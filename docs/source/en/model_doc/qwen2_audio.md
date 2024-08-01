@@ -39,9 +39,10 @@ In the following, we demonstrate how to use `Qwen2-Audio-7B-Instrucct` for the i
 ### Voice Chat Inference
 In the voice chat mode, users can freely engage in voice interactions with Qwen2-Audio without text input:
 ```python
+from io import BytesIO
+from urllib.request import urlopen
+import librosa
 from transformers import Qwen2AudioForConditionalGeneration, AutoProcessor
-from transformers.pipelines.audio_utils import ffmpeg_read
-import requests
 
 processor = AutoProcessor.from_pretrained("Qwen/Qwen2-Audio-7B-Instruct")
 model = Qwen2AudioForConditionalGeneration.from_pretrained("Qwen/Qwen2-Audio-7B-Instruct", device_map="auto")
@@ -61,7 +62,10 @@ for message in conversation:
     if isinstance(message["content"], list):
         for ele in message["content"]:
             if ele["type"] == "audio":
-                audios.append(ffmpeg_read(requests.get(ele['audio_url']).content, sampling_rate=processor.feature_extractor.sampling_rate))
+                audios.append(librosa.load(
+                    BytesIO(urlopen(ele['audio_url']).read()), 
+                    sr=self.processor.feature_extractor.sampling_rate)[0]
+                )
 
 inputs = processor(text=text, audios=audios, return_tensors="pt", padding=True)
 inputs.input_ids = inputs.input_ids.to("cuda")
@@ -75,9 +79,10 @@ response = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_
 ### Audio Analysis Inference
 In the audio analysis, users could provide both audio and text instructions for analysis:
 ```python
+from io import BytesIO
+from urllib.request import urlopen
+import librosa
 from transformers import Qwen2AudioForConditionalGeneration, AutoProcessor
-from transformers.pipelines.audio_utils import ffmpeg_read
-import requests
 
 processor = AutoProcessor.from_pretrained("Qwen/Qwen2-Audio-7B-Instruct")
 model = Qwen2AudioForConditionalGeneration.from_pretrained("Qwen/Qwen2-Audio-7B-Instruct", device_map="auto")
@@ -104,7 +109,11 @@ for message in conversation:
     if isinstance(message["content"], list):
         for ele in message["content"]:
             if ele["type"] == "audio":
-                audios.append(ffmpeg_read(requests.get(ele['audio_url']).content, sampling_rate=processor.feature_extractor.sampling_rate))
+                audios.append(
+                    librosa.load(
+                        BytesIO(urlopen(ele['audio_url']).read()), 
+                        sr=self.processor.feature_extractor.sampling_rate)[0]
+                )
 
 inputs = processor(text=text, audios=audios, return_tensors="pt", padding=True)
 inputs.input_ids = inputs.input_ids.to("cuda")
@@ -121,9 +130,10 @@ print("response:\n", response)
 ### Batch Inference
 We also support batch inference:
 ```python
+from io import BytesIO
+from urllib.request import urlopen
+import librosa
 from transformers import Qwen2AudioForConditionalGeneration, AutoProcessor
-from transformers.pipelines.audio_utils import ffmpeg_read
-import requests
 
 processor = AutoProcessor.from_pretrained("Qwen/Qwen2-Audio-7B-Instruct")
 model = Qwen2AudioForConditionalGeneration.from_pretrained("Qwen/Qwen2-Audio-7B-Instruct", device_map="auto")
@@ -157,7 +167,11 @@ for conversation in conversations:
         if isinstance(message["content"], list):
             for ele in message["content"]:
                 if ele["type"] == "audio":
-                    audios.append(ffmpeg_read(requests.get(ele['audio_url']).content, sampling_rate=processor.feature_extractor.sampling_rate))
+                    audios.append(
+                        librosa.load(
+                            BytesIO(urlopen(ele['audio_url']).read()), 
+                            sr=self.processor.feature_extractor.sampling_rate)[0]
+                    )
 
 inputs = processor(text=text, audios=audios, return_tensors="pt", padding=True)
 inputs['input_ids'] = inputs['input_ids'].to("cuda")

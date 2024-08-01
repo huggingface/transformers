@@ -16,8 +16,10 @@
 
 import gc
 import unittest
+from io import BytesIO
+from urllib.request import urlopen
 
-import requests
+import librosa
 
 from transformers import (
     AutoProcessor,
@@ -39,8 +41,6 @@ if is_torch_available():
     import torch
 else:
     is_torch_greater_or_equal_than_2_0 = False
-
-from transformers.pipelines.audio_utils import ffmpeg_read
 
 
 class Qwen2AudioModelTester:
@@ -174,7 +174,9 @@ class Qwen2AudioForConditionalGenerationModelTest(ModelTesterMixin, unittest.Tes
 @require_torch
 class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.processor = AutoProcessor.from_pretrained("Qwen/Qwen2-Audio-7B")
+        self.processor = AutoProcessor.from_pretrained(
+            "/cpfs01/shared/public/fay.cyf/opensource_qwenaudio_0704/hub/Qwen/Qwen2-Audio-7B"
+        )
 
     def tearDown(self):
         gc.collect()
@@ -183,13 +185,14 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     def test_small_model_integration_test_single(self):
         # Let' s make sure we test the preprocessing to replace what is used
-        model = Qwen2AudioForConditionalGeneration.from_pretrained("Qwen/Qwen2-Audio-7B")
+        model = Qwen2AudioForConditionalGeneration.from_pretrained(
+            "/cpfs01/shared/public/fay.cyf/opensource_qwenaudio_0704/hub/Qwen/Qwen2-Audio-7B"
+        )
 
         prompt = "<|audio_bos|><|AUDIO|><|audio_eos|>Detect the language and recognize the speech:"
         url = "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/1272-128104-0000.flac"
-        raw_audio = ffmpeg_read(
-            requests.get(url).content, sampling_rate=self.processor.feature_extractor.sampling_rate
-        )
+
+        raw_audio, _ = librosa.load(BytesIO(urlopen(url).read()), sr=self.processor.feature_extractor.sampling_rate)
 
         inputs = self.processor(text=prompt, audios=raw_audio, return_tensors="pt")
 
@@ -197,6 +200,7 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.equal(inputs["input_ids"], EXPECTED_INPUT_IDS))
 
         output = model.generate(**inputs, max_new_tokens=32)
+        print(self.processor.decode(output[0], skip_special_tokens=False))
         EXPECTED_DECODED_TEXT = "<|audio_bos|><|AUDIO|><|audio_eos|>Detect the language and recognize the speech:<|en|>mister quilter is the apostle of the middle classes and we are glad to welcome his gospel<|endoftext|>"
 
         self.assertEqual(
@@ -207,7 +211,9 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     def test_small_model_integration_test_batch(self):
         # Let' s make sure we test the preprocessing to replace what is used
-        model = Qwen2AudioForConditionalGeneration.from_pretrained("Qwen/Qwen2-Audio-7B")
+        model = Qwen2AudioForConditionalGeneration.from_pretrained(
+            "/cpfs01/shared/public/fay.cyf/opensource_qwenaudio_0704/hub/Qwen/Qwen2-Audio-7B"
+        )
 
         prompts = [
             "<|audio_bos|><|AUDIO|><|audio_eos|>Detect the language and recognize the speech:",
@@ -215,11 +221,11 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
             "<|audio_bos|><|AUDIO|><|audio_eos|>Classify the human vocal sound to VocalSound in English:",
         ]
         url1 = "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/1272-128104-0000.flac"
-        audio1 = ffmpeg_read(requests.get(url1).content, sampling_rate=self.processor.feature_extractor.sampling_rate)
+        audio1, _ = librosa.load(BytesIO(urlopen(url1).read()), sr=self.processor.feature_extractor.sampling_rate)
         url2 = "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/glass-breaking-151256.mp3"
-        audio2 = ffmpeg_read(requests.get(url2).content, sampling_rate=self.processor.feature_extractor.sampling_rate)
+        audio2, _ = librosa.load(BytesIO(urlopen(url2).read()), sr=self.processor.feature_extractor.sampling_rate)
         url3 = "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/f2641_0_throatclearing.wav"
-        audio3 = ffmpeg_read(requests.get(url3).content, sampling_rate=self.processor.feature_extractor.sampling_rate)
+        audio3, _ = librosa.load(BytesIO(urlopen(url3).read()), sr=self.processor.feature_extractor.sampling_rate)
 
         inputs = self.processor(text=prompts, audios=[audio1, audio2, audio3], return_tensors="pt", padding=True)
 
@@ -230,6 +236,7 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
             "Generate the caption in English: Glass is breaking.",
             "Classify the human vocal sound to VocalSound in English: Throat clearing",
         ]
+        print(self.processor.batch_decode(output, skip_special_tokens=True))
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
@@ -238,7 +245,9 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     def test_small_model_integration_test_multiturn(self):
         # Let' s make sure we test the preprocessing to replace what is used
-        model = Qwen2AudioForConditionalGeneration.from_pretrained("Qwen/Qwen2-Audio-7B-Instruct")
+        model = Qwen2AudioForConditionalGeneration.from_pretrained(
+            "/cpfs01/shared/public/fay.cyf/opensource_qwenaudio_0704/hub/Qwen/Qwen2-Audio-7B-Instruct"
+        )
 
         messages = [
             {"role": "system", "content": "You are a helpful assistant."},
@@ -273,10 +282,10 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
                 for ele in message["content"]:
                     if ele["type"] == "audio":
                         audios.append(
-                            ffmpeg_read(
-                                requests.get(ele["audio_url"]).content,
-                                sampling_rate=self.processor.feature_extractor.sampling_rate,
-                            )
+                            librosa.load(
+                                BytesIO(urlopen(ele["audio_url"]).read()),
+                                sr=self.processor.feature_extractor.sampling_rate,
+                            )[0]
                         )
 
         inputs = self.processor(text=formatted_prompt, audios=audios, return_tensors="pt", padding=True)

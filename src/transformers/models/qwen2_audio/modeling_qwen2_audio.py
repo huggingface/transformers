@@ -973,13 +973,15 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel):
             Edge cases:
                 * If tokens are same but audio token sizes are different, then cannot infer left or right padding
                 ```python
-                audio1 = ffmpeg_read(requests.get("https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/glass-breaking-151256.mp3").content, sampling_rate=processor.feature_extractor.sampling_rate)
-                audio2 = ffmpeg_read(requests.get("https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/f2641_0_throatclearing.wav").content, sampling_rate=processor.feature_extractor.sampling_rate)
+                url1 = "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/glass-breaking-151256.mp3"
+                audio1, _ = librosa.load(BytesIO(urlopen(url1).read()), sr=processor.feature_extractor.sampling_rate)
+                url2 = "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/f2641_0_throatclearing.wav"
+                audio2, _ = librosa.load(BytesIO(urlopen(url2).read()), sr=processor.feature_extractor.sampling_rate)
                 prompts = [
                     "[INST] <|AUDIO|>\nWhat is that in this audio? [/INST]",
                     "[INST] <|AUDIO|>\nWhat is that in this audio? [/INST]",
                 ]
-                inputs = processor(text=prompts, [audio1, audio2], return_tensors='pt', padding=True).to("cuda")
+                inputs = processor(text=prompts, audios=[audio1, audio2], return_tensors='pt', padding=True).to("cuda")
                     audio1 has 101 tokens, while audio2 has 72 tokens
                 ```
 
@@ -1139,16 +1141,17 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel):
         Example:
 
         ```python
-        >>> import requests
+        >>> from io import BytesIO
+        >>> from urllib.request import urlopen
+        >>> import librosa
         >>> from transformers import AutoProcessor, Qwen2AudioForConditionalGeneration
-        >>> from transformers.pipelines.audio_utils import ffmpeg_read
 
         >>> model = Qwen2AudioForConditionalGeneration.from_pretrained("Qwen/Qwen2-Audio-7B")
         >>> processor = AutoProcessor.from_pretrained("Qwen/Qwen2-Audio-7B")
 
         >>> prompt = "<|audio_bos|><|AUDIO|><|audio_eos|>Generate the caption in English:"
         >>> url = "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/glass-breaking-151256.mp3"
-        >>> audio = ffmpeg_read(requests.get(url).content, sampling_rate=processor.feature_extractor.sampling_rate)
+        >>> audio, _ = librosa.load(BytesIO(urlopen(url).read()), sr=self.processor.feature_extractor.sampling_rate)
 
         >>> inputs = processor(text=prompt, audios=audio, return_tensors="pt")
 
