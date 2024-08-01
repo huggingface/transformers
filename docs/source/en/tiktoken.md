@@ -17,14 +17,12 @@ rendered properly in your Markdown viewer.
 # Tiktoken and interaction with Transformers
 
 Support for tiktoken model files is seamlessly integrated in 🤗 transformers when loading models 
-`from_pretrained` with a `tokenizer.model` tiktoken file on the Hub, which automatically converted into our 
+`from_pretrained` with a `tokenizer.model` tiktoken file on the Hub, which is automatically converted into our 
 [fast tokenizer](https://huggingface.co/docs/transformers/main/en/main_classes/tokenizer#transformers.PreTrainedTokenizerFast). 
-All necessary components, including model weights, tokenizer settings, and configuration metadata, are 
-encapsulated within a single file. This means there is no need for separate files for the model, tokenizer, and configuration settings.
 
-### Supported model architectures
-
-- #TODO: add model architectures which has tiktoken file on hub!
+### Known models that were released with a `tiktoken.model`:
+	- gpt2
+	- llama3
 
 ## Example usage
  
@@ -35,7 +33,6 @@ will automatically be loaded when loading `from_pretrained`. Here is how one wou
 ```py
 from transformers import AutoTokenizer
 
-model_id = #TODO: Add model id
-
-tokenizer = AutoTokenizer.from_pretrained(model_id)
+model_id = "meta-llama/Meta-Llama-3-8B-Instruct"
+tokenizer = AutoTokenizer.from_pretrained(model_id, subfolder="original") 
 ```
