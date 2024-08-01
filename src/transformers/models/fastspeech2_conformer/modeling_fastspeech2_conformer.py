@@ -1681,6 +1681,6 @@ class FastSpeech2ConformerWithHifiGan(PreTrainedModel):
         waveform = self.vocoder(spectrogram)
 
         if not return_dict:
-            return model_outputs + (waveform,)
+            return (waveform,) + model_outputs
 
         return FastSpeech2ConformerWithHifiGanOutput(waveform=waveform, **model_outputs)
