@@ -643,6 +643,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
         ("siglip_vision_model", "siglip"),
         ("chinese_clip_vision_model", "chinese_clip"),
         ("rt_detr_resnet", "rt_detr"),
+        ("fastspeech2_conformer_with_hifigan", "fastspeech2_conformer"),
     ]
 )
 
