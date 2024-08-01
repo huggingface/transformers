@@ -1569,6 +1569,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
     def __init__(self, **kwargs):
         # inputs and kwargs for saving and re-loading (see ``from_pretrained`` and ``save_pretrained``)
         self.init_inputs = ()
+        for key in kwargs:
+            if hasattr(self, key) and callable(getattr(self, key)):
+                raise AttributeError(f"{key} conflicts with the method {key} in {self.__class__.__name__}")
+
         self.init_kwargs = copy.deepcopy(kwargs)
         self.name_or_path = kwargs.pop("name_or_path", "")
         self._processor_class = kwargs.pop("processor_class", None)
