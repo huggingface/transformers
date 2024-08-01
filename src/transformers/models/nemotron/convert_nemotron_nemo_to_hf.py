@@ -91,7 +91,9 @@ def get_args():
     return args
 
 
-def convert_hf_config(nemo_config, tokenizer, vocab_size, dtype, hf_output_path, hf_url="nvidia/nemotron-3-8b-base-4k-hf"):
+def convert_hf_config(
+    nemo_config, tokenizer, vocab_size, dtype, hf_output_path, hf_url="nvidia/nemotron-3-8b-base-4k-hf"
+):
     """
     Convert NeMo config to HF config
     """

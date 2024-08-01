@@ -76,14 +76,6 @@ class NemotronConfig(PretrainedConfig):
             Whether to tie weight embeddings
         rope_theta (`float`, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings.
-        rope_scaling (`Dict`, *optional*):
-            Dictionary containing the scaling configuration for the RoPE embeddings. Currently supports two scaling
-            strategies: linear and dynamic. Their scaling factor must be a float greater than 1. The expected format is
-            `{"type": strategy name, "factor": scaling factor}`. When using this flag, don't update
-            `max_position_embeddings` to the expected new maximum. See the following thread for more information on how
-            these scaling strategies behave:
-            https://www.reddit.com/r/LocalLLaMA/comments/14mrgpr/dynamically_scaled_rope_further_increases/. This is an
-            experimental feature, subject to breaking API changes in future versions.
         partial_rotary_factor (`float`, *optional*, defaults to 0.5): Percentage of the query and keys which will have rotary embedding.
         attention_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
@@ -127,7 +119,6 @@ class NemotronConfig(PretrainedConfig):
         eos_token_id=3,
         tie_word_embeddings=False,
         rope_theta=10000.0,
-        rope_scaling=None,
         partial_rotary_factor=0.5,
         attention_bias=False,
         attention_dropout=0.0,
@@ -147,7 +138,6 @@ class NemotronConfig(PretrainedConfig):
         self.norm_eps = norm_eps
         self.use_cache = use_cache
         self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
         self.partial_rotary_factor = partial_rotary_factor
         rope_config_validation(self)
         self.attention_bias = attention_bias
