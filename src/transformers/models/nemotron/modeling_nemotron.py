@@ -83,7 +83,6 @@ ALL_LAYERNORM_LAYERS.append(NemotronLayerNorm1P)
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with LLAMA->NEMOTRON,Llama->Nemotron,llama->nemotron
 class NemotronRotaryEmbedding(nn.Module):
-    
     # Ignore copy
     def __init__(
         self,
@@ -91,7 +90,7 @@ class NemotronRotaryEmbedding(nn.Module):
         device=None,
     ):
         super().__init__()
-        
+
         assert config is not None
         self.rope_type = "default"
         self.max_seq_len_cached = config.max_position_embeddings
@@ -269,7 +268,6 @@ class NemotronAttention(nn.Module):
         query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-
 
         if position_embeddings is None:
             logger.warning_once(
