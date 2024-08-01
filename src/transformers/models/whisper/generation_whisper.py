@@ -814,7 +814,7 @@ class WhisperGenerationMixin:
                 if key in generate_kwargs:
                     del generate_kwargs[key]
 
-            cur_bsz = segment_input.shape[0]
+            cur_bsz = decoder_input_ids.shape[0]
             if generation_config.cache_implementation == "static" and cur_bsz < batch_size:
                 segment_input = F.pad(segment_input, (0, 0, 0, 0, 0, batch_size - cur_bsz), value=0)
                 decoder_input_ids = F.pad(
@@ -824,6 +824,8 @@ class WhisperGenerationMixin:
                     generate_kwargs["decoder_attention_mask"] = F.pad(
                         generate_kwargs["decoder_attention_mask"], (0, 0, 0, batch_size - cur_bsz), value=True
                     )
+                if generate_kwargs.get("encoder_outputs") is not None:
+                    generate_kwargs["encoder_outputs"] = F.pad(generate_kwargs["encoder_outputs"], (0, 0, 0, 0, 0, batch_size - cur_bsz), value=0)
 
             seek_outputs = super().generate(
                 segment_input,
