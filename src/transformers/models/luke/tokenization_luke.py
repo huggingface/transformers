@@ -889,7 +889,7 @@ class LukeTokenizer(PreTrainedTokenizer):
 
     def _check_entity_input_format(self, entities: Optional[EntityInput], entity_spans: Optional[EntitySpanInput]):
         if not isinstance(entity_spans, list):
-            raise ValueError("entity_spans should be given as a list")
+            raise TypeError("entity_spans should be given as a list")
         elif len(entity_spans) > 0 and not isinstance(entity_spans[0], tuple):
             raise ValueError(
                 "entity_spans should be given as a list of tuples containing the start and end character indices"

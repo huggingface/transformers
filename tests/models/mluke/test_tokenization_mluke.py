@@ -151,7 +151,7 @@ class MLukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         with self.assertRaises(ValueError):
             tokenizer(sentence, entities=tuple(entities), entity_spans=spans)
 
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             tokenizer(sentence, entities=entities, entity_spans=tuple(spans))
 
         with self.assertRaises(ValueError):

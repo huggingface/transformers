@@ -1569,6 +1569,7 @@ class BigBirdPegasusPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["BigBirdPegasusEncoderLayer", "BigBirdPegasusDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
+    _supports_param_buffer_assignment = False
 
     def _init_weights(self, module):
         std = self.config.init_std
