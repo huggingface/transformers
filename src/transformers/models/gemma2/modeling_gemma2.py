@@ -754,11 +754,12 @@ class Gemma2Model(Gemma2PreTrainedModel):
 
         # Probably a forward call with caching, so we set up cache for one call only
         if use_cache and past_key_values is None and not self.training:
-            raise ValueError(
+            logger.warning_once(
                 "You are calling the model with `use_cache=True` but didn't pass `past_key_values`. ",
-                "Make sure to pass an instance of `HybridCache`. See for more: "
+                "Make sure to pass an instance of `HybridCache`. Caching will be disabled. See for more: "
                 "(https://huggingface.co/docs/transformers/main/en/internal/generation_utils#transformers.HybridCache)",
             )
+            use_cache = False
 
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
