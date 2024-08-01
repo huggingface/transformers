@@ -186,7 +186,7 @@ class FlaxDinov2Embeddings(nn.Module):
         self.position_embeddings = self.param(
             "position_embeddings",
             jax.nn.initializers.variance_scaling(self.config.initializer_range**2, "fan_in", "truncated_normal"),
-            (1, num_patches + 1, self.config.hidden_size),  # ? (1, 1370, 768)
+            (1, num_patches + 1, self.config.hidden_size),
         )
         self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
 
