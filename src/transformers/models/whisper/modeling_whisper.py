@@ -1845,6 +1845,10 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
         elif use_cache:
             cache_position = cache_position[-decoder_input_ids.shape[1] :]
 
+        # The `contiguous()` here is necessary to have a static stride during decoding. torchdynamo otherwise
+        # recompiles graphs as the stride of the inputs is a guard. Ref: https://github.com/huggingface/transformers/pull/29114
+        decoder_input_ids = decoder_input_ids.contiguous()
+
         return {
             "encoder_outputs": encoder_outputs,
             "past_key_values": past_key_values,
