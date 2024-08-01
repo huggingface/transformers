@@ -132,8 +132,6 @@ class Qwen2AudioConfig(PretrainedConfig):
             The config object or dictionary of the audio backbone.
         text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `LlamaConfig`):
             The config object or dictionary of the text backbone.
-        ignore_index (`int`, *optional*, defaults to -100):
-            The ignore index for the loss function.
         audio_token_index (`int`, *optional*, defaults to 151646):
             The image token index to encode the image prompt.
 

@@ -16,8 +16,13 @@
 Processor class for Qwen2Audio.
 """
 
+from typing import List, Optional, Union
+
+import numpy as np
+
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessorMixin
+from ...tokenization_utils_base import PaddingStrategy, PreTokenizedInput, TextInput
 
 
 class Qwen2AudioProcessor(ProcessorMixin):
@@ -46,37 +51,55 @@ class Qwen2AudioProcessor(ProcessorMixin):
             chat_template = self.default_chat_template
         super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
 
-    def __call__(self, *args, **kwargs) -> BatchFeature:
+    def __call__(
+        self,
+        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        audios: Union[np.ndarray, List[np.ndarray]] = None,
+        padding: Union[bool, str, PaddingStrategy] = False,
+        sampling_rate: Optional[int] = None,
+        **kwargs,
+    ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and audio(s). This method forwards the `text`
         and `kwargs` arguments to Qwen2TokenizerFast's [`~Qwen2TokenizerFast.__call__`] if `text` is not `None` to encode
         the text. To prepare the audio(s), this method forwards the `audios` and `kwrags` arguments to
         WhisperFeatureExtractor's [`~WhisperFeatureExtractor.__call__`] if `audios` is not `None`. Please refer to the doctsring
         of the above two methods for more information.
-        """
 
-        audios = kwargs.pop("audios", None)
-        sampling_rate = kwargs.pop("sampling_rate", None)
-        text = kwargs.pop("text", None)
-        if len(args) > 0:
-            audios = args[0]
-            args = args[1:]
+        Args:
+            text (`str`, `List[str]`, `List[List[str]]`):
+                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
+                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
+                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
+            audios (`np.ndarray`, `List[np.ndarray]`):
+                The audio or batch of audios to be prepared. Each audio can be a NumPy array.
+            padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
+                Select a strategy to pad the returned sequences (according to the model's padding side and padding
+                index) among:
+                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
+                  sequence if provided).
+                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
+                  acceptable input length for the model if that argument is not provided.
+                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
+                  lengths).
+            sampling_rate (`int`, defaults to 16000):
+                The sampling rate at which the audio files should be digitalized expressed in hertz (Hz).
+        """
 
         if audios is None and text is None:
             raise ValueError("You need to specify either an `audio` or `text` input to process.")
-        text_inputs = self.tokenizer(text, **kwargs)
+        inputs = self.tokenizer(text, padding=padding, **kwargs)
 
-        kwargs.pop("padding", None)
         if audios is not None:
-            inputs = self.feature_extractor(
-                audios, *args, sampling_rate=sampling_rate, return_attention_mask=True, padding="max_length", **kwargs
+            audio_inputs = self.feature_extractor(
+                audios, sampling_rate=sampling_rate, return_attention_mask=True, padding="max_length", **kwargs
             )
-            inputs["feature_attention_mask"] = inputs.pop(
+            audio_inputs["feature_attention_mask"] = audio_inputs.pop(
                 "attention_mask"
             )  # rename attention_mask to prevent conflicts later on
-            text_inputs.update(inputs)
+            inputs.update(audio_inputs)
 
-        return BatchFeature(data={**text_inputs})
+        return BatchFeature(data={**inputs})
 
     def batch_decode(self, *args, **kwargs):
         """
