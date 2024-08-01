@@ -2976,7 +2976,9 @@ class Trainer:
                 }
                 xm.save(
                     optm,
-                    os.path.join(output_dir, f"rank{self.args.process_index}_{OPTIMIZER_NAME}"),
+                    os.path.join(
+                        output_dir, f"rank{self.args.process_index}-of-{self.args.world_size}-{OPTIMIZER_NAME}"
+                    ),
                     master_only=False,
                 )
             else:
@@ -3059,7 +3061,7 @@ class Trainer:
             )
         )
         checkpoint_file_exists = (
-            glob.glob(os.path.join(checkpoint, "rank*_" + OPTIMIZER_NAME))
+            glob.glob(os.path.join(checkpoint, f"rank*-of-{self.args.world_size}-{OPTIMIZER_NAME}"))
             if self.is_fsdp_xla_enabled and not self.is_fsdp_xla_v2_enabled
             else checkpoint_file_exists
         )
@@ -3069,7 +3071,10 @@ class Trainer:
                 # On TPU we have to take some extra precautions to properly load the states on the right device.
                 if self.is_fsdp_xla_enabled and not self.is_fsdp_xla_v2_enabled:
                     optimizer_state = torch.load(
-                        os.path.join(checkpoint, f"rank{self.args.process_index}_{OPTIMIZER_NAME}"), map_location="cpu"
+                        os.path.join(
+                            checkpoint, f"rank{self.args.process_index}-of-{self.args.world_size}-{OPTIMIZER_NAME}"
+                        ),
+                        map_location="cpu",
                     )
                     # We only need `optimizer` when resuming from checkpoint
                     optimizer_state = optimizer_state["optimizer"]
@@ -3501,7 +3506,7 @@ class Trainer:
                 "shard_metadata": model.get_shard_metadata(),
             }
             ckpt_path = os.path.join(
-                output_dir, f"rank{self.args.process_index}_of_{self.args.world_size}_{WEIGHTS_NAME}.pth"
+                output_dir, f"rank{self.args.process_index}-of-{self.args.world_size}-{WEIGHTS_NAME}"
             )
             # All ranks save sharded checkpoint
             xm.save(ckpt, ckpt_path, master_only=False)
@@ -3509,15 +3514,13 @@ class Trainer:
             xm.rendezvous("save_full_checkpoints")
             # Master save full checkpoint
             if self.args.should_save:
-                from torch_xla.distributed.fsdp import XlaFullyShardedDataParallel as FSDP
                 from torch_xla.distributed.fsdp import consolidate_sharded_model_checkpoints
 
                 full_state_dict, _ = consolidate_sharded_model_checkpoints(
                     ckpt_prefix=os.path.join(output_dir, ""),
-                    ckpt_suffix=f"rank*_of_*_{WEIGHTS_NAME}.pth",
+                    ckpt_suffix=f"rank*-of-*-{WEIGHTS_NAME}",
                     save_model=False,
                 )
-                assert isinstance(model, FSDP)
                 model = model.module.module
                 if isinstance(self.accelerator.unwrap_model(model), supported_classes):
                     self.accelerator.unwrap_model(model).save_pretrained(
@@ -3529,9 +3532,6 @@ class Trainer:
                 else:
                     logger.info("Trainer.model is not a `PreTrainedModel`, only saving its state dict.")
                     xm.save(full_state_dict, os.path.join(output_dir, WEIGHTS_NAME))
-            # Remove temporary sharded checkpoints
-            xm.rendezvous("remove_unused_checkpoints")
-            os.remove(ckpt_path)
         elif not isinstance(model, supported_classes):
             if isinstance(self.accelerator.unwrap_model(model), supported_classes):
                 self.accelerator.unwrap_model(model).save_pretrained(
