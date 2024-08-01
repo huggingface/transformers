@@ -165,32 +165,6 @@ class GraniteRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaLinearScalingRotaryEmbedding with Llama->Granite
-class GraniteLinearScalingRotaryEmbedding(GraniteRotaryEmbedding):
-    """GraniteRotaryEmbedding extended with linear scaling. Credits to the Reddit user /u/kaiokendev"""
-
-    def __init__(self, *args, **kwargs):
-        logger.warning_once(
-            "`GraniteLinearScalingRotaryEmbedding` is deprecated an will be removed in v4.45. Please use "
-            "`GraniteRotaryEmbedding`, which now also does linear scaling (simply pass the model config to __init__)."
-        )
-        kwargs["rope_type"] = "linear"
-        super().__init__(*args, **kwargs)
-
-
-# Copied from transformers.models.llama.modeling_llama.LlamaDynamicNTKScalingRotaryEmbedding with Llama->Granite
-class GraniteDynamicNTKScalingRotaryEmbedding(GraniteRotaryEmbedding):
-    """GraniteRotaryEmbedding extended with Dynamic NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla"""
-
-    def __init__(self, *args, **kwargs):
-        logger.warning_once(
-            "`GraniteDynamicNTKScalingRotaryEmbedding` is deprecated an will be removed in v4.45. Please use "
-            "`GraniteRotaryEmbedding`, which now also does dynamic ntk scaling (simply pass the model config to "
-            "__init__)."
-        )
-        kwargs["rope_type"] = "dynamic"
-        super().__init__(*args, **kwargs)
-
 
 # Copied from transformers.models.llama.modeling_llama.rotate_half with Llama->Granite
 def rotate_half(x):
