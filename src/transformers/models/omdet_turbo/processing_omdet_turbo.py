@@ -148,16 +148,12 @@ class OmDetTurboProcessor(ProcessorMixin):
         encoding_image_processor = self.image_processor(images, **output_kwargs["images_kwargs"])
         tasks_encoding = self.tokenizer(text=text, **output_kwargs["text_kwargs"])
 
-        classes_encoding_batched = []
-        for class_single in classes:
-            classes_encoding = self.tokenizer(text=class_single, **output_kwargs["text_kwargs"])
-            classes_encoding_batched.append(classes_encoding)
-        # workaround to group the classes encoding by task in a BatchEncoding
-        classes_encoding_batched = BatchEncoding(
-            {str(i): class_encoding for i, class_encoding in enumerate(classes_encoding_batched)}
-        )
+        classes_structure = torch.tensor([len(class_single) for class_single in classes], dtype=torch.long)
+        classes_flattened = [class_single for class_batch in classes for class_single in class_batch]
+        classes_encoding = self.tokenizer(text=classes_flattened, **output_kwargs["text_kwargs"])
+        classes_encoding.update({"structure": classes_structure})
 
-        encoding = BatchEncoding({"tasks": tasks_encoding, "classes": classes_encoding_batched})
+        encoding = BatchEncoding({"tasks": tasks_encoding, "classes": classes_encoding})
         encoding.update(encoding_image_processor)
 
         return encoding
@@ -194,16 +190,16 @@ class OmDetTurboProcessor(ProcessorMixin):
         Filter predicted results using given thresholds and NMS.
         Args:
             boxes (Tensor): A Tensor of predicted class-specific or class-agnostic
-                boxes for the image. Shape : (R, K * 4) if doing
-                class-specific regression, or (R, 4) if doing class-agnostic
-                regression, where R is the number of predicted objects for the image.
+                boxes for the image. Shape : (num_queries, max_num_classes_in_batch * 4) if doing
+                class-specific regression, or (num_queries, 4) if doing class-agnostic
+                regression.
                 This is compatible with the output of :meth:`FastRCNNOutputLayers.predict_boxes`.
             scores (Tensor): A Tensor of predicted class scores for the image.
-                Shape : (R, K + 1), where R is the number of predicted objects for the image.
+                Shape : (num_queries, max_num_classes_in_batch + 1)
                 This is compatible with the output of :meth:`FastRCNNOutputLayers.predict_probs`.
             predicted_classes (Tensor): A Tensor of predicted classes for the image.
-                Shape : (R,), where R is the number of predicted objects for the image.
-            classes (list[str]): The input classes names.
+                Shape : (num_queries * (max_num_classes_in_batch + 1),)
+            classes (List[str]): The input classes names.
             image_size (tuple): A tuple of (height, width) for the image.
             num_classes (int): The number of classes given for this image.
             score_threshold (float): Only return detections with a confidence score exceeding this
@@ -212,13 +208,15 @@ class OmDetTurboProcessor(ProcessorMixin):
             max_num_det (int, optional): The maximum number of detections to return. Default is None.
         Returns:
             dict: A dictionary the following keys:
-                "boxes" (Tensor): A tensor of shape (N, 4), containing the predicted boxes in (x1, y1, x2, y2) format,
-                where N is the number of predicted objects after filtering.
-                "scores" (Tensor): A tensor of shape (N,), containing the predicted confidence scores for each detection.
-                "classes" (list[str]): A list of strings, where each string is the predicted class for the
+                "boxes" (Tensor): A tensor of shape (num_filtered_objects, 4), containing the predicted boxes in (x1, y1, x2, y2) format.
+                "scores" (Tensor): A tensor of shape (num_filtered_objects,), containing the predicted confidence scores for each detection.
+                "classes" (List[str]): A list of strings, where each string is the predicted class for the
                     corresponding detection
         """
         proposal_num = len(boxes) if max_num_det is None else max_num_det
+        print("boxes", boxes.shape)
+        print("scores", scores.shape)
+        print("predicted_classes", predicted_classes.shape)
         scores_per_image, topk_indices = scores.flatten(0, 1).topk(proposal_num, sorted=False)
         classes_per_image = predicted_classes[topk_indices]
         box_pred_per_image = boxes.view(-1, 1, 4).repeat(1, num_classes, 1).view(-1, 4)
@@ -254,6 +252,9 @@ class OmDetTurboProcessor(ProcessorMixin):
         result["scores"] = scores_per_image
         result["classes"] = classes_per_image
 
+        print("result bbox", result["boxes"].shape)
+        print("result scores", result["scores"].shape)
+        # print("result classes", len(result["classes"]))
         return result
 
     def post_process_grounded_object_detection(

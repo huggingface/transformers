@@ -37,7 +37,6 @@ from ...file_utils import (
     add_start_docstrings_to_model_forward,
     is_torch_cuda_available,
     replace_return_docstrings,
-    requires_backends,
 )
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
@@ -284,108 +283,21 @@ class OmDetTurboLanguageBackbone(nn.Module):
 class OmDetTurboVisionBackbone(nn.Module):
     def __init__(self, config: OmDetTurboConfig):
         super().__init__()
-        self.use_timm_backbone = config.use_timm_backbone
-        self.num_features = [int(config.backbone_embed_dim * 2**i) for i in range(len(config.backbone_depths))]
-        self.out_indices = config.backbone_out_indices
-        if self.use_timm_backbone:
-            requires_backends(self, ["timm"])
-            vision_backbone = load_backbone(config)._backbone
-
-            # if "swin" in config.backbone:
-            #     OmDetTurboVisionBackbone._force_partition_timm_backbone(config, vision_backbone)
-        else:
-            vision_backbone = load_backbone(config.vision_config)
-
-        self.vision_backbone = vision_backbone
+        self.apply_layernorm = config.apply_layernorm
+        self.vision_backbone = load_backbone(config)
         self.layer_norms = nn.ModuleList(
-            [nn.LayerNorm(self.num_features[i_layer], eps=config.layer_norm_eps) for i_layer in self.out_indices]
+            [nn.LayerNorm(in_channel_dim, eps=config.layer_norm_eps) for in_channel_dim in config.encoder_in_channels]
         )
 
-    # temporary while timm doesn't support always partition for swin
-    # @staticmethod
-    # def _window_partition(
-    #     x: torch.Tensor,
-    #     window_size: Tuple[int, int],
-    # ) -> torch.Tensor:
-    #     """
-    #     Partition into non-overlapping windows with padding if needed.
-    #     Args:
-    #         x (torch.Tensor): input tokens with [batch_size, height, width, num_channels].
-    #         window_size (int): window size.
-
-    #     Returns:
-    #         windows: windows after partition with [batch_size * num_windows, window_size, window_size, num_channels].
-    #         (Hp, Wp): padded height and width before partition
-    #     """
-    #     batch_size, height, width, num_channels = x.shape
-    #     x = x.view(
-    #         batch_size, height // window_size[0], window_size[0], width // window_size[1], window_size[1], num_channels
-    #     )
-    #     windows = x.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, window_size[0], window_size[1], num_channels)
-    #     return windows
-
-    # # temporary while timm doesn't support always partition for swin
-    # @staticmethod
-    # def _compute_attention_mask(block_to_fix):
-    #     H, W = block_to_fix.input_resolution
-    #     H = math.ceil(H / block_to_fix.window_size[0]) * block_to_fix.window_size[0]
-    #     W = math.ceil(W / block_to_fix.window_size[1]) * block_to_fix.window_size[1]
-    #     img_mask = torch.zeros((1, H, W, 1))  # 1 H W 1
-    #     cnt = 0
-    #     for height in (
-    #         slice(0, -block_to_fix.window_size[0]),
-    #         slice(-block_to_fix.window_size[0], -block_to_fix.shift_size[0]),
-    #         slice(-block_to_fix.shift_size[0], None),
-    #     ):
-    #         for width in (
-    #             slice(0, -block_to_fix.window_size[1]),
-    #             slice(-block_to_fix.window_size[1], -block_to_fix.shift_size[1]),
-    #             slice(-block_to_fix.shift_size[1], None),
-    #         ):
-    #             img_mask[:, height, width, :] = cnt
-    #             cnt += 1
-    #     mask_windows = OmDetTurboVisionBackbone._window_partition(
-    #         img_mask, block_to_fix.window_size
-    #     )  # nW, window_size, window_size, 1
-    #     mask_windows = mask_windows.view(-1, block_to_fix.window_area)
-    #     attn_mask = mask_windows.unsqueeze(1) - mask_windows.unsqueeze(2)
-    #     attn_mask = attn_mask.masked_fill(attn_mask != 0, float(-100.0)).masked_fill(attn_mask == 0, float(0.0))
-
-    #     return attn_mask
-
-    # temporary while timm doesn't support always partition for swin
-    # @staticmethod
-    # def _force_partition_timm_backbone(config, model):
-    #     target_shift_size = tuple([config.backbone_window_size // 2] * 2)
-    #     for layer, depth in enumerate(config.backbone_depths):
-    #         for block_num in range(depth):
-    #             if block_num % 2 != 0:
-    #                 block = getattr(model, f"layers_{layer}").blocks[block_num]
-    #                 if block.shift_size != target_shift_size:
-    #                     block.shift_size = target_shift_size
-    #                     attention_mask = OmDetTurboVisionBackbone._compute_attention_mask(block)
-    #                     block.register_buffer("attn_mask", attention_mask, persistent=False)
-
     def forward(self, pixel_values):
-        outputs_before_norm = self.vision_backbone(pixel_values)
-        if not self.use_timm_backbone:
-            hidden_states = outputs_before_norm.hidden_states
-            outputs_before_norm = [
-                hidden_states[i + 1].view(
-                    1,
-                    int(hidden_states[i + 1].shape[1] ** (1 / 2)),
-                    int(hidden_states[i + 1].shape[1] ** (1 / 2)),
-                    -1,
-                )
-                for i in self.out_indices
+        outputs = self.vision_backbone(pixel_values).feature_maps
+        if self.apply_layernorm:
+            outputs = [
+                layer_norm(output).permute(0, 3, 1, 2).contiguous()
+                for layer_norm, output in zip(self.layer_norms, outputs)
             ]
 
-        out = [
-            layer_norm(output).permute(0, 3, 1, 2).contiguous()
-            for layer_norm, output in zip(self.layer_norms, outputs_before_norm)
-        ]
-
-        return out
+        return outputs
 
 
 # Copied from transformers.models.deformable_detr.modeling_deformable_detr.MultiScaleDeformableAttentionFunction
@@ -656,7 +568,7 @@ class OmDetTurboCSPRepLayer(nn.Module):
 class OmDetTurboMultiheadAttention(nn.Module):
     """Equivalent implementation of nn.MultiheadAttention with `batch_first=True` and support for key_padding_mask."""
 
-    def __init__(self, hidden_size, num_attention_heads, dropout):
+    def __init__(self, config, hidden_size, num_attention_heads, dropout):
         super().__init__()
         if hidden_size % num_attention_heads != 0:
             raise ValueError(
@@ -667,13 +579,10 @@ class OmDetTurboMultiheadAttention(nn.Module):
         self.num_attention_heads = num_attention_heads
         self.attention_head_size = int(hidden_size / num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
-
         self.query = nn.Linear(hidden_size, self.all_head_size)
         self.key = nn.Linear(hidden_size, self.all_head_size)
         self.value = nn.Linear(hidden_size, self.all_head_size)
-
         self.out_proj = nn.Linear(hidden_size, hidden_size)
-
         self.dropout = nn.Dropout(dropout)
 
     def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
@@ -732,7 +641,10 @@ class OmDetTurboEncoderLayer(nn.Module):
         super().__init__()
         self.encoder_normalize_before = config.encoder_normalize_before
         self.self_attn = OmDetTurboMultiheadAttention(
-            config.encoder_hidden_dim, config.num_attention_heads, config.dropout
+            config,
+            hidden_size=config.encoder_hidden_dim,
+            num_attention_heads=config.num_attention_heads,
+            dropout=config.dropout,
         )
         self.self_attn_layer_norm = nn.LayerNorm(config.encoder_hidden_dim, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.dropout)
@@ -1061,14 +973,17 @@ class OmDetTurboDeformableTransformerDecoderLayer(nn.Module):
         super().__init__()
         # self attention
         self.self_attn = OmDetTurboMultiheadAttention(
-            config.decoder_hidden_dim, config.decoder_num_heads, dropout=config.decoder_dropout
+            config,
+            hidden_size=config.decoder_hidden_dim,
+            num_attention_heads=config.decoder_num_heads,
+            dropout=config.decoder_dropout,
         )
         self.dropout1 = nn.Dropout(config.decoder_dropout)
         self.norm1 = nn.LayerNorm(config.decoder_hidden_dim, eps=config.layer_norm_eps)
 
         # cross attention
         self.cross_attn = OmDetTurboMultiscaleDeformableAttention(
-            config, config.decoder_num_heads, config.decoder_num_points
+            config, num_heads=config.decoder_num_heads, n_points=config.decoder_num_points
         )
         self.dropout2 = nn.Dropout(config.decoder_dropout)
         self.norm2 = nn.LayerNorm(config.decoder_hidden_dim, eps=config.layer_norm_eps)
@@ -1363,17 +1278,23 @@ class OmDetTurboPreTrainedModel(PreTrainedModel):
         return total_task_features, total_task_masks
 
     def get_language_embedding(self, batched_classes, batched_tasks):
-        max_class_size = max([len(class_single["input_ids"]) for class_single in batched_classes])
-        class_features = []
-        for classes in batched_classes:
-            pad_size = max_class_size - len(classes["input_ids"])
-            class_emb = self.get_cached_class_emb(classes)
-            class_features.append(F.pad(class_emb, (0, 0, 0, pad_size)).unsqueeze(1).to(self.device))
+        structure = batched_classes["structure"]
+        batched_classes_embeddings = self.get_cached_class_emb(batched_classes)
+        # regroup class embeddings using saved structure
+        max_class_size = torch.max(structure)
+        class_embeddings_regrouped = []
+        start = 0
+        for size in structure:
+            pad_size = max_class_size - size
+            class_embeddings_regrouped.append(
+                F.pad(batched_classes_embeddings[start : start + size], (0, 0, 0, pad_size)).unsqueeze(1)
+            )
+            start += size
+        class_embeddings = torch.cat(class_embeddings_regrouped, dim=1)
 
-        class_features = torch.cat(class_features, dim=1)
-        task_features, task_mask = self.get_cached_task_emb(batched_tasks)
+        task_embeddings, task_mask = self.get_cached_task_emb(batched_tasks)
 
-        return class_features, task_features, task_mask
+        return class_embeddings, task_embeddings, task_mask
 
 
 OMDET_TURBO_START_DOCSTRING = r"""
@@ -1425,7 +1346,7 @@ class OmDetTurboDecoder(OmDetTurboPreTrainedModel):
         # backbone feature projection
         self.channel_projection_layers = nn.ModuleList(
             nn.Sequential(nn.Conv2d(x, hidden_dim, 1, bias=False), nn.BatchNorm2d(hidden_dim))
-            for x in config.backbone_feat_channels
+            for x in config.vision_features_channels
         )
         self.task_encoder = OmDetTurboTaskEncoder(config)
         if config.class_dim != hidden_dim:
@@ -1691,7 +1612,7 @@ class OmDetTurboForObjectDetection(OmDetTurboPreTrainedModel):
         output_hidden_states = output_hidden_states if output_hidden_states is not None else self.output_hidden_states
         return_dict = return_dict if return_dict is not None else self.use_return_dict
 
-        classes = [classes[str(i)] for i in range(len(classes))]
+        # classes = [classes[str(i)] for i in range(len(classes))]
 
         image_features = self.vision_backbone(pixel_values)
         encoder_outputs = self.encoder(

@@ -16,6 +16,7 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.backbone_utils import verify_backbone_config_arguments
 from ..auto import CONFIG_MAPPING
 
 
@@ -43,29 +44,15 @@ class OmDetTurboConfig(PretrainedConfig):
             The name of the timm vision backbone to use.
         backbone_kwargs (`dict`, *optional*):
             Additional kwargs for the timm vision backbone.
-        backbone_out_indices (`List(int)`, *optional*, defaults to `[1, 2, 3]`):
-            The output indices of the vision backbone.
-        backbone_embed_dim (`int`, *optional*, defaults to 96):
-            The embedding dimension of the vision backbone.
-        backbone_qkv_bias (`bool`, *optional*, defaults to `True`):
-            Whether to use bias for the attention int the vision backbone.
-        backbone_depths (`List(int)`, *optional*, defaults to `[2, 2, 6, 2]`):
-            The depths of the vision backbone layers.
-        backbone_num_heads (`List(int)`, *optional*, defaults to `[3, 6, 12, 24]`):
-            The number of heads for the vision backbone.
-        backbone_window_size (`int`, *optional*, defaults to 7):
-            The window size for the vision backbone.
-        backbone_features_only (`bool`, *optional*, defaults to `True`):
-            Whether to output only the features of the vision backbone (no head built on top).
-        use_pretrained_backbone (`bool`, *optional*, defaults to `True`):
+        use_pretrained_backbone (`bool`, *optional*, defaults to `False`):
             Whether to use a pretrained timm vision backbone.
-        backbone_image_size (`int`, *optional*, defaults to 640):
-            The image size for the vision backbone.
+        image_size (`int`, *optional*, defaults to 640):
+            The size (resolution) of each image.
         encoder_hidden_dim (`int`, *optional*, defaults to 256):
             The hidden dimension of the encoder.
         decoder_hidden_dim (`int`, *optional*, defaults to 256):
             The hidden dimension of the decoder.
-        backbone_feat_channels (`tuple(int)`, *optional*, defaults to `[256, 256, 256]`):
+        vision_features_channels (`tuple(int)`, *optional*, defaults to `[256, 256, 256]`):
             The projected vision features channels used as inputs for the decoder.
         num_feature_levels (`int`, *optional*, defaults to 3):
             The number of feature levels for the multi-scale deformable attention module of the decoder.
@@ -166,22 +153,16 @@ class OmDetTurboConfig(PretrainedConfig):
     def __init__(
         self,
         text_config=None,
-        vision_config=None,
+        backbone_config=None,
         use_timm_backbone=True,
         backbone="swin_tiny_patch4_window7_224",
         backbone_kwargs=None,
-        backbone_out_indices=[1, 2, 3],
-        backbone_embed_dim=96,
-        backbone_qkv_bias=True,
-        backbone_depths=[2, 2, 6, 2],
-        backbone_num_heads=[3, 6, 12, 24],
-        backbone_window_size=7,
-        backbone_features_only=True,
-        use_pretrained_backbone=True,
-        backbone_image_size=640,
+        use_pretrained_backbone=False,
+        image_size=640,
+        apply_layernorm=True,
         encoder_hidden_dim=256,
         decoder_hidden_dim=256,
-        backbone_feat_channels=[256, 256, 256],
+        vision_features_channels=[256, 256, 256],
         num_feature_levels=3,
         disable_custom_kernels=False,
         text_projection_in_dim=512,
@@ -218,33 +199,35 @@ class OmDetTurboConfig(PretrainedConfig):
         is_encoder_decoder=True,
         **kwargs,
     ):
-        if use_timm_backbone and backbone_kwargs is None:
-            backbone_kwargs = {
-                "window_size": backbone_window_size,
-                "features_only": backbone_features_only,
-                "out_indices": backbone_out_indices,
-                "qkv_bias": backbone_qkv_bias,
-                "img_size": backbone_image_size,
-                "embed_dim": backbone_embed_dim,
-                "depths": backbone_depths,
-                "num_heads": backbone_num_heads,
-            }
-        elif vision_config is None:
+        if use_timm_backbone:
+            if backbone_kwargs is None:
+                backbone_kwargs = {
+                    "out_indices": [1, 2, 3],
+                    "img_size": image_size,
+                    "always_partition": True,
+                }
+        elif backbone_config is None:
             logger.info("`vision_config` is `None`. Initializing the config with the default `swin` vision config.")
-            vision_config = CONFIG_MAPPING["swin"](
-                window_size=backbone_window_size,
-                image_size=backbone_image_size,
-                embed_dim=backbone_embed_dim,
-                depths=backbone_depths,
-                num_heads=backbone_num_heads,
-                qkv_bias=backbone_qkv_bias,
-                output_hidden_states=True,
+            backbone_config = CONFIG_MAPPING["swin"](
+                window_size=7,
+                image_size=image_size,
+                embed_dim=96,
+                depths=[2, 2, 6, 2],
+                num_heads=[3, 6, 12, 24],
                 out_indices=[2, 3, 4],
             )
-        elif isinstance(vision_config, dict):
-            backbone_model_type = vision_config.pop("model_type")
+        elif isinstance(backbone_config, dict):
+            backbone_model_type = backbone_config.pop("model_type")
             config_class = CONFIG_MAPPING[backbone_model_type]
-            vision_config = config_class.from_dict(vision_config)
+            backbone_config = config_class.from_dict(backbone_config)
+
+        verify_backbone_config_arguments(
+            use_timm_backbone=use_timm_backbone,
+            use_pretrained_backbone=use_pretrained_backbone,
+            backbone=backbone,
+            backbone_config=backbone_config,
+            backbone_kwargs=backbone_kwargs,
+        )
 
         if text_config is None:
             logger.info(
@@ -257,20 +240,16 @@ class OmDetTurboConfig(PretrainedConfig):
             text_config = config_class.from_dict(text_config)
 
         self.text_config = text_config
-        self.vision_config = vision_config
+        self.backbone_config = backbone_config
         self.use_timm_backbone = use_timm_backbone
         self.backbone = backbone
         self.backbone_kwargs = backbone_kwargs
-        self.backbone_out_indices = backbone_out_indices
-        self.backbone_embed_dim = backbone_embed_dim
-        self.backbone_depths = backbone_depths
-        self.backbone_num_heads = backbone_num_heads
-        self.backbone_window_size = backbone_window_size
-        self.backbone_image_size = backbone_image_size
+        self.image_size = image_size
         self.use_pretrained_backbone = use_pretrained_backbone
+        self.apply_layernorm = apply_layernorm
         self.encoder_hidden_dim = encoder_hidden_dim
         self.decoder_hidden_dim = decoder_hidden_dim
-        self.backbone_feat_channels = backbone_feat_channels
+        self.vision_features_channels = vision_features_channels
         self.num_feature_levels = num_feature_levels
         self.disable_custom_kernels = disable_custom_kernels
         self.text_projection_in_dim = text_projection_in_dim

@@ -55,7 +55,8 @@ def get_omdet_turbo_config(model_name, use_timm_backbone):
         text_config={"model_type": "clip_text_model"},
         use_timm_backbone=use_timm_backbone,
         backbone="swin_tiny_patch4_window7_224" if use_timm_backbone else None,
-        use_pretrained_backbone=True,
+        apply_layernorm=True if use_timm_backbone else False,
+        use_pretrained_backbone=False,
     )
 
     return config
@@ -68,7 +69,7 @@ def create_rename_keys_vision(state_dict, config):
     for layer_name in state_dict.keys():
         if layer_name.startswith("backbone") and not layer_name.startswith("backbone.norm"):
             if config.use_timm_backbone:
-                layer_name_replace = layer_name.replace("backbone", "vision_backbone.vision_backbone")
+                layer_name_replace = layer_name.replace("backbone", "vision_backbone.vision_backbone._backbone")
                 layer_name_replace = layer_name_replace.replace(".layers.", ".layers_")
                 if "downsample" in layer_name:
                     # get layer number
@@ -87,9 +88,12 @@ def create_rename_keys_vision(state_dict, config):
                     layer_name_replace = layer_name_replace.replace(".layers.", ".encoder.layers.")
                     layer_name_replace = layer_name_replace.replace(".attn.", ".attention.self.")
         elif layer_name.startswith("backbone.norm"):
-            layer_name_replace = layer_name.replace("backbone", "vision_backbone")
             layer_num = int(layer_name.split("norm")[1].split(".")[0])
-            layer_name_replace = layer_name_replace.replace(f"norm{layer_num}", f"layer_norms.{layer_num-1}")
+            if config.use_timm_backbone:
+                layer_name_replace = layer_name.replace("backbone", "vision_backbone")
+                layer_name_replace = layer_name_replace.replace(f"norm{layer_num}", f"layer_norms.{layer_num-1}")
+            else:
+                layer_name_replace = layer_name.replace(f"backbone.norm{layer_num}", f"vision_backbone.vision_backbone.hidden_states_norms.stage{layer_num+1}")
         else:
             continue
         rename_keys.append((layer_name, layer_name_replace))
@@ -158,7 +162,7 @@ def read_in_q_k_v_vision(state_dict, config):
     for layer_name_vision in state_dict_keys:
         if layer_name_vision.startswith("vision_backbone") and "qkv" in layer_name_vision:
             layer_num = int(layer_name_vision.split(".")[4])
-            hidden_size = config.vision_config.embed_dim * 2**layer_num
+            hidden_size = config.backbone_config.embed_dim * 2**layer_num
             if "weight" in layer_name_vision:
                 in_proj_weight = state_dict.pop(layer_name_vision)
                 state_dict[layer_name_vision.replace("qkv.weight", "key.weight")] = in_proj_weight[:hidden_size, :]
