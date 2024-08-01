@@ -93,13 +93,11 @@ class FlaxDinov2PatchEmbeddings(nn.Module):
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
-        image_size = self.config.image_size  # ? 518
-        patch_size = self.config.patch_size  # ? 14
+        image_size = self.config.image_size
+        patch_size = self.config.patch_size
         image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
         patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (
-            image_size[0] // patch_size[0]
-        )  # ? 518//14 * 518//14 = 37*37 = 1369
+        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
 
         self.num_patches = num_patches
         self.num_channels = self.config.num_channels
