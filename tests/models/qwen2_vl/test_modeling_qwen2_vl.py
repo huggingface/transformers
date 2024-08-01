@@ -21,7 +21,6 @@ from transformers import (
     AutoProcessor,
     Qwen2VLConfig,
     Qwen2VLForConditionalGeneration,
-    Qwen2VLModel,
     is_torch_available,
     is_vision_available,
 )
