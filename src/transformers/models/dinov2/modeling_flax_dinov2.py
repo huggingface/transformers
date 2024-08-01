@@ -71,7 +71,7 @@ DINOV2_START_DOCSTRING = r"""
             [`~FlaxPreTrainedModel.to_bf16`].
 """
 
-Dinov2_INPUTS_DOCSTRING = r"""
+DINOV2_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`numpy.ndarray` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`Dinov2ImageProcessor.__call__`]
