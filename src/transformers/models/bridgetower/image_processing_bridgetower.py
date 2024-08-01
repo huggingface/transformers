@@ -474,7 +474,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
         do_pad = do_pad if do_pad is not None else self.do_pad
-        do_center_crop if do_center_crop is not None else self.do_center_crop
+        do_center_crop = do_center_crop if do_center_crop is not None else self.do_center_crop
         # For backwards compatibility. Initial version of this processor was cropping to the "size" argument, which
         # it should default to if crop_size is undefined.
         crop_size = (
