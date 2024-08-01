@@ -1455,9 +1455,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # should respect.
             attn_implementation = config._attn_implementation_internal
         else:
-            attn_implementation = kwargs.pop("attn_implementation", None)
+            attn_implementation = None
 
-        config._attn_implementation = attn_implementation
+        config._attn_implementation = kwargs.pop("attn_implementation", attn_implementation)
         config = cls._autoset_attn_implementation(
             config,
             use_flash_attention_2=use_flash_attention_2,
