@@ -165,7 +165,6 @@ class GraniteRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-
 # Copied from transformers.models.llama.modeling_llama.rotate_half with Llama->Granite
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
@@ -766,37 +765,12 @@ class GraniteModel(GranitePreTrainedModel):
         self.rope_theta = config.rope_theta
 
         # rope
-        self._init_rope()
+        self.rotary_emb = GraniteRotaryEmbedding(
+            self.head_dim, max_position_embeddings=self.max_position_embeddings, base=self.rope_theta
+        )
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def _init_rope(self):
-        if self.config.rope_scaling is None:
-            self.rotary_emb = GraniteRotaryEmbedding(
-                self.head_dim,
-                max_position_embeddings=self.max_position_embeddings,
-                base=self.rope_theta,
-            )
-        else:
-            scaling_type = self.config.rope_scaling["type"]
-            scaling_factor = self.config.rope_scaling["factor"]
-            if scaling_type == "linear":
-                self.rotary_emb = GraniteLinearScalingRotaryEmbedding(
-                    self.head_dim,
-                    max_position_embeddings=self.max_position_embeddings,
-                    scaling_factor=scaling_factor,
-                    base=self.rope_theta,
-                )
-            elif scaling_type == "dynamic":
-                self.rotary_emb = GraniteDynamicNTKScalingRotaryEmbedding(
-                    self.head_dim,
-                    max_position_embeddings=self.max_position_embeddings,
-                    scaling_factor=scaling_factor,
-                    base=self.rope_theta,
-                )
-            else:
-                raise ValueError(f"Unknown RoPE scaling type {scaling_type}")
 
     def get_input_embeddings(self):
         return self.embed_tokens
