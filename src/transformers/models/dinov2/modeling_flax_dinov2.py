@@ -601,6 +601,7 @@ class FlaxDinov2PreTrainedModel(FlaxPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
+        # (batch_size, num_channels, height, width) -> (batch_size, height, width, num_channels)
         pixel_values = jnp.transpose(pixel_values, (0, 2, 3, 1))
         # Handle any PRNG if needed
         rngs = {}
