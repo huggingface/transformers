@@ -177,9 +177,7 @@ class FlaxDinov2Embeddings(nn.Module):
     def setup(self):
         self.cls_token = self.param(
             "cls_token",
-            jax.nn.initializers.variance_scaling(
-                self.config.initializer_range**2, "fan_in", "truncated_normal"
-            ),  # ? NTU initializer_range**2
+            jax.nn.initializers.variance_scaling(self.config.initializer_range**2, "fan_in", "truncated_normal"),
             (1, 1, self.config.hidden_size),
         )
         self.mask_token = self.param(
