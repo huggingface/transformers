@@ -237,7 +237,7 @@ class FlaxDinov2ModelIntegrationTest(unittest.TestCase):
     def test_inference_image_classification_head_imagenet_1k(self):
         model = FlaxDinov2ForImageClassification.from_pretrained(
             "facebook/dinov2-base-imagenet1k-1-layer", from_pt=True
-        )  # change from_pt to False when the checkpoints are uploaded to hub
+        )
 
         image_processor = self.default_image_processor
         image = prepare_img()
