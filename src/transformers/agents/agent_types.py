@@ -107,7 +107,7 @@ class AgentImage(AgentType, ImageType):
         elif isinstance(value, np.ndarray):
             self._tensor = torch.tensor(value)
         else:
-            raise ValueError(f"Unsupported type for {self.__class__.__name__}: {type(value)}")
+            raise TypeError(f"Unsupported type for {self.__class__.__name__}: {type(value)}")
 
     def _ipython_display_(self, include=None, exclude=None):
         """

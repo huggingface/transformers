@@ -1817,8 +1817,8 @@ class TrainingArguments:
                 " during training"
             )
 
-        if not isinstance(self.warmup_steps, int) or self.warmup_steps < 0 or 0 < self.warmup_steps <= 1:
-            raise ValueError("warmup_steps must be either 0 or > 1")
+        if not isinstance(self.warmup_steps, int) or self.warmup_steps < 0:
+            raise ValueError("warmup_steps must be of type int and must be 0 or a positive integer.")
 
         if isinstance(self.fsdp, bool):
             self.fsdp = [FSDPOption.FULL_SHARD] if self.fsdp else ""
