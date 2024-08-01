@@ -759,7 +759,7 @@ class FlaxDinov2ForImageClassification(FlaxDinov2PreTrainedModel):
     module_class = FlaxDinov2ForImageClassificationModule
 
 
-FLAX_VISION_CLASSIF_DOCSTRING = """
+FLAX_VISION_CLASSIFICATION_DOCSTRING = """
     Returns:
 
     Example:
