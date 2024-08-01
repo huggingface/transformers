@@ -182,7 +182,7 @@ class FlaxDinov2Embeddings(nn.Module):
             (1, self.config.hidden_size),
         )
         self.patch_embeddings = FlaxDinov2PatchEmbeddings(self.config, dtype=self.dtype)
-        num_patches = self.patch_embeddings.num_patches  # ? 1369
+        num_patches = self.patch_embeddings.num_patches
         self.position_embeddings = self.param(
             "position_embeddings",
             jax.nn.initializers.variance_scaling(self.config.initializer_range**2, "fan_in", "truncated_normal"),
