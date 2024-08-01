@@ -113,7 +113,7 @@ class FlaxDinov2PatchEmbeddings(nn.Module):
         )
 
     def __call__(self, pixel_values):
-        num_channels = pixel_values.shape[-1]  # ? jax convention is NHWC
+        num_channels = pixel_values.shape[-1]
         if num_channels != self.num_channels:
             raise ValueError(
                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
