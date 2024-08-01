@@ -423,9 +423,7 @@ class FlaxDinov2Layer(nn.Module):
         self.norm1 = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
         self.attention = FlaxDinov2Attention(self.config, dtype=self.dtype)
         self.layer_scale1 = FlaxDinov2LayerScale(self.config, dtype=self.dtype)
-        self.drop_path = FlaxDinov2DropPath(
-            self.config.drop_path_rate
-        )
+        self.drop_path = FlaxDinov2DropPath(self.config.drop_path_rate)
         self.norm2 = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
 
         if self.config.use_swiglu_ffn:
