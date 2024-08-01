@@ -266,7 +266,6 @@ class DepthAnythingModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(predicted_depth[0, :3, :3], expected_slice, atol=1e-6))
 
         # -- `metric` depth model
-        # TODO: change path to `depth-anything/depth-anything-V2-metric-indoor-small-hf` once it's available
         image_processor = DPTImageProcessor.from_pretrained("depth-anything/depth-anything-V2-metric-indoor-small-hf")
         model = DepthAnythingForDepthEstimation.from_pretrained(
             "depth-anything/depth-anything-V2-metric-indoor-small-hf"
