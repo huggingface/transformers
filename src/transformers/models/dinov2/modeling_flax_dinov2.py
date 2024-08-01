@@ -194,7 +194,7 @@ class FlaxDinov2Embeddings(nn.Module):
 
     def __call__(self, pixel_values, deterministic=True):
         batch_size = pixel_values.shape[0]
-        height, width = pixel_values.shape[1], pixel_values.shape[2]  # ? 224, 224
+        height, width = pixel_values.shape[1], pixel_values.shape[2]
 
         embeddings = self.patch_embeddings(pixel_values)
 
