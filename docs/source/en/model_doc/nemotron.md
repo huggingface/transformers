@@ -113,3 +113,36 @@ If you find our work helpful, please consider citing our paper:
       url={https://arxiv.org/abs/2407.14679},
 }
 ```
+
+## NemotronConfig
+
+[[autodoc]] NemotronConfig
+
+
+## NemotronModel
+
+[[autodoc]] NemotronModel
+    - forward
+
+
+## NemotronForCausalLM
+
+[[autodoc]] NemotronForCausalLM
+    - forward
+
+## NemotronForSequenceClassification
+
+[[autodoc]] NemotronForSequenceClassification
+    - forward
+
+
+## NemotronForQuestionAnswering
+
+[[autodoc]] NemotronForQuestionAnswering
+    - forward
+
+
+## NemotronForTokenClassification
+
+[[autodoc]] NemotronForTokenClassification
+    - forward
