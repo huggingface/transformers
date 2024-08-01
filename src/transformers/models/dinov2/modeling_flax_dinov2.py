@@ -143,7 +143,6 @@ def interpolate_pos_encoding(config, hidden_states, height, width, position_embe
     new_height_ratio = jnp.float32(height / math.sqrt(num_positions))
     new_width_ratio = jnp.float32(width / math.sqrt(num_positions))
 
-    # patch_pos_embed = jax.image.resize(patch_pos_embed, shape=(hidden_states.shape[0], dim, height, width), method='bicubic', antialias=False)
     scale, translation = (
         jnp.array([new_height_ratio, new_width_ratio], dtype=jnp.float32),
         jnp.array([0.0, 0.0], dtype=jnp.float32),
@@ -426,7 +425,7 @@ class FlaxDinov2Layer(nn.Module):
         self.layer_scale1 = FlaxDinov2LayerScale(self.config, dtype=self.dtype)
         self.drop_path = FlaxDinov2DropPath(
             self.config.drop_path_rate
-        )  # if self.config.drop_path_rate > 0.0 else nn.Identity()
+        )
         self.norm2 = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
 
         if self.config.use_swiglu_ffn:
@@ -578,7 +577,7 @@ class FlaxDinov2PreTrainedModel(FlaxPreTrainedModel):
         else:
             return random_params
 
-    @add_start_docstrings_to_model_forward(Dinov2_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(DINOV2_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     def __call__(
         self,
         pixel_values,
@@ -658,7 +657,7 @@ class FlaxDinov2Module(nn.Module):
 
 @add_start_docstrings(
     "The bare Dinov2 Model transformer outputting raw hidden-states without any specific head on top.",
-    Dinov2_START_DOCSTRING,
+    DINOV2_START_DOCSTRING,
 )
 class FlaxDinov2Model(FlaxDinov2PreTrainedModel):
     module_class = FlaxDinov2Module
@@ -748,7 +747,7 @@ class FlaxDinov2ForImageClassificationModule(nn.Module):
     Dinov2 Model transformer with an image classification head on top (a linear layer on top of the final hidden state of
     the [CLS] token) e.g. for ImageNet.
     """,
-    Dinov2_START_DOCSTRING,
+    DINOV2_START_DOCSTRING,
 )
 class FlaxDinov2ForImageClassification(FlaxDinov2PreTrainedModel):
     module_class = FlaxDinov2ForImageClassificationModule
@@ -781,7 +780,7 @@ FLAX_VISION_CLASSIFICATION_DOCSTRING = """
     ```
 """
 
-overwrite_call_docstring(FlaxDinov2ForImageClassification, FLAX_VISION_CLASSIF_DOCSTRING)
+overwrite_call_docstring(FlaxDinov2ForImageClassification, FLAX_VISION_CLASSIFICATION_DOCSTRING)
 append_replace_return_docstrings(
     FlaxDinov2ForImageClassification, output_type=FlaxSequenceClassifierOutput, config_class=Dinov2Config
 )
