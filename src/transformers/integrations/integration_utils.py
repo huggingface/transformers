@@ -744,7 +744,7 @@ class WandbLogModel(str, Enum):
         if not isinstance(value, str):
             raise ValueError(f"Expecting to have a string `WANDB_LOG_MODEL` setting, but got {type(value)}")
         if value.upper() in ENV_VARS_TRUE_VALUES:
-            DeprecationWarning(
+            raise DeprecationWarning(
                 f"Setting `WANDB_LOG_MODEL` as {os.getenv('WANDB_LOG_MODEL')} is deprecated and will be removed in "
                 "version 5 of transformers. Use one of `'end'` or `'checkpoint'` instead."
             )
@@ -1389,7 +1389,7 @@ class NeptuneCallback(TrainerCallback):
             You can find and copy the name in Neptune from the project settings -> Properties. If None (default), the
             value of the `NEPTUNE_PROJECT` environment variable is used.
         name (`str`, *optional*): Custom name for the run.
-        base_namespace (`str`, optional, defaults to "finetuning"): In the Neptune run, the root namespace
+        base_namespace (`str`, *optional*, defaults to "finetuning"): In the Neptune run, the root namespace
             that will contain all of the metadata logged by the callback.
         log_parameters (`bool`, *optional*, defaults to `True`):
             If True, logs all Trainer arguments and model parameters provided by the Trainer.

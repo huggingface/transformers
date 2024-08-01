@@ -1249,7 +1249,7 @@ class TapasTokenizer(PreTrainedTokenizer):
                 Total number of table columns
             max_length (`int`):
                 Total maximum length.
-            truncation_strategy (`str` or [`TapasTruncationStrategy`]):
+            truncation_strategy (`str` or [`TapasTruncationStrategy]`):
                 Truncation strategy to use. Seeing as this method should only be called when truncating, the only
                 available strategy is the `"drop_rows_to_fit"` strategy.
 

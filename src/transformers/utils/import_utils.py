@@ -670,18 +670,20 @@ def is_torch_compile_available():
 def is_torchdynamo_compiling():
     if not is_torch_available():
         return False
-    try:
-        # Importing torch._dynamo causes issues with PyTorch profiler (https://github.com/pytorch/pytorch/issues/130622) hence rather relying on `torch.compiler.is_compiling()` when possible.
-        if version.parse(_torch_version) >= version.parse("2.3.0"):
-            import torch
 
-            return torch.compiler.is_compiling()
-        else:
+    # Importing torch._dynamo causes issues with PyTorch profiler (https://github.com/pytorch/pytorch/issues/130622)
+    # hence rather relying on `torch.compiler.is_compiling()` when possible (torch>=2.3)
+    try:
+        import torch
+
+        return torch.compiler.is_compiling()
+    except AttributeError:
+        try:
             import torch._dynamo as dynamo  # noqa: F401
 
             return dynamo.is_compiling()
-    except Exception:
-        return False
+        except Exception:
+            return False
 
 
 def is_torch_tensorrt_fx_available():
@@ -1603,7 +1605,7 @@ def direct_transformers_import(path: str, file="__init__.py") -> ModuleType:
 
     Args:
         path (`str`): The path to the source file
-        file (`str`, optional): The file to join with the path. Defaults to "__init__.py".
+        file (`str`, *optional*): The file to join with the path. Defaults to "__init__.py".
 
     Returns:
         `ModuleType`: The resulting imported module
