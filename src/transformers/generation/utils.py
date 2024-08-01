@@ -13,7 +13,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import copy
 import inspect
 import warnings
@@ -33,6 +32,7 @@ from ..cache_utils import (
     HQQQuantizedCache,
     HybridCache,
     MambaCache,
+    OffloadedCache,
     QuantizedCacheConfig,
     QuantoQuantizedCache,
     SlidingWindowCache,
@@ -1813,7 +1813,9 @@ class GenerationMixin:
                     )
                 model_kwargs[cache_name] = self._get_cache(
                     generation_config.cache_implementation,
-                    getattr(generation_config, "num_beams", 1) * batch_size,
+                    getattr(generation_config, "num_beams", 1)
+                    * getattr(generation_config, "num_return_sequences", 1)
+                    * batch_size,
                     generation_config.max_length,
                     model_kwargs,
                 )
@@ -1843,6 +1845,8 @@ class GenerationMixin:
                     )
 
                 model_kwargs[cache_name] = cache_class(cache_config)
+            elif generation_config.cache_implementation == "offloaded":
+                model_kwargs[cache_name] = OffloadedCache()
         # Use DynamicCache() instance by default. This will avoid back and forth from legacy format that
         # keeps copying the cache thus using much more memory
         elif generation_config.cache_implementation is None and self._supports_default_dynamic_cache():
