@@ -442,7 +442,7 @@ class Trainer:
         # New models init such as `MyModel()` will not hit this step
         if is_deepspeed_zero3_enabled() and not getattr(model, "transformers_zero3_init_used", True):
             raise ValueError(
-                "Model was not initialized with `Zero-3` despite being configured. Please re-initialize your model via `***Model.from_pretrained(...)` or `***Model.from_config(...)` after creating your `TrainingArguments`!"
+                "Model was not initialized with `Zero-3` despite being configured. Please re-initialize your model via `Model.from_pretrained(...)` or `Model.from_config(...)` after creating your `TrainingArguments`!"
             )
 
         if model.__class__.__name__ in MODEL_MAPPING_NAMES:
