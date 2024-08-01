@@ -77,7 +77,6 @@ class GraniteRMSNorm(nn.Module):
 ALL_LAYERNORM_LAYERS.append(GraniteRMSNorm)
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->Granite
 class GraniteRotaryEmbedding(nn.Module):
     def __init__(self, config: GraniteConfig):
         super().__init__()
