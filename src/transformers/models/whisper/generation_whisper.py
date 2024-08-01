@@ -825,7 +825,9 @@ class WhisperGenerationMixin:
                         generate_kwargs["decoder_attention_mask"], (0, 0, 0, batch_size - cur_bsz), value=True
                     )
                 if generate_kwargs.get("encoder_outputs") is not None:
-                    generate_kwargs["encoder_outputs"] = F.pad(generate_kwargs["encoder_outputs"], (0, 0, 0, 0, 0, batch_size - cur_bsz), value=0)
+                    generate_kwargs["encoder_outputs"] = F.pad(
+                        generate_kwargs["encoder_outputs"], (0, 0, 0, 0, 0, batch_size - cur_bsz), value=0
+                    )
 
             seek_outputs = super().generate(
                 segment_input,
