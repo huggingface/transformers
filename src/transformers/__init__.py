@@ -67,6 +67,7 @@ _import_structure = {
         "ToolCollection",
         "launch_gradio_demo",
         "load_tool",
+        "stream_to_gradio",
     ],
     "audio_utils": [],
     "benchmark": [],
@@ -681,6 +682,13 @@ _import_structure = {
         "SamPromptEncoderConfig",
         "SamVisionConfig",
     ],
+    "models.sam2": [
+        "Sam2Config",
+        "Sam2MaskDecoderConfig",
+        "Sam2Processor",
+        "Sam2PromptEncoderConfig",
+        "Sam2VisionConfig",
+    ],
     "models.seamless_m4t": [
         "SeamlessM4TConfig",
         "SeamlessM4TFeatureExtractor",
@@ -1179,6 +1187,7 @@ else:
     _import_structure["models.pvt"].extend(["PvtImageProcessor"])
     _import_structure["models.rt_detr"].extend(["RTDetrImageProcessor"])
     _import_structure["models.sam"].extend(["SamImageProcessor"])
+    _import_structure["models.sam2"].extend(["Sam2ImageProcessor"])
     _import_structure["models.segformer"].extend(["SegformerFeatureExtractor", "SegformerImageProcessor"])
     _import_structure["models.seggpt"].extend(["SegGptImageProcessor"])
     _import_structure["models.siglip"].append("SiglipImageProcessor")
@@ -3096,6 +3105,12 @@ else:
             "SamPreTrainedModel",
         ]
     )
+    _import_structure["models.sam2"].extend(
+        [
+            "Sam2Model",
+            "Sam2PreTrainedModel",
+        ]
+    )
     _import_structure["models.seamless_m4t"].extend(
         [
             "SeamlessM4TCodeHifiGan",
@@ -4733,6 +4748,7 @@ if TYPE_CHECKING:
         ToolCollection,
         launch_gradio_demo,
         load_tool,
+        stream_to_gradio,
     )
     from .configuration_utils import PretrainedConfig
 
@@ -5913,6 +5929,7 @@ if TYPE_CHECKING:
         from .models.pvt import PvtImageProcessor
         from .models.rt_detr import RTDetrImageProcessor
         from .models.sam import SamImageProcessor
+        from .models.sam2 import Sam2ImageProcessor
         from .models.segformer import SegformerFeatureExtractor, SegformerImageProcessor
         from .models.seggpt import SegGptImageProcessor
         from .models.siglip import SiglipImageProcessor
@@ -7464,6 +7481,10 @@ if TYPE_CHECKING:
         from .models.sam import (
             SamModel,
             SamPreTrainedModel,
+        )
+        from .models.sam2 import (
+            Sam2Model,
+            Sam2PreTrainedModel,
         )
         from .models.seamless_m4t import (
             SeamlessM4TCodeHifiGan,
