@@ -4408,3 +4408,11 @@ class TokenizerTesterMixin:
                         replace_additional_special_tokens=False,
                     )
                     self.assertEqual(tokenizer_2.additional_special_tokens, ["<other>", "<another>", "<tok>"])
+
+    def test_tokenizer_initialization_with_conflicting_key(self):
+        get_tokenizer_func = self.get_rust_tokenizer if self.test_rust_tokenizer else self.get_tokenizer
+        with self.assertRaises(AttributeError, msg="conflicts with the method"):
+            get_tokenizer_func(add_special_tokens=True)
+
+        with self.assertRaises(AttributeError, msg="conflicts with the method"):
+            get_tokenizer_func(get_vocab=True)
