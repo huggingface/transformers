@@ -119,11 +119,9 @@ class FlaxDinov2PatchEmbeddings(nn.Module):
                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
                 f" Expected {self.num_channels} but got {num_channels}."
             )
-        embeddings = self.projection(pixel_values)  # ? (batch_size,224,224,3) -> (batch_size, 16, 16, 768)
+        embeddings = self.projection(pixel_values)
         batch_size, _, _, channels = embeddings.shape
-        return jnp.reshape(
-            embeddings, (batch_size, -1, channels)
-        )  # ? (batch_size, 16*16, 768) = (batch_size, 256, 768)
+        return jnp.reshape(embeddings, (batch_size, -1, channels))
 
 
 def interpolate_pos_encoding(config, hidden_states, height, width, position_embeddings):
