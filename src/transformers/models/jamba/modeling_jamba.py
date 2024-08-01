@@ -97,7 +97,7 @@ def load_balancing_loss_func(
         router_logits (Union[`torch.Tensor`, Tuple[torch.Tensor]):
             Logits from the `router`, should be a tuple of model.config.num_hidden_layers tensors of
             shape [batch_size X sequence_length, num_experts].
-        attention_mask (`torch.Tensor`, None):
+        attention_mask (`torch.Tensor`, *optional*):
             The attention_mask used in forward function
             shape [batch_size X sequence_length] if not None.
         num_experts (`int`, *optional*):
