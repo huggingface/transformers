@@ -82,8 +82,8 @@ class Sam2MaskDecoderConfig(PretrainedConfig):
     Args:
         hidden_size (`int`, *optional*, defaults to 256):
             Dimensionality of the hidden states.
-        hidden_act (`str`, *optional*, defaults to `"relu"`):
-            The non-linear activation function used inside the `SamMaskDecoder` module.
+        hidden_act (`str`, *optional*, defaults to `"gelu"`):
+            The non-linear activation function used inside the `Sam2MaskDecoder` module.
         mlp_dim (`int`, *optional*, defaults to 2048):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
         num_hidden_layers (`int`, *optional*, defaults to 2):
@@ -122,7 +122,7 @@ class Sam2MaskDecoderConfig(PretrainedConfig):
     def __init__(
         self,
         hidden_size=256,
-        hidden_act="relu",
+        hidden_act="gelu",
         mlp_dim=2048,
         num_hidden_layers=2,
         num_attention_heads=8,
@@ -160,6 +160,29 @@ class Sam2MaskDecoderConfig(PretrainedConfig):
         self.pred_obj_scores_mlp= pred_obj_scores_mlp,
         self.use_multimask_token_for_obj_ptr=use_multimask_token_for_obj_ptr,
         self.layer_norm_eps = layer_norm_eps
+
+
+class Sam2MemoryAttentionConfig(PretrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`Sam2MemoryAttentionConfig`]. It is used to instantiate a SAM2
+    memory attention according to the specified arguments, defining the model architecture. Instantiating a configuration
+    defaults will yield a similar configuration to that of the SAM2-hiera-tiny
+    [facebook/sam2-hiera-tiny](https://huggingface.co/facebook/sam2-hiera-tiny) architecture.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+
+    """
+    def __init__(
+        self,
+        # TO DO
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+
+        # TO DO
 
 
 class Sam2MemoryEncoderConfig(PretrainedConfig):
@@ -284,24 +307,27 @@ class Sam2VisionConfig(PretrainedConfig):
         self.mlp_dim = int(hidden_size * mlp_ratio) if mlp_dim is None else mlp_dim
 
 
-# TO DO
 class Sam2Config(PretrainedConfig):
     r"""
     [`Sam2Config`] is the configuration class to store the configuration of a [`Sam2Model`]. It is used to instantiate a
-    SAM model according to the specified arguments, defining the vision model, prompt-encoder model and mask decoder
+    SAM2 model according to the specified arguments, defining the vision model, prompt-encoder model, mask decoder, and memory-encoder model
     configs. Instantiating a configuration with the defaults will yield a similar configuration to that of the
-    SAM-ViT-H [facebook/sam2-hiera-tiny](https://huggingface.co/facebook/sam2-hiera-tiny) architecture.
+    [facebook/sam2-hiera-tiny](https://huggingface.co/facebook/sam2-hiera-tiny) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        vision_config (Union[`dict`, `SamVisionConfig`], *optional*):
-            Dictionary of configuration options used to initialize [`SamVisionConfig`].
-        prompt_encoder_config (Union[`dict`, `SamPromptEncoderConfig`], *optional*):
-            Dictionary of configuration options used to initialize [`SamPromptEncoderConfig`].
-        mask_decoder_config (Union[`dict`, `SamMaskDecoderConfig`], *optional*):
-            Dictionary of configuration options used to initialize [`SamMaskDecoderConfig`].
+        vision_config (Union[`dict`, `Sam2VisionConfig`], *optional*):
+            Dictionary of configuration options used to initialize [`Sam2VisionConfig`].
+        prompt_encoder_config (Union[`dict`, `Sam2PromptEncoderConfig`], *optional*):
+            Dictionary of configuration options used to initialize [`Sam2PromptEncoderConfig`].
+        mask_decoder_config (Union[`dict`, `Sam2MaskDecoderConfig`], *optional*):
+            Dictionary of configuration options used to initialize [`Sam2MaskDecoderConfig`].
+        memory_attention_config (Union[`dict`, `Sam2MemoryAttentionConfig`], *optional*):
+            Dictionary of configuration options used to initialize [`Sam2MemoryAttentionConfig`].
+        memory_encoder_config (Union[`dict`, `Sam2MemoryEncoderConfig`], *optional*):
+            Dictionary of configuration options used to initialize [`Sam2MemoryEncoderConfig`].
 
         kwargs (*optional*):
             Dictionary of keyword arguments.
@@ -313,6 +339,8 @@ class Sam2Config(PretrainedConfig):
     ...     Sam2VisionConfig,
     ...     Sam2PromptEncoderConfig,
     ...     Sam2MaskDecoderConfig,
+    ...     Sam2MemoryAttentionConfig,
+    ...     Sam2MemoryEncoderConfig,
     ...     Sam2Model,
     ... )
 
@@ -320,19 +348,21 @@ class Sam2Config(PretrainedConfig):
     >>> configuration = Sam2Config()
 
     >>> # Initializing a SamModel (with random weights) from the `"facebook/sam2-hiera-tiny"` style configuration
-    >>> model = SamModel(configuration)
+    >>> model = Sam2Model(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
 
-    >>> # We can also initialize a SamConfig from a SamVisionConfig, SamPromptEncoderConfig, and SamMaskDecoderConfig
+    >>> # We can also initialize a Sam2Config from a Sam2VisionConfig, Sam2PromptEncoderConfig, Sam2MaskDecoderConfig, Sam2MemoryAttentionConfig and Sam2MemoryEncoderConfig
 
-    >>> # Initializing SAM vision, SAM Q-Former and language model configurations
+    >>> # Initializing SAM2 vision, prompt_encoder, mask_decoder, and memory_encoder
     >>> vision_config = SamVisionConfig()
-    >>> prompt_encoder_config = SamPromptEncoderConfig()
-    >>> mask_decoder_config = SamMaskDecoderConfig()
+    >>> prompt_encoder_config = Sam2PromptEncoderConfig()
+    >>> mask_decoder_config = Sam2MaskDecoderConfig()
+    >>> memory_attention_config = Sam2MemoryAttentionConfig()
+    >>> memory_encoder_config = Sam2MemoryEncoderConfig()
 
-    >>> config = SamConfig(vision_config, prompt_encoder_config, mask_decoder_config)
+    >>> config = Sam2Config(vision_config, prompt_encoder_config, mask_decoder_config, memory_attention_config, memory_encoder_config)
     ```"""
 
     model_type = "sam2"
@@ -342,6 +372,8 @@ class Sam2Config(PretrainedConfig):
         vision_config=None,
         prompt_encoder_config=None,
         mask_decoder_config=None,
+        memory_attention_config=None,
+        memory_encoder_config=None,
         initializer_range=0.02,
         **kwargs,
     ):
@@ -349,15 +381,23 @@ class Sam2Config(PretrainedConfig):
         vision_config = vision_config if vision_config is not None else {}
         prompt_encoder_config = prompt_encoder_config if prompt_encoder_config is not None else {}
         mask_decoder_config = mask_decoder_config if mask_decoder_config is not None else {}
+        memory_attention_config = memory_attention_config if memory_attention_config is not None else {}
+        memory_encoder_config = memory_encoder_config if memory_encoder_config is not None else {}
 
-        if isinstance(vision_config, SamVisionConfig):
+        if isinstance(vision_config, Sam2VisionConfig):
             vision_config = vision_config.to_dict()
-        if isinstance(prompt_encoder_config, SamPromptEncoderConfig):
+        if isinstance(prompt_encoder_config, Sam2PromptEncoderConfig):
             prompt_encoder_config = prompt_encoder_config.to_dict()
-        if isinstance(mask_decoder_config, SamMaskDecoderConfig):
+        if isinstance(mask_decoder_config, Sam2MaskDecoderConfig):
             mask_decoder_config = mask_decoder_config.to_dict()
+        if isinstance(memory_attention_config, Sam2MemoryAttentionConfig):
+            memory_attention_config = memory_attention_config.to_dict()
+        if isinstance(memory_encoder_config, Sam2MemoryEncoderConfig):
+            memory_encoder_config = memory_encoder_config.to_dict()
 
-        self.vision_config = SamVisionConfig(**vision_config)
-        self.prompt_encoder_config = SamPromptEncoderConfig(**prompt_encoder_config)
-        self.mask_decoder_config = SamMaskDecoderConfig(**mask_decoder_config)
+        self.vision_config = Sam2VisionConfig(**vision_config)
+        self.prompt_encoder_config = Sam2PromptEncoderConfig(**prompt_encoder_config)
+        self.mask_decoder_config = Sam2MaskDecoderConfig(**mask_decoder_config)
+        self.memory_attention_config = Sam2MemoryAttentionConfig(**memory_attention_config)
+        self.memory_encoder_config = Sam2MemoryEncoderConfig(**memory_encoder_config)
         self.initializer_range = initializer_range
