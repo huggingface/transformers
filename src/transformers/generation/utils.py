@@ -25,7 +25,6 @@ import torch
 import torch.distributed as dist
 from torch import nn
 from torch.nn import functional as F
-from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_4
 
 from ..cache_utils import (
     Cache,
@@ -48,6 +47,7 @@ from ..models.auto import (
     MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
     MODEL_FOR_VISION_2_SEQ_MAPPING,
 )
+from ..pytorch_utils import is_torch_greater_or_equal_than_2_4
 from ..tokenization_utils import ExtensionsTrie
 from ..utils import (
     ModelOutput,
