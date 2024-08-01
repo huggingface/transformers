@@ -53,8 +53,8 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_nemotron import (
-            NemotronForQuestionAnswering,
             NemotronForCausalLM,
+            NemotronForQuestionAnswering,
             NemotronForSequenceClassification,
             NemotronForTokenClassification,
             NemotronModel,
