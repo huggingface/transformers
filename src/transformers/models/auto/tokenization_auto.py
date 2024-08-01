@@ -184,6 +184,10 @@ else:
                 "fastspeech2_conformer",
                 ("FastSpeech2ConformerTokenizer" if is_g2p_en_available() else None, None),
             ),
+            (
+                "fastspeech2_conformer_with_hifigan",
+                ("FastSpeech2ConformerTokenizer" if is_g2p_en_available() else None, None),
+            ),
             ("flaubert", ("FlaubertTokenizer", None)),
             ("fnet", ("FNetTokenizer", "FNetTokenizerFast" if is_tokenizers_available() else None)),
             ("fsmt", ("FSMTTokenizer", None)),

@@ -19,6 +19,7 @@ import numpy as np
 from transformers import (
     MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING,
     AutoProcessor,
+    FastSpeech2ConformerHifiGan,
     TextToAudioPipeline,
     pipeline,
 )
@@ -195,6 +196,35 @@ class TextToAudioPipelineTests(unittest.TestCase):
         # test batching
         outputs = speech_generator(["This is a test", "This is a second test"], batch_size=2)
         self.assertEqual(ANY(np.ndarray), outputs[0]["audio"])
+
+    @slow
+    @require_torch
+    def test_fastspeech2_conformer_model_pt(self):
+        speech_generator = pipeline(
+            task="text-to-audio", model="espnet/fastspeech2_conformer_with_hifigan", framework="pt"
+        )
+
+        outputs = speech_generator("This is a test")
+
+        audio = outputs["audio"]
+        self.assertEqual(ANY(np.ndarray), audio)
+
+        # test model without hifigan head but choosing our own vocoder
+        vocoder = FastSpeech2ConformerHifiGan.from_pretrained("espnet/fastspeech2_conformer_hifigan")
+        speech_generator = pipeline(model="espnet/fastspeech2_conformer", vocoder=vocoder, framework="pt")
+
+        outputs_2 = speech_generator("This is a test")
+
+        audio = outputs["audio"]
+        self.assertTrue((outputs_2["audio"] == outputs["audio"]).all())
+
+        # test without vocoder
+        speech_generator = pipeline(model="espnet/fastspeech2_conformer", framework="pt")
+
+        outputs = speech_generator("This is a test")
+
+        audio = outputs["audio"]
+        self.assertEqual(ANY(np.ndarray), audio)
 
     @slow
     @require_torch

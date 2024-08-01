@@ -135,6 +135,11 @@ class FastSpeech2ConformerWithHifiGanOutput(FastSpeech2ConformerModelOutput):
 
     waveform: torch.FloatTensor = None
 
+    def __post_init__(self):
+        super().__post_init__()
+        # move waveform to the the beginning of the ordered dictionnary
+        self.move_to_end("waveform", last=False)
+
 
 _CONFIG_FOR_DOC = "FastSpeech2ConformerConfig"
 
