@@ -66,6 +66,7 @@ from .utils import (
     requires_backends,
     to_py_obj,
 )
+from .utils.import_utils import PROTOBUF_IMPORT_ERROR
 
 
 if TYPE_CHECKING:
@@ -78,6 +79,9 @@ if TYPE_CHECKING:
 
 if is_protobuf_available():
     from google.protobuf.message import DecodeError
+else:
+    raise ImportError(PROTOBUF_IMPORT_ERROR)
+
 
 if is_tokenizers_available():
     from tokenizers import AddedToken
