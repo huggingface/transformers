@@ -253,7 +253,7 @@ class DepthAnythingModelIntegrationTest(unittest.TestCase):
         image_processor = DPTImageProcessor.from_pretrained("LiheYoung/depth-anything-small-hf")
         model = DepthAnythingForDepthEstimation.from_pretrained("LiheYoung/depth-anything-small-hf").to(torch_device)
 
-        predicted_depth = predict_depth(model, image_processor)
+        predicted_depth = predict_depth(image_processor, model)
 
         # verify the predicted depth
         expected_shape = torch.Size([1, 518, 686])
@@ -267,12 +267,12 @@ class DepthAnythingModelIntegrationTest(unittest.TestCase):
 
         # -- `metric` depth model
         # TODO: change path to `depth-anything/depth-anything-V2-metric-indoor-small-hf` once it's available
-        image_processor = DPTImageProcessor.from_pretrained("bthia97/Depth-Anything-V2-Metric-Indoor-Small-hf")
-        model = DepthAnythingForDepthEstimation.from_pretrained("bthia97/Depth-Anything-V2-Metric-Indoor-Small-hf").to(
+        image_processor = DPTImageProcessor.from_pretrained("depth-anything/depth-anything-V2-metric-indoor-small-hf")
+        model = DepthAnythingForDepthEstimation.from_pretrained("depth-anything/depth-anything-V2-metric-indoor-small-hf").to(
             torch_device
         )
 
-        predicted_depth = predict_depth(model, image_processor)
+        predicted_depth = predict_depth(image_processor, model)
 
         # verify the predicted depth
         expected_shape = torch.Size([1, 518, 686])
