@@ -165,11 +165,9 @@ class Qwen2AudioConfig(PretrainedConfig):
         self,
         audio_config=None,
         text_config=None,
-        ignore_index=-100,
         audio_token_index=151646,
         **kwargs,
     ):
-        self.ignore_index = ignore_index
         self.audio_token_index = audio_token_index
 
         if isinstance(audio_config, dict):
