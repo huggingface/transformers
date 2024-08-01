@@ -208,7 +208,7 @@ class FlaxDinov2Embeddings(nn.Module):
         )
 
         embeddings = self.dropout(embeddings, deterministic=deterministic)
-        return embeddings  # ? (batch_size, 257, 768)
+        return embeddings
 
 
 # Copied from transformers.models.vit.modeling_flax_vit.FlaxViTSelfAttention with ViT->Dinov2
