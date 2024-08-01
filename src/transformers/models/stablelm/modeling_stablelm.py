@@ -28,7 +28,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, StaticCache
+from ...cache_utils import Cache, DynamicCache, SinkCache, StaticCache
 from ...modeling_attn_mask_utils import (
     AttentionMaskConverter,
 )
@@ -1009,6 +1009,7 @@ class StableLmModel(StableLmPreTrainedModel):
         # to infer the attention mask.
         past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
         using_static_cache = isinstance(past_key_values, StaticCache)
+        using_sink_cache = isinstance(past_key_values, SinkCache)
 
         # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
         if self.config._attn_implementation == "sdpa" and not using_static_cache and not output_attentions:
@@ -1025,6 +1026,8 @@ class StableLmModel(StableLmPreTrainedModel):
         sequence_length = input_tensor.shape[1]
         if using_static_cache:
             target_length = past_key_values.get_max_length()
+        elif using_sink_cache:
+            target_length = past_key_values.window_length
         else:
             target_length = (
                 attention_mask.shape[-1]

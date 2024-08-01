@@ -28,7 +28,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, SlidingWindowCache, StaticCache
+from ...cache_utils import Cache, DynamicCache, SinkCache, SlidingWindowCache, StaticCache
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
@@ -873,6 +873,7 @@ class MistralModel(MistralPreTrainedModel):
         # cache_position must be valid here no matter which cache we use
         past_seen_tokens = cache_position[0] if past_key_values is not None else 0
         using_static_cache = isinstance(past_key_values, StaticCache)
+        using_sink_cache = isinstance(past_key_values, SinkCache)
         using_sliding_window_cache = isinstance(past_key_values, SlidingWindowCache)
 
         if (
@@ -898,6 +899,8 @@ class MistralModel(MistralPreTrainedModel):
         # StaticCache
         elif using_static_cache:
             target_length = past_key_values.get_max_length()
+        elif using_sink_cache:
+            target_length = past_key_values.window_length
         # DynamicCache or no cache
         else:
             target_length = (

@@ -59,7 +59,7 @@ if is_torch_available():
         ImageGPTForCausalImageModeling,
         SpeechEncoderDecoderModel,
     )
-    from transformers.cache_utils import DynamicCache, EncoderDecoderCache, QuantoQuantizedCache
+    from transformers.cache_utils import DynamicCache, EncoderDecoderCache, QuantoQuantizedCache, SinkCache
     from transformers.generation import (
         BeamSampleDecoderOnlyOutput,
         BeamSampleEncoderDecoderOutput,
@@ -1740,6 +1740,38 @@ class GenerationTesterMixin:
                             legacy_cache_converted[layer_idx][kv_idx],
                         )
                     )
+
+    def test_with_sink_cache(self):
+        """
+        Tests if SinkCache works if we go beyond the window length in one generate call.
+        Attention mask should be cropped in model's input preparation step, otherwise
+        size mismatch error will be raised. Unfortunately there's no way for us to test
+        if position ids are correctly constructed except for slow test in `test_cache_utils`
+        """
+        for model_class in self.all_generative_model_classes:
+            if not model_class._supports_cache_class or any(
+                model_name in model_class.__name__.lower() for model_name in ("jamba", "whisper")
+            ):
+                self.skipTest(reason="This model does not support sink cache")
+
+            config, input_ids, attention_mask = self._get_input_ids_and_config()
+            config.use_cache = True
+            config.is_decoder = True
+            past_key_values = SinkCache(window_length=10, num_sink_tokens=2)
+
+            model = model_class(config).to(torch_device).eval()
+            generation_kwargs = {
+                "min_new_tokens": 20,  # we need more tokens that window length
+                "max_new_tokens": 20,
+                "return_dict_in_generate": True,
+            }
+            # need to have padding so we don't skip causal mask preparation step if SDPA
+            attention_mask[:, 0] = 0
+
+            results = model.generate(
+                input_ids, attention_mask=attention_mask, past_key_values=past_key_values, **generation_kwargs
+            )
+            self.assertTrue(isinstance(results.past_key_values, SinkCache))
 
     @require_quanto
     def test_generate_with_quant_cache(self):

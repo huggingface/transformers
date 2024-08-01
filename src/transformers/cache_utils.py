@@ -688,6 +688,10 @@ class SinkCache(Cache):
 
     def get_max_length(self) -> Optional[int]:
         """Returns the maximum sequence length of the cached states."""
+        logger.warning_once(
+            "`get_max_length` for SinkCache is deprecated and will return 0 after v4.47. ",
+            "Use past_key_values.window_length to get the maximum window length of the cache.",
+        )
         return self.window_length
 
     def update(
