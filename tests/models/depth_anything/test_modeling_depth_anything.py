@@ -268,9 +268,9 @@ class DepthAnythingModelIntegrationTest(unittest.TestCase):
         # -- `metric` depth model
         # TODO: change path to `depth-anything/depth-anything-V2-metric-indoor-small-hf` once it's available
         image_processor = DPTImageProcessor.from_pretrained("depth-anything/depth-anything-V2-metric-indoor-small-hf")
-        model = DepthAnythingForDepthEstimation.from_pretrained("depth-anything/depth-anything-V2-metric-indoor-small-hf").to(
-            torch_device
-        )
+        model = DepthAnythingForDepthEstimation.from_pretrained(
+            "depth-anything/depth-anything-V2-metric-indoor-small-hf"
+        ).to(torch_device)
 
         predicted_depth = predict_depth(image_processor, model)
 
