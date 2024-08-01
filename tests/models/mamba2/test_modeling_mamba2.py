@@ -19,7 +19,7 @@ import unittest
 from parameterized import parameterized
 
 from transformers import AutoTokenizer, Mamba2Config, is_torch_available
-from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
+from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -223,11 +223,13 @@ class Mamba2IntegrationTest(unittest.TestCase):
         # FIXME currently batched generation seems off, as is in the original repo
         self.prompt = ("[INST]Write a hello world program in C++.",)
 
-    @parameterized.expand([
-        (torch_device, """<s>[INST] Write a hello world program in C++.[/INST] Sure, here is a simple "Hello, World!" program in C++:\n\n```cpp\n#include <iostream>\n\n"""),
-        ("cpu", """<s>[INST] Write a hello world program in C++.[/INST] #include <iostream>\n\nint main() {\n    std::cout << "Hello, World!";\n    return 0;""")
-    ])
-    def test_simple_generate(self, device, ground_truth_sentence):
+    @parameterized.expand(
+        [
+            (torch_device,),
+            ("cpu",),
+        ]
+    )
+    def test_simple_generate(self, device):
         tokenizer = self.tokenizer
         tokenizer.pad_token_id = tokenizer.eos_token_id
 
@@ -238,5 +240,6 @@ class Mamba2IntegrationTest(unittest.TestCase):
         )
 
         out = model.generate(input_ids, do_sample=False, use_cache=True, max_new_tokens=30)
-        output_sentence = tokenizer.decode(out[0])        
+        output_sentence = tokenizer.decode(out[0])
+        ground_truth_sentence = """<s>[INST] Write a hello world program in C++.[/INST] Sure, here is a simple "Hello, World!" program in C++:\n\n```cpp\n#include <iostream>\n\n"""
         self.assertEqual(output_sentence, ground_truth_sentence)

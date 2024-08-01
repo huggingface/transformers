@@ -129,7 +129,6 @@ class Mamba2Cache:
         conv_kernel_size = config.conv_kernel
         self.intermediate_size = int(config.expand * config.hidden_size)
 
-
         self.conv_states = {
             i: torch.zeros(
                 batch_size,
@@ -269,6 +268,7 @@ class Mamba2Mixer(nn.Module):
                 ],
                 dim=-1,
             )
+
             xBC = causal_conv1d_update(
                 xBC,
                 cache_params.conv_states[self.layer_idx],
@@ -439,7 +439,6 @@ class Mamba2Mixer(nn.Module):
             dt_bias = self.dt_bias.unsqueeze(-1).expand(self.dt_bias.shape[0], self.head_dim)
 
             dt = torch.nn.functional.softplus(dt + dt_bias.to(dt.dtype))
-            dt = torch.clamp(dt, self.time_step_min, self.time_step_max)
             A = A[..., None, None].expand(A.shape[0], self.head_dim, self.ssm_state_size).to(dtype=torch.float32)
             # [bsz, num_heads, head_dim, state_size]
             dA = torch.exp(dt.unsqueeze(-1) * A)
@@ -485,10 +484,8 @@ class Mamba2Mixer(nn.Module):
             # [bsz, num_heads, head_dim] -> [bsz, 1, intermediate_size]
             y = y.reshape(y.shape[0], -1).unsqueeze(1)
         else:
-            # begin ssd naive implementation
-            # einsum-free - but some tensors have to be upcasted to avoid error propagation (we downcast after)
+            # begin ssd naive implementation without einsums
             dt = nn.functional.softplus(dt + self.dt_bias)
-            dt = torch.clamp(dt, self.time_step_min, self.time_step_max)
             hidden_states = hidden_states.reshape(hidden_states.shape[0], hidden_states.shape[1], -1, self.head_dim).float()
             B = B.reshape(batch_size, seq_len,  -1, self.ssm_state_size).float()
             C = C.reshape(batch_size, seq_len, -1, self.ssm_state_size).float()
@@ -582,12 +579,11 @@ class Mamba2Mixer(nn.Module):
     # fmt: on
 
     def forward(self, hidden_states, cache_params: Optional[Mamba2Cache] = None):
-        if (is_fast_path_available and "cuda" in self.in_proj.weight.device.type):
+        if is_fast_path_available and "cuda" in self.in_proj.weight.device.type:
             return self.cuda_kernels_forward(hidden_states, cache_params)
         return self.torch_forward(hidden_states, cache_params)
 
 
-# Copied from transformers.models.mamba.modeling_mamba.MambaRMSNorm with Mamba->Mamba2
 class Mamba2RMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
@@ -617,6 +613,7 @@ class Mamba2Block(nn.Module):
 
     def forward(self, hidden_states, cache_params: Optional[Mamba2Cache] = None):
         residual = hidden_states
+        # hidden_states = hidden_states.to(self.mixer.in_proj.weight.dtype)
         hidden_states = self.norm(hidden_states.to(dtype=self.norm.weight.dtype))
         if self.residual_in_fp32:
             residual = residual.to(torch.float32)
