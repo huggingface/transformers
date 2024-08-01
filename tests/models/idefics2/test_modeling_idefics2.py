@@ -356,8 +356,7 @@ class Idefics2ModelTest(ModelTesterMixin, unittest.TestCase):
                 perceiver_attn = "eager"
                 vision_attn = "eager"
 
-                # We didn't skip test, so this model supports sdpa for sure in general config
-                self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
+                self.assertTrue(model_sdpa.config.text_config._attn_implementation == "sdpa")
                 self.assertTrue(model_sdpa.config.perceiver_config._attn_implementation == perceiver_attn)
                 self.assertTrue(model_sdpa.config.vision_config._attn_implementation == vision_attn)
 
@@ -370,7 +369,7 @@ class Idefics2ModelTest(ModelTesterMixin, unittest.TestCase):
                 )
                 model_sdpa_explicit = model_sdpa_explicit.eval().to(torch_device)
 
-                self.assertTrue(model_sdpa_explicit.config._attn_implementation == "sdpa")
+                self.assertTrue(model_sdpa_explicit.config.text_config._attn_implementation == "sdpa")
                 self.assertTrue(model_sdpa.config.perceiver_config._attn_implementation == perceiver_attn)
                 self.assertTrue(model_sdpa.config.vision_config._attn_implementation == vision_attn)
 
@@ -381,7 +380,7 @@ class Idefics2ModelTest(ModelTesterMixin, unittest.TestCase):
                 )
                 model_eager = model_eager.eval().to(torch_device)
 
-                self.assertTrue(model_eager.config._attn_implementation == "eager")
+                self.assertTrue(model_eager.config.text_config._attn_implementation == "eager")
                 self.assertTrue(model_sdpa.config.perceiver_config._attn_implementation == "eager")
                 self.assertTrue(model_sdpa.config.vision_config._attn_implementation == "eager")
 
@@ -390,13 +389,14 @@ class Idefics2ModelTest(ModelTesterMixin, unittest.TestCase):
                     if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
                         raise ValueError("The eager model should not have SDPA attention layers")
 
+                print(model_sdpa)
                 has_sdpa = False
                 for name, submodule in model_sdpa.named_modules():
                     class_name = submodule.__class__.__name__
                     if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
                         has_sdpa = True
                         break
-                if not has_sdpa and model_sdpa.config.model_type != "falcon":
+                if not has_sdpa:
                     raise ValueError("The SDPA model should have SDPA attention layers")
 
 

@@ -1523,6 +1523,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # typical SDPA-dispatch path (i.e. if hard_check). Same goes for FA2.
         sub_configs = {key: value for key, value in config if isinstance(value, PretrainedConfig)}
         if sub_configs:
+            attn_implementation_per_subconfig = {}
             for key, sub_config in sub_configs.items():
                 sub_model_cls = MODEL_MAPPING.get(type(sub_config), None)
                 if sub_model_cls is not None:
@@ -1532,8 +1533,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         sub_config._attn_implementation = requested_attn_implementation[key]
                     else:
                         sub_config._attn_implementation = requested_attn_implementation
-
-                    print(type(sub_config), requested_attn_implementation)
                     sub_model_cls._autoset_attn_implementation(
                         sub_config,
                         use_flash_attention_2=use_flash_attention_2,
@@ -1542,13 +1541,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         check_device_map=check_device_map,
                     )
                     setattr(config, key, sub_config)
+                attn_implementation_per_subconfig[key] = sub_config._attn_implementation
 
-            # Set to eager to avoid hard_check errors that cls does not support sdpa/FA2, because generalist model's
-            # cls attr should be set to False by default. Sub-configs cls attr can still be set to True
-            # If any sub-config doesnt support requested attn, we'll catch that when dispatching the sub-config above
-            requested_attn_implementation = (
-                None if requested_attn_implementation == "sdpa" else requested_attn_implementation
-            )
+            # Set the general attn_implementation to a dict where keys are sub-configs
+            requested_attn_implementation = attn_implementation_per_subconfig
 
         if use_flash_attention_2:
             logger.warning_once(

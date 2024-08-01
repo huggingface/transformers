@@ -3777,7 +3777,6 @@ class ModelTesterMixin:
                 model_sdpa = model_class.from_pretrained(tmpdirname, torch_dtype=torch_dtype)
                 model_sdpa = model_sdpa.eval().to(torch_device)
 
-                self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
                 if self.is_multimodal:
                     vision_supports_sdpa = (
                         model.image_tower._supports_sdpa
@@ -3785,7 +3784,15 @@ class ModelTesterMixin:
                         else model.vision_tower._supports_sdpa
                     )
                     vision_attn = "sdpa" if vision_supports_sdpa else "eager"
+                    text_attn = "sdpa" if model.language_model._supports_sdpa else "eager"
                     self.assertTrue(model_sdpa.config.vision_config._attn_implementation == vision_attn)
+                    self.assertTrue(model_sdpa.config.text_config._attn_implementation == text_attn)
+                    self.assertTrue(
+                        model_sdpa.config._attn_implementation
+                        == {"text_config": text_attn, "vision_config": vision_attn}
+                    )
+                else:
+                    self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
 
                 model_eager = model_class.from_pretrained(
                     tmpdirname,
@@ -3794,9 +3801,14 @@ class ModelTesterMixin:
                 )
                 model_eager = model_eager.eval().to(torch_device)
 
-                self.assertTrue(model_eager.config._attn_implementation == "eager")
                 if self.is_multimodal:
                     self.assertTrue(model_eager.config.vision_config._attn_implementation == "eager")
+                    self.assertTrue(model_eager.config.text_config._attn_implementation == "eager")
+                    self.assertTrue(
+                        model_eager.config._attn_implementation == {"text_config": "eager", "vision_config": "eager"}
+                    )
+                else:
+                    self.assertTrue(model_eager.config._attn_implementation == "eager")
 
                 for name, submodule in model_eager.named_modules():
                     class_name = submodule.__class__.__name__

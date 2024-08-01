@@ -1133,18 +1133,6 @@ class Idefics2PreTrainedModel(PreTrainedModel):
             check_device_map=check_device_map,
             **kwargs,
         )
-        # autoset-attn calls recursively all sub-configs (text-config, vision-config)
-        # and sets attn implementation if the config can be mapped bu auto-model
-        # Idefics2 vision config can't be mapped automatically so we set it manually here
-        # We can't set vision attn same as general attn, because the general attr will be sdpa if at
-        # least one sub-module (in this case LLM) supports sdpa, and we know vision/perceiver doesn't support yet
-        if hasattr(config, "vision_config"):
-            config.vision_config._attn_implementation = (
-                config._attn_implementation if config._attn_implementation != "sdpa" else "eager"
-            )
-            config.perceiver_config._attn_implementation = (
-                config._attn_implementation if config._attn_implementation != "sdpa" else "eager"
-            )
         return config
 
 
@@ -1230,7 +1218,9 @@ class Idefics2Model(Idefics2PreTrainedModel):
 
         self.vision_model = Idefics2VisionTransformer(config.vision_config)
         self.connector = Idefics2Connector(config)
-        self.text_model = AutoModel.from_config(config.text_config, attn_implementation=config._attn_implementation)
+        self.text_model = AutoModel.from_config(
+            config.text_config, attn_implementation=config.text_config._attn_implementation
+        )
 
         self.image_seq_len = config.perceiver_config.resampler_n_latents
         self.image_token_id = self.config.image_token_id

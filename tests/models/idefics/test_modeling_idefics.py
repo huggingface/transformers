@@ -601,8 +601,6 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
                 perceiver_attn = "eager"
                 vision_attn = "eager"
 
-                # We also know this model supports sdpa for sure in general config
-                self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
                 self.assertTrue(model_sdpa.config.perceiver_config._attn_implementation == perceiver_attn)
                 self.assertTrue(model_sdpa.config.vision_config._attn_implementation == vision_attn)
 
@@ -615,7 +613,6 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
                 )
                 model_sdpa_explicit = model_sdpa_explicit.eval().to(torch_device)
 
-                self.assertTrue(model_sdpa_explicit.config._attn_implementation == "sdpa")
                 self.assertTrue(model_sdpa_explicit.config.perceiver_config._attn_implementation == perceiver_attn)
                 self.assertTrue(model_sdpa_explicit.config.vision_config._attn_implementation == vision_attn)
 
@@ -626,7 +623,6 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
                 )
                 model_eager = model_eager.eval().to(torch_device)
 
-                self.assertTrue(model_eager.config._attn_implementation == "eager")
                 self.assertTrue(model_eager.config.perceiver_config._attn_implementation == "eager")
                 self.assertTrue(model_eager.config.vision_config._attn_implementation == "eager")
 
