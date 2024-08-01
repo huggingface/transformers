@@ -780,7 +780,7 @@ MAMBA2_INPUTS_DOCSTRING = r"""
     "The bare MAMBA2 Model transformer outputting raw hidden-states without any specific head on top.",
     MAMBA2_START_DOCSTRING,
 )
-# Copied from transformers.models.mamba.modeling_mamba.MambaModel with MAMBA->MAMBA2,Mamba->Mamba2
+# TODO @molbap difference with Mamba is the lack of cache_position support
 class Mamba2Model(Mamba2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
