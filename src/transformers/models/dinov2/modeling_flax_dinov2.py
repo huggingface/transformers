@@ -196,9 +196,7 @@ class FlaxDinov2Embeddings(nn.Module):
 
         embeddings = self.patch_embeddings(pixel_values)
 
-        cls_tokens = jnp.broadcast_to(
-            self.cls_token, (batch_size, 1, self.config.hidden_size)
-        )  # ? (batch_size, 1, 768)
+        cls_tokens = jnp.broadcast_to(self.cls_token, (batch_size, 1, self.config.hidden_size))
         embeddings = jnp.concatenate((cls_tokens, embeddings), axis=1)
 
         embeddings = embeddings + interpolate_pos_encoding(
