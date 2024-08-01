@@ -103,7 +103,7 @@ class FlaxDinov2PatchEmbeddings(nn.Module):
         self.num_channels = self.config.num_channels
         self.projection = nn.Conv(
             self.config.hidden_size,
-            kernel_size=(patch_size[0], patch_size[1]),  # ? (14, 14)
+            kernel_size=(patch_size[0], patch_size[1]),
             strides=(patch_size[0], patch_size[1]),
             padding="VALID",
             dtype=self.dtype,
