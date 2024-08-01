@@ -964,11 +964,17 @@ class WhisperGenerationMixin:
                         layer_past_key_values = []
                         for cache_cls in [values.self_attention_cache, values.cross_attention_cache]:
                             for v in [cache_cls.key_cache, cache_cls.value_cache]:
-                                layer_past_key_values.append(v[layer_idx][None].cpu())
+                                layer_past_key_values.append(v[layer_idx][batch_idx][None].cpu())
                         all_past_key_values.append(tuple(layer_past_key_values))
                     return tuple(all_past_key_values)
                 else:
-                    return tuple(tuple(w[batch_idx][None].cpu() for w in values[v]) for v in range(len(values)))
+                    all_past_key_values = []
+                    for v in range(len(values)):
+                        layer_past_key_values = []
+                        for w in values[v]:
+                            layer_past_key_values.append(w[batch_idx][None].cpu())
+                        all_past_key_values.append(tuple(layer_past_key_values))
+                    return tuple(all_past_key_values)
 
             return values[batch_idx].cpu()
 
