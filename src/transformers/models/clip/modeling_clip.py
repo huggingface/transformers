@@ -1137,10 +1137,14 @@ class CLIPModel(CLIPPreTrainedModel):
         self.text_embed_dim = text_config.hidden_size
         self.vision_embed_dim = vision_config.hidden_size
 
-        text_model = CLIPTextModel._from_config(text_config, attn_implementation=config._attn_implementation)
+        text_model = CLIPTextModel._from_config(
+            text_config, attn_implementation=config.text_config._attn_implementation
+        )
         self.text_model = text_model.text_model
 
-        vision_model = CLIPVisionModel._from_config(vision_config, attn_implementation=config._attn_implementation)
+        vision_model = CLIPVisionModel._from_config(
+            vision_config, attn_implementation=config.vision_config._attn_implementation
+        )
         self.vision_model = vision_model.vision_model
 
         self.visual_projection = nn.Linear(self.vision_embed_dim, self.projection_dim, bias=False)
@@ -1356,7 +1360,7 @@ class CLIPTextModelWithProjection(CLIPPreTrainedModel):
     def __init__(self, config: CLIPTextConfig):
         super().__init__(config)
 
-        text_model = CLIPTextModel._from_config(config, attn_implementation=config._attn_implementation)
+        text_model = CLIPTextModel._from_config(config, attn_implementation=config.text_config._attn_implementation)
         self.text_model = text_model.text_model
 
         self.text_projection = nn.Linear(config.hidden_size, config.projection_dim, bias=False)
@@ -1437,7 +1441,9 @@ class CLIPVisionModelWithProjection(CLIPPreTrainedModel):
     def __init__(self, config: CLIPVisionConfig):
         super().__init__(config)
 
-        vision_model = CLIPVisionModel._from_config(config, attn_implementation=config._attn_implementation)
+        vision_model = CLIPVisionModel._from_config(
+            config, attn_implementation=config.vision_config._attn_implementation
+        )
         self.vision_model = vision_model.vision_model
 
         self.visual_projection = nn.Linear(config.hidden_size, config.projection_dim, bias=False)
@@ -1518,7 +1524,7 @@ class CLIPForImageClassification(CLIPPreTrainedModel):
 
         self.num_labels = config.num_labels
         vision_model = CLIPVisionModel._from_config(
-            config.vision_config, attn_implementation=config._attn_implementation
+            config.vision_config, attn_implementation=config.vision_config._attn_implementation
         )
         self.vision_model = vision_model.vision_model
 

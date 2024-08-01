@@ -212,10 +212,12 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
         super().__init__(config)
 
         if encoder is None:
-            encoder = AutoModel.from_config(config.encoder, attn_implementation=config._attn_implementation)
+            encoder = AutoModel.from_config(config.encoder, attn_implementation=config.encoder._attn_implementation)
 
         if decoder is None:
-            decoder = AutoModelForCausalLM.from_config(config.decoder, attn_implementation=config._attn_implementation)
+            decoder = AutoModelForCausalLM.from_config(
+                config.decoder, attn_implementation=config.decoder._attn_implementation
+            )
 
         self.encoder = encoder
         self.decoder = decoder
