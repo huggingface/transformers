@@ -93,7 +93,7 @@ class NemotronModelTest(GemmaModelTest):
     fx_compatible = False
 
     # used in `test_torch_compile`
-    _torch_compile_test_ckpt = "nvidia/nemotron3-7b-hf"
+    _torch_compile_test_ckpt = "nvidia/nemotron-3-8b-base-4k-hf"
 
     def setUp(self):
         self.model_tester = NemotronModelTester(self)

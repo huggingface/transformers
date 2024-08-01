@@ -66,7 +66,7 @@ def get_args():
         "--hf_input_path",
         type=str,
         default=None,
-        help="A HF model path, " "e.g. a folder containing https://huggingface.co/nvidia/nemotron-3-8b-base-4k",
+        help="A HF model path, " "e.g. a folder containing https://huggingface.co/nvidia/nemotron-3-8b-base-4k-hf",
     )
     parser.add_argument(
         "--hf_output_path",
@@ -91,7 +91,7 @@ def get_args():
     return args
 
 
-def convert_hf_config(nemo_config, tokenizer, vocab_size, dtype, hf_output_path, hf_url="nvidia/nemotron3-8b-base"):
+def convert_hf_config(nemo_config, tokenizer, vocab_size, dtype, hf_output_path, hf_url="nvidia/nemotron-3-8b-base-4k-hf"):
     """
     Convert NeMo config to HF config
     """
