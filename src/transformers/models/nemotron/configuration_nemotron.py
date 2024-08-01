@@ -84,7 +84,7 @@ class NemotronConfig(PretrainedConfig):
             these scaling strategies behave:
             https://www.reddit.com/r/LocalLLaMA/comments/14mrgpr/dynamically_scaled_rope_further_increases/. This is an
             experimental feature, subject to breaking API changes in future versions.
-        partial_rotary_factor (`float`, *optional*, defaults to 0.5): <fill_docstring>
+        partial_rotary_factor (`float`, *optional*, defaults to 0.5): Percentage of the query and keys which will have rotary embedding.
         attention_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
