@@ -27,7 +27,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache
+from ...cache_utils import Cache
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
@@ -754,12 +754,10 @@ class Gemma2Model(Gemma2PreTrainedModel):
 
         # Probably a forward call with caching, so we set up cache for one call only
         if use_cache and past_key_values is None and not self.training:
-            past_key_values = DynamicCache()
-            logger.warning(
+            raise ValueError(
                 "You are calling the model with `use_cache=True` but didn't pass `past_key_values`. ",
-                "Be default the model will use a dynamic cache, which doesn't support sliding window. "
-                "In case you are calling iteratively to generate, please initiate `past_key_values` "
-                "outside as `HybridCache` class.",
+                "Make sure to pass an instance of `HybridCache`. See for more: "
+                "(https://huggingface.co/docs/transformers/main/en/internal/generation_utils#transformers.HybridCache)",
             )
 
         if position_ids is None:
