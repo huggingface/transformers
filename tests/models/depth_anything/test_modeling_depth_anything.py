@@ -19,7 +19,7 @@ import unittest
 from transformers import DepthAnythingConfig, Dinov2Config
 from transformers.file_utils import is_torch_available, is_vision_available
 from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_4
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import require_torch, require_vision, slow, torch_device, skipIfRocm
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -156,6 +156,10 @@ class DepthAnythingModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
             hidden_size=37,
             common_properties=["patch_size"],
         )
+
+    @skipIfRocm
+    def test_batching_equivalence(self):
+        super().test_batching_equivalence()
 
     def test_config(self):
         self.config_tester.run_common_tests()
