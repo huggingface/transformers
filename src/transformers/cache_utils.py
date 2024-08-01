@@ -1034,7 +1034,7 @@ class EncoderDecoderCache(Cache):
                 self.self_attention_cache.key_cache[layer_idx],
                 self.self_attention_cache.value_cache[layer_idx],
                 self.cross_attention_cache.key_cache[layer_idx],
-                self.cross_attention_cache.key_cache[layer_idx],
+                self.cross_attention_cache.value_cache[layer_idx],
             )
         else:
             raise KeyError(f"Cache only has {len(self)} layers, attempted to access layer with index {layer_idx}")
