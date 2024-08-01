@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""SAM model configuration"""
+"""SAM2 model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -21,12 +21,13 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class SamPromptEncoderConfig(PretrainedConfig):
+# Copied from transformers.models.sam.configuration_sam.SamPromptEncoderConfig with Sam->Sam2
+class Sam2PromptEncoderConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`SamPromptEncoder`]. The [`SamPromptEncoder`]
+    This is the configuration class to store the configuration of a [`Sam2PromptEncoder`]. The [`Sam2PromptEncoder`]
     module is used to encode the input 2D points and bounding boxes. Instantiating a configuration defaults will yield
-    a similar configuration to that of the SAM-vit-h
-    [facebook/sam-vit-huge](https://huggingface.co/facebook/sam-vit-huge) architecture.
+    a similar configuration to that of the SAM2-hiera-tiny
+    [facebook/sam2-hiera-tiny](https://huggingface.co/facebook/sam2-hiera-tiny) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -68,12 +69,12 @@ class SamPromptEncoderConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
 
 
-class SamMaskDecoderConfig(PretrainedConfig):
+class Sam2MaskDecoderConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`SamMaskDecoder`]. It is used to instantiate a SAM
+    This is the configuration class to store the configuration of a [`Sam2MaskDecoder`]. It is used to instantiate a SAM2
     mask decoder to the specified arguments, defining the model architecture. Instantiating a configuration defaults
-    will yield a similar configuration to that of the SAM-vit-h
-    [facebook/sam-vit-huge](https://huggingface.co/facebook/sam-vit-huge) architecture.
+    will yield a similar configuration to that of the SAM2-hiera-tiny
+    [facebook/sam2-hiera-tiny](https://huggingface.co/facebook/sam2-hiera-tiny) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -97,6 +98,22 @@ class SamMaskDecoderConfig(PretrainedConfig):
             The number of layers in the IoU head module.
         iou_head_hidden_dim (`int`, *optional*, defaults to 256):
             The dimensionality of the hidden states in the IoU head module.
+        use_high_res_features (`bool`, *optional*, defaults to False):
+            whether to use high-resolution feature maps in the SAM mask decoder.
+        iou_prediction_use_sigmoid (`bool`, *optional*, defaults to False):
+            Whether to use sigmoid to restrict ious prediction to [0-1]
+        dynamic_multimask_via_stability (`bool`, *optional*, defaults to False):
+            Whether to use the best multimask output token if the single mask output token gives low stability scores
+        dynamic_multimask_stability_delta (`float`, *optional*, defaults to 0.05):
+            The margin of mask logits to compute stability scores.
+        dynamic_multimask_stability_thresh (`float`, *optional*, defaults to 0.98):
+            The minimum threshold of stability scores.
+        pred_obj_scores (`bool`, *optional*, defaults to False):
+            Whether to predict if there is an object in the frame.
+        pred_obj_scores_mlp (`bool`, *optional*, defaults to False):
+            Whether to use an MLP to predict object scores.
+        use_multimask_token_for_obj_ptr (`bool`, *optional*, defaults to False):
+            Whether to use multimask tokens for obj ptr. Only relevant when both `use_obj_ptrs_in_encoder=True` and multimask_output_for_tracking=True`.
         layer_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the layer normalization layers.
 
@@ -113,6 +130,14 @@ class SamMaskDecoderConfig(PretrainedConfig):
         num_multimask_outputs=3,
         iou_head_depth=3,
         iou_head_hidden_dim=256,
+        use_high_res_features=False,
+        iou_prediction_use_sigmoid=False,
+        dynamic_multimask_via_stability=False,
+        dynamic_multimask_stability_delta=0.05,
+        dynamic_multimask_stability_thresh=0.98,
+        pred_obj_scores= False,
+        pred_obj_scores_mlp= False,
+        use_multimask_token_for_obj_ptr=False,
         layer_norm_eps=1e-6,
         **kwargs,
     ):
@@ -126,15 +151,47 @@ class SamMaskDecoderConfig(PretrainedConfig):
         self.num_multimask_outputs = num_multimask_outputs
         self.iou_head_depth = iou_head_depth
         self.iou_head_hidden_dim = iou_head_hidden_dim
+        self.use_high_res_features=use_high_res_features,
+        self.iou_prediction_use_sigmoid=iou_prediction_use_sigmoid,
+        self.dynamic_multimask_via_stability=dynamic_multimask_via_stability,
+        self.dynamic_multimask_stability_delta=dynamic_multimask_stability_delta,
+        self.dynamic_multimask_stability_thresh=dynamic_multimask_stability_thresh,
+        self.pred_obj_scores= pred_obj_scores,
+        self.pred_obj_scores_mlp= pred_obj_scores_mlp,
+        self.use_multimask_token_for_obj_ptr=use_multimask_token_for_obj_ptr,
         self.layer_norm_eps = layer_norm_eps
 
 
-class SamVisionConfig(PretrainedConfig):
+class Sam2MemoryEncoderConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`SamVisionModel`]. It is used to instantiate a SAM
+    This is the configuration class to store the configuration of a [`Sam2MemoryEncoderConfig`]. It is used to instantiate a SAM2
+    memory encoder according to the specified arguments, defining the model architecture. Instantiating a configuration
+    defaults will yield a similar configuration to that of the SAM2-hiera-tiny
+    [facebook/sam2-hiera-tiny](https://huggingface.co/facebook/sam2-hiera-tiny) architecture.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+
+    """
+    def __init__(
+        self,
+        # TO DO
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+
+        # TO DO
+
+
+# TO DO
+class Sam2VisionConfig(PretrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`Sam2VisionModel`]. It is used to instantiate a SAM2
     vision encoder according to the specified arguments, defining the model architecture. Instantiating a configuration
-    defaults will yield a similar configuration to that of the SAM ViT-h
-    [facebook/sam-vit-huge](https://huggingface.co/facebook/sam-vit-huge) architecture.
+    defaults will yield a similar configuration to that of the SAM2-hiera-tiny
+    [facebook/sam2-hiera-tiny](https://huggingface.co/facebook/sam2-hiera-tiny) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -227,12 +284,13 @@ class SamVisionConfig(PretrainedConfig):
         self.mlp_dim = int(hidden_size * mlp_ratio) if mlp_dim is None else mlp_dim
 
 
-class SamConfig(PretrainedConfig):
+# TO DO
+class Sam2Config(PretrainedConfig):
     r"""
-    [`SamConfig`] is the configuration class to store the configuration of a [`SamModel`]. It is used to instantiate a
+    [`Sam2Config`] is the configuration class to store the configuration of a [`Sam2Model`]. It is used to instantiate a
     SAM model according to the specified arguments, defining the vision model, prompt-encoder model and mask decoder
     configs. Instantiating a configuration with the defaults will yield a similar configuration to that of the
-    SAM-ViT-H [facebook/sam-vit-huge](https://huggingface.co/facebook/sam-vit-huge) architecture.
+    SAM-ViT-H [facebook/sam2-hiera-tiny](https://huggingface.co/facebook/sam2-hiera-tiny) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -252,16 +310,16 @@ class SamConfig(PretrainedConfig):
 
     ```python
     >>> from transformers import (
-    ...     SamVisionConfig,
-    ...     SamPromptEncoderConfig,
-    ...     SamMaskDecoderConfig,
-    ...     SamModel,
+    ...     Sam2VisionConfig,
+    ...     Sam2PromptEncoderConfig,
+    ...     Sam2MaskDecoderConfig,
+    ...     Sam2Model,
     ... )
 
-    >>> # Initializing a SamConfig with `"facebook/sam-vit-huge"` style configuration
-    >>> configuration = SamConfig()
+    >>> # Initializing a Sam2Config with `"facebook/sam2-hiera-tiny"` style configuration
+    >>> configuration = Sam2Config()
 
-    >>> # Initializing a SamModel (with random weights) from the `"facebook/sam-vit-huge"` style configuration
+    >>> # Initializing a SamModel (with random weights) from the `"facebook/sam2-hiera-tiny"` style configuration
     >>> model = SamModel(configuration)
 
     >>> # Accessing the model configuration
@@ -277,7 +335,7 @@ class SamConfig(PretrainedConfig):
     >>> config = SamConfig(vision_config, prompt_encoder_config, mask_decoder_config)
     ```"""
 
-    model_type = "sam"
+    model_type = "sam2"
 
     def __init__(
         self,
