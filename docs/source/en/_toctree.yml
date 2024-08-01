@@ -92,6 +92,8 @@
       title: Visual Question Answering
     - local: tasks/text-to-speech
       title: Text to speech
+    - local: tasks/image_text_to_text
+      title: Image-text-to-text
     title: Multimodal
   - isExpanded: false
     sections:
@@ -155,6 +157,8 @@
     title: EETQ
   - local: quantization/hqq
     title: HQQ
+  - local: quantization/fbgemm_fp8
+    title: FBGEMM_FP8
   - local: quantization/optimum
     title: Optimum
   - local: quantization/contribute
@@ -760,6 +764,8 @@
         title: BridgeTower
       - local: model_doc/bros
         title: BROS
+      - local: model_doc/chameleon
+        title: Chameleon
       - local: model_doc/chinese_clip
         title: Chinese-CLIP
       - local: model_doc/clip
