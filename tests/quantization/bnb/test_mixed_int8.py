@@ -895,6 +895,8 @@ class MixedInt8GPT2Test(MixedInt8Test):
     EXPECTED_OUTPUTS.add("Hello my name is John Doe, and I'm a fan of the")
     # Expected values on a A10
     EXPECTED_OUTPUTS.add("Hello my name is John Doe, and I am a member of the")
+    # Expected values on Intel CPU
+    EXPECTED_OUTPUTS.add("Hello my name is John Doe. I am a man. I am")
 
     def test_int8_from_pretrained(self):
         r"""
