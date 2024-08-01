@@ -725,7 +725,7 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
                     model=model,
                     args=training_args,
                 )
-            # Now do it proper, triggered from our `TrainingArguments` earlier
+            # Now do it properly, triggered from our `TrainingArguments` earlier
             model = AutoModel.from_pretrained(T5_TINY)
             trainer = Trainer(
                 model=model,
