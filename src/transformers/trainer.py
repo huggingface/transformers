@@ -60,7 +60,9 @@ from .configuration_utils import PretrainedConfig
 from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
 from .debug_utils import DebugOption, DebugUnderflowOverflow
 from .feature_extraction_sequence_utils import SequenceFeatureExtractor
+from .feature_extraction_utils import FeatureExtractionMixin
 from .hyperparameter_search import ALL_HYPERPARAMETER_SEARCH_BACKENDS, default_hp_search_backend
+from .image_processing_utils import BaseImageProcessor
 from .integrations.deepspeed import deepspeed_init, deepspeed_load_checkpoint, is_deepspeed_available
 from .integrations.tpu import tpu_spmd_dataloader
 from .modelcard import TrainingSummary
@@ -70,6 +72,7 @@ from .models.auto.modeling_auto import (
     MODEL_MAPPING_NAMES,
 )
 from .optimization import Adafactor, get_scheduler
+from .processing_utils import ProcessorMixin
 from .pytorch_utils import (
     ALL_LAYERNORM_LAYERS,
     is_torch_greater_or_equal_than_1_13,
@@ -308,8 +311,8 @@ class Trainer:
             `output_dir` set to a directory named *tmp_trainer* in the current directory if not provided.
         data_collator (`DataCollator`, *optional*):
             The function to use to form a batch from a list of elements of `train_dataset` or `eval_dataset`. Will
-            default to [`default_data_collator`] if no `tokenizer` is provided, an instance of
-            [`DataCollatorWithPadding`] otherwise.
+            default to [`default_data_collator`] if no `processing_class` is provided, an instance of
+            [`DataCollatorWithPadding`] otherwise if the processing_class is a feature extractor or tokenizer.
         train_dataset (Union[`torch.utils.data.Dataset`, `torch.utils.data.IterableDataset`, `datasets.Dataset`], *optional*):
             The dataset to use for training. If it is a [`~datasets.Dataset`], columns not accepted by the
             `model.forward()` method are automatically removed.
@@ -327,6 +330,12 @@ class Trainer:
             The tokenizer used to preprocess the data. If provided, will be used to automatically pad the inputs to the
             maximum length when batching inputs, and it will be saved along the model to make it easier to rerun an
             interrupted training or reuse the fine-tuned model.
+            This is now deprecated.
+        processing_class (`PreTrainedTokenizerBase` or `BaseImageProcessor` or `FeatureExtractionMixin` or `ProcessorMixin`, *optional*):
+            Processing class used to process the data. If provided, will be used to automatically process the inputs
+            for the model, and it will be saved along the model to make it easier to rerun an interrupted training or
+            reuse the fine-tuned model.
+            This supercedes the `tokenizer` argument, which is now deprecated.
         model_init (`Callable[[], PreTrainedModel]`, *optional*):
             A function that instantiates the model to be used. If provided, each call to [`~Trainer.train`] will start
             from a new instance of the model as given by this function.
@@ -384,6 +393,9 @@ class Trainer:
         train_dataset: Optional[Union[Dataset, IterableDataset, "datasets.Dataset"]] = None,
         eval_dataset: Optional[Union[Dataset, Dict[str, Dataset], "datasets.Dataset"]] = None,
         tokenizer: Optional[PreTrainedTokenizerBase] = None,
+        processing_class: Optional[
+            Union[PreTrainedTokenizerBase, BaseImageProcessor, FeatureExtractionMixin, ProcessorMixin]
+        ] = None,
         model_init: Optional[Callable[[], PreTrainedModel]] = None,
         compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None,
         callbacks: Optional[List[TrainerCallback]] = None,
@@ -420,6 +432,14 @@ class Trainer:
 
         # force device and distributed setup init explicitly
         args._setup_devices
+
+        if tokenizer is not None:
+            if processing_class is not None:
+                raise ValueError(
+                    "You cannot specify both `tokenizer` and `processing_class` at the same time. Please use `processing_class`."
+                )
+            logger.warning("`tokenizer` is now deprecated, please use `processing_class` instead.")
+            processing_class = tokenizer
 
         if model is None:
             if model_init is not None:
@@ -537,14 +557,15 @@ class Trainer:
             self.place_model_on_device = False
 
         default_collator = (
-            DataCollatorWithPadding(tokenizer)
-            if tokenizer is not None and isinstance(tokenizer, (PreTrainedTokenizerBase, SequenceFeatureExtractor))
+            DataCollatorWithPadding(processing_class)
+            if processing_class is not None
+            and isinstance(processing_class, (PreTrainedTokenizerBase, SequenceFeatureExtractor))
             else default_data_collator
         )
         self.data_collator = data_collator if data_collator is not None else default_collator
         self.train_dataset = train_dataset
         self.eval_dataset = eval_dataset
-        self.tokenizer = tokenizer
+        self.processing_class = processing_class
 
         # Bnb Quantized models doesn't support `.to` operation.
         if (
@@ -596,7 +617,7 @@ class Trainer:
         default_callbacks = DEFAULT_CALLBACKS + get_reporting_integration_callbacks(self.args.report_to)
         callbacks = default_callbacks if callbacks is None else default_callbacks + callbacks
         self.callback_handler = CallbackHandler(
-            callbacks, self.model, self.tokenizer, self.optimizer, self.lr_scheduler
+            callbacks, self.model, self.processing_class, self.optimizer, self.lr_scheduler
         )
         self.add_callback(PrinterCallback if self.args.disable_tqdm else DEFAULT_PROGRESS_CALLBACK)
 
@@ -723,6 +744,11 @@ class Trainer:
             num_devices = xr.global_runtime_device_count()
             xs.set_global_mesh(xs.Mesh(np.array(range(num_devices)), (num_devices, 1), axis_names=("fsdp", "tensor")))
         self.is_fsdp_xla_v1_enabled = self.is_fsdp_xla_enabled and not self.is_fsdp_xla_v2_enabled
+
+    @property
+    def tokenizer(self) -> Optional[PreTrainedTokenizerBase]:
+        logger.warning("Trainer.tokenizer is now deprecated. You should use Trainer.processing_class instead.")
+        return self.processing_class
 
     def _activate_neftune(self, model):
         r"""
@@ -883,7 +909,9 @@ class Trainer:
                 )
             else:
                 lengths = None
-            model_input_name = self.tokenizer.model_input_names[0] if self.tokenizer is not None else None
+            model_input_name = (
+                self.processing_class.model_input_names[0] if self.processing_class is not None else None
+            )
             return LengthGroupedSampler(
                 self.args.train_batch_size * self.args.gradient_accumulation_steps,
                 dataset=self.train_dataset,
@@ -3695,8 +3723,8 @@ class Trainer:
                 safe_serialization=self.args.save_safetensors,
                 state_dict=xm._maybe_convert_to_cpu(model.state_dict()),
             )
-        if self.tokenizer is not None and self.args.should_save:
-            self.tokenizer.save_pretrained(output_dir)
+        if self.processing_class is not None and self.args.should_save:
+            self.processing_class.save_pretrained(output_dir)
 
     def _save(self, output_dir: Optional[str] = None, state_dict=None):
         # If we are executing this function, we are the process zero, so we don't check for that.
@@ -3728,8 +3756,8 @@ class Trainer:
                 output_dir, state_dict=state_dict, safe_serialization=self.args.save_safetensors
             )
 
-        if self.tokenizer is not None:
-            self.tokenizer.save_pretrained(output_dir)
+        if self.processing_class is not None:
+            self.processing_class.save_pretrained(output_dir)
 
         # Good practice: save your training arguments together with the trained model
         torch.save(self.args, os.path.join(output_dir, TRAINING_ARGS_NAME))
@@ -4439,9 +4467,9 @@ class Trainer:
         for modeling_file in modeling_files:
             if os.path.isfile(os.path.join(checkpoint_folder, modeling_file)):
                 shutil.copy(os.path.join(checkpoint_folder, modeling_file), os.path.join(output_dir, modeling_file))
-        # Saving the tokenizer is fast and we don't know how many files it may have spawned, so we resave it to be sure.
-        if self.tokenizer is not None:
-            self.tokenizer.save_pretrained(output_dir)
+        # Saving the processing class is fast and we don't know how many files it may have spawned, so we resave it to be sure.
+        if self.processing_class is not None:
+            self.processing_class.save_pretrained(output_dir)
         # Same for the training arguments
         torch.save(self.args, os.path.join(output_dir, TRAINING_ARGS_NAME))
 
@@ -4496,7 +4524,7 @@ class Trainer:
         **kwargs,
     ) -> str:
         """
-        Upload `self.model` and `self.tokenizer` to the 🤗 model hub on the repo `self.args.hub_model_id`.
+        Upload `self.model` and `self.processing_class` to the 🤗 model hub on the repo `self.args.hub_model_id`.
 
         Parameters:
             commit_message (`str`, *optional*, defaults to `"End of training"`):
