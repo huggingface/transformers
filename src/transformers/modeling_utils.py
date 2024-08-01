@@ -935,10 +935,6 @@ def _load_state_dict_into_meta_model(
                 )
             )
         ):
-            # TODO @mobicham: skip module to device for HQQLinear since it's already on device
-            if is_quantized:
-                if isinstance(hf_quantizer, HqqHfQuantizer) and hf_quantizer.pre_quantized:
-                    continue
             # For backward compatibility with older versions of `accelerate` and for non-quantized params
             set_module_tensor_to_device(model, param_name, param_device, **set_module_kwargs)
         else:
@@ -3963,11 +3959,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             ):
                 device_map_kwargs["force_hooks"] = True
 
-            # TODO @mobicham: HQQLinear breaks with dispatch_model() when loading
-            do_dispatch_model = True
-            # if pre_quantized:
-            #     do_dispatch_model = not isinstance(hf_quantizer, HqqHfQuantizer)
-            if not is_fsdp_enabled() and not is_deepspeed_zero3_enabled() and do_dispatch_model:
+            if not is_fsdp_enabled() and not is_deepspeed_zero3_enabled():
                 dispatch_model(model, **device_map_kwargs)
 
         if hf_quantizer is not None:
