@@ -42,10 +42,6 @@ else:
 
 
 class Mamba2ModelTester:
-    config_classs = Mamba2Config
-    model_class = Mamba2Model
-    for_causal_lm = Mamba2ForCausalLM
-
     def __init__(
         self,
         parent,
