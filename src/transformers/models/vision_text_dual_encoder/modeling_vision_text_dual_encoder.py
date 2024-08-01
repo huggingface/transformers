@@ -185,11 +185,13 @@ class VisionTextDualEncoderModel(PreTrainedModel):
                 vision_model = CLIPVisionModel(config.vision_config)
             else:
                 vision_model = AutoModel.from_config(
-                    config.vision_config, attn_implementation=config._attn_implementation
+                    config.vision_config, attn_implementation=config.vision_config._attn_implementation
                 )
 
         if text_model is None:
-            text_model = AutoModel.from_config(config.text_config, attn_implementation=config._attn_implementation)
+            text_model = AutoModel.from_config(
+                config.text_config, attn_implementation=config.text_config._attn_implementation
+            )
 
         self.vision_model = vision_model
         self.text_model = text_model
