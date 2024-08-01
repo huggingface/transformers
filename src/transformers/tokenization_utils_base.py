@@ -1593,6 +1593,14 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         self.model_input_names = kwargs.pop("model_input_names", self.model_input_names)
 
+        if "clean_up_tokenization_spaces" not in kwargs:
+            warnings.warn(
+                "`clean_up_tokenization_spaces` was not set. It will be set to `True` by default. This "
+                "behavior will be depracted in transformers v4.45, and will be then set to `False` by default. "
+                "For more details check this issue: https://github.com/huggingface/transformers/issues/31884",
+                FutureWarning,
+            )
+
         # By default, cleaning tokenization spaces for both fast and slow tokenizers
         self.clean_up_tokenization_spaces = kwargs.pop("clean_up_tokenization_spaces", True)
 
