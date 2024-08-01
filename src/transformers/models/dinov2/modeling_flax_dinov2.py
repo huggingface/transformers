@@ -36,7 +36,7 @@ from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward
 from .configuration_dinov2 import Dinov2Config
 
 
-Dinov2_START_DOCSTRING = r"""
+DINOV2_START_DOCSTRING = r"""
 
     This model inherits from [`FlaxPreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading, saving and converting weights from PyTorch models)
