@@ -13,7 +13,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import copy
 import inspect
 import warnings
@@ -1779,6 +1778,20 @@ class GenerationMixin:
             cache_name = "cache_params"
         else:
             cache_name = "past_key_values"
+
+        # TODO(joao): support static caches in assisted generation. assisted generation needs to roll back caches,
+        # which is only supported in dynamic caches atm
+        if (
+            assistant_model is not None
+            and generation_config.cache_implementation is not None
+            and self._supports_default_dynamic_cache()
+        ):
+            logger.warning_once(
+                "An assistant model is provided, using a dynamic cache instead of a cache of type="
+                f"'{generation_config.cache_implementation}'."
+            )
+            generation_config.cache_implementation = None
+
         if (model_kwargs.get(cache_name) is not None) and is_torchdynamo_compiling():
             raise ValueError(
                 "Passing `past_key_values` is not supported when compiling `model.generate` with torch.compile -- you "
