@@ -1470,7 +1470,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             model = cls(config, **kwargs)
 
         # Flag for if we init with `zero3`, add an attr to the model so we can check downstream for issues
-        model.transformers_zero3_init_used = is_deepspeed_zero3_enabled()
+        model._transformers_zero3_init_used = is_deepspeed_zero3_enabled()
 
         # restore default dtype if it was modified
         if dtype_orig is not None:
@@ -3802,7 +3802,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             model = cls(config, *model_args, **model_kwargs)
 
         # If we init with `zero3`, add an attr to the model so we can check downstream for issues
-        model.transformers_zero3_init_used = is_deepspeed_zero3_enabled() and not is_quantized
+        model._transformers_zero3_init_used = is_deepspeed_zero3_enabled() and not is_quantized
 
         # make sure we use the model's config since the __init__ call might have copied it
         config = model.config

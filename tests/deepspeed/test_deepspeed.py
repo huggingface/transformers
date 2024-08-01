@@ -732,7 +732,7 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
                 args=training_args,
             )
             assert trainer.is_deepspeed_enabled
-            assert model.transformers_zero3_init_used
+            assert model._transformers_zero3_init_used
 
     def check_saved_checkpoints_deepspeed(self, output_dir, freq, total, stage, dtype):
         # adapted from TrainerIntegrationCommon.check_saved_checkpoints

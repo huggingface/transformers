@@ -440,7 +440,7 @@ class Trainer:
         # 1. Used `.from_pretrained` or `.from_config` to initialize their model
         # 2. Did not configure Zero-3 via `TrainingArguments` or `accelerate launch` beforehand
         # New models init such as `MyModel()` will not hit this step
-        if is_deepspeed_zero3_enabled() and not getattr(model, "transformers_zero3_init_used", True):
+        if is_deepspeed_zero3_enabled() and not getattr(model, "_transformers_zero3_init_used", True):
             raise ValueError(
                 "Model was not initialized with `Zero-3` despite being configured. Please re-initialize your model via `Model.from_pretrained(...)` or `Model.from_config(...)` after creating your `TrainingArguments`!"
             )
