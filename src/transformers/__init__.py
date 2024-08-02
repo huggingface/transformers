@@ -682,6 +682,12 @@ _import_structure = {
         "SamPromptEncoderConfig",
         "SamVisionConfig",
     ],
+    "models.sam2": [
+        "Sam2Config",
+        "Sam2ImageEncoderConfig",
+        "Sam2ImageEncoderConfig",
+        "Sam2MemoryEncoderConfig",
+    ],
     "models.seamless_m4t": [
         "SeamlessM4TConfig",
         "SeamlessM4TFeatureExtractor",
