@@ -86,8 +86,8 @@ class Qwen2AudioProcessor(ProcessorMixin):
                 The sampling rate at which the audio files should be digitalized expressed in hertz (Hz).
         """
 
-        if audios is None and text is None:
-            raise ValueError("You need to specify either an `audio` or `text` input to process.")
+        if text is None:
+            raise ValueError("You need to specify either a `text` input to process.")
         inputs = self.tokenizer(text, padding=padding, **kwargs)
 
         if audios is not None:
