@@ -1557,7 +1557,8 @@ class MambaCache:
     Cache for mamba model which does not have attention mechanism and key value states.
 
     Arguments:
-        config (`PretrainedConfig`): <fill_docstring>
+        config (`PretrainedConfig):
+            The configuration file defining the shape-related attributes required to initialize the static cache.
         max_batch_size (`int`):
             The maximum batch size with which the model will be used.
         dtype (*optional*, defaults to `torch.float16`):
