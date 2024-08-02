@@ -103,8 +103,8 @@ class FlaxDinov2PatchEmbeddings(nn.Module):
         self.num_channels = self.config.num_channels
         self.projection = nn.Conv(
             self.config.hidden_size,
-            kernel_size=(patch_size[0], patch_size[1]),
-            strides=(patch_size[0], patch_size[1]),
+            kernel_size=patch_size,
+            strides=patch_size,
             padding="VALID",
             dtype=self.dtype,
             kernel_init=jax.nn.initializers.variance_scaling(
@@ -112,6 +112,7 @@ class FlaxDinov2PatchEmbeddings(nn.Module):
             ),
         )
 
+    # Copied from transformers.models.bart.modeling_flax_vit.FlaxViTPatchEmbeddings.__call__
     def __call__(self, pixel_values):
         num_channels = pixel_values.shape[-1]
         if num_channels != self.num_channels:
@@ -124,41 +125,41 @@ class FlaxDinov2PatchEmbeddings(nn.Module):
         return jnp.reshape(embeddings, (batch_size, -1, channels))
 
 
-def interpolate_pos_encoding(config, hidden_states, height, width, position_embeddings):
-    num_patches = hidden_states.shape[1] - 1
-    num_positions = position_embeddings.shape[1] - 1
-    if num_patches == num_positions and height == width:
-        return position_embeddings
-    class_pos_embed = position_embeddings[:, 0]
-    patch_pos_embed = position_embeddings[:, 1:]
-    dim = hidden_states.shape[-1]
+# def interpolate_pos_encoding(config, hidden_states, height, width, position_embeddings):
+#     num_patches = hidden_states.shape[1] - 1
+#     num_positions = position_embeddings.shape[1] - 1
+#     if num_patches == num_positions and height == width:
+#         return position_embeddings
+#     class_pos_embed = position_embeddings[:, 0]
+#     patch_pos_embed = position_embeddings[:, 1:]
+#     dim = hidden_states.shape[-1]
 
-    height = height // config.patch_size
-    width = width // config.patch_size
-    height, width = height + 0.1, width + 0.1
+#     height = height // config.patch_size
+#     width = width // config.patch_size
+#     height, width = height + 0.1, width + 0.1
 
-    patch_pos_embed = patch_pos_embed.reshape((1, int(math.sqrt(num_positions)), int(math.sqrt(num_positions)), dim))
-    patch_pos_embed = jnp.transpose(patch_pos_embed, (0, 3, 1, 2))
+#     patch_pos_embed = patch_pos_embed.reshape((1, int(math.sqrt(num_positions)), int(math.sqrt(num_positions)), dim))
+#     patch_pos_embed = jnp.transpose(patch_pos_embed, (0, 3, 1, 2))
 
-    new_height_ratio = jnp.float32(height / math.sqrt(num_positions))
-    new_width_ratio = jnp.float32(width / math.sqrt(num_positions))
+#     new_height_ratio = jnp.float32(height / math.sqrt(num_positions))
+#     new_width_ratio = jnp.float32(width / math.sqrt(num_positions))
 
-    scale = jnp.array([new_height_ratio, new_width_ratio], dtype=jnp.float32)
-    translation = jnp.array([0.0, 0.0], dtype=jnp.float32)
+#     scale = jnp.array([new_height_ratio, new_width_ratio], dtype=jnp.float32)
+#     translation = jnp.array([0.0, 0.0], dtype=jnp.float32)
 
-    patch_pos_embed = jax.image.scale_and_translate(
-        patch_pos_embed,
-        shape=(1, 768, 16, 16),
-        spatial_dims=(2, 3),
-        scale=scale,
-        translation=translation,
-        method="bicubic",
-        antialias=False,
-    )
+#     patch_pos_embed = jax.image.scale_and_translate(
+#         patch_pos_embed,
+#         shape=(1, 768, 16, 16),
+#         spatial_dims=(2, 3),
+#         scale=scale,
+#         translation=translation,
+#         method="bicubic",
+#         antialias=False,
+#     )
 
-    patch_pos_embed = jnp.transpose(patch_pos_embed, (0, 2, 3, 1)).reshape((hidden_states.shape[0], -1, dim))
+#     patch_pos_embed = jnp.transpose(patch_pos_embed, (0, 2, 3, 1)).reshape((hidden_states.shape[0], -1, dim))
 
-    return jnp.concatenate((class_pos_embed[jnp.newaxis, :], patch_pos_embed), axis=1)
+#     return jnp.concatenate((class_pos_embed[jnp.newaxis, :], patch_pos_embed), axis=1)
 
 
 class FlaxDinov2Embeddings(nn.Module):
@@ -187,16 +188,53 @@ class FlaxDinov2Embeddings(nn.Module):
         )
         self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
 
+    def interpolate_pos_encoding(self, config, hidden_states, height, width, position_embeddings):
+        num_patches = hidden_states.shape[1] - 1
+        num_positions = position_embeddings.shape[1] - 1
+        if num_patches == num_positions and height == width:
+            return position_embeddings
+        class_pos_embed = position_embeddings[:, 0]
+        patch_pos_embed = position_embeddings[:, 1:]
+        dim = hidden_states.shape[-1]
+
+        h = height // config.patch_size
+        w = width // config.patch_size
+        height, width = h + 0.1, w + 0.1
+
+        patch_pos_embed = patch_pos_embed.reshape((1, int(math.sqrt(num_positions)), int(math.sqrt(num_positions)), dim))
+        patch_pos_embed = jnp.transpose(patch_pos_embed, (0, 3, 1, 2))
+        target_dtype = patch_pos_embed.dtype
+        new_height_ratio = jnp.float32(height / math.sqrt(num_positions))
+        new_width_ratio = jnp.float32(width / math.sqrt(num_positions))
+
+        scale = jnp.array([new_height_ratio, new_width_ratio], dtype=jnp.float32)
+        translation = jnp.array([0.0, 0.0], dtype=jnp.float32)
+
+        patch_pos_embed = jax.image.scale_and_translate(
+            patch_pos_embed.astype(jnp.float32),
+            shape=(patch_pos_embed.shape[0], patch_pos_embed.shape[1], h, w),
+            spatial_dims=(2, 3),
+            scale=scale,
+            translation=translation,
+            method="bicubic",
+            antialias=False,
+        )
+        patch_pos_embed = patch_pos_embed.astype(target_dtype)
+        patch_pos_embed = jnp.transpose(patch_pos_embed, (0, 2, 3, 1)).reshape((hidden_states.shape[0], -1, dim))
+
+        return jnp.concatenate((class_pos_embed[jnp.newaxis, :], patch_pos_embed), axis=1)
+
     def __call__(self, pixel_values, deterministic=True):
         batch_size = pixel_values.shape[0]
+        target_dtype = self.patch_embeddings.projection.dtype
         height, width = pixel_values.shape[1], pixel_values.shape[2]
 
-        embeddings = self.patch_embeddings(pixel_values)
+        embeddings = self.patch_embeddings(pixel_values.astype(target_dtype))
 
         cls_tokens = jnp.broadcast_to(self.cls_token, (batch_size, 1, self.config.hidden_size))
         embeddings = jnp.concatenate((cls_tokens, embeddings), axis=1)
 
-        embeddings = embeddings + interpolate_pos_encoding(
+        embeddings = embeddings + self.interpolate_pos_encoding(
             self.config, embeddings, height, width, self.position_embeddings
         )
 
