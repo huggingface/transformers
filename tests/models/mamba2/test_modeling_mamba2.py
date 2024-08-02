@@ -20,7 +20,7 @@ from typing import Dict, List, Tuple
 from parameterized import parameterized
 
 from transformers import AutoTokenizer, Mamba2Config, is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -291,7 +291,15 @@ class Mamba2IntegrationTest(unittest.TestCase):
             ("cpu",),
         ]
     )
+    @slow
+    @require_torch
     def test_simple_generate(self, device):
+        """
+        Simple generate test to avoid regressions.
+        Note: state-spaces (cuda) implementation and pure torch implementation
+        have irreconciliable differences as of now, which will cause this test to fail
+        in an environment with state-spaces installed.
+        """
         tokenizer = self.tokenizer
         tokenizer.pad_token_id = tokenizer.eos_token_id
 
@@ -305,3 +313,30 @@ class Mamba2IntegrationTest(unittest.TestCase):
         output_sentence = tokenizer.decode(out[0])
         ground_truth_sentence = """<s>[INST] Write a hello world program in C++.[/INST] Sure, here is a simple "Hello, World!" program in C++:\n\n```cpp\n#include <iostream>\n\n"""
         self.assertEqual(output_sentence, ground_truth_sentence)
+
+    @slow
+    @require_torch_gpu
+    def test_batched_equivalence(self):
+        """
+        Verifies that batched generation matches individual generation.
+        Important because of the specific caching mechanism + statefulness of mamba model.
+        Depending on precision and devices, differences can be observed from generation to generation.
+        """
+        tokenizer = AutoTokenizer.from_pretrained("Molbap/code2", from_slow=True, legacy=False)
+        prompt = ["[INST]Showcase C language.[/INST]", "[INST]Write a hello world program in C++.[/INST]"]
+        model = Mamba2ForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.bfloat16).to(torch_device)
+        tokenizer.pad_token_id = tokenizer.eos_token_id
+
+        # batched generation
+
+        tokenized_prompts = tokenizer(prompt, return_tensors="pt", padding="longest").to(torch_device)
+        batched_gen = model.generate(**tokenized_prompts, max_new_tokens=30, use_cache=True)
+        batched_output = tokenizer.batch_decode(batched_gen, skip_special_tokens=True)
+
+        # individual generation
+
+        for index_gen, individual_prompt in enumerate(prompt):
+            inputs = tokenizer(individual_prompt, return_tensors="pt", padding="longest").to(torch_device)
+            individual_gen = model.generate(**inputs, max_new_tokens=30, use_cache=True)
+            individual_output = tokenizer.batch_decode(individual_gen, skip_special_tokens=True)[0]
+            self.assertEqual(individual_output, batched_output[index_gen])
