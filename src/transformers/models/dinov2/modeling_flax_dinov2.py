@@ -143,10 +143,8 @@ def interpolate_pos_encoding(config, hidden_states, height, width, position_embe
     new_height_ratio = jnp.float32(height / math.sqrt(num_positions))
     new_width_ratio = jnp.float32(width / math.sqrt(num_positions))
 
-    scale, translation = (
-        jnp.array([new_height_ratio, new_width_ratio], dtype=jnp.float32),
-        jnp.array([0.0, 0.0], dtype=jnp.float32),
-    )
+    scale = jnp.array([new_height_ratio, new_width_ratio], dtype=jnp.float32)
+    translation = jnp.array([0.0, 0.0], dtype=jnp.float32)
 
     patch_pos_embed = jax.image.scale_and_translate(
         patch_pos_embed,
