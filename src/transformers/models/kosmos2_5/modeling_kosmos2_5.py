@@ -490,7 +490,6 @@ class Kosmos2_5VisionMlp(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.pix2struct.modeling_pix2struct.Pix2StructVisionAttention with Pix2Struct->Kosmos2_5
 class Kosmos2_5VisionAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -710,13 +709,16 @@ KOSMOS2_5_VISION_ATTENTION_CLASSES = {
 }
 
 
-# Copied from transformers.models.pix2struct.modeling_pix2struct.Pix2StructVisionLayer with Pix2StructVisionAttention->KOSMOS2_5_VISION_ATTENTION_CLASSES[config._attn_implementation],Pix2Struct->Kosmos2_5
 class Kosmos2_5VisionLayer(nn.Module):
+    # Copied from transformers.models.pix2struct.modeling_pix2struct.Pix2StructVisionLayer.__init__ with Pix2StructVisionAttention->KOSMOS2_5_VISION_ATTENTION_CLASSES[config._attn_implementation],Pix2Struct->Kosmos2_5
     def __init__(self, config: Kosmos2_5VisionConfig) -> None:
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
+
+        # Ignore copy
         self.config = config
+
         self.attention = KOSMOS2_5_VISION_ATTENTION_CLASSES[config._attn_implementation](config)
         self.mlp = Kosmos2_5VisionMlp(config)
         self.pre_mlp_layer_norm = Kosmos2_5LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -745,7 +747,9 @@ class Kosmos2_5VisionLayer(nn.Module):
 
         # in  Kosmos2_5Vision, layernorm is applied before self-attention
         hidden_states = self.pre_attention_layer_norm(hidden_states)
+
         attention_mask = self._prepare_attention_mask(attention_mask, hidden_states.shape[:2], hidden_states)
+
         self_attention_outputs, _ = self.attention(
             hidden_states,
             attention_mask=attention_mask,
@@ -761,7 +765,10 @@ class Kosmos2_5VisionLayer(nn.Module):
         # in  Kosmos2_5Vision, layernorm is also applied after self-attention
         layer_output = self.pre_mlp_layer_norm(hidden_states)
         layer_output = self.mlp(layer_output) + hidden_states  # second residual connection
-        return layer_output, outputs
+
+        outputs = (layer_output,) + outputs
+
+        return outputs
 
 
 # Copied from transformers.models.pix2struct.modeling_pix2struct.Pix2StructVisionEncoder with Pix2Struct->Kosmos2_5
