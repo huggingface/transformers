@@ -108,9 +108,7 @@ class Sam2PositionEmbeddingRandom(nn.Module):
         pe = self._pe_encoding(torch.stack([x_embed, y_embed], dim=-1))
         return pe.permute(2, 0, 1)  # C x H x W
 
-    def forward_with_coords(
-        self, coords_input: torch.Tensor, image_size: Tuple[int, int]
-    ) -> torch.Tensor:
+    def forward_with_coords(self, coords_input: torch.Tensor, image_size: Tuple[int, int]) -> torch.Tensor:
         """Positionally encode points that are not normalized to [0,1]."""
         coords = coords_input.clone()
         coords[:, :, 0] = coords[:, :, 0] / image_size[1]
@@ -148,9 +146,7 @@ class PromptEncoder(nn.Module):
         self.pe_layer = Sam2PositionEmbeddingRandom(embed_dim // 2)
 
         self.num_point_embeddings: int = 4  # pos/neg point + 2 box corners
-        point_embeddings = [
-            nn.Embedding(1, embed_dim) for i in range(self.num_point_embeddings)
-        ]
+        point_embeddings = [nn.Embedding(1, embed_dim) for i in range(self.num_point_embeddings)]
         self.point_embeddings = nn.ModuleList(point_embeddings)
         self.not_a_point_embed = nn.Embedding(1, embed_dim)
 
@@ -193,9 +189,7 @@ class PromptEncoder(nn.Module):
             padding_label = -torch.ones((labels.shape[0], 1), device=labels.device)
             points = torch.cat([points, padding_point], dim=1)
             labels = torch.cat([labels, padding_label], dim=1)
-        point_embedding = self.pe_layer.forward_with_coords(
-            points, self.input_image_size
-        )
+        point_embedding = self.pe_layer.forward_with_coords(points, self.input_image_size)
         point_embedding[labels == -1] = 0.0
         point_embedding[labels == -1] += self.not_a_point_embed.weight
         point_embedding[labels == 0] += self.point_embeddings[0].weight
@@ -208,9 +202,7 @@ class PromptEncoder(nn.Module):
         """Embeds box prompts."""
         boxes = boxes + 0.5  # Shift to center of pixel
         coords = boxes.reshape(-1, 2, 2)
-        corner_embedding = self.pe_layer.forward_with_coords(
-            coords, self.input_image_size
-        )
+        corner_embedding = self.pe_layer.forward_with_coords(coords, self.input_image_size)
         corner_embedding[:, 0, :] += self.point_embeddings[2].weight
         corner_embedding[:, 1, :] += self.point_embeddings[3].weight
         return corner_embedding
@@ -265,9 +257,7 @@ class PromptEncoder(nn.Module):
             Bx(embed_dim)x(embed_H)x(embed_W)
         """
         bs = self._get_batch_size(points, boxes, masks)
-        sparse_embeddings = torch.empty(
-            (bs, 0, self.embed_dim), device=self._get_device()
-        )
+        sparse_embeddings = torch.empty((bs, 0, self.embed_dim), device=self._get_device())
         if points is not None:
             coords, labels = points
             point_embeddings = self._embed_points(coords, labels, pad=(boxes is None))
@@ -337,30 +327,19 @@ class Sam2MaskDecoder(nn.Module):
         self.use_multimask_token_for_obj_ptr = use_multimask_token_for_obj_ptr
 
         self.output_upscaling = nn.Sequential(
-            nn.ConvTranspose2d(
-                transformer_dim, transformer_dim // 4, kernel_size=2, stride=2
-            ),
+            nn.ConvTranspose2d(transformer_dim, transformer_dim // 4, kernel_size=2, stride=2),
             Sam2LayerNorm2d(transformer_dim // 4),
             activation(),
-            nn.ConvTranspose2d(
-                transformer_dim // 4, transformer_dim // 8, kernel_size=2, stride=2
-            ),
+            nn.ConvTranspose2d(transformer_dim // 4, transformer_dim // 8, kernel_size=2, stride=2),
             activation(),
         )
         self.use_high_res_features = use_high_res_features
         if use_high_res_features:
-            self.conv_s0 = nn.Conv2d(
-                transformer_dim, transformer_dim // 8, kernel_size=1, stride=1
-            )
-            self.conv_s1 = nn.Conv2d(
-                transformer_dim, transformer_dim // 4, kernel_size=1, stride=1
-            )
+            self.conv_s0 = nn.Conv2d(transformer_dim, transformer_dim // 8, kernel_size=1, stride=1)
+            self.conv_s1 = nn.Conv2d(transformer_dim, transformer_dim // 4, kernel_size=1, stride=1)
 
         self.output_hypernetworks_mlps = nn.ModuleList(
-            [
-                Sam2MLP(transformer_dim, transformer_dim, transformer_dim // 8, 3)
-                for i in range(self.num_mask_tokens)
-            ]
+            [Sam2MLP(transformer_dim, transformer_dim, transformer_dim // 8, 3) for i in range(self.num_mask_tokens)]
         )
 
         self.iou_prediction_head = Sam2MLP(
@@ -373,9 +352,7 @@ class Sam2MaskDecoder(nn.Module):
         if self.pred_obj_scores:
             self.pred_obj_score_head = nn.Linear(transformer_dim, 1)
             if pred_obj_scores_mlp:
-                self.pred_obj_score_head = Sam2MLP(
-                    transformer_dim, transformer_dim, 1, 3
-                )
+                self.pred_obj_score_head = Sam2MLP(transformer_dim, transformer_dim, 1, 3)
 
         # When outputting a single mask, optionally we can dynamically fall back to the best
         # multimask output token if the single mask output token gives low stability scores.
@@ -464,12 +441,8 @@ class Sam2MaskDecoder(nn.Module):
             )
             s = 1
         else:
-            output_tokens = torch.cat(
-                [self.iou_token.weight, self.mask_tokens.weight], dim=0
-            )
-        output_tokens = output_tokens.unsqueeze(0).expand(
-            sparse_prompt_embeddings.size(0), -1, -1
-        )
+            output_tokens = torch.cat([self.iou_token.weight, self.mask_tokens.weight], dim=0)
+        output_tokens = output_tokens.unsqueeze(0).expand(sparse_prompt_embeddings.size(0), -1, -1)
         tokens = torch.cat((output_tokens, sparse_prompt_embeddings), dim=1)
 
         # Expand per-image data in batch direction to be per-mask
@@ -479,9 +452,7 @@ class Sam2MaskDecoder(nn.Module):
             assert image_embeddings.shape[0] == tokens.shape[0]
             src = image_embeddings
         src = src + dense_prompt_embeddings
-        assert (
-            image_pe.size(0) == 1
-        ), "image_pe should have size 1 in batch dim (from `get_dense_pe()`)"
+        assert image_pe.size(0) == 1, "image_pe should have size 1 in batch dim (from `get_dense_pe()`)"
         pos_src = torch.repeat_interleave(image_pe, tokens.shape[0], dim=0)
         b, c, h, w = src.shape
 
@@ -502,9 +473,7 @@ class Sam2MaskDecoder(nn.Module):
 
         hyper_in_list: List[torch.Tensor] = []
         for i in range(self.num_mask_tokens):
-            hyper_in_list.append(
-                self.output_hypernetworks_mlps[i](mask_tokens_out[:, i, :])
-            )
+            hyper_in_list.append(self.output_hypernetworks_mlps[i](mask_tokens_out[:, i, :]))
         hyper_in = torch.stack(hyper_in_list, dim=1)
         b, c, h, w = upscaled_embedding.shape
         masks = (hyper_in @ upscaled_embedding.view(b, c, h * w)).view(b, -1, h, w)
@@ -543,9 +512,7 @@ class Sam2MaskDecoder(nn.Module):
         multimask_logits = all_mask_logits[:, 1:, :, :]
         multimask_iou_scores = all_iou_scores[:, 1:]
         best_scores_inds = torch.argmax(multimask_iou_scores, dim=-1)
-        batch_inds = torch.arange(
-            multimask_iou_scores.size(0), device=all_iou_scores.device
-        )
+        batch_inds = torch.arange(multimask_iou_scores.size(0), device=all_iou_scores.device)
         best_multimask_logits = multimask_logits[batch_inds, best_scores_inds]
         best_multimask_logits = best_multimask_logits.unsqueeze(1)
         best_multimask_iou_scores = multimask_iou_scores[batch_inds, best_scores_inds]
@@ -603,9 +570,7 @@ class Sam2TwoWayAttentionBlock(nn.Module):
         )
         self.norm2 = nn.LayerNorm(embedding_dim)
 
-        self.mlp = Sam2MLP(
-            embedding_dim, mlp_dim, embedding_dim, num_layers=2, activation=activation
-        )
+        self.mlp = Sam2MLP(embedding_dim, mlp_dim, embedding_dim, num_layers=2, activation=activation)
         self.norm3 = nn.LayerNorm(embedding_dim)
 
         self.norm4 = nn.LayerNorm(embedding_dim)
@@ -615,9 +580,7 @@ class Sam2TwoWayAttentionBlock(nn.Module):
 
         self.skip_first_layer_pe = skip_first_layer_pe
 
-    def forward(
-        self, queries: Tensor, keys: Tensor, query_pe: Tensor, key_pe: Tensor
-    ) -> Tuple[Tensor, Tensor]:
+    def forward(self, queries: Tensor, keys: Tensor, query_pe: Tensor, key_pe: Tensor) -> Tuple[Tensor, Tensor]:
         # Self attention block
         if self.skip_first_layer_pe:
             queries = self.self_attn(q=queries, k=queries, v=queries)
@@ -779,12 +742,8 @@ class Sam2PositionEmbeddingSine(nn.Module):
 
         pos_x = x_embed[:, None] / dim_t
         pos_y = y_embed[:, None] / dim_t
-        pos_x = torch.stack(
-            (pos_x[:, 0::2].sin(), pos_x[:, 1::2].cos()), dim=2
-        ).flatten(1)
-        pos_y = torch.stack(
-            (pos_y[:, 0::2].sin(), pos_y[:, 1::2].cos()), dim=2
-        ).flatten(1)
+        pos_x = torch.stack((pos_x[:, 0::2].sin(), pos_x[:, 1::2].cos()), dim=2).flatten(1)
+        pos_y = torch.stack((pos_y[:, 0::2].sin(), pos_y[:, 1::2].cos()), dim=2).flatten(1)
         return pos_x, pos_y
 
     @torch.no_grad()
@@ -830,12 +789,8 @@ class Sam2PositionEmbeddingSine(nn.Module):
 
         pos_x = x_embed[:, :, :, None] / dim_t
         pos_y = y_embed[:, :, :, None] / dim_t
-        pos_x = torch.stack(
-            (pos_x[:, :, :, 0::2].sin(), pos_x[:, :, :, 1::2].cos()), dim=4
-        ).flatten(3)
-        pos_y = torch.stack(
-            (pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4
-        ).flatten(3)
+        pos_x = torch.stack((pos_x[:, :, :, 0::2].sin(), pos_x[:, :, :, 1::2].cos()), dim=4).flatten(3)
+        pos_y = torch.stack((pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4).flatten(3)
         pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
         self.cache[cache_key] = pos[0]
         return pos
@@ -889,7 +844,6 @@ class Sam2VisionNeck(nn.Module):
         self.fpn_top_down_levels = list(config.fpn_top_down_levels)
 
     def forward(self, xs: List[torch.Tensor]):
-
         out = [None] * len(self.convs)
         pos = [None] * len(self.convs)
         assert len(xs) == len(self.convs)
@@ -906,9 +860,7 @@ class Sam2VisionNeck(nn.Module):
                     prev_features.to(dtype=torch.float32),
                     scale_factor=2.0,
                     mode=self.fpn_interp_model,
-                    align_corners=(
-                        None if self.fpn_interp_model == "nearest" else False
-                    ),
+                    align_corners=(None if self.fpn_interp_model == "nearest" else False),
                     antialias=False,
                 )
                 prev_features = lateral_features + top_down_features
@@ -942,9 +894,7 @@ def window_partition(x, window_size):
     Hp, Wp = H + pad_h, W + pad_w
 
     x = x.view(B, Hp // window_size, window_size, Wp // window_size, window_size, C)
-    windows = (
-        x.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, window_size, window_size, C)
-    )
+    windows = x.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, window_size, window_size, C)
     return windows, (Hp, Wp)
 
 
@@ -962,9 +912,7 @@ def window_unpartition(windows, window_size, pad_hw, hw):
     Hp, Wp = pad_hw
     H, W = hw
     B = windows.shape[0] // (Hp * Wp // window_size // window_size)
-    x = windows.view(
-        B, Hp // window_size, Wp // window_size, window_size, window_size, -1
-    )
+    x = windows.view(B, Hp // window_size, Wp // window_size, window_size, window_size, -1)
     x = x.permute(0, 1, 3, 2, 4, 5).contiguous().view(B, Hp, Wp, -1)
 
     if Hp > H or Wp > W:
@@ -994,9 +942,7 @@ class Sam2PatchEmbed(nn.Module):
             embed_dim (int):  embed_dim (int): Patch embedding dimension.
         """
         super().__init__()
-        self.proj = nn.Conv2d(
-            in_chans, embed_dim, kernel_size=kernel_size, stride=stride, padding=padding
-        )
+        self.proj = nn.Conv2d(in_chans, embed_dim, kernel_size=kernel_size, stride=stride, padding=padding)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.proj(x)
@@ -1043,9 +989,7 @@ def select_closest_cond_frames(frame_idx, cond_frame_outputs, max_cond_frame_num
             key=lambda x: abs(x - frame_idx),
         )[:num_remain]
         selected_outputs.update((t, cond_frame_outputs[t]) for t in inds_remain)
-        unselected_outputs = {
-            t: v for t, v in cond_frame_outputs.items() if t not in selected_outputs
-        }
+        unselected_outputs = {t: v for t, v in cond_frame_outputs.items() if t not in selected_outputs}
 
     return selected_outputs, unselected_outputs
 
@@ -1093,9 +1037,7 @@ class Sam2MLP(nn.Module):
         super().__init__()
         self.num_layers = num_layers
         h = [hidden_dim] * (num_layers - 1)
-        self.layers = nn.ModuleList(
-            nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim])
-        )
+        self.layers = nn.ModuleList(nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim]))
         self.sigmoid_output = sigmoid_output
         self.act = activation()
 
@@ -1213,9 +1155,7 @@ class Sam2MultiScaleBlock(nn.Module):
 
         self.pool, self.q_stride = None, q_stride
         if self.q_stride:
-            self.pool = nn.MaxPool2d(
-                kernel_size=q_stride, stride=q_stride, ceil_mode=False
-            )
+            self.pool = nn.MaxPool2d(kernel_size=q_stride, stride=q_stride, ceil_mode=False)
 
         self.attn = Sam2MultiScaleAttention(
             dim,
@@ -1287,9 +1227,7 @@ class Sam2HieraBackbone(nn.Module):
         embed_dim = config.embed_dim
         num_heads = config.num_heads
         self.q_stride = config.q_stride
-        self.stage_ends = [
-            sum(config.stages[:i]) - 1 for i in range(1, len(config.stages) + 1)
-        ]
+        self.stage_ends = [sum(config.stages[:i]) - 1 for i in range(1, len(config.stages) + 1)]
         assert 0 <= config.q_pool <= len(self.stage_ends[:-1])
         self.q_pool_blocks = [x + 1 for x in self.stage_ends[:-1]][: config.q_pool]
         self.return_interm_layers = config.return_interm_layers
@@ -1301,19 +1239,11 @@ class Sam2HieraBackbone(nn.Module):
         self.global_att_blocks = config.global_att_blocks
 
         # Windowed positional embedding (https://arxiv.org/abs/2311.05613)
-        self.window_pos_embed_bkg_spatial_size = (
-            config.window_pos_embed_bkg_spatial_size
-        )
-        self.pos_embed = nn.Parameter(
-            torch.zeros(1, embed_dim, *self.window_pos_embed_bkg_spatial_size)
-        )
-        self.pos_embed_window = nn.Parameter(
-            torch.zeros(1, embed_dim, self.window_spec[0], self.window_spec[0])
-        )
+        self.window_pos_embed_bkg_spatial_size = config.window_pos_embed_bkg_spatial_size
+        self.pos_embed = nn.Parameter(torch.zeros(1, embed_dim, *self.window_pos_embed_bkg_spatial_size))
+        self.pos_embed_window = nn.Parameter(torch.zeros(1, embed_dim, self.window_spec[0], self.window_spec[0]))
 
-        dpr = [
-            x.item() for x in torch.linspace(0, config.drop_path_rate, depth)
-        ]  # stochastic depth decay rule
+        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, depth)]  # stochastic depth decay rule
 
         cur_stage = 1
         self.blocks = nn.ModuleList()
@@ -1355,9 +1285,7 @@ class Sam2HieraBackbone(nn.Module):
         h, w = hw
         window_embed = self.pos_embed_window
         pos_embed = F.interpolate(self.pos_embed, size=(h, w), mode="bicubic")
-        pos_embed = pos_embed + window_embed.tile(
-            [x // y for x, y in zip(pos_embed.shape, window_embed.shape)]
-        )
+        pos_embed = pos_embed + window_embed.tile([x // y for x, y in zip(pos_embed.shape, window_embed.shape)])
         pos_embed = pos_embed.permute(0, 2, 3, 1)
         return pos_embed
 
@@ -1371,9 +1299,7 @@ class Sam2HieraBackbone(nn.Module):
         outputs = []
         for i, blk in enumerate(self.blocks):
             x = blk(x)
-            if (i == self.stage_ends[-1]) or (
-                i in self.stage_ends and self.return_interm_layers
-            ):
+            if (i == self.stage_ends[-1]) or (i in self.stage_ends and self.return_interm_layers):
                 feats = x.permute(0, 3, 1, 2)
                 outputs.append(feats)
 
@@ -1441,11 +1367,7 @@ def apply_rotary_enc(
     repeat_freqs_k: bool = False,
 ):
     xq_ = torch.view_as_complex(xq.float().reshape(*xq.shape[:-1], -1, 2))
-    xk_ = (
-        torch.view_as_complex(xk.float().reshape(*xk.shape[:-1], -1, 2))
-        if xk.shape[-2] != 0
-        else None
-    )
+    xk_ = torch.view_as_complex(xk.float().reshape(*xk.shape[:-1], -1, 2)) if xk.shape[-2] != 0 else None
     freqs_cis = reshape_for_broadcast(freqs_cis, xq_)
     xq_out = torch.view_as_real(xq_ * freqs_cis).flatten(3)
     if xk_ is None:
@@ -1478,9 +1400,7 @@ class Sam2Attention(nn.Module):
         self.kv_in_dim = kv_in_dim if kv_in_dim is not None else embedding_dim
         self.internal_dim = embedding_dim // downsample_rate
         self.num_heads = num_heads
-        assert (
-            self.internal_dim % num_heads == 0
-        ), "num_heads must divide embedding_dim."
+        assert self.internal_dim % num_heads == 0, "num_heads must divide embedding_dim."
 
         self.q_proj = nn.Linear(embedding_dim, self.internal_dim)
         self.k_proj = nn.Linear(self.kv_in_dim, self.internal_dim)
@@ -1541,16 +1461,12 @@ class Sam2RoPEAttention(Sam2Attention):
     ):
         super().__init__(*args, **kwargs)
 
-        self.compute_cis = partial(
-            compute_axial_cis, dim=self.internal_dim // self.num_heads, theta=rope_theta
-        )
+        self.compute_cis = partial(compute_axial_cis, dim=self.internal_dim // self.num_heads, theta=rope_theta)
         freqs_cis = self.compute_cis(end_x=feat_sizes[0], end_y=feat_sizes[1])
         self.freqs_cis = freqs_cis
         self.rope_k_repeat = rope_k_repeat
 
-    def forward(
-        self, q: Tensor, k: Tensor, v: Tensor, num_k_exclude_rope: int = 0
-    ) -> Tensor:
+    def forward(self, q: Tensor, k: Tensor, v: Tensor, num_k_exclude_rope: int = 0) -> Tensor:
         # Input projections
         q = self.q_proj(q)
         k = self.k_proj(k)
@@ -1592,8 +1508,8 @@ class Sam2RoPEAttention(Sam2Attention):
 
         return out
 
-class Sam2MemoryAttentionLayer(nn.Module):
 
+class Sam2MemoryAttentionLayer(nn.Module):
     def __init__(
         self,
         activation: str = "relu",
@@ -1680,7 +1596,6 @@ class Sam2MemoryAttentionLayer(nn.Module):
         query_pos: Optional[Tensor] = None,
         num_k_exclude_rope: int = 0,
     ) -> torch.Tensor:
-
         # Self-Attn, Cross-Attn
         tgt = self._forward_sa(tgt, query_pos)
         tgt = self._forward_ca(tgt, memory, query_pos, pos, num_k_exclude_rope)
@@ -1698,9 +1613,7 @@ class Sam2MemoryAttention(nn.Module):
     ):
         super().__init__()
         self.d_model = config.d_model
-        layer = Sam2MemoryAttentionLayer(
-            activation="relu", dim_feedforward=2048, dropout=0.1, pos_enc_at_attn=False
-        )
+        layer = Sam2MemoryAttentionLayer(activation="relu", dim_feedforward=2048, dropout=0.1, pos_enc_at_attn=False)
         self.num_layers = config.num_layers
         self.layers = get_clones(layer, self.num_layers)
         self.norm = nn.LayerNorm(self.d_model)
@@ -1723,9 +1636,7 @@ class Sam2MemoryAttention(nn.Module):
                 curr_pos[0],
             )
 
-        assert (
-            curr.shape[1] == memory.shape[1]
-        ), "Batch size must be the same for curr and memory"
+        assert curr.shape[1] == memory.shape[1], "Batch size must be the same for curr and memory"
 
         output = curr
         if self.pos_enc_at_input and curr_pos is not None:
@@ -1791,9 +1702,7 @@ class Sam2MemoryFuserCXBlock(nn.Module):
             groups=dim if use_dwconv else 1,
         )  # depthwise conv
         self.norm = Sam2LayerNorm2d(dim, eps=1e-6)
-        self.pwconv1 = nn.Linear(
-            dim, 4 * dim
-        )  # pointwise/1x1 convs, implemented with linear layers
+        self.pwconv1 = nn.Linear(dim, 4 * dim)  # pointwise/1x1 convs, implemented with linear layers
         self.act = nn.GELU()
         self.pwconv2 = nn.Linear(4 * dim, dim)
         self.weight = (
@@ -2036,7 +1945,6 @@ SAM2_INPUTS_DOCSTRING = r"""
     SAM2_START_DOCSTRING,
 )
 class Sam2Model(Sam2PreTrainedModel):
-
     def __init__(self, config):
         super().__init__(config)
         self.image_encoder = Sam2ImageEncoder(config.image_encoder_config)
@@ -2058,26 +1966,18 @@ class Sam2Model(Sam2PreTrainedModel):
             self.mask_downsample = torch.nn.Conv2d(1, 1, kernel_size=4, stride=4)
         self.add_tpos_enc_to_obj_ptrs = config.add_tpos_enc_to_obj_ptrs
         if config.proj_tpos_enc_in_obj_ptrs:
-            assert (
-                config.add_tpos_enc_to_obj_ptrs
-            )  # these options need to be used together
+            assert config.add_tpos_enc_to_obj_ptrs  # these options need to be used together
         self.proj_tpos_enc_in_obj_ptrs = config.proj_tpos_enc_in_obj_ptrs
-        self.only_obj_ptrs_in_the_past_for_eval = (
-            config.only_obj_ptrs_in_the_past_for_eval
-        )
+        self.only_obj_ptrs_in_the_past_for_eval = config.only_obj_ptrs_in_the_past_for_eval
 
         # Part 3: memory encoder for the previous frame's outputs
         self.mem_dim = self.hidden_dim
-        if hasattr(self.memory_encoder, "out_proj") and hasattr(
-            self.memory_encoder.out_proj, "weight"
-        ):
+        if hasattr(self.memory_encoder, "out_proj") and hasattr(self.memory_encoder.out_proj, "weight"):
             # if there is compression of memories along channel dim
             self.mem_dim = self.memory_encoder.out_proj.weight.shape[0]
         self.num_maskmem = config.num_maskmem  # Number of memories accessible
         # Temporal encoding of the memories
-        self.maskmem_tpos_enc = torch.nn.Parameter(
-            torch.zeros(config.num_maskmem, 1, 1, self.mem_dim)
-        )
+        self.maskmem_tpos_enc = torch.nn.Parameter(torch.zeros(config.num_maskmem, 1, 1, self.mem_dim))
         # a single token to indicate no memory embedding from previous frames
         self.no_mem_embed = torch.nn.Parameter(torch.zeros(1, 1, self.hidden_dim))
         self.no_mem_pos_enc = torch.nn.Parameter(torch.zeros(1, 1, self.hidden_dim))
@@ -2086,16 +1986,12 @@ class Sam2Model(Sam2PreTrainedModel):
         # range (-inf, +inf) to range (0, 1)) before feeding them into the memory encoder
         self.sigmoid_scale_for_mem_enc = config.sigmoid_scale_for_mem_enc
         self.sigmoid_bias_for_mem_enc = config.sigmoid_bias_for_mem_enc
-        self.binarize_mask_from_pts_for_mem_enc = (
-            config.binarize_mask_from_pts_for_mem_enc
-        )
+        self.binarize_mask_from_pts_for_mem_enc = config.binarize_mask_from_pts_for_mem_enc
         self.non_overlap_masks_for_mem_enc = config.non_overlap_masks_for_mem_enc
         self.memory_temporal_stride_for_eval = config.memory_temporal_stride_for_eval
         # On frames with mask input, whether to directly output the input mask without
         # using a SAM prompt encoder + mask decoder
-        self.use_mask_input_as_output_without_sam = (
-            config.use_mask_input_as_output_without_sam
-        )
+        self.use_mask_input_as_output_without_sam = config.use_mask_input_as_output_without_sam
         self.multimask_output_in_sam = config.multimask_output_in_sam
         self.multimask_min_pt_num = config.multimask_min_pt_num
         self.multimask_max_pt_num = config.multimask_max_pt_num
@@ -2120,17 +2016,13 @@ class Sam2Model(Sam2PreTrainedModel):
         self.use_mlp_for_obj_ptr_proj = config.use_mlp_for_obj_ptr_proj
 
         self._build_sam_heads()
-        self.add_all_frames_to_correct_as_cond = (
-            config.add_all_frames_to_correct_as_cond
-        )
+        self.add_all_frames_to_correct_as_cond = config.add_all_frames_to_correct_as_cond
         self.max_cond_frames_in_attn = config.max_cond_frames_in_attn
 
         # Model compilation
         if config.compile_image_encoder:
             # Compile the forward function (not the full module) to allow loading checkpoints.
-            print(
-                "Image encoder compilation is enabled. First forward pass will be slow."
-            )
+            print("Image encoder compilation is enabled. First forward pass will be slow.")
             self.image_encoder.forward = torch.compile(
                 self.image_encoder.forward,
                 mode="max-autotune",
@@ -2143,9 +2035,7 @@ class Sam2Model(Sam2PreTrainedModel):
     def _build_sam_heads(self):
         """Build SAM-style prompt encoder and mask decoder."""
         self.sam_prompt_embed_dim = self.config.image_encoder_config.d_model
-        self.sam_image_embedding_size = (
-            self.config.image_size // self.config.backbone_stride
-        )
+        self.sam_image_embedding_size = self.config.image_size // self.config.backbone_stride
 
         # build PromptEncoder and MaskDecoder from SAM
         # (their hyperparameters like `mask_in_chans=16` are from SAM code)
@@ -2180,9 +2070,7 @@ class Sam2Model(Sam2PreTrainedModel):
             # a linear projection on SAM output tokens to turn them into object pointers
             self.obj_ptr_proj = torch.nn.Linear(self.hidden_dim, self.hidden_dim)
             if self.config.use_mlp_for_obj_ptr_proj:
-                self.obj_ptr_proj = Sam2MLP(
-                    self.hidden_dim, self.hidden_dim, self.hidden_dim, 3
-                )
+                self.obj_ptr_proj = Sam2MLP(self.hidden_dim, self.hidden_dim, self.hidden_dim, 3)
         else:
             self.obj_ptr_proj = torch.nn.Identity()
         if self.config.proj_tpos_enc_in_obj_ptrs:
