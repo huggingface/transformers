@@ -236,7 +236,6 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
             "Generate the caption in English: Glass is breaking.",
             "Classify the human vocal sound to VocalSound in English: Throat clearing",
         ]
-        print(self.processor.batch_decode(output, skip_special_tokens=True))
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
