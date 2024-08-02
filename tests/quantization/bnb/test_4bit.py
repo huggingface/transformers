@@ -520,7 +520,10 @@ class Bnb4BitTestTraining(Base4bitTest):
         # Step 1: freeze all parameters
         model = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_4bit=True)
 
-        self.assertEqual(set(model.hf_device_map.values()), {torch.cuda.current_device()})
+        if torch.cuda.is_available():
+            self.assertEqual(set(model.hf_device_map.values()), {torch.cuda.current_device()})
+        else:
+            self.assertTrue(all(param.device.type == "cpu" for param in model.parameters()))
 
         for param in model.parameters():
             param.requires_grad = False  # freeze the model - train adapters later

@@ -855,7 +855,10 @@ class MixedInt8TestTraining(BaseMixedInt8Test):
         # Step 1: freeze all parameters
         model = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_8bit=True)
 
-        self.assertEqual(set(model.hf_device_map.values()), {torch.cuda.current_device()})
+        if torch.cuda.is_available():
+            self.assertEqual(set(model.hf_device_map.values()), {torch.cuda.current_device()})
+        else:
+            self.assertTrue(all(param.device.type == "cpu" for param in model.parameters()))
 
         for param in model.parameters():
             param.requires_grad = False  # freeze the model - train adapters later
@@ -897,6 +900,7 @@ class MixedInt8GPT2Test(MixedInt8Test):
     EXPECTED_OUTPUTS.add("Hello my name is John Doe, and I am a member of the")
     # Expected values on Intel CPU
     EXPECTED_OUTPUTS.add("Hello my name is John Doe. I am a man. I am")
+    EXPECTED_OUTPUTS.add("Hello my name is John, and I'm a writer. I'm")
 
     def test_int8_from_pretrained(self):
         r"""
