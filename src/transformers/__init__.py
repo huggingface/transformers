@@ -685,7 +685,7 @@ _import_structure = {
     "models.sam2": [
         "Sam2Config",
         "Sam2ImageEncoderConfig",
-        "Sam2ImageEncoderConfig",
+        "Sam2MemoryAttentionConfig",
         "Sam2MemoryEncoderConfig",
     ],
     "models.seamless_m4t": [
