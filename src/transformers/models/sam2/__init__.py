@@ -16,20 +16,19 @@ from typing import TYPE_CHECKING
 from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
-    is_tf_available,
     is_torch_available,
     is_vision_available,
 )
 
 
 _import_structure = {
-    "configuration_sam": [
-        "SamConfig",
-        "SamMaskDecoderConfig",
-        "SamPromptEncoderConfig",
-        "SamVisionConfig",
+    "configuration_sam2": [
+        "Sam2Config",
+        "Sam2MaskDecoderConfig",
+        "Sam2PromptEncoderConfig",
+        "Sam2VisionConfig",
     ],
-    "processing_sam": ["SamProcessor"],
+    "processing_sam2": ["Sam2Processor"],
 }
 
 
@@ -39,19 +38,9 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_sam"] = [
-        "SamModel",
-        "SamPreTrainedModel",
-    ]
-try:
-    if not is_tf_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["modeling_tf_sam"] = [
-        "TFSamModel",
-        "TFSamPreTrainedModel",
+    _import_structure["modeling_sam2"] = [
+        "Sam2Model",
+        "Sam2PreTrainedModel",
     ]
 try:
     if not is_vision_available():
@@ -59,17 +48,17 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["image_processing_sam"] = ["SamImageProcessor"]
+    _import_structure["image_processing_sam2"] = ["Sam2ImageProcessor"]
 
 
 if TYPE_CHECKING:
-    from .configuration_sam import (
-        SamConfig,
-        SamMaskDecoderConfig,
-        SamPromptEncoderConfig,
-        SamVisionConfig,
+    from .configuration_sam2 import (
+        Sam2Config,
+        Sam2MaskDecoderConfig,
+        Sam2PromptEncoderConfig,
+        Sam2VisionConfig,
     )
-    from .processing_sam import SamProcessor
+    from .processing_sam2 import Sam2Processor
 
     try:
         if not is_torch_available():
@@ -77,15 +66,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_sam import SamModel, SamPreTrainedModel
-
-    try:
-        if not is_tf_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .modeling_tf_sam import TFSamModel, TFSamPreTrainedModel
+        from .modeling_sam2 import Sam2Model, Sam2PreTrainedModel
 
     try:
         if not is_vision_available():
@@ -93,7 +74,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .image_processing_sam import SamImageProcessor
+        from .image_processing_sam2 import Sam2ImageProcessor
 
 else:
     import sys
