@@ -1076,15 +1076,15 @@ class DABDETRDecoder(DABDETRPreTrainedModel):
 
         # query_scale is the FFN applied on f to generate transformation T
         assert config.query_scale_type in ["cond_elewise", "cond_scalar", "fix_elewise"]
-        self.query_scale_type = query_scale_type = config.query_scale_type
-        if query_scale_type == "cond_elewise":
+        self.query_scale_type = config.query_scale_type
+        if self.query_scale_type == "cond_elewise":
             self.query_scale = MLP(d_model, d_model, d_model, 2)
-        elif query_scale_type == "cond_scalar":
+        elif self.query_scale_type == "cond_scalar":
             self.query_scale = MLP(d_model, d_model, 1, 2)
-        elif query_scale_type == "fix_elewise":
+        elif self.query_scale_type == "fix_elewise":
             self.query_scale = nn.Embedding(config.decoder_layers, d_model)
         else:
-            raise NotImplementedError("Unknown query_scale_type: {}".format(query_scale_type))
+            raise NotImplementedError("Unknown query_scale_type: {}".format(self.query_scale_type))
 
         self.ref_point_head = MLP(config.decoder_query_dim // 2 * d_model, d_model, d_model, 2)
 
