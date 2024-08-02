@@ -458,3 +458,16 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         EXPECTED_OUTPUT = ['<|im_start|>', 'system', '\n', 'Answer', '▁the', '▁questions', '.', '<|im_end|>', '<|im_start|>', 'user', '\n', '<image>', '\n', 'What', '▁is', '▁shown', '▁in', '▁this', '▁image', '?', '<|im_end|>', '<|im_start|>', 'ass', 'istant', '\n']  # fmt: skip
         self.assertEqual(slow_tokenizer.tokenize(prompt), EXPECTED_OUTPUT)
         self.assertEqual(fast_tokenizer.tokenize(prompt), EXPECTED_OUTPUT)
+
+    @slow
+    @require_bitsandbytes
+    def test_generation_no_images(self):
+        model_id = "llava-hf/llava-1.5-7b-hf"
+        model = LlavaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
+        processor = AutoProcessor.from_pretrained(model_id)
+
+        # Prepare inputs with no images
+        inputs = processor("Hello, I am", return_tensors="pt").to(torch_device)
+
+        # Make sure that `generate` works
+        _ = model.generate(**inputs, max_new_tokens=20)

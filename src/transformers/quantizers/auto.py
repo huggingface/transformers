@@ -20,6 +20,7 @@ from ..utils.quantization_config import (
     AwqConfig,
     BitsAndBytesConfig,
     EetqConfig,
+    FbgemmFp8Config,
     GPTQConfig,
     HqqConfig,
     QuantizationConfigMixin,
@@ -31,6 +32,7 @@ from .quantizer_awq import AwqQuantizer
 from .quantizer_bnb_4bit import Bnb4BitHfQuantizer
 from .quantizer_bnb_8bit import Bnb8BitHfQuantizer
 from .quantizer_eetq import EetqHfQuantizer
+from .quantizer_fbgemm_fp8 import FbgemmFp8HfQuantizer
 from .quantizer_gptq import GptqHfQuantizer
 from .quantizer_hqq import HqqHfQuantizer
 from .quantizer_quanto import QuantoHfQuantizer
@@ -45,6 +47,7 @@ AUTO_QUANTIZER_MAPPING = {
     "quanto": QuantoHfQuantizer,
     "eetq": EetqHfQuantizer,
     "hqq": HqqHfQuantizer,
+    "fbgemm_fp8": FbgemmFp8HfQuantizer,
 }
 
 AUTO_QUANTIZATION_CONFIG_MAPPING = {
@@ -56,6 +59,7 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
     "aqlm": AqlmConfig,
     "quanto": QuantoConfig,
     "hqq": HqqConfig,
+    "fbgemm_fp8": FbgemmFp8Config,
 }
 
 
@@ -156,8 +160,11 @@ class AutoHfQuantizer:
         if isinstance(quantization_config, dict):
             quantization_config = AutoQuantizationConfig.from_dict(quantization_config)
 
-        if isinstance(quantization_config, (GPTQConfig, AwqConfig)) and quantization_config_from_args is not None:
-            # special case for GPTQ / AWQ config collision
+        if (
+            isinstance(quantization_config, (GPTQConfig, AwqConfig, FbgemmFp8Config))
+            and quantization_config_from_args is not None
+        ):
+            # special case for GPTQ / AWQ / FbgemmFp8 config collision
             loading_attr_dict = quantization_config_from_args.get_loading_attributes()
             for attr, val in loading_attr_dict.items():
                 setattr(quantization_config, attr, val)
