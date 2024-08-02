@@ -160,6 +160,7 @@ class Mamba2Cache:
         self.conv_states[layer_idx] += conv_state
         return self.conv_states[layer_idx]
 
+
 class MambaRMSNormGated(torch.nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         super().__init__()
@@ -255,10 +256,10 @@ class Mamba2Mixer(nn.Module):
             )
 
     def cuda_kernels_forward(
-            self,
-            hidden_states: torch.Tensor,
-            cache_params: Optional[Mamba2Cache] = None,
-            cache_position: Optional[torch.LongTensor] = None,
+        self,
+        hidden_states: torch.Tensor,
+        cache_params: Optional[Mamba2Cache] = None,
+        cache_position: Optional[torch.LongTensor] = None,
     ):
         seq_len = hidden_states.shape[1]
 
@@ -540,15 +541,8 @@ class Mamba2Mixer(nn.Module):
             M = M_intermediate.sum(dim=-1)
 
             # Step 3: Compute Y_diag (apply to values)
-            #Y_diag_intermediate = M[..., None] * hidden_states[:, None, ...]
-            # Reduce over s
-            #Y_diag = Y_diag_intermediate.sum(dim=3)
-            #Y_diag_intermediate = M[..., None] * hidden_states[:, :, None, ...]
             Y_diag = ((M.unsqueeze(-1) * hidden_states.unsqueeze(2)).sum(dim=3))
-            # Reduce over s
-            #Y_diag = Y_diag_intermediate.sum(dim=1)
-            #breakpoint()
-            #Y_diag = M * hidden_states
+
             # (right term of low-rank factorization of off-diagonal blocks; B terms)
 
             decay_states = torch.exp((A_cumsum[:, :, :, -1:] - A_cumsum))
@@ -603,12 +597,12 @@ class Mamba2Mixer(nn.Module):
     # fmt: on
 
     def forward(
-            self,
-            hidden_states,
-            cache_params: Optional[Mamba2Cache] = None,
-            cache_position: Optional[torch.LongTensor] = None,
-            ):
-        if False: #is_fast_path_available and "cuda" in self.in_proj.weight.device.type:
+        self,
+        hidden_states,
+        cache_params: Optional[Mamba2Cache] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+    ):
+        if is_fast_path_available and "cuda" in self.in_proj.weight.device.type:
             return self.cuda_kernels_forward(hidden_states, cache_params, cache_position)
         return self.torch_forward(hidden_states, cache_params, cache_position)
 
@@ -640,11 +634,11 @@ class Mamba2Block(nn.Module):
         self.mixer = Mamba2Mixer(config, layer_idx=layer_idx)
 
     def forward(
-            self,
-            hidden_states,
-            cache_params: Optional[Mamba2Cache] = None,
-            cache_position: Optional[torch.LongTensor] = None,
-        ):
+        self,
+        hidden_states,
+        cache_params: Optional[Mamba2Cache] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+    ):
         residual = hidden_states
         hidden_states = self.norm(hidden_states.to(dtype=self.norm.weight.dtype))
         if self.residual_in_fp32:
@@ -873,7 +867,6 @@ class Mamba2Model(Mamba2PreTrainedModel):
         if self.gradient_checkpointing and self.training and use_cache:
             use_cache = False
 
-
         if use_cache:
             if cache_params is None:
                 cache_params = Mamba2Cache(
@@ -898,7 +891,7 @@ class Mamba2Model(Mamba2PreTrainedModel):
             if self.gradient_checkpointing and self.training:
                 hidden_states = self._gradient_checkpointing_func(
                     mixer_block.__call__, hidden_states, cache_params, cache_position
-                    )
+                )
             else:
                 hidden_states = mixer_block(hidden_states, cache_params=cache_params, cache_position=cache_position)
 
@@ -964,6 +957,7 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel):
             model_kwargs["cache_position"] = model_kwargs["cache_position"][-1:] + num_new_tokens
 
         return model_kwargs
+
     def prepare_inputs_for_generation(
         self,
         input_ids,
@@ -989,7 +983,6 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel):
                 # will be applied when it is longer, so it will be equivalent to always have it match
                 # the length of `cache_params.conv_states`, which is `config.conv_kernel`
                 cache_position = torch.arange(0, input_ids.shape[1], device=input_ids.device)
-
 
         if inputs_embeds is not None and cache_params is None:
             model_inputs = {"inputs_embeds": inputs_embeds}
