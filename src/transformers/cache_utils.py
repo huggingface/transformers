@@ -1406,7 +1406,7 @@ class HybridCache(Cache):
             The maximum batch size with which the model will be used.
         max_cache_len (`int`):
             The maximum sequence length with which the model will be used.
-        device (`torch.device`):
+        device (`torch.device`, *optional*, defaults to `"cpu"`):
             The device on which the cache should be initialized. Should be the same as the layer.
         dtype (*optional*, defaults to `torch.float32`):
             The default `dtype` to use when initializing the layer.
@@ -1557,14 +1557,13 @@ class MambaCache:
     Cache for mamba model which does not have attention mechanism and key value states.
 
     Arguments:
-        config: (`MambaConfig`):
-            The configuration file defining the shape-related attributes required to initialize the static cache.
+        config (`PretrainedConfig`): <fill_docstring>
         max_batch_size (`int`):
             The maximum batch size with which the model will be used.
-        device (`torch.device`):
-            The device on which the cache should be initialized. Should be the same as the layer.
-        dtype (*optional*, defaults to `torch.float32`):
+        dtype (*optional*, defaults to `torch.float16`):
             The default `dtype` to use when initializing the layer.
+        device (`torch.device`, *optional*):
+            The device on which the cache should be initialized. Should be the same as the layer.
 
     Attributes:
         dtype: (`torch.dtype`):
