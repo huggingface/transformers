@@ -655,7 +655,7 @@ class IdeficsAttention(nn.Module):
 
         kv_seq_len = key_states.shape[-2]
         if past_key_value is not None:
-            kv_seq_len += cache_position[0]  # past_key_value.get_seq_length(self.layer_idx)
+            kv_seq_len += cache_position[0]
 
         if not is_cross_attention:
             cos, sin = self.rotary_emb(value_states, seq_len=max(kv_seq_len, q_len))
@@ -1692,13 +1692,13 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel):
         outputs: ModelOutput,
         model_kwargs: Dict[str, Any],
         is_encoder_decoder: bool = False,
-        standardize_cache_format: bool = False,
+        **kwargs,
     ) -> Dict[str, Any]:
         model_kwargs = super()._update_model_kwargs_for_generation(
             outputs,
             model_kwargs,
             is_encoder_decoder,
-            standardize_cache_format,
+            **kwargs,
         )
 
         if "image_attention_mask" in model_kwargs:
