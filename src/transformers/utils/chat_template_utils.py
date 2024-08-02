@@ -74,7 +74,7 @@ def _parse_type_hint(hint: str) -> Dict:
 
     elif origin is Union:
         # Recurse into each of the subtypes in the Union, except None, which is handled separately at the end
-        subtypes = [_parse_type_hint(t) for t in args if t != type(None)]
+        subtypes = [_parse_type_hint(t) for t in args if t is not type(None)]
         if len(subtypes) == 1:
             # A single non-null type can be expressed directly
             return_dict = subtypes[0]

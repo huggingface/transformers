@@ -142,6 +142,7 @@ jobs:
             - run: python utils/custom_init_isort.py --check_only
             - run: python utils/sort_auto_mappings.py --check_only
             - run: python utils/check_doc_toc.py
+            - run: python utils/check_docstrings.py --check_all
 
     check_repository_consistency:
         working_directory: ~/transformers
