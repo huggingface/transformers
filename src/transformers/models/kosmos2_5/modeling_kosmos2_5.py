@@ -766,9 +766,7 @@ class Kosmos2_5VisionLayer(nn.Module):
         layer_output = self.pre_mlp_layer_norm(hidden_states)
         layer_output = self.mlp(layer_output) + hidden_states  # second residual connection
 
-        outputs = (layer_output,) + outputs
-
-        return outputs
+        return layer_output, outputs
 
 
 # Copied from transformers.models.pix2struct.modeling_pix2struct.Pix2StructVisionEncoder with Pix2Struct->Kosmos2_5
