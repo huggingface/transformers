@@ -147,6 +147,10 @@ class ViTPoseBackboneModelTest(ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
+    @unittest.skip(reason="ViTPoseBackbone does not support input and output embeddings")
+    def test_model_get_set_embeddings(self):
+        pass
+
     @unittest.skip(reason="ViTPoseBackbone does not support feedforward chunking")
     def test_feed_forward_chunking(self):
         pass
