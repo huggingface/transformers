@@ -1569,6 +1569,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
     def __init__(self, **kwargs):
         # inputs and kwargs for saving and re-loading (see ``from_pretrained`` and ``save_pretrained``)
         self.init_inputs = ()
+        for key in kwargs:
+            if hasattr(self, key) and callable(getattr(self, key)):
+                raise AttributeError(f"{key} conflicts with the method {key} in {self.__class__.__name__}")
+
         self.init_kwargs = copy.deepcopy(kwargs)
         self.name_or_path = kwargs.pop("name_or_path", "")
         self._processor_class = kwargs.pop("processor_class", None)
@@ -1592,6 +1596,14 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             )
 
         self.model_input_names = kwargs.pop("model_input_names", self.model_input_names)
+
+        if "clean_up_tokenization_spaces" not in kwargs:
+            warnings.warn(
+                "`clean_up_tokenization_spaces` was not set. It will be set to `True` by default. This "
+                "behavior will be depracted in transformers v4.45, and will be then set to `False` by default. "
+                "For more details check this issue: https://github.com/huggingface/transformers/issues/31884",
+                FutureWarning,
+            )
 
         # By default, cleaning tokenization spaces for both fast and slow tokenizers
         self.clean_up_tokenization_spaces = kwargs.pop("clean_up_tokenization_spaces", True)
@@ -2663,6 +2675,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             tokenizer_config.pop("name_or_path")
             tokenizer_config.pop("special_tokens_map_file", None)
             tokenizer_config.pop("tokenizer_file", None)
+        if "device_map" in tokenizer_config:
+            tokenizer_config.pop("device_map")
 
         with open(tokenizer_config_file, "w", encoding="utf-8") as f:
             out_str = json.dumps(tokenizer_config, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
