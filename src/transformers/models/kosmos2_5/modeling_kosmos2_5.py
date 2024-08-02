@@ -563,7 +563,7 @@ class Kosmos2_5VisionFlashAttention2(Kosmos2_5VisionAttention):
     them.
     """
 
-    # copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__
+    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -1137,7 +1137,7 @@ class Kosmos2_5TextFlashAttention2(Kosmos2_5TextAttention):
     public API of flash attention and deal with padding tokens in case the input contains any of them.
     """
 
-    # copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__
+    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -1432,6 +1432,7 @@ class Kosmos2_5TextBlock(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.kosmos2.modeling_kosmos2.Kosmos2TextTransformer with Kosmos2->Kosmos2_5
 class Kosmos2_5TextTransformer(nn.Module):
     """
     Transformer decoder consisting of `config.layers` layers. Each layer is a [`Kosmos2_5TextBlock`].
@@ -1454,12 +1455,16 @@ class Kosmos2_5TextTransformer(nn.Module):
             embedding_dim=config.embed_dim,
             padding_idx=config.pad_token_id,
         )
+
+        # Ignore copy
         self.segment_emb = nn.Embedding(2, config.embed_dim)
+
         self.layers = nn.ModuleList([Kosmos2_5TextBlock(config) for _ in range(config.layers)])
         self.layer_norm = nn.LayerNorm(config.embed_dim, config.layer_norm_eps)
 
         self.gradient_checkpointing = False
 
+    # Ignore copy
     def _prepare_decoder_attention_mask(self, attention_mask, input_shape, inputs_embeds, past_key_values_length):
         if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and 0.0 in attention_mask:
@@ -1501,35 +1506,34 @@ class Kosmos2_5TextTransformer(nn.Module):
             inputs_embeds = self.embed_tokens(input_ids)
 
         if image_embeds is not None:
-            inputs_embeds[img_input_mask == 1] = image_embeds.to(inputs_embeds.device).view(-1, image_embeds.size(-1))
-        inputs_embeds = inputs_embeds * self.embed_scale
-        # embed positions
-        positions = None
-        if self.embed_positions is not None:
-            positions = self.embed_positions(
-                input_ids=input_ids,
-                inputs_embeds=inputs_embeds,
-                past_key_values_length=past_key_values_length,
-                position_ids=position_ids,
-            ).to(inputs_embeds.device)
-            if self.segment_emb is not None:
-                if img_input_mask is not None:
-                    # make every not equal 0 be 1
-                    img_input_mask = img_input_mask.ne(0).long()
-                    segment_embeds = self.segment_emb(img_input_mask)
-                    positions += segment_embeds
-                else:
-                    # add zero embedding for padding tokens
-                    bsz, seq_len, dim = positions.size()
-                    zero_emb = self.segment_emb(torch.zeros((bsz, 1), dtype=torch.long, device=positions.device))
-                    positions += zero_emb
+            inputs_embeds[img_input_mask.to(dtype=torch.bool)] = image_embeds.to(inputs_embeds.device).view(
+                -1, image_embeds.size(-1)
+            )
 
-        if positions is not None:
-            hidden_states = inputs_embeds + positions
+        inputs_embeds = inputs_embeds * self.embed_scale
+
+        # embed positions
+        positions = self.embed_positions(
+            input_ids=input_ids,
+            inputs_embeds=inputs_embeds,
+            past_key_values_length=past_key_values_length,
+            position_ids=position_ids,
+        )
+        positions = positions.to(inputs_embeds.device)
+
+        # Ignore copy
+        if img_input_mask is not None:
+            # make every not equal 0 be 1
+            img_input_mask = img_input_mask.ne(0).long()
+            segment_embeds = self.segment_emb(img_input_mask)
+            positions += segment_embeds
+
+        hidden_states = inputs_embeds + positions
+
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+
         return hidden_states
 
-    # Copied from transformers.models.kosmos2.modeling_kosmos2.Kosmos2TextTransformer.forward
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
