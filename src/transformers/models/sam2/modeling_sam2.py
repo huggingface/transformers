@@ -17,16 +17,15 @@
 import copy
 import math
 import warnings
-from dataclasses import dataclass
 from functools import partial
-from typing import Dict, List, Optional, Tuple, Type, Union
+from typing import List, Optional, Tuple, Type, Union
 
 import numpy as np
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
 from timm.layers import DropPath
-from torch import nn, Tensor
+from torch import Tensor, nn
 
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, logging
@@ -99,7 +98,7 @@ class Sam2PositionEmbeddingRandom(nn.Module):
     def forward(self, size: Tuple[int, int]) -> torch.Tensor:
         """Generate positional encoding for a grid of the specified size."""
         h, w = size
-        device: Any = self.positional_encoding_gaussian_matrix.device
+        device = self.positional_encoding_gaussian_matrix.device
         grid = torch.ones((h, w), device=device, dtype=torch.float32)
         y_embed = grid.cumsum(dim=0) - 0.5
         x_embed = grid.cumsum(dim=1) - 0.5
@@ -1592,22 +1591,6 @@ class Sam2RoPEAttention(Sam2Attention):
         out = self.out_proj(out)
 
         return out
-
-
-def get_activation_fn(activation):
-    """Return an activation function given a string"""
-    if activation == "relu":
-        return F.relu
-    if activation == "gelu":
-        return F.gelu
-    if activation == "glu":
-        return F.glu
-    raise RuntimeError(f"activation should be relu/gelu, not {activation}.")
-
-
-def get_clones(module, N):
-    return nn.ModuleList([copy.deepcopy(module) for i in range(N)])
-
 
 class Sam2MemoryAttentionLayer(nn.Module):
 

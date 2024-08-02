@@ -13,11 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """SAM 2 model configuration"""
-import sys
 from typing import Tuple
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+
 
 logger = logging.get_logger(__name__)
 
