@@ -1530,6 +1530,11 @@ class Kosmos2_5TextTransformer(nn.Module):
             img_input_mask = img_input_mask.ne(0).long()
             segment_embeds = self.segment_emb(img_input_mask)
             positions += segment_embeds
+        else:
+            # add zero embedding for padding tokens
+            bsz, seq_len, dim = positions.size()
+            zero_emb = self.segment_emb(torch.zeros((bsz, 1), dtype=torch.long, device=positions.device))
+            positions += zero_emb
 
         hidden_states = inputs_embeds + positions
 
