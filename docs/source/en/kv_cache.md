@@ -144,7 +144,7 @@ I like rock music because it's loud and energetic. I like to listen to it when I
 
 ### Static Cache
 
-Since the "DynamicCache" dynamically grows with each generation step, it prevents you from taking advantage of JIT optimizations. The ["StaticCache"](./internal/generation_utils#transformers.StaticCache) pre-allocates 
+Since the "DynamicCache" dynamically grows with each generation step, it prevents you from taking advantage of JIT optimizations. The [`~StaticCache`] pre-allocates 
 a specific maximum size for the keys and values, allowing you to generate up to the maximum length without having to modify cache size. Check the below usage example.
 
 For more examples with Static Cache and JIT compilation, take a look at [StaticCache & torchcompile](./llm_optims.md#static-kv-cache-and-torchcompile)
@@ -208,14 +208,14 @@ Unlike other cache classes, this one can't be used directly by indicating a `cac
 
 ### Encoder-Decoder Cache
 
-The ["EncoderDecoderCache"](./internal/generation_utils#transformers.EncoderDecoderCache) is a wrapper designed to handle the caching needs of encoder-decoder models. This cache type is specifically built to manage both self-attention and cross-attention caches, ensuring storage and retrieval of past key/values required for these complex models. Cool thing about Encoder-Decoder Cache is that you can set different cache types for the encoder and for the decoder, depending on your use case. Currently this cache is only supported in [Whisper](./model_doc/whisper.md) models but we will be adding more models soon. 
+The [`~EncoderDecoderCache`] is a wrapper designed to handle the caching needs of encoder-decoder models. This cache type is specifically built to manage both self-attention and cross-attention caches, ensuring storage and retrieval of past key/values required for these complex models. Cool thing about Encoder-Decoder Cache is that you can set different cache types for the encoder and for the decoder, depending on your use case. Currently this cache is only supported in [Whisper](./model_doc/whisper.md) models but we will be adding more models soon. 
 
 In terms of usage, there is nothing special to be done and calling `generate()` or `forward()` will handle everything for you.
 
 
 ### Model-specific Cache Classes
 
-Some models require storing previous keys, values, or states in a specific way, and the above cache classes cannot be used. For such cases, we have several specialized cache classes that are designed for specific models. These models only accept their own dedicated cache classes and do not support using any other cache types. Some examples include ["HybridCache"](./internal/generation_utils#transformers.HybridCache) for [Gemma2](./model_doc/gemma2.md) series models or ["MambaCache"](./internal/generation_utils#transformers.MambaCache) for [Mamba](./model_doc/mamba.md) architecture models.
+Some models require storing previous keys, values, or states in a specific way, and the above cache classes cannot be used. For such cases, we have several specialized cache classes that are designed for specific models. These models only accept their own dedicated cache classes and do not support using any other cache types. Some examples include [`~HybridCache`] for [Gemma2](./model_doc/gemma2.md) series models or [`~MambaCache`] for [Mamba](./model_doc/mamba.md) architecture models.
 
 
 ## Iterative Generation with Cache
