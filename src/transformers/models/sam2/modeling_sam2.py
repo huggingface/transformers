@@ -656,6 +656,18 @@ class Sam2PromptEncoder(nn.Module):
             point_embedding,
         )
 
+        point_embedding = torch.where(
+            (labels == 2)[:, :, :, None],
+            point_embedding + self.point_embed[2].weight[None, None, :, :],
+            point_embedding,
+        )
+
+        point_embedding = torch.where(
+            (labels == 3)[:, :, :, None],
+            point_embedding + self.point_embed[3].weight[None, None, :, :],
+            point_embedding,
+        )
+
         return point_embedding
 
     def _embed_boxes(self, boxes: torch.Tensor) -> torch.Tensor:
@@ -1376,7 +1388,7 @@ class Sam2Model(Sam2PreTrainedModel):
         #         " input_labels of shape (batch_size, point_batch_size, num_points_per_image)",
         #     )
 
-        #``````````````````````````````````Begins: Porting of mask decoder, prompt encoder and memory modules``````````````````````````````````````
+        #``````````````````````````````````Begins: Porting of mask decoder, prompt encoder(done) and memory modules``````````````````````````````````````
         image_positional_embeddings = []
 
         sparse_embeddings, dense_embeddings = self.prompt_encoder(
