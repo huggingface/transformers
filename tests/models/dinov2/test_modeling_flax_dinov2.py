@@ -79,6 +79,7 @@ class FlaxDinov2ModelTester:
         num_patches = (image_size // patch_size) ** 2
         self.seq_length = num_patches + 1
 
+    # Copied from tests.models.vit.test_modeling_vit.ViTModelTester.prepare_config_and_inputs with ViT -> Dinov2
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
 
@@ -99,6 +100,7 @@ class FlaxDinov2ModelTester:
 
         return config, pixel_values
 
+    # Copied from tests.models.vit.test_modeling_vit.ViTModelTester.create_and_check_model with ViT -> Dinov2
     def create_and_check_model(self, config, pixel_values):
         model = FlaxDinov2Model(config=config)
         result = model(pixel_values)
@@ -108,6 +110,7 @@ class FlaxDinov2ModelTester:
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
 
+    # Copied from tests.models.vit.test_modeling_vit.ViTModelTester.create_and_check_for_image_classification with ViT -> Dinov2
     def create_and_check_for_image_classification(self, config, pixel_values):
         config.num_labels = self.type_sequence_label_size
         model = FlaxDinov2ForImageClassification(config=config)
@@ -121,6 +124,7 @@ class FlaxDinov2ModelTester:
         pixel_values = floats_tensor([self.batch_size, 1, self.image_size, self.image_size])
         result = model(pixel_values)
 
+    # Copied from tests.models.vit.test_modeling_vit.ViTModelTester.prepare_config_and_inputs_for_common
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -135,22 +139,27 @@ class FlaxDinov2ModelTester:
 class FlaxDionv2ModelTest(FlaxModelTesterMixin, unittest.TestCase):
     all_model_classes = (FlaxDinov2Model, FlaxDinov2ForImageClassification) if is_flax_available() else ()
 
+    # Copied from tests.models.vit.test_modeling_vit.ViTModelTest.setUp with ViT -> Dinov2
     def setUp(self) -> None:
         self.model_tester = FlaxDinov2ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Dinov2Config, has_text_modality=False, hidden_size=37)
 
+    # Copied from tests.models.vit.test_modeling_vit.ViTModelTest.test_config
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    # Copied from tests.models.vit.test_modeling_vit.ViTModelTest.test_model
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    # Copied from tests.models.vit.test_modeling_vit.ViTModelTest.test_for_image_classification
     def test_for_image_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
 
     # We need to override this test because Dinov2's forward signature is different than text models.
+    # Copied from tests.models.vit.test_modeling_vit.ViTModelTest.test_forward_signature
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -164,6 +173,7 @@ class FlaxDionv2ModelTest(FlaxModelTesterMixin, unittest.TestCase):
             self.assertListEqual(arg_names[:1], expected_arg_names)
 
     # We need to override this test because Dinov2 expects pixel_values instead of input_ids
+    # Copied from tests.models.vit.test_modeling_vit.ViTModelTest.test_jit_compilation
     def test_jit_compilation(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -225,9 +235,9 @@ class FlaxDinov2ModelIntegrationTest(unittest.TestCase):
 
         expected_slice = np.array(
             [
-                [-2.1629136, -0.46566555, 1.092598],
-                [-3.5971718, -1.0283647, -1.1780545],
-                [-2.9004114, 1.1334716, -0.7435752],
+                [-2.1629121, -0.46566057, 1.0925977],
+                [-3.5971704, -1.0283585, -1.1780515],
+                [-2.900407, 1.1334689, -0.74357724],
             ]
         )
 
@@ -251,7 +261,7 @@ class FlaxDinov2ModelIntegrationTest(unittest.TestCase):
         expected_shape = (1, 1000)
         self.assertEqual(logits.shape, expected_shape)
 
-        expected_slice = np.array([-2.1776438, 0.36716837, 0.13870966])
+        expected_slice = np.array([-2.1776447, 0.36716992, 0.13870952])
 
         self.assertTrue(np.allclose(logits[0, :3], expected_slice, atol=1e-4))
 
