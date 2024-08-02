@@ -141,8 +141,6 @@ class GPTJAttention(nn.Module):
         self.config = config
         max_positions = config.max_position_embeddings
 
-        self.register_buffer("masked_bias", torch.tensor(-1e9), persistent=False)
-
         self.attn_dropout = nn.Dropout(config.attn_pdrop)
         self.resid_dropout = nn.Dropout(config.resid_pdrop)
 
