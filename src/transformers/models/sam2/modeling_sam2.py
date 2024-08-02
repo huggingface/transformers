@@ -1193,12 +1193,29 @@ class Sam2Model(Sam2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.shared_image_embedding = Sam2PositionalEmbedding(config.vision_config)
-
+        self.no_mem_embed = torch.nn.Parameter(torch.zeros(1, 1, self.config.prompt_encoder_config.hidden_size))
+        
         self.vision_encoder = Sam2VisionEncoder(config.vision_config)
         self.prompt_encoder = Sam2PromptEncoder(config.prompt_encoder_config, self.shared_image_embedding)
         self.mask_decoder = Sam2MaskDecoder(config.mask_decoder_config)
 
         self.post_init()
+
+    def _prepare_backbone_features(self, backbone_out):
+        """Prepare and flatten visual features."""
+        backbone_out = backbone_out.copy()
+        assert len(backbone_out["backbone_fpn"]) == len(backbone_out["vision_pos_enc"])
+        assert len(backbone_out["backbone_fpn"]) >= self.num_feature_levels
+
+        feature_maps = backbone_out["backbone_fpn"][-self.num_feature_levels :]
+        vision_pos_embeds = backbone_out["vision_pos_enc"][-self.num_feature_levels :]
+
+        feat_sizes = [(x.shape[-2], x.shape[-1]) for x in vision_pos_embeds]
+        # flatten NxCxHxW to HWxNxC
+        vision_feats = [x.flatten(2).permute(2, 0, 1) for x in feature_maps]
+        vision_pos_embeds = [x.flatten(2).permute(2, 0, 1) for x in vision_pos_embeds]
+
+        return backbone_out, vision_feats, vision_pos_embeds, feat_sizes
 
     def get_input_embeddings(self):
         return self.vision_encoder.get_input_embeddings()
@@ -1354,22 +1371,21 @@ class Sam2Model(Sam2PreTrainedModel):
         #             )
         #         )
 
-        # image_positional_embeddings = self.get_image_wide_positional_embeddings()
+        image_positional_embeddings = self.get_image_wide_positional_embeddings()
         # # repeat with batch size
-        # batch_size = pixel_values.shape[0] if pixel_values is not None else image_embeddings.shape[0]
-        # image_positional_embeddings = image_positional_embeddings.repeat(batch_size, 1, 1, 1)
+        batch_size = pixel_values.shape[0] if pixel_values is not None else image_embeddings.shape[0]
+        image_positional_embeddings = image_positional_embeddings.repeat(batch_size, 1, 1, 1)
 
         # vision_attentions = None
         # vision_hidden_states = None
 
-        # if pixel_values is not None:
-        #     vision_outputs = self.vision_encoder(
-        #         pixel_values,
-        #         output_attentions=output_attentions,
-        #         output_hidden_states=output_hidden_states,
-        #         return_dict=return_dict,
-        #     )
-        #     image_embeddings = vision_outputs[0]
+        if pixel_values is not None:
+            backbone_out = self.vision_encoder(
+                pixel_values,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+            )
 
         #     if output_hidden_states:
         #         vision_hidden_states = vision_outputs[1]
@@ -1389,7 +1405,28 @@ class Sam2Model(Sam2PreTrainedModel):
         #     )
 
         #``````````````````````````````````Begins: Porting of mask decoder, prompt encoder(done) and memory modules``````````````````````````````````````
-        image_positional_embeddings = []
+
+        if self.config.use_high_res_features_in_sam:
+            # precompute projected level 0 and level 1 features in SAM decoder
+            # to avoid running it again on every SAM click
+            backbone_out["backbone_fpn"][0] = self.mask_decoder.conv_s0(
+                backbone_out["backbone_fpn"][0]
+            )
+            backbone_out["backbone_fpn"][1] = self.mask_decoder.conv_s1(
+                backbone_out["backbone_fpn"][1]
+            )
+        _, vision_feats, _, _ = self._prepare_backbone_features(backbone_out)
+
+        if self.config.directly_add_no_mem_embed:
+            vision_feats[-1] = vision_feats[-1] + self.no_mem_embed
+        
+        feats = [
+            feat.permute(1, 2, 0).view(1, -1, *feat_size)
+            for feat, feat_size in zip(vision_feats[::-1], self._bb_feat_sizes[::-1])
+        ][::-1]
+        self._features = {"image_embed": feats[-1], "high_res_feats": feats[:-1]}
+
+        img_idx: int = -1
 
         sparse_embeddings, dense_embeddings = self.prompt_encoder(
             input_points=input_points,
@@ -1398,12 +1435,29 @@ class Sam2Model(Sam2PreTrainedModel):
             input_masks=input_masks,
         )
 
+        # Predict masks
+        if input_points is not None:
+            batched_mode = (
+                input_points is not None and input_points.shape[0] > 1
+            )
+        if input_boxes is not None:
+            batched_mode = (
+                input_boxes is not None and input_boxes.reshape(-1, 2, 2).shape[0] > 1
+            )
+        # multi object prediction
+        high_res_features = [
+            feat_level[img_idx].unsqueeze(0)
+            for feat_level in self._features["high_res_feats"]
+        ]
+
         low_res_masks, iou_predictions, mask_decoder_attentions = self.mask_decoder(
-            image_embeddings=image_embeddings,
+            image_embeddings=self._features["image_embed"][img_idx].unsqueeze(0),
             image_positional_embeddings=image_positional_embeddings,
             sparse_prompt_embeddings=sparse_embeddings,
             dense_prompt_embeddings=dense_embeddings,
             multimask_output=multimask_output,
+            repeat_image=batched_mode,
+            high_res_features=high_res_features,
             attention_similarity=attention_similarity,
             target_embedding=target_embedding,
             output_attentions=output_attentions,
