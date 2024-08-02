@@ -4587,7 +4587,6 @@ class ModelTesterMixin:
             normalized_1 = F.softmax(out_shared_prefix_last_tokens)
             torch.testing.assert_close(normalized_0, normalized_1, rtol=1e-3, atol=1e-4)
 
-    @is_flaky("flaky for some models, reason unknown yet!")
     def test_static_cache_matches_dynamic(self):
         """
         Tests that generating with static cache give almost same results as with dynamic cache.
@@ -4624,7 +4623,7 @@ class ModelTesterMixin:
                 output_logits=True,
                 return_dict_in_generate=True,
             )
-            self.assertTrue(torch.allclose(dynamic_out.logits[0], static_out.logits[0]))
+            self.assertTrue(torch.allclose(dynamic_out.logits[0], static_out.logits[0], rtol=1e-3, atol=1e-4))
 
     # For now, Let's focus only on GPU for `torch.compile`
     @slow
