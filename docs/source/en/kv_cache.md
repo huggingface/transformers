@@ -92,7 +92,7 @@ More concretely, key-value cache acts as a memory bank for these generative mode
 ## Generate with Cache
 
 In 🤗 Transformers, we support various Cache types to optimize the performance across different models and tasks. By default, all models generate with caching,
-with the ["DynamicCache"](./internal/generation_utils#transformers.DynamicCache) class being the default cache for most models. It allows us to dynamically grow cache size, by saving more and more keys and values as we generate. If for some reason you don't want to use caches, you can pass `use_cache=False` into the `generate()` method.
+with the [`~DynamicCache`] class being the default cache for most models. It allows us to dynamically grow cache size, by saving more and more keys and values as we generate. If for some reason you don't want to use caches, you can pass `use_cache=False` into the `generate()` method.
 
 Refer to the table below to see the difference between cache types and choose the one that suits best for your use-case.
 
@@ -112,7 +112,7 @@ These cache classes can be set with a `cache_implementation` argument when gener
 The key and value cache can occupy a large portion of memory, becoming a [bottleneck for long-context generation](https://huggingface.co/blog/llama31#inference-memory-requirements), especially for Large Language Models.
 Quantizing the cache when using `generate()` can significantly reduce memory requirements at the cost of speed.
 
-KV Cache quantization in `transformers` is largely inspired by the paper ["KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache"](https://arxiv.org/abs/2402.02750) and currently supports ["QuantoQuantizedCache"](./internal/generation_utils#transformers.QuantoQuantizedCache) and ["HQQQuantizedCache"](./internal/generation_utils#transformers.HQQQuantizedCache) classes. For more information on the inner workings see the paper.
+KV Cache quantization in `transformers` is largely inspired by the paper ["KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache"](https://arxiv.org/abs/2402.02750) and currently supports [`~QuantoQuantizedCache`] and [`~HQQQuantizedCache`] classes. For more information on the inner workings see the paper.
 
 To enable quantization of the key-value cache, one needs to indicate `cache_implementation="quantized"` in the `generation_config`.
 Quantization related arguments should be passed to the `generation_config` either as a `dict` or an instance of a [`~QuantizedCacheConfig`] class.
