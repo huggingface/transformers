@@ -125,43 +125,6 @@ class FlaxDinov2PatchEmbeddings(nn.Module):
         return jnp.reshape(embeddings, (batch_size, -1, channels))
 
 
-# def interpolate_pos_encoding(config, hidden_states, height, width, position_embeddings):
-#     num_patches = hidden_states.shape[1] - 1
-#     num_positions = position_embeddings.shape[1] - 1
-#     if num_patches == num_positions and height == width:
-#         return position_embeddings
-#     class_pos_embed = position_embeddings[:, 0]
-#     patch_pos_embed = position_embeddings[:, 1:]
-#     dim = hidden_states.shape[-1]
-
-#     height = height // config.patch_size
-#     width = width // config.patch_size
-#     height, width = height + 0.1, width + 0.1
-
-#     patch_pos_embed = patch_pos_embed.reshape((1, int(math.sqrt(num_positions)), int(math.sqrt(num_positions)), dim))
-#     patch_pos_embed = jnp.transpose(patch_pos_embed, (0, 3, 1, 2))
-
-#     new_height_ratio = jnp.float32(height / math.sqrt(num_positions))
-#     new_width_ratio = jnp.float32(width / math.sqrt(num_positions))
-
-#     scale = jnp.array([new_height_ratio, new_width_ratio], dtype=jnp.float32)
-#     translation = jnp.array([0.0, 0.0], dtype=jnp.float32)
-
-#     patch_pos_embed = jax.image.scale_and_translate(
-#         patch_pos_embed,
-#         shape=(1, 768, 16, 16),
-#         spatial_dims=(2, 3),
-#         scale=scale,
-#         translation=translation,
-#         method="bicubic",
-#         antialias=False,
-#     )
-
-#     patch_pos_embed = jnp.transpose(patch_pos_embed, (0, 2, 3, 1)).reshape((hidden_states.shape[0], -1, dim))
-
-#     return jnp.concatenate((class_pos_embed[jnp.newaxis, :], patch_pos_embed), axis=1)
-
-
 class FlaxDinov2Embeddings(nn.Module):
     """Construct the CLS token, position and patch embeddings."""
 
