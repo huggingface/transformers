@@ -16,7 +16,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -1112,29 +1112,6 @@ class Idefics2PreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-
-    @classmethod
-    def _autoset_attn_implementation(
-        cls,
-        config,
-        use_flash_attention_2: bool = False,
-        torch_dtype: Optional[torch.dtype] = None,
-        device_map: Optional[Union[str, Dict[str, int]]] = None,
-        check_device_map: bool = True,
-        **kwargs,
-    ):
-        """
-        Overrides the method in `PreTrainedModel` to update the vision config with the correct attention implementation
-        """
-        config = super()._autoset_attn_implementation(
-            config=config,
-            use_flash_attention_2=use_flash_attention_2,
-            torch_dtype=torch_dtype,
-            device_map=device_map,
-            check_device_map=check_device_map,
-            **kwargs,
-        )
-        return config
 
 
 IDEFICS2_INPUTS_DOCSTRING = r"""
