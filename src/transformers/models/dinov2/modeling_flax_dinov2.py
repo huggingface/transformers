@@ -163,7 +163,9 @@ class FlaxDinov2Embeddings(nn.Module):
         w = width // config.patch_size
         height, width = h + 0.1, w + 0.1
 
-        patch_pos_embed = patch_pos_embed.reshape((1, int(math.sqrt(num_positions)), int(math.sqrt(num_positions)), dim))
+        patch_pos_embed = patch_pos_embed.reshape(
+            (1, int(math.sqrt(num_positions)), int(math.sqrt(num_positions)), dim)
+        )
         patch_pos_embed = jnp.transpose(patch_pos_embed, (0, 3, 1, 2))
         target_dtype = patch_pos_embed.dtype
         new_height_ratio = jnp.float32(height / math.sqrt(num_positions))
@@ -328,11 +330,16 @@ class FlaxDinov2LayerScale(nn.Module):
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
-        self.lambda1 = self.config.layerscale_value * self.param("lambda1", jax.nn.initializers.ones, (self.config.hidden_size,),)
-        self.lambda1 = self.lambda1*self.config.layerscale_value
+        self.lambda1 = self.config.layerscale_value * self.param(
+            "lambda1",
+            jax.nn.initializers.ones,
+            (self.config.hidden_size,),
+        )
+        self.lambda1 = self.lambda1 * self.config.layerscale_value
 
     def __call__(self, hidden_states):
         return self.lambda1 * hidden_states
+
 
 # Copied from transformers.models.beit.modeling_flax_beit.FlaxBeitDropPath with Beit -> Dinov2
 class FlaxDinov2DropPath(nn.Module):
