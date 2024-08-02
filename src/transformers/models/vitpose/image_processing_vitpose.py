@@ -370,7 +370,7 @@ class ViTPoseImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        boxes: List[List[float]],
+        boxes: Union[List[List[float]], np.ndarray],
         do_affine_transform: bool = None,
         size: Dict[str, int] = None,
         do_rescale: bool = None,
@@ -390,8 +390,8 @@ class ViTPoseImageProcessor(BaseImageProcessor):
                 Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
                 passing in images with pixel values between 0 and 1, set `do_rescale=False`.
 
-            boxes (`List[List[float]]`):
-                List of bounding boxes for each image. Each box should be a list of 4 floats representing the bounding
+            boxes (`List[List[float]]` or `np.ndarray`):
+                List or array of bounding boxes for each image. Each box should be a list of 4 floats representing the bounding
                 box coordinates in COCO format (x, y, w, h).
 
             do_affine_transform (`bool`, *optional*, defaults to `self.do_affine_transform`):

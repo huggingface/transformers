@@ -541,13 +541,17 @@ def _center_to_corners_format_tf(bboxes_center: "tf.Tensor") -> "tf.Tensor":
 
 # inspired by https://github.com/ViTAE-Transformer/ViTPose/blob/d5216452796c90c6bc29f5c5ec0bdba94366768a/mmpose/datasets/datasets/base/kpt_2d_sview_rgb_img_top_down_dataset.py#L132
 def box_to_center_and_scale(
-    box: Union[Tuple, List], image_width: int, image_height: int, pixel_std: float = 200.0, padding: float = 1.25
+    box: Union[Tuple, List, np.ndarray],
+    image_width: int,
+    image_height: int,
+    pixel_std: float = 200.0,
+    padding: float = 1.25,
 ):
     """
     Encodes a bounding box in COCO format into (center, scale).
 
     Args:
-        box (`Tuple` or `List`):
+        box (`Tuple`, `List`, or `np.ndarray`):
             Bounding box in COCO format (top_left_x, top_left_y, width, height).
         image_width (`int`):
             Image width.
