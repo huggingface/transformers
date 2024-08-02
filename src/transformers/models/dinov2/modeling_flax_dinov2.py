@@ -112,13 +112,12 @@ class FlaxDinov2PatchEmbeddings(nn.Module):
             ),
         )
 
-    # Copied from transformers.models.bart.modeling_flax_vit.FlaxViTPatchEmbeddings.__call__
+    # Copied from transformers.models.vit.modeling_flax_vit.FlaxViTPatchEmbeddings.__call__
     def __call__(self, pixel_values):
         num_channels = pixel_values.shape[-1]
         if num_channels != self.num_channels:
             raise ValueError(
                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
-                f" Expected {self.num_channels} but got {num_channels}."
             )
         embeddings = self.projection(pixel_values)
         batch_size, _, _, channels = embeddings.shape
@@ -329,27 +328,32 @@ class FlaxDinov2LayerScale(nn.Module):
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
-        self.lambda1 = self.param("lambda1", ones_with_scale, (self.config.hidden_size,), self.config.layerscale_value)
+        self.lambda1 = self.config.layerscale_value * self.param("lambda1", jax.nn.initializers.ones, (self.config.hidden_size,),)
+        self.lambda1 = self.lambda1*self.config.layerscale_value
 
     def __call__(self, hidden_states):
         return self.lambda1 * hidden_states
 
-
+# Copied from transformers.models.beit.modeling_flax_beit.FlaxBeitDropPath with Beit -> Dinov2
 class FlaxDinov2DropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
     rate: float
 
+    @nn.module.compact
     def __call__(self, inputs, deterministic: Optional[bool] = True):
-        if self.rate == 0.0 or deterministic:
+        if self.rate == 0.0:
             return inputs
         keep_prob = 1.0 - self.rate
-        shape = (inputs.shape[0],) + (1,) * (inputs.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-        rng = self.make_rng("droppath")
-        random_tensor = keep_prob + jax.random.uniform(rng, shape=shape, dtype=inputs.dtype)
-        random_tensor = jnp.floor(random_tensor)
-        output = inputs / keep_prob * random_tensor
-        return output
+        if deterministic:
+            return inputs
+        else:
+            shape = (inputs.shape[0],) + (1,) * (inputs.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
+            rng = self.make_rng("droppath")
+            random_tensor = keep_prob + jax.random.uniform(rng, shape=shape, dtype=inputs.dtype)
+            binary_tensor = jnp.floor(random_tensor)
+            output = inputs / keep_prob * binary_tensor
+            return output
 
 
 class FlaxDinov2MLP(nn.Module):
@@ -375,7 +379,6 @@ class FlaxDinov2MLP(nn.Module):
             self.act = ACT2FN[self.config.hidden_act]
         else:
             self.act = self.config.hidden_act
-        self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
 
     def __call__(self, hidden_states):
         hidden_states = self.fc1(hidden_states)
@@ -389,11 +392,11 @@ class FlaxDinov2SwiGLUFFN(nn.Module):
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
-        self.hidden_features = int(self.config.hidden_size * self.config.mlp_ratio)
-        self.hidden_features = (int(self.hidden_features * 2 / 3) + 7) // 8 * 8
+        hidden_features = int(self.config.hidden_size * self.config.mlp_ratio)
+        hidden_features = (int(self.hidden_features * 2 / 3) + 7) // 8 * 8
 
         self.weights_in = nn.Dense(
-            2 * self.hidden_features,
+            2 * hidden_features,
             kernel_init=jax.nn.initializers.variance_scaling(
                 self.config.initializer_range**2, "fan_in", "truncated_normal"
             ),
@@ -560,7 +563,8 @@ class FlaxDinov2PreTrainedModel(FlaxPreTrainedModel):
         pixel_values = jnp.zeros(input_shape, dtype=self.dtype)
 
         params_rng, dropout_rng = jax.random.split(rng)
-        rngs = {"params": params_rng, "dropout": dropout_rng}
+        dropout_rng, droppath_rng = jax.random.split(dropout_rng)
+        rngs = {"params": params_rng, "dropout": dropout_rng, "droppath": droppath_rng}
 
         random_params = self.module.init(rngs, pixel_values, return_dict=False)["params"]
 
@@ -591,12 +595,13 @@ class FlaxDinov2PreTrainedModel(FlaxPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
-        # (batch_size, num_channels, height, width) -> (batch_size, height, width, num_channels)
         pixel_values = jnp.transpose(pixel_values, (0, 2, 3, 1))
         # Handle any PRNG if needed
         rngs = {}
         if dropout_rng is not None:
+            dropout_rng, droppath_rng = jax.random.split(dropout_rng)
             rngs["dropout"] = dropout_rng
+            rngs["droppath"] = droppath_rng
 
         return self.module.apply(
             {"params": params or self.params},
