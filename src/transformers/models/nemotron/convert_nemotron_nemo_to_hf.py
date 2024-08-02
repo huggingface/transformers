@@ -12,27 +12,28 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
 import os
+import shutil
 from argparse import ArgumentParser
 from collections import OrderedDict
-import json
-import shutil
 
 import torch
-from omegaconf import open_dict
+from nemo.collections.common.tokenizers.huggingface.auto_tokenizer import AutoTokenizer
+from nemo.collections.nlp.models.language_modeling.megatron_gpt_model import MegatronGPTModel
+from nemo.collections.nlp.parts.nlp_overrides import NLPDDPStrategy
+from nemo.utils import logging
 from pytorch_lightning import Trainer
+
 from transformers import (
-    AutoModelForCausalLM,
+    AutoTokenizer as HFAutoTokenizer,
+)
+from transformers import (
     LlamaTokenizer,
     PreTrainedTokenizerFast,
-    AutoTokenizer as HFAutoTokenizer,
 )
 from transformers.convert_slow_tokenizer import LlamaConverter
 
-from nemo.collections.nlp.models.language_modeling.megatron_gpt_model import MegatronGPTModel
-from nemo.collections.common.tokenizers.huggingface.auto_tokenizer import AutoTokenizer
-from nemo.collections.nlp.parts.nlp_overrides import NLPDDPStrategy
-from nemo.utils import logging
 
 """
 Script to convert a nemotron checkpoint in nemo (mcore path) into a HuggingFace checkpoint.
@@ -191,8 +192,8 @@ def convert(input_nemo_file, output_hf_file, precision=None, cpu_only=False) -> 
     qkv_total_dim = head_num + 2 * num_query_groups
 
     # Embedding
-    embed_weight = model.state_dict()[f"model.embedding.word_embeddings.weight"]
-    embed_weights_base_name = f"model.embed_tokens.weight"
+    embed_weight = model.state_dict()["model.embedding.word_embeddings.weight"]
+    embed_weights_base_name = "model.embed_tokens.weight"
     checkpoint[embed_weights_base_name] = param_to_weights(embed_weight)
 
     for l in range(int(num_layers)):
@@ -281,16 +282,16 @@ def convert(input_nemo_file, output_hf_file, precision=None, cpu_only=False) -> 
 
         print(f"done layer {l}")
 
-    final_ln_weight = model.state_dict()[f"model.decoder.final_layernorm.weight"]
-    final_ln_base_name = f"model.norm.weight"
+    final_ln_weight = model.state_dict()["model.decoder.final_layernorm.weight"]
+    final_ln_base_name = "model.norm.weight"
     checkpoint[final_ln_base_name] = param_to_weights(final_ln_weight)
-    if model.state_dict().get(f"model.decoder.final_layernorm.bias", None) is not None:
-        final_ln_bias = model.state_dict()[f"model.decoder.final_layernorm.bias"]
-        final_ln_bias_name = f"model.norm.bias"
+    if model.state_dict().get("model.decoder.final_layernorm.bias", None) is not None:
+        final_ln_bias = model.state_dict()["model.decoder.final_layernorm.bias"]
+        final_ln_bias_name = "model.norm.bias"
         checkpoint[final_ln_bias_name] = param_to_weights(final_ln_bias)
 
-    output_layer_weight = model.state_dict()[f"model.output_layer.weight"]
-    output_layer_base_name = f"lm_head.weight"
+    output_layer_weight = model.state_dict()["model.output_layer.weight"]
+    output_layer_base_name = "lm_head.weight"
     checkpoint[output_layer_base_name] = param_to_weights(output_layer_weight)
 
     os.makedirs(os.path.dirname(output_hf_file), exist_ok=True)
