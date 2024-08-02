@@ -34,7 +34,7 @@ The abstract from the paper is the following:
 
 `Qwen2-Audio-7B` and `Qwen2-Audio-7B-Instruct` can be found on the [Huggingface Hub](https://huggingface.co/Qwen)
 
-In the following, we demonstrate how to use `Qwen2-Audio-7B-Instrucct` for the inference, supporting both voice chat and audio analysis modes. Note that we have used the ChatML format for dialog, in this demo we show how to leverage `apply_chat_template` for this purpose.
+In the following, we demonstrate how to use `Qwen2-Audio-7B-Instruct` for the inference, supporting both voice chat and audio analysis modes. Note that we have used the ChatML format for dialog, in this demo we show how to leverage `apply_chat_template` for this purpose.
 
 ### Voice Chat Inference
 In the voice chat mode, users can freely engage in voice interactions with Qwen2-Audio without text input:
@@ -64,7 +64,7 @@ for message in conversation:
             if ele["type"] == "audio":
                 audios.append(librosa.load(
                     BytesIO(urlopen(ele['audio_url']).read()), 
-                    sr=self.processor.feature_extractor.sampling_rate)[0]
+                    sr=processor.feature_extractor.sampling_rate)[0]
                 )
 
 inputs = processor(text=text, audios=audios, return_tensors="pt", padding=True)
@@ -112,7 +112,7 @@ for message in conversation:
                 audios.append(
                     librosa.load(
                         BytesIO(urlopen(ele['audio_url']).read()), 
-                        sr=self.processor.feature_extractor.sampling_rate)[0]
+                        sr=processor.feature_extractor.sampling_rate)[0]
                 )
 
 inputs = processor(text=text, audios=audios, return_tensors="pt", padding=True)
@@ -122,9 +122,6 @@ generate_ids = model.generate(**inputs, max_length=256)
 generate_ids = generate_ids[:, inputs.input_ids.size(1):]
 
 response = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-
-print("prompt:\n", text)
-print("response:\n", response)
 ```
 
 ### Batch Inference
@@ -170,7 +167,7 @@ for conversation in conversations:
                     audios.append(
                         librosa.load(
                             BytesIO(urlopen(ele['audio_url']).read()), 
-                            sr=self.processor.feature_extractor.sampling_rate)[0]
+                            sr=processor.feature_extractor.sampling_rate)[0]
                     )
 
 inputs = processor(text=text, audios=audios, return_tensors="pt", padding=True)
