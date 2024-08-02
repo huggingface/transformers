@@ -577,6 +577,7 @@ class CLIPPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _supports_sdpa = True
     _supports_flash_attn_2 = True
+    _is_composite = True
 
     def _init_weights(self, module):
         """Initialize the weights"""

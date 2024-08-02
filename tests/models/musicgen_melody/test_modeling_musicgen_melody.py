@@ -1983,7 +1983,20 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                 model_sdpa = model_class.from_pretrained(tmpdirname, torch_dtype=torch_dtype)
                 model_sdpa = model_sdpa.eval().to(torch_device)
 
-                self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
+                audio_encoder_attn = "sdpa" if model.audio_encoder._supports_sdpa else "eager"
+                text_encoder_attn = "sdpa" if model.text_encoder._supports_sdpa else "eager"
+                decoder_attn = "sdpa" if model.decoder._supports_sdpa else "eager"
+                self.assertTrue(model_sdpa.config.audio_encoder._attn_implementation == audio_encoder_attn)
+                self.assertTrue(model_sdpa.config.text_encoder._attn_implementation == text_encoder_attn)
+                self.assertTrue(model_sdpa.config.decoder._attn_implementation == decoder_attn)
+                self.assertTrue(
+                    model_sdpa.config._attn_implementation
+                    == {
+                        "audio_encoder": audio_encoder_attn,
+                        "text_encoder": text_encoder_attn,
+                        "decoder": decoder_attn,
+                    }
+                )
 
                 model_eager = model_class.from_pretrained(
                     tmpdirname,
@@ -1992,7 +2005,13 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                 )
                 model_eager = model_eager.eval().to(torch_device)
 
-                self.assertTrue(model_eager.config._attn_implementation == "eager")
+                self.assertTrue(model_eager.config.audio_encoder._attn_implementation == "eager")
+                self.assertTrue(model_eager.config.text_encoder._attn_implementation == "eager")
+                self.assertTrue(model_eager.config.decoder._attn_implementation == "eager")
+                self.assertTrue(
+                    model_eager.config._attn_implementation
+                    == {"audio_encoder": "eager", "text_encoder": "eager", "decoder": "eager"}
+                )
 
                 for name, submodule in model_eager.named_modules():
                     if "SdpaAttention" in submodule.__class__.__name__:

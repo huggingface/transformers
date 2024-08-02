@@ -217,7 +217,6 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "BeitForMaskedImageModeling",
     "ChineseCLIPTextModel",
     "ChineseCLIPVisionModel",
-    "CLIPTextModel",
     "CLIPTextModelWithProjection",
     "CLIPVisionModelWithProjection",
     "ClvpForCausalLM",
@@ -318,8 +317,6 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "SeamlessM4Tv2CodeHifiGan",
     "SeamlessM4Tv2ForSpeechToSpeech",  # no auto class for speech-to-speech
     "SegGptForImageSegmentation",
-    "SiglipVisionModel",
-    "SiglipTextModel",
     "ChameleonVQVAE",  # no autoclass for VQ-VAE models
 ]
 

@@ -126,6 +126,7 @@ class PaliGemmaPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["PaliGemmaMultiModalProjector"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = False
+    _is_composite = True
 
     def _init_weights(self, module):
         # important: this ported version of PaliGemmaisn't meant for training from scratch - only

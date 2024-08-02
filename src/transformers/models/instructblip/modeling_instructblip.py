@@ -306,6 +306,8 @@ class InstructBlipPreTrainedModel(PreTrainedModel):
     config_class = InstructBlipConfig
     base_model_prefix = "blip"
     supports_gradient_checkpointing = True
+    _is_composite = True
+
     _no_split_modules = [
         "InstructBlipQFormerEmbeddings",
         "InstructBlipAttention",

@@ -1331,6 +1331,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     # SDPA support
     _supports_sdpa = False
 
+    # Composite models consisting of several PretrainedModels
+    _is_composite = False
+
     # Has support for a `Cache` instance as `past_key_values`? Does it support a `StaticCache`?
     _supports_cache_class = False
     _supports_static_cache = False
@@ -1544,7 +1547,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 attn_implementation_per_subconfig[key] = sub_config._attn_implementation
 
             # Set the general attn_implementation to a dict where keys are sub-configs
-            requested_attn_implementation = attn_implementation_per_subconfig
+            requested_attn_implementation = (
+                attn_implementation_per_subconfig if cls._is_composite else requested_attn_implementation
+            )
 
         if use_flash_attention_2:
             logger.warning_once(
@@ -1647,8 +1652,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
 
         # VLM/Encoder-Decoder etc. have to follow the sdpa attr of its sub-configs
-        sub_configs = {key: value for key, value in config if isinstance(value, PretrainedConfig)}
-        if not cls._supports_flash_attn_2 and not sub_configs:
+        if not cls._supports_flash_attn_2:
             raise ValueError(
                 f"{cls.__name__} does not support Flash Attention 2.0 yet. Please request to add support where"
                 f" the model is hosted, on its model hub page: https://huggingface.co/{config._name_or_path}/discussions/new"
@@ -1721,15 +1725,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 "initialise the model on a GPU by passing a device_map that contains only GPU devices as keys."
             )
         if not hard_check_only:
-            if sub_configs:
-                sub_config_attentions = {sub_config._attn_implementation for key, sub_config in sub_configs.items()}
-                config._attn_implementation = (
-                    "flash_attention_2"
-                    if "flash_attention_2" in sub_config_attentions
-                    else config._attn_implementation
-                )
-            else:
-                config._attn_implementation = "flash_attention_2"
+            config._attn_implementation = "flash_attention_2"
         return config
 
     @classmethod
@@ -1750,12 +1746,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 raise ImportError(
                     "PyTorch SDPA requirements in Transformers are not met. Please install torch>=2.1.1."
                 )
-
-        # VLM/Encoder-Decoder etc. have to follow the sdpa attr of its sub-configs
-        sub_configs = {key: value for key, value in config if isinstance(value, PretrainedConfig)}
-        if sub_configs:
-            sub_config_attentions = {sub_config._attn_implementation for key, sub_config in sub_configs.items()}
-            config._attn_implementation = "sdpa" if "sdpa" in sub_config_attentions else config._attn_implementation
 
         if not is_torch_sdpa_available() or not cls._supports_sdpa:
             return config

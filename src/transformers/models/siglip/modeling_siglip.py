@@ -668,6 +668,8 @@ class SiglipPreTrainedModel(PreTrainedModel):
     config_class = SiglipConfig
     base_model_prefix = "siglip"
     supports_gradient_checkpointing = True
+    _is_composite = True
+
     _no_split_modules = [
         "SiglipTextEmbeddings",
         "SiglipEncoderLayer",

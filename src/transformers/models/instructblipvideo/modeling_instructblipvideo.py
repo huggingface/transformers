@@ -314,6 +314,8 @@ class InstructBlipVideoPreTrainedModel(PreTrainedModel):
     config_class = InstructBlipVideoConfig
     base_model_prefix = "blip"
     supports_gradient_checkpointing = True
+    _is_composite = True
+
     _no_split_modules = [
         "InstructBlipVideoQFormerEmbeddings",
         "InstructBlipVideoAttention",

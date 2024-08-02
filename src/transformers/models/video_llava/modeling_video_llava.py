@@ -126,6 +126,7 @@ class VideoLlavaPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["VideoLlavaVisionAttention"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
+    _is_composite = True
 
     def _init_weights(self, module):
         std = (

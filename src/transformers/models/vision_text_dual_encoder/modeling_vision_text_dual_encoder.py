@@ -161,6 +161,7 @@ def clip_loss(similarity: torch.Tensor) -> torch.Tensor:
 class VisionTextDualEncoderModel(PreTrainedModel):
     config_class = VisionTextDualEncoderConfig
     base_model_prefix = "vision_text_dual_encoder"
+    _is_composite = True
 
     def __init__(
         self,

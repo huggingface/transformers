@@ -1086,7 +1086,9 @@ MODELS_NOT_IN_README = [
     "Vision Encoder decoder",
     "VisionTextDualEncoder",
     "CLIPVisionModel",
+    "CLIPTextModel",
     "SiglipVisionModel",
+    "SiglipTextModel",
     "ChineseCLIPVisionModel",
 ]
 

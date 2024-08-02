@@ -304,6 +304,8 @@ class Blip2PreTrainedModel(PreTrainedModel):
     config_class = Blip2Config
     base_model_prefix = "blip"
     supports_gradient_checkpointing = True
+    _is_composite = True
+
     _no_split_modules = ["Blip2Attention", "T5Block", "OPTDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _keep_in_fp32_modules = ["wo"]
@@ -1602,11 +1604,11 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
         self.language_projection = nn.Linear(config.qformer_config.hidden_size, config.text_config.hidden_size)
         if config.use_decoder_only_language_model:
             language_model = AutoModelForCausalLM.from_config(
-                config.text_config, attn_implementation=config._attn_implementation
+                config.text_config, attn_implementation=config.text_config._attn_implementation
             )
         else:
             language_model = AutoModelForSeq2SeqLM.from_config(
-                config.text_config, attn_implementation=config._attn_implementation
+                config.text_config, attn_implementation=config.text_config._attn_implementation
             )
 
         # Update _tied_weights_keys using the base model used.
