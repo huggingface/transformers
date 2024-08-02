@@ -371,7 +371,9 @@ class Mamba2Mixer(nn.Module):
                 )
                 if attention_mask is not None and attention_mask.shape[1] > 1 and attention_mask.shape[0] > 1:
                     # tune out hidden states for pad tokens, see https://github.com/state-spaces/mamba/issues/66
-                    hidden_states = hidden_states * attention_mask.unsqueeze(2)
+                    # bug in generate tests?
+                    dtype = hidden_states.dtype
+                    hidden_states = (hidden_states * attention_mask.unsqueeze(2)).to(dtype)
                 time_step = nn.functional.softplus(time_step + self.dt_bias)
                 # 1D Convolution
                 if causal_conv1d_fn is None or self.activation not in ["silu", "swish"]:
@@ -393,7 +395,8 @@ class Mamba2Mixer(nn.Module):
 
                 if attention_mask is not None and attention_mask.shape[1] > 1 and attention_mask.shape[0] > 1:
                     # tune out hidden states for pad tokens, see https://github.com/state-spaces/mamba/issues/66
-                    hidden_states = hidden_states * attention_mask.unsqueeze(2)
+                    dtype = hidden_states.dtype
+                    hidden_states = (hidden_states * attention_mask.unsqueeze(2)).to(dtype)
                 scan_output, ssm_state = mamba_chunk_scan_combined(
                     hidden_states.view(hidden_states.shape[0], hidden_states.shape[1], -1, self.head_dim),
                     time_step,
@@ -553,8 +556,15 @@ class Mamba2Mixer(nn.Module):
 
             # Step 3: Compute Y_diag (apply to values)
             #Y_diag = ((M.unsqueeze(-1) * hidden_states.unsqueeze(1)).sum(dim=3))
-            Y_diag_intermediate = M[..., None] * hidden_states[:, None, ...]
-            Y_diag = Y_diag_intermediate.sum(dim=3)
+            #Y_diag_einsum = torch.einsum("bclsh,bcshp->bclhp", M, hidden_states)
+            # Y_diag_alt = (M.unsqueeze(-1) * hidden_states.unsqueeze(2)).sum(3)
+            #diff_ = ((Y_diag_alt - Y_diag_einsum) / (Y_diag_einsum + 1e-9)).min()
+
+            #Y_diag_intermediate = M[..., None] * hidden_states[:, None, ...]
+            #Y_diag = Y_diag_intermediate.sum(dim=3)
+
+            Y_diag = (M.unsqueeze(-1) * hidden_states.unsqueeze(2)).sum(3)
+
             # (right term of low-rank factorization of off-diagonal blocks; B terms)
 
             decay_states = torch.exp((A_cumsum[:, :, :, -1:] - A_cumsum))
@@ -617,9 +627,12 @@ class Mamba2Mixer(nn.Module):
     ):
         if is_fast_path_available and "cuda" in self.in_proj.weight.device.type:
             return self.cuda_kernels_forward(hidden_states, cache_params, cache_position, attention_mask)
+        # if cache_params is not None and attention_mask is not None and attention_mask.shape[1] > 1 and attention_mask.shape[0] > 1:
+        dtype = hidden_states.dtype
         if attention_mask is not None and attention_mask.shape[1] > 1 and attention_mask.shape[0] > 1:
             # tune out hidden states for pad tokens, see https://github.com/state-spaces/mamba/issues/66
-            hidden_states = hidden_states * attention_mask.unsqueeze(2)
+            hidden_states = (hidden_states * attention_mask.unsqueeze(2)).to(dtype)
+
         return self.torch_forward(hidden_states, cache_params, cache_position, attention_mask)
 
 
@@ -1001,6 +1014,7 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel):
                     "`model.generate`, you are responsible for passing in a valid `cache_position` if "
                     "you are calling `prepare_inputs_for_generation` directly with `use_cache=True`"
                 )
+            # how do we detect that we are in decoding without cache?
             if cache_position[0] > 0:
                 input_ids = input_ids[:, -1].unsqueeze(-1)
                 attention_mask = attention_mask[:, -1].unsqueeze(-1)
@@ -1010,7 +1024,22 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel):
                 # will be applied when it is longer, so it will be equivalent to always have it match
                 # the length of `cache_params.conv_states`, which is `config.conv_kernel`
                 cache_position = torch.arange(0, input_ids.shape[1], device=input_ids.device)
-
+                # if the cache is not used, we also do have to extend the attention mask here
+                # TODO there is likely a cleverer way to do this
+                extended_mask = torch.ones(
+                    attention_mask.size(0), input_ids.shape[1] - attention_mask.shape[1], device=attention_mask.device
+                )
+                attention_mask = torch.cat([attention_mask, extended_mask], dim=1)
+            cache_params = None
+            if attention_mask.shape[1] < input_ids.shape[1]:
+                # we have to update manually the attention mask if
+                # we are in decoding without cache
+                # and we don't have position_ids here
+                # TODO but we should be able to use cache_position though at a later time
+                extended_mask = torch.ones(
+                    attention_mask.size(0), input_ids.shape[1] - attention_mask.shape[1], device=attention_mask.device
+                )
+                attention_mask = torch.cat([attention_mask, extended_mask], dim=1)
         if inputs_embeds is not None and cache_params is None:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
