@@ -69,6 +69,42 @@ class Sam2PromptEncoderConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
 
 
+class Sam2PositionEmbeddingConfig(PretrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`Sam2PositionEmbedding`]. The [`Sam2PositionEmbedding`]
+    module is used to encode the input 2D points and bounding boxes. Instantiating a configuration defaults will yield
+    a similar configuration to that of the SAM2-hiera-tiny
+    [facebook/sam2-hiera-tiny](https://huggingface.co/facebook/sam2-hiera-tiny) architecture.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        num_pos_feats (`int`):
+            The number of feature size for positioinal features.
+        temperature (`int`, *optional*, defaults to 10000):
+            The temperature value to consider.
+        normalize (`bool`, *optional*, defaults to True):
+            Whether to normalize the embedding vector.
+        scale (`float`, *optional*, defaults to None):
+            The scale value for embedding vector.
+    """
+
+    def __init__(
+        self,
+        num_pos_feats,
+        temperature=10000,
+        normalize=True,
+        scale=None,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        self.num_pos_feats = num_pos_feats
+        self.temperature = temperature
+        self.normalize = normalize
+        self.scale = scale
+
+
 class Sam2MaskDecoderConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Sam2MaskDecoder`]. It is used to instantiate a SAM2
@@ -135,8 +171,8 @@ class Sam2MaskDecoderConfig(PretrainedConfig):
         dynamic_multimask_via_stability=False,
         dynamic_multimask_stability_delta=0.05,
         dynamic_multimask_stability_thresh=0.98,
-        pred_obj_scores= False,
-        pred_obj_scores_mlp= False,
+        pred_obj_scores=False,
+        pred_obj_scores_mlp=False,
         use_multimask_token_for_obj_ptr=False,
         layer_norm_eps=1e-6,
         **kwargs,
@@ -151,14 +187,14 @@ class Sam2MaskDecoderConfig(PretrainedConfig):
         self.num_multimask_outputs = num_multimask_outputs
         self.iou_head_depth = iou_head_depth
         self.iou_head_hidden_dim = iou_head_hidden_dim
-        self.use_high_res_features=use_high_res_features,
-        self.iou_prediction_use_sigmoid=iou_prediction_use_sigmoid,
-        self.dynamic_multimask_via_stability=dynamic_multimask_via_stability,
-        self.dynamic_multimask_stability_delta=dynamic_multimask_stability_delta,
-        self.dynamic_multimask_stability_thresh=dynamic_multimask_stability_thresh,
-        self.pred_obj_scores= pred_obj_scores,
-        self.pred_obj_scores_mlp= pred_obj_scores_mlp,
-        self.use_multimask_token_for_obj_ptr=use_multimask_token_for_obj_ptr,
+        self.use_high_res_features = (use_high_res_features,)
+        self.iou_prediction_use_sigmoid = (iou_prediction_use_sigmoid,)
+        self.dynamic_multimask_via_stability = (dynamic_multimask_via_stability,)
+        self.dynamic_multimask_stability_delta = (dynamic_multimask_stability_delta,)
+        self.dynamic_multimask_stability_thresh = (dynamic_multimask_stability_thresh,)
+        self.pred_obj_scores = (pred_obj_scores,)
+        self.pred_obj_scores_mlp = (pred_obj_scores_mlp,)
+        self.use_multimask_token_for_obj_ptr = (use_multimask_token_for_obj_ptr,)
         self.layer_norm_eps = layer_norm_eps
 
 
@@ -175,6 +211,7 @@ class Sam2MemoryAttentionConfig(PretrainedConfig):
     Args:
 
     """
+
     def __init__(
         self,
         # TO DO
@@ -198,6 +235,7 @@ class Sam2MemoryEncoderConfig(PretrainedConfig):
     Args:
 
     """
+
     def __init__(
         self,
         out_dim=64,
@@ -209,11 +247,20 @@ class Sam2MemoryEncoderConfig(PretrainedConfig):
     ):
         super().__init__(**kwargs)
         if positional_encoding_config is None:
-            positional_encoding_config = {'num_pos_feats':64, 'normalize':True, 'scale': None, 'temperature': 1000}
+            positional_encoding_config = {"num_pos_feats": 64, "normalize": True, "scale": None, "temperature": 1000}
         if mask_downsmapler_config is None:
-            mask_downsmapler_config = {'kernel_size': 3, 'stride': 2, 'padding':1}
+            mask_downsmapler_config = {"kernel_size": 3, "stride": 2, "padding": 1}
         if fuser_config is None:
-            fuser_config = {'layer':{'dim': 256, 'kernel_size': 7, 'padding':3, 'layer_scale_init_value': 1e-6, 'use_dwconv': True}, 'num_layers':2}
+            fuser_config = {
+                "layer": {
+                    "dim": 256,
+                    "kernel_size": 7,
+                    "padding": 3,
+                    "layer_scale_init_value": 1e-6,
+                    "use_dwconv": True,
+                },
+                "num_layers": 2,
+            }
 
         self.out_dim = out_dim
         self.positional_encoding_config = positional_encoding_config
@@ -276,48 +323,56 @@ class Sam2VisionConfig(PretrainedConfig):
 
     def __init__(
         self,
-        hidden_size=768,
-        output_channels=256,
-        num_hidden_layers=12,
-        num_attention_heads=12,
-        num_channels=3,
-        image_size=1024,
-        patch_size=16,
-        hidden_act="gelu",
-        layer_norm_eps=1e-06,
-        attention_dropout=0.0,
-        initializer_range=1e-10,
-        qkv_bias=True,
-        mlp_ratio=4.0,
-        use_abs_pos=True,
-        use_rel_pos=True,
-        window_size=14,
-        global_attn_indexes=[2, 5, 8, 11],
-        num_pos_feats=128,
-        mlp_dim=None,
+        scalp=1,
+        hidden_size=96,
+        num_heads=1,
+        drop_path_rate=0,
+        q_pool=3,
+        q_stride=[2, 2],
+        stages=[1, 2, 7, 2],
+        dim_mul=2.0,
+        head_mul=2.0,
+        window_pos_embed_bkg_spatial_size=[7, 7],
+        window_spec=[8, 4, 14, 7],
+        global_att_blocks=[5, 7, 9],
+        return_interm_layers=False,
+        neck_position_encoding_config=None,
+        neck_hidden_size=256,
+        neck_backbone_channel_list=[768, 384, 192, 96],
+        neck_kernel_size=1,
+        neck_stride=1,
+        neck_padding=0,
+        neck_fpn_interp_model="nearest",
+        neck_fuse_type="sum",
+        neck_fpn_top_down_level=[2, 3],
         **kwargs,
     ):
         super().__init__(**kwargs)
+        if neck_position_encoding_config is None:
+            neck_position_encoding_config = Sam2PositionEmbeddingConfig(num_pos_feats=256)
 
+        self.scalp = scalp
         self.hidden_size = hidden_size
-        self.output_channels = output_channels
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.hidden_act = hidden_act
-        self.layer_norm_eps = layer_norm_eps
-        self.attention_dropout = attention_dropout
-        self.initializer_range = initializer_range
-        self.qkv_bias = qkv_bias
-        self.mlp_ratio = mlp_ratio
-        self.use_abs_pos = use_abs_pos
-        self.use_rel_pos = use_rel_pos
-        self.window_size = window_size
-        self.global_attn_indexes = global_attn_indexes
-        self.num_pos_feats = num_pos_feats
-        self.mlp_dim = int(hidden_size * mlp_ratio) if mlp_dim is None else mlp_dim
+        self.num_heads = num_heads
+        self.drop_path_rate = drop_path_rate
+        self.q_pool = q_pool
+        self.q_stride = q_stride
+        self.stages = stages
+        self.dim_mul = dim_mul
+        self.head_mul = head_mul
+        self.window_pos_embed_bkg_spatial_size = window_pos_embed_bkg_spatial_size
+        self.window_spec = window_spec
+        self.global_att_blocks = global_att_blocks
+        self.return_interm_layers = return_interm_layers
+        self.neck_position_encoding_config = neck_position_encoding_config
+        self.neck_hidden_size = neck_hidden_size
+        self.neck_backbone_channel_list = neck_backbone_channel_list
+        self.neck_kernel_size = neck_kernel_size
+        self.neck_stride = neck_stride
+        self.neck_padding = neck_padding
+        self.neck_fpn_interp_model = neck_fpn_interp_model
+        self.neck_fuse_type = neck_fuse_type
+        self.neck_fpn_top_down_level = neck_fpn_top_down_level
 
 
 class Sam2Config(PretrainedConfig):
