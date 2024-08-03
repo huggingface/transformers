@@ -750,7 +750,7 @@ class Kosmos2_5VisionLayer(nn.Module):
 
         attention_mask = self._prepare_attention_mask(attention_mask, hidden_states.shape[:2], hidden_states)
 
-        self_attention_outputs, _ = self.attention(
+        self_attention_outputs = self.attention(
             hidden_states,
             attention_mask=attention_mask,
             layer_head_mask=head_mask,
@@ -766,7 +766,9 @@ class Kosmos2_5VisionLayer(nn.Module):
         layer_output = self.pre_mlp_layer_norm(hidden_states)
         layer_output = self.mlp(layer_output) + hidden_states  # second residual connection
 
-        return layer_output, outputs
+        outputs = (layer_output,) + outputs
+
+        return outputs
 
 
 # Copied from transformers.models.pix2struct.modeling_pix2struct.Pix2StructVisionEncoder with Pix2Struct->Kosmos2_5
