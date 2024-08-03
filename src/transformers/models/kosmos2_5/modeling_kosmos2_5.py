@@ -1117,8 +1117,7 @@ class Kosmos2_5TextAttention(nn.Module):
         attn_weights = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
         attn_output = torch.matmul(attn_weights, value_states)
 
-        if attn_output.size() != (batch_size, self.num_heads, seq_length, self.head_dim
-        ):
+        if attn_output.size() != (batch_size, self.num_heads, seq_length, self.head_dim):
             raise ValueError(
                 f"`attn_output` should be of size {(batch_size, self.num_heads, seq_length, self.head_dim)}, but is"
                 f" {attn_output.size()}"
