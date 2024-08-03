@@ -1170,8 +1170,8 @@ class OlmoeForCausalLM(OlmoePreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, OlmoeForCausalLM
 
-        >>> model = OlmoeForCausalLM.from_pretrained("allenai/OLMoE-1B-hf")
-        >>> tokenizer = AutoTokenizer.from_pretrained("allenai/OLMoE-1B-hf")
+        >>> model = OlmoeForCausalLM.from_pretrained("allenai/OLMoE-7B-A1B")
+        >>> tokenizer = AutoTokenizer.from_pretrained("allenai/OLMoE-7B-A1B")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")

@@ -13,11 +13,11 @@
 Example for running:
 0. Cp ckpts to local
 aws s3 cp --recursive s3://ai2-llm/checkpoints/OLMoE/olmoe-8x1b-newhp-newds-final-annealFrom1200000/step23842 /data/niklas/llm/checkpoints/olmoe-8x1b-newhp-newds-final-annealFrom1200000_step23842
-1. Unshard your OLMo checkpoint
+1. Unshard your OLMoE checkpoint using https://github.com/allenai/OLMo/blob/7d63fe09d23cf23714da5aa633a44a90180195da/scripts/unshard.py
 python OLMo/scripts/unshard.py /data/niklas/llm/checkpoints/23485/step954000 /data/niklas/llm/checkpoints/1b-954000-unsharded --model-only
 python OLMo/scripts/unshard.py /data/niklas/llm/checkpoints/23485/step954000 /data/niklas/llm/checkpoints/1b-954000-unsharded --model-only
 python OLMo/scripts/unshard.py /data/niklas/llm/checkpoints/olmoe-8x1b-newhp-newds-final-annealFrom1200000_step23842 /data/niklas/llm/checkpoints/olmoe-8x1b-newhp-newds-final-annealFrom1200000_step23842-unsharded --model-only
-2. Convert to transformers:
+2. Convert to transformers
 rm -rf olmoe; mkdir olmoe; python /data/niklas/transformers/src/transformers/models/olmoe/convert_olmoe_weights_to_hf.py --input_dir /data/niklas/llm/checkpoints/olmoe-8x1b-newhp-newds-final-annealFrom1200000_step23842-unsharded --tokenizer_json_path /data/niklas/llm/checkpoints/olmoe-step1200000-unsharded/tokenizer.json --output_dir olmoe
 3. Load model via:
 ```
@@ -31,9 +31,9 @@ inputs = {k: v.cuda() for k, v in inputs.items()}
 out = model.generate(**inputs, max_length=64)
 print(tokenizer.decode(out[0]))
 # > # Bitcoin is a digital currency that is created and held electronically. No one controls it. Bitcoins aren’t printed, like dollars or euros – they’re produced by people and businesses running computers all around the world, using software that solves mathematical
-# Or manually:
+# Or quick sanity check:
 o = model(torch.tensor([[0, 1]]).cuda())
-# In FP32
+# If the checkpoint is not converted to BF16 but kept in FP32:
 # > # Bitcoin is a digital currency that is not controlled by any central authority. It is a peer-to-peer payment system that allows users to send and receive payments from anywhere in the world. Bitcoin is also known as a cryptocurrency because it uses cryptography to secure transactions and prevent fraud.
 ```
 
@@ -46,7 +46,7 @@ from olmo.model import OLMo
 import torch
 model = OLMo.from_checkpoint("/data/niklas/llm/checkpoints/olmoe-step1200000-unsharded-pt")
 model = model.cuda()
-#model = model.to(torch.bfloat16)
+model = model.to(torch.bfloat16)
 from transformers import AutoTokenizer
 tokenizer = AutoTokenizer.from_pretrained("../transformers/olmoe")
 inputs = tokenizer("Bitcoin is", return_tensors="pt")
@@ -54,7 +54,7 @@ inputs = {k: v.cuda() for k, v in inputs.items()}
 out = model.generate(**inputs)
 print(tokenizer.decode(out[0][0][0]))
 # Bitcoin is a digital currency that is created and held electronically. No one controls it. Bitcoins aren’t printed, like dollars or euros – they’re produced by people and businesses running computers all around the world, using software that solves mathematical problems. It’s the first example of a growing category of money
-# Or manually:
+# Or quick sanity check:
 o = model(torch.tensor([[0, 1]]).cuda())
 ```
 """
