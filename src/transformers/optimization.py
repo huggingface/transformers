@@ -965,11 +965,11 @@ class AdamMini(Optimizer):
         model_sharding (`bool`, *optional*, defaults to `False`):
             Set to True if you are using model parallelism with more than 1 GPU, including FSDP and
             zero_1,2,3 in Deepspeed. Set to False if otherwise.
-        n_feature (`int`, *optional*, defaults to `None`):
+        n_feature (`int`, *optional*):
             Dimension for hidden features. Can be left unspecified if training non-transformer models.
-        n_head (`int`, *optional*, defaults to `None`):
+        n_head (`int`, *optional*):
             Number of attention heads. Can be left unspecified if training non-transformer models.
-        n_kv_head (`int`, *optional*, defaults to `None`):
+        n_kv_head (`int`, *optional*):
             Number of heads for Key and Value. Or equivalently, number of query groups in Group Query
             Attention. Also known as "n_query_groups". If not specified, it will be equal to n_head.
             Can be left unspecified if training non-transformer models.
