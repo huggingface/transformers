@@ -41,10 +41,13 @@ def get_config(model_name):
         vision_config = Sam2VisionConfig()
     elif "sam2_hiera_small" in model_name:
         # TO DO
+        pass
     elif "sam2_hiera_base_plus" in model_name:
         # TO DO
+        pass
     elif "sam2_hiera_large" in model_name:
         # TO DO
+        pass
 
     config = Sam2Config(
         vision_config=vision_config,
@@ -153,13 +156,14 @@ def convert_sam2_checkpoint(model_name, checkpoint_path, pytorch_dump_folder, pu
 
     elif model_name == "sam2_hiera_small":
         # TO DO
-
+        pass
     elif model_name == "sam2_hiera_base_plus":
         # TO DO
+        pass
 
     elif model_name == "sam2_hiera_large":
         # TO DO
-
+        pass
 
     if pytorch_dump_folder is not None:
         processor.save_pretrained(pytorch_dump_folder)
