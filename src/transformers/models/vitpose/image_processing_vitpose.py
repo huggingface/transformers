@@ -37,7 +37,6 @@ from ...utils import TensorType, is_scipy_available, is_torch_available, is_visi
 
 if is_torch_available():
     import torch
-    from torch import nn
 
 if is_vision_available():
     import PIL
@@ -63,44 +62,45 @@ def coco_to_pascal_voc(bboxes: torch.Tensor) -> torch.Tensor:
     Returns:
         `torch.Tensor` of shape `(batch_size, 4) in Pascal VOC format.
     """
-    bbox_xyxy = bboxes.copy()
-    bbox_xyxy[:, 2] = bbox_xyxy[:, 2] + bbox_xyxy[:, 0] - 1
-    bbox_xyxy[:, 3] = bbox_xyxy[:, 3] + bbox_xyxy[:, 1] - 1
+    bboxes[:, 2] = bboxes[:, 2] + bboxes[:, 0] - 1
+    bboxes[:, 3] = bboxes[:, 3] + bboxes[:, 1] - 1
 
-    return bbox_xyxy
+    return bboxes
 
 
 def _get_max_preds(heatmaps):
     """Get keypoint predictions from score maps.
 
     Args:
-        heatmaps (`np.ndarray` of shape `(batch_size, num_keypoints, height, width)`):
+        heatmaps (`torch.Tensor` or `np.ndarray` of shape `(batch_size, num_keypoints, height, width)`):
             Model predicted heatmaps.
 
     Returns:
         tuple: A tuple containing aggregated results.
 
-        - preds (np.ndarray[N, K, 2]):
+        - coords (torch.Tensor[N, K, 2]):
             Predicted keypoint location.
-        - scores (np.ndarray[N, K, 1]):
+        - scores (torch.Tensor[N, K, 1]):
             Scores (confidence) of the keypoints.
     """
-    if not isinstance(heatmaps, np.ndarray):
-        raise ValueError("Heatmaps should be numpy.ndarray")
+    if isinstance(heatmaps, np.ndarray):
+        heatmaps = torch.Tensor(heatmaps)
+    if not isinstance(heatmaps, torch.Tensor):
+        raise ValueError("Heatmaps should be torch.Tensor")
     if heatmaps.ndim != 4:
         raise ValueError("Heatmaps should be 4-dimensional")
 
     batch_size, num_keypoints, _, width = heatmaps.shape
-    heatmaps_reshaped = heatmaps.reshape((batch_size, num_keypoints, -1))
-    idx = np.argmax(heatmaps_reshaped, 2).reshape((batch_size, num_keypoints, 1))
-    scores = np.amax(heatmaps_reshaped, 2).reshape((batch_size, num_keypoints, 1))
+    heatmaps_reshaped = heatmaps.view(batch_size, num_keypoints, -1)
+    idx = torch.argmax(heatmaps_reshaped, dim=2).view(batch_size, num_keypoints, 1)
+    scores = torch.amax(heatmaps_reshaped, dim=2).view(batch_size, num_keypoints, 1)
 
-    preds = np.tile(idx, (1, 1, 2)).astype(np.float32)
-    preds[:, :, 0] = preds[:, :, 0] % width
-    preds[:, :, 1] = preds[:, :, 1] // width
+    coords = idx.repeat(1, 1, 2).float()
+    coords[:, :, 0] = coords[:, :, 0] % width
+    coords[:, :, 1] = coords[:, :, 1] // width
 
-    preds = np.where(np.tile(scores, (1, 1, 2)) > 0.0, preds, -1)
-    return preds, scores
+    coords = torch.where(scores.repeat(1, 1, 2) > 0.0, coords, -1)
+    return coords, scores
 
 
 def post_dark_udp(coords, batch_heatmaps, kernel=3):
@@ -121,9 +121,11 @@ def post_dark_udp(coords, batch_heatmaps, kernel=3):
             Gaussian kernel size (K) for modulation.
 
     Returns:
-        `np.ndarray` of shape `(num_persons, num_keypoints, 2)` ):
+        `torch.Tensor` of shape `(num_persons, num_keypoints, 2)` ):
             Refined coordinates.
     """
+    if not isinstance(coords, np.ndarray):
+        coords = coords.cpu().numpy()
     if not isinstance(batch_heatmaps, np.ndarray):
         batch_heatmaps = batch_heatmaps.cpu().numpy()
     batch_size, num_keypoints, height, width = batch_heatmaps.shape
@@ -163,6 +165,7 @@ def post_dark_udp(coords, batch_heatmaps, kernel=3):
     hessian = hessian.reshape(num_coords, num_keypoints, 2, 2)
     hessian = np.linalg.inv(hessian + np.finfo(np.float32).eps * np.eye(2))
     coords -= np.einsum("ijmn,ijnk->ijmk", hessian, derivative).squeeze()
+    coords = torch.Tensor(coords)
     return coords
 
 
@@ -174,22 +177,22 @@ def transform_preds(coords, center, scale, output_size):
         num_keypoints: K
 
     Args:
-        coords (`np.ndarray[K, ndims]`):
+        coords (`torch.Tensor[K, ndims]`):
 
             * If ndims=2, corrds are predicted keypoint location.
             * If ndims=4, corrds are composed of (x, y, scores, tags)
             * If ndims=5, corrds are composed of (x, y, scores, tags,
               flipped_tags)
 
-        center (`np.ndarray[2,]`):
+        center (`torch.Tensor[2,]`):
             Center of the bounding box (x, y).
-        scale (`np.ndarray[2,]`):
+        scale (`torch.Tensor[2,]`):
             Scale of the bounding box wrt [width, height].
-        output_size (`np.ndarray[2,] or `List(2,)`):
+        output_size (`torch.Tensor[2,]):
             Size of the destination heatmaps in (height, width) format.
 
     Returns:
-        np.ndarray: Predicted coordinates in the images.
+        torch.Tensor: Predicted coordinates in the images.
     """
     if coords.shape[1] not in (2, 4, 5):
         raise ValueError("Coordinates need to have either 2, 4 or 5 dimensions.")
@@ -207,7 +210,7 @@ def transform_preds(coords, center, scale, output_size):
     scale_y = scale[1] / (output_size[0] - 1.0)
     scale_x = scale[0] / (output_size[1] - 1.0)
 
-    target_coords = np.ones_like(coords)
+    target_coords = torch.ones_like(coords)
     target_coords[:, 0] = coords[:, 0] * scale_x + center[0] - scale[0] * 0.5
     target_coords[:, 1] = coords[:, 1] * scale_y + center[1] - scale[1] * 0.5
 
@@ -529,9 +532,9 @@ class ViTPoseImageProcessor(BaseImageProcessor):
 
         batch_size, _, height, width = heatmaps.shape
 
-        preds, scores = _get_max_preds(heatmaps)
+        coords, scores = _get_max_preds(heatmaps)
 
-        preds = post_dark_udp(preds, heatmaps, kernel=kernel)
+        preds = post_dark_udp(coords, heatmaps, kernel=kernel)
 
         # Transform back to the image
         for i in range(batch_size):
@@ -577,9 +580,9 @@ class ViTPoseImageProcessor(BaseImageProcessor):
 
         poses = all_preds
 
-        bboxes_xyxy = coco_to_pascal_voc(boxes)
+        bboxes_xyxy = coco_to_pascal_voc(all_boxes)
 
-        pose_results: List[Dict[str, TensorType]] = []
+        pose_results: List[Dict[str, torch.Tensor]] = []
         for pose, bbox_xyxy in zip(poses, bboxes_xyxy):
             pose_result = {}
             pose_result["keypoints"] = pose
