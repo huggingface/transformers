@@ -198,14 +198,13 @@ class ViTPoseImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         # create random numpy tensors
         self.image_processor_tester.num_channels = 4
         image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
-
         # Test not batched input
         boxes = [[[0, 0, 1, 1], [0.5, 0.5, 0.5, 0.5]]]
         encoded_images = image_processor(
             image_inputs[0],
             boxes=boxes,
             return_tensors="pt",
-            input_data_format="channels_first",
+            input_data_format="channels_last",
             image_mean=0,
             image_std=1,
         ).pixel_values
@@ -218,7 +217,7 @@ class ViTPoseImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             image_inputs,
             boxes=boxes,
             return_tensors="pt",
-            input_data_format="channels_first",
+            input_data_format="channels_last",
             image_mean=0,
             image_std=1,
         ).pixel_values
