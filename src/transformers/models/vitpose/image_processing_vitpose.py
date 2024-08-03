@@ -45,7 +45,7 @@ if is_scipy_available():
 logger = logging.get_logger(__name__)
 
 
-def coco_to_pascal_voc(bboxes: np.ndarray) -> np.ndarray:
+def coco_to_pascal_voc(bboxes: torch.Tensor) -> torch.Tensor:
     """
     Converts bounding boxes from the COCO format to the Pascal VOC format.
 
@@ -53,11 +53,11 @@ def coco_to_pascal_voc(bboxes: np.ndarray) -> np.ndarray:
     to (top_left_x, top_left_y, bottom_right_x, bottom_right_y).
 
     Args:
-        bboxes (`ndarray` of shape `(batch_size, 4)):
+        bboxes (`torch.Tensor` of shape `(batch_size, 4)):
             Bounding boxes in COCO format.
 
     Returns:
-        `np.ndarray` of shape `(batch_size, 4) in Pascal VOC format.
+        `torch.Tensor` of shape `(batch_size, 4) in Pascal VOC format.
     """
     bbox_xyxy = bboxes.copy()
     bbox_xyxy[:, 2] = bbox_xyxy[:, 2] + bbox_xyxy[:, 0] - 1
@@ -546,12 +546,15 @@ class ViTPoseImageProcessor(BaseImageProcessor):
                 Bounding boxes.
             kernel_size (`int`, *optional*, defaults to 11):
                 Gaussian kernel size (K) for modulation.
+        Returns:
+            `List[Dict]`: A list of dictionaries, each dictionary containing the keypoints and boxes for an image
+            in the batch as predicted by the model.
         """
 
         # First compute centers and scales for each bounding box
         batch_size = len(outputs.heatmaps)
-        centers = np.zeros((batch_size, 2), dtype=np.float32)
-        scales = np.zeros((batch_size, 2), dtype=np.float32)
+        centers = torch.zeros((batch_size, 2), dtype=torch.float32)
+        scales = torch.zeros((batch_size, 2), dtype=torch.float32)
         for i in range(batch_size):
             width, height = self.size["width"], self.size["height"]
             center, scale = box_to_center_and_scale(boxes[i], image_width=width, image_height=height)
@@ -560,20 +563,19 @@ class ViTPoseImageProcessor(BaseImageProcessor):
 
         preds, scores = self.keypoints_from_heatmaps(outputs.heatmaps, centers, scales, kernel=kernel_size)
 
-        all_preds = np.zeros((batch_size, preds.shape[1], 3), dtype=np.float32)
-        all_boxes = np.zeros((batch_size, 6), dtype=np.float32)
+        all_preds = torch.zeros((batch_size, preds.shape[1], 3), dtype=torch.float32)
+        all_boxes = torch.zeros((batch_size, 6), dtype=torch.float32)
         all_preds[:, :, 0:2] = preds[:, :, 0:2]
         all_preds[:, :, 2:3] = scores
         all_boxes[:, 0:2] = centers[:, 0:2]
         all_boxes[:, 2:4] = scales[:, 0:2]
-        all_boxes[:, 4] = np.prod(scales * 200.0, axis=1)
+        all_boxes[:, 4] = torch.prod(scales * 200.0, axis=1)
 
         poses = all_preds
 
-        bboxes = np.array(boxes)
-        bboxes_xyxy = coco_to_pascal_voc(bboxes)
+        bboxes_xyxy = coco_to_pascal_voc(boxes)
 
-        pose_results = []
+        pose_results: List[Dict[str, TensorType]] = []
         for pose, bbox_xyxy in zip(poses, bboxes_xyxy):
             pose_result = {}
             pose_result["keypoints"] = pose
