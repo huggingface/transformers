@@ -1,4 +1,4 @@
-# Copyright (c) 2023, NVIDIA CORPORATION.  All rights reserved.
+# Copyright (c) 2024, NVIDIA CORPORATION.  All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -25,13 +25,7 @@ from nemo.collections.nlp.parts.nlp_overrides import NLPDDPStrategy
 from nemo.utils import logging
 from pytorch_lightning import Trainer
 
-from transformers import (
-    AutoTokenizer as HFAutoTokenizer,
-)
-from transformers import (
-    LlamaTokenizer,
-    PreTrainedTokenizerFast,
-)
+from transformers import LlamaTokenizer, PreTrainedTokenizerFast
 from transformers.convert_slow_tokenizer import LlamaConverter
 
 
@@ -71,7 +65,7 @@ def get_args():
         "--hf_input_path",
         type=str,
         default=None,
-        help="A HF model path, " "e.g. a folder containing https://huggingface.co/nvidia/nemotron-3-8b-base-4k-hf",
+        help="A HF model path, " "e.g. a folder containing https://huggingface.co/nvidia/Minitron-8B-Base",
     )
     parser.add_argument(
         "--hf_output_path",
@@ -96,7 +90,7 @@ def get_args():
     return args
 
 
-def convert_hf_config(nemo_config, tokenizer, vocab_size, dtype, hf_output_path, hf_url="nvidia/nemotron3-8b-base"):
+def convert_hf_config(nemo_config, tokenizer, vocab_size, dtype, hf_output_path, hf_url="nvidia/Minitron-8B-Base"):
     """
     Convert NeMo config to HF config
     """
@@ -304,6 +298,8 @@ def convert(input_nemo_file, output_hf_file, precision=None, cpu_only=False) -> 
 def extract_nemotron_tokenizer(nemo_file, model_config, output_hf_path, nemo_tokenizer):
     tokenizer_cfg = model_config.tokenizer
     if tokenizer_cfg.library == "sentencepiece":
+        # For sentencepiece tokenizer, we are wrapping with HF's LlamaTokenizer
+        # and convert it to a PreTrainedTokenizerFast
         tokenizer_fn = tokenizer_cfg.model[5:]
         output_tokenizer = f"{output_hf_path}/tokenizer.model"
         if nemo_file.endswith(".nemo"):
@@ -317,14 +313,11 @@ def extract_nemotron_tokenizer(nemo_file, model_config, output_hf_path, nemo_tok
         elif os.path.isdir(nemo_file):
             shutil.copy(f"{nemo_file}/{tokenizer_fn}", output_tokenizer)
         # We use LlamaTokenizer for sentencepiece based tokenizer
-        tokenizer = LlamaTokenizer.from_pretrained(output_hf_path)
+        tokenizer = LlamaTokenizer.from_pretrained(output_hf_path, legacy=False)
         # Convert the LlamaTokenizer to a PreTrainedTokenizerFast instance
         tokenizer = PreTrainedTokenizerFast(
             tokenizer_object=LlamaConverter(tokenizer).converted(), model_input_names=["input_ids", "token_type_ids"]
         )
-        tokenizer.save_pretrained(output_hf_path)
-        # Make sure not use legacy mode
-        tokenizer = HFAutoTokenizer.from_pretrained(output_hf_path, from_slow=False, legacy=False)
         tokenizer.save_pretrained(output_hf_path)
         logging.info(f"Setencepiece tokenizer has been saved to {output_tokenizer}")
     elif isinstance(nemo_tokenizer, AutoTokenizer):
@@ -337,7 +330,7 @@ def extract_nemotron_tokenizer(nemo_file, model_config, output_hf_path, nemo_tok
 if __name__ == "__main__":
     args = get_args()
     if not args.hf_output_path:
-        assert args.output_path is not None, "Need to provide either provide output_path or hf_output_path"
+        assert args.output_path is not None, "Need to provide either output_path or hf_output_path"
     else:
         args.output_path = f"{args.hf_output_path}/pytorch_model.bin"
         logging.info(f"weight will be saved to {args.output_path}")
