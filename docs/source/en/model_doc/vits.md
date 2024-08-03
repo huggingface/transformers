@@ -93,21 +93,8 @@ from transformers import VitsTokenizer
 tokenizer = VitsTokenizer.from_pretrained("facebook/mms-tts-eng")
 print(tokenizer.is_uroman)
 ```
-
-If required, you should apply the uroman package to your text inputs **prior** to passing them to the `VitsTokenizer`, 
-since currently the tokenizer does not support performing the pre-processing itself.  
-
-To do this, first clone the uroman repository to your local machine and set the bash variable `UROMAN` to the local path:
-
-```bash
-git clone https://github.com/isi-nlp/uroman.git
-cd uroman
-export UROMAN=$(pwd)
-```
-
-You can then pre-process the text input using the following code snippet. You can either rely on using the bash variable 
-`UROMAN` to point to the uroman repository, or you can pass the uroman directory as an argument to the `uromaize` function:
-
+If the is_uroman attribute is True, the tokenizer will automatically apply the uroman package to your text inputs. 
+You can use the tokenizer as usual without any additional preprocessing steps:
 ```python
 import torch
 from transformers import VitsTokenizer, VitsModel, set_seed
@@ -116,27 +103,8 @@ import subprocess
 
 tokenizer = VitsTokenizer.from_pretrained("facebook/mms-tts-kor")
 model = VitsModel.from_pretrained("facebook/mms-tts-kor")
-
-def uromanize(input_string, uroman_path):
-    """Convert non-Roman strings to Roman using the `uroman` perl package."""
-    script_path = os.path.join(uroman_path, "bin", "uroman.pl")
-
-    command = ["perl", script_path]
-
-    process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    # Execute the perl command
-    stdout, stderr = process.communicate(input=input_string.encode())
-
-    if process.returncode != 0:
-        raise ValueError(f"Error {process.returncode}: {stderr.decode()}")
-
-    # Return the output as a string and skip the new-line character at the end
-    return stdout.decode()[:-1]
-
 text = "이봐 무슨 일이야"
-uromaized_text = uromanize(text, uroman_path=os.environ["UROMAN"])
-
-inputs = tokenizer(text=uromaized_text, return_tensors="pt")
+inputs = tokenizer(text=text, return_tensors="pt")
 
 set_seed(555)  # make deterministic
 with torch.no_grad():
