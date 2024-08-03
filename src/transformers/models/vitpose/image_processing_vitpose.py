@@ -32,8 +32,12 @@ from ...image_utils import (
     to_numpy_array,
     valid_images,
 )
-from ...utils import TensorType, is_scipy_available, is_vision_available, logging
+from ...utils import TensorType, is_scipy_available, is_torch_available, is_vision_available, logging
 
+
+if is_torch_available():
+    import torch
+    from torch import nn
 
 if is_vision_available():
     import PIL
