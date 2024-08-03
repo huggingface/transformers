@@ -74,7 +74,7 @@ class DABDETRConfig(PretrainedConfig):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"silu"` and `"gelu_new"` are supported.
         d_model (`int`, *optional*, defaults to 256):
-            Dimension of the layers.
+            This parameter is a general dimension parameter, defining dimensions for components such as the encoder layer and projection parameters in the decoder layer, among others.
         dropout (`float`, *optional*, defaults to 0.1):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -115,7 +115,7 @@ class DABDETRConfig(PretrainedConfig):
             Relative weight of the generalized IoU loss in the object detection loss.
         focal_alpha (`float`, *optional*, defaults to 0.25):
             Alpha parameter in the focal loss.
-        do_use_self_attn_decoder (`bool`, *optional*, defaults to `False`):
+        do_use_self_attn_decoder (`bool`, *optional*, defaults to `True`):
             Whether to use self-attention module in decoder layers.
         decoder_modulate_hw_attn (`bool`, *optional*, defaults to `True`):
             Whether to modulate the positional attention map using the box width and height information.
@@ -209,7 +209,7 @@ class DABDETRConfig(PretrainedConfig):
         bbox_loss_coefficient=5,
         giou_loss_coefficient=2,
         focal_alpha=0.25,
-        do_use_self_attn_decoder=False,
+        do_use_self_attn_decoder=True,
         decoder_modulate_hw_attn=True,
         temperature_height=20,
         temperature_width=20,
