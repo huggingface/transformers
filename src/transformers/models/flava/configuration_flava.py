@@ -389,16 +389,16 @@ class FlavaImageCodebookConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        num_groups (`int`, defaults to 4):
+        num_groups (`int`, *optional*, defaults to 4):
             Number of groups to be created. This parameter as of now doesn't affect the model and is used for some
             internal calculation and estimations.
-        input_channels (`int`, defaults to 3):
+        input_channels (`int`, *optional*, defaults to 3):
             Number of channels in the image to be passed.
-        num_blocks_per_group (`int`, defaults to 2):
+        num_blocks_per_group (`int`, *optional*, defaults to 2):
             Number of conv-based blocks per group.
-        hidden_size (`int`, defaults to 256):
+        hidden_size (`int`, *optional*, defaults to 256):
             Size of hidden dim for the blocks.
-        vocab_size (`int`, defaults to 8192):
+        vocab_size (`int`, *optional*, defaults to 8192):
             Size of the output vocabulary for the codebook.
         freeze (`bool`, defaults to `True`):
             Whether to freeze the weights of the model.

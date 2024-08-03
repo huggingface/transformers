@@ -2292,7 +2292,7 @@ def _max_by_axis(the_list):
     return maxes
 
 
-class NestedTensor(object):
+class NestedTensor:
     def __init__(self, tensors, mask: Optional[Tensor]):
         self.tensors = tensors
         self.mask = mask

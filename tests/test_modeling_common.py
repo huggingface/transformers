@@ -22,6 +22,7 @@ import os.path
 import random
 import re
 import tempfile
+import time
 import warnings
 from collections import defaultdict
 from typing import Dict, List, Tuple
@@ -37,6 +38,7 @@ from transformers import (
     AutoModelForCausalLM,
     AutoModelForSequenceClassification,
     AutoTokenizer,
+    GenerationConfig,
     PretrainedConfig,
     PreTrainedModel,
     is_torch_available,
@@ -1755,6 +1757,8 @@ class ModelTesterMixin:
             config = copy.deepcopy(original_config)
             model = model_class(config)
             model.to(torch_device)
+            model_embed_pre_resize = model.get_input_embeddings()
+            type_model_embed_pre_resize = type(model_embed_pre_resize)
 
             if self.model_tester.is_training is False:
                 model.eval()
@@ -1774,6 +1778,9 @@ class ModelTesterMixin:
             self.assertEqual(new_model_vocab_size, model_vocab_size + 10)
             # Check that it actually resizes the embeddings matrix
             self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] + 10)
+            # Check to make sure the type of embeddings returned post resizing is same as type of input
+            type_model_embed_post_resize = type(model_embed)
+            self.assertEqual(type_model_embed_pre_resize, type_model_embed_post_resize)
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
             model(**self._prepare_for_class(inputs_dict, model_class))
 
@@ -4265,6 +4272,18 @@ class ModelTesterMixin:
                     use_cache=True,
                 )
 
+                # Generate with one batch only to test generation when attention mask will be None
+                # when real inputs are used, because there is no padding. See issue #32237 for more
+                dummy_input = dummy_input[:1, ...]
+                dummy_attention_mask = torch.ones_like(dummy_attention_mask[:1, ...])
+                _ = model.generate(
+                    dummy_input,
+                    attention_mask=dummy_attention_mask,
+                    max_new_tokens=max_new_tokens,
+                    do_sample=False,
+                    use_cache=True,
+                )
+
     @require_flash_attn
     @require_torch_gpu
     @require_bitsandbytes
@@ -4321,6 +4340,79 @@ class ModelTesterMixin:
                     _ = model(dummy_input)
                     # with attention mask
                     _ = model(dummy_input, attention_mask=dummy_attention_mask)
+
+    @require_flash_attn
+    @require_torch_gpu
+    @mark.flash_attn_test
+    @slow
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
+        if not self.has_attentions:
+            self.skipTest(reason="Model architecture does not support attentions")
+
+        max_new_tokens = 30
+
+        for model_class in self.all_generative_model_classes:
+            if not model_class._supports_flash_attn_2:
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            if 0 not in inputs_dict.get("attention_mask", []) or "attention_mask" not in inputs_dict:
+                self.skipTest("Model dummy inputs should contain padding in their attention mask")
+
+            dummy_input = inputs_dict[model_class.main_input_name]
+            if dummy_input.dtype in [torch.float32, torch.bfloat16]:
+                dummy_input = dummy_input.to(torch.float16)
+
+            # make sure that all models have enough positions for generation
+            if hasattr(config, "max_position_embeddings"):
+                config.max_position_embeddings = max_new_tokens + dummy_input.shape[1] + 1
+
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                # ensure left padding, to adapt for some models
+                if 0 in inputs_dict["attention_mask"][:, -1]:
+                    inputs_dict["attention_mask"] = inputs_dict["attention_mask"].flip(1)
+                dummy_attention_mask = inputs_dict["attention_mask"]
+                inputs_dict["input_ids"][~dummy_attention_mask.bool()] = config.pad_token_id
+
+                model = (
+                    model_class.from_pretrained(
+                        tmpdirname,
+                        torch_dtype=torch.float16,
+                        attn_implementation="flash_attention_2",
+                        low_cpu_mem_usage=True,
+                    )
+                    .to(torch_device)
+                    .eval()
+                )
+
+                # flatten
+                padfree_inputs_dict = {
+                    k: v[dummy_attention_mask.bool()].unsqueeze(0)
+                    for k, v in inputs_dict.items()
+                    if not k == "attention_mask"
+                }
+                # add position_ids
+                padfree_inputs_dict["position_ids"] = (
+                    torch.cat([torch.arange(length) for length in dummy_attention_mask.sum(1).tolist()])
+                    .long()
+                    .unsqueeze(0)
+                    .to(torch_device)
+                )
+
+                res_padded = model(**inputs_dict)
+                res_padfree = model(**padfree_inputs_dict)
+
+                logits_padded = res_padded.logits[inputs_dict["attention_mask"].bool()]
+                logits_padfree = res_padfree.logits[0]
+
+                torch.testing.assert_close(logits_padded.argmax(-1), logits_padfree.argmax(-1), atol=0, rtol=0)
+                # acceptable numerical instability
+                tol = torch.finfo(torch.float16).eps
+                torch.testing.assert_close(logits_padded, logits_padfree, atol=tol, rtol=tol)
 
     @is_pt_tf_cross_test
     def test_tf_from_pt_safetensors(self):
@@ -4516,7 +4608,6 @@ class ModelTesterMixin:
         model = AutoModelForCausalLM.from_pretrained(ckpt, torch_dtype=torch.float16).to(torch_device)
 
         model.generation_config.max_new_tokens = 4
-        model.generation_config.max_new_tokens = 4
 
         model.generation_config.cache_implementation = "static"
         model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
@@ -4526,6 +4617,66 @@ class ModelTesterMixin:
 
         for i in range(n_iter):
             _ = model.generate(**input_ids, do_sample=False)
+
+    @slow
+    @require_torch_gpu  # Testing cuda graphs.
+    @require_read_token
+    def test_compile_cuda_graph_time(self):
+        if version.parse(torch.__version__) < version.parse("2.3"):
+            self.skipTest(reason="This test requires torch >= 2.3 to run.")
+
+        # TODO felix: All models supporting `StaticCache` or `torch.compile` should be tested.
+        # At the moment, only llama, gemma and gemma2 are tested here!
+        if not hasattr(self, "_torch_compile_test_ckpt"):
+            self.skipTest(f"{self.__class__.__name__} doesn't have the attribute `_torch_compile_test_ckpt`.")
+        ckpt = self._torch_compile_test_ckpt
+
+        os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
+        tokenizer = AutoTokenizer.from_pretrained(ckpt)
+        model = AutoModelForCausalLM.from_pretrained(ckpt, torch_dtype=torch.float16).to(torch_device)
+
+        cache_implementation = "static"
+        if model.config.model_type == "gemma2":
+            cache_implementation = "hybrid"
+
+        new_tokens = 50
+        gen_config = GenerationConfig(
+            max_new_tokens=new_tokens,
+            min_new_tokens=new_tokens,
+            use_cache=True,
+            pad_token_id=tokenizer.pad_token_id,
+            num_beams=1,
+            do_sample=False,
+            eos_token_id=None,  # This is required for min_new_tokens to actually have an effect.
+        )
+        model.generation_config.eos_token_id = None  # greedy_search falls back on this eos_token_id that we need to set to None as well for min_new_tokens to have an effect.
+
+        model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
+
+        inp = tokenizer("Why cats are cute?", return_tensors="pt").to(torch_device)
+
+        # First run: the first run warms up each graph, which does things like CuBlas or Triton benchmarking
+        start = time.perf_counter()
+        _ = model.generate(**inp, generation_config=gen_config, cache_implementation=cache_implementation)
+        end = time.perf_counter()
+        graph_warmup_time = end - start
+
+        # Second run: CUDA Graph recording, and replays it
+        start = time.perf_counter()
+        _ = model.generate(**inp, generation_config=gen_config, cache_implementation=cache_implementation)
+        end = time.perf_counter()
+        record_time = end - start
+
+        # Finally: we hit the optimized, CUDA Graph replay path
+        start = time.perf_counter()
+        _ = model.generate(**inp, generation_config=gen_config, cache_implementation=cache_implementation)
+        end = time.perf_counter()
+        opt_time = end - start
+
+        # For the recording step, we expect only two cuda graphs and this step should be much faster than the first.
+        self.assertTrue(record_time < 0.15 * graph_warmup_time)
+        self.assertTrue(opt_time < record_time)
 
 
 global_rng = random.Random()

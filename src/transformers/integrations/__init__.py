@@ -45,6 +45,7 @@ _import_structure = {
         "unset_hf_deepspeed_config",
     ],
     "eetq": ["replace_with_eetq_linear"],
+    "fbgemm_fp8": ["FbgemmFp8Linear", "replace_with_fbgemm_fp8_linear"],
     "ggml": [
         "GGUF_CONFIG_MAPPING",
         "GGUF_TENSOR_MAPPING",
@@ -126,6 +127,7 @@ if TYPE_CHECKING:
         unset_hf_deepspeed_config,
     )
     from .eetq import replace_with_eetq_linear
+    from .fbgemm_fp8 import FbgemmFp8Linear, replace_with_fbgemm_fp8_linear
     from .ggml import (
         GGUF_CONFIG_MAPPING,
         GGUF_TENSOR_MAPPING,
