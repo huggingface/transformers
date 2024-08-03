@@ -24,8 +24,8 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import (
-    MoeModelOutputWithPast,
     MoeCausalLMOutputWithPast,
+    MoeModelOutputWithPast,
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
@@ -125,7 +125,6 @@ def load_balancing_loss_func(
     return overall_loss * num_experts
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->Olmoe
 class OlmoeRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-5):
         """
@@ -273,7 +272,6 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
 class OlmoeAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaAttention.__init__ with Llama->Olmoe
     def __init__(self, config: OlmoeConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.config = config
@@ -305,7 +303,7 @@ class OlmoeAttention(nn.Module):
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
         self.o_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=config.attention_bias)
-        self.q_norm = OlmoeRMSNorm(self.hidden_size) 
+        self.q_norm = OlmoeRMSNorm(self.hidden_size)
         self.k_norm = OlmoeRMSNorm((self.hidden_size // self.num_heads) * self.num_key_value_heads)
         self._init_rope()
 
@@ -437,7 +435,6 @@ class OlmoeFlashAttention2(OlmoeAttention):
         query_states = self.q_norm(self.q_proj(hidden_states))
         key_states = self.k_norm(self.k_proj(hidden_states))
         value_states = self.v_proj(hidden_states)
-        #import pdb; pdb.set_trace()
         if self.config.clip_qkv is not None:
             query_states.clamp_(min=-self.config.clip_qkv, max=self.config.clip_qkv)
             key_states.clamp_(min=-self.config.clip_qkv, max=self.config.clip_qkv)
@@ -622,7 +619,6 @@ class OlmoeSparseMoeBlock(nn.Module):
         self.experts = nn.ModuleList([OlmoeMLP(config) for _ in range(self.num_experts)])
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        #import pdb; pdb.set_trace()
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states = hidden_states.view(-1, hidden_dim)
         # router_logits: (batch * sequence_length, n_experts)
@@ -672,7 +668,6 @@ class OlmoeDecoderLayer(nn.Module):
         self.input_layernorm = OlmoeRMSNorm(config.hidden_size)
         self.post_attention_layernorm = OlmoeRMSNorm(config.hidden_size)
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaDecoderLayer.forward
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -709,8 +704,6 @@ class OlmoeDecoderLayer(nn.Module):
         """
         residual = hidden_states
 
-        #import pdb; pdb.set_trace()
-
         hidden_states = self.input_layernorm(hidden_states)
 
         # Self Attention
@@ -729,7 +722,6 @@ class OlmoeDecoderLayer(nn.Module):
         # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
-        #import pdb; pdb.set_trace()
         hidden_states, router_logits = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
 
@@ -904,7 +896,6 @@ class OlmoeModel(OlmoePreTrainedModel):
         self.embed_tokens = value
 
     @add_start_docstrings_to_model_forward(OLMOE_INPUTS_DOCSTRING)
-    # Copied from transformers.models.llama.modeling_llama.LlamaModel.forward
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1114,7 +1105,6 @@ class OlmoeModel(OlmoePreTrainedModel):
         return causal_mask
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM with LLAMA->OLMOE,Llama->Olmoe
 class OlmoeForCausalLM(OlmoePreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 

@@ -59,7 +59,6 @@ class OlmoeModelTester:
         hidden_size=32,
         num_hidden_layers=2,
         num_attention_heads=4,
-        intermediate_size=37,
         hidden_act="silu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
@@ -71,6 +70,12 @@ class OlmoeModelTester:
         num_choices=4,
         pad_token_id=0,
         scope=None,
+        num_experts_per_tok=2,
+        num_experts=8,
+        norm_topk_prob=False,
+        output_router_logits=False,
+        router_aux_loss_coef=0.001,
+        intermediate_size=12,                        
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -95,6 +100,11 @@ class OlmoeModelTester:
         self.num_choices = num_choices
         self.pad_token_id = pad_token_id
         self.scope = scope
+        self.num_experts_per_tok = num_experts_per_tok
+        self.num_experts = num_experts
+        self.norm_topk_prob = norm_topk_prob
+        self.output_router_logits = output_router_logits
+        self.router_aux_loss_coef = router_aux_loss_coef
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -134,6 +144,11 @@ class OlmoeModelTester:
             is_decoder=False,
             initializer_range=self.initializer_range,
             pad_token_id=self.pad_token_id,
+            num_experts_per_tok=self.num_experts_per_tok,
+            num_experts=self.num_experts,
+            norm_topk_prob=self.norm_topk_prob,
+            output_router_logits=self.output_router_logits,
+            router_aux_loss_coef=self.router_aux_loss_coef,
         )
 
     def create_and_check_model(

@@ -32,13 +32,13 @@ class OlmoeConfig(PretrainedConfig):
         vocab_size (`int`, *optional*, defaults to 50304):
             Vocabulary size of the OLMoE model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`OlmoeModel`]
-        hidden_size (`int`, *optional*, defaults to 4096):
+        hidden_size (`int`, *optional*, defaults to 2048):
             Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 11008):
+        intermediate_size (`int`, *optional*, defaults to 2048):
             Dimension of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 32):
+        num_hidden_layers (`int`, *optional*, defaults to 16):
             Number of hidden layers in the Transformer decoder.
-        num_attention_heads (`int`, *optional*, defaults to 32):
+        num_attention_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the Transformer decoder.
         num_key_value_heads (`int`, *optional*):
             This is the number of key_value heads that should be used to implement Grouped Query Attention. If
@@ -50,7 +50,7 @@ class OlmoeConfig(PretrainedConfig):
             `num_attention_heads`.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
-        max_position_embeddings (`int`, *optional*, defaults to 2048):
+        max_position_embeddings (`int`, *optional*, defaults to 4096):
             The maximum sequence length that this model might ever be used with.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
@@ -82,14 +82,25 @@ class OlmoeConfig(PretrainedConfig):
         clip_qkv (`float`, *optional*):
             If not `None`, elements of query, key and value attention states are clipped so that their
             absolute value does not exceed this value.
+        num_experts_per_tok (`int`, *optional*, defaults to 8):
+            Number of selected experts.
+        num_experts (`int`, *optional*, defaults to 64):
+            Number of routed experts.
+        output_router_logits (`bool`, *optional*, defaults to `False`):
+            Whether or not the router logits should be returned by the model. Enabeling this will also
+            allow the model to output the auxiliary loss, including load balancing loss and router z-loss.
+        router_aux_loss_coef (`float`, *optional*, defaults to 0.001):
+            The aux loss factor for the total loss.
+        norm_topk_prob (`bool`, *optional*, defaults to `False`):
+            Whether to normalize the topk probabilities.
 
     ```python
     >>> from transformers import OlmoeModel, OlmoeConfig
 
-    >>> # Initializing a OLMoE 7B style configuration
+    >>> # Initializing a OLMoE 7B A1B style configuration
     >>> configuration = OlmoeConfig()
 
-    >>> # Initializing a model from the OLMoE 7B style configuration
+    >>> # Initializing a model from the OLMoE 7B A1B style configuration
     >>> model = OlmoeModel(configuration)
 
     >>> # Accessing the model configuration
