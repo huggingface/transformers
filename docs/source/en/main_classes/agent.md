@@ -72,6 +72,10 @@ We provide two types of agents, based on the main [`Agent`] class:
 
 [[autodoc]] launch_gradio_demo
 
+### stream_to_gradio
+
+[[autodoc]] stream_to_gradio
+
 ### ToolCollection
 
 [[autodoc]] ToolCollection

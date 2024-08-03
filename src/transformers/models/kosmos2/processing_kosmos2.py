@@ -133,7 +133,7 @@ class Kosmos2Processor(ProcessorMixin):
         Args:
             bboxes (`Union[List[Tuple[int]], List[Tuple[float]], List[List[Tuple[int]]], List[List[Tuple[float]]]]`, *optional*):
                 The bounding bboxes associated to `texts`.
-            num_image_tokens (`int`, defaults to 64):
+            num_image_tokens (`int`, *optional* defaults to 64):
                 The number of (consecutive) places that are used to mark the placeholders to store image information.
                 This should be the same as `latent_query_num` in the instance of `Kosmos2Config` you are using.
             first_image_token_id (`int`, *optional*):

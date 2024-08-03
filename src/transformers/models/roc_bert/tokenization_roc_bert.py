@@ -889,7 +889,7 @@ class RoCBertTokenizer(PreTrainedTokenizer):
 
 
 # Copied from  transformers.models.bert.tokenization_bert.BasicTokenizer with BasicTokenizer->RoCBertBasicTokenizer
-class RoCBertBasicTokenizer(object):
+class RoCBertBasicTokenizer:
     """
     Constructs a RoCBertBasicTokenizer that will run basic tokenization (punctuation splitting, lower casing, etc.).
 
@@ -1051,7 +1051,7 @@ class RoCBertBasicTokenizer(object):
 
 
 # Copied from  transformers.models.bert.tokenization_bert.WordpieceTokenizer with WordpieceTokenizer->RoCBertWordpieceTokenizer
-class RoCBertWordpieceTokenizer(object):
+class RoCBertWordpieceTokenizer:
     """Runs WordPiece tokenization."""
 
     def __init__(self, vocab, unk_token, max_input_chars_per_word=100):
