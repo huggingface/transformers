@@ -562,8 +562,8 @@ class ViTPoseImageProcessor(BaseImageProcessor):
         for i in range(batch_size):
             width, height = self.size["width"], self.size["height"]
             center, scale = box_to_center_and_scale(boxes[i], image_width=width, image_height=height)
-            centers[i, :] = center
-            scales[i, :] = scale
+            centers[i, :] = torch.Tensor(center)
+            scales[i, :] = torch.Tensor(scale)
 
         preds, scores = self.keypoints_from_heatmaps(outputs.heatmaps, centers, scales, kernel=kernel_size)
 
