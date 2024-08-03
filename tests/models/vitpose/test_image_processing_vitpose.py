@@ -24,13 +24,14 @@ from transformers.utils import is_torch_available, is_vision_available
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
 
+if is_torch_available():
+    import torch
+    
+
 if is_vision_available():
     from PIL import Image
 
     from transformers import ViTPoseImageProcessor
-
-if is_torch_available():
-    import torch
 
 
 class ViTPoseImageProcessingTester(unittest.TestCase):
