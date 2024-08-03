@@ -971,7 +971,7 @@ class AdamMini(Optimizer):
             Number of attention heads. Can be left unspecified if training non-transformer models.
         n_kv_head (`int`, *optional*, defaults to `None`):
             Number of heads for Key and Value. Or equivalently, number of query groups in Group Query
-            Attention. Also known as "n_query_groups".  If not specified, it will be equal to n_head.
+            Attention. Also known as "n_query_groups". If not specified, it will be equal to n_head.
             Can be left unspecified if training non-transformer models.
     """
 
@@ -1068,7 +1068,7 @@ class AdamMini(Optimizer):
 
                     dic["parameter_per_head"] = self.n_feature * self.n_feature // self.n_head
                     if (self.n_feature * self.n_feature % self.n_head) != 0:
-                        raise ValueError("'n_feature * n_feature' is not a multiple of  n_head")
+                        raise ValueError("'n_feature * n_feature' is not a multiple of n_head")
 
                 optim_groups.append(dic)
 
@@ -1079,19 +1079,19 @@ class AdamMini(Optimizer):
             )
         if count_output == 0:
             warnings.warn(
-                "No output layer found.  If you are training Transformers (without weight-tying), please check the name"
+                "No output layer found. If you are training Transformers (without weight-tying), please check the name"
                 " of your output layer and manually add them to 'self.embd_blocks' of Adam-mini. Please ignore this"
                 " warning if you are using weight-tying."
             )
         if count_q == 0:
             warnings.warn(
-                "No Query found.  If you are training Transformers, please check the name of your Query in attention"
+                "No Query found. If you are training Transformers, please check the name of your Query in attention"
                 " blocks and manually add them to 'self.qk_blocks' of Adam-mini"
             )
 
         if count_k == 0:
             warnings.warn(
-                "No Key found.  If you are training Transformers, please check the name of your Key in attention blocks"
+                "No Key found. If you are training Transformers, please check the name of your Key in attention blocks"
                 " and manually add them to 'self.qk_blocks' of Adam-mini"
             )
 
@@ -1103,7 +1103,7 @@ class AdamMini(Optimizer):
 
         # embd_blocks, including embd and output layers. Use normal adamW updates for these blocks
         self.embd_blocks = {"embed", "embd", "wte", "lm_head.weight", "output.weight"}
-        # Query and Keys, will  assign lrs by heads
+        # Query and Keys, will assign lrs by heads
         self.qk_blocks = {"k_proj.weight", "q_proj.weight", "wq.weight", "wk.weight"}
 
         defaults = {"lr": lr, "betas": betas, "eps": eps, "weight_decay": weight_decay}
@@ -1124,8 +1124,8 @@ class AdamMini(Optimizer):
             loss = closure()
 
         for group in self.param_groups:
-            beta1 = group["beta1"]
-            beta2 = group["beta2"]
+            beta1 = group["betas"][0]
+            beta2 = group["betas"][1]
             lr = group["lr"]
             name = group["name"]
             eps = group["eps"]
