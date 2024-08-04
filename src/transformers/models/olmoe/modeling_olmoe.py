@@ -48,6 +48,7 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "OlmoeConfig"
 
+
 # Copied from transformers.models.mixtral.modeling_mixtral.load_balancing_loss_func
 def load_balancing_loss_func(
     gate_logits: torch.Tensor, num_experts: torch.Tensor = None, top_k=2, attention_mask: Optional[torch.Tensor] = None
@@ -140,6 +141,7 @@ class OlmoeRMSNorm(nn.Module):
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
         return self.weight * hidden_states.to(input_dtype)
+
 
 ALL_LAYERNORM_LAYERS.append(OlmoeRMSNorm)
 

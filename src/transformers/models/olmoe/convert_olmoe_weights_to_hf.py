@@ -58,6 +58,7 @@ print(tokenizer.decode(out[0][0][0]))
 o = model(torch.tensor([[0, 1]]).cuda())
 ```
 """
+
 import argparse
 import gc
 import json
@@ -137,15 +138,23 @@ def write_model(model_path, input_base_path, tokenizer_path=None, safe_serializa
             f"model.layers.{layer_i}.self_attn.k_norm.weight": loaded[f"transformer.blocks.{layer_i}.k_norm.weight"],
             f"model.layers.{layer_i}.mlp.gate.weight": loaded[f"transformer.blocks.{layer_i}.ffn.router.layer.weight"],
             f"model.layers.{layer_i}.input_layernorm.weight": loaded[f"transformer.blocks.{layer_i}.attn_norm.weight"],
-            f"model.layers.{layer_i}.post_attention_layernorm.weight": loaded[f"transformer.blocks.{layer_i}.ff_norm.weight"],
+            f"model.layers.{layer_i}.post_attention_layernorm.weight": loaded[
+                f"transformer.blocks.{layer_i}.ff_norm.weight"
+            ],
         }
 
         num_experts = loaded[f"transformer.blocks.{layer_i}.ffn.router.layer.weight"].shape[0]
         dim_per_expert = loaded[f"transformer.blocks.{layer_i}.ffn.experts.mlp.w1"].shape[0] // num_experts
         for expert_i in range(num_experts):
-            state_dict[f"model.layers.{layer_i}.mlp.experts.{expert_i}.gate_proj.weight"] = loaded[f"transformer.blocks.{layer_i}.ffn.experts.mlp.w1"][dim_per_expert*expert_i:dim_per_expert*(expert_i+1), :]
-            state_dict[f"model.layers.{layer_i}.mlp.experts.{expert_i}.up_proj.weight"] = loaded[f"transformer.blocks.{layer_i}.ffn.experts.mlp.v1"][dim_per_expert*expert_i:dim_per_expert*(expert_i+1), :]
-            state_dict[f"model.layers.{layer_i}.mlp.experts.{expert_i}.down_proj.weight"] = loaded[f"transformer.blocks.{layer_i}.ffn.experts.mlp.w2"][dim_per_expert*expert_i:dim_per_expert*(expert_i+1), :].T.contiguous()
+            state_dict[f"model.layers.{layer_i}.mlp.experts.{expert_i}.gate_proj.weight"] = loaded[
+                f"transformer.blocks.{layer_i}.ffn.experts.mlp.w1"
+            ][dim_per_expert * expert_i : dim_per_expert * (expert_i + 1), :]
+            state_dict[f"model.layers.{layer_i}.mlp.experts.{expert_i}.up_proj.weight"] = loaded[
+                f"transformer.blocks.{layer_i}.ffn.experts.mlp.v1"
+            ][dim_per_expert * expert_i : dim_per_expert * (expert_i + 1), :]
+            state_dict[f"model.layers.{layer_i}.mlp.experts.{expert_i}.down_proj.weight"] = loaded[
+                f"transformer.blocks.{layer_i}.ffn.experts.mlp.w2"
+            ][dim_per_expert * expert_i : dim_per_expert * (expert_i + 1), :].T.contiguous()
 
         state_dict[f"model.layers.{layer_i}.self_attn.rotary_emb.inv_freq"] = inv_freq
 
@@ -255,7 +264,9 @@ def main():
         dest="fix_eos_token_id",
         help="If set, does not change eos token id from 0 to 50279 if it is 0. Changing 0 to 50279 is a bug fix, so use this option with care.",
     )
-    parser.add_argument("--safe_serialization", type=bool, default=True, help="Whether or not to save using `safetensors`.")
+    parser.add_argument(
+        "--safe_serialization", type=bool, default=True, help="Whether or not to save using `safetensors`."
+    )
     args = parser.parse_args()
     write_model(
         model_path=args.output_dir,
