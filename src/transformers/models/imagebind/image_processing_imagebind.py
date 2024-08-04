@@ -106,14 +106,14 @@ def make_batched_videos(videos) -> List[VideoInput]:
 
 # Copy from models.imagebind.feature_extraction_imagebind.uniform_chunk_sampling
 def uniform_chunk_sampling(
-    total_duration: float, chunk_duration: float, num_chunks: int
+    total_duration: float, chunk_duration: int, num_chunks: int
 ) -> List[Tuple[Fraction, Fraction]]:
     """
     Uniformly sample `num_chunks` chunks of duration `chunk_duration` from an audio/video of total duration `total_duration`.
 
     Args:
         total_duration (float): Total duration of the audio/video.
-        chunk_duration (float): Duration of each chunk(clip duration).
+        chunk_duration (int): Duration of each chunk(clip duration).
         num_chunks (int): Number of chunks to sample(number of clips per video).
 
     Returns:
@@ -359,7 +359,7 @@ class ImageBindImageProcessor(BaseImageProcessor):
             Whether to convert the image to RGB.
         do_chunk (`bool`, *optional*, defaults to `False`):
             Whether to chunk the video into multiple clips.
-        chunk_duration (`float`, *optional*, defaults to 2.0):
+        chunk_duration (`int`, *optional*, defaults to 2):
             Duration of each chunk in seconds(clip duration).
         num_chunks (`int`, *optional*, defaults to 5):
             Number of chunks to sample(number of clips per video).
@@ -385,7 +385,7 @@ class ImageBindImageProcessor(BaseImageProcessor):
         image_std: Optional[Union[float, List[float]]] = None,
         do_convert_rgb: bool = True,
         do_chunk: bool = False,
-        chunk_duration: float = 2.0,
+        chunk_duration: int = 2,
         num_chunks: int = 5,
         num_frames_per_chunk: int = 2,
         fps: int = 30,
@@ -494,7 +494,7 @@ class ImageBindImageProcessor(BaseImageProcessor):
         )
 
     def chunk(
-        self, video: VideoInput, fps: int, chunk_duration: float, num_chunks: int, num_frames_per_chunk: int
+        self, video: VideoInput, fps: int, chunk_duration: int, num_chunks: int, num_frames_per_chunk: int
     ) -> List[VideoInput]:
         """
         Uniformly sample `num_chunks` chunks of duration `chunk_duration` from a video.
@@ -504,7 +504,7 @@ class ImageBindImageProcessor(BaseImageProcessor):
                 Video to chunk.
             fps (`int`):
                 Frame rate of the video
-            chunk_duration (`float`):
+            chunk_duration (`int`):
                 Duration of each chunk(clip duration).
             num_chunks (`int`):
                 Number of chunks to sample(number of clips per video).
@@ -522,7 +522,10 @@ class ImageBindImageProcessor(BaseImageProcessor):
 
         all_clips = []
         for clip_timepoints in all_clips_timepoints:
-            video_clip = video[int(clip_timepoints[0] * fps) : int(clip_timepoints[1] * fps)]
+            # Read the clip, get frames
+            video_clip = video.get_clip(clip_timepoints[0], clip_timepoints[1])
+            if video_clip is None:
+                raise ValueError("No clip found")
             video_clip = uniform_temporal_subsample(video_clip, num_samples=num_frames_per_chunk)
             all_clips.append(video_clip)
 
@@ -621,7 +624,7 @@ class ImageBindImageProcessor(BaseImageProcessor):
         image_std: Optional[Union[float, List[float]]] = None,
         do_convert_rgb: bool = None,
         do_chunk: bool = None,
-        chunk_duration: float = None,
+        chunk_duration: int = None,
         num_chunks: int = None,
         num_frames_per_chunk: int = None,
         fps: int = None,
@@ -669,7 +672,7 @@ class ImageBindImageProcessor(BaseImageProcessor):
                 Whether to convert the image to RGB.
             do_chunk (`bool`, *optional*, defaults to `self.do_chunk`):
                 Whether to chunk the video into multiple clips.
-            chunk_duration (`float`, *optional*, defaults to `self.chunk_duration`):
+            chunk_duration (`int`, *optional*, defaults to `self.chunk_duration`):
                 Duration of each chunk in seconds(clip duration).
             num_chunks (`int`, *optional*, defaults to `self.num_chunks`):
                 Number of chunks to sample(number of clips per video).
