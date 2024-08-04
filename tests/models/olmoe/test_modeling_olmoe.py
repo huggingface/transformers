@@ -75,7 +75,7 @@ class OlmoeModelTester:
         norm_topk_prob=False,
         output_router_logits=False,
         router_aux_loss_coef=0.001,
-        intermediate_size=12,                        
+        intermediate_size=12,
     ):
         self.parent = parent
         self.batch_size = batch_size
