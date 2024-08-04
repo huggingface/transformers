@@ -356,11 +356,7 @@ class LlamaAttention(nn.Module):
         self.config = config
         self.layer_idx = layer_idx
         if layer_idx is None:
-            logger.warning_once(
-                f"Instantiating {self.__class__.__name__} without passing a `layer_idx` is not recommended and will "
-                "lead to errors during the forward call if caching is used. Please make sure to provide a `layer_idx` "
-                "when creating this class."
-            )
+            raise AssertionError('layer idx None')
 
         self.attention_dropout = config.attention_dropout
         self.hidden_size = config.hidden_size
@@ -386,6 +382,13 @@ class LlamaAttention(nn.Module):
         # TODO (joao): remove in v4.45 (RoPE is computed in the model, not in the decoder layers)
         self.rotary_emb = LlamaRotaryEmbedding(config=self.config)
 
+
+    def log(self, tname, t):
+        if self.layer_idx > 0:
+            return
+        print_debug(f'L0.{tname}',t)
+
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -401,6 +404,7 @@ class LlamaAttention(nn.Module):
         bsz, q_len, _ = hidden_states.size()
 
         if self.config.pretraining_tp > 1:
+            raise AssertionError('')
             key_value_slicing = (self.num_key_value_heads * self.head_dim) // self.config.pretraining_tp
             query_slices = self.q_proj.weight.split(
                 (self.num_heads * self.head_dim) // self.config.pretraining_tp, dim=0
@@ -423,8 +427,11 @@ class LlamaAttention(nn.Module):
             value_states = self.v_proj(hidden_states)
 
         query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        self.log('q_BLHK', query_states.transpose(1,2))
+        self.log('k_BLGK', key_states.transpose(1, 2))
 
         if position_embeddings is None:
             logger.warning_once(
@@ -435,8 +442,12 @@ class LlamaAttention(nn.Module):
             )
             cos, sin = self.rotary_emb(value_states, position_ids)
         else:
+            raise AssertionError('hit this')
             cos, sin = position_embeddings
+
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        self.log('q_BLHK_after_rope', query_states.transpose(1, 2))
+        self.log('k_BLGK_after_rope', key_states.transpose(1, 2))
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
@@ -453,9 +464,10 @@ class LlamaAttention(nn.Module):
             attn_weights = attn_weights + causal_mask
 
         # upcast attention to fp32
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
-        attn_weights = nn.functional.dropout(attn_weights, p=self.attention_dropout, training=self.training)
+        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.bfloat16).to(query_states.dtype)
+        #attn_weights = nn.functional.dropout(attn_weights, p=self.attention_dropout, training=self.training)
         attn_output = torch.matmul(attn_weights, value_states)
+
 
         if attn_output.size() != (bsz, self.num_heads, q_len, self.head_dim):
             raise ValueError(
@@ -466,8 +478,11 @@ class LlamaAttention(nn.Module):
         attn_output = attn_output.transpose(1, 2).contiguous()
 
         attn_output = attn_output.reshape(bsz, q_len, -1)
+        self.log('attn_middle_out_BLQ', attn_output)
+
 
         if self.config.pretraining_tp > 1:
+            raise AssertionError(f'{self.config.pretraining_tp=}')
             attn_output = attn_output.split(self.hidden_size // self.config.pretraining_tp, dim=2)
             o_proj_slices = self.o_proj.weight.split(self.hidden_size // self.config.pretraining_tp, dim=1)
             attn_output = sum([F.linear(attn_output[i], o_proj_slices[i]) for i in range(self.config.pretraining_tp)])
@@ -476,6 +491,8 @@ class LlamaAttention(nn.Module):
 
         if not output_attentions:
             attn_weights = None
+
+        self.log('L0_out_BLD', attn_output)
 
         return attn_output, attn_weights, past_key_value
 
@@ -658,6 +675,7 @@ class LlamaSdpaAttention(LlamaAttention):
         else:
             cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
@@ -1004,7 +1022,8 @@ class LlamaModel(LlamaPreTrainedModel):
 
         # create position embeddings to be shared across the decoder layers
         position_embeddings = self.rotary_emb(inputs_embeds, position_ids)
-        print_debug('pos_embs', position_embeddings)
+        cos, sin = position_embeddings
+        print_debug('cos', cos)
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
