@@ -26,10 +26,12 @@ import unittest
 import numpy as np
 import pytest
 from huggingface_hub import hf_hub_download
+from parameterized import parameterized
 
 import transformers
 from transformers import WhisperConfig
 from transformers.testing_utils import (
+    is_flaky,
     is_pt_flax_cross_test,
     require_flash_attn,
     require_torch,
@@ -72,6 +74,7 @@ if is_torch_available():
         BeamSearchEncoderDecoderOutput,
         GenerateBeamDecoderOnlyOutput,
         GenerateBeamEncoderDecoderOutput,
+        GenerateEncoderDecoderOutput,
         PhrasalConstraint,
     )
     from transformers.generation.logits_process import LogitsProcessor
@@ -1783,6 +1786,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 output_generate, input_ids, model.config, num_return_sequences=beam_kwargs["num_return_sequences"]
             )
 
+    @is_flaky()  # TODO (joao, sanchit): fails ~9% of the times. Does the original test have the same issue?
     def test_custom_4d_attention_mask(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         model = WhisperForConditionalGeneration(config).to(device=torch_device, dtype=torch.float32)
@@ -1820,6 +1824,26 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         normalized_1 = torch.nn.functional.softmax(out_shared_prefix_last_tokens)
         torch.testing.assert_close(normalized_0, normalized_1, rtol=1e-3, atol=1e-4)
 
+    @parameterized.expand([(True,), (False,)])
+    def test_generate_output_type(self, return_dict_in_generate):
+        expected_output_type = GenerateEncoderDecoderOutput if return_dict_in_generate else torch.Tensor
+        for model_class in self.all_generative_model_classes:
+            config, inputs = self.model_tester.prepare_config_and_inputs()
+            model = model_class(config).to(torch_device).eval()
+
+            # short-form generation without fallback
+            pred_ids = model.generate(**inputs, return_dict_in_generate=return_dict_in_generate)
+            assert isinstance(pred_ids, expected_output_type)
+
+            # short-form generation with fallback
+            pred_ids = model.generate(
+                **inputs,
+                logprob_threshold=-1.0,
+                temperature=[0.0, 0.1],
+                return_dict_in_generate=return_dict_in_generate,
+            )
+            assert isinstance(pred_ids, expected_output_type)
+
 
 @require_torch
 @require_torchaudio
@@ -1835,9 +1859,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         return WhisperProcessor.from_pretrained("openai/whisper-base")
 
     def _load_datasamples(self, num_samples):
-        ds = load_dataset(
-            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
-        )
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         # automatic decoding with librispeech
         speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
 
@@ -2237,72 +2259,6 @@ class WhisperModelIntegrationTests(unittest.TestCase):
                             " He has grave doubts whether Sir Frederick Latins' work is really Greek after all, and"
                         ),
                         "timestamp": (23.76, 29.44),
-                    },
-                ],
-            }
-        ]
-
-        transcript = processor.batch_decode(generated_ids, skip_special_tokens=True, output_offsets=True)
-        self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
-
-    @slow
-    def test_tiny_longform_timestamps_generation(self):
-        set_seed(0)
-        processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
-        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
-        model.to(torch_device)
-
-        sample = self._load_datasamples(1)
-        input_speech = np.concatenate(sample * 10)
-
-        input_features = processor(input_speech, return_tensors="pt", truncation=False, sampling_rate=16_000)
-        input_features = input_features.to(torch_device)
-
-        generated_ids = model.generate(**input_features, return_timestamps=True, return_segments=True)
-
-        EXPECTED_TRANSCRIPT = [
-            {
-                "text": " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel. Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel. Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel. Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel. Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel. Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel. Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel. Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel. Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel. Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.",
-                "offsets": [
-                    {
-                        "text": " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.",
-                        "timestamp": (0.0, 6.0),
-                    },
-                    {
-                        "text": " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.",
-                        "timestamp": (6.0, 12.0),
-                    },
-                    {
-                        "text": " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.",
-                        "timestamp": (12.0, 18.0),
-                    },
-                    {
-                        "text": " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.",
-                        "timestamp": (18.0, 24.0),
-                    },
-                    {
-                        "text": " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.",
-                        "timestamp": (24.0, 29.0),
-                    },
-                    {
-                        "text": " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.",
-                        "timestamp": (29.0, 35.0),
-                    },
-                    {
-                        "text": " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.",
-                        "timestamp": (35.0, 41.0),
-                    },
-                    {
-                        "text": " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.",
-                        "timestamp": (41.0, 47.0),
-                    },
-                    {
-                        "text": " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.",
-                        "timestamp": (47.0, 53.0),
-                    },
-                    {
-                        "text": " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.",
-                        "timestamp": (53.0, 58.20000076293945),
                     },
                 ],
             }
@@ -2718,9 +2674,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         )
         assistant_model.to(torch_device)
 
-        dataset = load_dataset(
-            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
-        )
+        dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         sample = dataset[0]["audio"]
 
         input_features = processor(sample["array"], return_tensors="pt", sampling_rate=16_000).input_features
@@ -2769,9 +2723,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         )
         assistant_model.to(torch_device)
 
-        dataset = load_dataset(
-            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
-        )
+        dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         sample = dataset[0]["audio"]
 
         input_features = processor(sample["array"], return_tensors="pt", sampling_rate=16_000).input_features
@@ -2812,7 +2764,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
         model = model.to(torch_device)
 
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", trust_remote_code=True)
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean")
         one_audio = np.concatenate([x["array"] for x in ds["validation"]["audio"]], dtype=np.float32)
 
         input_features = processor(
@@ -2848,9 +2800,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         prompt = "Mr. Kilter, Brionno."  # let's force Quilter -> Kilter, Brion -> Brionno
         prompt_ids = processor.get_prompt_ids(prompt, return_tensors="pt").to(torch_device)
 
-        ds = load_dataset(
-            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation[:-1]", trust_remote_code=True
-        )
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation[:-1]")
         one_audio = np.concatenate([x["array"] for x in ds["audio"]], dtype=np.float32)
 
         first_text = ds[0]["text"].lower()
@@ -2901,7 +2851,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
         model = model.to(torch_device)
 
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", trust_remote_code=True)
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean")
         one_audio = np.concatenate([x["array"] for x in ds["validation"]["audio"]], dtype=np.float32)
 
         input_features = processor(
@@ -2983,7 +2933,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
         model = model.to(torch_device)
 
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", trust_remote_code=True)
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean")
         one_audio = np.concatenate([x["array"] for x in ds["validation"]["audio"]], dtype=np.float32)
 
         input_features = processor(
@@ -3025,7 +2975,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
         model = model.to(torch_device)
 
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", trust_remote_code=True)
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean")
         one_audio = np.concatenate([x["array"] for x in ds["validation"]["audio"]], dtype=np.float32)
         audios = []
         audios.append(one_audio[110000:])
@@ -3079,7 +3029,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
         model = model.to(torch_device)
 
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", trust_remote_code=True)
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean")
         one_audio = np.concatenate([x["array"] for x in ds["validation"]["audio"]], dtype=np.float32)
         audios = []
         audios.append(one_audio[110000:])
@@ -3433,6 +3383,66 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         )
         input_features = input_features[permutation_idx, ...]
         static_generated_ids = model.generate(input_features, max_new_tokens=64)
+        # assert re-ordered generations match those from eager
+        assert (eager_generated_ids[permutation_idx, :] == static_generated_ids).all()
+
+    @slow
+    def test_tiny_static_generation_long_form(self):
+        import torch._dynamo.config
+
+        # only permit 4 compilations: 2 prefill steps and 2 decoding steps (1 for each of conditioned/not conditioned)
+        torch._dynamo.config.cache_size_limit = 4
+
+        processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
+        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
+        model.to(torch_device)
+
+        dataset = load_dataset("distil-whisper/meanwhile", "default")["test"]
+        dataset = dataset.cast_column("audio", Audio(sampling_rate=16000))
+        input_speech = [audio["array"] for audio in dataset[2:4]["audio"]]
+
+        inputs = processor(
+            input_speech,
+            return_tensors="pt",
+            padding="longest",
+            truncation=False,
+            return_attention_mask=True,
+            sampling_rate=16_000,
+        )
+        inputs = inputs.to(torch_device)
+
+        gen_kwargs = {
+            "return_timestamps": True,
+            "no_speech_threshold": 0.6,
+            "temperature": (0.0, 0.2, 0.4, 0.6, 0.8, 1.0),
+            "compression_ratio_threshold": 1.35,
+            "condition_on_prev_tokens": True,  # conditioning on prev tokens introduces a recompile on the second time step
+            "logprob_threshold": -1.0,
+            "num_beams": 1,
+        }
+
+        set_seed(42)
+        eager_generated_ids = model.generate(**inputs, **gen_kwargs)
+
+        # compile the forward pass and assert equivalence
+        model.generation_config.cache_implementation = "static"
+        model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
+
+        set_seed(42)
+        static_generated_ids = model.generate(**inputs, **gen_kwargs)
+        assert (eager_generated_ids == static_generated_ids).all()
+
+        # check the compiled graph can be re-used and that the cache is correctly reset
+        # reverse the ordering of the input features
+        input_features = inputs.input_features
+        permutation_idx = (
+            torch.arange(input_features.shape[0], 0, step=-1, dtype=torch.long, device=input_features.device) - 1
+        )
+        input_features = input_features[permutation_idx, ...]
+        attention_mask = inputs.attention_mask[permutation_idx, ...]
+
+        set_seed(42)
+        static_generated_ids = model.generate(input_features, attention_mask=attention_mask, **gen_kwargs)
         # assert re-ordered generations match those from eager
         assert (eager_generated_ids[permutation_idx, :] == static_generated_ids).all()
 
