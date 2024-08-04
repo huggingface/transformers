@@ -233,8 +233,8 @@ class OlmoeRotaryEmbedding(nn.Module):
 
 # copied from transformers.models.llama.modeling_llama.LlamaLinearScalingRotaryEmbedding with Llama->Olmoe
 # TODO(joao): add me back asap :)
-class OlmoeLinearScalingRotaryEmbedding(OlmoRotaryEmbedding):
-    """OlmoRotaryEmbedding extended with linear scaling. Credits to the Reddit user /u/kaiokendev"""
+class OlmoeLinearScalingRotaryEmbedding(OlmoeRotaryEmbedding):
+    """OlmoeRotaryEmbedding extended with linear scaling. Credits to the Reddit user /u/kaiokendev"""
 
     def forward(self, x, position_ids):
         # difference to the original RoPE: a scaling factor is aplied to the position ids
@@ -245,8 +245,8 @@ class OlmoeLinearScalingRotaryEmbedding(OlmoRotaryEmbedding):
 
 # copied from transformers.models.llama.modeling_llama.LlamaDynamicNTKScalingRotaryEmbedding with Llama->Olmoe
 # TODO(joao): add me back asap :)
-class OlmoeDynamicNTKScalingRotaryEmbedding(OlmoRotaryEmbedding):
-    """OlmoRotaryEmbedding extended with Dynamic NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla"""
+class OlmoeDynamicNTKScalingRotaryEmbedding(OlmoeRotaryEmbedding):
+    """OlmoeRotaryEmbedding extended with Dynamic NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla"""
 
     def forward(self, x, position_ids):
         # difference to the original RoPE: inv_freq is recomputed when the sequence length > original length
