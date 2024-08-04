@@ -200,9 +200,9 @@ class OlmoeRMSNorm(nn.Module):
 ALL_LAYERNORM_LAYERS.append(OlmoeRMSNorm)
 
 
-# copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->Olmo
+# copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->Olmoe
 # TODO(joao): add me back asap :)
-class OlmoRotaryEmbedding(nn.Module):
+class OlmoeRotaryEmbedding(nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
         super().__init__()
         self.scaling_factor = scaling_factor
@@ -231,9 +231,9 @@ class OlmoRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-# copied from transformers.models.llama.modeling_llama.LlamaLinearScalingRotaryEmbedding with Llama->Olmo
+# copied from transformers.models.llama.modeling_llama.LlamaLinearScalingRotaryEmbedding with Llama->Olmoe
 # TODO(joao): add me back asap :)
-class OlmoLinearScalingRotaryEmbedding(OlmoRotaryEmbedding):
+class OlmoeLinearScalingRotaryEmbedding(OlmoRotaryEmbedding):
     """OlmoRotaryEmbedding extended with linear scaling. Credits to the Reddit user /u/kaiokendev"""
 
     def forward(self, x, position_ids):
@@ -243,9 +243,9 @@ class OlmoLinearScalingRotaryEmbedding(OlmoRotaryEmbedding):
         return cos, sin
 
 
-# copied from transformers.models.llama.modeling_llama.LlamaDynamicNTKScalingRotaryEmbedding with Llama->Olmo
+# copied from transformers.models.llama.modeling_llama.LlamaDynamicNTKScalingRotaryEmbedding with Llama->Olmoe
 # TODO(joao): add me back asap :)
-class OlmoDynamicNTKScalingRotaryEmbedding(OlmoRotaryEmbedding):
+class OlmoeDynamicNTKScalingRotaryEmbedding(OlmoRotaryEmbedding):
     """OlmoRotaryEmbedding extended with Dynamic NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla"""
 
     def forward(self, x, position_ids):
