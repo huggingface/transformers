@@ -113,22 +113,46 @@ def uniform_chunk_sampling(
 
     Args:
         total_duration (float): Total duration of the audio/video.
-        chunk_duration (float): Duration of each chunk.
-        num_chunks (int): Number of chunks to sample.
+        chunk_duration (float): Duration of each chunk(clip duration).
+        num_chunks (int): Number of chunks to sample(number of clips per video).
 
     Returns:
         List[Tuple[float, float]]: List of tuples where each tuple contains the start and end time of a chunk.
     """
+    _current_clip_index = 0
+    _current_aug_index = 0
+    _augs_per_clip: int = 1
+    
     chunk_duration_fraction = Fraction(chunk_duration)
-    max_possible_clip_start = Fraction(max(total_duration - chunk_duration, 0))
+    max_possible_clip_start = Fraction(max(total_duration - chunk_duration_fraction, 0)) # Previously chunk_duration was used instead of chunk_duration_fraction so that could be the reason for pixel values not matching
     uniform_clip = Fraction(max_possible_clip_start / max(num_chunks - 1, 1))
 
     result = []
-    for clip_index in range(num_chunks):
-        clip_start_sec = uniform_clip * clip_index
+    is_last_clip = False
+    while not is_last_clip:
+        clip_start_sec = uniform_clip * _current_clip_index
+        _current_aug_index += 1
+        if _current_aug_index >= _augs_per_clip:
+            _current_clip_index += 1
+            _current_aug_index = 0
+        
+        # Last clip is True if sampled self._clips_per_video or if end of video is reached.
+        is_last_clip = False
+        if (
+            _current_clip_index >= num_chunks
+            or uniform_clip * _current_clip_index > max_possible_clip_start
+        ):
+            _current_clip_index = 0
+            is_last_clip = True
+
+        # reset
+        if is_last_clip:
+            _current_clip_index = 0
+            _current_aug_index = 0
+
         clip_end_sec = clip_start_sec + chunk_duration_fraction
         result.append((clip_start_sec, clip_end_sec))
-
+    
     return result
 
 
@@ -336,9 +360,9 @@ class ImageBindImageProcessor(BaseImageProcessor):
         do_chunk (`bool`, *optional*, defaults to `False`):
             Whether to chunk the video into multiple clips.
         chunk_duration (`float`, *optional*, defaults to 2.0):
-            Duration of each chunk in seconds.
+            Duration of each chunk in seconds(clip duration).
         num_chunks (`int`, *optional*, defaults to 5):
-            Number of chunks to sample.
+            Number of chunks to sample(number of clips per video).
         num_frames_per_chunk (`int`, *optional*, defaults to 2):
             Number of frames to sample per chunk.
         fps (`int`, *optional*, defaults to 30):
@@ -481,13 +505,13 @@ class ImageBindImageProcessor(BaseImageProcessor):
             fps (`int`):
                 Frame rate of the video
             chunk_duration (`float`):
-                Duration of each chunk.
+                Duration of each chunk(clip duration).
             num_chunks (`int`):
-                Number of chunks to sample.
+                Number of chunks to sample(number of clips per video).
             num_frames_per_chunk (`int`):
                 Number of frames to sample per chunk.
         """
-        video_duration = len(video) / fps
+        video_duration = video.duration # EncodedVideoDecord obj
         if video_duration < chunk_duration:
             logger.warning_once(
                 "Chunk duration is greater than audio duration. Chunks will be repeated, consider adjusting either `chunk_duration` or `num_chunks`"
@@ -646,9 +670,9 @@ class ImageBindImageProcessor(BaseImageProcessor):
             do_chunk (`bool`, *optional*, defaults to `self.do_chunk`):
                 Whether to chunk the video into multiple clips.
             chunk_duration (`float`, *optional*, defaults to `self.chunk_duration`):
-                Duration of each chunk in seconds.
+                Duration of each chunk in seconds(clip duration).
             num_chunks (`int`, *optional*, defaults to `self.num_chunks`):
-                Number of chunks to sample.
+                Number of chunks to sample(number of clips per video).
             num_frames_per_chunk (`int`, *optional*, defaults to `self.num_frames_per_chunk`):
                 Number of frames to sample per chunk.
             fps (`int`, *optional*, defaults to `self.fps`):
