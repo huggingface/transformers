@@ -456,6 +456,7 @@ class OmDetTurboMultiscaleDeformableAttention(nn.Module):
         attention_weights = F.softmax(attention_weights, -1).view(
             batch_size, num_queries, self.n_heads, self.n_levels, self.n_points
         )
+        # batch_size, num_queries, n_heads, n_levels, n_points, 2
         num_coordinates = reference_points.shape[-1]
         if num_coordinates == 2:
             offset_normalizer = torch.stack([spatial_shapes[..., 1], spatial_shapes[..., 0]], -1)
@@ -714,7 +715,6 @@ class OmDetTurboEncoderLayer(nn.Module):
         return (hidden_states,)
 
 
-# Copied from transformers.models.rt_detr.modeling_rt_detr.RTDetrEncoder with RTDetr->OmDetTurbo
 class OmDetTurboEncoder(nn.Module):
     def __init__(self, config: OmDetTurboConfig):
         super().__init__()
@@ -804,8 +804,8 @@ class OmDetTurboHybridEncoder(nn.Module):
             )
             self.pan_blocks.append(OmDetTurboCSPRepLayer(config))
 
-    # Copied from transformers.models.rt_detr.modeling_rt_detr.RTDetrHybridEncoder.build_2d_sincos_position_embedding
     @staticmethod
+    # Copied from transformers.models.rt_detr.modeling_rt_detr.RTDetrHybridEncoder.build_2d_sincos_position_embedding
     def build_2d_sincos_position_embedding(width, height, embed_dim=256, temperature=10000.0):
         grid_w = torch.arange(int(width), dtype=torch.float32)
         grid_h = torch.arange(int(height), dtype=torch.float32)
@@ -1381,8 +1381,8 @@ class OmDetTurboDecoder(OmDetTurboPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    # Copied from transformers.models.rt_detr.modeling_rt_detr.RTDetrModel.generate_anchors
     @lru_cache(maxsize=32)
+    # Copied from transformers.models.rt_detr.modeling_rt_detr.RTDetrModel.generate_anchors
     def generate_anchors(self, spatial_shapes=None, grid_size=0.05):
         # We always generate anchors in float32 to preserve equivalence between
         # dynamic and static anchor inference

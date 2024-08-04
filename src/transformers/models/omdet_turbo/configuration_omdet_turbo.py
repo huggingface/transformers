@@ -36,7 +36,7 @@ class OmDetTurboConfig(PretrainedConfig):
     Args:
         text_config (`PretrainedConfig`, *optional*):
             The configuration of the text backbone.
-        vision_config (`PretrainedConfig`, *optional*):
+        backbone_config (`PretrainedConfig`, *optional*):
             The configuration of the vision backbone.
         use_timm_backbone (`bool`, *optional*, defaults to `True`):
             Whether to use the timm for the vision backbone.
@@ -48,6 +48,8 @@ class OmDetTurboConfig(PretrainedConfig):
             Whether to use a pretrained timm vision backbone.
         image_size (`int`, *optional*, defaults to 640):
             The size (resolution) of each image.
+        apply_layernorm (`bool`, *optional*, defaults to `True`):
+            Whether to apply layer normalization on the feature maps of the vision backbone output.
         encoder_hidden_dim (`int`, *optional*, defaults to 256):
             The hidden dimension of the encoder.
         decoder_hidden_dim (`int`, *optional*, defaults to 256):
