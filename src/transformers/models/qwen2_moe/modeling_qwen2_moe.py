@@ -481,7 +481,10 @@ class Qwen2MoeFlashAttention2(Qwen2MoeAttention):
             kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
 
         # Because the input can be padded, the absolute sequence length depends on the max position id.
-        rotary_seq_len = max(kv_seq_len, position_ids[:, -1].max().item()) + 1
+        rotary_seq_len = (
+            max(kv_seq_len, position_ids[:, -1].max().item() + 1) if position_ids is not None else kv_seq_len
+        )
+
         cos, sin = self.rotary_emb(value_states, seq_len=rotary_seq_len)
 
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
