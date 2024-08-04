@@ -31,7 +31,7 @@ class ImageBindProcessorKwargs(ProcessingKwargs, total=False):
 
 class ImageBindProcessor(ProcessorMixin):
     r"""
-    Constructs a ImageBind processor which wraps a ImageBind image processor and feature extracotr and a CLIP tokenizer into a single processor.
+    Constructs a ImageBind processor which wraps a ImageBind image processor and feature extractor and a CLIP tokenizer into a single processor.
 
     [`ImageBindProcessor`] offers all the functionalities of [`ImageBindImageProcessor`], [`ImageBindFeatureExtractor`] and [`CLIPTokenizerFast`].
     See the [`~ImageBindProcessor.__call__`] and [`~ImageBindProcessor.decode`] for more information.

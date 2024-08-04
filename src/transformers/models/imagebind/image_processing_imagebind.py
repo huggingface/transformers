@@ -13,8 +13,15 @@
 # limitations under the License.
 """Image processor class for ImageBind."""
 
+import decord
 from fractions import Fraction
-from typing import Dict, List, Optional, Tuple, Union
+import io
+import math
+import mimetypes
+import pathlib
+from pathlib import Path
+import torch
+from typing import BinaryIO, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -50,6 +57,35 @@ logger = logging.get_logger(__name__)
 if is_vision_available():
     import PIL
 
+def check_for_video_paths(videos) -> bool:
+    return (isinstance(videos, list) and all(isinstance(video, Path) and mimetypes.guess_type(video)[0].startswith('video/') for video in videos))
+
+#Adapted from https://github.com/facebookresearch/pytorchvideo/blob/1fadaef40dd393ca09680f55582399f4679fc9b7/pytorchvideo/data/encoded_video.py#L42
+def encoded_video_from_path(video_path):
+    """
+    Fetches the given video path using PathManager (allowing remote uris to be
+    fetched) and constructs the EncodedVideo object.
+
+    Args:
+        file_path (str): a PathManager file-path.
+    """
+    video_path = Path(video_path)
+    if video_path.is_file():
+        with video_path.open('rb') as file:
+            video_file = io.BytesIO(file.read())
+    else:
+        raise FileNotFoundError(f"{video_path} does not exist or is not a file")
+    
+    sample_rate=16000
+    video = EncodedVideoDecord(
+        file=video_file,
+        video_name=pathlib.Path(video_path).name,
+        decode_video=True,
+        decode_audio=False,
+        **{"sample_rate": sample_rate},
+    )
+    return video
+    
 
 # Copy from models.video_llava.image_processing_video_llava.make_batched_videos
 def make_batched_videos(videos) -> List[VideoInput]:
@@ -117,6 +153,148 @@ def uniform_temporal_subsample(video: VideoInput, num_samples: int) -> VideoInpu
 
     return [video[i] for i in indices]
 
+#Adapted from https://github.com/facebookresearch/pytorchvideo/blob/1fadaef40dd393ca09680f55582399f4679fc9b7/pytorchvideo/data/encoded_video_decord.py#L28
+class EncodedVideoDecord():
+    """
+
+    Accessing clips from an encoded video using Decord video reading API
+    as the decoding backend. For more details, please refer to -
+    `Decord <https://github.com/dmlc/decord>`
+    """
+
+    def __init__(
+        self,
+        file: BinaryIO,
+        video_name: Optional[str] = None,
+        decode_video: bool = True,
+        decode_audio: bool = False,
+        sample_rate: int = 44100,
+        mono: bool = True,
+        width: int = -1,
+        height: int = -1,
+        num_threads: int = 0,
+        fault_tol: int = -1,
+    ) -> None:
+        """
+        Args:
+            file (BinaryIO): a file-like object (e.g. io.BytesIO or io.StringIO) that
+                contains the encoded video.
+            video_name (str): An optional name assigned to the video.
+            decode_video (bool): If disabled, video is not decoded.
+            decode_audio (bool): If disabled, audio is not decoded.
+            sample_rate: int, default is -1
+                Desired output sample rate of the audio, unchanged if `-1` is specified.
+            mono: bool, default is True
+                Desired output channel layout of the audio. `True` is mono layout. `False`
+                is unchanged.
+            width : int, default is -1
+                Desired output width of the video, unchanged if `-1` is specified.
+            height : int, default is -1
+                Desired output height of the video, unchanged if `-1` is specified.
+            num_threads : int, default is 0
+                Number of decoding thread, auto if `0` is specified.
+            fault_tol : int, default is -1
+                The threshold of corrupted and recovered frames. This is to prevent silent fault
+                tolerance when for example 50% frames of a video cannot be decoded and duplicate
+                frames are returned. You may find the fault tolerant feature sweet in many
+                cases, but not for training models. Say `N = # recovered frames`
+                If `fault_tol` < 0, nothing will happen.
+                If 0 < `fault_tol` < 1.0, if N > `fault_tol * len(video)`,
+                raise `DECORDLimitReachedError`.
+                If 1 < `fault_tol`, if N > `fault_tol`, raise `DECORDLimitReachedError`.
+        """
+        if not decode_video:
+            raise NotImplementedError()
+
+        self._video_name = video_name
+
+        try:
+            self._av_reader = decord.VideoReader(
+                uri=file,
+                ctx=decord.cpu(0),
+                width=width,
+                height=height,
+                num_threads=num_threads,
+                fault_tol=fault_tol,
+            )
+        except Exception as e:
+            raise RuntimeError(f"Failed to open video {video_name} with Decord. {e}")
+
+        self._fps = self._av_reader.get_avg_fps()
+
+        self._duration = float(len(self._av_reader)) / float(self._fps)
+
+    @property
+    def name(self) -> Optional[str]:
+        """
+        Returns:
+            name: the name of the stored video if set.
+        """
+        return self._video_name
+
+    @property
+    def duration(self) -> float:
+        """
+        Returns:
+            duration: the video's duration/end-time in seconds.
+        """
+        return self._duration
+
+    def close(self):
+        if self._av_reader is not None:
+            del self._av_reader
+            self._av_reader = None
+
+    def get_clip(
+        self, start_sec: float, end_sec: float
+    ) -> Dict[str, Optional[torch.Tensor]]:
+        """
+        Retrieves frames from the encoded video at the specified start and end times
+        in seconds (the video always starts at 0 seconds).
+
+        Args:
+            start_sec (float): the clip start time in seconds
+            end_sec (float): the clip end time in seconds
+        Returns:
+            clip_data:
+                A dictionary mapping the entries at "video" and "audio" to a tensors.
+
+                "video": A tensor of the clip's RGB frames with shape:
+                (channel, time, height, width). The frames are of type torch.float32 and
+                in the range [0 - 255].
+
+                "audio": A tensor of the clip's audio samples with shape:
+                (samples). The samples are of type torch.float32 and
+                in the range [0 - 255].
+
+            Returns None if no video or audio found within time range.
+
+        """
+        if start_sec > end_sec or start_sec > self._duration:
+            raise RuntimeError(
+                f"Incorrect time window for Decord decoding for video: {self._video_name}."
+            )
+
+        start_idx = math.ceil(self._fps * start_sec)
+        end_idx = math.ceil(self._fps * end_sec)
+        end_idx = min(end_idx, len(self._av_reader))
+        frame_idxs = list(range(start_idx, end_idx))
+
+        try:
+            outputs = self._av_reader.get_batch(frame_idxs)
+        except Exception as e:
+            logger.debug(f"Failed to decode video with Decord: {self._video_name}. {e}")
+            raise e
+
+        video = outputs
+
+        if video is not None:
+            video = video.to(torch.float32)
+            #Permute tensor from (time, height, weight, channel) to (channel, height, width, time).
+            video = video.permute(3, 0, 1, 2)
+
+
+        return video
 
 class ImageBindImageProcessor(BaseImageProcessor):
     r"""
@@ -551,7 +729,12 @@ class ImageBindImageProcessor(BaseImageProcessor):
             )
         else:
             pixel_values = []
+                              
             for video in videos:
+                if check_for_video_paths(videos):
+                     video = encoded_video_from_path(
+                        video,
+                    )
                 if do_chunk:
                     clips = self.chunk(
                         video=video,
@@ -607,3 +790,6 @@ class ImageBindImageProcessor(BaseImageProcessor):
                 pixel_values.append(_pixel_values)
 
         return BatchFeature(data={"pixel_values": pixel_values}, tensor_type=return_tensors)
+
+
+    
