@@ -72,7 +72,7 @@ model_8bit = AutoModelForCausalLM.from_pretrained(
 model_8bit.model.decoder.layers[-1].final_layer_norm.weight.dtype
 ```
 
-모델이 8비트로 양자화되면 최신 버전의 Transformers와 bitsandbytes를 사용하지 않는 한 양자화된 가중치를 Hub에 푸시할 수 없습니다. 최신 버전을 사용하는 경우, [`~PreTrainedModel.push_to_hub`] 메서드를 사용하여 8비트 모델을 Hub에 푸시할 수 있습니다. 양자화 구성 파일(config.json)이 먼저 푸시되고, 그 다음 양자화된 모델 가중치가 푸시됩니다.
+모델이 8비트로 양자화되면 최신 버전의 Transformers와 bitsandbytes를 사용하지 않는 한 양자화된 가중치를 Hub에 푸시할 수 없습니다. 최신 버전을 사용하는 경우, [`~PreTrainedModel.push_to_hub`] 방법을 사용하여 8비트 모델을 Hub에 푸시할 수 있습니다. 양자화 구성 파일(config.json)이 먼저 푸시되고, 그 다음 양자화된 모델 가중치가 푸시됩니다.
 
 
 
@@ -134,14 +134,14 @@ model_4bit.model.decoder.layers[-1].final_layer_norm.weight.dtype
 
 </Tip>
 
-메모리 사용량을 확인하려면 `get_memory_footprint` 메서드를 사용하세요:
+메모리 사용량을 확인하려면 `get_memory_footprint`를 사용하세요:
 
 
 ```py
 print(model.get_memory_footprint())
 ```
 
-양자화된 모델은 [`~PreTrainedModel.from_pretrained`] 메서드를 사용하여 `load_in_8bit` 또는 `load_in_4bit` 매개변수를 지정하지 않고도 로드할 수 있습니다:
+양자화된 모델은 [`~PreTrainedModel.from_pretrained`]를 사용하여 `load_in_8bit` 또는 `load_in_4bit` 매개변수를 지정하지 않고도 로드할 수 있습니다:
 
 
 ```py
@@ -162,7 +162,7 @@ model = AutoModelForCausalLM.from_pretrained("{your_username}/bloom-560m-8bit", 
 
 ### 오프로드[[offloading]]
 
-8비트 모델은 CPU와 GPU 간에 가중치를 오프로드하여 매우 큰 모델을 메모리에 적재할 수 있습니다. CPU로 전송된 가중치는 실제로 **float32**로 저장되며 8비트로 변환되지 않습니다. 예를 들어, [bigscience/bloom-1b7](https://huggingface.co/bigscience/bloom-1b7) 모델의 오프로드를 활성화하려면 [`BitsAndBytesConfig`]를 생성합니다:
+8비트 모델은 CPU와 GPU 간에 가중치를 오프로드하여 매우 큰 모델을 메모리에 장착할 수 있습니다. CPU로 전송된 가중치는 실제로 **float32**로 저장되며 8비트로 변환되지 않습니다. 예를 들어, [bigscience/bloom-1b7](https://huggingface.co/bigscience/bloom-1b7) 모델의 오프로드를 활성화하려면 [`BitsAndBytesConfig`]를 생성하는 것부터 시작하세요:
 
 ```py
 from transformers import AutoModelForCausalLM, BitsAndBytesConfig
@@ -194,7 +194,7 @@ model_8bit = AutoModelForCausalLM.from_pretrained(
 
 ### 이상치 임계값[[outlier-threshold]]
 
-"이상값"은 특정 임계값을 초과하는 히든 상태 값을 의미하며, 이러한 값은 fp16으로 계산됩니다. 값은 일반적으로 정규 분포([-3.5, 3.5])를 따르지만, 대형 모델의 경우 이 분포는 매우 다를 수 있습니다([-60, 6] 또는 [6, 60]). 8비트 양자화는 ~5 정도의 값에서 잘 작동하지만, 그 이상에서는 성능에 큰 페널티가 발생합니다. 기본 임계값 값은 6이 적절하지만, 더 불안정한 모델(소형 모델 또는 미세 조정)에는 더 낮은 임계값이 필요할 수 있습니다.
+"이상값"은 특정 임계값을 초과하는 히든 상태 값을 의미하며, 이러한 값은 fp16으로 계산됩니다. 값은 일반적으로 정규 분포([-3.5, 3.5])를 따르지만, 대형 모델의 경우 이 분포는 매우 다를 수 있습니다([-60, 6] 또는 [6, 60]). 8비트 양자화는 ~5 정도의 값에서 잘 작동하지만, 그 이상에서는 상당한 성능 저하가 발생합니다. 좋은 기본 임계값 값은 6이지만, 더 불안정한 모델(소형 모델 또는 미세 조정)에는 더 낮은 임계값이 필요할 수 있습니다.
 
 모델에 가장 적합한 임계값을 찾으려면 [BitsAndBytesConfig]에서 `llm_int8_threshold` 매개변수를 실험해보는 것이 좋습니다:
 
@@ -216,7 +216,7 @@ model_8bit = AutoModelForCausalLM.from_pretrained(
 
 ### 모듈 변환 건너뛰기[[skip-module-conversion]]
 
-[Jukebox](model_doc/jukebox)와 같은 일부 모델에서는 모든 모듈을 8비트로 양자화할 필요가 없으며, 이는 실제로 불안정성을 유발할 수 있습니다. Jukebox의 경우, 여러 `lm_head` 모듈은 [`BitsAndBytesConfig`]에서 `llm_int8_skip_modules` 매개변수를 사용하여 건너뛰어야 합니다:
+[Jukebox](model_doc/jukebox)와 같은 일부 모델은 모든 모듈을 8비트로 양자화할 필요가 없으며, 이는 실제로 불안정성을 유발할 수 있습니다. Jukebox의 경우, [`BitsAndBytesConfig`]의 `llm_int8_skip_modules` 매개변수를 사용하여 여러 `lm_head` 모듈을 건너뛰어야 합니다:
 
 ```py
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
@@ -295,7 +295,7 @@ model_double_quant = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-13
 ```
 
 ## `bitsandbytes` 모델의 비양자화[[dequantizing-`bitsandbytes`-models]]
-양자화된 후에는 모델을 원래의 정밀도로 비양자화할 수 있지만, 이는 모델의 품질 손실을 초래할 수 있습니다. 비양자화된 모델을 맞추기 위해 충분한 GPU RAM이 있는지 확인하십시오.
+양자화된 후에는 모델을 원래의 정밀도로 비양자화할 수 있지만, 이는 모델의 작은 품질 손실을 초래할 수 있습니다. 비양자화된 모델을 맞추기 위해 충분한 GPU RAM이 있는지 확인하세요.
 
 ```python
 from transformers import AutoModelForCausalLM, BitsAndBytesConfig, AutoTokenizer
