@@ -148,7 +148,7 @@
   - local: in_translation
     title: (번역중) AWQ
   - local: quantization/aqlm
-    title: (번역중) AQLM
+    title: AQLM
   - local: in_translation
     title: (번역중) Quanto
   - local: in_translation
