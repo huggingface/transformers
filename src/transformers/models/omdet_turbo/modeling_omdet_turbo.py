@@ -19,6 +19,7 @@ import os
 import warnings
 from collections import OrderedDict
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 from typing import Optional, Tuple
 
@@ -260,7 +261,7 @@ class OmDetTurboLanguageBackbone(nn.Module):
     def __init__(self, config: OmDetTurboConfig):
         super().__init__()
         self.model = AutoModel.from_config(config.text_config, attn_implementation=config._attn_implementation)
-        self.text_projection = nn.Parameter(torch.empty(config.text_projection_in_dim, config.text_projection_out_dim))
+        self.text_projection = nn.Parameter(torch.zeros(config.text_projection_in_dim, config.text_projection_out_dim))
 
     def forward(self, hidden_states, mask=None, encode_type="task"):
         text_outputs = self.model(hidden_states)
@@ -575,7 +576,6 @@ class OmDetTurboMultiheadAttention(nn.Module):
                 f"The hidden size ({hidden_size}) is not a multiple of the number of attention "
                 f"heads ({num_attention_heads})"
             )
-
         self.num_attention_heads = num_attention_heads
         self.attention_head_size = int(hidden_size / num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
@@ -605,7 +605,6 @@ class OmDetTurboMultiheadAttention(nn.Module):
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
-
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
         if attention_mask is not None:
             attention_scores = attention_scores + attention_mask.view(attention_scores.shape)
@@ -724,6 +723,7 @@ class OmDetTurboEncoder(nn.Module):
 
     def forward(self, src, src_mask=None, pos_embed=None, output_attentions: bool = False) -> torch.Tensor:
         hidden_states = src
+        attention = () if output_attentions else None
         for layer in self.layers:
             hidden_states = layer(
                 hidden_states,
@@ -731,7 +731,11 @@ class OmDetTurboEncoder(nn.Module):
                 position_embeddings=pos_embed,
                 output_attentions=output_attentions,
             )
-        return hidden_states
+            if output_attentions:
+                attention = attention + (hidden_states[1],)
+            hidden_states = hidden_states[0]
+
+        return hidden_states, attention
 
 
 class OmDetTurboHybridEncoder(nn.Module):
@@ -845,7 +849,6 @@ class OmDetTurboHybridEncoder(nn.Module):
 
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
-
         # get projection features
         projected_features = [self.channel_projection_layers[i](feature) for i, feature in enumerate(hidden_states)]
         # encoder
@@ -861,7 +864,6 @@ class OmDetTurboHybridEncoder(nn.Module):
                 ).to(src_flatten.device, src_flatten.dtype)
             else:
                 pos_embed = None
-
             layer_outputs = self.encoder[encoder_layer_index](
                 src_flatten,
                 pos_embed=pos_embed,
@@ -898,7 +900,6 @@ class OmDetTurboHybridEncoder(nn.Module):
                 torch.concat([downsample_feat, feat_high.to(downsample_feat.device)], dim=1)
             )
             fpn_states.append(hidden_states)
-
         if not return_dict:
             return (fpn_states, encoder_states, all_attentions)
         return BaseModelOutput(last_hidden_state=fpn_states, hidden_states=encoder_states, attentions=all_attentions)
@@ -1029,22 +1030,25 @@ class OmDetTurboDeformableTransformerDecoderLayer(nn.Module):
         key = torch.cat((key, task_features), dim=1)
         decoder_embeddings = torch.cat((decoder_embeddings, task_features), dim=1)
 
-        self_attention = self.self_attn(query, key, decoder_embeddings, key_padding_mask=key_padding_mask)[0]
-        decoder_embeddings = decoder_embeddings + self.dropout1(self_attention)
+        outputs = self.self_attn(
+            query, key, decoder_embeddings, key_padding_mask=key_padding_mask, output_attentions=output_attentions
+        )
+        context, self_attention = outputs if output_attentions else (outputs[0], None)
+        decoder_embeddings = decoder_embeddings + self.dropout1(context)
         decoder_embeddings = self.norm1(decoder_embeddings)
 
         task_features = decoder_embeddings[:, origin_embedding_len:, :].transpose(0, 1)
         decoder_embeddings = decoder_embeddings[:, :origin_embedding_len, :]
 
         # cross attention
-        cross_attention = self.cross_attn(
+        outputs, cross_attention = self.cross_attn(
             hidden_states=self.with_pos_embed(decoder_embeddings, query_position),
             attention_mask=padding_mask,
             encoder_hidden_states=vision_features,
             reference_points=reference_points.unsqueeze(2),
             spatial_shapes=torch.tensor(vision_shapes, dtype=torch.int64),
-        )[0]
-        decoder_embeddings = decoder_embeddings + self.dropout2(cross_attention)
+        )
+        decoder_embeddings = decoder_embeddings + self.dropout2(outputs)
         residual = self.norm2(decoder_embeddings)
 
         # feed forward network
@@ -1204,8 +1208,7 @@ class OmDetTurboPreTrainedModel(PreTrainedModel):
     def _get_cache_key_at_index(inputs, index):
         input_ids = inputs["input_ids"][index]
         input_mask = inputs["attention_mask"][index]
-        cache_key = "-".join([str(input_ids[i]) for i in range(len(input_ids)) if input_mask[i] != 0])
-
+        cache_key = tuple(input_ids[input_mask != 0].tolist())
         return cache_key
 
     def get_cached_class_emb(self, classes):
@@ -1272,7 +1275,7 @@ class OmDetTurboPreTrainedModel(PreTrainedModel):
                 total_task_masks[idx_to_put] = cur_mask
                 self.language_cache_prompt.put(not_cached_tasks[idx], (emb, cur_mask))
 
-        total_task_features = torch.cat(total_task_features, dim=1)
+        total_task_features = torch.cat(total_task_features, dim=1).to(self.device)
         total_task_masks = torch.cat(total_task_masks, dim=0).to(self.device)
 
         return total_task_features, total_task_masks
@@ -1378,25 +1381,35 @@ class OmDetTurboDecoder(OmDetTurboPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def _generate_anchors(self, vision_shapes, grid_size=0.05, dtype=torch.float32, device="cpu", eps=1e-2):
+    # Copied from transformers.models.rt_detr.modeling_rt_detr.RTDetrModel.generate_anchors
+    @lru_cache(maxsize=32)
+    def generate_anchors(self, spatial_shapes=None, grid_size=0.05):
+        # We always generate anchors in float32 to preserve equivalence between
+        # dynamic and static anchor inference
+        dtype = torch.float32
+
+        if spatial_shapes is None:
+            spatial_shapes = [
+                [int(self.config.anchor_image_size[0] / s), int(self.config.anchor_image_size[1] / s)]
+                for s in self.config.feat_strides
+            ]
         anchors = []
-        for i, (height, width) in enumerate(vision_shapes):
+        for level, (height, width) in enumerate(spatial_shapes):
             grid_y, grid_x = torch.meshgrid(
-                torch.arange(end=height, dtype=dtype, device=device),
-                torch.arange(end=width, dtype=dtype, device=device),
-                indexing="ij",
+                torch.arange(end=height, dtype=dtype), torch.arange(end=width, dtype=dtype), indexing="ij"
             )
-            grid_xy = torch.stack([grid_x, grid_y], -1)  # (height, width, 2)
-
-            valid_WH = torch.tensor([width, height], dtype=dtype, device=device)
-            grid_xy = (grid_xy.unsqueeze(0) + 0.5) / valid_WH  # (1, height, width, 2)
-            anchor_sizes = torch.ones_like(grid_xy, dtype=dtype, device=device) * grid_size * (2.0**i)
-            anchors.append(torch.cat([grid_xy, anchor_sizes], -1).view(-1, height * width, 4))  # (1, height*width, 4)
-
-        anchors = torch.cat(anchors, 1)  # (1, height*width*nl, 4)
-        valid_mask = ((anchors > eps) * (anchors < 1 - eps)).all(-1, keepdim=True)  # 1, height*width*nl, 1
+            grid_xy = torch.stack([grid_x, grid_y], -1)
+            valid_wh = torch.tensor([width, height]).to(dtype)
+            grid_xy = (grid_xy.unsqueeze(0) + 0.5) / valid_wh
+            wh = torch.ones_like(grid_xy) * grid_size * (2.0**level)
+            anchors.append(torch.concat([grid_xy, wh], -1).reshape(-1, height * width, 4))
+        # define the valid range for anchor coordinates
+        eps = 1e-2
+        anchors = torch.concat(anchors, 1)
+        valid_mask = ((anchors > eps) * (anchors < 1 - eps)).all(-1, keepdim=True)
         anchors = torch.log(anchors / (1 - anchors))
-        anchors = torch.where(valid_mask, anchors, torch.tensor(torch.inf, dtype=torch.float32))
+        anchors = torch.where(valid_mask, anchors, torch.inf)
+
         return anchors, valid_mask
 
     def _get_encoder_input(self, vision_features):
@@ -1410,7 +1423,7 @@ class OmDetTurboDecoder(OmDetTurboPreTrainedModel):
             # [b, c, height, width] -> [b, height*width, c]
             new_vision_features.append(feat.flatten(2).permute(0, 2, 1))
             # [nl, 2]
-            new_vision_shapes.append([height, width])
+            new_vision_shapes.append((height, width))
 
         # [b, height*width, c]
         new_vision_features = torch.cat(new_vision_features, 1)
@@ -1422,9 +1435,8 @@ class OmDetTurboDecoder(OmDetTurboPreTrainedModel):
         logit_scale = torch.tensor(np.log(1 / 0.07), dtype=torch.float32)
         batch_size = len(vision_features)
         # prepare input for decoder
-        anchors, valid_mask = self._generate_anchors(
-            vision_shapes, dtype=vision_features.dtype, device=vision_features.device
-        )
+        anchors, valid_mask = self.generate_anchors(tuple(vision_shapes))
+        anchors, valid_mask = anchors.to(vision_features.device), valid_mask.to(vision_features.device)
         predicted_class_features = self.encoder_vision_features(
             torch.where(valid_mask, vision_features, torch.tensor(0.0, dtype=torch.float32))
         )
@@ -1613,7 +1625,6 @@ class OmDetTurboForObjectDetection(OmDetTurboPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.use_return_dict
 
         # classes = [classes[str(i)] for i in range(len(classes))]
-
         image_features = self.vision_backbone(pixel_values)
         encoder_outputs = self.encoder(
             image_features,

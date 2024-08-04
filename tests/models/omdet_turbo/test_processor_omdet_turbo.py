@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import tempfile
 
 import numpy as np
 import pytest
@@ -40,15 +39,13 @@ if is_vision_available():
 @require_vision
 class OmDetTurboProcessorTest(TestCasePlus):
     def setUp(self):
-        self.tmpdirname = tempfile.mkdtemp()
-
         super().setUp()
 
         self.checkpoint_path = self.get_auto_remove_tmp_dir()
 
         image_processor = DetrImageProcessor(
             return_tensors="pt",
-            size=[640, 640],
+            size={"height": 640, "width": 640},
             do_rescale=False,
             image_mean=IMAGE_MEAN,
             image_std=IMAGE_STD,
@@ -60,7 +57,7 @@ class OmDetTurboProcessorTest(TestCasePlus):
 
         processor.save_pretrained(self.checkpoint_path)
 
-        self.input_keys = ["tasks", "labels", "pixel_values"]
+        self.input_keys = ["tasks", "classes", "pixel_values"]
         self.text_input_keys = ["input_ids", "attention_mask"]
 
         self.batch_size = 5
@@ -91,9 +88,9 @@ class OmDetTurboProcessorTest(TestCasePlus):
             decoder_class_logits=torch.rand(self.batch_size, self.num_queries, self.embed_dim),
         )
 
-    def get_fake_omdet_turbo_labels(self):
-        input_labels = [f"label{i}" for i in range(self.num_queries)]
-        return [input_labels] * self.batch_size
+    def get_fake_omdet_turbo_classes(self):
+        input_classes = [f"class{i}" for i in range(self.num_queries)]
+        return [input_classes] * self.batch_size
 
     def test_post_process_grounded_object_detection(self):
         image_processor = self.get_image_processor()
@@ -102,14 +99,14 @@ class OmDetTurboProcessorTest(TestCasePlus):
         processor = OmDetTurboProcessor(tokenizer=tokenizer, image_processor=image_processor)
 
         omdet_turbo_output = self.get_fake_omdet_turbo_output()
-        omdet_turbo_labels = self.get_fake_omdet_turbo_labels()
+        omdet_turbo_classes = self.get_fake_omdet_turbo_classes()
 
         post_processed = processor.post_process_grounded_object_detection(
-            omdet_turbo_output, omdet_turbo_labels, target_sizes=[(30, 400) for _ in range(self.batch_size)]
+            omdet_turbo_output, omdet_turbo_classes, target_sizes=[(400, 30) for _ in range(self.batch_size)]
         )
 
         self.assertEqual(len(post_processed), self.batch_size)
-        self.assertEqual(list(post_processed[0].keys()), ["boxes", "scores", "labels"])
+        self.assertEqual(list(post_processed[0].keys()), ["boxes", "scores", "classes"])
         self.assertEqual(post_processed[0]["boxes"].shape, (self.num_queries, 4))
         self.assertEqual(post_processed[0]["scores"].shape, (self.num_queries,))
         expected_scores = torch.tensor([0.7310, 0.6579, 0.6513, 0.6444, 0.6252])
@@ -171,16 +168,15 @@ class OmDetTurboProcessorTest(TestCasePlus):
         processor = OmDetTurboProcessor(tokenizer=tokenizer, image_processor=image_processor)
 
         input_tasks = "task"
-        input_labels = ["label1", "label2"]
+        input_classes = ["class1", "class2"]
         image_input = self.prepare_image_inputs()
 
-        input_processor = processor(images=image_input, text=input_tasks, labels=input_labels, return_tensors="pt")
+        input_processor = processor(images=image_input, text=input_tasks, classes=input_classes, return_tensors="pt")
 
         assert torch.is_tensor(input_processor["pixel_values"])
         for key in self.text_input_keys:
             assert torch.is_tensor(input_processor["tasks"][key])
-            for _, label in input_processor["labels"].items():
-                assert torch.is_tensor(label[key])
+            assert torch.is_tensor(input_processor["classes"][key])
         # test if it raises when no input is passed
         with pytest.raises(ValueError):
             processor()
@@ -205,9 +201,9 @@ class OmDetTurboProcessorTest(TestCasePlus):
         processor = OmDetTurboProcessor(tokenizer=tokenizer, image_processor=image_processor)
 
         input_tasks = "task"
-        input_labels = ["label1", "label2"]
+        input_classes = ["class1", "class2"]
         image_input = self.prepare_image_inputs()
 
-        inputs = processor(images=image_input, text=input_tasks, labels=input_labels, return_tensors="pt")
+        inputs = processor(images=image_input, text=input_tasks, classes=input_classes, return_tensors="pt")
 
         self.assertListEqual(list(inputs.keys()), self.input_keys)

@@ -236,8 +236,7 @@ class OmDetTurboConfig(PretrainedConfig):
             text_config = CONFIG_MAPPING["clip_text_model"]()
         elif isinstance(text_config, dict):
             text_model_type = text_config.pop("model_type")
-            config_class = CONFIG_MAPPING[text_model_type]
-            text_config = config_class.from_dict(text_config)
+            text_config = CONFIG_MAPPING[text_model_type](**text_config)
 
         self.text_config = text_config
         self.backbone_config = backbone_config

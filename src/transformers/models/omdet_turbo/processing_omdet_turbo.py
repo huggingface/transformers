@@ -127,6 +127,17 @@ class OmDetTurboProcessor(ProcessorMixin):
         [`CLIPTokenizerFast.__call__`] to prepare text for the model.
 
         Please refer to the docstring of the above two methods for more information.
+
+        Args:
+            images (:obj:`ImageInput`):
+               Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255.
+            text (:obj:`Union[str, List[str], TextInput, PreTokenizedInput]`):
+                The grounded text used to guide open vocabulary detection. Expects a single string or a list of strings.
+                Examples: "Detect a cat, a dog, and a bird.", "Detect everything."
+            classes (:obj:`Union[List[str], List[List[str]]]`):
+                The classes used to limit the scope of the open vocabulary detection. Expects a list of strings or a list
+                of list of strings.
+                Examples: ["cat", "dog", "bird"].
         """
         if images is None or text is None or classes is None:
             raise ValueError("You have to specify `images`, `text` and `classes`.")
