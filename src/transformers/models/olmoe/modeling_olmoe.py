@@ -309,7 +309,6 @@ class OlmoeAttention(nn.Module):
         self.k_norm = OlmoeRMSNorm((self.hidden_size // self.num_heads) * self.num_key_value_heads)
         self._init_rope()
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaAttention._init_rope with Llama->Olmoe
     def _init_rope(self):
         if self.config.rope_scaling is None:
             self.rotary_emb = OlmoeRotaryEmbedding(
