@@ -777,6 +777,11 @@ class Kosmos2ModelIntegrationTest(unittest.TestCase):
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
         inputs = processor(text="what's in the image", images=image, return_tensors="pt").to(torch_device)
 
+        # interpolate_pos_encodiung false should return value error
+        with self.assertRaises(ValueError, msg="doesn't match model"):
+            with torch.no_grad():
+                model(**inputs, interpolate_pos_encoding=False)
+
         # forward pass
         with torch.no_grad():
             outputs = model(**inputs, interpolate_pos_encoding=True)
@@ -786,7 +791,10 @@ class Kosmos2ModelIntegrationTest(unittest.TestCase):
 
         self.assertEqual(outputs.vision_model_output.last_hidden_state.shape, expected_shape)
 
-        # interpolate_pos_encodiung false should return value error
-        with self.assertRaises(ValueError, msg="doesn't match model"):
-            with torch.no_grad():
-                model(**inputs, interpolate_pos_encoding=False)
+        expected_slice = torch.tensor(
+            [[1.4228, -1.9611, 3.8449], [3.4988, 2.0516, 0.3597], [3.1699, 0.2604, -0.4210]]
+        ).to(torch_device)
+
+        self.assertTrue(
+            torch.allclose(outputs.vision_model_output.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4)
+        )

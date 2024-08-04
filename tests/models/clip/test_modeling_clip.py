@@ -870,3 +870,11 @@ class CLIPModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 26, 768))
 
         self.assertEqual(outputs.vision_model_output.last_hidden_state.shape, expected_shape)
+
+        expected_slice = torch.tensor(
+            [[-0.0966, 0.3521, -0.3485], [0.5785, 0.8967, 0.3586], [0.2314, 0.3896, 0.2557]]
+        ).to(torch_device)
+
+        self.assertTrue(
+            torch.allclose(outputs.vision_model_output.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4)
+        )

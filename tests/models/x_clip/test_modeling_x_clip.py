@@ -23,7 +23,13 @@ import numpy as np
 from huggingface_hub import hf_hub_download
 
 from transformers import XCLIPConfig, XCLIPTextConfig, XCLIPVisionConfig
-from transformers.testing_utils import require_torch, require_torch_multi_gpu, require_vision, slow, torch_device
+from transformers.testing_utils import (
+    require_torch,
+    require_torch_multi_gpu,
+    require_vision,
+    slow,
+    torch_device,
+)
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -91,7 +97,12 @@ class XCLIPVisionModelTester:
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor(
-            [self.batch_size * self.num_frames, self.num_channels, self.image_size, self.image_size]
+            [
+                self.batch_size * self.num_frames,
+                self.num_channels,
+                self.image_size,
+                self.image_size,
+            ]
         )
         config = self.get_config()
 
@@ -122,11 +133,17 @@ class XCLIPVisionModelTester:
         # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
         image_size = (self.image_size, self.image_size)
         patch_size = (self.patch_size, self.patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        self.parent.assertEqual(
-            result.last_hidden_state.shape, (self.batch_size * self.num_frames, num_patches + 1, self.hidden_size)
+        num_patches = (image_size[1] // patch_size[1]) * (
+            image_size[0] // patch_size[0]
         )
-        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size * self.num_frames, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size * self.num_frames, num_patches + 1, self.hidden_size),
+        )
+        self.parent.assertEqual(
+            result.pooler_output.shape,
+            (self.batch_size * self.num_frames, self.hidden_size),
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -151,7 +168,10 @@ class XCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = XCLIPVisionModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=XCLIPVisionConfig, has_text_modality=False, hidden_size=37
+            self,
+            config_class=XCLIPVisionConfig,
+            has_text_modality=False,
+            hidden_size=37,
         )
 
     def test_config(self):
@@ -204,11 +224,15 @@ class XCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="XCLIPVisionModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(
+        reason="XCLIPVisionModel has no base class and is not available in MODEL_MAPPING"
+    )
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @unittest.skip(reason="XCLIPVisionModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(
+        reason="XCLIPVisionModel has no base class and is not available in MODEL_MAPPING"
+    )
     def test_save_load_fast_init_to_base(self):
         pass
 
@@ -248,7 +272,9 @@ class XCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
             model.eval()
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            self.assertEqual(len(outputs.attentions), self.model_tester.num_hidden_layers)
+            self.assertEqual(
+                len(outputs.attentions), self.model_tester.num_hidden_layers
+            )
 
             # check that output_attentions also work using config
             del inputs_dict["output_attentions"]
@@ -258,11 +284,17 @@ class XCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
             model.eval()
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            self.assertEqual(len(outputs.attentions), self.model_tester.num_hidden_layers)
+            self.assertEqual(
+                len(outputs.attentions), self.model_tester.num_hidden_layers
+            )
 
             self.assertListEqual(
                 list(outputs.attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, encoder_seq_length, encoder_seq_length],
+                [
+                    self.model_tester.num_attention_heads,
+                    encoder_seq_length,
+                    encoder_seq_length,
+                ],
             )
             out_len = len(outputs)
 
@@ -282,7 +314,11 @@ class XCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
             self.assertListEqual(
                 list(self_attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, encoder_seq_length, encoder_seq_length],
+                [
+                    self.model_tester.num_attention_heads,
+                    encoder_seq_length,
+                    encoder_seq_length,
+                ],
             )
 
     @require_torch_multi_gpu
@@ -291,7 +327,11 @@ class XCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
         # some params shouldn't be scattered by nn.DataParallel
         # so just remove them if they are present.
-        blacklist_non_batched_params = ["head_mask", "decoder_head_mask", "cross_attn_head_mask"]
+        blacklist_non_batched_params = [
+            "head_mask",
+            "decoder_head_mask",
+            "cross_attn_head_mask",
+        ]
         for k in blacklist_non_batched_params:
             inputs_dict.pop(k, None)
 
@@ -392,8 +432,13 @@ class XCLIPTextModelTester:
         with torch.no_grad():
             result = model(input_ids, attention_mask=input_mask)
             result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
+        self.parent.assertEqual(
+            result.pooler_output.shape, (self.batch_size, self.hidden_size)
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -411,7 +456,9 @@ class XCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = XCLIPTextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=XCLIPTextConfig, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=XCLIPTextConfig, hidden_size=37
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -442,11 +489,15 @@ class XCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="XCLIPTextModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(
+        reason="XCLIPTextModel has no base class and is not available in MODEL_MAPPING"
+    )
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @unittest.skip(reason="XCLIPTextModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(
+        reason="XCLIPTextModel has no base class and is not available in MODEL_MAPPING"
+    )
     def test_save_load_fast_init_to_base(self):
         pass
 
@@ -477,11 +528,15 @@ class XCLIPModelTester:
         self.mit_hidden_size = mit_hidden_size
         self.text_model_tester = XCLIPTextModelTester(parent, **text_kwargs)
         self.vision_model_tester = XCLIPVisionModelTester(parent, **vision_kwargs)
-        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
+        self.batch_size = (
+            self.text_model_tester.batch_size
+        )  # need bs for batching_equivalence test
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
-        text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
+        text_config, input_ids, attention_mask = (
+            self.text_model_tester.prepare_config_and_inputs()
+        )
         vision_config, _ = self.vision_model_tester.prepare_config_and_inputs()
         pixel_values = floats_tensor(
             [
@@ -532,7 +587,9 @@ class XCLIPModelTester:
 @require_torch
 class XCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (XCLIPModel,) if is_torch_available() else ()
-    pipeline_model_mapping = {"feature-extraction": XCLIPModel} if is_torch_available() else {}
+    pipeline_model_mapping = (
+        {"feature-extraction": XCLIPModel} if is_torch_available() else {}
+    )
     fx_compatible = False
     test_head_masking = False
     test_pruning = False
@@ -586,7 +643,9 @@ class XCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
                     elif name == "prompts_generator.alpha":
-                        self.assertAlmostEqual(param.data.mean().item(), model.config.prompt_alpha)
+                        self.assertAlmostEqual(
+                            param.data.mean().item(), model.config.prompt_alpha
+                        )
                     else:
                         self.assertIn(
                             ((param.data.mean() * 1e9).round() / 1e9).item(),
@@ -641,10 +700,14 @@ class XCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                     non_persistent_buffers[key] = loaded_model_state_dict[key]
 
             loaded_model_state_dict = {
-                key: value for key, value in loaded_model_state_dict.items() if key not in non_persistent_buffers
+                key: value
+                for key, value in loaded_model_state_dict.items()
+                if key not in non_persistent_buffers
             }
 
-            self.assertEqual(set(model_state_dict.keys()), set(loaded_model_state_dict.keys()))
+            self.assertEqual(
+                set(model_state_dict.keys()), set(loaded_model_state_dict.keys())
+            )
 
             model_buffers = list(model.buffers())
             for non_persistent_buffer in non_persistent_buffers.values():
@@ -672,7 +735,9 @@ class XCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir_name:
             config.save_pretrained(tmp_dir_name)
             vision_config = XCLIPVisionConfig.from_pretrained(tmp_dir_name)
-            self.assertDictEqual(config.vision_config.to_dict(), vision_config.to_dict())
+            self.assertDictEqual(
+                config.vision_config.to_dict(), vision_config.to_dict()
+            )
 
         # Save XCLIPConfig and check if we can load XCLIPTextConfig from it
         with tempfile.TemporaryDirectory() as tmp_dir_name:
@@ -690,7 +755,9 @@ class XCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 # We will verify our results on a spaghetti video
 def prepare_video():
     file = hf_hub_download(
-        repo_id="hf-internal-testing/spaghetti-video", filename="eating_spaghetti_8_frames.npy", repo_type="dataset"
+        repo_id="hf-internal-testing/spaghetti-video",
+        filename="eating_spaghetti_8_frames.npy",
+        repo_type="dataset",
     )
     video = np.load(file)
     return list(video)
@@ -707,7 +774,10 @@ class XCLIPModelIntegrationTest(unittest.TestCase):
 
         video = prepare_video()
         inputs = processor(
-            text=["playing sports", "eating spaghetti", "go shopping"], videos=video, return_tensors="pt", padding=True
+            text=["playing sports", "eating spaghetti", "go shopping"],
+            videos=video,
+            return_tensors="pt",
+            padding=True,
         ).to(torch_device)
 
         # forward pass
@@ -724,9 +794,13 @@ class XCLIPModelIntegrationTest(unittest.TestCase):
             torch.Size((inputs.input_ids.shape[0], inputs.pixel_values.shape[0])),
         )
 
-        expected_logits = torch.tensor([[14.0181, 20.2771, 14.4776]], device=torch_device)
+        expected_logits = torch.tensor(
+            [[14.0181, 20.2771, 14.4776]], device=torch_device
+        )
 
-        self.assertTrue(torch.allclose(outputs.logits_per_video, expected_logits, atol=1e-3))
+        self.assertTrue(
+            torch.allclose(outputs.logits_per_video, expected_logits, atol=1e-3)
+        )
 
     @slow
     def test_inference_interpolate_pos_encoding(self):
@@ -734,14 +808,20 @@ class XCLIPModelIntegrationTest(unittest.TestCase):
         # allowing to interpolate the pre-trained position embeddings in order to use
         # the model on higher resolutions. The DINO model by Facebook AI leverages this
         # to visualize self-attention on higher resolution images.
-        model = XCLIPModel.from_pretrained("microsoft/xclip-base-patch32").to(torch_device)
+        model = XCLIPModel.from_pretrained("microsoft/xclip-base-patch32").to(
+            torch_device
+        )
 
         processor = XCLIPProcessor.from_pretrained(
-            "microsoft/xclip-base-patch32", size=180, crop_size={"height": 180, "width": 180}
+            "microsoft/xclip-base-patch32",
+            size=180,
+            crop_size={"height": 180, "width": 180},
         )
 
         video = prepare_video()
-        inputs = processor(text="what's in the video", videos=video, return_tensors="pt").to(torch_device)
+        inputs = processor(
+            text="what's in the video", videos=video, return_tensors="pt"
+        ).to(torch_device)
 
         # forward pass
         with torch.no_grad():
@@ -750,7 +830,27 @@ class XCLIPModelIntegrationTest(unittest.TestCase):
         # verify the logits
         expected_shape = torch.Size((8, 26, 768))
 
-        self.assertEqual(outputs.vision_model_output.last_hidden_state.shape, expected_shape)
+        self.assertEqual(
+            outputs.vision_model_output.last_hidden_state.shape, expected_shape
+        )
+
+        expected_slice = torch.tensor(
+            [
+                [0.1806, 0.3649, -0.0850],
+                [0.0210, 0.3411, -0.0637],
+                [0.2307, 0.3106, -0.2027],
+            ]
+        ).to(torch_device)
+
+        print(outputs.vision_model_output.last_hidden_state[0, :3, :3])
+
+        self.assertTrue(
+            torch.allclose(
+                outputs.vision_model_output.last_hidden_state[0, :3, :3],
+                expected_slice,
+                atol=1e-4,
+            )
+        )
 
         # interpolate_pos_encodiung false should return value error
         with self.assertRaises(ValueError, msg="doesn't match model"):
