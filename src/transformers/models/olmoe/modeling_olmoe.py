@@ -64,7 +64,7 @@ def load_balancing_loss_func(
         gate_logits (Union[`torch.Tensor`, Tuple[torch.Tensor]):
             Logits from the `gate`, should be a tuple of model.config.num_hidden_layers tensors of
             shape [batch_size X sequence_length, num_experts].
-        attention_mask (`torch.Tensor`, None):
+        attention_mask (`torch.Tensor`, *optional*):
             The attention_mask used in forward function
             shape [batch_size X sequence_length] if not None.
         num_experts (`int`, *optional*):
@@ -148,24 +148,77 @@ ALL_LAYERNORM_LAYERS.append(OlmoeRMSNorm)
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->Olmoe
 class OlmoeRotaryEmbedding(nn.Module):
-    def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
+    def __init__(
+        self,
+        dim=None,
+        max_position_embeddings=2048,
+        base=10000,
+        device=None,
+        scaling_factor=1.0,
+        rope_type="default",
+        config: Optional[OlmoeConfig] = None,
+    ):
         super().__init__()
-        self.scaling_factor = scaling_factor
-        self.dim = dim
-        self.max_position_embeddings = max_position_embeddings
-        self.base = base
-        inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.int64).float().to(device) / self.dim))
+        # TODO (joao): remove the `if` below, only used for BC
+        self.rope_kwargs = {}
+        if config is None:
+            logger.warning_once(
+                "`OlmoeRotaryEmbedding` can now be fully parameterized by passing the model config through the "
+                "`config` argument. All other arguments will be removed in v4.45"
+            )
+            self.rope_kwargs = {
+                "rope_type": rope_type,
+                "factor": scaling_factor,
+                "dim": dim,
+                "base": base,
+                "max_position_embeddings": max_position_embeddings,
+            }
+            self.rope_type = rope_type
+            self.max_seq_len_cached = max_position_embeddings
+            self.original_max_seq_len = max_position_embeddings
+        else:
+            # BC: "rope_type" was originally "type"
+            if config.rope_scaling is not None:
+                self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
+            else:
+                self.rope_type = "default"
+            self.max_seq_len_cached = config.max_position_embeddings
+            self.original_max_seq_len = config.max_position_embeddings
+
+        self.config = config
+        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+
+        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device, **self.rope_kwargs)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        # For BC we register cos and sin cached
-        self.max_seq_len_cached = max_position_embeddings
+        self.original_inv_freq = self.inv_freq
+
+    def _dynamic_frequency_update(self, position_ids, device):
+        """
+        dynamic RoPE layers should recompute `inv_freq` in the following situations:
+        1 - growing beyond the cached sequence length (allow scaling)
+        2 - the current sequence length is in the original scale (avoid losing precision with small sequences)
+        """
+        seq_len = torch.max(position_ids) + 1
+        if seq_len > self.max_seq_len_cached:  # growth
+            inv_freq, self.attention_scaling = self.rope_init_fn(
+                self.config, device, seq_len=seq_len, **self.rope_kwargs
+            )
+            self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: may break with compilation
+            self.max_seq_len_cached = seq_len
+
+        if seq_len < self.original_max_seq_len and self.max_seq_len_cached > self.original_max_seq_len:  # reset
+            self.register_buffer("inv_freq", self.original_inv_freq, persistent=False)
+            self.max_seq_len_cached = self.original_max_seq_len
 
     @torch.no_grad()
     def forward(self, x, position_ids):
-        # x: [bs, num_attention_heads, seq_len, head_size]
+        if "dynamic" in self.rope_type:
+            self._dynamic_frequency_update(position_ids, device=x.device)
+
+        # Core RoPE block
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
         position_ids_expanded = position_ids[:, None, :].float()
-        # Force float32 since bfloat16 loses precision on long contexts
-        # See https://github.com/huggingface/transformers/pull/29285
+        # Force float32 (see https://github.com/huggingface/transformers/pull/29285)
         device_type = x.device.type
         device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):
@@ -173,6 +226,11 @@ class OlmoeRotaryEmbedding(nn.Module):
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos()
             sin = emb.sin()
+
+        # Advanced RoPE types (e.g. yarn) apply a post-processing scaling factor, equivalent to scaling attention
+        cos = cos * self.attention_scaling
+        sin = sin * self.attention_scaling
+
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
@@ -180,31 +238,27 @@ class OlmoeRotaryEmbedding(nn.Module):
 class OlmoeLinearScalingRotaryEmbedding(OlmoeRotaryEmbedding):
     """OlmoeRotaryEmbedding extended with linear scaling. Credits to the Reddit user /u/kaiokendev"""
 
-    def forward(self, x, position_ids):
-        # difference to the original RoPE: a scaling factor is aplied to the position ids
-        position_ids = position_ids.float() / self.scaling_factor
-        cos, sin = super().forward(x, position_ids)
-        return cos, sin
+    def __init__(self, *args, **kwargs):
+        logger.warning_once(
+            "`OlmoeLinearScalingRotaryEmbedding` is deprecated an will be removed in v4.45. Please use "
+            "`OlmoeRotaryEmbedding`, which now also does linear scaling (simply pass the model config to __init__)."
+        )
+        kwargs["rope_type"] = "linear"
+        super().__init__(*args, **kwargs)
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaDynamicNTKScalingRotaryEmbedding with Llama->Olmoe
 class OlmoeDynamicNTKScalingRotaryEmbedding(OlmoeRotaryEmbedding):
     """OlmoeRotaryEmbedding extended with Dynamic NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla"""
 
-    def forward(self, x, position_ids):
-        # difference to the original RoPE: inv_freq is recomputed when the sequence length > original length
-        seq_len = torch.max(position_ids) + 1
-        if seq_len > self.max_position_embeddings:
-            base = self.base * (
-                (self.scaling_factor * seq_len / self.max_position_embeddings) - (self.scaling_factor - 1)
-            ) ** (self.dim / (self.dim - 2))
-            inv_freq = 1.0 / (
-                base ** (torch.arange(0, self.dim, 2, dtype=torch.int64).float().to(x.device) / self.dim)
-            )
-            self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: this may break with compilation
-
-        cos, sin = super().forward(x, position_ids)
-        return cos, sin
+    def __init__(self, *args, **kwargs):
+        logger.warning_once(
+            "`OlmoeDynamicNTKScalingRotaryEmbedding` is deprecated an will be removed in v4.45. Please use "
+            "`OlmoeRotaryEmbedding`, which now also does dynamic ntk scaling (simply pass the model config to "
+            "__init__)."
+        )
+        kwargs["rope_type"] = "dynamic"
+        super().__init__(*args, **kwargs)
 
 
 # Copied from transformers.models.llama.modeling_llama.rotate_half
@@ -1071,27 +1125,18 @@ class OlmoeModel(OlmoePreTrainedModel):
                 else past_seen_tokens + sequence_length + 1
             )
 
-        if attention_mask is not None and attention_mask.dim() == 4:
-            # in this case we assume that the mask comes already in inverted form and requires no inversion or slicing
-            if attention_mask.max() != 0:
-                raise ValueError("Custom 4D attention mask should be passed in inverted form with max==0`")
-            causal_mask = attention_mask
-        else:
-            causal_mask = torch.full(
-                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device
-            )
-            if sequence_length != 1:
-                causal_mask = torch.triu(causal_mask, diagonal=1)
-            causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
-            causal_mask = causal_mask[None, None, :, :].expand(input_tensor.shape[0], 1, -1, -1)
-            if attention_mask is not None:
-                causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
-                mask_length = attention_mask.shape[-1]
-                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :]
-                padding_mask = padding_mask == 0
-                causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
-                    padding_mask, min_dtype
-                )
+        # In case the provided `attention` mask is 2D, we generate a causal mask here (4D).
+        causal_mask = _prepare_4d_causal_attention_mask_with_cache_position(
+            attention_mask,
+            sequence_length=sequence_length,
+            target_length=target_length,
+            dtype=dtype,
+            device=device,
+            min_dtype=min_dtype,
+            cache_position=cache_position,
+            batch_size=input_tensor.shape[0],
+        )
+
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
