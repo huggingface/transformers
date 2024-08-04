@@ -22,7 +22,12 @@ import unittest
 import numpy as np
 import requests
 
-from transformers import AltCLIPConfig, AltCLIPProcessor, AltCLIPTextConfig, AltCLIPVisionConfig
+from transformers import (
+    AltCLIPConfig,
+    AltCLIPProcessor,
+    AltCLIPTextConfig,
+    AltCLIPVisionConfig,
+)
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -87,7 +92,9 @@ class AltCLIPVisionModelTester:
         self.seq_length = num_patches + 1
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.image_size, self.image_size]
+        )
         config = self.get_config()
 
         return config, pixel_values
@@ -116,9 +123,16 @@ class AltCLIPVisionModelTester:
         # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
         image_size = (self.image_size, self.image_size)
         patch_size = (self.patch_size, self.patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
-        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
+        num_patches = (image_size[1] // patch_size[1]) * (
+            image_size[0] // patch_size[0]
+        )
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, num_patches + 1, self.hidden_size),
+        )
+        self.parent.assertEqual(
+            result.pooler_output.shape, (self.batch_size, self.hidden_size)
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -143,7 +157,10 @@ class AltCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = AltCLIPVisionModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=AltCLIPVisionConfig, has_text_modality=False, hidden_size=37
+            self,
+            config_class=AltCLIPVisionConfig,
+            has_text_modality=False,
+            hidden_size=37,
         )
 
     def test_config(self):
@@ -196,15 +213,21 @@ class AltCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="AltCLIPVisionModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(
+        reason="AltCLIPVisionModel has no base class and is not available in MODEL_MAPPING"
+    )
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @unittest.skip(reason="AltCLIPVisionModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(
+        reason="AltCLIPVisionModel has no base class and is not available in MODEL_MAPPING"
+    )
     def test_save_load_fast_init_to_base(self):
         pass
 
-    @unittest.skip(reason="AltCLIPVisionModel use the same cv backbone with CLIP model.")
+    @unittest.skip(
+        reason="AltCLIPVisionModel use the same cv backbone with CLIP model."
+    )
     def test_model_from_pretrained(self):
         pass
 
@@ -291,8 +314,13 @@ class AltCLIPTextModelTester:
         with torch.no_grad():
             result = model(input_ids, attention_mask=input_mask)
             result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.projection_dim))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
+        self.parent.assertEqual(
+            result.pooler_output.shape, (self.batch_size, self.projection_dim)
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -315,7 +343,9 @@ class AltCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = AltCLIPTextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=AltCLIPTextConfig, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=AltCLIPTextConfig, hidden_size=37
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -353,11 +383,15 @@ class AltCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="AltCLIPTextModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(
+        reason="AltCLIPTextModel has no base class and is not available in MODEL_MAPPING"
+    )
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @unittest.skip(reason="AltCLIPTextModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(
+        reason="AltCLIPTextModel has no base class and is not available in MODEL_MAPPING"
+    )
     def test_save_load_fast_init_to_base(self):
         pass
 
@@ -378,19 +412,27 @@ class AltCLIPModelTester:
         self.parent = parent
         self.text_model_tester = AltCLIPTextModelTester(parent, **text_kwargs)
         self.vision_model_tester = AltCLIPVisionModelTester(parent, **vision_kwargs)
-        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
+        self.batch_size = (
+            self.text_model_tester.batch_size
+        )  # need bs for batching_equivalence test
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
-        text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
-        vision_config, pixel_values = self.vision_model_tester.prepare_config_and_inputs()
+        text_config, input_ids, attention_mask = (
+            self.text_model_tester.prepare_config_and_inputs()
+        )
+        vision_config, pixel_values = (
+            self.vision_model_tester.prepare_config_and_inputs()
+        )
 
         config = self.get_config()
         return config, input_ids, attention_mask, pixel_values
 
     def get_config(self):
         return AltCLIPConfig.from_text_vision_configs(
-            self.text_model_tester.get_config(), self.vision_model_tester.get_config(), projection_dim=64
+            self.text_model_tester.get_config(),
+            self.vision_model_tester.get_config(),
+            projection_dim=64,
         )
 
     def create_and_check_model(self, config, input_ids, attention_mask, pixel_values):
@@ -423,7 +465,9 @@ def prepare_img():
 @require_torch
 class AltCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (AltCLIPModel,) if is_torch_available() else ()
-    pipeline_model_mapping = {"feature-extraction": AltCLIPModel} if is_torch_available() else {}
+    pipeline_model_mapping = (
+        {"feature-extraction": AltCLIPModel} if is_torch_available() else {}
+    )
     fx_compatible = True
     test_head_masking = False
     test_pruning = False
@@ -432,7 +476,12 @@ class AltCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     # TODO: Fix the failed tests when this model gets more usage
     def is_pipeline_test_to_skip(
-        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+        self,
+        pipeline_test_casse_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        processor_name,
     ):
         if pipeline_test_casse_name == "FeatureExtractionPipelineTests":
             return True
@@ -532,10 +581,14 @@ class AltCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
                     non_persistent_buffers[key] = loaded_model_state_dict[key]
 
             loaded_model_state_dict = {
-                key: value for key, value in loaded_model_state_dict.items() if key not in non_persistent_buffers
+                key: value
+                for key, value in loaded_model_state_dict.items()
+                if key not in non_persistent_buffers
             }
 
-            self.assertEqual(set(model_state_dict.keys()), set(loaded_model_state_dict.keys()))
+            self.assertEqual(
+                set(model_state_dict.keys()), set(loaded_model_state_dict.keys())
+            )
 
             model_buffers = list(model.buffers())
             for non_persistent_buffer in non_persistent_buffers.values():
@@ -603,45 +656,48 @@ class AltCLIPModelIntegrationTest(unittest.TestCase):
         model_name = "BAAI/AltCLIP"
         model = AltCLIPModel.from_pretrained(model_name).to(torch_device)
 
-<<<<<<< HEAD
         image_processor = AltCLIPProcessor.from_pretrained(
-            model_name, size={"shortest_edge": 180}, crop_size={"height": 180, "width": 180}
+            model_name,
+            size={"shortest_edge": 180},
+            crop_size={"height": 180, "width": 180},
         )
-=======
-        image_processor = AltCLIPProcessor.from_pretrained(model_name)
->>>>>>> 26de213... fixes clip interpolate
 
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        inputs = image_processor(text="what's in the image", images=image, return_tensors="pt").to(torch_device)
+        inputs = image_processor(
+            text="what's in the image", images=image, return_tensors="pt"
+        ).to(torch_device)
 
-<<<<<<< HEAD
         # interpolate_pos_encodiung false should return value error
         with self.assertRaises(ValueError, msg="doesn't match model"):
             with torch.no_grad():
                 model(**inputs, interpolate_pos_encoding=False)
 
-=======
->>>>>>> 26de213... fixes clip interpolate
         # forward pass
         with torch.no_grad():
             outputs = model(**inputs, interpolate_pos_encoding=True)
 
         # verify the logits
-<<<<<<< HEAD
         expected_shape = torch.Size((1, 145, 1024))
-=======
-        expected_shape = torch.Size((1, 257, 1024))
->>>>>>> 26de213... fixes clip interpolate
         print("nilesh ")
         print(outputs.vision_model_output.last_hidden_state.shape)
         print(outputs.vision_model_output.last_hidden_state[0, :3, :3])
 
-        self.assertEqual(outputs.vision_model_output.last_hidden_state.shape, expected_shape)
+        self.assertEqual(
+            outputs.vision_model_output.last_hidden_state.shape, expected_shape
+        )
 
         expected_slice = torch.tensor(
-            [[-0.5297, -0.7713, 0.4655], [0.8688, 0.1690, 0.6678], [1.1742, -0.7551, 0.0396]]
+            [
+                [-0.5297, -0.7713, 0.4655],
+                [0.8688, 0.1690, 0.6678],
+                [1.1742, -0.7551, 0.0396],
+            ]
         ).to(torch_device)
 
         self.assertTrue(
-            torch.allclose(outputs.vision_model_output.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4)
+            torch.allclose(
+                outputs.vision_model_output.last_hidden_state[0, :3, :3],
+                expected_slice,
+                atol=1e-4,
+            )
         )
