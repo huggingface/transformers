@@ -144,7 +144,10 @@ class CLIPVisionModelTester:
         image_size = (self.image_size, self.image_size)
         patch_size = (self.patch_size, self.patch_size)
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, num_patches + 1, self.hidden_size),
+        )
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
     def create_and_check_model_with_projection(self, config, pixel_values):
@@ -157,7 +160,10 @@ class CLIPVisionModelTester:
         image_size = (self.image_size, self.image_size)
         patch_size = (self.patch_size, self.patch_size)
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, num_patches + 1, self.hidden_size),
+        )
         self.parent.assertEqual(result.image_embeds.shape, (self.batch_size, self.projection_dim))
 
     def prepare_config_and_inputs_for_common(self):
@@ -338,7 +344,10 @@ class CLIPTextModelTester:
         with torch.no_grad():
             result = model(input_ids, attention_mask=input_mask)
             result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
     def create_and_check_model_with_projection(self, config, input_ids, input_mask):
@@ -348,7 +357,10 @@ class CLIPTextModelTester:
         with torch.no_grad():
             result = model(input_ids, attention_mask=input_mask)
             result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
         self.parent.assertEqual(result.text_embeds.shape, (self.batch_size, self.projection_dim))
 
     def prepare_config_and_inputs_for_common(self):
@@ -448,7 +460,9 @@ class CLIPModelTester:
 
     def get_config(self):
         return CLIPConfig.from_text_vision_configs(
-            self.text_model_tester.get_config(), self.vision_model_tester.get_config(), projection_dim=64
+            self.text_model_tester.get_config(),
+            self.vision_model_tester.get_config(),
+            projection_dim=64,
         )
 
     def create_and_check_model(self, config, input_ids, attention_mask, pixel_values):
@@ -456,10 +470,12 @@ class CLIPModelTester:
         with torch.no_grad():
             result = model(input_ids, pixel_values, attention_mask)
         self.parent.assertEqual(
-            result.logits_per_image.shape, (self.vision_model_tester.batch_size, self.text_model_tester.batch_size)
+            result.logits_per_image.shape,
+            (self.vision_model_tester.batch_size, self.text_model_tester.batch_size),
         )
         self.parent.assertEqual(
-            result.logits_per_text.shape, (self.text_model_tester.batch_size, self.vision_model_tester.batch_size)
+            result.logits_per_text.shape,
+            (self.text_model_tester.batch_size, self.vision_model_tester.batch_size),
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -660,7 +676,11 @@ class CLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 # convert inputs to Flax
                 fx_inputs = {k: np.array(v.to("cpu")) for k, v in pt_inputs.items() if torch.is_tensor(v)}
                 fx_outputs = fx_model(**fx_inputs).to_tuple()
-                self.assertEqual(len(fx_outputs), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
+                self.assertEqual(
+                    len(fx_outputs),
+                    len(pt_outputs),
+                    "Output lengths differ between Flax and PyTorch",
+                )
                 for fx_output, pt_output in zip(fx_outputs[:4], pt_outputs[:4]):
                     self.assert_almost_equals(fx_output, pt_output.numpy(), 4e-2)
 
@@ -670,7 +690,9 @@ class CLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
                 fx_outputs_loaded = fx_model_loaded(**fx_inputs).to_tuple()
                 self.assertEqual(
-                    len(fx_outputs_loaded), len(pt_outputs), "Output lengths differ between Flax and PyTorch"
+                    len(fx_outputs_loaded),
+                    len(pt_outputs),
+                    "Output lengths differ between Flax and PyTorch",
                 )
                 for fx_output_loaded, pt_output in zip(fx_outputs_loaded[:4], pt_outputs[:4]):
                     self.assert_almost_equals(fx_output_loaded, pt_output.numpy(), 4e-2)
@@ -719,7 +741,11 @@ class CLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 fx_inputs = {k: np.array(v.to("cpu")) for k, v in pt_inputs.items() if torch.is_tensor(v)}
 
                 fx_outputs = fx_model(**fx_inputs).to_tuple()
-                self.assertEqual(len(fx_outputs), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
+                self.assertEqual(
+                    len(fx_outputs),
+                    len(pt_outputs),
+                    "Output lengths differ between Flax and PyTorch",
+                )
 
                 for fx_output, pt_output in zip(fx_outputs[:4], pt_outputs[:4]):
                     self.assert_almost_equals(fx_output, pt_output.numpy(), 4e-2)
@@ -732,7 +758,9 @@ class CLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                     pt_outputs_loaded = pt_model_loaded(**pt_inputs).to_tuple()
 
                 self.assertEqual(
-                    len(fx_outputs), len(pt_outputs_loaded), "Output lengths differ between Flax and PyTorch"
+                    len(fx_outputs),
+                    len(pt_outputs_loaded),
+                    "Output lengths differ between Flax and PyTorch",
                 )
                 for fx_output, pt_output in zip(fx_outputs[:4], pt_outputs_loaded[:4]):
                     self.assert_almost_equals(fx_output, pt_output.numpy(), 4e-2)
@@ -821,7 +849,10 @@ class CLIPModelIntegrationTest(unittest.TestCase):
 
         image = prepare_img()
         inputs = processor(
-            text=["a photo of a cat", "a photo of a dog"], images=image, padding=True, return_tensors="pt"
+            text=["a photo of a cat", "a photo of a dog"],
+            images=image,
+            padding=True,
+            return_tensors="pt",
         ).to(torch_device)
 
         # forward pass
@@ -851,7 +882,9 @@ class CLIPModelIntegrationTest(unittest.TestCase):
         model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32").to(torch_device)
 
         processor = CLIPProcessor.from_pretrained(
-            "openai/clip-vit-base-patch32", size={"height": 180, "width": 180}, crop_size={"height": 180, "width": 180}
+            "openai/clip-vit-base-patch32",
+            size={"height": 180, "width": 180},
+            crop_size={"height": 180, "width": 180},
         )
 
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
@@ -872,9 +905,17 @@ class CLIPModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.vision_model_output.last_hidden_state.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[-0.0966, 0.3521, -0.3485], [0.5785, 0.8967, 0.3586], [0.2314, 0.3896, 0.2557]]
+            [
+                [-0.0966, 0.3521, -0.3485],
+                [0.5785, 0.8967, 0.3586],
+                [0.2314, 0.3896, 0.2557],
+            ]
         ).to(torch_device)
 
         self.assertTrue(
-            torch.allclose(outputs.vision_model_output.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4)
+            torch.allclose(
+                outputs.vision_model_output.last_hidden_state[0, :3, :3],
+                expected_slice,
+                atol=1e-4,
+            )
         )

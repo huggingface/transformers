@@ -24,7 +24,10 @@ import numpy as np
 import requests
 
 from transformers import AutoModelForVision2Seq, AutoProcessor, Kosmos2Config
-from transformers.models.kosmos2.configuration_kosmos2 import Kosmos2TextConfig, Kosmos2VisionConfig
+from transformers.models.kosmos2.configuration_kosmos2 import (
+    Kosmos2TextConfig,
+    Kosmos2VisionConfig,
+)
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -186,7 +189,14 @@ class Kosmos2TextModelTester:
 
 
 class Kosmos2ModelTester:
-    def __init__(self, parent, text_kwargs=None, vision_kwargs=None, latent_query_num=3, is_training=True):
+    def __init__(
+        self,
+        parent,
+        text_kwargs=None,
+        vision_kwargs=None,
+        latent_query_num=3,
+        is_training=True,
+    ):
         if text_kwargs is None:
             text_kwargs = {}
         if vision_kwargs is None:
@@ -209,7 +219,13 @@ class Kosmos2ModelTester:
 
         config = self.get_config()
 
-        return config, input_ids, attention_mask, image_embeds_position_mask, pixel_values
+        return (
+            config,
+            input_ids,
+            attention_mask,
+            image_embeds_position_mask,
+            pixel_values,
+        )
 
     def get_config(self):
         return Kosmos2Config(
@@ -218,17 +234,32 @@ class Kosmos2ModelTester:
             latent_query_num=self.latent_query_num,
         )
 
-    def create_and_check_model(self, config, input_ids, attention_mask, image_embeds_position_mask, pixel_values):
+    def create_and_check_model(
+        self,
+        config,
+        input_ids,
+        attention_mask,
+        image_embeds_position_mask,
+        pixel_values,
+    ):
         model = Kosmos2Model(config).to(torch_device).eval()
         with torch.no_grad():
             result = model(pixel_values, input_ids, image_embeds_position_mask, attention_mask)
         self.parent.assertEqual(
             result.last_hidden_state.shape,
-            (self.text_model_tester.batch_size, self.text_model_tester.seq_length, self.text_model_tester.hidden_size),
+            (
+                self.text_model_tester.batch_size,
+                self.text_model_tester.seq_length,
+                self.text_model_tester.hidden_size,
+            ),
         )
         self.parent.assertEqual(
             result.image_embeds.shape,
-            (self.text_model_tester.batch_size, self.latent_query_num, self.text_model_tester.hidden_size),
+            (
+                self.text_model_tester.batch_size,
+                self.latent_query_num,
+                self.text_model_tester.hidden_size,
+            ),
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -248,7 +279,10 @@ class Kosmos2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     all_model_classes = (Kosmos2Model, Kosmos2ForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (Kosmos2ForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": Kosmos2Model, "image-to-text": Kosmos2ForConditionalGeneration}
+        {
+            "feature-extraction": Kosmos2Model,
+            "image-to-text": Kosmos2ForConditionalGeneration,
+        }
         if is_torch_available()
         else {}
     )
@@ -260,7 +294,12 @@ class Kosmos2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     # TODO: `image-to-text` pipeline for this model needs Processor.
     def is_pipeline_test_to_skip(
-        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+        self,
+        pipeline_test_casse_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        processor_name,
     ):
         return pipeline_test_casse_name == "ImageToTextPipelineTests"
 
@@ -270,7 +309,10 @@ class Kosmos2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         if return_labels:
             if model_class.__name__ == "Kosmos2ForConditionalGeneration":
                 inputs_dict["labels"] = torch.zeros(
-                    (self.model_tester.text_model_tester.batch_size, self.model_tester.text_model_tester.seq_length),
+                    (
+                        self.model_tester.text_model_tester.batch_size,
+                        self.model_tester.text_model_tester.seq_length,
+                    ),
                     dtype=torch.long,
                     device=torch_device,
                 )
@@ -329,7 +371,9 @@ class Kosmos2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
                 for k, v in model.state_dict().items():
                     self.assertIn(k, reloaded_state, f"Key {k} is missing from reloaded")
                     torch.testing.assert_close(
-                        v, reloaded_state[k], msg=lambda x: f"{model_class.__name__}: Tensor {k}: {x}"
+                        v,
+                        reloaded_state[k],
+                        msg=lambda x: f"{model_class.__name__}: Tensor {k}: {x}",
                     )
                 # Checking there was no complain of missing weights
                 self.assertEqual(infos["missing_keys"], [])
@@ -443,9 +487,18 @@ class Kosmos2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
             try:
                 main_input = inputs[main_input_name]
-                model(main_input, inputs["input_ids"], inputs["image_embeds_position_mask"])
+                model(
+                    main_input,
+                    inputs["input_ids"],
+                    inputs["image_embeds_position_mask"],
+                )
                 traced_model = torch.jit.trace(
-                    model, (main_input, inputs["input_ids"], inputs["image_embeds_position_mask"])
+                    model,
+                    (
+                        main_input,
+                        inputs["input_ids"],
+                        inputs["image_embeds_position_mask"],
+                    ),
                 )
             except RuntimeError:
                 self.fail("Couldn't trace module.")
@@ -542,7 +595,13 @@ class Kosmos2ModelIntegrationTest(unittest.TestCase):
         # By default, the generated  text is cleanup and the entities are extracted.
         final_text_with_entities = [processor.post_process_generation(x) for x in generated_text]
 
-        return scores, generated_ids, generated_text, processed_text, final_text_with_entities
+        return (
+            scores,
+            generated_ids,
+            generated_text,
+            processed_text,
+            final_text_with_entities,
+        )
 
     def test_snowman_image_captioning(self):
         url = "https://huggingface.co/microsoft/kosmos-2-patch14-224/resolve/main/snowman.png"
@@ -555,9 +614,13 @@ class Kosmos2ModelIntegrationTest(unittest.TestCase):
         processor = AutoProcessor.from_pretrained("microsoft/kosmos-2-patch14-224")
 
         prompt = "<grounding>An image of"
-        scores, generated_ids, generated_text, processed_text, final_text_with_entities = self.run_example(
-            prompt, image, model, processor
-        )
+        (
+            scores,
+            generated_ids,
+            generated_text,
+            processed_text,
+            final_text_with_entities,
+        ) = self.run_example(prompt, image, model, processor)
         processed_text = processed_text[0]
         final_text, entities = final_text_with_entities[0]
 
@@ -613,9 +676,13 @@ class Kosmos2ModelIntegrationTest(unittest.TestCase):
         # test with the detail caption generation
 
         prompt = "<grounding>Describe this image in detail:"
-        scores, generated_ids, generated_text, processed_text, final_text_with_entities = self.run_example(
-            prompt, image, model, processor
-        )
+        (
+            scores,
+            generated_ids,
+            generated_text,
+            processed_text,
+            final_text_with_entities,
+        ) = self.run_example(prompt, image, model, processor)
         processed_text = processed_text[0]
         final_text, entities = final_text_with_entities[0]
 
@@ -702,9 +769,13 @@ class Kosmos2ModelIntegrationTest(unittest.TestCase):
         # left padding
         processor = AutoProcessor.from_pretrained("microsoft/kosmos-2-patch14-224", padding_side="left")
 
-        scores, generated_ids, generated_text, processed_text, final_text_with_entities = self.run_example(
-            prompt, [image] * len(prompt), model, processor
-        )
+        (
+            scores,
+            generated_ids,
+            generated_text,
+            processed_text,
+            final_text_with_entities,
+        ) = self.run_example(prompt, [image] * len(prompt), model, processor)
         all_final_text = [x[0] for x in final_text_with_entities]
         all_entities = [x[1] for x in final_text_with_entities]
 
@@ -750,9 +821,13 @@ class Kosmos2ModelIntegrationTest(unittest.TestCase):
         # right padding
         processor = AutoProcessor.from_pretrained("microsoft/kosmos-2-patch14-224")
 
-        scores, generated_ids, generated_text, processed_text, final_text_with_entities = self.run_example(
-            prompt, [image] * len(prompt), model, processor
-        )
+        (
+            scores,
+            generated_ids,
+            generated_text,
+            processed_text,
+            final_text_with_entities,
+        ) = self.run_example(prompt, [image] * len(prompt), model, processor)
         all_final_text = [x[0] for x in final_text_with_entities]
         all_entities = [x[1] for x in final_text_with_entities]
 
@@ -771,7 +846,9 @@ class Kosmos2ModelIntegrationTest(unittest.TestCase):
 
         # default imnage size of pretrained kosmos_2 is 224 x 224
         processor = AutoProcessor.from_pretrained(
-            "microsoft/kosmos-2-patch14-224", size={"shortest_edge": 180}, crop_size={"height": 180, "width": 180}
+            "microsoft/kosmos-2-patch14-224",
+            size={"shortest_edge": 180},
+            crop_size={"height": 180, "width": 180},
         )
 
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
@@ -792,9 +869,17 @@ class Kosmos2ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.vision_model_output.last_hidden_state.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[1.4228, -1.9611, 3.8449], [3.4988, 2.0516, 0.3597], [3.1699, 0.2604, -0.4210]]
+            [
+                [1.4228, -1.9611, 3.8449],
+                [3.4988, 2.0516, 0.3597],
+                [3.1699, 0.2604, -0.4210],
+            ]
         ).to(torch_device)
 
         self.assertTrue(
-            torch.allclose(outputs.vision_model_output.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4)
+            torch.allclose(
+                outputs.vision_model_output.last_hidden_state[0, :3, :3],
+                expected_slice,
+                atol=1e-4,
+            )
         )
