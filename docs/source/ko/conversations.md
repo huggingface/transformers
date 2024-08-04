@@ -17,7 +17,7 @@ rendered properly in your Markdown viewer.
 # Transformers로 채팅하기[[Chatting with Transformers]]
 
 이 글을 보고 있다면 **채팅 모델**에 대해 어느정도 알고 계실 것입니다.
-채팅 모델이란 메시지를 주고받을 수 있는 대화형 인공지능입니다. 
+채팅 모델이란 메세지를 주고받을 수 있는 대화형 인공지능입니다. 
 대표적으로 ChatGPT가 있고, 이와 비슷하거나 더 뛰어난 오픈소스 채팅 모델이 많이 존재합니다.  
 이러한 모델들은 무료 다운로드할 수 있으며, 로컬에서 실행할 수 있습니다. 
 크고 무거운 모델은 고성능 하드웨어와 메모리가 필요하지만, 
@@ -33,9 +33,9 @@ rendered properly in your Markdown viewer.
 
 ## 빠른시작[[Quickstart]]
 
-자세히 볼 여유가 없는 분들을 위해 간단히 요약해보겠습니다: 
-채팅 모델은 대화 메시지를 계속해서 생성해 나갑니다.
-즉, 짧막한 채팅 메세지를 모델에게 전달하면, 모델은 이를 바탕으로 응답을 추가하며 대화를 이어나갑니다. 
+자세히 볼 여유가 없는 분들을 위해 간단히 요약해 보겠습니다: 
+채팅 모델은 대화 메세지를 계속해서 생성해 나갑니다.
+즉, 짤막한 채팅 메세지를 모델에게 전달하면, 모델은 이를 바탕으로 응답을 추가하며 대화를 이어나갑니다. 
 이제 실제로 어떻게 작동하는지 살펴보겠습니다. 
 먼저, 채팅을 만들어 보겠습니다:
 
@@ -47,11 +47,11 @@ chat = [
 ]
 ```
 
-주목하세요, 대화를 처음 시작할때 유저 메세지 이외의도, 별도의 **시스템** 메시지가 필요할 수 있습니다.
-모든 채팅 모델이 시스템 메시지를 지원하는 것은 아니지만,
-지원하는 경우에는 시스템 메시지는 대화에서 모델이 어떻게 행동해야 하는지를 지시할 수 있습니다.
+주목하세요, 대화를 처음 시작할 때 유저 메세지 이외의도, 별도의 **시스템** 메세지가 필요할 수 있습니다.
+모든 채팅 모델이 시스템 메세지를 지원하는 것은 아니지만,
+지원하는 경우에는 시스템 메세지는 대화에서 모델이 어떻게 행동해야 하는지를 지시할 수 있습니다.
 예를 들어, 유쾌하거나 진지하고자 할때, 짧은 답변이나 긴 답변을 원할 때 등을 설정할 수 있습니다.
-시스템 메시지를 생략하고
+시스템 메세지를 생략하고
 "You are a helpful and intelligent AI assistant who responds to user queries."
 와 같은 간단한 프롬프트를 사용하는 것도 가능합니다.
 
@@ -97,7 +97,7 @@ excuse me, I've got some oil changes to attend to. (winks)
 
 채팅을 계속하려면, 자신의 답장을 추가하면 됩니다. 
 파이프라인에서 반환된 `response` 객체에는 현재까지 모든 채팅을 포함하고 있으므로 
-메시지를 추가하고 다시 전달하기만하면 됩니다.
+메세지를 추가하고 다시 전달하기만하면 됩니다.
 
 ```python
 chat = response[0]['generated_text']
@@ -130,14 +130,14 @@ But, hey, that's what makes art, art, right? (laughs)
 ## 채팅 모델 고르기[[Choosing a chat model]]
 
 [Hugging Face Hub](https://huggingface.co/models?pipeline_tag=text-generation&sort=trending)는 채팅 모델을 다양하게 제공하고 있습니다.
-처음 사용하는 사람에게는 모델을 선택하기가 어려울 지 모릅니다.
+처음 사용하는 사람에게는 모델을 선택하기가 어려울지 모릅니다.
 하지만 걱정하지 마세요! 두 가지만 명심하면 됩니다:
 
-- 모델의 크기 - 이는 실행 속도와 메모리에 올라올수 있는지 여부를 결정함.
+- 모델의 크기 - 이는 실행 속도와 메모리에 올라올 수 있는지 여부를 결정함.
 - 모델이 생성한 대답이 퀄리티.
 
 위의 둘을 서로 밀접하게 연관되어 있습니다. - 모델의 크기가 클수록 보통 더 좋은 성능을 보이지만, 
-크기가 같은 모델 끼리도 유의미한 차이가 날 수 있습니다!
+크기가 같은 모델끼리도 유의미한 차이가 날 수 있습니다!
 
 ### 모델의 명칭과 크기[[Size and model naming]]
 
@@ -158,7 +158,7 @@ But, hey, that's what makes art, art, right? (laughs)
 ### 그럼 어떤 채팅 모델이 최고야?[[But which chat model is best?]]
 모델의 크기 외에도 고려할 점이 많습니다. 
 이를 한눈에 살펴보려면 **리더보드**를 참고하는 것이 좋습니다. 
-가장 인기 있는 리더보드 두 가지는 [OpenLLM Leaderboard](https://huggingface.co/spaces/HuggingFaceH4/open_llm_leaderboard) 와 [LMSys Chatbot Arena Leaderboard](https://chat.lmsys.org/?leaderboard) 입니다. 
+가장 인기 있는 리더보드 두 가지는 [OpenLLM Leaderboard](https://huggingface.co/spaces/HuggingFaceH4/open_llm_leaderboard)와 [LMSys Chatbot Arena Leaderboard](https://chat.lmsys.org/?leaderboard)입니다. 
 LMSys 리더보드에는 독점 모델도 포함되어 있으니,
 `license` 열에서 접근 가능한 모델을 선택한 후
 [Hugging Face Hub](https://huggingface.co/models?pipeline_tag=text-generation&sort=trending)에서 검색해 보세요.
@@ -223,7 +223,7 @@ print("Decoded output:\n", decoded_output)
 ## 성능, 메모리와 하드웨어[[Performance, memory and hardware]]
 이제 대부분의 머신 러닝 작업이 GPU에서 실행된다는 것을 아실 겁니다. 
 다소 느리기는 해도 CPU에서 채팅 모델이나 언어 모델로부터 텍스트를 생성하는 것도 가능합니다. 
-하지만 모델을 GPU 메모리에 올려놓을 수만 있다면, GPU를 사용하는게 일반적으로 더 선호되는 방식입니다.
+하지만 모델을 GPU 메모리에 올려놓을 수만 있다면, GPU를 사용하는 것이 일반적으로 더 선호되는 방식입니다.
 
 ### 메모리 고려사항[[Memory considerations]]
 
@@ -241,7 +241,7 @@ Hugging Face 클래스는 모델을 `float32` 정밀도(Precision)로 로드합�
 이 방법은 모델의 가중치를 손실 압축하여 각 파라미터를 8비트, 
 4비트 또는 그 이하로 줄일 수 있습니다. 
 특히 4비트에서 모델의 출력이 부정적인 영향을 받을 수 있지만, 
-더 크고 강력한 채팅 모델을 메모리에 올리기 위해 이같은 트레이드오프를 감수할 가치가 있습니다. 
+더 크고 강력한 채팅 모델을 메모리에 올리기 위해 이 같은 트레이드오프를 감수할 가치가 있습니다. 
 이제 `bitsandbytes`를 사용하여 이를 실제로 확인해 보겠습니다:
 
 ```python
@@ -298,7 +298,7 @@ pipe = pipeline("text-generation", "meta-llama/Meta-Llama-3-8B-Instruct", device
 
 마지막으로, "Mixture of Experts" (MoE) 모델에 대해서도 짚고 넘어가 보도록 합니다. 
 Mixtral, Qwen-MoE, DBRX와 같은 인기 있는 채팅 모델이 바로 MoE 모델입니다. 
-이 모델들은 토큰을 생성할때 모든 파라미터가 사용되지 않습니다. 
+이 모델들은 토큰을 생성할 때 모든 파라미터가 사용되지 않습니다. 
 이로 인해 MoE 모델은 전체 크기가 상당히 클 수 있지만, 
 차지하는 메모리 대역폭은 낮은 편입니다. 
 따라서 동일한 크기의 일반 "조밀한(Dense)" 모델보다 몇 배 빠를 수 있습니다. 
