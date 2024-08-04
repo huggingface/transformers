@@ -1242,13 +1242,13 @@ class XCLIPModel(XCLIPPreTrainedModel):
         super().__init__(config)
 
         if not isinstance(config.text_config, XCLIPTextConfig):
-            raise ValueError(
+            raise TypeError(
                 "config.text_config is expected to be of type XCLIPTextConfig but is of type"
                 f" {type(config.text_config)}."
             )
 
         if not isinstance(config.vision_config, XCLIPVisionConfig):
-            raise ValueError(
+            raise TypeError(
                 "config.vision_config is expected to be of type XCLIPVisionConfig but is of type"
                 f" {type(config.vision_config)}."
             )
