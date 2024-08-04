@@ -169,13 +169,21 @@ def uniform_temporal_subsample(video: VideoInput, num_samples: int) -> VideoInpu
         num_samples (`int`):
             Number of frames to sample.
     """
-    num_frames = len(video)
+    # num_frames = len(video)
 
-    # Sample by nearest neighbor interpolation if num_samples > t.
-    indices = np.linspace(0, num_frames - 1, num_samples)
-    indices = np.clip(indices, 0, num_frames - 1).astype(int)
+    # # Sample by nearest neighbor interpolation if num_samples > t.
+    # indices = np.linspace(0, num_frames - 1, num_samples)
+    # indices = np.clip(indices, 0, num_frames - 1).astype(int)
 
-    return [video[i] for i in indices]
+    # return [video[i] for i in indices]
+
+    temporal_dim: int = -3
+    num_frames = video.shape[temporal_dim]
+    assert num_samples > 0 and num_frames > 0
+    # Sample by nearest neighbor interpolation if num_samples > num_frames.
+    indices = torch.linspace(0, num_frames - 1, num_samples)
+    indices = torch.clamp(indices, 0, num_frames - 1).long()
+    return torch.index_select(video, temporal_dim, indices)
 
 #Adapted from https://github.com/facebookresearch/pytorchvideo/blob/1fadaef40dd393ca09680f55582399f4679fc9b7/pytorchvideo/data/encoded_video_decord.py#L28
 class EncodedVideoDecord():
@@ -509,7 +517,7 @@ class ImageBindImageProcessor(BaseImageProcessor):
             num_chunks (`int`):
                 Number of chunks to sample(number of clips per video).
             num_frames_per_chunk (`int`):
-                Number of frames to sample per chunk.
+                Number of frames to sample per chunk.######(WHY IS IT DEFINED WHEN chunk_duration can fulfill its purpose?)######
         """
         video_duration = video.duration # EncodedVideoDecord obj
         if video_duration < chunk_duration:
@@ -526,7 +534,8 @@ class ImageBindImageProcessor(BaseImageProcessor):
             video_clip = video.get_clip(clip_timepoints[0], clip_timepoints[1])
             if video_clip is None:
                 raise ValueError("No clip found")
-            video_clip = uniform_temporal_subsample(video_clip, num_samples=num_frames_per_chunk)
+            video_clip = uniform_temporal_subsample(video_clip, num_samples=chunk_duration)
+            video_clip = video_clip / 255.0  # since this is float, need 0-1
             all_clips.append(video_clip)
 
         return all_clips
