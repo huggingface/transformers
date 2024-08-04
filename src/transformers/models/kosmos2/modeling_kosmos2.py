@@ -120,11 +120,7 @@ KOSMOS2_VISION_INPUTS_DOCSTRING = r"""
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-<<<<<<< HEAD
         interpolate_pos_encoding (`bool`, *optional*, defaults `False`):
-=======
-        interpolate_pos_encoding (`bool`, *optional*):
->>>>>>> 6ed7b4768974c74f6e22053e8fb6e2b2c1350fbe
             Whether to interpolate the pre-trained position encodings.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
