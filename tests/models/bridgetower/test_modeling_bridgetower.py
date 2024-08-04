@@ -666,24 +666,35 @@ class BridgeTowerModelTrainingTest(unittest.TestCase):
         model_name = "BridgeTower/bridgetower-base"
         model = BridgeTowerModel.from_pretrained(model_name).to(torch_device)
 
+<<<<<<< HEAD
         image_processor = BridgeTowerProcessor.from_pretrained(
             model_name, size={"shortest_edge": 180}, crop_size={"height": 180, "width": 180}
         )
+=======
+        image_processor = BridgeTowerProcessor.from_pretrained(model_name)
+>>>>>>> 26de213... fixes clip interpolate
 
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
         inputs = image_processor(text="what's in the image", images=image, return_tensors="pt").to(torch_device)
 
+<<<<<<< HEAD
         # interpolate_pos_encodiung false should return value error
         with self.assertRaises(ValueError, msg="doesn't match model"):
             with torch.no_grad():
                 model(**inputs, interpolate_pos_encoding=False)
 
+=======
+>>>>>>> 26de213... fixes clip interpolate
         # forward pass
         with torch.no_grad():
             outputs = model(**inputs, interpolate_pos_encoding=True)
 
         # verify the logits
+<<<<<<< HEAD
         expected_shape = torch.Size((1, 901, 768))
+=======
+        expected_shape = torch.Size((1, 325, 768))
+>>>>>>> 26de213... fixes clip interpolate
 
         self.assertEqual(outputs.image_features.shape, expected_shape)
 

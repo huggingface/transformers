@@ -1049,10 +1049,13 @@ class AltCLIPVisionEmbeddings(nn.Module):
 
     def forward(self, pixel_values: torch.FloatTensor, interpolate_pos_encoding=False) -> torch.Tensor:
         batch_size, _, height, width = pixel_values.shape
+<<<<<<< HEAD
         if not interpolate_pos_encoding and (height != self.image_size or width != self.image_size):
             raise ValueError(
                 f"Input image size ({height}*{width}) doesn't match model" f" ({self.image_size}*{self.image_size})."
             )
+=======
+>>>>>>> 26de213... fixes clip interpolate
         target_dtype = self.patch_embedding.weight.dtype
         patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # shape = [*, width, grid, grid]
         patch_embeds = patch_embeds.flatten(2).transpose(1, 2)

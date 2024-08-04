@@ -768,12 +768,17 @@ class XCLIPModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_interpolate_pos_encoding(self):
+<<<<<<< HEAD
         # XCLIP models have an `interpolate_pos_encoding` argument in their forward method,
+=======
+        # ViT models have an `interpolate_pos_encoding` argument in their forward method,
+>>>>>>> 26de213... fixes clip interpolate
         # allowing to interpolate the pre-trained position embeddings in order to use
         # the model on higher resolutions. The DINO model by Facebook AI leverages this
         # to visualize self-attention on higher resolution images.
         model = XCLIPModel.from_pretrained("microsoft/xclip-base-patch32").to(torch_device)
 
+<<<<<<< HEAD
         processor = XCLIPProcessor.from_pretrained(
             "microsoft/xclip-base-patch32",
             size=180,
@@ -782,27 +787,42 @@ class XCLIPModelIntegrationTest(unittest.TestCase):
 
         video = prepare_video()
         inputs = processor(text="what's in the video", videos=video, return_tensors="pt").to(torch_device)
+=======
+        image_processor = XCLIPProcessor.from_pretrained("microsoft/xclip-base-patch32", size=480)
+
+        video = prepare_video()
+        inputs = image_processor(text="what's in the video", videos=video, return_tensors="pt").to(torch_device)
+>>>>>>> 26de213... fixes clip interpolate
 
         # forward pass
         with torch.no_grad():
             outputs = model(**inputs, interpolate_pos_encoding=True)
 
         # verify the logits
+<<<<<<< HEAD
         expected_shape = torch.Size((8, 26, 768))
+=======
+        expected_shape = torch.Size((8, 50, 768))
+>>>>>>> 26de213... fixes clip interpolate
 
         self.assertEqual(outputs.vision_model_output.last_hidden_state.shape, expected_shape)
 
         expected_slice = torch.tensor(
+<<<<<<< HEAD
             [
                 [0.1806, 0.3649, -0.0850],
                 [0.0210, 0.3411, -0.0637],
                 [0.2307, 0.3106, -0.2027],
             ]
+=======
+            [[0.1806, 0.3649, -0.0850], [0.0210, 0.3411, -0.0637], [0.2307, 0.3106, -0.2027]]
+>>>>>>> 26de213... fixes clip interpolate
         ).to(torch_device)
 
         print(outputs.vision_model_output.last_hidden_state[0, :3, :3])
 
         self.assertTrue(
+<<<<<<< HEAD
             torch.allclose(
                 outputs.vision_model_output.last_hidden_state[0, :3, :3],
                 expected_slice,
@@ -814,3 +834,7 @@ class XCLIPModelIntegrationTest(unittest.TestCase):
         with self.assertRaises(ValueError, msg="doesn't match model"):
             with torch.no_grad():
                 model(**inputs, interpolate_pos_encoding=False)
+=======
+            torch.allclose(outputs.vision_model_output.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4)
+        )
+>>>>>>> 26de213... fixes clip interpolate

@@ -790,30 +790,42 @@ class ChineseCLIPModelIntegrationTest(unittest.TestCase):
         model_name = "OFA-Sys/chinese-clip-vit-base-patch16"
         model = ChineseCLIPModel.from_pretrained(model_name).to(torch_device)
 
+<<<<<<< HEAD
         image_processor = ChineseCLIPProcessor.from_pretrained(
             model_name,
             size={"height": 180, "width": 180},
             crop_size={"height": 180, "width": 180},
         )
+=======
+        image_processor = ChineseCLIPProcessor.from_pretrained(model_name)
+>>>>>>> 26de213... fixes clip interpolate
 
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
         inputs = image_processor(text="what's in the image", images=image, return_tensors="pt").to(torch_device)
 
+<<<<<<< HEAD
         # interpolate_pos_encodiung false should return value error
         with self.assertRaises(ValueError, msg="doesn't match model"):
             with torch.no_grad():
                 model(**inputs, interpolate_pos_encoding=False)
 
+=======
+>>>>>>> 26de213... fixes clip interpolate
         # forward pass
         with torch.no_grad():
             outputs = model(**inputs, interpolate_pos_encoding=True)
 
         # verify the logits
+<<<<<<< HEAD
         expected_shape = torch.Size((1, 122, 768))
+=======
+        expected_shape = torch.Size((1, 197, 768))
+>>>>>>> 26de213... fixes clip interpolate
 
         self.assertEqual(outputs.vision_model_output.last_hidden_state.shape, expected_shape)
 
         expected_slice = torch.tensor(
+<<<<<<< HEAD
             [
                 [-0.3374, 0.3212, -0.1293],
                 [-0.2208, -0.6150, 0.7010],
@@ -827,4 +839,11 @@ class ChineseCLIPModelIntegrationTest(unittest.TestCase):
                 expected_slice,
                 atol=1e-4,
             )
+=======
+            [[-0.3374, 0.3212, -0.1293], [-0.2208, -0.6150, 0.7010], [-0.1901, -0.6576, 0.4843]]
+        ).to(torch_device)
+
+        self.assertTrue(
+            torch.allclose(outputs.vision_model_output.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4)
+>>>>>>> 26de213... fixes clip interpolate
         )

@@ -603,24 +603,35 @@ class AltCLIPModelIntegrationTest(unittest.TestCase):
         model_name = "BAAI/AltCLIP"
         model = AltCLIPModel.from_pretrained(model_name).to(torch_device)
 
+<<<<<<< HEAD
         image_processor = AltCLIPProcessor.from_pretrained(
             model_name, size={"shortest_edge": 180}, crop_size={"height": 180, "width": 180}
         )
+=======
+        image_processor = AltCLIPProcessor.from_pretrained(model_name)
+>>>>>>> 26de213... fixes clip interpolate
 
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
         inputs = image_processor(text="what's in the image", images=image, return_tensors="pt").to(torch_device)
 
+<<<<<<< HEAD
         # interpolate_pos_encodiung false should return value error
         with self.assertRaises(ValueError, msg="doesn't match model"):
             with torch.no_grad():
                 model(**inputs, interpolate_pos_encoding=False)
 
+=======
+>>>>>>> 26de213... fixes clip interpolate
         # forward pass
         with torch.no_grad():
             outputs = model(**inputs, interpolate_pos_encoding=True)
 
         # verify the logits
+<<<<<<< HEAD
         expected_shape = torch.Size((1, 145, 1024))
+=======
+        expected_shape = torch.Size((1, 257, 1024))
+>>>>>>> 26de213... fixes clip interpolate
         print("nilesh ")
         print(outputs.vision_model_output.last_hidden_state.shape)
         print(outputs.vision_model_output.last_hidden_state[0, :3, :3])
