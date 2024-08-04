@@ -153,7 +153,7 @@ class AltCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    def test_model_get_set_embeddings(self):
+    def test_model_common_attributes(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -178,11 +178,9 @@ class AltCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip
     def test_training(self):
         pass
 
-    @unittest.skip
     def test_training_gradient_checkpointing(self):
         pass
 
@@ -311,7 +309,7 @@ class AltCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
     test_head_masking = False
 
     # TODO (@SunMarc): Fix me
-    @unittest.skip(reason="It's broken.")
+    @unittest.skip("It's broken.")
     def test_resize_tokens_embeddings(self):
         super().test_resize_tokens_embeddings()
 
@@ -326,11 +324,9 @@ class AltCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip
     def test_training(self):
         pass
 
-    @unittest.skip
     def test_training_gradient_checkpointing(self):
         pass
 
@@ -463,7 +459,7 @@ class AltCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         pass
 
     @unittest.skip(reason="CLIPModel does not have input/output embeddings")
-    def test_model_get_set_embeddings(self):
+    def test_model_common_attributes(self):
         pass
 
     # override as the `logit_scale` parameter initilization is different for AltCLIP
@@ -491,7 +487,7 @@ class AltCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:
-            self.skipTest(reason="test_torchscript is set to False")
+            return
 
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
         configs_no_init.torchscript = True
@@ -607,17 +603,24 @@ class AltCLIPModelIntegrationTest(unittest.TestCase):
         model_name = "BAAI/AltCLIP"
         model = AltCLIPModel.from_pretrained(model_name).to(torch_device)
 
-        image_processor = AltCLIPProcessor.from_pretrained(model_name, size={"shortest_edge": 480})
+        image_processor = AltCLIPProcessor.from_pretrained(
+            model_name, size={"shortest_edge": 180}, crop_size={"height": 180, "width": 180}
+        )
 
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
         inputs = image_processor(text="what's in the image", images=image, return_tensors="pt").to(torch_device)
+
+        # interpolate_pos_encodiung false should return value error
+        with self.assertRaises(ValueError, msg="doesn't match model"):
+            with torch.no_grad():
+                model(**inputs, interpolate_pos_encoding=False)
 
         # forward pass
         with torch.no_grad():
             outputs = model(**inputs, interpolate_pos_encoding=True)
 
         # verify the logits
-        expected_shape = torch.Size((1, 257, 1024))
+        expected_shape = torch.Size((1, 145, 1024))
         print("nilesh ")
         print(outputs.vision_model_output.last_hidden_state.shape)
         print(outputs.vision_model_output.last_hidden_state[0, :3, :3])

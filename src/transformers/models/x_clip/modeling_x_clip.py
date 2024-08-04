@@ -158,6 +158,10 @@ class XCLIPVisionEmbeddings(nn.Module):
 
     def forward(self, pixel_values: torch.FloatTensor, interpolate_pos_encoding=False) -> torch.Tensor:
         batch_size, _, height, width = pixel_values.shape
+        if not interpolate_pos_encoding and (height != self.image_size or width != self.image_size):
+            raise ValueError(
+                f"Input image size ({height}*{width}) doesn't match model" f" ({self.image_size}*{self.image_size})."
+            )
         target_dtype = self.patch_embedding.weight.dtype
         patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # shape = [*, width, grid, grid]
         patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
@@ -237,7 +241,7 @@ class XCLIPAttention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         causal_attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
         bsz, tgt_len, embed_dim = hidden_states.size()
@@ -326,7 +330,7 @@ class XCLIPMLP(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.altclip.modeling_altclip.AltCLIPEncoderLayer with AltCLIP->XCLIP
+# Copied from transformers.models.clip.modeling_clip.CLIPEncoderLayer with CLIP->XCLIP
 class XCLIPEncoderLayer(nn.Module):
     def __init__(self, config: XCLIPConfig):
         super().__init__()
@@ -651,7 +655,7 @@ X_CLIP_INPUTS_DOCSTRING = r"""
 """
 
 
-# Copied from transformers.models.altclip.modeling_altclip.AltCLIPEncoder with AltCLIP->XCLIP
+# Copied from transformers.models.clip.modeling_clip.CLIPEncoder with CLIP->XCLIP
 class XCLIPEncoder(nn.Module):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
@@ -1285,13 +1289,13 @@ class XCLIPModel(XCLIPPreTrainedModel):
         super().__init__(config)
 
         if not isinstance(config.text_config, XCLIPTextConfig):
-            raise TypeError(
+            raise ValueError(
                 "config.text_config is expected to be of type XCLIPTextConfig but is of type"
                 f" {type(config.text_config)}."
             )
 
         if not isinstance(config.vision_config, XCLIPVisionConfig):
-            raise TypeError(
+            raise ValueError(
                 "config.vision_config is expected to be of type XCLIPVisionConfig but is of type"
                 f" {type(config.vision_config)}."
             )

@@ -25,7 +25,7 @@ import requests
 
 from transformers import AutoModelForVision2Seq, AutoProcessor, Kosmos2Config
 from transformers.models.kosmos2.configuration_kosmos2 import Kosmos2TextConfig, Kosmos2VisionConfig
-from transformers.testing_utils import IS_ROCM_SYSTEM, require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -375,7 +375,7 @@ class Kosmos2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     # overwrite from common in order to use `config.text_config.vocab_size` instead of `config.vocab_size`
     def test_tie_model_weights(self):
         if not self.test_torchscript:
-            self.skipTest(reason="test_torchscript is set to False")
+            return
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -429,7 +429,7 @@ class Kosmos2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:
-            self.skipTest(reason="test_torchscript is set to False")
+            return
 
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
         configs_no_init.torchscript = True
@@ -561,8 +561,6 @@ class Kosmos2ModelIntegrationTest(unittest.TestCase):
         processed_text = processed_text[0]
         final_text, entities = final_text_with_entities[0]
 
-        atol = 1e-4 if IS_ROCM_SYSTEM else 1e-5
-
         np.testing.assert_allclose(
             torch.concat(scores[1:4])[:3, :3].to("cpu").numpy(),
             np.array(
@@ -572,7 +570,7 @@ class Kosmos2ModelIntegrationTest(unittest.TestCase):
                     [-0.9352350831031799, -4.688288688659668, 6.240612983703613],
                 ]
             ),
-            atol=atol,
+            atol=1e-5,
         )
         np.testing.assert_allclose(
             torch.concat(scores[-3:])[-3:, -3:].to("cpu").numpy(),
@@ -630,7 +628,7 @@ class Kosmos2ModelIntegrationTest(unittest.TestCase):
                     [-0.7624598741531372, -4.771658897399902, 6.576295852661133],
                 ]
             ),
-            atol=atol,
+            atol=1e-5,
         )
         np.testing.assert_allclose(
             torch.concat(scores[-3:])[-3:, -3:].to("cpu").numpy(),
@@ -771,8 +769,9 @@ class Kosmos2ModelIntegrationTest(unittest.TestCase):
         # to visualize self-attention on higher resolution images.
         model = Kosmos2Model.from_pretrained("microsoft/kosmos-2-patch14-224").to(torch_device)
 
+        # default imnage size of pretrained kosmos_2 is 224 x 224
         processor = AutoProcessor.from_pretrained(
-            "microsoft/kosmos-2-patch14-224", padding_side="left", size={"shortest_edge": 480}
+            "microsoft/kosmos-2-patch14-224", size={"shortest_edge": 180}, crop_size={"height": 180, "width": 180}
         )
 
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
@@ -786,3 +785,8 @@ class Kosmos2ModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 257, 1024))
 
         self.assertEqual(outputs.vision_model_output.last_hidden_state.shape, expected_shape)
+
+        # interpolate_pos_encodiung false should return value error
+        with self.assertRaises(ValueError, msg="doesn't match model"):
+            with torch.no_grad():
+                model(**inputs, interpolate_pos_encoding=False)
