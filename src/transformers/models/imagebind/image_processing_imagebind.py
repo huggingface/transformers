@@ -56,12 +56,13 @@ from ...utils import TensorType, is_vision_available, logging
 
 logger = logging.get_logger(__name__)
 
+decord.bridge.set_bridge("torch")
 
 if is_vision_available():
     import PIL
 
 def check_for_video_paths(videos) -> bool:
-    return (isinstance(videos, list) and all(isinstance(video, Path) and mimetypes.guess_type(video)[0].startswith('video/') for video in videos))
+    return (isinstance(videos, list) and all(isinstance(video, str) and mimetypes.guess_type(video)[0].startswith('video/') for video in videos))
 
 #Adapted from https://github.com/facebookresearch/pytorchvideo/blob/1fadaef40dd393ca09680f55582399f4679fc9b7/pytorchvideo/data/encoded_video.py#L42
 def encoded_video_from_path(video_path):
@@ -295,14 +296,14 @@ class SpatialCrop(nn.Module):
                 to C, T, H', W' by spatial cropping.
         """
         assert isinstance(videos, list), "Must be a list of videos after temporal crops"
-        assert all([video.ndim == 4 for video in videos]), "Must be (C,T,H,W)"
+        assert all([video[0].ndim == 4 for video in videos]), "Must be (C,T,H,W)"
         res = []
         for video in videos:
             for spatial_idx in self.crops_to_ext:
-                res.append(uniform_crop(video, self.crop_size, spatial_idx)[0])
+                res.append(uniform_crop(video[0], self.crop_size, spatial_idx)[0])
             if not self.flipped_crops_to_ext:
                 continue
-            flipped_video = transforms.functional.hflip(video)
+            flipped_video = transforms.functional.hflip(video[0])
             for spatial_idx in self.flipped_crops_to_ext:
                 res.append(uniform_crop(flipped_video, self.crop_size, spatial_idx)[0])
         return res
@@ -735,22 +736,23 @@ class ImageBindImageProcessor(BaseImageProcessor):
             resample=resample,
         )
 
-        if do_convert_rgb and not is_video:
-            images = [convert_to_rgb(image) for image in images]
+        if not is_video:
+          if do_convert_rgb:
+              images = [convert_to_rgb(image) for image in images]
 
         # All transformations expect numpy arrays.
         if not is_video:
             images = [to_numpy_array(image) for image in images]
-
-        if is_scaled_image(images[0]) and do_rescale and not is_video:
-            logger.warning_once(
-                "It looks like you are trying to rescale already rescaled images. If the input"
-                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
-            )
-
-        if input_data_format is None and not is_video:
-            # We assume that all images have the same channel dimension format.
-            input_data_format = infer_channel_dimension_format(images[0])
+        if not is_video:
+          if is_scaled_image(images[0]) and do_rescale:
+              logger.warning_once(
+                  "It looks like you are trying to rescale already rescaled images. If the input"
+                  " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
+              )
+        if not is_video:
+          if input_data_format is None:
+              # We assume that all images have the same channel dimension format.
+              input_data_format = infer_channel_dimension_format(images[0])
 
         if not is_video:
             if do_resize:
@@ -786,7 +788,7 @@ class ImageBindImageProcessor(BaseImageProcessor):
                 images = NormalizeVideo(
                             mean=image_mean,
                             std=image_std,
-                        ),
+                        )(images),
 
         return images
 
@@ -908,7 +910,7 @@ class ImageBindImageProcessor(BaseImageProcessor):
         fps = fps if fps is not None else self.fps
 
         if images is not None:
-            is_video = True
+            is_video = False
             images = make_list_of_images(images)
         if videos is not None and (not check_for_video_paths(videos)):
             is_video = True
@@ -916,11 +918,12 @@ class ImageBindImageProcessor(BaseImageProcessor):
 
         validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
 
-        if (videos is not None and not valid_images(videos)) or (images is not None and not valid_images(images)):
-            raise ValueError(
-                "Invalid input type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
+        if not check_for_video_paths(videos):
+          if (videos is not None and not valid_images(videos)) or (images is not None and not valid_images(images)):
+              raise ValueError(
+                  "Invalid input type. Must be of type PIL.Image.Image, numpy.ndarray, "
+                  "torch.Tensor, tf.Tensor or jax.ndarray."
+              )
 
         if images is not None:
             pixel_values = self._preprocess_image(
@@ -1007,7 +1010,7 @@ class ImageBindImageProcessor(BaseImageProcessor):
                 # # Make it shape (num_chunks, num_channels, num_frames_per_chunk, height, width)
                 # _pixel_values = np.swapaxes(_pixel_values, 1, 2)
                 # pixel_values.append(_pixel_values)
-
+            pixel_values = torch.stack(pixel_values, dim=0)
         return BatchFeature(data={"pixel_values": pixel_values}, tensor_type=return_tensors)
 
 
