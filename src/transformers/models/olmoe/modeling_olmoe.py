@@ -200,79 +200,27 @@ class OlmoeRMSNorm(nn.Module):
 ALL_LAYERNORM_LAYERS.append(OlmoeRMSNorm)
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->Olmoe
-class OlmoeRotaryEmbedding(nn.Module):
-    def __init__(
-        self,
-        dim=None,
-        max_position_embeddings=2048,
-        base=10000,
-        device=None,
-        scaling_factor=1.0,
-        rope_type="default",
-        config: Optional[OlmoeConfig] = None,
-    ):
+# copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->Olmo
+# TODO(joao): add me back asap :)
+class OlmoRotaryEmbedding(nn.Module):
+    def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
         super().__init__()
-        # TODO (joao): remove the `if` below, only used for BC
-        self.rope_kwargs = {}
-        if config is None:
-            logger.warning_once(
-                "`OlmoeRotaryEmbedding` can now be fully parameterized by passing the model config through the "
-                "`config` argument. All other arguments will be removed in v4.45"
-            )
-            self.rope_kwargs = {
-                "rope_type": rope_type,
-                "factor": scaling_factor,
-                "dim": dim,
-                "base": base,
-                "max_position_embeddings": max_position_embeddings,
-            }
-            self.rope_type = rope_type
-            self.max_seq_len_cached = max_position_embeddings
-            self.original_max_seq_len = max_position_embeddings
-        else:
-            # BC: "rope_type" was originally "type"
-            if config.rope_scaling is not None:
-                self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
-            else:
-                self.rope_type = "default"
-            self.max_seq_len_cached = config.max_position_embeddings
-            self.original_max_seq_len = config.max_position_embeddings
-
-        self.config = config
-        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-
-        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device, **self.rope_kwargs)
+        self.scaling_factor = scaling_factor
+        self.dim = dim
+        self.max_position_embeddings = max_position_embeddings
+        self.base = base
+        inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.int64).float().to(device) / self.dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = self.inv_freq
-
-    def _dynamic_frequency_update(self, position_ids, device):
-        """
-        dynamic RoPE layers should recompute `inv_freq` in the following situations:
-        1 - growing beyond the cached sequence length (allow scaling)
-        2 - the current sequence length is in the original scale (avoid losing precision with small sequences)
-        """
-        seq_len = torch.max(position_ids) + 1
-        if seq_len > self.max_seq_len_cached:  # growth
-            inv_freq, self.attention_scaling = self.rope_init_fn(
-                self.config, device, seq_len=seq_len, **self.rope_kwargs
-            )
-            self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: may break with compilation
-            self.max_seq_len_cached = seq_len
-
-        if seq_len < self.original_max_seq_len and self.max_seq_len_cached > self.original_max_seq_len:  # reset
-            self.register_buffer("inv_freq", self.original_inv_freq, persistent=False)
-            self.max_seq_len_cached = self.original_max_seq_len
+        # For BC we register cos and sin cached
+        self.max_seq_len_cached = max_position_embeddings
 
     @torch.no_grad()
     def forward(self, x, position_ids):
-        if "dynamic" in self.rope_type:
-            self._dynamic_frequency_update(position_ids, device=x.device)
-
-        # Core RoPE block
+        # x: [bs, num_attention_heads, seq_len, head_size]
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
         position_ids_expanded = position_ids[:, None, :].float()
-        # Force float32 (see https://github.com/huggingface/transformers/pull/29285)
+        # Force float32 since bfloat16 loses precision on long contexts
+        # See https://github.com/huggingface/transformers/pull/29285
         device_type = x.device.type
         device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):
@@ -280,39 +228,40 @@ class OlmoeRotaryEmbedding(nn.Module):
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos()
             sin = emb.sin()
-
-        # Advanced RoPE types (e.g. yarn) apply a post-processing scaling factor, equivalent to scaling attention
-        cos = cos * self.attention_scaling
-        sin = sin * self.attention_scaling
-
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaLinearScalingRotaryEmbedding with Llama->Olmoe
-class OlmoeLinearScalingRotaryEmbedding(OlmoeRotaryEmbedding):
-    """OlmoeRotaryEmbedding extended with linear scaling. Credits to the Reddit user /u/kaiokendev"""
+# copied from transformers.models.llama.modeling_llama.LlamaLinearScalingRotaryEmbedding with Llama->Olmo
+# TODO(joao): add me back asap :)
+class OlmoLinearScalingRotaryEmbedding(OlmoRotaryEmbedding):
+    """OlmoRotaryEmbedding extended with linear scaling. Credits to the Reddit user /u/kaiokendev"""
 
-    def __init__(self, *args, **kwargs):
-        logger.warning_once(
-            "`OlmoeLinearScalingRotaryEmbedding` is deprecated an will be removed in v4.45. Please use "
-            "`OlmoeRotaryEmbedding`, which now also does linear scaling (simply pass the model config to __init__)."
-        )
-        kwargs["rope_type"] = "linear"
-        super().__init__(*args, **kwargs)
+    def forward(self, x, position_ids):
+        # difference to the original RoPE: a scaling factor is aplied to the position ids
+        position_ids = position_ids.float() / self.scaling_factor
+        cos, sin = super().forward(x, position_ids)
+        return cos, sin
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaDynamicNTKScalingRotaryEmbedding with Llama->Olmoe
-class OlmoeDynamicNTKScalingRotaryEmbedding(OlmoeRotaryEmbedding):
-    """OlmoeRotaryEmbedding extended with Dynamic NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla"""
+# copied from transformers.models.llama.modeling_llama.LlamaDynamicNTKScalingRotaryEmbedding with Llama->Olmo
+# TODO(joao): add me back asap :)
+class OlmoDynamicNTKScalingRotaryEmbedding(OlmoRotaryEmbedding):
+    """OlmoRotaryEmbedding extended with Dynamic NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla"""
 
-    def __init__(self, *args, **kwargs):
-        logger.warning_once(
-            "`OlmoeDynamicNTKScalingRotaryEmbedding` is deprecated an will be removed in v4.45. Please use "
-            "`OlmoeRotaryEmbedding`, which now also does dynamic ntk scaling (simply pass the model config to "
-            "__init__)."
-        )
-        kwargs["rope_type"] = "dynamic"
-        super().__init__(*args, **kwargs)
+    def forward(self, x, position_ids):
+        # difference to the original RoPE: inv_freq is recomputed when the sequence length > original length
+        seq_len = torch.max(position_ids) + 1
+        if seq_len > self.max_position_embeddings:
+            base = self.base * (
+                (self.scaling_factor * seq_len / self.max_position_embeddings) - (self.scaling_factor - 1)
+            ) ** (self.dim / (self.dim - 2))
+            inv_freq = 1.0 / (
+                base ** (torch.arange(0, self.dim, 2, dtype=torch.int64).float().to(x.device) / self.dim)
+            )
+            self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: this may break with compilation
+
+        cos, sin = super().forward(x, position_ids)
+        return cos, sin
 
 
 # Copied from transformers.models.llama.modeling_llama.rotate_half
