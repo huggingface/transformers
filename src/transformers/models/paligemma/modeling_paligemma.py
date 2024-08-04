@@ -127,6 +127,7 @@ class PaliGemmaPreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = False
     _supports_sdpa = True
+    _supports_cache_class = True
 
     def _init_weights(self, module):
         # important: this ported version of PaliGemmaisn't meant for training from scratch - only
