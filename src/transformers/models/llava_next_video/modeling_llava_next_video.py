@@ -1040,10 +1040,6 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel):
         )
         return model_inputs
 
-    # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration._reorder_cache
-    def _reorder_cache(self, *args, **kwargs):
-        return self.language_model._reorder_cache(*args, **kwargs)
-
     def _get_image_features(self, pixel_values, image_sizes):
         # ! infer image_num_patches from image_sizes
         image_num_patches = [

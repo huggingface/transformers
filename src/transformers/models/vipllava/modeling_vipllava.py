@@ -561,6 +561,3 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel):
             }
         )
         return model_inputs
-
-    def _reorder_cache(self, *args, **kwargs):
-        return self.language_model._reorder_cache(*args, **kwargs)
