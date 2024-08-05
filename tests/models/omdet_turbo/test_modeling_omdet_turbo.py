@@ -17,7 +17,6 @@
 import unittest
 
 import requests
-import torch.nn.functional as F
 
 from transformers import OmDetTurboConfig, is_torch_available, is_vision_available
 from transformers.file_utils import cached_property
@@ -38,6 +37,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 
 if is_torch_available():
     import torch
+    import torch.nn.functional as F
 
     from transformers import OmDetTurboForObjectDetection
 

@@ -568,7 +568,7 @@ class OmDetTurboCSPRepLayer(nn.Module):
 
 
 class OmDetTurboMultiheadAttention(nn.Module):
-    """Equivalent implementation of nn.MultiheadAttention with `batch_first=True` and support for key_padding_mask."""
+    """Equivalent implementation of nn.MultiheadAttention with `batch_first=True`."""
 
     def __init__(self, config, hidden_size, num_attention_heads, dropout):
         super().__init__()
@@ -597,7 +597,6 @@ class OmDetTurboMultiheadAttention(nn.Module):
         keys: torch.Tensor,
         values: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
-        key_padding_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor]:
         query_layer = self.transpose_for_scores(self.query(queries))
@@ -607,14 +606,9 @@ class OmDetTurboMultiheadAttention(nn.Module):
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
+
         if attention_mask is not None:
             attention_scores = attention_scores + attention_mask.view(attention_scores.shape)
-
-        if key_padding_mask is not None:
-            # don't attend to padding symbols
-            attention_scores = attention_scores.masked_fill(
-                key_padding_mask.unsqueeze(1).unsqueeze(2).to(torch.bool), float("-inf")
-            )
 
         # Normalize the attention scores to probabilities.
         attention_probs = nn.functional.softmax(attention_scores, dim=-1)
@@ -1011,7 +1005,7 @@ class OmDetTurboDeformableTransformerDecoderLayer(nn.Module):
         reference_points,
         vision_features,
         vision_shapes,
-        key_padding_mask=None,
+        attention_mask=None,
         padding_mask=None,
         query_position=None,
         output_attentions=None,
@@ -1031,7 +1025,11 @@ class OmDetTurboDeformableTransformerDecoderLayer(nn.Module):
         decoder_embeddings = torch.cat((decoder_embeddings, task_features), dim=1)
 
         outputs = self.self_attn(
-            query, key, decoder_embeddings, key_padding_mask=key_padding_mask, output_attentions=output_attentions
+            query,
+            key,
+            decoder_embeddings,
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
         )
         context, self_attention = outputs if output_attentions else (outputs[0], None)
         decoder_embeddings = decoder_embeddings + self.dropout1(context)
@@ -1115,7 +1113,7 @@ class OmDetTurboDeformableTransformerDecoder(nn.Module):
         bbox_head,
         class_head,
         query_position_head,
-        key_padding_mask=None,
+        attention_mask=None,
         output_attentions=None,
         output_hidden_states=None,
     ):
@@ -1143,7 +1141,7 @@ class OmDetTurboDeformableTransformerDecoder(nn.Module):
                 reference_points,
                 vision_features,
                 vision_shapes,
-                key_padding_mask=key_padding_mask,
+                attention_mask=attention_mask,
                 query_position=query_position_head(reference_points),
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
@@ -1267,6 +1265,7 @@ class OmDetTurboPreTrainedModel(PreTrainedModel):
             not_cached_index_ids = torch.stack([batched_tasks["input_ids"][idx] for idx in not_cached_index])
             not_cached_mask = torch.stack([batched_tasks["attention_mask"][idx] for idx in not_cached_index])
             embeddings, masks = self.language_backbone(not_cached_index_ids, mask=not_cached_mask, encode_type="task")
+
             for idx in range(embeddings.shape[1]):
                 emb = embeddings[:, [idx], :]
                 idx_to_put = not_cached_index[idx]
@@ -1274,6 +1273,14 @@ class OmDetTurboPreTrainedModel(PreTrainedModel):
                 total_task_features[idx_to_put] = emb
                 total_task_masks[idx_to_put] = cur_mask
                 self.language_cache_prompt.put(not_cached_tasks[idx], (emb, cur_mask))
+
+        # pad before concat if needed
+        max_len = max([task.shape[0] for task in total_task_features])
+        for idx, task in enumerate(total_task_features):
+            if task.shape[0] < max_len:
+                pad_size = max_len - task.shape[0]
+                total_task_features[idx] = F.pad(task, (0, 0, 0, 0, 0, pad_size))
+                total_task_masks[idx] = F.pad(total_task_masks[idx], (0, pad_size))
 
         total_task_features = torch.cat(total_task_features, dim=1).to(self.device)
         total_task_masks = torch.cat(total_task_masks, dim=0).to(self.device)
@@ -1509,6 +1516,10 @@ class OmDetTurboDecoder(OmDetTurboPreTrainedModel):
         fusion_size = attn_mask_len + task_features.shape[0]
         key_padding_mask = torch.zeros([batch_size, fusion_size], dtype=torch.bool).to(task_features.device)
         key_padding_mask[:, attn_mask_len:] = src_key_mask
+        attention_mask = torch.zeros([batch_size, self.num_head, fusion_size, fusion_size]).to(task_features.device)
+        attention_mask = attention_mask.masked_fill(
+            key_padding_mask.unsqueeze(1).unsqueeze(2).to(torch.bool), float("-inf")
+        )
         decoder_embeddings, reference_points, encoder_bboxes, encoder_class_similarity, init_reference_points = (
             self._get_decoder_input(vision_features, vision_shapes, class_feats, denoise_embeddings, denoise_bboxes)
         )
@@ -1522,7 +1533,7 @@ class OmDetTurboDecoder(OmDetTurboPreTrainedModel):
             self.decoder_bbox_head,
             self.decoder_class_head,
             self.query_position_head,
-            key_padding_mask=key_padding_mask,
+            attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
         )
@@ -1592,26 +1603,36 @@ class OmDetTurboForObjectDetection(OmDetTurboPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import AutoProcessor, OmDetTurboForObjectDetection
-        >>> from PIL import Image
         >>> import requests
+        >>> from PIL import Image
+
+        >>> from transformers import AutoProcessor, OmDetTurboForObjectDetection
+
+        >>> processor = AutoProcessor.from_pretrained("omlab/omdet-turbo-tiny")
+        >>> model = OmDetTurboForObjectDetection.from_pretrained("omlab/omdet-turbo-tiny")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
         >>> classes = ["cat", "remote"]
         >>> task = "Detect {}.".format(",".join(classes))
+        >>> inputs = processor(image, text=task, classes=classes, return_tensors="pt")
 
-        >>> processor = AutoProcessor.from_pretrained("omlab/omdet-turbo-tiny")
-        >>> model = OmDetTurboForObjectDetection.from_pretrained("omlab/omdet-turbo-tiny")
-
-        >>> inputs = processor(image, tasks=task, classes=classes, return_tensors="pt")
         >>> outputs = model(**inputs)
 
-        >>> # convert outputs (bounding boxes and class logits) to COCO API
-        >>> results = processor.post_process_grounded_object_detection(outputs, classes=[classes], target_sizes=[image.size])[0]
-        >>> for score, class, box in zip(results["scores"], results["classes"], results["boxes"]):
+        >>> # convert outputs (bounding boxes and class logits)
+        >>> results = processor.post_process_grounded_object_detection(
+        ...     outputs,
+        ...     classes=[classes],
+        ...     target_sizes=[image.size[::-1]],
+        ...     score_threshold=0.3,
+        ...     nms_threshold=0.3,
+        >>> )[0]
+        >>> for score, class_name, box in zip(results["scores"], results["classes"], results["boxes"]):
         ...     box = [round(i, 1) for i in box.tolist()]
-        ...     print(f"Detected {class.item()} with confidence " f"{round(score.item(), 2)} at location {box}")
+        ...     print(
+        ...         f"Detected {class_name} with confidence "
+        ...         f"{round(score.item(), 2)} at location {box}"
+        ...     )
         Detected remote with confidence 0.76 at location [39.9, 71.3, 176.5, 117.9]
         Detected cat with confidence 0.72 at location [345.1, 22.5, 639.7, 371.9]
         Detected cat with confidence 0.65 at location [12.7, 53.8, 315.5, 475.3]
