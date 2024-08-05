@@ -14,24 +14,27 @@
 # limitations under the License.
 """Qwen2VL model configuration"""
 
+from dataclasses import asdict, dataclass
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
-_DEFAULT_QWEN2_VL_VISUAL_CONFIG = {
-    "model_type": "qwen2_vl",
-    "depth": 32,
-    "embed_dim": 1280,
-    "mlp_ratio": 4,
-    "num_heads": 16,
-    "patch_size": 14,
-    "spatial_merge_size": 2,
-    "spatial_patch_size": 14,
-    "temporal_patch_size": 2,
-    "use_flash_attention": True,
-}
+
+@dataclass
+class Qwen2VLVisionConfig:
+    model_type: str = "qwen2_vl"
+    depth: int = 32
+    embed_dim: int = 1280
+    mlp_ratio: int = 4
+    num_heads: int = 16
+    patch_size: int = 14
+    spatial_merge_size: int = 2
+    spatial_patch_size: int = 14
+    temporal_patch_size: int = 2
+    use_flash_attention: int = True
 
 
 class Qwen2VLConfig(PretrainedConfig):
@@ -140,9 +143,7 @@ class Qwen2VLConfig(PretrainedConfig):
         if isinstance(vision_config, dict):
             self.vision_config = vision_config
         else:
-            self.vision_config = {}
-            for key, default_value in _DEFAULT_QWEN2_VL_VISUAL_CONFIG.items():
-                self.vision_config[key] = default_value
+            self.vision_config = asdict(Qwen2VLVisionConfig())
         self.vision_config["hidden_size"] = hidden_size
 
         self.vocab_size = vocab_size
