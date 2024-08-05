@@ -21,7 +21,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 _DEFAULT_QWEN2_VL_VISUAL_CONFIG = {
-    "model_type": "qwen2-vl",
+    "model_type": "qwen2_vl",
     "depth": 32,
     "embed_dim": 1280,
     "mlp_ratio": 4,
@@ -111,7 +111,7 @@ class Qwen2VLConfig(PretrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "qwen2-vl"
+    model_type = "qwen2_vl"
     keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(

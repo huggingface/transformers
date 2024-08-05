@@ -69,7 +69,7 @@ class Qwen2VLVisionText2TextModelTester:
         intermediate_size=37,
         max_position_embeddings=512,
         max_window_layers=3,
-        model_type="qwen2-vl",
+        model_type="qwen2_vl",
         num_attention_heads=4,
         num_hidden_layers=3,
         num_key_value_heads=2,
