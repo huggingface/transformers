@@ -296,10 +296,9 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
                 The channel dimension format of the input image. If not provided, it will be inferred from the input
                 image.
         """
-        output_size = size["shortest_edge"]
         return center_crop(
             image,
-            size=(output_size, output_size),
+            size=(size["height"], size["width"]),
             data_format=data_format,
             input_data_format=input_data_format,
             **kwargs,
@@ -529,7 +528,6 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
                 )
                 for image in images
             ]
-
         if do_center_crop:
             images = [
                 self.center_crop(image=image, size=crop_size, input_data_format=input_data_format) for image in images
