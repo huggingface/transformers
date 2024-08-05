@@ -267,9 +267,9 @@ class PatchEmbed(nn.Module):
         self.proj = nn.Conv3d(in_chans, embed_dim, kernel_size=kernel_size, stride=kernel_size, bias=False)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        L, C = x.shape
-        x = x.view(L, -1, self.temporal_patch_size, self.patch_size, self.patch_size)
-        x = self.proj(x).view(L, self.embed_dim)
+        seqlen = x.shape[0]
+        x = x.view(seqlen, -1, self.temporal_patch_size, self.patch_size, self.patch_size)
+        x = self.proj(x).view(seqlen, self.embed_dim)
         return x
 
 
