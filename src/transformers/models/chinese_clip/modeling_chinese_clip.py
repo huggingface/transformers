@@ -1246,7 +1246,7 @@ class ChineseCLIPTextTransformer(ChineseCLIPPreTrainedModel):
 
 
 @add_start_docstrings(
-    """The vision model from CHINESE_CLIP without any head or projection on top.""",
+    """The text model from CHINESE_CLIP without any head or projection on top.""",
     CHINESE_CLIP_START_DOCSTRING,
 )
 class ChineseCLIPTextModel(ChineseCLIPPreTrainedModel):
