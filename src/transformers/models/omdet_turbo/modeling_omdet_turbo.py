@@ -744,7 +744,7 @@ class OmDetTurboHybridEncoder(nn.Module):
     def __init__(self, config: OmDetTurboConfig):
         super().__init__()
         self.in_channels = config.encoder_in_channels
-        self.feat_strides = config.feat_strides
+        self.feat_strides = config.encoder_feat_strides
         self.encoder_hidden_dim = config.encoder_hidden_dim
         self.encoder_projection_indices = config.encoder_projection_indices
         self.positional_encoding_temperature = config.positional_encoding_temperature
@@ -1395,11 +1395,10 @@ class OmDetTurboDecoder(OmDetTurboPreTrainedModel):
         # dynamic and static anchor inference
         dtype = torch.float32
 
+        # Ignore copy
         if spatial_shapes is None:
-            spatial_shapes = [
-                [int(self.config.anchor_image_size[0] / s), int(self.config.anchor_image_size[1] / s)]
-                for s in self.config.feat_strides
-            ]
+            raise ValueError("spatial_shapes must be provided")
+
         anchors = []
         for level, (height, width) in enumerate(spatial_shapes):
             grid_y, grid_x = torch.meshgrid(

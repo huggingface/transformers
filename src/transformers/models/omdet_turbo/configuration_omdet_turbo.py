@@ -148,7 +148,6 @@ class OmDetTurboConfig(PretrainedConfig):
     model_type = "omdet-turbo"
     attribute_map = {
         "encoder_hidden_dim": "d_model",
-        "encoder_feat_strides": "feat_strides",
         "num_attention_heads": "encoder_attention_heads",
     }
 
