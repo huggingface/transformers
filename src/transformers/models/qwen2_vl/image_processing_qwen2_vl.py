@@ -255,8 +255,8 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
             # We assume that all images have the same channel dimension format.
             input_data_format = infer_channel_dimension_format(images[0])
 
-        h, w = get_image_size(images[0], channel_dim=input_data_format)
-        resized_height, resized_width = h, w
+        height, width = get_image_size(images[0], channel_dim=input_data_format)
+        resized_height, resized_width = height, width
         if do_resize:
             if vision_info is not None:
                 min_pixels = vision_info.get("min_pixels", self.min_pixels)
@@ -269,16 +269,16 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
                     )
                 else:
                     resized_height, resized_width = smart_resize(
-                        h,
-                        w,
+                        height,
+                        width,
                         factor=self.patch_size * self.merge_size,
                         min_pixels=min_pixels,
                         max_pixels=max_pixels,
                     )
             else:
                 resized_height, resized_width = smart_resize(
-                    h,
-                    w,
+                    height,
+                    width,
                     factor=self.patch_size * self.merge_size,
                     min_pixels=self.min_pixels,
                     max_pixels=self.max_pixels,
