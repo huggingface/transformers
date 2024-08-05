@@ -280,7 +280,7 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 @slow
 class Mamba2IntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.model_id = "/raid/pablo/codestral-hf-good/"   #"Molbap/code2"
+        self.model_id = "/raid/pablo/codestral-hf-good/"  # "Molbap/code2"
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_id, from_slow=True, legacy=False)
         # FIXME currently batched generation seems off, as is in the original repo
         self.prompt = ("[INST]Write a hello world program in C++.",)
@@ -322,7 +322,11 @@ class Mamba2IntegrationTest(unittest.TestCase):
         Depending on precision and devices, differences can be observed from generation to generation.
         """
         tokenizer = self.tokenizer
-        prompt = ['[INST]Showcase C language.[/INST]', '[INST]Write a hello world program in C++.[/INST]', '[INST] Write a Fibonacci number computation function in Rust.[/INST]']
+        prompt = [
+            "[INST]Showcase C language.[/INST]",
+            "[INST]Write a hello world program in C++.[/INST]",
+            "[INST] Write a Fibonacci number computation function in Rust.[/INST]",
+        ]
         model = Mamba2ForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.bfloat16).to(torch_device)
         tokenizer.pad_token_id = tokenizer.eos_token_id
         # batched generation
