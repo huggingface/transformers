@@ -136,6 +136,9 @@ print(output_texts)
 
 ### We strongly recommend using Flash-Attention 2 to speed up generation
 
+First make sure to install flash-attn. Refer to the [original repository of Flash Attention](https://github.com/Dao-AILab/flash-attention) regarding that package installation. Simply set the `use_flash_attention=True` in the `config.json` file.
+
+
 ## Qwen2VLConfig
 
 [[autodoc]] Qwen2VLConfig
