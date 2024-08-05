@@ -123,18 +123,18 @@ class OmDetTurboProcessor(ProcessorMixin):
         **kwargs: Unpack[OmDetTurboProcessorKwargs],
     ) -> BatchEncoding:
         """
-        This method uses [`DetrImageProcessor.__call__`] method to prepare image(s) for the model, and
-        [`CLIPTokenizerFast.__call__`] to prepare text for the model.
+        This method uses [*DetrImageProcessor.__call__*] method to prepare image(s) for the model, and
+        [*CLIPTokenizerFast.__call__*] to prepare text for the model.
 
         Please refer to the docstring of the above two methods for more information.
 
         Args:
-            images (:obj:`ImageInput`):
+            images (`ImageInput`):
                Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255.
-            text (:obj:`Union[str, List[str], TextInput, PreTokenizedInput]`):
+            text (`Union[str, List[str], TextInput, PreTokenizedInput]`):
                 The grounded text used to guide open vocabulary detection. Expects a single string or a list of strings.
                 Examples: "Detect a cat, a dog, and a bird.", "Detect everything."
-            classes (:obj:`Union[List[str], List[List[str]]]`):
+            classes (`Union[List[str], List[List[str]]]`):
                 The classes used to limit the scope of the open vocabulary detection. Expects a list of strings or a list
                 of list of strings.
                 Examples: ["cat", "dog", "bird"].
@@ -204,10 +204,10 @@ class OmDetTurboProcessor(ProcessorMixin):
                 boxes for the image. Shape : (num_queries, max_num_classes_in_batch * 4) if doing
                 class-specific regression, or (num_queries, 4) if doing class-agnostic
                 regression.
-                This is compatible with the output of :meth:`FastRCNNOutputLayers.predict_boxes`.
+                This is compatible with the output of [`FastRCNNOutputLayers.predict_boxes`].
             scores (Tensor): A Tensor of predicted class scores for the image.
                 Shape : (num_queries, max_num_classes_in_batch + 1)
-                This is compatible with the output of :meth:`FastRCNNOutputLayers.predict_probs`.
+                This is compatible with the output of [`FastRCNNOutputLayers.predict_probs`].
             predicted_classes (Tensor): A Tensor of predicted classes for the image.
                 Shape : (num_queries * (max_num_classes_in_batch + 1),)
             classes (List[str]): The input classes names.
