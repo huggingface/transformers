@@ -110,12 +110,7 @@ class Qwen2AudioModelTester:
             ]
         )
         config = self.get_config()
-        feature_attention_mask = (
-            (ids_tensor([self.batch_size, self.feat_seq_length], config.text_config.vocab_size - 1) + 1)
-            .ne(1)
-            .long()
-            .to(torch_device)
-        )
+        feature_attention_mask =torch.ones([self.batch_size, self.feat_seq_length], dtype=torch.long).to(torch_device)
         return config, input_features_values, feature_attention_mask
 
     def prepare_config_and_inputs_for_common(self):
