@@ -1511,6 +1511,7 @@ class Kosmos2_5TextTransformer(nn.Module):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
+        # Ignore copy
         if image_embeds is not None:
             inputs_embeds[img_input_mask == 1] = image_embeds.to(inputs_embeds.device).view(-1, image_embeds.size(-1))
 
