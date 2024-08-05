@@ -13,6 +13,7 @@
 # limitations under the License.
 """Image processor class for ImageBind."""
 
+import math
 from fractions import Fraction
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -182,7 +183,7 @@ class ImageBindImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         do_convert_rgb: bool = True,
-        do_chunk: bool = False,
+        do_chunk: bool = True,
         chunk_duration: float = 2.0,
         num_chunks: int = 5,
         num_frames_per_chunk: int = 2,
@@ -320,7 +321,7 @@ class ImageBindImageProcessor(BaseImageProcessor):
 
         all_clips = []
         for clip_timepoints in all_clips_timepoints:
-            video_clip = video[int(clip_timepoints[0] * fps) : int(clip_timepoints[1] * fps)]
+            video_clip = video[math.ceil(clip_timepoints[0] * fps) : math.ceil(clip_timepoints[1] * fps)]
             video_clip = uniform_temporal_subsample(video_clip, num_samples=num_frames_per_chunk)
             all_clips.append(video_clip)
 
