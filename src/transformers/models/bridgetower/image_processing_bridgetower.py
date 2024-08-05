@@ -528,6 +528,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
                 )
                 for image in images
             ]
+
         if do_center_crop:
             images = [
                 self.center_crop(image=image, size=crop_size, input_data_format=input_data_format) for image in images
