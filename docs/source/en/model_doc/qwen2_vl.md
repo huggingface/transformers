@@ -115,7 +115,16 @@ print(output_text)
 ```python
 
 # Sample messages for batch inference
-messages1 = [{"role": "user", "content": [{"type": "image", "image": "file:///path/to/image1.jpg"}, {"type": "image", "image": "file:///path/to/image2.jpg"}, {"type": "text", "text": "What are the common elements in these pictures?"}]}]
+messages1 = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "image", "image": "file:///path/to/image1.jpg"},
+            {"type": "image", "image": "file:///path/to/image2.jpg"},
+            {"type": "text", "text": "What are the common elements in these pictures?"},
+        ],
+    }
+]
 messages2 = [{"role": "system", "content": "You are a helpful assistant."}, {"role": "user", "content": "Who are you?"}]
 # Combine messages for batch processing
 messages = [messages1, messages1]
