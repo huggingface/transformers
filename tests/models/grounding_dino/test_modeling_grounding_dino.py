@@ -150,6 +150,7 @@ class GroundingDinoModelTester:
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
         pixel_mask = torch.ones([self.batch_size, self.image_size, self.image_size], device=torch_device)
 
+        # To avoid erros when running tests with `labels` `input_ids` have to follow this structure
         input_ids = torch.tensor([101, 3869, 1012, 11420, 1012, 1012, 102])
         input_ids = input_ids.unsqueeze(0).expand(self.batch_size, -1)
 
