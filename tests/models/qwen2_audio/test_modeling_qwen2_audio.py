@@ -312,20 +312,6 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         inputs = self.processor(text=text, audios=audios, return_tensors="pt", padding=True)
 
-        # prompts = [
-        #     "<|audio_bos|><|AUDIO|><|audio_eos|>Detect the language and recognize the speech:",
-        #     "<|audio_bos|><|AUDIO|><|audio_eos|>Generate the caption in English:",
-        #     "<|audio_bos|><|AUDIO|><|audio_eos|>Classify the human vocal sound to VocalSound in English:",
-        # ]
-        # url1 = "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/1272-128104-0000.flac"
-        # audio1, _ = librosa.load(BytesIO(urlopen(url1).read()), sr=self.processor.feature_extractor.sampling_rate)
-        # url2 = "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/glass-breaking-151256.mp3"
-        # audio2, _ = librosa.load(BytesIO(urlopen(url2).read()), sr=self.processor.feature_extractor.sampling_rate)
-        # url3 = "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/f2641_0_throatclearing.wav"
-        # audio3, _ = librosa.load(BytesIO(urlopen(url3).read()), sr=self.processor.feature_extractor.sampling_rate)
-
-        # inputs = self.processor(text=prompts, audios=[audio1, audio2, audio3], return_tensors="pt", padding=True)
-
         output = model.generate(**inputs, max_new_tokens=32)
 
         print(self.processor.batch_decode(output, skip_special_tokens=True))
