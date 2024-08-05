@@ -1758,6 +1758,7 @@ class Kosmos2_5PreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize the weights"""
+        # vision config's `self.config.vision_config.initializer_range` is not used
         if isinstance(self, Kosmos2_5VisionModel):
             factor = self.config.initializer_factor
         elif isinstance(self, (Kosmos2_5Model, Kosmos2_5ForConditionalGeneration)):
