@@ -17,7 +17,7 @@ Processor class for PaliGemma.
 """
 
 import logging
-from typing import List, Union
+from typing import List, Optional, Union
 
 
 try:
@@ -26,7 +26,7 @@ except ImportError:
     pass
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image
-from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, TextKwargs
 from ...tokenization_utils_base import (
     AddedToken,
     PreTokenizedInput,
@@ -74,18 +74,44 @@ def build_string_from_input(prompt, bos_token, image_seq_len, image_token):
     """
     return f"{image_token * image_seq_len}{bos_token}{prompt}\n"
 
+
+class PaliGemmaTextKwargs(TextKwargs):
+    suffix: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None
+
+
+class PaliGemmaImagesKwargs(ImagesKwargs):
+    do_convert_rgb: Optional[bool] = None
+    do_thumbnail: Optional[bool] = None
+    do_align_long_axis: Optional[bool] = None
+    do_rescale: Optional[bool] = None
+
+
 class PaliGemmaProcessorKwargs(ProcessingKwargs, total=False):
+    text_kwargs: PaliGemmaTextKwargs
+    image_kwargs: PaliGemmaImagesKwargs
     _defaults = {
         "text_kwargs": {
-            "tokenize_newline_separately": True,
-            "suffix": None,
+            "tokenize_newline_separately": True,  # Not Available in Default
+            "suffix": None,  # Not Available in Default
+            "padding": False,
+            "truncation": None,
+            "max_length": None,
         },
         "image_kwargs": {
-            "do_convert_rgb": None,
-            "do_thumbnail": None,
-            "do_align_long_axis":  None,
+            "do_resize": None,
+            "do_normalize": None,
+            "image_mean": None,
+            "image_std": None,
+            "data_format": "channels_first",
+            "input_data_format": None,
+            "resample": None,
+            "do_convert_rgb": None,  # Not Available in Default
+            "do_thumbnail": None,  # Not Available in Default
+            "do_align_long_axis": None,  # Not Available in Default
+            "do_rescale": None,
         },
     }
+
 
 class PaliGemmaProcessor(ProcessorMixin):
     r"""
@@ -138,7 +164,7 @@ class PaliGemmaProcessor(ProcessorMixin):
         self,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
         images: ImageInput = None,
-        video =None,
+        video=None,
         **kwargs: Unpack[PaliGemmaProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -213,7 +239,12 @@ class PaliGemmaProcessor(ProcessorMixin):
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
             - **labels** -- Labels compatible with training if `suffix` is not None
         """
-        suffix = kwargs["text_kwargs"]["suffix"]
+        output_kwargs = self._merge_kwargs(
+            PaliGemmaProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
+        suffix = output_kwargs["text_kwargs"]["suffix"]
         return_token_type_ids = True if suffix is not None else False
 
         if images is None:
@@ -252,8 +283,7 @@ class PaliGemmaProcessor(ProcessorMixin):
             images,
             **kwargs["image_kwargs"],
         )["pixel_values"]
-
-        max_length = kwargs.get("max_length", None)
+        max_length = output_kwargs.get("max_length", None)
         if max_length is not None:
             max_length += self.image_seq_length  # max_length has to account for the image tokens
         output_kwargs = self._merge_kwargs(
@@ -264,7 +294,7 @@ class PaliGemmaProcessor(ProcessorMixin):
         inputs = self.tokenizer(
             input_strings,
             text_pair=suffix,
-            **output_kwargs['text_kwargs'],
+            **output_kwargs["text_kwargs"],
             return_token_type_ids=return_token_type_ids,
         )
 
