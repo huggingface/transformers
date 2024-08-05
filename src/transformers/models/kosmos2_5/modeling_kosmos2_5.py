@@ -1706,6 +1706,7 @@ class Kosmos2_5TextTransformer(nn.Module):
         )
 
 
+# Copied from transformers.models.kosmos2.modeling_kosmos2.Kosmos2ImageToTextProjection with Kosmos2->Kosmos2_5
 class Kosmos2_5ImageToTextProjection(nn.Module):
     """The layer that transforms the image model's output to part of the text model's input (namely, image features)"""
 
@@ -1713,6 +1714,8 @@ class Kosmos2_5ImageToTextProjection(nn.Module):
         super().__init__()
         self.dense = nn.Linear(config.vision_config.hidden_size, config.text_config.embed_dim)
         self.latent_query = nn.Parameter(torch.randn(config.latent_query_num, config.text_config.embed_dim))
+
+        # Ignore copy
         self.x_attn = KOSMOS2_5_TEXT_ATTENTION_CLASSES[config._attn_implementation](
             config.text_config,
             config.text_config.embed_dim,
@@ -1722,7 +1725,6 @@ class Kosmos2_5ImageToTextProjection(nn.Module):
             add_inner_attn_layernorm=False,
             is_causal=False,
         )
-        # self.dropout = nn.Dropout(config.text_config.dropout, inplace=True)
 
     def forward(self, features):
         hidden_states = self.dense(features)
