@@ -1605,14 +1605,18 @@ class M2M100DecoderModel(M2M100PreTrainedModel):
             labels = labels.to(lm_logits.device)
             loss_fct = CrossEntropyLoss()
             masked_lm_loss = loss_fct(lm_logits.view(-1, self.config.vocab_size), labels.view(-1))
-        
+
         if (output_attentions or self.config.output_attentions) and encoder_outputs.attentions is None:
             # just for the sake of compatibility, adding fake encoder attentions
             encoder_outputs.attentions = [
-                torch.ones((batch_size, self.config.encoder_attention_heads, 1, 1), device=embeddings.device, dtype=embeddings.dtype)
+                torch.ones(
+                    (batch_size, self.config.encoder_attention_heads, 1, 1),
+                    device=embeddings.device,
+                    dtype=embeddings.dtype,
+                )
                 for layer in range(self.config.encoder_layers)
             ]
-        
+
         if (output_hidden_states or self.config.output_hidden_states) and encoder_outputs.hidden_states is None:
             # just for the sake of compatibility, adding fake encoder hidden states
             encoder_outputs.hidden_states = [

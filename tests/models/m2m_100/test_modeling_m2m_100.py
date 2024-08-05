@@ -675,14 +675,14 @@ class M2M100DecoderModelTester:
         self.encoder_seq_length = 1
 
     def prepare_config_and_inputs(self):
-         # encoder_input_ids should usually be ignored, but adding them for compatibility with some tests like test_resize_tokens_embeddings
+        # encoder_input_ids should usually be ignored, but adding them for compatibility with some tests like test_resize_tokens_embeddings
         encoder_input_ids = ids_tensor([self.batch_size, 1], self.vocab_size)
         decoder_input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
         attention_mask = None
         if self.use_attention_mask:
             attention_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
-        
+
         embeddings = torch.randn([self.batch_size, 1, self.hidden_size], device=torch_device)
         encoder_outputs = BaseModelOutput(last_hidden_state=embeddings)
 
@@ -692,9 +692,6 @@ class M2M100DecoderModelTester:
             "decoder_input_ids": decoder_input_ids,
             "decoder_attention_mask": attention_mask,
             "encoder_outputs": encoder_outputs,
-            #"head_mask": head_mask,
-            #"decoder_head_mask": decoder_head_mask,
-            #"cross_attn_head_mask": cross_attn_head_mask,
         }
 
         config = M2M100Config(
@@ -717,10 +714,7 @@ class M2M100DecoderModelTester:
             is_encoder_decoder=self.is_encoder_decoder,
         )
 
-        return (
-            config,
-            inputs_dict
-        )
+        return (config, inputs_dict)
 
     def create_and_check_model(
         self,
@@ -757,7 +751,9 @@ class M2M100DecoderModelTester:
 class M2M100DecoderModelTest(ModelTesterMixin, unittest.TestCase):  # TODO: add GenerationTesterMixin
     all_model_classes = (M2M100DecoderModel,) if is_torch_available() else ()
     test_pruning = False
-    test_head_masking = False  # this would require also masking the attention heads of the fake encoder, which is cumbersome
+    test_head_masking = (
+        False  # this would require also masking the attention heads of the fake encoder, which is cumbersome
+    )
 
     def setUp(self):
         self.model_tester = M2M100DecoderModelTester(self)
@@ -788,7 +784,12 @@ class M2M100DecoderModelTest(ModelTesterMixin, unittest.TestCase):  # TODO: add 
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
-    # TODO: fix test_batching_equivalence (reason unknown)
+    @unittest.skip(
+        reason="The batching test does not split the precomputed encoder outputs into batches, so it cannot really batch the inputs."
+    )
+    def test_batching_equivalence(self):
+        pass
+
 
 @require_torch
 @require_sentencepiece
