@@ -831,7 +831,7 @@ class Speech2Text2ForCausalLM(Speech2Text2PreTrainedModel):
         >>> model.config.decoder_start_token_id = tokenizer.bos_token_id
         >>> # pre-process inputs and labels
 
-        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True)
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> inputs = feature_extractor(
         ...     ds[0]["audio"]["array"], sampling_rate=ds[0]["audio"]["sampling_rate"], return_tensors="pt"
         ... )
