@@ -205,6 +205,11 @@ class GroundingDinoConfig(PretrainedConfig):
         layer_norm_eps=1e-5,
         **kwargs,
     ):
+        if class_loss_reduction not in ["sum", "mean"]:
+            raise ValueError(
+                f"Invalid class_loss_reduction: {class_loss_reduction}. It must be either 'sum' or 'mean'."
+            )
+
         if backbone_config is None and backbone is None:
             logger.info("`backbone_config` is `None`. Initializing the config with the default `Swin` backbone.")
             backbone_config = CONFIG_MAPPING["swin"](
