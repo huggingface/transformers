@@ -2316,3 +2316,7 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     @unittest.skip(reason="The model tested fails `Hub -> Fast == Hub -> Slow`, nothing much we can do")
     def test_added_tokens_serialization(self):
         pass
+
+    @unittest.skip("Chat is not supported")
+    def test_chat_template_return_assistant_tokens_mask(self):
+        pass

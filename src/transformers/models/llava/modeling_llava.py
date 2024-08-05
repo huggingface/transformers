@@ -125,6 +125,7 @@ class LlavaPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["LlavaVisionAttention"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
+    _supports_cache_class = True
 
     def _init_weights(self, module):
         # important: this ported version of Llava isn't meant for training from scratch - only

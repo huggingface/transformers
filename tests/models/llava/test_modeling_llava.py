@@ -503,6 +503,19 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
     @slow
     @require_bitsandbytes
+    def test_generation_no_images(self):
+        model_id = "llava-hf/llava-1.5-7b-hf"
+        model = LlavaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
+        processor = AutoProcessor.from_pretrained(model_id)
+
+        # Prepare inputs with no images
+        inputs = processor("Hello, I am", return_tensors="pt").to(torch_device)
+
+        # Make sure that `generate` works
+        _ = model.generate(**inputs, max_new_tokens=20)
+
+    @slow
+    @require_bitsandbytes
     def test_expansion_in_processing(self):
         model_id = "llava-hf/llava-1.5-7b-hf"
         model = LlavaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
