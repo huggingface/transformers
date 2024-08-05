@@ -436,7 +436,7 @@ class OmDetTurboModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
                 ],
             )
 
-    # overwrite since hidden_states are called encoder_text_hidden_states
+    # overwrite since encoder_hidden_states are not typical.
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
             model = model_class(config)
@@ -479,7 +479,7 @@ class OmDetTurboModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
-    # # removed retain_grad and grad on decoder_hidden_states, as queries don't require grad
+    # removed retain_grad and grad on decoder_hidden_states, as queries don't require grad
     def test_retain_grad_hidden_states_attentions(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.output_hidden_states = True

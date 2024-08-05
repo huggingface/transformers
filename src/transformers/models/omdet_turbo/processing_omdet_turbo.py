@@ -225,9 +225,6 @@ class OmDetTurboProcessor(ProcessorMixin):
                     corresponding detection
         """
         proposal_num = len(boxes) if max_num_det is None else max_num_det
-        print("boxes", boxes.shape)
-        print("scores", scores.shape)
-        print("predicted_classes", predicted_classes.shape)
         scores_per_image, topk_indices = scores.flatten(0, 1).topk(proposal_num, sorted=False)
         classes_per_image = predicted_classes[topk_indices]
         box_pred_per_image = boxes.view(-1, 1, 4).repeat(1, num_classes, 1).view(-1, 4)
@@ -263,9 +260,6 @@ class OmDetTurboProcessor(ProcessorMixin):
         result["scores"] = scores_per_image
         result["classes"] = classes_per_image
 
-        print("result bbox", result["boxes"].shape)
-        print("result scores", result["scores"].shape)
-        # print("result classes", len(result["classes"]))
         return result
 
     def post_process_grounded_object_detection(

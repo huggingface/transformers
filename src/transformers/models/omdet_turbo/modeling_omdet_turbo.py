@@ -917,11 +917,8 @@ class OmDetTurboMLP(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim, num_layers):
         super().__init__()
         self.num_layers = num_layers
-        # Create a list of hidden layer dimensions
         hidden_layers_dims = [hidden_dim] * (num_layers - 1)
-        # Define the dimensions for each layer
         layers_dims = [input_dim] + hidden_layers_dims + [output_dim]
-        # Create the layers using nn.ModuleList
         self.layers = nn.ModuleList(
             [nn.Linear(in_dim, out_dim) for in_dim, out_dim in zip(layers_dims[:-1], layers_dims[1:])]
         )
@@ -943,7 +940,6 @@ class OmDetTurboResidualLayer(nn.Module):
         self.dropout = nn.Dropout(config.decoder_dropout)
 
     def forward(self, x, y):
-        "Apply residual connection to any sublayer with the same size."
         return self.norm1(x + self.dropout(y))
 
 
@@ -1018,7 +1014,7 @@ class OmDetTurboDeformableTransformerDecoderLayer(nn.Module):
 
         # self attention
         query = key = self.with_pos_embed(decoder_embeddings, query_position)
-        # combine task_emb with query, key, value
+        # combine task_features with query, key, value
         task_features = task_features.transpose(0, 1)
         query = torch.cat((query, task_features), dim=1)
         key = torch.cat((key, task_features), dim=1)
@@ -1146,18 +1142,14 @@ class OmDetTurboDeformableTransformerDecoder(nn.Module):
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
             )
-
             if output_attentions:
                 all_self_attns = all_self_attns + (self_attention,)
                 all_cross_attns = all_cross_attns + (cross_attention,)
-
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (predicted_class_features,)
 
             refined_bbox = torch.sigmoid(bbox_head[i](predicted_class_features) + _inverse_sigmoid(reference_points))
-
             original_class_projected = class_head[i](class_feats).permute(1, 2, 0)
-
             if self.training:
                 decoder_class_logits.append(
                     get_class_similarity(
@@ -1178,10 +1170,8 @@ class OmDetTurboDeformableTransformerDecoder(nn.Module):
                 )
                 decoder_bboxes.append(refined_bbox)
                 break
-
             last_refined_bbox = refined_bbox
             reference_points = refined_bbox.detach() if self.training else refined_bbox
-
         if output_attentions:
             all_attns += (all_self_attns, all_cross_attns)
 
@@ -1465,9 +1455,7 @@ class OmDetTurboDecoder(OmDetTurboPreTrainedModel):
             torch.arange(end=batch_size, dtype=topk_ind.dtype).unsqueeze(-1).repeat(1, self.num_queries).view(-1)
         )
 
-        # Unsigmoided
         reference_points = encoder_outputs_bboxes[batch_ind, topk_ind].view(batch_size, self.num_queries, -1)
-
         encoder_bboxes = reference_points.sigmoid()
         if denoise_bboxes is not None:
             reference_points = torch.cat([denoise_bboxes, reference_points], 1)
@@ -1644,7 +1632,6 @@ class OmDetTurboForObjectDetection(OmDetTurboPreTrainedModel):
         output_hidden_states = output_hidden_states if output_hidden_states is not None else self.output_hidden_states
         return_dict = return_dict if return_dict is not None else self.use_return_dict
 
-        # classes = [classes[str(i)] for i in range(len(classes))]
         image_features = self.vision_backbone(pixel_values)
         encoder_outputs = self.encoder(
             image_features,
@@ -1666,8 +1653,8 @@ class OmDetTurboForObjectDetection(OmDetTurboPreTrainedModel):
 
         if not return_dict:
             return tuple(
-                v
-                for v in [
+                output
+                for output in [
                     None,
                     decoder_outputs[0],
                     decoder_outputs[1],
@@ -1681,7 +1668,7 @@ class OmDetTurboForObjectDetection(OmDetTurboPreTrainedModel):
                     decoder_outputs[3],
                     encoder_outputs[0],
                 ]
-                if v is not None
+                if output is not None
             )
 
         return OmDetTurboObjectDetectionOutput(
