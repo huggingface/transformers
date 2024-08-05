@@ -495,11 +495,11 @@ class SonarIntegrationTests(unittest.TestCase):
 
     def test_encoding_and_decoding(self):
         tokenizer = self.default_tokenizer
-        encoder = self.defalt_encoder()
+        encoder = self.default_encoder()
         tokenizer.src_lang = "eng_Latn"
 
         sentences = ["My name is SONAR.", "I can embed the sentences into vectorial space."]
-        batch = tokenizer(sentences, padding=True, return_tensors="pt")
+        batch = tokenizer(sentences, padding=True, return_tensors="pt").to(torch_device)
 
         with torch.inference_mode():
             enc_out = encoder(**batch, pool_last_hidden_state=True)
@@ -510,13 +510,13 @@ class SonarIntegrationTests(unittest.TestCase):
             [
                 [-0.005286, 0.002008, -0.000562, 0.006344, 0.006329],
                 [-0.000330, -0.007055, 0.007644, 0.001841, 0.003727],
-            ]
+            ],
+            device=torch_device,
         )
         assert torch.allclose(embeddings[:, :5], ref_embeddings, rtol=1e-3)
 
         decoder = self.default_decoder()
 
-        print("Conversion completed, testing the decoding accuracy...")
         gen_out = decoder.generate(
             # passing encoder_outputs is not recommended, because beam search decoding modifies them in place, which is ugly
             # encoder_outputs=enc_out,
