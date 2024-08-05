@@ -1,0 +1,10 @@
+datasets >= 1.13.3
+pytest<8.0.1
+conllu
+nltk
+rouge-score
+seqeval
+tensorboard
+evaluate >= 0.2.0
+torch
+accelerate

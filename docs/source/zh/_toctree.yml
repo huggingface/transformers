@@ -1,0 +1,152 @@
+- sections:
+  - local: index
+    title: 🤗 Transformers 简介
+  - local: quicktour
+    title: 快速上手
+  - local: installation
+    title: 安装
+  title: 开始使用
+- sections:
+  - local: pipeline_tutorial
+    title: 使用pipelines进行推理
+  - local: autoclass_tutorial
+    title: 使用AutoClass编写可移植的代码
+  - local: preprocessing
+    title: 预处理数据
+  - local: training
+    title: 微调预训练模型
+  - local: run_scripts
+    title: 通过脚本训练模型
+  - local: accelerate
+    title: 使用🤗Accelerate进行分布式训练
+  - local: peft
+    title: 使用🤗 PEFT加载和训练adapters
+  - local: model_sharing
+    title: 分享您的模型
+  - local: transformers_agents
+    title: agents教程
+  - local: llm_tutorial
+    title: 使用LLMs进行生成
+  title: 教程
+- sections:
+  - isExpanded: false
+    sections:
+    - local: tasks/asr
+      title: 自动语音识别
+- sections:
+  - local: fast_tokenizers
+    title: 使用 🤗 Tokenizers 中的分词器
+  - local: multilingual
+    title: 使用多语言模型进行推理
+  - local: create_a_model
+    title: 使用特定于模型的 API
+  - local: custom_models
+    title: 共享自定义模型
+  - local: chat_templating
+    title: 聊天模型的模板
+  - local: serialization
+    title: 导出为 ONNX
+  - local: tflite
+    title: 导出为 TFLite
+  - local: torchscript
+    title: 导出为 TorchScript
+  title: 开发者指南
+- sections:
+  - local: performance
+    title: 综述
+  - sections:
+    - local: fsdp
+      title: 完全分片数据并行
+    - local: perf_hardware
+      title: 用于训练的定制硬件
+    - local: hpo_train
+      title: 使用Trainer API 进行超参数搜索
+    title: 高效训练技术
+  - local: big_models
+    title: 实例化大模型
+  - local: debugging
+    title: 问题定位及解决
+  - local: tf_xla
+    title: TensorFlow模型的XLA集成
+  - local: perf_torch_compile
+    title: 使用 `torch.compile()` 优化推理
+  title: 性能和可扩展性
+- sections:
+  - local: contributing
+    title: 如何为 🤗 Transformers 做贡献？
+  - local: add_new_pipeline
+    title: 如何将流水线添加到 🤗 Transformers？
+  title: 贡献
+- sections:
+  - local: philosophy
+    title: Transformers的设计理念
+  - local: task_summary
+    title: 🤗Transformers能做什么
+  - local: tokenizer_summary
+    title: 分词器的摘要
+  title: 概念指南
+- sections:
+  - sections:
+    - local: main_classes/agent
+      title: Agents和工具
+    - local: main_classes/callback
+      title: Callbacks
+    - local: main_classes/configuration
+      title: Configuration
+    - local: main_classes/data_collator
+      title: Data Collator
+    - local: main_classes/keras_callbacks
+      title: Keras callbacks
+    - local: main_classes/logging
+      title: Logging
+    - local: main_classes/model
+      title: 模型
+    - local: main_classes/text_generation
+      title: 文本生成
+    - local: main_classes/onnx
+      title: ONNX
+    - local: main_classes/optimizer_schedules
+      title: Optimization
+    - local: main_classes/output
+      title: 模型输出
+    - local: main_classes/pipelines
+      title: Pipelines
+    - local: main_classes/processors
+      title: Processors
+    - local: main_classes/quantization
+      title: Quantization
+    - local: main_classes/tokenizer
+      title: Tokenizer
+    - local: main_classes/trainer
+      title: Trainer
+    - local: main_classes/deepspeed
+      title: DeepSpeed集成
+    - local: main_classes/feature_extractor
+      title: Feature Extractor
+    - local: main_classes/image_processor
+      title: Image Processor
+    title: 主要类
+  - sections:
+    - local: internal/modeling_utils
+      title: 自定义层和工具
+    - local: internal/pipelines_utils
+      title: pipelines工具
+    - local: internal/tokenization_utils
+      title: Tokenizers工具
+    - local: internal/trainer_utils
+      title: 训练器工具
+    - local: internal/generation_utils
+      title: 生成工具
+    - local: internal/image_processing_utils
+      title: 图像处理工具
+    - local: internal/audio_utils
+      title: 音频处理工具
+    - local: internal/file_utils
+      title: 通用工具
+    - local: internal/time_series_utils
+      title: 时序数据工具
+    title: 内部辅助工具
+  title: 应用程序接口 (API) 
+
+
+

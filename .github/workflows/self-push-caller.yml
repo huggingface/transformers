@@ -1,0 +1,54 @@
+# Used to trigger self-push CI
+name: Self-hosted runner (push-caller)
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "src/**"
+      - "tests/**"
+      - ".github/**"
+      - "templates/**"
+      - "utils/**"
+
+jobs:
+  check-for-setup:
+      runs-on: ubuntu-22.04
+      name: Check if setup was changed
+      outputs:
+        changed: ${{ steps.was_changed.outputs.changed }}
+      steps:
+        - uses: actions/checkout@v4
+          with: 
+            fetch-depth: "2"
+        
+        - name: Get changed files
+          id: changed-files
+          uses: tj-actions/changed-files@v41
+        
+        - name: Was setup changed 
+          id: was_changed
+          run: |
+            for file in ${{ steps.changed-files.outputs.all_changed_files }}; do
+              if [ `basename "${file}"` = "setup.py" ]; then
+                echo "changed=1" >> $GITHUB_OUTPUT
+              fi
+            done
+
+  build-docker-containers:
+    needs: check-for-setup
+    if: (github.event_name == 'push') && (needs.check-for-setup.outputs.changed == '1')
+    uses: ./.github/workflows/build-docker-images.yml
+    with:
+      image_postfix: "-push-ci"
+    secrets: inherit
+
+  run_push_ci:
+    name: Trigger Push CI
+    runs-on: ubuntu-22.04
+    if: ${{ always() }}
+    needs: build-docker-containers
+    steps:
+      - name: Trigger push CI via workflow_run
+        run: echo "Trigger push CI via workflow_run"

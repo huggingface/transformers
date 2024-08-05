@@ -1,0 +1,16 @@
+docs/source/en/generation_strategies.md
+docs/source/en/model_doc/code_llama.md
+docs/source/en/model_doc/ctrl.md
+docs/source/en/model_doc/kosmos-2.md
+docs/source/en/model_doc/seamless_m4t.md
+docs/source/en/model_doc/seamless_m4t_v2.md
+docs/source/en/task_summary.md
+docs/source/en/tasks/prompting.md
+docs/source/ja/model_doc/code_llama.md
+src/transformers/models/blip_2/modeling_blip_2.py
+src/transformers/models/ctrl/modeling_ctrl.py
+src/transformers/models/fuyu/modeling_fuyu.py
+src/transformers/models/idefics2/modeling_idefics2.py
+src/transformers/models/kosmos2/modeling_kosmos2.py
+src/transformers/models/musicgen_melody/modeling_musicgen_melody.py
+src/transformers/models/musicgen_melody/processing_musicgen_melody.py
