@@ -335,7 +335,7 @@ class VisionAttention(nn.Module):
         return x
 
 
-class Block(nn.Module):
+class Qwen2VLVisionBlock(nn.Module):
     def __init__(
         self,
         dim: int,
@@ -392,7 +392,7 @@ class Qwen2VisionTransformer(nn.Module):
 
         self.blocks = nn.ModuleList(
             [
-                Block(
+                Qwen2VLVisionBlock(
                     dim=embed_dim,
                     num_heads=num_heads,
                     mlp_ratio=mlp_ratio,
@@ -1147,7 +1147,7 @@ class Qwen2VLPreTrainedModel(PreTrainedModel):
     config_class = Qwen2VLConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["Qwen2VLDecoderLayer", "Block"]
+    _no_split_modules = ["Qwen2VLDecoderLayer", "Qwen2VLVisionBlock"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
     _supports_sdpa = True
