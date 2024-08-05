@@ -502,7 +502,6 @@ class M2M100EncoderModelTester:
         self.parent = parent
         self.batch_size = batch_size
         self.seq_length = seq_length
-        self.encoder_seq_length = seq_length
         self.is_training = is_training
         self.use_labels = use_labels
         self.vocab_size = vocab_size
@@ -523,11 +522,11 @@ class M2M100EncoderModelTester:
         self.is_encoder_decoder = is_encoder_decoder
 
     def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)
+        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
         attention_mask = None
         if self.use_attention_mask:
-            attention_mask = ids_tensor([self.batch_size, self.encoder_seq_length], vocab_size=2)
+            attention_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
 
         config = M2M100Config(
             vocab_size=self.vocab_size,
@@ -571,7 +570,7 @@ class M2M100EncoderModelTester:
         result = model(input_ids=input_ids)
         encoder_output = result.last_hidden_state
 
-        self.parent.assertEqual(encoder_output.size(), (self.batch_size, self.encoder_seq_length, self.hidden_size))
+        self.parent.assertEqual(encoder_output.size(), (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_model_fp16_forward(
         self,
@@ -601,8 +600,6 @@ class M2M100EncoderModelTester:
 class M2M100EncoderModelModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (M2M100EncoderModel,) if is_torch_available() else ()
     test_pruning = False
-    test_torchscript = True
-    test_resize_embeddings = False
 
     def setUp(self):
         self.model_tester = M2M100EncoderModelTester(self)
@@ -626,6 +623,170 @@ class M2M100EncoderModelModelTest(ModelTesterMixin, unittest.TestCase):
     def test_load_save_without_tied_weights(self):
         pass
 
+
+class M2M100DecoderModelTester:
+    def __init__(
+        self,
+        parent,
+        batch_size=13,
+        seq_length=7,
+        is_training=False,
+        use_labels=False,
+        vocab_size=99,
+        hidden_size=16,
+        num_hidden_layers=2,
+        num_attention_heads=4,
+        intermediate_size=4,
+        hidden_act="relu",
+        hidden_dropout_prob=0.1,
+        attention_probs_dropout_prob=0.1,
+        encoder_layerdrop=0.0,
+        decoder_layerdrop=0.0,
+        max_position_embeddings=20,
+        eos_token_id=2,
+        pad_token_id=1,
+        bos_token_id=0,
+        use_attention_mask: bool = True,
+        is_encoder_decoder=True,
+    ):
+        self.parent = parent
+        self.batch_size = batch_size
+        self.seq_length = seq_length
+        self.is_training = is_training
+        self.use_labels = use_labels
+        self.vocab_size = vocab_size
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.intermediate_size = intermediate_size
+        self.hidden_act = hidden_act
+        self.hidden_dropout_prob = hidden_dropout_prob
+        self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.encoder_layerdrop = encoder_layerdrop
+        self.decoder_layerdrop = decoder_layerdrop
+        self.max_position_embeddings = max_position_embeddings
+        self.eos_token_id = eos_token_id
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.use_attention_mask = use_attention_mask
+        self.is_encoder_decoder = is_encoder_decoder
+
+    def prepare_config_and_inputs(self):
+        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+
+        attention_mask = None
+        if self.use_attention_mask:
+            attention_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
+        
+        embeddings = torch.randn([self.batch_size, 1, self.hidden_size], device=torch_device)
+        encoder_outputs = BaseModelOutput(last_hidden_state=embeddings)
+
+        inputs_dict = {
+            "input_ids": None,  # the input ids are always ignored anyway
+            "attention_mask": None,  # the inputs are pooled embeddins, so they are never masked
+            "decoder_input_ids": input_ids,
+            "decoder_attention_mask": attention_mask,
+            "encoder_outputs": encoder_outputs,
+            #"head_mask": head_mask,
+            #"decoder_head_mask": decoder_head_mask,
+            #"cross_attn_head_mask": cross_attn_head_mask,
+        }
+
+        config = M2M100Config(
+            vocab_size=self.vocab_size,
+            d_model=self.hidden_size,
+            encoder_layers=self.num_hidden_layers,
+            decoder_layers=self.num_hidden_layers,
+            encoder_attention_heads=self.num_attention_heads,
+            decoder_attention_heads=self.num_attention_heads,
+            encoder_ffn_dim=self.intermediate_size,
+            decoder_ffn_dim=self.intermediate_size,
+            dropout=self.hidden_dropout_prob,
+            attention_dropout=self.attention_probs_dropout_prob,
+            encoder_layerdrop=self.encoder_layerdrop,
+            decoder_layerdrop=self.decoder_layerdrop,
+            max_position_embeddings=self.max_position_embeddings,
+            eos_token_id=self.eos_token_id,
+            bos_token_id=self.bos_token_id,
+            pad_token_id=self.pad_token_id,
+            is_encoder_decoder=self.is_encoder_decoder,
+        )
+
+        return (
+            config,
+            inputs_dict
+        )
+
+    def create_and_check_model(
+        self,
+        config,
+        **inputs_dict,
+    ):
+        model = M2M100DecoderModel(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(
+            **inputs_dict,
+        )
+        logits = result.logits
+
+        self.parent.assertEqual(logits.size(), (self.batch_size, self.seq_length, self.vocab_size))
+
+    def create_and_check_model_fp16_forward(
+        self,
+        config,
+        encoder_outputs,
+        **inputs_dict,
+    ):
+        model = M2M100DecoderModel(config=config).to(torch_device).half().eval()
+        encoder_outputs_half = BaseModelOutput(last_hidden_state=encoder_outputs.last_hidden_state.half())
+        output = model(encoder_outputs=encoder_outputs_half, **inputs_dict)
+        self.parent.assertFalse(torch.isnan(output["logits"]).any().item())
+
+    def prepare_config_and_inputs_for_common(self):
+        config_and_inputs = self.prepare_config_and_inputs()
+        config, inputs_dict = config_and_inputs
+        return config, inputs_dict
+
+
+class M2M100DecoderModelTest(ModelTesterMixin, unittest.TestCase):  # TODO: add GenerationTesterMixin
+    all_model_classes = (M2M100DecoderModel,) if is_torch_available() else ()
+    test_pruning = False
+
+    def setUp(self):
+        self.model_tester = M2M100DecoderModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=M2M100Config, d_model=37)
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
+
+    def test_model(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model(config, **inputs_dict)
+
+    @unittest.skipIf(torch_device == "cpu", "Cant do half precision")
+    def test_model_fp16_forward(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model_fp16_forward(config, **inputs_dict)
+
+    @unittest.skip(
+        reason="This architecure has tied weights by default and there is no way to remove it, check: https://github.com/huggingface/transformers/pull/31771#issuecomment-2210915245"
+    )
+    def test_load_save_without_tied_weights(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure is an encoder-decoder, but the encoder is precomputed, so it doesn't have outputs.encoder_attentions."
+    )
+    def test_attention_outputs(self):
+        pass
+
+    # TODO: fix test_batching_equivalence (reason unknown)
+    # TODO: fix test_headmasking, check_attentions_validity, (add fake encoder attentions)
+
+    # TODO: fix check_hidden_states_output (add fake encoder hidden states)
+
+    # TODO: fix test_inputs_embeds (use some arbitrary input embeddings)
 
 @require_torch
 @require_sentencepiece

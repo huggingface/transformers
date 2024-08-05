@@ -1525,6 +1525,8 @@ class M2M100DecoderModel(M2M100PreTrainedModel):
     def _tie_weights(self):
         if self.config.tie_word_embeddings:
             self._tie_or_clone_weights(self.decoder.embed_tokens, self.shared)
+            # in SONAR models, input and output projections are tied (ideally, this should be configurable)
+            self._tie_or_clone_weights(self.lm_head, self.shared)
 
     def get_decoder(self):
         return self.decoder
