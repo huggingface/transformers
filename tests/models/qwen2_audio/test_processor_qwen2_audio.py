@@ -22,7 +22,7 @@ from transformers.testing_utils import require_torch, require_torchaudio
 @require_torchaudio
 class Qwen2AudioProcessorTest(unittest.TestCase):
     def setUp(self):
-        self.checkpoint = "Qwen/Qwen2-Audio-7B"
+        self.checkpoint = "faychu/test"
         self.tmpdirname = tempfile.mkdtemp()
 
     def test_can_load_various_tokenizers(self):
