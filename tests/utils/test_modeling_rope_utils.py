@@ -46,7 +46,7 @@ class RopeTest(unittest.TestCase):
 
         # Parameters are exclusive to their own RoPE type, and should raise an exception if incorrectly passed
         valid_param_mapping = {
-            "factor": ["linear", "dynamic", "yarn", "longrope"],
+            "factor": ["linear", "ntk", "dynamic", "yarn", "longrope"],
             "attention_factor": ["yarn", "longrope"],
             "beta_fast": ["yarn"],
             "beta_slow": ["yarn"],
@@ -113,6 +113,24 @@ class RopeTest(unittest.TestCase):
         }
 
         rope_fn = ROPE_INIT_FUNCTIONS["dynamic"]
+        config_freqs = rope_fn(config=config, device=device)[0]
+        kwargs_freqs = rope_fn(**rope_kwargs, device=device)[0]
+        torch.testing.assert_close(config_freqs, kwargs_freqs)
+
+    def test_ntk_rope_function_bc(self):
+        config = LlamaConfig()
+        config.rope_scaling = {"rope_type": "ntk", "factor": 10.0}
+        device = torch_device
+
+        rope_kwargs = {
+            "rope_type": "dynamic",
+            "dim": config.hidden_size // config.num_attention_heads,
+            "max_position_embeddings": config.max_position_embeddings,
+            "base": config.rope_theta,
+            "factor": 10.0,
+        }
+
+        rope_fn = ROPE_INIT_FUNCTIONS["ntk"]
         config_freqs = rope_fn(config=config, device=device)[0]
         kwargs_freqs = rope_fn(**rope_kwargs, device=device)[0]
         torch.testing.assert_close(config_freqs, kwargs_freqs)
