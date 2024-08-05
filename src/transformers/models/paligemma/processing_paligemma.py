@@ -76,14 +76,14 @@ def build_string_from_input(prompt, bos_token, image_seq_len, image_token):
 
 
 class PaliGemmaTextKwargs(TextKwargs):
-    suffix: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None
+    suffix: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]]
 
 
 class PaliGemmaImagesKwargs(ImagesKwargs):
-    do_convert_rgb: Optional[bool] = None
-    do_thumbnail: Optional[bool] = None
-    do_align_long_axis: Optional[bool] = None
-    do_rescale: Optional[bool] = None
+    do_convert_rgb: Optional[bool]
+    do_thumbnail: Optional[bool]
+    do_align_long_axis: Optional[bool]
+    do_rescale: Optional[bool]
 
 
 class PaliGemmaProcessorKwargs(ProcessingKwargs, total=False):
@@ -92,23 +92,10 @@ class PaliGemmaProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "tokenize_newline_separately": True,  # Not Available in Default
-            "suffix": None,  # Not Available in Default
             "padding": False,
-            "truncation": None,
-            "max_length": None,
         },
         "image_kwargs": {
-            "do_resize": None,
-            "do_normalize": None,
-            "image_mean": None,
-            "image_std": None,
             "data_format": "channels_first",
-            "input_data_format": None,
-            "resample": None,
-            "do_convert_rgb": None,  # Not Available in Default
-            "do_thumbnail": None,  # Not Available in Default
-            "do_align_long_axis": None,  # Not Available in Default
-            "do_rescale": None,
         },
     }
 
