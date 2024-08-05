@@ -1628,9 +1628,10 @@ def get_user_input():
     )
 
     old_processing_classes = [
-        c if not isinstance(c, tuple) else c[0]
-        for c in [old_image_processor_class, old_feature_extractor_class, old_tokenizer_class, old_processor_class]
+        c_i for c in [old_image_processor_class, old_feature_extractor_class, old_tokenizer_class, old_processor_class]
         if c is not None
+        for c_i in (c if isinstance(c, tuple) else [c])
+        if c_i is not None
     ]
     old_processing_classes = ", ".join(old_processing_classes)
     keep_processing = get_user_field(
