@@ -1090,7 +1090,7 @@ class ChineseCLIPVisionTransformer(nn.Module):
         )
 
 
-class ChineseCLIPTextTransformer(ChineseCLIPPreTrainedModel):
+class ChineseCLIPTextTransformer(nn.Module):
     """
 
     The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
