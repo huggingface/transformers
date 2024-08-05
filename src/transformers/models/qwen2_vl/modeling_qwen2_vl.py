@@ -1739,14 +1739,12 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel):
         outputs: ModelOutput,
         model_kwargs: Dict[str, Any],
         is_encoder_decoder: bool = False,
-        standardize_cache_format: bool = False,
         num_new_tokens: int = 1,
     ) -> Dict[str, Any]:
         model_kwargs = super()._update_model_kwargs_for_generation(
             outputs=outputs,
             model_kwargs=model_kwargs,
             is_encoder_decoder=is_encoder_decoder,
-            standardize_cache_format=standardize_cache_format,
             num_new_tokens=num_new_tokens,
         )
 
