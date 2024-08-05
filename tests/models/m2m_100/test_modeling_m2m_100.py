@@ -21,7 +21,6 @@ import unittest
 import pytest
 
 from transformers import M2M100Config, is_torch_available
-from transformers.modeling_outputs import BaseModelOutput
 from transformers.testing_utils import (
     require_flash_attn,
     require_sentencepiece,
@@ -50,6 +49,7 @@ if is_torch_available():
         M2M100Model,
         M2M100Tokenizer,
     )
+    from transformers.modeling_outputs import BaseModelOutput
     from transformers.models.m2m_100.modeling_m2m_100 import M2M100Decoder, M2M100Encoder
 
 
@@ -671,8 +671,13 @@ class M2M100DecoderModelTester:
         self.use_attention_mask = use_attention_mask
         self.is_encoder_decoder = is_encoder_decoder
 
+        # some tests ask for encoder-related parameters (e.g. test_attention_outputs)
+        self.encoder_seq_length = 1
+
     def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+         # encoder_input_ids should usually be ignored, but adding them for compatibility with some tests like test_resize_tokens_embeddings
+        encoder_input_ids = ids_tensor([self.batch_size, 1], self.vocab_size)
+        decoder_input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
         attention_mask = None
         if self.use_attention_mask:
@@ -682,9 +687,9 @@ class M2M100DecoderModelTester:
         encoder_outputs = BaseModelOutput(last_hidden_state=embeddings)
 
         inputs_dict = {
-            "input_ids": None,  # the input ids are always ignored anyway
+            "input_ids": encoder_input_ids,  # the input ids are always ignored anyway
             "attention_mask": None,  # the inputs are pooled embeddins, so they are never masked
-            "decoder_input_ids": input_ids,
+            "decoder_input_ids": decoder_input_ids,
             "decoder_attention_mask": attention_mask,
             "encoder_outputs": encoder_outputs,
             #"head_mask": head_mask,
@@ -752,10 +757,12 @@ class M2M100DecoderModelTester:
 class M2M100DecoderModelTest(ModelTesterMixin, unittest.TestCase):  # TODO: add GenerationTesterMixin
     all_model_classes = (M2M100DecoderModel,) if is_torch_available() else ()
     test_pruning = False
+    test_head_masking = False  # this would require also masking the attention heads of the fake encoder, which is cumbersome
 
     def setUp(self):
         self.model_tester = M2M100DecoderModelTester(self)
         self.config_tester = ConfigTester(self, config_class=M2M100Config, d_model=37)
+        self.is_encoder_decoder = True
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -776,17 +783,12 @@ class M2M100DecoderModelTest(ModelTesterMixin, unittest.TestCase):  # TODO: add 
         pass
 
     @unittest.skip(
-        reason="This architecure is an encoder-decoder, but the encoder is precomputed, so it doesn't have outputs.encoder_attentions."
+        reason="The encoder hidden states are an input to M2M100DecoderModelTest, so they do not have gradients, as the test expects."
     )
-    def test_attention_outputs(self):
+    def test_retain_grad_hidden_states_attentions(self):
         pass
 
     # TODO: fix test_batching_equivalence (reason unknown)
-    # TODO: fix test_headmasking, check_attentions_validity, (add fake encoder attentions)
-
-    # TODO: fix check_hidden_states_output (add fake encoder hidden states)
-
-    # TODO: fix test_inputs_embeds (use some arbitrary input embeddings)
 
 @require_torch
 @require_sentencepiece
