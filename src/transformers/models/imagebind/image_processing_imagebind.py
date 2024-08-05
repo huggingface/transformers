@@ -156,7 +156,7 @@ class ImageBindImageProcessor(BaseImageProcessor):
             Can be overridden by the `image_std` parameter in the `preprocess` method.
         do_convert_rgb (`bool`, *optional*, defaults to `True`):
             Whether to convert the image to RGB.
-        do_chunk (`bool`, *optional*, defaults to `False`):
+        do_chunk (`bool`, *optional*, defaults to `True`):
             Whether to chunk the video into multiple clips.
         chunk_duration (`float`, *optional*, defaults to 2.0):
             Duration of each chunk in seconds.
