@@ -101,10 +101,6 @@ Chinese-CLIP モデルは、[OFA-Sys](https://huggingface.co/OFA-Sys) によっ�
     - get_text_features
     - get_image_features
 
-## ChineseCLIPTextTransformer
-
-[[autodoc]] ChineseCLIPTextTransformer
-    - forward
 
 ## ChineseCLIPTextModel
 
