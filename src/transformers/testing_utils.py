@@ -52,25 +52,30 @@ from .integrations import (
 )
 from .integrations.deepspeed import is_deepspeed_available
 from .utils import (
+    ACCELERATE_MIN_VERSION,
     is_accelerate_available,
     is_apex_available,
     is_aqlm_available,
     is_auto_awq_available,
     is_auto_gptq_available,
+    is_av_available,
     is_bitsandbytes_available,
     is_bs4_available,
     is_cv2_available,
     is_cython_available,
     is_decord_available,
     is_detectron2_available,
+    is_eetq_available,
     is_essentia_available,
     is_faiss_available,
+    is_fbgemm_gpu_available,
     is_flash_attn_2_available,
     is_flax_available,
     is_fsdp_available,
     is_ftfy_available,
     is_g2p_en_available,
     is_galore_torch_available,
+    is_gguf_available,
     is_ipex_available,
     is_jieba_available,
     is_jinja_available,
@@ -78,6 +83,7 @@ from .utils import (
     is_keras_nlp_available,
     is_levenshtein_available,
     is_librosa_available,
+    is_lomo_available,
     is_natten_available,
     is_nltk_available,
     is_onnx_available,
@@ -111,6 +117,7 @@ from .utils import (
     is_torch_bf16_available_on_device,
     is_torch_bf16_cpu_available,
     is_torch_bf16_gpu_available,
+    is_torch_deterministic,
     is_torch_fp16_available_on_device,
     is_torch_neuroncore_available,
     is_torch_npu_available,
@@ -161,6 +168,15 @@ ENDPOINT_STAGING = "https://hub-ci.huggingface.co"
 # Not critical, only usable on the sandboxed CI instance.
 TOKEN = "hf_94wBhPGp6KrrTH3KDchhKpRxZwd6dmHWLL"
 
+if is_torch_available():
+    import torch
+
+    IS_ROCM_SYSTEM = torch.version.hip is not None
+    IS_CUDA_SYSTEM = torch.version.cuda is not None
+else:
+    IS_ROCM_SYSTEM = False
+    IS_CUDA_SYSTEM = False
+
 
 def parse_flag_from_env(key, default=False):
     try:
@@ -198,7 +214,7 @@ _run_custom_tokenizers = parse_flag_from_env("RUN_CUSTOM_TOKENIZERS", default=Fa
 _run_staging = parse_flag_from_env("HUGGINGFACE_CO_STAGING", default=False)
 _tf_gpu_memory_limit = parse_int_from_env("TF_GPU_MEMORY_LIMIT", default=None)
 _run_pipeline_tests = parse_flag_from_env("RUN_PIPELINE_TESTS", default=True)
-_run_tool_tests = parse_flag_from_env("RUN_TOOL_TESTS", default=False)
+_run_agent_tests = parse_flag_from_env("RUN_AGENT_TESTS", default=False)
 _run_third_party_device_tests = parse_flag_from_env("RUN_THIRD_PARTY_DEVICE_TESTS", default=False)
 
 
@@ -211,7 +227,7 @@ def is_pt_tf_cross_test(test_case):
 
     """
     if not _run_pt_tf_cross_tests or not is_torch_available() or not is_tf_available():
-        return unittest.skip("test is PT+TF test")(test_case)
+        return unittest.skip(reason="test is PT+TF test")(test_case)
     else:
         try:
             import pytest  # We don't need a hard dependency on pytest in the main library
@@ -230,7 +246,7 @@ def is_pt_flax_cross_test(test_case):
 
     """
     if not _run_pt_flax_cross_tests or not is_torch_available() or not is_flax_available():
-        return unittest.skip("test is PT+FLAX test")(test_case)
+        return unittest.skip(reason="test is PT+FLAX test")(test_case)
     else:
         try:
             import pytest  # We don't need a hard dependency on pytest in the main library
@@ -247,7 +263,7 @@ def is_staging_test(test_case):
     Those tests will run using the staging environment of huggingface.co instead of the real model hub.
     """
     if not _run_staging:
-        return unittest.skip("test is staging test")(test_case)
+        return unittest.skip(reason="test is staging test")(test_case)
     else:
         try:
             import pytest  # We don't need a hard dependency on pytest in the main library
@@ -263,7 +279,7 @@ def is_pipeline_test(test_case):
     skipped.
     """
     if not _run_pipeline_tests:
-        return unittest.skip("test is pipeline test")(test_case)
+        return unittest.skip(reason="test is pipeline test")(test_case)
     else:
         try:
             import pytest  # We don't need a hard dependency on pytest in the main library
@@ -273,19 +289,19 @@ def is_pipeline_test(test_case):
             return pytest.mark.is_pipeline_test()(test_case)
 
 
-def is_tool_test(test_case):
+def is_agent_test(test_case):
     """
-    Decorator marking a test as a tool test. If RUN_TOOL_TESTS is set to a falsy value, those tests will be skipped.
+    Decorator marking a test as an agent test. If RUN_TOOL_TESTS is set to a falsy value, those tests will be skipped.
     """
-    if not _run_tool_tests:
-        return unittest.skip("test is a tool test")(test_case)
+    if not _run_agent_tests:
+        return unittest.skip(reason="test is an agent test")(test_case)
     else:
         try:
             import pytest  # We don't need a hard dependency on pytest in the main library
         except ImportError:
             return test_case
         else:
-            return pytest.mark.is_tool_test()(test_case)
+            return pytest.mark.is_agent_test()(test_case)
 
 
 def slow(test_case):
@@ -306,7 +322,7 @@ def tooslow(test_case):
     these will not be tested by the CI.
 
     """
-    return unittest.skip("test is too slow")(test_case)
+    return unittest.skip(reason="test is too slow")(test_case)
 
 
 def custom_tokenizers(test_case):
@@ -332,6 +348,14 @@ def require_galore_torch(test_case):
     https://github.com/jiaweizzhao/GaLore
     """
     return unittest.skipUnless(is_galore_torch_available(), "test requires GaLore")(test_case)
+
+
+def require_lomo(test_case):
+    """
+    Decorator marking a test that requires LOMO. These tests are skipped when LOMO-optim isn't installed.
+    https://github.com/OpenLMLab/LOMO
+    """
+    return unittest.skipUnless(is_lomo_available(), "test requires LOMO")(test_case)
 
 
 def require_cv2(test_case):
@@ -364,11 +388,20 @@ def require_nltk(test_case):
     return unittest.skipUnless(is_nltk_available(), "test requires NLTK")(test_case)
 
 
-def require_accelerate(test_case):
+def require_accelerate(test_case, min_version: str = ACCELERATE_MIN_VERSION):
     """
     Decorator marking a test that requires accelerate. These tests are skipped when accelerate isn't installed.
     """
-    return unittest.skipUnless(is_accelerate_available(), "test requires accelerate")(test_case)
+    return unittest.skipUnless(
+        is_accelerate_available(min_version), f"test requires accelerate version >= {min_version}"
+    )(test_case)
+
+
+def require_gguf(test_case):
+    """
+    Decorator marking a test that requires ggguf. These tests are skipped when gguf isn't installed.
+    """
+    return unittest.skipUnless(is_gguf_available(), "test requires gguf")(test_case)
 
 
 def require_fsdp(test_case, min_version: str = "1.12.0"):
@@ -480,7 +513,10 @@ def require_read_token(fn):
 
     @wraps(fn)
     def _inner(*args, **kwargs):
-        with patch("huggingface_hub.utils._headers.get_token", return_value=token):
+        if token is not None:
+            with patch("huggingface_hub.utils._headers.get_token", return_value=token):
+                return fn(*args, **kwargs)
+        else:  # Allow running locally with the default token env variable
             return fn(*args, **kwargs)
 
     return _inner
@@ -677,7 +713,7 @@ def require_torch_multi_gpu(test_case):
     To run *only* the multi_gpu tests, assuming all test names contain multi_gpu: $ pytest -sv ./tests -k "multi_gpu"
     """
     if not is_torch_available():
-        return unittest.skip("test requires PyTorch")(test_case)
+        return unittest.skip(reason="test requires PyTorch")(test_case)
 
     import torch
 
@@ -691,7 +727,7 @@ def require_torch_multi_accelerator(test_case):
     multi_accelerator: $ pytest -sv ./tests -k "multi_accelerator"
     """
     if not is_torch_available():
-        return unittest.skip("test requires PyTorch")(test_case)
+        return unittest.skip(reason="test requires PyTorch")(test_case)
 
     return unittest.skipUnless(backend_device_count(torch_device) > 1, "test requires multiple accelerators")(
         test_case
@@ -703,7 +739,7 @@ def require_torch_non_multi_gpu(test_case):
     Decorator marking a test that requires 0 or 1 GPU setup (in PyTorch).
     """
     if not is_torch_available():
-        return unittest.skip("test requires PyTorch")(test_case)
+        return unittest.skip(reason="test requires PyTorch")(test_case)
 
     import torch
 
@@ -715,7 +751,7 @@ def require_torch_non_multi_accelerator(test_case):
     Decorator marking a test that requires 0 or 1 accelerator setup (in PyTorch).
     """
     if not is_torch_available():
-        return unittest.skip("test requires PyTorch")(test_case)
+        return unittest.skip(reason="test requires PyTorch")(test_case)
 
     return unittest.skipUnless(backend_device_count(torch_device) < 2, "test requires 0 or 1 accelerator")(test_case)
 
@@ -725,7 +761,7 @@ def require_torch_up_to_2_gpus(test_case):
     Decorator marking a test that requires 0 or 1 or 2 GPU setup (in PyTorch).
     """
     if not is_torch_available():
-        return unittest.skip("test requires PyTorch")(test_case)
+        return unittest.skip(reason="test requires PyTorch")(test_case)
 
     import torch
 
@@ -737,7 +773,7 @@ def require_torch_up_to_2_accelerators(test_case):
     Decorator marking a test that requires 0 or 1 or 2 accelerator setup (in PyTorch).
     """
     if not is_torch_available():
-        return unittest.skip("test requires PyTorch")(test_case)
+        return unittest.skip(reason="test requires PyTorch")(test_case)
 
     return unittest.skipUnless(backend_device_count(torch_device) < 3, "test requires 0 or 1 or 2 accelerators")
     (test_case)
@@ -774,30 +810,31 @@ def require_torch_multi_npu(test_case):
     To run *only* the multi_npu tests, assuming all test names contain multi_npu: $ pytest -sv ./tests -k "multi_npu"
     """
     if not is_torch_npu_available():
-        return unittest.skip("test requires PyTorch NPU")(test_case)
+        return unittest.skip(reason="test requires PyTorch NPU")(test_case)
 
     return unittest.skipUnless(torch.npu.device_count() > 1, "test requires multiple NPUs")(test_case)
 
 
 def require_torch_xpu(test_case):
     """
-    Decorator marking a test that requires XPU and IPEX.
+    Decorator marking a test that requires XPU (in PyTorch).
 
-    These tests are skipped when Intel Extension for PyTorch isn't installed or it does not match current PyTorch
-    version.
+    These tests are skipped when XPU backend is not available. XPU backend might be available either via stock
+    PyTorch (>=2.4) or via Intel Extension for PyTorch. In the latter case, if IPEX is installed, its version
+    must match match current PyTorch version.
     """
-    return unittest.skipUnless(is_torch_xpu_available(), "test requires IPEX and an XPU device")(test_case)
+    return unittest.skipUnless(is_torch_xpu_available(), "test requires XPU device")(test_case)
 
 
 def require_torch_multi_xpu(test_case):
     """
-    Decorator marking a test that requires a multi-XPU setup with IPEX and atleast one XPU device. These tests are
-    skipped on a machine without IPEX or multiple XPUs.
+    Decorator marking a test that requires a multi-XPU setup (in PyTorch). These tests are skipped on a machine without
+    multiple XPUs.
 
     To run *only* the multi_xpu tests, assuming all test names contain multi_xpu: $ pytest -sv ./tests -k "multi_xpu"
     """
     if not is_torch_xpu_available():
-        return unittest.skip("test requires IPEX and atleast one XPU device")(test_case)
+        return unittest.skip(reason="test requires PyTorch XPU")(test_case)
 
     return unittest.skipUnless(torch.xpu.device_count() > 1, "test requires multiple XPUs")(test_case)
 
@@ -912,6 +949,15 @@ def require_torch_bf16_cpu(test_case):
     )(test_case)
 
 
+def require_deterministic_for_xpu(test_case):
+    if is_torch_xpu_available():
+        return unittest.skipUnless(is_torch_deterministic(), "test requires torch to use deterministic algorithms")(
+            test_case
+        )
+    else:
+        return test_case
+
+
 def require_torch_tf32(test_case):
     """Decorator marking a test that requires Ampere or a newer GPU arch, cuda>=11 and torch>=1.7."""
     return unittest.skipUnless(
@@ -1010,6 +1056,20 @@ def require_aqlm(test_case):
     return unittest.skipUnless(is_aqlm_available(), "test requires aqlm")(test_case)
 
 
+def require_eetq(test_case):
+    """
+    Decorator marking a test that requires eetq
+    """
+    return unittest.skipUnless(is_eetq_available(), "test requires eetq")(test_case)
+
+
+def require_av(test_case):
+    """
+    Decorator marking a test that requires av
+    """
+    return unittest.skipUnless(is_av_available(), "test requires av")(test_case)
+
+
 def require_bitsandbytes(test_case):
     """
     Decorator marking a test that requires the bitsandbytes library. Will be skipped when the library or its hard dependency torch is not installed.
@@ -1022,7 +1082,7 @@ def require_bitsandbytes(test_case):
         except ImportError:
             return test_case
     else:
-        return unittest.skip("test requires bitsandbytes and torch")(test_case)
+        return unittest.skip(reason="test requires bitsandbytes and torch")(test_case)
 
 
 def require_optimum(test_case):
@@ -1058,6 +1118,13 @@ def require_quanto(test_case):
     Decorator for quanto dependency
     """
     return unittest.skipUnless(is_quanto_available(), "test requires quanto")(test_case)
+
+
+def require_fbgemm_gpu(test_case):
+    """
+    Decorator for fbgemm_gpu dependency
+    """
+    return unittest.skipUnless(is_fbgemm_gpu_available(), "test requires fbgemm-gpu")(test_case)
 
 
 def require_phonemizer(test_case):
@@ -2376,6 +2443,10 @@ if is_torch_available():
     BACKEND_MANUAL_SEED = {"cuda": torch.cuda.manual_seed, "cpu": torch.manual_seed, "default": torch.manual_seed}
     BACKEND_EMPTY_CACHE = {"cuda": torch.cuda.empty_cache, "cpu": None, "default": None}
     BACKEND_DEVICE_COUNT = {"cuda": torch.cuda.device_count, "cpu": lambda: 0, "default": lambda: 1}
+else:
+    BACKEND_MANUAL_SEED = {"default": None}
+    BACKEND_EMPTY_CACHE = {"default": None}
+    BACKEND_DEVICE_COUNT = {"default": lambda: 0}
 
 
 def backend_manual_seed(device: str, seed: int):

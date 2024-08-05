@@ -501,9 +501,9 @@ class FSMTEncoder(nn.Module):
             BaseModelOutput or Tuple comprised of:
 
                 - **x** (`torch.Tensor`): the last encoder layer's output of shape *(src_len, batch, embed_dim)*
-                - **encoder_states** (`Tuple(torch.FloatTensor`)): all intermediate hidden states of shape *(src_len,
+                - **encoder_states** (`Tuple(torch.FloatTensor)`): all intermediate hidden states of shape *(src_len,
                   batch, embed_dim)*. Only populated if *output_hidden_states:* is True.
-                - **all_attentions** (`Tuple(torch.FloatTensor`)): Attention weights for each layer.
+                - **all_attentions** (`Tuple(torch.FloatTensor)`): Attention weights for each layer.
                 During training might not be of length n_layers because of layer dropout.
         """
         # check attention mask and invert
@@ -691,6 +691,9 @@ class FSMTDecoder(nn.Module):
             embed_tokens_weight_shape = self.embed_tokens.weight.shape
         self.output_projection = nn.Linear(embed_tokens_weight_shape[1], embed_tokens_weight_shape[0], bias=False)
         self.output_projection.weight = self.embed_tokens.weight
+
+    def _tie_weights(self):
+        self.embed_tokens.weight = self.output_projection.weight
 
     def forward(
         self,

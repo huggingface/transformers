@@ -13,17 +13,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" OpenAI GPT configuration"""
+"""OpenAI GPT configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "openai-community/openai-gpt": "https://huggingface.co/openai-community/openai-gpt/resolve/main/config.json"
-}
 
 
 class OpenAIGPTConfig(PretrainedConfig):

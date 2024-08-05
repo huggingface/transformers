@@ -17,7 +17,6 @@ import argparse
 import logging
 import math
 import os
-import warnings
 from pathlib import Path
 
 import datasets
@@ -54,7 +53,7 @@ Any model supported by the AutoModelForMaskedImageModeling API can be used.
 logger = logging.getLogger(__name__)
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.39.0.dev0")
+check_min_version("4.44.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/image-pretraining/requirements.txt")
 
@@ -197,19 +196,12 @@ def parse_args():
         ),
     )
     parser.add_argument(
-        "--use_auth_token",
-        type=bool,
-        default=None,
-        help="The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token` instead.",
-    )
-    parser.add_argument(
         "--trust_remote_code",
-        type=bool,
-        default=False,
+        action="store_true",
         help=(
-            "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option "
-            "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
-            "execute code present on the Hub on your local machine."
+            "Whether to trust the execution of code from datasets/models defined on the Hub."
+            " This option should only be set to `True` for repositories you trust and in which you have read the"
+            " code, as it will execute code present on the Hub on your local machine."
         ),
     )
     parser.add_argument(
@@ -384,15 +376,6 @@ def collate_fn(examples):
 def main():
     args = parse_args()
 
-    if args.use_auth_token is not None:
-        warnings.warn(
-            "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token` instead.",
-            FutureWarning,
-        )
-        if args.token is not None:
-            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
-        args.token = args.use_auth_token
-
     # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
     # information sent is the one passed as arguments along with your Python/PyTorch versions.
     send_example_telemetry("run_mim_no_trainer", args)
@@ -457,6 +440,7 @@ def main():
         data_files=args.data_files,
         cache_dir=args.cache_dir,
         token=args.token,
+        trust_remote_code=args.trust_remote_code,
     )
 
     # If we don't have a validation split, split off a percentage of train as validation.

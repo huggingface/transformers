@@ -25,6 +25,20 @@ customize it to your needs if you need extra processing on your datasets.
 It will either run on a datasets hosted on our [hub](https://huggingface.co/datasets) or with your own text files for
 training and validation, you might just need to add some tweaks in the data preprocessing.
 
+### Using your own data
+
+If you use your own data, the script expects the following format of the data -
+
+```bash
+{
+    "chunk_tags": [11, 12, 12, 21, 13, 11, 11, 21, 13, 11, 12, 13, 11, 21, 22, 11, 12, 17, 11, 21, 17, 11, 12, 12, 21, 22, 22, 13, 11, 0],
+    "id": "0",
+    "ner_tags": [0, 3, 4, 0, 0, 0, 0, 0, 0, 7, 0, 0, 0, 0, 0, 7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    "pos_tags": [12, 22, 22, 38, 15, 22, 28, 38, 15, 16, 21, 35, 24, 35, 37, 16, 21, 15, 24, 41, 15, 16, 21, 21, 20, 37, 40, 35, 21, 7],
+    "tokens": ["The", "European", "Commission", "said", "on", "Thursday", "it", "disagreed", "with", "German", "advice", "to", "consumers", "to", "shun", "British", "lamb", "until", "scientists", "determine", "whether", "mad", "cow", "disease", "can", "be", "transmitted", "to", "sheep", "."]
+}
+```
+
 The following example fine-tunes BERT on CoNLL-2003:
 
 ```bash

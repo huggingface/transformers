@@ -30,8 +30,6 @@ Esta guía te mostrará cómo realizar fine-tuning [DistilGPT2](https://huggingf
 
 <Tip>
 
-Puedes realizar fine-tuning a otras arquitecturas para modelos de lenguaje como [GPT-Neo](https://huggingface.co/EleutherAI/gpt-neo-125M), [GPT-J](https://huggingface.co/EleutherAI/gpt-j-6B) y [BERT](https://huggingface.co/google-bert/bert-base-uncased) siguiendo los mismos pasos presentados en esta guía!
-
 Mira la [página de tarea](https://huggingface.co/tasks/text-generation) para generación de texto y la [página de tarea](https://huggingface.co/tasks/fill-mask) para modelos de lenguajes por enmascaramiento para obtener más información sobre los modelos, datasets, y métricas asociadas.
 
 </Tip>
@@ -232,7 +230,7 @@ A este punto, solo faltan tres pasos:
 ```py
 >>> training_args = TrainingArguments(
 ...     output_dir="./results",
-...     evaluation_strategy="epoch",
+...     eval_strategy="epoch",
 ...     learning_rate=2e-5,
 ...     weight_decay=0.01,
 ... )
@@ -338,7 +336,7 @@ A este punto, solo faltan tres pasos:
 ```py
 >>> training_args = TrainingArguments(
 ...     output_dir="./results",
-...     evaluation_strategy="epoch",
+...     eval_strategy="epoch",
 ...     learning_rate=2e-5,
 ...     num_train_epochs=3,
 ...     weight_decay=0.01,

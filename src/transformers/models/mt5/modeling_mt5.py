@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch mT5 model."""
+"""PyTorch mT5 model."""
 
 import copy
 import math
@@ -59,14 +59,6 @@ _CHECKPOINT_FOR_DOC = "mt5-small"
 # This dict contains ids and associated url
 # for the pretrained weights provided with the models
 ####################################################
-MT5_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/mt5-small",
-    "google/mt5-base",
-    "google/mt5-large",
-    "google/mt5-xl",
-    "google/mt5-xxl",
-    # See all mT5 models at https://huggingface.co/models?filter=mt5
-]
 
 PARALLELIZE_DOCSTRING = r"""
     This is an experimental feature and is a subject to change at a moment's notice.
@@ -75,7 +67,7 @@ PARALLELIZE_DOCSTRING = r"""
     it will evenly distribute blocks across all devices.
 
     Args:
-        device_map (`Dict[int, list]`, optional, defaults to None):
+        device_map (`Dict[int, list]`, *optional*):
             A dictionary that maps attention modules to devices. Note that the embedding module and LMHead are always
             automatically mapped to the first device (for esoteric reasons). That means that the first device should
             have fewer attention modules mapped to it than other devices. For reference, the mt5 models have the
@@ -560,7 +552,7 @@ class MT5Block(nn.Module):
             if len(past_key_value) != expected_num_past_key_values:
                 raise ValueError(
                     f"There should be {expected_num_past_key_values} past states. "
-                    f"{'2 (past / key) for cross attention. ' if expected_num_past_key_values == 4 else ''}"
+                    f"{'2 (key / value) for cross attention. ' if expected_num_past_key_values == 4 else ''}"
                     f"Got {len(past_key_value)} past key / value states"
                 )
 

@@ -18,7 +18,7 @@ from ....utils import OptionalDependencyNotAvailable, _LazyModule, is_tf_availab
 
 
 _import_structure = {
-    "configuration_transfo_xl": ["TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP", "TransfoXLConfig"],
+    "configuration_transfo_xl": ["TransfoXLConfig"],
     "tokenization_transfo_xl": ["TransfoXLCorpus", "TransfoXLTokenizer"],
 }
 
@@ -29,7 +29,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_transfo_xl"] = [
-        "TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST",
         "AdaptiveEmbedding",
         "TransfoXLForSequenceClassification",
         "TransfoXLLMHeadModel",
@@ -45,7 +44,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_tf_transfo_xl"] = [
-        "TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFAdaptiveEmbedding",
         "TFTransfoXLForSequenceClassification",
         "TFTransfoXLLMHeadModel",
@@ -56,7 +54,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_transfo_xl import TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP, TransfoXLConfig
+    from .configuration_transfo_xl import TransfoXLConfig
     from .tokenization_transfo_xl import TransfoXLCorpus, TransfoXLTokenizer
 
     try:
@@ -66,7 +64,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_transfo_xl import (
-            TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST,
             AdaptiveEmbedding,
             TransfoXLForSequenceClassification,
             TransfoXLLMHeadModel,
@@ -82,7 +79,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_tf_transfo_xl import (
-            TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFAdaptiveEmbedding,
             TFTransfoXLForSequenceClassification,
             TFTransfoXLLMHeadModel,

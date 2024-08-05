@@ -22,10 +22,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-MAMBA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "state-spaces/mamba-2.8b": "https://huggingface.co/state-spaces/mamba-2.8b/resolve/main/config.json",
-}
-
 
 class MambaConfig(PretrainedConfig):
     """
@@ -68,7 +64,7 @@ class MambaConfig(PretrainedConfig):
         residual_in_fp32 (`bool`, *optional*, defaults to `True`):
             Whether or not residuals should be in `float32`. If set to `False` residuals will keep the same `dtype` as the rest of the model
         time_step_rank (`Union[int,str]`, *optional*, defaults to `"auto"`):
-            Rank of the the discretization projection matrix. `"auto"` means that it will default to `math.ceil(self.hidden_size / 16)`
+            Rank of the discretization projection matrix. `"auto"` means that it will default to `math.ceil(self.hidden_size / 16)`
         time_step_scale (`float`, *optional*, defaults to 1.0):
             Scale used used to scale `dt_proj.bias`.
         time_step_min (`float`, *optional*, defaults to 0.001):
@@ -83,6 +79,8 @@ class MambaConfig(PretrainedConfig):
             Whether or not to rescale `out_proj` weights when initializing.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the cache should be used.
+        use_mambapy (`bool`, *optional*, defaults to `False`):
+            Determines the fallback strategy during training if the CUDA-based official implementation of Mamba is not avaiable. If `True`, the mamba.py implementation is used. If `False`, the naive and slower implementation is used. Consider switching to the naive version if memory is limited.
 
 
     Example:
@@ -127,6 +125,7 @@ class MambaConfig(PretrainedConfig):
         time_step_floor=1e-4,
         rescale_prenorm_residual=False,
         use_cache=True,
+        use_mambapy=False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -153,5 +152,6 @@ class MambaConfig(PretrainedConfig):
         self.rescale_prenorm_residual = rescale_prenorm_residual
         self.residual_in_fp32 = residual_in_fp32
         self.use_cache = use_cache
+        self.use_mambapy = use_mambapy
 
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, pad_token_id=pad_token_id, **kwargs)

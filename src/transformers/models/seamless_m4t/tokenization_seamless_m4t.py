@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization classes for SeamlessM4T."""
+
 import os
 from shutil import copyfile
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -32,23 +33,11 @@ from ...utils import PaddingStrategy, logging
 
 logger = logging.get_logger(__name__)
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "facebook/hf-seamless-m4t-medium": (
-            "https://huggingface.co/facebook/hf-seamless-m4t-medium/blob/main/sentencepiece.bpe.model"
-        ),
-    }
-}
 
 SPIECE_UNDERLINE = "▁"
 
 
 VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model"}
-
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "facebook/hf-seamless-m4t-medium": 2048,
-}
 
 
 class SeamlessM4TTokenizer(PreTrainedTokenizer):
@@ -126,8 +115,6 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     model_input_names = ["input_ids", "attention_mask"]
 
     prefix_tokens: List[int] = []
@@ -476,9 +463,8 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
         `unk_token`. Here is an example with `unk_token = "<unk>"` and `unk_token_length = 4`.
         `self.tokenizer.sp_model.encode("<unk> Hey", out_type = str)[4:]`.
         """
-        tokens = self.sp_model.encode(text, out_type=str)
         if self.legacy or not text.startswith((SPIECE_UNDERLINE, " ")):
-            return tokens
+            return self.sp_model.encode(text, out_type=str)
 
         # 1. Encode string + prefix ex: "<unk> Hey"
         tokens = self.sp_model.encode(self.unk_token + text, out_type=str)

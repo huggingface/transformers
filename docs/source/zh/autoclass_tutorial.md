@@ -83,7 +83,7 @@ rendered properly in your Markdown viewer.
 
 ## AutoProcessor
 
-多模态任务需要一种`processor`，将两种类型的预处理工具结合起来。例如，[LayoutLMV2](model_doc/layoutlmv2)模型需要一个`image processo`来处理图像和一个`tokenizer`来处理文本；`processor`将两者结合起来。
+多模态任务需要一种`processor`，将两种类型的预处理工具结合起来。例如，[LayoutLMV2](model_doc/layoutlmv2)模型需要一个`image processor`来处理图像和一个`tokenizer`来处理文本；`processor`将两者结合起来。
 
 使用[`AutoProcessor.from_pretrained`]加载`processor`：
 

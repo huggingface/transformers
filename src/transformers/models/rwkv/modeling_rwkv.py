@@ -44,20 +44,6 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "RWKV/rwkv-4-169m-pile"
 _CONFIG_FOR_DOC = "RwkvConfig"
 
-RWKV_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "RWKV/rwkv-4-169m-pile",
-    "RWKV/rwkv-4-430m-pile",
-    "RWKV/rwkv-4-1b5-pile",
-    "RWKV/rwkv-4-3b-pile",
-    "RWKV/rwkv-4-7b-pile",
-    "RWKV/rwkv-4-14b-pile",
-    "RWKV/rwkv-raven-1b5",
-    "RWKV/rwkv-raven-3b",
-    "RWKV/rwkv-raven-7b",
-    "RWKV/rwkv-raven-14b",
-    # See all RWKV models at https://huggingface.co/models?filter=rwkv
-]
-
 
 rwkv_cuda_kernel = None
 
@@ -408,6 +394,7 @@ class RwkvPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["RwkvBlock"]
     _keep_in_fp32_modules = ["time_decay", "time_first"]
     supports_gradient_checkpointing = True
+    _is_stateful = True
 
     def _init_weights(self, module):
         """Initialize the weights."""
@@ -638,6 +625,9 @@ class RwkvModel(RwkvPreTrainedModel):
         use_cache = use_cache if use_cache is not None else (self.config.use_cache if not self.training else False)
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        if attention_mask is None:
+            logger.warning_once("`attention_mask` was passed, but it is unused in this model.")
+
         if self.training == self.layers_are_rescaled:
             self._rescale_layers()
 
@@ -777,24 +767,6 @@ class RwkvForCausalLM(RwkvPreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.head = new_embeddings
-
-    def generate(self, *args, **kwargs):
-        # Thin wrapper to raise exceptions when trying to generate with methods that manipulate `past_key_values`.
-        # RWKV is one of the few models that don't have it (it has `state` instead, which has different properties and
-        # usage).
-        try:
-            gen_output = super().generate(*args, **kwargs)
-        except AttributeError as exc:
-            # Expected exception: "AttributeError: '(object name)' object has no attribute 'past_key_values'"
-            if "past_key_values" in str(exc):
-                raise AttributeError(
-                    "You tried to call `generate` with a decoding strategy that manipulates `past_key_values`. RWKV "
-                    "doesn't have that attribute, try another generation strategy instead. For the available "
-                    "generation strategies, check this doc: https://huggingface.co/docs/transformers/en/generation_strategies#decoding-strategies"
-                )
-            else:
-                raise exc
-        return gen_output
 
     def prepare_inputs_for_generation(self, input_ids, state=None, inputs_embeds=None, **kwargs):
         # only last token for inputs_ids if the state is passed along.

@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch PatchTSMixer model."""
+"""PyTorch PatchTSMixer model."""
 
 import math
 from dataclasses import dataclass
@@ -37,12 +37,6 @@ from .configuration_patchtsmixer import PatchTSMixerConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "PatchTSMixerConfig"
-
-
-PATCHTSMIXER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "ibm/patchtsmixer-etth1-pretrain",
-    # See all PatchTSMixer models at https://huggingface.co/models?filter=patchtsmixer
-]
 
 
 PATCHTSMIXER_START_DOCSTRING = r"""
@@ -168,7 +162,7 @@ class PatchTSMixerNormLayer(nn.Module):
     """Normalization block
 
     Args:
-        config (`PatchTSMixerConfig`, *required*):
+        config (`PatchTSMixerConfig`):
             Configuration.
     """
 
@@ -240,7 +234,7 @@ class PatchTSMixerChannelFeatureMixerBlock(nn.Module):
     """This module mixes the features in the channel dimension.
 
     Args:
-        config (`PatchTSMixerConfig`, *required*):
+        config (`PatchTSMixerConfig`):
             Configuration.
     """
 
@@ -447,7 +441,7 @@ class PatchMixerBlock(nn.Module):
     """This module mixes the patch dimension.
 
     Args:
-        config (`PatchTSMixerConfig`, *required*):
+        config (`PatchTSMixerConfig`):
             Configuration.
     """
 
@@ -516,7 +510,7 @@ class FeatureMixerBlock(nn.Module):
     """This module mixes the hidden feature dimension.
 
     Args:
-        config (`PatchTSMixerConfig`, *required*):
+        config (`PatchTSMixerConfig`):
             Configuration.
 
     """
@@ -562,7 +556,7 @@ class PatchTSMixerLayer(nn.Module):
     The `PatchTSMixer` layer that does all three kinds of mixing.
 
     Args:
-        config (`PatchTSMixerConfig`, *required*):
+        config (`PatchTSMixerConfig`):
             Configuration.
 
     """
@@ -599,7 +593,7 @@ class PatchTSMixerBlock(nn.Module):
     """The main computing framework of the `PatchTSMixer` model.
 
     Args:
-        config (`PatchTSMixerConfig`, *required*):
+        config (`PatchTSMixerConfig`):
             Configuration.
     """
 
@@ -640,7 +634,8 @@ class PatchTSMixerForPredictionHead(nn.Module):
     """Prediction Head for Forecasting
 
     Args:
-        config (`PatchTSMixerConfig`, *required*): Configuration.
+        config (`PatchTSMixerConfig`):
+            Configuration.
     """
 
     def __init__(self, config: PatchTSMixerConfig, distribution_output=None):
@@ -695,8 +690,8 @@ class PatchTSMixerLinearHead(nn.Module):
     """Linear head for Classification and Regression.
 
     Args:
-        config (`PatchTSMixerConfig`, *required*):
-
+        config (`PatchTSMixerConfig`):
+            Configuration.
     """
 
     def __init__(self, config: PatchTSMixerConfig, distribution_output=None):
@@ -791,7 +786,7 @@ class PatchTSMixerPretrainHead(nn.Module):
     """Pretraining head.
 
     Args:
-        config (`PatchTSMixerConfig`, *required*):
+        config (`PatchTSMixerConfig`):
             Configuration.
     """
 
@@ -1195,7 +1190,7 @@ class PatchTSMixerEncoder(PatchTSMixerPreTrainedModel):
     Encoder for PatchTSMixer which inputs patched time-series and outputs patched embeddings.
 
     Args:
-        config (`PatchTSMixerConfig`, *required*):
+        config (`PatchTSMixerConfig`):
             Configuration.
     """
 
@@ -1417,7 +1412,7 @@ class PatchTSMixerForPretraining(PatchTSMixerPreTrainedModel):
     `PatchTSMixer` for mask pretraining.
 
     Args:
-        config (`PatchTSMixerConfig`, *required*):
+        config (`PatchTSMixerConfig`):
             Configuration.
 
     Returns:
@@ -1599,7 +1594,7 @@ class PatchTSMixerForPrediction(PatchTSMixerPreTrainedModel):
     `PatchTSMixer` for forecasting application.
 
     Args:
-        config (`PatchTSMixerConfig`, *required*):
+        config (`PatchTSMixerConfig`):
             Configuration.
 
     Returns:
@@ -1832,7 +1827,7 @@ class PatchTSMixerForTimeSeriesClassification(PatchTSMixerPreTrainedModel):
     `PatchTSMixer` for classification application.
 
     Args:
-        config (`PatchTSMixerConfig`, *required*):
+        config (`PatchTSMixerConfig`):
             Configuration.
 
     Returns:
@@ -2003,7 +1998,7 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
     `PatchTSMixer` for regression application.
 
     Args:
-        config (`PatchTSMixerConfig`, *required*):
+        config (`PatchTSMixerConfig`):
             Configuration.
 
     Returns:

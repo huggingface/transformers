@@ -169,8 +169,6 @@
 - sections:
   - local: add_new_model
     title: 🤗 Transformersにモデルを追加する方法
-  - local: add_tensorflow_model
-    title: 🤗 TransformersモデルをTensorFlowに変換する方法
   - local: testing
     title: テスト
   - local: pr_checks

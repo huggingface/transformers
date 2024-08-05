@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Tokenization class for TAPAS model."""
-
+"""Tokenization class for TAPAS model."""
 
 import collections
 import datetime
@@ -24,7 +23,7 @@ import os
 import re
 import unicodedata
 from dataclasses import dataclass
-from typing import Callable, Dict, Generator, List, Optional, Text, Tuple, Union
+from typing import Callable, Dict, Generator, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -48,92 +47,6 @@ logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        # large models
-        "google/tapas-large-finetuned-sqa": (
-            "https://huggingface.co/google/tapas-large-finetuned-sqa/resolve/main/vocab.txt"
-        ),
-        "google/tapas-large-finetuned-wtq": (
-            "https://huggingface.co/google/tapas-large-finetuned-wtq/resolve/main/vocab.txt"
-        ),
-        "google/tapas-large-finetuned-wikisql-supervised": (
-            "https://huggingface.co/google/tapas-large-finetuned-wikisql-supervised/resolve/main/vocab.txt"
-        ),
-        "google/tapas-large-finetuned-tabfact": (
-            "https://huggingface.co/google/tapas-large-finetuned-tabfact/resolve/main/vocab.txt"
-        ),
-        # base models
-        "google/tapas-base-finetuned-sqa": (
-            "https://huggingface.co/google/tapas-base-finetuned-sqa/resolve/main/vocab.txt"
-        ),
-        "google/tapas-base-finetuned-wtq": (
-            "https://huggingface.co/google/tapas-base-finetuned-wtq/resolve/main/vocab.txt"
-        ),
-        "google/tapas-base-finetuned-wikisql-supervised": (
-            "https://huggingface.co/google/tapas-base-finetuned-wikisql-supervised/resolve/main/vocab.txt"
-        ),
-        "google/tapas-base-finetuned-tabfact": (
-            "https://huggingface.co/google/tapas-base-finetuned-tabfact/resolve/main/vocab.txt"
-        ),
-        # medium models
-        "google/tapas-medium-finetuned-sqa": (
-            "https://huggingface.co/google/tapas-medium-finetuned-sqa/resolve/main/vocab.txt"
-        ),
-        "google/tapas-medium-finetuned-wtq": (
-            "https://huggingface.co/google/tapas-medium-finetuned-wtq/resolve/main/vocab.txt"
-        ),
-        "google/tapas-medium-finetuned-wikisql-supervised": (
-            "https://huggingface.co/google/tapas-medium-finetuned-wikisql-supervised/resolve/main/vocab.txt"
-        ),
-        "google/tapas-medium-finetuned-tabfact": (
-            "https://huggingface.co/google/tapas-medium-finetuned-tabfact/resolve/main/vocab.txt"
-        ),
-        # small models
-        "google/tapas-small-finetuned-sqa": (
-            "https://huggingface.co/google/tapas-small-finetuned-sqa/resolve/main/vocab.txt"
-        ),
-        "google/tapas-small-finetuned-wtq": (
-            "https://huggingface.co/google/tapas-small-finetuned-wtq/resolve/main/vocab.txt"
-        ),
-        "google/tapas-small-finetuned-wikisql-supervised": (
-            "https://huggingface.co/google/tapas-small-finetuned-wikisql-supervised/resolve/main/vocab.txt"
-        ),
-        "google/tapas-small-finetuned-tabfact": (
-            "https://huggingface.co/google/tapas-small-finetuned-tabfact/resolve/main/vocab.txt"
-        ),
-        # tiny models
-        "google/tapas-tiny-finetuned-sqa": (
-            "https://huggingface.co/google/tapas-tiny-finetuned-sqa/resolve/main/vocab.txt"
-        ),
-        "google/tapas-tiny-finetuned-wtq": (
-            "https://huggingface.co/google/tapas-tiny-finetuned-wtq/resolve/main/vocab.txt"
-        ),
-        "google/tapas-tiny-finetuned-wikisql-supervised": (
-            "https://huggingface.co/google/tapas-tiny-finetuned-wikisql-supervised/resolve/main/vocab.txt"
-        ),
-        "google/tapas-tiny-finetuned-tabfact": (
-            "https://huggingface.co/google/tapas-tiny-finetuned-tabfact/resolve/main/vocab.txt"
-        ),
-        # mini models
-        "google/tapas-mini-finetuned-sqa": (
-            "https://huggingface.co/google/tapas-mini-finetuned-sqa/resolve/main/vocab.txt"
-        ),
-        "google/tapas-mini-finetuned-wtq": (
-            "https://huggingface.co/google/tapas-mini-finetuned-wtq/resolve/main/vocab.txt"
-        ),
-        "google/tapas-mini-finetuned-wikisql-supervised": (
-            "https://huggingface.co/google/tapas-mini-finetuned-wikisql-supervised/resolve/main/vocab.txt"
-        ),
-        "google/tapas-mini-finetuned-tabfact": (
-            "https://huggingface.co/google/tapas-mini-finetuned-tabfact/resolve/main/vocab.txt"
-        ),
-    }
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {name: 512 for name in PRETRAINED_VOCAB_FILES_MAP.keys()}
-PRETRAINED_INIT_CONFIGURATION = {name: {"do_lower_case": True} for name in PRETRAINED_VOCAB_FILES_MAP.keys()}
-
 
 class TapasTruncationStrategy(ExplicitEnum):
     """
@@ -156,19 +69,19 @@ class TokenCoordinates:
 
 @dataclass
 class TokenizedTable:
-    rows: List[List[List[Text]]]
+    rows: List[List[List[str]]]
     selected_tokens: List[TokenCoordinates]
 
 
 @dataclass(frozen=True)
 class SerializedExample:
-    tokens: List[Text]
+    tokens: List[str]
     column_ids: List[int]
     row_ids: List[int]
     segment_ids: List[int]
 
 
-def _is_inner_wordpiece(token: Text):
+def _is_inner_wordpiece(token: str):
     return token.startswith("##")
 
 
@@ -315,8 +228,6 @@ class TapasTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
     def __init__(
         self,
@@ -1338,7 +1249,7 @@ class TapasTokenizer(PreTrainedTokenizer):
                 Total number of table columns
             max_length (`int`):
                 Total maximum length.
-            truncation_strategy (`str` or [`TapasTruncationStrategy`]):
+            truncation_strategy (`str` or [`TapasTruncationStrategy]`):
                 Truncation strategy to use. Seeing as this method should only be called when truncating, the only
                 available strategy is the `"drop_rows_to_fit"` strategy.
 
@@ -2050,7 +1961,7 @@ class TapasTokenizer(PreTrainedTokenizer):
 
 
 # Copied from transformers.models.bert.tokenization_bert.BasicTokenizer
-class BasicTokenizer(object):
+class BasicTokenizer:
     """
     Constructs a BasicTokenizer that will run basic tokenization (punctuation splitting, lower casing, etc.).
 
@@ -2212,7 +2123,7 @@ class BasicTokenizer(object):
 
 
 # Copied from transformers.models.bert.tokenization_bert.WordpieceTokenizer
-class WordpieceTokenizer(object):
+class WordpieceTokenizer:
     """Runs WordPiece tokenization."""
 
     def __init__(self, vocab, unk_token, max_input_chars_per_word=100):
@@ -2312,14 +2223,14 @@ class NumericValueSpan:
 
 @dataclass
 class Cell:
-    text: Text
+    text: str
     numeric_value: Optional[NumericValue] = None
 
 
 @dataclass
 class Question:
-    original_text: Text  # The original raw question string.
-    text: Text  # The question string after normalization.
+    original_text: str  # The original raw question string.
+    text: str  # The question string after normalization.
     numeric_spans: Optional[List[NumericValueSpan]] = None
 
 

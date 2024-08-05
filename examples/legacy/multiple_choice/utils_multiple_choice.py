@@ -13,8 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Multiple choice fine-tuning: utilities to work with multiple choice tasks of reading comprehension """
-
+"""Multiple choice fine-tuning: utilities to work with multiple choice tasks of reading comprehension"""
 
 import csv
 import glob

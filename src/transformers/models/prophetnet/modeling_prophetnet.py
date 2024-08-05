@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch ProphetNet model, ported from ProphetNet repo(fairsequery_states version)."""
+"""PyTorch ProphetNet model, ported from ProphetNet repo(fairsequery_states version)."""
 
 import copy
 import math
@@ -42,11 +42,6 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "ProphenetConfig"
 _CHECKPOINT_FOR_DOC = "microsoft/prophetnet-large-uncased"
-
-PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/prophetnet-large-uncased",
-    # See all ProphetNet models at https://huggingface.co/models?filter=prophetnet
-]
 
 
 PROPHETNET_START_DOCSTRING = r"""

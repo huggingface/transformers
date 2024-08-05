@@ -13,8 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-""" PyTorch CLVP model."""
-
+"""PyTorch CLVP model."""
 
 import copy
 import math
@@ -54,11 +53,6 @@ from .configuration_clvp import (
 logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "susnato/clvp_dev"
-
-CLVP_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "susnato/clvp_dev",
-    # See all Clvp models at https://huggingface.co/models?filter=clvp
-]
 
 
 # Copied from transformers.models.clip.modeling_clip.contrastive_loss
@@ -244,6 +238,9 @@ class ClvpRMSNorm(nn.Module):
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
         return self.weight * hidden_states.to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
 class ClvpRotaryPositionalEmbedding(nn.Module):
@@ -1519,19 +1516,19 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
         super().__init__(config)
 
         if not isinstance(config.text_config, ClvpEncoderConfig):
-            raise ValueError(
+            raise TypeError(
                 "config.text_config is expected to be of type `ClvpEncoderConfig` but is of type"
                 f" {type(config.text_config)}."
             )
 
         if not isinstance(config.speech_config, ClvpEncoderConfig):
-            raise ValueError(
+            raise TypeError(
                 "config.speech_config is expected to be of type `ClvpEncoderConfig` but is of type"
                 f" {type(config.speech_config)}."
             )
 
         if not isinstance(config.decoder_config, ClvpDecoderConfig):
-            raise ValueError(
+            raise TypeError(
                 "config.decoder_config is expected to be of type `ClvpDecoderConfig` but is of type"
                 f" {type(config.decoder_config)}."
             )

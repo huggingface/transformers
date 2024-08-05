@@ -1,5 +1,4 @@
-""" Testing suite for the Tensorflow CvT model. """
-
+"""Testing suite for the Tensorflow CvT model."""
 
 from __future__ import annotations
 
@@ -23,7 +22,6 @@ if is_tf_available():
 
     from transformers import TFCvtForImageClassification, TFCvtModel
     from transformers.modeling_tf_utils import keras
-    from transformers.models.cvt.modeling_tf_cvt import TF_CVT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -251,9 +249,9 @@ class TFCvtModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TF_CVT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFCvtModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "microsoft/cvt-13"
+        model = TFCvtModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats
@@ -267,11 +265,11 @@ def prepare_img():
 class TFCvtModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return AutoImageProcessor.from_pretrained(TF_CVT_PRETRAINED_MODEL_ARCHIVE_LIST[0])
+        return AutoImageProcessor.from_pretrained("microsoft/cvt-13")
 
     @slow
     def test_inference_image_classification_head(self):
-        model = TFCvtForImageClassification.from_pretrained(TF_CVT_PRETRAINED_MODEL_ARCHIVE_LIST[0])
+        model = TFCvtForImageClassification.from_pretrained("microsoft/cvt-13")
 
         image_processor = self.default_image_processor
         image = prepare_img()

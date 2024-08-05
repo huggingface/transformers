@@ -15,7 +15,6 @@
 """Convert Depth Anything checkpoints from the original repository. URL:
 https://github.com/LiheYoung/Depth-Anything"""
 
-
 import argparse
 from pathlib import Path
 
@@ -34,25 +33,28 @@ logger = logging.get_logger(__name__)
 
 def get_dpt_config(model_name):
     if "small" in model_name:
+        out_indices = [3, 6, 9, 12] if "v2" in model_name else [9, 10, 11, 12]
         backbone_config = Dinov2Config.from_pretrained(
-            "facebook/dinov2-small", out_indices=[9, 10, 11, 12], apply_layernorm=True, reshape_hidden_states=False
+            "facebook/dinov2-small", out_indices=out_indices, apply_layernorm=True, reshape_hidden_states=False
         )
         fusion_hidden_size = 64
         neck_hidden_sizes = [48, 96, 192, 384]
     elif "base" in model_name:
+        out_indices = [3, 6, 9, 12] if "v2" in model_name else [9, 10, 11, 12]
         backbone_config = Dinov2Config.from_pretrained(
-            "facebook/dinov2-base", out_indices=[9, 10, 11, 12], apply_layernorm=True, reshape_hidden_states=False
+            "facebook/dinov2-base", out_indices=out_indices, apply_layernorm=True, reshape_hidden_states=False
         )
         fusion_hidden_size = 128
         neck_hidden_sizes = [96, 192, 384, 768]
     elif "large" in model_name:
+        out_indices = [5, 12, 18, 24] if "v2" in model_name else [21, 22, 23, 24]
         backbone_config = Dinov2Config.from_pretrained(
-            "facebook/dinov2-large", out_indices=[21, 22, 23, 24], apply_layernorm=True, reshape_hidden_states=False
+            "facebook/dinov2-large", out_indices=out_indices, apply_layernorm=True, reshape_hidden_states=False
         )
         fusion_hidden_size = 256
         neck_hidden_sizes = [256, 512, 1024, 1024]
     else:
-        raise NotImplementedError("To do")
+        raise NotImplementedError(f"Model not supported: {model_name}")
 
     config = DepthAnythingConfig(
         reassemble_hidden_size=backbone_config.hidden_size,
@@ -170,9 +172,13 @@ def prepare_img():
 
 
 name_to_checkpoint = {
-    "depth-anything-small": "depth_anything_vits14.pth",
-    "depth-anything-base": "depth_anything_vitb14.pth",
-    "depth-anything-large": "depth_anything_vitl14.pth",
+    "depth-anything-small": "pytorch_model.bin",
+    "depth-anything-base": "pytorch_model.bin",
+    "depth-anything-large": "pytorch_model.bin",
+    "depth-anything-v2-small": "depth_anything_v2_vits.pth",
+    "depth-anything-v2-base": "depth_anything_v2_vitb.pth",
+    "depth-anything-v2-large": "depth_anything_v2_vitl.pth",
+    # v2-giant pending
 }
 
 
@@ -185,17 +191,23 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
     # define DPT configuration
     config = get_dpt_config(model_name)
 
-    model_name_to_filename = {
-        "depth-anything-small": "depth_anything_vits14.pth",
-        "depth-anything-base": "depth_anything_vitb14.pth",
-        "depth-anything-large": "depth_anything_vitl14.pth",
+    model_name_to_repo = {
+        "depth-anything-small": "LiheYoung/depth_anything_vits14",
+        "depth-anything-base": "LiheYoung/depth_anything_vitb14",
+        "depth-anything-large": "LiheYoung/depth_anything_vitl14",
+        "depth-anything-v2-small": "depth-anything/Depth-Anything-V2-Small",
+        "depth-anything-v2-base": "depth-anything/Depth-Anything-V2-Base",
+        "depth-anything-v2-large": "depth-anything/Depth-Anything-V2-Large",
     }
 
     # load original state_dict
-    filename = model_name_to_filename[model_name]
+    repo_id = model_name_to_repo[model_name]
+    filename = name_to_checkpoint[model_name]
     filepath = hf_hub_download(
-        repo_id="LiheYoung/Depth-Anything", filename=f"checkpoints/{filename}", repo_type="space"
+        repo_id=repo_id,
+        filename=f"{filename}",
     )
+
     state_dict = torch.load(filepath, map_location="cpu")
     # rename keys
     rename_keys = create_rename_keys(config)
@@ -248,11 +260,23 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
             expected_slice = torch.tensor(
                 [[87.9968, 87.7493, 88.2704], [87.1927, 87.6611, 87.3640], [86.7789, 86.9469, 86.7991]]
             )
+        elif model_name == "depth-anything-v2-small":
+            expected_slice = torch.tensor(
+                [[2.6751, 2.6211, 2.6571], [2.5820, 2.6138, 2.6271], [2.6160, 2.6141, 2.6306]]
+            )
+        elif model_name == "depth-anything-v2-base":
+            expected_slice = torch.tensor(
+                [[4.3576, 4.3723, 4.3908], [4.3231, 4.3146, 4.3611], [4.3016, 4.3170, 4.3121]]
+            )
+        elif model_name == "depth-anything-v2-large":
+            expected_slice = torch.tensor(
+                [[162.2751, 161.8504, 162.8788], [160.3138, 160.8050, 161.9835], [159.3812, 159.9884, 160.0768]]
+            )
         else:
             raise ValueError("Not supported")
 
         assert predicted_depth.shape == torch.Size(expected_shape)
-        assert torch.allclose(predicted_depth[0, :3, :3], expected_slice, atol=1e-6)
+        assert torch.allclose(predicted_depth[0, :3, :3], expected_slice, atol=1e-4)
         print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:
@@ -263,8 +287,8 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
 
     if push_to_hub:
         print("Pushing model and processor to hub...")
-        model.push_to_hub(repo_id=f"LiheYoung/{model_name}-hf")
-        processor.push_to_hub(repo_id=f"LiheYoung/{model_name}-hf")
+        model.push_to_hub(repo_id=f"{model_name.title()}-hf")
+        processor.push_to_hub(repo_id=f"{model_name.title()}-hf")
 
 
 if __name__ == "__main__":

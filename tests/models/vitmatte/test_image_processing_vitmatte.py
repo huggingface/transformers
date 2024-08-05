@@ -94,6 +94,7 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = VitMatteImageProcessor if is_vision_available() else None
 
     def setUp(self):
+        super().setUp()
         self.image_processor_tester = VitMatteImageProcessingTester(self)
 
     @property
@@ -190,5 +191,9 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     def test_padding(self):
         image_processing = self.image_processing_class(**self.image_processor_dict)
         image = np.random.randn(3, 249, 491)
+        images = image_processing.pad_image(image)
+        assert images.shape == (3, 256, 512)
+
+        image = np.random.randn(3, 249, 512)
         images = image_processing.pad_image(image)
         assert images.shape == (3, 256, 512)

@@ -98,7 +98,7 @@ Es werden ständig neue Modelle veröffentlicht. Wenn Sie ein neues Modell imple
 
 Lassen Sie es uns wissen, wenn Sie bereit sind, das Modell selbst beizutragen. Dann können wir Ihnen helfen, es zu 🤗 Transformers hinzuzufügen!
 
-Wir haben eine [detaillierte Anleitung und Vorlagen](https://github.com/huggingface/transformers/tree/main/templates) hinzugefügt, um Ihnen das Hinzufügen eines neuen Modells zu erleichtern, und wir haben auch einen technischen Leitfaden dazu, [wie man ein Modell zu 🤗 Transformers hinzufügt](https://huggingface.co/docs/transformers/add_new_model).
+Wir haben auch einen technischen Leitfaden dazu, [wie man ein Modell zu 🤗 Transformers hinzufügt](https://huggingface.co/docs/transformers/add_new_model).
 
 ## Möchten Sie die Dokumentation erweitern?
 

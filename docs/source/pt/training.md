@@ -146,13 +146,13 @@ todos os modelos de 🤗 Transformers retornam logits).
 ...     return metric.compute(predictions=predictions, references=labels)
 ```
 
-Se quiser controlar as suas métricas de avaliação durante o fine-tuning, especifique o parâmetro `evaluation_strategy`
+Se quiser controlar as suas métricas de avaliação durante o fine-tuning, especifique o parâmetro `eval_strategy`
 nos seus argumentos de treinamento para que o modelo considere a métrica de avaliação ao final de cada época:
 
 ```py
 >>> from transformers import TrainingArguments
 
->>> training_args = TrainingArguments(output_dir="test_trainer", evaluation_strategy="epoch")
+>>> training_args = TrainingArguments(output_dir="test_trainer", eval_strategy="epoch")
 ```
 
 ### Trainer

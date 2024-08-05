@@ -13,8 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TF 2.0 BERT model."""
-
+"""TF 2.0 BERT model."""
 
 from __future__ import annotations
 
@@ -88,30 +87,6 @@ _QA_TARGET_END_INDEX = 15
 _CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION = "ydshieh/bert-base-uncased-yelp-polarity"
 _SEQ_CLASS_EXPECTED_OUTPUT = "'LABEL_1'"
 _SEQ_CLASS_EXPECTED_LOSS = 0.01
-
-TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google-bert/bert-base-uncased",
-    "google-bert/bert-large-uncased",
-    "google-bert/bert-base-cased",
-    "google-bert/bert-large-cased",
-    "google-bert/bert-base-multilingual-uncased",
-    "google-bert/bert-base-multilingual-cased",
-    "google-bert/bert-base-chinese",
-    "google-bert/bert-base-german-cased",
-    "google-bert/bert-large-uncased-whole-word-masking",
-    "google-bert/bert-large-cased-whole-word-masking",
-    "google-bert/bert-large-uncased-whole-word-masking-finetuned-squad",
-    "google-bert/bert-large-cased-whole-word-masking-finetuned-squad",
-    "google-bert/bert-base-cased-finetuned-mrpc",
-    "cl-tohoku/bert-base-japanese",
-    "cl-tohoku/bert-base-japanese-whole-word-masking",
-    "cl-tohoku/bert-base-japanese-char",
-    "cl-tohoku/bert-base-japanese-char-whole-word-masking",
-    "TurkuNLP/bert-base-finnish-cased-v1",
-    "TurkuNLP/bert-base-finnish-uncased-v1",
-    "wietsedv/bert-base-dutch-cased",
-    # See all BERT models at https://huggingface.co/models?filter=bert
-]
 
 
 class TFBertPreTrainingLoss:
@@ -1316,7 +1291,7 @@ class TFBertForPreTraining(TFBertPreTrainedModel, TFBertPreTrainingLoss):
 
             - 0 indicates sequence B is a continuation of sequence A,
             - 1 indicates sequence B is a random sequence.
-        kwargs (`Dict[str, any]`, optional, defaults to *{}*):
+        kwargs (`Dict[str, any]`, *optional*, defaults to `{}`):
             Used to hide legacy arguments that have been deprecated.
 
         Return:

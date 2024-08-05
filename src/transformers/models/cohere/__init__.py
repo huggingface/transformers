@@ -23,7 +23,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_cohere": ["COHERE_PRETRAINED_CONFIG_ARCHIVE_MAP", "CohereConfig"],
+    "configuration_cohere": ["CohereConfig"],
 }
 
 
@@ -49,7 +49,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_cohere import COHERE_PRETRAINED_CONFIG_ARCHIVE_MAP, CohereConfig
+    from .configuration_cohere import CohereConfig
 
     try:
         if not is_tokenizers_available():

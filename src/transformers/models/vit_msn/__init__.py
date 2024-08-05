@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING
 from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
 
 
-_import_structure = {"configuration_vit_msn": ["VIT_MSN_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTMSNConfig"]}
+_import_structure = {"configuration_vit_msn": ["ViTMSNConfig"]}
 
 try:
     if not is_torch_available():
@@ -25,14 +25,13 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_vit_msn"] = [
-        "VIT_MSN_PRETRAINED_MODEL_ARCHIVE_LIST",
         "ViTMSNModel",
         "ViTMSNForImageClassification",
         "ViTMSNPreTrainedModel",
     ]
 
 if TYPE_CHECKING:
-    from .configuration_vit_msn import VIT_MSN_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTMSNConfig
+    from .configuration_vit_msn import ViTMSNConfig
 
     try:
         if not is_torch_available():
@@ -41,7 +40,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_vit_msn import (
-            VIT_MSN_PRETRAINED_MODEL_ARCHIVE_LIST,
             ViTMSNForImageClassification,
             ViTMSNModel,
             ViTMSNPreTrainedModel,

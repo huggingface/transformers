@@ -212,7 +212,7 @@ class ViltImageProcessor(BaseImageProcessor):
     @classmethod
     def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
         """
-        Overrides the `from_dict` method from the base class to make sure `reduce_labels` is updated if image processor
+        Overrides the `from_dict` method from the base class to make sure `pad_and_return_pixel_mask` is updated if image processor
         is created using from_dict and kwargs e.g. `ViltImageProcessor.from_pretrained(checkpoint,
         pad_and_return_pixel_mask=False)`
         """
@@ -243,7 +243,7 @@ class ViltImageProcessor(BaseImageProcessor):
                 Image to resize.
             size (`Dict[str, int]`):
                 Controls the size of the output image. Should be of the form `{"shortest_edge": int}`.
-            size_divisor (`int`, defaults to 32):
+            size_divisor (`int`, *optional*, defaults to 32):
                 The image is resized to a size that is a multiple of this value.
             resample (`PILImageResampling` filter, *optional*, defaults to `PILImageResampling.BICUBIC`):
                 Resampling filter to use when resiizing the image.

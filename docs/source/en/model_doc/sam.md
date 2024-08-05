@@ -81,10 +81,10 @@ processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
 img_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
 raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
 mask_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
-segmentation_map = Image.open(requests.get(mask_url, stream=True).raw).convert("RGB")
+segmentation_map = Image.open(requests.get(mask_url, stream=True).raw).convert("1")
 input_points = [[[450, 600]]]  # 2D location of a window in the image
 
-inputs = processor(raw_image, input_points=input_points, segmentation_maps=mask, return_tensors="pt").to(device)
+inputs = processor(raw_image, input_points=input_points, segmentation_maps=segmentation_map, return_tensors="pt").to(device)
 with torch.no_grad():
     outputs = model(**inputs)
 
@@ -108,6 +108,15 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 SlimSAM, a pruned version of SAM, was proposed in [0.1% Data Makes Segment Anything Slim](https://arxiv.org/abs/2312.05284) by Zigeng Chen et al. SlimSAM reduces the size of the SAM models considerably while maintaining the same performance.
 
 Checkpoints can be found on the [hub](https://huggingface.co/models?other=slimsam), and they can be used as a drop-in replacement of SAM.
+
+## Grounded SAM
+
+One can combine [Grounding DINO](grounding-dino) with SAM for text-based mask generation as introduced in [Grounded SAM: Assembling Open-World Models for Diverse Visual Tasks](https://arxiv.org/abs/2401.14159). You can refer to this [demo notebook](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/Grounding%20DINO/GroundingDINO_with_Segment_Anything.ipynb) 🌍 for details.
+
+<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/grounded_sam.png"
+alt="drawing" width="900"/>
+
+<small> Grounded SAM overview. Taken from the <a href="https://github.com/IDEA-Research/Grounded-Segment-Anything">original repository</a>. </small>
 
 ## SamConfig
 

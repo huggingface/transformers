@@ -14,7 +14,6 @@
 # limitations under the License.
 """TensorFlow VisionTextDualEncoder model."""
 
-
 from __future__ import annotations
 
 import re

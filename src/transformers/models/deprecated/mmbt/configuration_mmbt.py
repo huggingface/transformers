@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" MMBT configuration"""
+"""MMBT configuration"""
 
 from ....utils import logging
 
@@ -21,7 +21,7 @@ from ....utils import logging
 logger = logging.get_logger(__name__)
 
 
-class MMBTConfig(object):
+class MMBTConfig:
     """
     This is the configuration class to store the configuration of a [`MMBTModel`]. It is used to instantiate a MMBT
     model according to the specified arguments, defining the model architecture.

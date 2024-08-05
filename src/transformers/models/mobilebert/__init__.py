@@ -25,7 +25,6 @@ from ...utils import (
 
 _import_structure = {
     "configuration_mobilebert": [
-        "MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "MobileBertConfig",
         "MobileBertOnnxConfig",
     ],
@@ -47,7 +46,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_mobilebert"] = [
-        "MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "MobileBertForMaskedLM",
         "MobileBertForMultipleChoice",
         "MobileBertForNextSentencePrediction",
@@ -68,7 +66,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_tf_mobilebert"] = [
-        "TF_MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFMobileBertForMaskedLM",
         "TFMobileBertForMultipleChoice",
         "TFMobileBertForNextSentencePrediction",
@@ -84,7 +81,6 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_mobilebert import (
-        MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         MobileBertConfig,
         MobileBertOnnxConfig,
     )
@@ -105,7 +101,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_mobilebert import (
-            MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             MobileBertForMaskedLM,
             MobileBertForMultipleChoice,
             MobileBertForNextSentencePrediction,
@@ -126,7 +121,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_tf_mobilebert import (
-            TF_MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFMobileBertForMaskedLM,
             TFMobileBertForMultipleChoice,
             TFMobileBertForNextSentencePrediction,

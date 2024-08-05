@@ -27,6 +27,7 @@ import warnings
 from collections.abc import Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+from itertools import chain
 from logging import StreamHandler
 from typing import Any, Dict, Iterator, List, Optional, Union
 
@@ -34,13 +35,18 @@ import numpy as np
 import torch
 import torch.distributed as dist
 from torch import nn
-from torch.optim.lr_scheduler import LRScheduler
 from torch.utils.data import Dataset, IterableDataset, RandomSampler, Sampler
 from torch.utils.data.distributed import DistributedSampler
 
 from .integrations.deepspeed import is_deepspeed_zero3_enabled
 from .tokenization_utils_base import BatchEncoding
-from .utils import is_sagemaker_mp_enabled, is_torch_xla_available, is_training_run_on_sagemaker, logging
+from .utils import (
+    is_sagemaker_mp_enabled,
+    is_torch_available,
+    is_torch_xla_available,
+    is_training_run_on_sagemaker,
+    logging,
+)
 
 
 if is_training_run_on_sagemaker():
@@ -49,11 +55,14 @@ if is_training_run_on_sagemaker():
 if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
 
-# this is used to suppress an undesired warning emitted by pytorch versions 1.4.2-1.7.0
-try:
-    from torch.optim.lr_scheduler import SAVE_STATE_WARNING
-except ImportError:
-    SAVE_STATE_WARNING = ""
+if is_torch_available():
+    from .pytorch_utils import is_torch_greater_or_equal_than_2_0
+
+    if is_torch_greater_or_equal_than_2_0:
+        from torch.optim.lr_scheduler import LRScheduler
+    else:
+        from torch.optim.lr_scheduler import _LRScheduler as LRScheduler
+
 
 logger = logging.get_logger(__name__)
 
@@ -117,9 +126,10 @@ def nested_concat(tensors, new_tensors, padding_index=-100):
     Concat the `new_tensors` to `tensors` on the first dim and pad them on the second if needed. Works for tensors or
     nested list/tuples/dict of tensors.
     """
-    assert type(tensors) == type(
-        new_tensors
-    ), f"Expected `tensors` and `new_tensors` to have the same type but found {type(tensors)} and {type(new_tensors)}."
+    if not (isinstance(tensors, torch.Tensor) and isinstance(new_tensors, torch.Tensor)):
+        assert (
+            type(tensors) is type(new_tensors)
+        ), f"Expected `tensors` and `new_tensors` to have the same type but found {type(tensors)} and {type(new_tensors)}."
     if isinstance(tensors, (list, tuple)):
         return type(tensors)(nested_concat(t, n, padding_index=padding_index) for t, n in zip(tensors, new_tensors))
     elif isinstance(tensors, torch.Tensor):
@@ -176,7 +186,7 @@ def nested_detach(tensors):
         return type(tensors)(nested_detach(t) for t in tensors)
     elif isinstance(tensors, Mapping):
         return type(tensors)({k: nested_detach(t) for k, t in tensors.items()})
-    return tensors.detach()
+    return tensors.detach() if isinstance(tensors, torch.Tensor) else tensors
 
 
 def nested_xla_mesh_reduce(tensors, name):
@@ -235,10 +245,10 @@ def distributed_broadcast_scalars(
 
 
 def reissue_pt_warnings(caught_warnings):
-    # Reissue warnings that are not the SAVE_STATE_WARNING
+    # Reissue warnings
     if len(caught_warnings) > 1:
         for w in caught_warnings:
-            if w.category != UserWarning or w.message != SAVE_STATE_WARNING:
+            if w.category is not UserWarning:
                 warnings.warn(w.message, w.category)
 
 
@@ -283,6 +293,58 @@ class DistributedSamplerWithLoop(DistributedSampler):
         start_remainder = 1 if self.rank < len(self.dataset) % self.num_replicas else 0
         indices += indices[start_remainder : start_remainder + remainder]
         return iter(indices)
+
+
+class EvalLoopContainer:
+    """
+    Container to store intermediate results of evaluation loop
+
+    Args:
+        do_nested_concat (`bool`, *optional*, defaults to `True`):
+            If set to `True`, each iteration will recursively concatenate a new object containing tensors to
+            the existing stored tensors, provided that the structure of the existing object and the new one
+            are identical. If set to `False`, all newly added tensors will be stored in a list.
+        padding_index (`int`, *optional*, defaults to -100):
+            Value used to pad tensors of different shapes when `do_nested_concat=True`.
+    """
+
+    def __init__(self, do_nested_concat: bool = True, padding_index: int = -100):
+        self.do_nested_concat = do_nested_concat
+        self.padding_index = padding_index
+        self.tensors = None
+        self.arrays = None
+
+    def add(self, tensors) -> None:
+        """Add tensors to the stored objects. If `do_nested_concat=True`, the tensors will be concatenated recursively."""
+        if self.tensors is None:
+            self.tensors = tensors if self.do_nested_concat else [tensors]
+        elif self.do_nested_concat:
+            self.tensors = nested_concat(self.tensors, tensors, padding_index=self.padding_index)
+        else:
+            self.tensors.append(tensors)
+
+    def to_cpu_and_numpy(self) -> None:
+        """Move tensors in stored objects to CPU and convert them to numpy arrays."""
+
+        # Check if we have something to add, if not just return
+        if self.tensors is None:
+            return
+
+        new_arrays = nested_numpify(self.tensors)
+        if self.arrays is None:
+            self.arrays = new_arrays
+        elif self.do_nested_concat:
+            self.arrays = nested_concat(self.arrays, new_arrays, padding_index=self.padding_index)
+        else:
+            self.arrays.extend(new_arrays)
+
+        # reset device tensors after adding to cpu
+        self.tensors = None
+
+    def get_arrays(self):
+        """Returns the numpified and moved to CPU stored objects."""
+        self.to_cpu_and_numpy()
+        return self.arrays
 
 
 class SequentialDistributedSampler(Sampler):
@@ -1171,6 +1233,23 @@ class AcceleratorConfig:
             training results are fully reproducable using a different sampling technique. While seed-to-seed results
             may differ, on average the differences are neglible when using multiple different seeds to compare. Should
             also be ran with [`~utils.set_seed`] for the best results.
+        gradient_accumulation_kwargs (`dict`, *optional*):
+            Additional kwargs to configure gradient accumulation, see [`accelerate.utils.GradientAccumulationPlugin`].
+            Any of the following (optional) keys are acceptable:
+              num_steps (`int`): Will take precedence over [`~.TrainingArguments.gradient_accumulation_steps`] if
+                the latter is set to 1, otherwise an exception will be raised.
+              adjust_scheduler (`bool`): Whether to adjust the scheduler steps to account for [`~.TrainingArguments.gradient_accumulation_steps`].
+                The [`accelerate.utils.GradientAccumulationPlugin`] default is `True`.
+              sync_each_batch (`bool`): Whether to synchronize the gradients at each data batch.
+                The [`accelerate.utils.GradientAccumulationPlugin`] default is `False`.
+        non_blocking (`bool`, *optional*, defaults to `False`):
+            Whether to use non-blocking CUDA calls to help minimize synchronization during
+            distributed training with prepared `DataLoader` inputs being moved to device.
+            Best if used with `pin_memory=True` in the `TrainingArguments`.
+        use_configured_state (`bool*, *optional*, defaults to `False`):
+            Whether or not to use a pre-configured `AcceleratorState` or `PartialState` defined
+            before calling `TrainingArguments`. If `True`, an `Accelerator` or `PartialState`
+            must be initialized. May lead to issues using sweeps or hyperparameter tuning.
 
     """
 
@@ -1210,6 +1289,37 @@ class AcceleratorConfig:
         },
     )
 
+    non_blocking: Optional[bool] = field(
+        default=False,
+        metadata={
+            "help": "Whether to use non-blocking CUDA calls to help minimize synchronization during "
+            "distributed training with prepared `DataLoader` inputs being moved to device. "
+            "Best if used with `pin_memory=True` in the `TrainingArguments`. Requires accelerate "
+            "v0.30.0."
+        },
+    )
+
+    gradient_accumulation_kwargs: Optional[Dict] = field(
+        default=None,
+        metadata={
+            "help": "Additional kwargs to configure gradient accumulation, see [`accelerate.utils.GradientAccumulationPlugin`]. "
+            "Any of the following (optional) keys are acceptable: "
+            "  num_steps (`int`): Will take precedence over [`~.TrainingArguments.gradient_accumulation_steps`] if "
+            "    the latter is set to 1, otherwise an exception will be raised. "
+            "  adjust_scheduler (`bool`): Whether to adjust the scheduler steps to account for [`~.TrainingArguments.gradient_accumulation_steps`]. "
+            "    The [`accelerate.utils.GradientAccumulationPlugin`] default is `True`. "
+            "  sync_each_batch (`bool`): Whether to synchronize the gradients at each data batch. "
+            "    The [`accelerate.utils.GradientAccumulationPlugin`] default is `False`."
+        },
+    )
+    use_configured_state: bool = field(
+        default=False,
+        metadata={
+            "help": "Whether or not to use a pre-configured `AcceleratorState` or `PartialState` defined before calling `TrainingArguments`."
+            "If `True`, an `Accelerator` or `PartialState` must be initialized. May lead to issues using sweeps or hyperparameter tuning."
+        },
+    )
+
     @classmethod
     def from_json_file(cls, json_file):
         # Check if exists
@@ -1228,6 +1338,9 @@ class AcceleratorConfig:
     def to_dict(self):
         return copy.deepcopy(self.__dict__)
 
+    def pop(self, key, default=None):
+        return self.__dict__.pop(key, default)
+
 
 class LayerWiseDummyOptimizer(torch.optim.Optimizer):
     """
@@ -1243,7 +1356,7 @@ class LayerWiseDummyOptimizer(torch.optim.Optimizer):
     def __init__(self, optimizer_dict=None, *args, **kwargs):
         dummy_tensor = torch.randn(1, 1)
         self.optimizer_dict = optimizer_dict
-        super().__init__([dummy_tensor], {"lr": 1e-03})
+        super().__init__([dummy_tensor], {"lr": kwargs.get("lr", 1e-03)})
 
     def zero_grad(self, set_to_none: bool = True) -> None:
         pass
@@ -1261,13 +1374,24 @@ class LayerWiseDummyScheduler(LRScheduler):
     """
 
     def __init__(self, *args, **kwargs):
-        optimizer = LayerWiseDummyOptimizer()
+        self.default_lr = kwargs["lr"]
+        optimizer = LayerWiseDummyOptimizer(**kwargs)
         last_epoch = -1
         verbose = False
         super().__init__(optimizer, last_epoch, verbose)
 
     def get_lr(self):
-        return [group["lr"] for group in self.optimizer.param_groups]
+        # default value
+        lrs = [self.default_lr]
+
+        # we take each lr in the parameters if they exist, assumes the optimizer to be the `LayerWiseDummyOptimizer`
+        if self.optimizer is not None:
+            param_wise_lrs = [
+                [group["lr"] for group in optim.param_groups] for optim in self.optimizer.optimizer_dict.values()
+            ]
+            lrs = list(chain(*param_wise_lrs))
+
+        return lrs
 
     def _get_closed_form_lr(self):
         return self.base_lrs

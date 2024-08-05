@@ -29,7 +29,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST,
         OpenAIGPTConfig,
         OpenAIGPTDoubleHeadsModel,
         OpenAIGPTForSequenceClassification,
@@ -270,9 +269,9 @@ class OpenAIGPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = OpenAIGPTModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "openai-community/openai-gpt"
+        model = OpenAIGPTModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @require_torch

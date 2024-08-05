@@ -12,18 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" StableLM model configuration """
+"""StableLM model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-STABLELM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "stabilityai/stablelm-3b-4e1t": "https://huggingface.co/stabilityai/stablelm-3b-4e1t/resolve/main/config.json",
-    # See all StableLM models at https://huggingface.co/models?filter=stablelm
-}
 
 
 class StableLmConfig(PretrainedConfig):
@@ -53,7 +48,7 @@ class StableLmConfig(PretrainedConfig):
         num_key_value_heads (`int`, *optional*, defaults to 32):
             This is the number of key_value heads that should be used to implement Grouped Query Attention. If
             `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
-            `num_key_value_heads=1 the model will use Multi Query Attention (MQA) otherwise GQA is used. When
+            `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
             by meanpooling all the original heads within that group. For more details checkout [this
             paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to
@@ -85,6 +80,11 @@ class StableLmConfig(PretrainedConfig):
             is an experimental feature, subject to breaking API changes in future versions.
         use_qkv_bias (`bool`, *optional*, defaults to `False`):
             Whether or not the model should use bias for qkv layers.
+        qk_layernorm (`bool`, *optional*, defaults to `False`):
+            Whether or not to normalize, per head, the Queries and Keys after projecting the hidden states.
+        use_parallel_residual (`bool`, *optional*, defaults to `False`):
+            Whether to use a "parallel" formulation in each Transformer layer, which can provide a slight training
+            speedup at large scales.
         hidden_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio after applying the MLP to the hidden states.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -125,6 +125,8 @@ class StableLmConfig(PretrainedConfig):
         rope_theta=10_000,
         rope_scaling=None,
         use_qkv_bias=False,
+        qk_layernorm=False,
+        use_parallel_residual=False,
         hidden_dropout=0.0,
         attention_dropout=0.0,
         partial_rotary_factor=0.25,
@@ -148,6 +150,8 @@ class StableLmConfig(PretrainedConfig):
         self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling
         self.use_qkv_bias = use_qkv_bias
+        self.qk_layernorm = qk_layernorm
+        self.use_parallel_residual = use_parallel_residual
         self.hidden_dropout = hidden_dropout
         self.attention_dropout = attention_dropout
         self.partial_rotary_factor = partial_rotary_factor
@@ -160,7 +164,6 @@ class StableLmConfig(PretrainedConfig):
             **kwargs,
         )
 
-    # Copied from transformers.models.llama.configuration_llama.LlamaConfig._rope_scaling_validation
     def _rope_scaling_validation(self):
         """
         Validate the `rope_scaling` configuration.
@@ -170,8 +173,7 @@ class StableLmConfig(PretrainedConfig):
 
         if not isinstance(self.rope_scaling, dict) or len(self.rope_scaling) != 2:
             raise ValueError(
-                "`rope_scaling` must be a dictionary with with two fields, `type` and `factor`, "
-                f"got {self.rope_scaling}"
+                "`rope_scaling` must be a dictionary with two fields, `type` and `factor`, " f"got {self.rope_scaling}"
             )
         rope_scaling_type = self.rope_scaling.get("type", None)
         rope_scaling_factor = self.rope_scaling.get("factor", None)

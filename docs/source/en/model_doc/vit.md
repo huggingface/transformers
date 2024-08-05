@@ -62,7 +62,7 @@ Following the original Vision Transformer, some follow-up works have been made:
 This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code (written in JAX) can be
 found [here](https://github.com/google-research/vision_transformer).
 
-Note that we converted the weights from Ross Wightman's [timm library](https://github.com/rwightman/pytorch-image-models), 
+Note that we converted the weights from Ross Wightman's [timm library](https://github.com/rwightman/pytorch-image-models),
 who already converted the weights from JAX to PyTorch. Credits go to him!
 
 ## Usage tips
@@ -87,6 +87,34 @@ who already converted the weights from JAX to PyTorch. Credits go to him!
   an experiment with a self-supervised pre-training objective, namely masked patched prediction (inspired by masked
   language modeling). With this approach, the smaller ViT-B/16 model achieves 79.9% accuracy on ImageNet, a significant
   improvement of 2% to training from scratch, but still 4% behind supervised pre-training.
+
+### Using Scaled Dot Product Attention (SDPA)
+
+PyTorch includes a native scaled dot-product attention (SDPA) operator as part of `torch.nn.functional`. This function 
+encompasses several implementations that can be applied depending on the inputs and the hardware in use. See the 
+[official documentation](https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html) 
+or the [GPU Inference](https://huggingface.co/docs/transformers/main/en/perf_infer_gpu_one#pytorch-scaled-dot-product-attention)
+page for more information.
+
+SDPA is used by default for `torch>=2.1.1` when an implementation is available, but you may also set 
+`attn_implementation="sdpa"` in `from_pretrained()` to explicitly request SDPA to be used.
+
+```
+from transformers import ViTForImageClassification
+model = ViTForImageClassification.from_pretrained("google/vit-base-patch16-224", attn_implementation="sdpa", torch_dtype=torch.float16)
+...
+```
+
+For the best speedups, we recommend loading the model in half-precision (e.g. `torch.float16` or `torch.bfloat16`).
+
+On a local benchmark (A100-40GB, PyTorch 2.3.0, OS Ubuntu 22.04) with `float32` and `google/vit-base-patch16-224` model, we saw the following speedups during inference.
+
+|   Batch size |   Average inference time (ms), eager mode |   Average inference time (ms), sdpa model |   Speed up, Sdpa / Eager (x) |
+|--------------|-------------------------------------------|-------------------------------------------|------------------------------|
+|            1 |                                         7 |                                         6 |                      1.17 |
+|            2 |                                         8 |                                         6 |                      1.33 |
+|            4 |                                         8 |                                         6 |                      1.33 |
+|            8 |                                         8 |                                         6 |                      1.33 |
 
 ## Resources
 
@@ -128,6 +156,11 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 ## ViTImageProcessor
 
 [[autodoc]] ViTImageProcessor
+    - preprocess
+
+## ViTImageProcessorFast
+
+[[autodoc]] ViTImageProcessorFast
     - preprocess
 
 <frameworkcontent>

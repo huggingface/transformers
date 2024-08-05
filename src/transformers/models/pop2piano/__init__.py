@@ -25,7 +25,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_pop2piano": ["POP2PIANO_PRETRAINED_CONFIG_ARCHIVE_MAP", "Pop2PianoConfig"],
+    "configuration_pop2piano": ["Pop2PianoConfig"],
 }
 
 try:
@@ -35,7 +35,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_pop2piano"] = [
-        "POP2PIANO_PRETRAINED_MODEL_ARCHIVE_LIST",
         "Pop2PianoForConditionalGeneration",
         "Pop2PianoPreTrainedModel",
     ]
@@ -72,7 +71,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_pop2piano import POP2PIANO_PRETRAINED_CONFIG_ARCHIVE_MAP, Pop2PianoConfig
+    from .configuration_pop2piano import Pop2PianoConfig
 
     try:
         if not is_torch_available():
@@ -81,7 +80,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_pop2piano import (
-            POP2PIANO_PRETRAINED_MODEL_ARCHIVE_LIST,
             Pop2PianoForConditionalGeneration,
             Pop2PianoPreTrainedModel,
         )

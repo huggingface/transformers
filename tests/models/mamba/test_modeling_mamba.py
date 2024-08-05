@@ -170,7 +170,7 @@ class MambaModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertEqual(len(result.hidden_states), config.num_hidden_layers + 1)
 
-    def create_and_check_causl_lm(self, config, input_ids, *args):
+    def create_and_check_causal_lm(self, config, input_ids, *args):
         model = MambaForCausalLM(config)
         model.to(torch_device)
         model.eval()
@@ -187,17 +187,51 @@ class MambaModelTester:
         outputs = model(input_ids)
         output_whole = outputs.last_hidden_state
 
-        outputs = model(input_ids[:, :-1], use_cache=True)
+        outputs = model(
+            input_ids[:, :-1],
+            use_cache=True,
+            cache_position=torch.arange(0, config.conv_kernel, device=input_ids.device),
+        )
         output_one = outputs.last_hidden_state
 
         # Using the state computed on the first inputs, we will get the same output
-        outputs = model(input_ids[:, -1:], cache_params=outputs.cache_params)
+        outputs = model(
+            input_ids[:, -1:],
+            use_cache=True,
+            cache_params=outputs.cache_params,
+            cache_position=torch.arange(config.conv_kernel, config.conv_kernel + 1, device=input_ids.device),
+        )
         output_two = outputs.last_hidden_state
 
         self.parent.assertTrue(torch.allclose(torch.cat([output_one, output_two], dim=1), output_whole, atol=1e-5))
         # TODO the orignal mamba does not support decoding more than 1 token neither do we
 
-    def create_and_check_forward_and_backwards(self, config, input_ids, *args, gradient_checkpointing=False):
+    def create_and_check_mamba_cached_slow_forward_and_backwards(
+        self, config, input_ids, *args, gradient_checkpointing=False
+    ):
+        model = MambaModel(config)
+        model.to(torch_device)
+        if gradient_checkpointing:
+            model.gradient_checkpointing_enable()
+
+        # create cache
+        cache = model(input_ids, use_cache=True).cache_params
+        cache.reset()
+
+        # use cache
+        token_emb = model.embeddings(input_ids)
+        outputs = model.layers[0].mixer.slow_forward(
+            token_emb, cache, cache_position=torch.arange(0, config.conv_kernel, device=input_ids.device)
+        )
+
+        loss = torch.log(1 + torch.abs(outputs.sum()))
+        self.parent.assertEqual(loss.shape, ())
+        self.parent.assertEqual(outputs.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        loss.backward()
+
+    def create_and_check_mamba_lm_head_forward_and_backwards(
+        self, config, input_ids, *args, gradient_checkpointing=False
+    ):
         model = MambaForCausalLM(config)
         model.to(torch_device)
         if gradient_checkpointing:
@@ -227,13 +261,14 @@ class MambaModelTester:
 @require_torch
 class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (MambaModel, MambaForCausalLM) if is_torch_available() else ()
+    all_generative_model_classes = (MambaForCausalLM,) if is_torch_available() else ()
+    has_attentions = False  # Mamba does not support attentions
     fx_compatible = False  # FIXME let's try to support this @ArthurZucker
     test_torchscript = False  # FIXME let's try to support this @ArthurZucker
     test_missing_keys = False
     test_model_parallel = False
     test_pruning = False
     test_head_masking = False  # Mamba does not have attention heads
-    test_model_parallel = False
     pipeline_model_mapping = (
         {"feature-extraction": MambaModel, "text-generation": MambaForCausalLM} if is_torch_available() else {}
     )
@@ -269,10 +304,6 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @unittest.skip("No attention in mamba")
-    def test_retain_grad_hidden_states_attentions(self):
-        pass
-
     @require_torch_multi_gpu
     def test_multi_gpu_data_parallel_forward(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -304,11 +335,19 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
     def test_mamba_lm_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_causl_lm(*config_and_inputs)
+        self.model_tester.create_and_check_causal_lm(*config_and_inputs)
 
     def test_state_equivalency(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_state_equivalency(*config_and_inputs)
+
+    def test_mamba_cached_slow_forward_and_backwards(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_mamba_cached_slow_forward_and_backwards(*config_and_inputs)
+
+    def test_mamba_lm_head_forward_and_backwards(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_mamba_lm_head_forward_and_backwards(*config_and_inputs)
 
     def test_initialization(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -332,14 +371,6 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                     if param.requires_grad:
                         # check if it's a ones like
                         self.assertTrue(torch.allclose(param.data, torch.ones_like(param.data), atol=1e-5, rtol=1e-5))
-
-    @unittest.skip("Mamba does not use attention")
-    def test_attention_outputs(self):
-        r"""
-        Overriding the test_attention_outputs test as the attention outputs of Mamba are different from other models
-        it has a shape `batch_size, seq_len, hidden_size`.
-        """
-        pass
 
     @slow
     def test_model_from_pretrained(self):
@@ -416,10 +447,9 @@ class MambaIntegrationTests(unittest.TestCase):
 
         model = MambaForCausalLM.from_pretrained("state-spaces/mamba-130m-hf", torch_dtype=torch.float16)
         model.to(device)
-        model.config.use_cache = True
         input_ids = tokenizer("Hey how are you doing?", return_tensors="pt")["input_ids"].to(device)
 
-        out = model.generate(input_ids, do_sample=False, max_new_tokens=10)
+        out = model.generate(input_ids, do_sample=False, use_cache=True, max_new_tokens=10)
         output_sentence = tokenizer.decode(out[0, :])
         self.assertEqual(output_sentence, "Hey how are you doing?\n\nI'm so glad you're here.")
 
@@ -488,4 +518,22 @@ class MambaIntegrationTests(unittest.TestCase):
         output = model.generate(input_ids, max_new_tokens=30)
         output_sentence = self.tokenizer.decode(output[0].tolist())
 
+        self.assertEqual(output_sentence, expected_output)
+
+    @slow
+    def test_compile_mamba_cache(self):
+        expected_output = "Hello my name is John and I am a\n\nI am a single father of a beautiful daughter. I am a"
+
+        input_ids = self.tokenizer("Hello my name is", return_tensors="pt").input_ids.to(torch_device)
+        model = MambaForCausalLM.from_pretrained("state-spaces/mamba-1.4b-hf", torch_dtype=torch.float16).to(
+            torch_device
+        )
+
+        output = model.generate(input_ids, max_new_tokens=20, cache_implementation="mamba")
+        output_sentence = self.tokenizer.decode(output[0].tolist())
+        self.assertEqual(output_sentence, expected_output)
+
+        model.forward = torch.compile(model.forward, fullgraph=True, mode="reduce-overhead")
+        output = model.generate(input_ids, max_new_tokens=20, cache_implementation="mamba")
+        output_sentence = self.tokenizer.decode(output[0].tolist())
         self.assertEqual(output_sentence, expected_output)

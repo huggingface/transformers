@@ -66,6 +66,8 @@ class GLPNImageProcessingTester(unittest.TestCase):
     def expected_output_image_shape(self, images):
         if isinstance(images[0], Image.Image):
             width, height = images[0].size
+        elif isinstance(images[0], np.ndarray):
+            height, width = images[0].shape[0], images[0].shape[1]
         else:
             height, width = images[0].shape[1], images[0].shape[2]
 
@@ -93,6 +95,7 @@ class GLPNImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = GLPNImageProcessor if is_vision_available() else None
 
     def setUp(self):
+        super().setUp()
         self.image_processor_tester = GLPNImageProcessingTester(self)
 
     @property

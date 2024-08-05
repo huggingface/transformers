@@ -1,11 +1,11 @@
-.PHONY: deps_table_update modified_only_fixup extra_style_checks quality style fixup fix-copies test test-examples
+.PHONY: deps_table_update modified_only_fixup extra_style_checks quality style fixup fix-copies test test-examples benchmark
 
 # make sure to test the local checkout in scripts and not the pre-installed one (don't use quotes!)
 export PYTHONPATH = src
 
 check_dirs := examples tests src utils
 
-exclude_folders := examples/research_projects
+exclude_folders :=  ""
 
 modified_only_fixup:
 	$(eval modified_py_files := $(shell python utils/get_modified_files.py $(check_dirs)))
@@ -44,18 +44,20 @@ repo-consistency:
 	python utils/check_config_attributes.py
 	python utils/check_doctest_list.py
 	python utils/update_metadata.py --check-only
-	python utils/check_task_guides.py
 	python utils/check_docstrings.py
 	python utils/check_support_list.py
 
 # this target runs checks on all files
 
 quality:
+	@python -c "from transformers import *" || (echo '🚨 import failed, this means you introduced unprotected imports! 🚨'; exit 1)
 	ruff check $(check_dirs) setup.py conftest.py
 	ruff format --check $(check_dirs) setup.py conftest.py
 	python utils/custom_init_isort.py --check_only
 	python utils/sort_auto_mappings.py --check_only
 	python utils/check_doc_toc.py
+	python utils/check_docstrings.py --check_all
+
 
 # Format source code automatically and check is there are any problems left that need manual fixing
 
@@ -83,7 +85,6 @@ fix-copies:
 	python utils/check_table.py --fix_and_overwrite
 	python utils/check_dummies.py --fix_and_overwrite
 	python utils/check_doctest_list.py --fix_and_overwrite
-	python utils/check_task_guides.py --fix_and_overwrite
 	python utils/check_docstrings.py --fix_and_overwrite
 
 # Run tests for the library
@@ -95,6 +96,11 @@ test:
 
 test-examples:
 	python -m pytest -n auto --dist=loadfile -s -v ./examples/pytorch/
+
+# Run benchmark
+
+benchmark:
+	python3 benchmark/benchmark.py --config-dir benchmark/config --config-name generation --commit=diff backend.model=google/gemma-2b backend.cache_implementation=null,static backend.torch_compile=false,true --multirun
 
 # Run tests for SageMaker DLC release
 

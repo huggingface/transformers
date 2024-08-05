@@ -12,18 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" UDOP model configuration"""
-
+"""UDOP model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-UDOP_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/udop-large": "https://huggingface.co/microsoft/udop-large/resolve/main/config.json",
-}
 
 
 class UdopConfig(PretrainedConfig):
@@ -140,7 +135,7 @@ class UdopConfig(PretrainedConfig):
         self.patch_size = patch_size
         self.num_channels = num_channels
         if not isinstance(relative_bias_args, list):
-            raise ValueError("`relative_bias_args` should be a list of dictionaries.")
+            raise TypeError("`relative_bias_args` should be a list of dictionaries.")
         self.relative_bias_args = relative_bias_args
 
         act_info = self.feed_forward_proj.split("-")

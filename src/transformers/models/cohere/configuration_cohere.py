@@ -17,15 +17,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Cohere model configuration"""
+"""Cohere model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-COHERE_PRETRAINED_CONFIG_ARCHIVE_MAP = {}
 
 
 class CohereConfig(PretrainedConfig):
@@ -55,7 +53,7 @@ class CohereConfig(PretrainedConfig):
         num_key_value_heads (`int`, *optional*):
             This is the number of key_value heads that should be used to implement Grouped Query Attention. If
             `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
-            `num_key_value_heads=1 the model will use Multi Query Attention (MQA) otherwise GQA is used. When
+            `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
             by meanpooling all the original heads within that group. For more details checkout [this
             paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to
@@ -85,6 +83,8 @@ class CohereConfig(PretrainedConfig):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
+        use_qk_norm (`bool`, *optional*, defaults to `False`):
+            Whether to use query-key normalization in the attention
 
     ```python
     >>> from transformers import CohereModel, CohereConfig
@@ -123,6 +123,7 @@ class CohereConfig(PretrainedConfig):
         rope_theta=10000.0,
         attention_bias=False,
         attention_dropout=0.0,
+        use_qk_norm=False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -145,6 +146,7 @@ class CohereConfig(PretrainedConfig):
         self.rope_theta = rope_theta
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
+        self.use_qk_norm = use_qk_norm
 
         super().__init__(
             pad_token_id=pad_token_id,

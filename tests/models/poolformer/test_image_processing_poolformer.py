@@ -88,6 +88,7 @@ class PoolFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
     image_processing_class = PoolFormerImageProcessor if is_vision_available() else None
 
     def setUp(self):
+        super().setUp()
         self.image_processor_tester = PoolFormerImageProcessingTester(self)
 
     @property

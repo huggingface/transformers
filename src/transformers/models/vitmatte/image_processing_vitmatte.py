@@ -133,9 +133,9 @@ class VitMatteImageProcessor(BaseImageProcessor):
 
         height, width = get_image_size(image, input_data_format)
 
-        if height % size_divisibility != 0 or width % size_divisibility != 0:
-            pad_height = size_divisibility - height % size_divisibility
-            pad_width = size_divisibility - width % size_divisibility
+        pad_height = 0 if height % size_divisibility == 0 else size_divisibility - height % size_divisibility
+        pad_width = 0 if width % size_divisibility == 0 else size_divisibility - width % size_divisibility
+        if pad_width + pad_height > 0:
             padding = ((0, pad_height), (0, pad_width))
             image = pad(image, padding=padding, data_format=data_format, input_data_format=input_data_format)
 

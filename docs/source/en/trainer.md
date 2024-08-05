@@ -62,7 +62,7 @@ training_args = TrainingArguments(
     per_device_eval_batch_size=16,
     num_train_epochs=2,
     weight_decay=0.01,
-    evaluation_strategy="epoch",
+    eval_strategy="epoch",
     save_strategy="epoch",
     load_best_model_at_end=True,
     push_to_hub=True,
@@ -278,7 +278,7 @@ args = TrainingArguments(
     max_steps=100,
     per_device_train_batch_size=2,
     optim="galore_adamw",
-    optim_target_modules=["attn", "mlp"]
+    optim_target_modules=[r".*.attn.*", r".*.mlp.*"]
 )
 
 model_id = "google/gemma-2b"
@@ -315,7 +315,7 @@ args = TrainingArguments(
     max_steps=100,
     per_device_train_batch_size=2,
     optim="galore_adamw",
-    optim_target_modules=["attn", "mlp"],
+    optim_target_modules=[r".*.attn.*", r".*.mlp.*"],
     optim_args="rank=64, update_proj_gap=100, scale=0.10",
 )
 
@@ -359,7 +359,7 @@ args = TrainingArguments(
     max_steps=100,
     per_device_train_batch_size=2,
     optim="galore_adamw_layerwise",
-    optim_target_modules=["attn", "mlp"]
+    optim_target_modules=[r".*.attn.*", r".*.mlp.*"]
 )
 
 model_id = "google/gemma-2b"
@@ -381,6 +381,56 @@ trainer.train()
 ```
 
 Note layerwise optimization is a bit experimental and does not support DDP (Distributed Data Parallel), thus you can run the training script only on a single GPU. Please see [this appropriate section](https://github.com/jiaweizzhao/GaLore?tab=readme-ov-file#train-7b-model-with-a-single-gpu-with-24gb-memory) for more details. Other features such as gradient clipping, DeepSpeed, etc might not be supported out of the box. Please [raise an issue on GitHub](https://github.com/huggingface/transformers/issues) if you encounter such issue.
+
+## LOMO optimizer
+
+The LOMO optimizers have been introduced in [Full Parameter Fine-Tuning for Large Language Models with Limited Resources](https://hf.co/papers/2306.09782) and [AdaLomo: Low-memory Optimization with Adaptive Learning Rate](https://hf.co/papers/2310.10195). 
+They both consist of an efficient full-parameter fine-tuning method. These optimizers fuse the gradient computation and the parameter update in one step to reduce memory usage. Supported optimizers for LOMO are `"lomo"` and `"adalomo"`. First either install LOMO from pypi `pip install lomo-optim` or install it from source with `pip install git+https://github.com/OpenLMLab/LOMO.git`. 
+
+<Tip>
+
+According to the authors, it is recommended to use `AdaLomo` without `grad_norm` to get better performance and higher throughput.
+
+</Tip>
+
+Below is a simple script to demonstrate how to fine-tune [google/gemma-2b](https://huggingface.co/google/gemma-2b) on IMDB dataset in full precision:
+
+```python
+import torch
+import datasets
+from transformers import TrainingArguments, AutoTokenizer, AutoModelForCausalLM
+import trl
+
+train_dataset = datasets.load_dataset('imdb', split='train')
+
+args = TrainingArguments(
+    output_dir="./test-lomo",
+    max_steps=1000,
+    per_device_train_batch_size=4,
+    optim="adalomo",
+    gradient_checkpointing=True,
+    logging_strategy="steps",
+    logging_steps=1,
+    learning_rate=2e-6,
+    save_strategy="no",
+    run_name="lomo-imdb",
+)
+
+model_id = "google/gemma-2b"
+
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True).to(0)
+
+trainer = trl.SFTTrainer(
+    model=model, 
+    args=args,
+    train_dataset=train_dataset,
+    dataset_text_field='text',
+    max_seq_length=1024,
+)
+
+trainer.train()
+```
 
 ## Accelerate and Trainer
 

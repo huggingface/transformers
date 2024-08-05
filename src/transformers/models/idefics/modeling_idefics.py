@@ -17,7 +17,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Idefics model."""
+"""PyTorch Idefics model."""
+
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -47,12 +48,6 @@ from .vision import IdeficsVisionTransformer
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "IdeficsConfig"
-
-IDEFICS_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "HuggingFaceM4/idefics-9b",
-    "HuggingFaceM4/idefics-80b",
-    # See all Idefics models at https://huggingface.co/models?filter=idefics
-]
 
 
 @dataclass
@@ -436,6 +431,9 @@ class IdeficsRMSNorm(nn.Module):
 
         return self.weight * hidden_states
 
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+
 
 ALL_LAYERNORM_LAYERS.append(IdeficsRMSNorm)
 
@@ -484,7 +482,7 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-# Copied from transformers.models.mistral.modeling_mistral.apply_rotary_pos_emb
+# Copied from transformers.models.mixtral.modeling_mixtral.apply_rotary_pos_emb
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -666,14 +664,18 @@ class IdeficsAttention(nn.Module):
             key_states = key_states.contiguous()
             value_states = value_states.contiguous()
 
-        attn_output = nn.functional.scaled_dot_product_attention(
+        # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
+        # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
+        # The q_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case q_len == 1.
+        is_causal = True if self.is_causal and attention_mask is None and q_len > 1 else False
+
+        attn_output = torch.nn.functional.scaled_dot_product_attention(
             query_states,
             key_states,
             value_states,
             attn_mask=attention_mask,
-            dropout_p=self.dropout,
-            # The q_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case q_len == 1.
-            is_causal=self.is_causal and attention_mask is None and q_len > 1,
+            dropout_p=self.dropout if self.training else 0.0,
+            is_causal=is_causal,
         )
 
         if attn_output.size() != (bsz, self.num_heads, q_len, self.head_dim):
@@ -1461,18 +1463,27 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, IdeficsForVisionText2Text
+        >>> from transformers import AutoProcessor, IdeficsForVisionText2Text
 
         >>> model = IdeficsForVisionText2Text.from_pretrained("HuggingFaceM4/idefics-9b")
-        >>> tokenizer = AutoTokenizer.from_pretrained("HuggingFaceM4/idefics-9b")
+        >>> processor = AutoProcessor.from_pretrained("HuggingFaceM4/idefics-9b")
 
-        >>> prompt = "Hey, are you consciours? Can you talk to me?"
-        >>> inputs = tokenizer(prompt, return_tensors="pt")
+        >>> dogs_image_url_1 = "https://huggingface.co/datasets/hf-internal-testing/fixtures_nlvr2/raw/main/image1.jpeg"
+        >>> dogs_image_url_2 = "https://huggingface.co/datasets/hf-internal-testing/fixtures_nlvr2/raw/main/image2.jpeg"
 
-        >>> # Generate
-        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
-        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "Hey, are you consciours? Can you talk to me?\nI'm not consciours, but I can talk to you."
+        >>> prompts = [
+        ...     [
+        ...         "User:",
+        ...         dogs_image_url_1,
+        ...         "Describe this image.\nAssistant: An image of two dogs.\n",
+        ...         "User:",
+        ...         dogs_image_url_2,
+        ...         "Describe this image.\nAssistant:",
+        ...     ]
+        ... ]
+        >>> inputs = processor(prompts, return_tensors="pt")
+        >>> generate_ids = model.generate(**inputs, max_new_tokens=6)
+        >>> processor.batch_decode(generate_ids, skip_special_tokens=True)
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions

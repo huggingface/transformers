@@ -528,9 +528,9 @@ class TFGenerationMixin:
         >>> for tok, score in zip(generated_tokens[0], transition_scores[0]):
         ...     # | token | token string | logits | probability
         ...     print(f"| {tok:5d} | {tokenizer.decode(tok):8s} | {score.numpy():.3f} | {np.exp(score.numpy()):.2%}")
-        |   262 |  the     | -1.413 | 24.33%
+        |   262 |  the     | -1.414 | 24.33%
         |  1110 |  day     | -2.609 | 7.36%
-        |   618 |  when    | -2.009 | 13.41%
+        |   618 |  when    | -2.010 | 13.40%
         |   356 |  we      | -1.859 | 15.58%
         |   460 |  can     | -2.508 | 8.14%
 
@@ -549,7 +549,7 @@ class TFGenerationMixin:
         >>> # If you sum the generated tokens' scores and apply the length penalty, you'll get the sequence scores.
         >>> # Tip: recomputing the scores is only guaranteed to match with `normalize_logits=False`. Depending on the
         >>> # use case, you might want to recompute it with `normalize_logits=True`.
-        >>> output_length = input_length + np.sum(transition_scores.numpy() < 0, axis=1)
+        >>> output_length = np.sum(transition_scores.numpy() < 0, axis=1)
         >>> length_penalty = model.generation_config.length_penalty
         >>> reconstructed_scores = np.sum(transition_scores, axis=1) / (output_length**length_penalty)
         >>> print(np.allclose(outputs.sequences_scores, reconstructed_scores))

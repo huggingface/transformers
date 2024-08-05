@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch LXMERT model."""
-
+"""PyTorch LXMERT model."""
 
 import math
 import os
@@ -42,10 +41,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "unc-nlp/lxmert-base-uncased"
 _CONFIG_FOR_DOC = "LxmertConfig"
-
-LXMERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "unc-nlp/lxmert-base-uncased",
-]
 
 
 class GeLU(nn.Module):
@@ -778,6 +773,7 @@ class LxmertPreTrainedModel(PreTrainedModel):
     config_class = LxmertConfig
     load_tf_weights = load_tf_weights_in_lxmert
     base_model_prefix = "lxmert"
+    _supports_param_buffer_assignment = False
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -1075,6 +1071,22 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
                 "loss": "l2",
             }
         self.visual_losses = visual_losses
+
+    def resize_token_embeddings(self, new_num_tokens: int, pad_to_multiple_of: Optional[int] = None) -> nn.Embedding:
+        # Adding the following steps to resize bias to match the shape of resized embeddings
+        new_embeddings = super().resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
+        self.cls.predictions.bias = self._resize_bias(self.cls.predictions.bias, new_num_tokens)
+        return new_embeddings
+
+    def _resize_bias(self, bias, new_num_tokens: int):
+        old_num_tokens = bias.shape[0]
+        if new_num_tokens <= old_num_tokens:
+            new_bias = bias[:new_num_tokens]
+        else:
+            extra_bias = torch.zeros(new_num_tokens - old_num_tokens, device=bias.device)
+            new_bias = torch.cat([bias, extra_bias])
+        new_bias = nn.Parameter(new_bias)
+        return new_bias
 
     def resize_num_qa_labels(self, num_labels):
         """

@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch GLPN model. """
-
+"""Testing suite for the PyTorch GLPN model."""
 
 import unittest
 
@@ -30,7 +29,6 @@ if is_torch_available():
 
     from transformers import GLPNConfig, GLPNForDepthEstimation, GLPNModel
     from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES
-    from transformers.models.glpn.modeling_glpn import GLPN_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -170,12 +168,12 @@ class GLPNModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_depth_estimation(*config_and_inputs)
 
-    @unittest.skip("GLPN does not use inputs_embeds")
+    @unittest.skip(reason="GLPN does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip("GLPN does not have get_input_embeddings method and get_output_embeddings methods")
-    def test_model_common_attributes(self):
+    @unittest.skip(reason="GLPN does not have get_input_embeddings method and get_output_embeddings methods")
+    def test_model_get_set_embeddings(self):
         pass
 
     def test_attention_outputs(self):
@@ -285,7 +283,7 @@ class GLPNModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def test_training(self):
         if not self.model_tester.is_training:
-            return
+            self.skipTest(reason="model_tester.is_training is set to False")
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
@@ -309,9 +307,9 @@ class GLPNModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in GLPN_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = GLPNModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "vinvino02/glpn-kitti"
+        model = GLPNModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats
@@ -326,8 +324,8 @@ def prepare_img():
 class GLPNModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_depth_estimation(self):
-        image_processor = GLPNImageProcessor.from_pretrained(GLPN_PRETRAINED_MODEL_ARCHIVE_LIST[0])
-        model = GLPNForDepthEstimation.from_pretrained(GLPN_PRETRAINED_MODEL_ARCHIVE_LIST[0]).to(torch_device)
+        image_processor = GLPNImageProcessor.from_pretrained("vinvino02/glpn-kitti")
+        model = GLPNForDepthEstimation.from_pretrained("vinvino02/glpn-kitti").to(torch_device)
 
         image = prepare_img()
         inputs = image_processor(images=image, return_tensors="pt").to(torch_device)

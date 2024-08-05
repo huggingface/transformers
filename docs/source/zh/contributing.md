@@ -98,7 +98,7 @@ python src/transformers/commands/transformers_cli.py env
 
 如果你想亲自贡献模型，请告诉我们。让我们帮你把它添加到 🤗 Transformers！
 
-我们已经添加了[详细的指南和模板](https://github.com/huggingface/transformers/tree/main/templates)来帮助你添加新模型。我们还有一个更技术性的指南，告诉你[如何将模型添加到 🤗 Transformers](https://huggingface.co/docs/transformers/add_new_model)。
+我们还有一个更技术性的指南，告诉你[如何将模型添加到 🤗 Transformers](https://huggingface.co/docs/transformers/add_new_model)。
 
 ## 你想要添加文档吗？
 

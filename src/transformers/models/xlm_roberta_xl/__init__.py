@@ -19,7 +19,6 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 _import_structure = {
     "configuration_xlm_roberta_xl": [
-        "XLM_ROBERTA_XL_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "XLMRobertaXLConfig",
         "XLMRobertaXLOnnxConfig",
     ],
@@ -32,7 +31,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_xlm_roberta_xl"] = [
-        "XLM_ROBERTA_XL_PRETRAINED_MODEL_ARCHIVE_LIST",
         "XLMRobertaXLForCausalLM",
         "XLMRobertaXLForMaskedLM",
         "XLMRobertaXLForMultipleChoice",
@@ -45,7 +43,6 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_xlm_roberta_xl import (
-        XLM_ROBERTA_XL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         XLMRobertaXLConfig,
         XLMRobertaXLOnnxConfig,
     )
@@ -57,7 +54,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_xlm_roberta_xl import (
-            XLM_ROBERTA_XL_PRETRAINED_MODEL_ARCHIVE_LIST,
             XLMRobertaXLForCausalLM,
             XLMRobertaXLForMaskedLM,
             XLMRobertaXLForMultipleChoice,

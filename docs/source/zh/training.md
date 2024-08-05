@@ -125,12 +125,12 @@ rendered properly in your Markdown viewer.
 ...     return metric.compute(predictions=predictions, references=labels)
 ```
 
-如果您希望在微调过程中监视评估指标，请在您的训练参数中指定 `evaluation_strategy` 参数，以在每个`epoch`结束时展示评估指标：
+如果您希望在微调过程中监视评估指标，请在您的训练参数中指定 `eval_strategy` 参数，以在每个`epoch`结束时展示评估指标：
 
 ```py
 >>> from transformers import TrainingArguments, Trainer
 
->>> training_args = TrainingArguments(output_dir="test_trainer", evaluation_strategy="epoch")
+>>> training_args = TrainingArguments(output_dir="test_trainer", eval_strategy="epoch")
 ```
 
 ### 训练器

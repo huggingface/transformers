@@ -60,6 +60,11 @@ This model was contributed by [Arthur Zucker](https://huggingface.co/ArthurZ), [
 [[autodoc]] GemmaForSequenceClassification
     - forward
 
+## GemmaForTokenClassification
+
+[[autodoc]] GemmaForTokenClassification
+    - forward
+
 ## FlaxGemmaModel
 
 [[autodoc]] FlaxGemmaModel

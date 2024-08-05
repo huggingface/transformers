@@ -323,7 +323,7 @@ class FlaxBlenderbotSmallModelTest(FlaxModelTesterMixin, unittest.TestCase, Flax
     def is_pipeline_test_to_skip(
         self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
     ):
-        return pipeline_test_casse_name in ("TextGenerationPipelineTests", "ConversationalPipelineTests")
+        return pipeline_test_casse_name == "TextGenerationPipelineTests"
 
     def setUp(self):
         self.model_tester = FlaxBlenderbotSmallModelTester(self)

@@ -12,18 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Pop2Piano model configuration"""
-
+"""Pop2Piano model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-POP2PIANO_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "sweetcocoa/pop2piano": "https://huggingface.co/sweetcocoa/pop2piano/blob/main/config.json"
-}
 
 
 class Pop2PianoConfig(PretrainedConfig):

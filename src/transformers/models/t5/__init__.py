@@ -25,7 +25,7 @@ from ...utils import (
 )
 
 
-_import_structure = {"configuration_t5": ["T5_PRETRAINED_CONFIG_ARCHIVE_MAP", "T5Config", "T5OnnxConfig"]}
+_import_structure = {"configuration_t5": ["T5Config", "T5OnnxConfig"]}
 
 try:
     if not is_sentencepiece_available():
@@ -50,7 +50,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_t5"] = [
-        "T5_PRETRAINED_MODEL_ARCHIVE_LIST",
         "T5EncoderModel",
         "T5ForConditionalGeneration",
         "T5Model",
@@ -68,7 +67,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_tf_t5"] = [
-        "TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFT5EncoderModel",
         "TFT5ForConditionalGeneration",
         "TFT5Model",
@@ -90,7 +88,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config, T5OnnxConfig
+    from .configuration_t5 import T5Config, T5OnnxConfig
 
     try:
         if not is_sentencepiece_available():
@@ -115,7 +113,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_t5 import (
-            T5_PRETRAINED_MODEL_ARCHIVE_LIST,
             T5EncoderModel,
             T5ForConditionalGeneration,
             T5ForQuestionAnswering,
@@ -133,7 +130,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_tf_t5 import (
-            TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFT5EncoderModel,
             TFT5ForConditionalGeneration,
             TFT5Model,

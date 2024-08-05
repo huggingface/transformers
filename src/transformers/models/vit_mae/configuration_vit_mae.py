@@ -12,18 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" ViT MAE model configuration"""
+"""ViT MAE model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/vit-mae-base": "https://huggingface.co/facebook/vit-mae-base/resolve/main/config.json",
-    # See all ViT MAE models at https://huggingface.co/models?filter=vit-mae
-}
 
 
 class ViTMAEConfig(PretrainedConfig):

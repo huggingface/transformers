@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" UMT5 model configuration"""
+"""UMT5 model configuration"""
+
 from typing import Mapping
 
 from ...configuration_utils import PretrainedConfig
@@ -21,11 +22,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-UMT5_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/umt5-small": "https://huggingface.co/google/umt5-small/resolve/main/config.json",
-    # See all umt5 models at https://huggingface.co/models?filter=umt5
-}
 
 
 class UMT5Config(PretrainedConfig):

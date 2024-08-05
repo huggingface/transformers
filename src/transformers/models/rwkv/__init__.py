@@ -22,7 +22,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_rwkv": ["RWKV_PRETRAINED_CONFIG_ARCHIVE_MAP", "RwkvConfig", "RwkvOnnxConfig"],
+    "configuration_rwkv": ["RwkvConfig", "RwkvOnnxConfig"],
 }
 
 try:
@@ -32,7 +32,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_rwkv"] = [
-        "RWKV_PRETRAINED_MODEL_ARCHIVE_LIST",
         "RwkvForCausalLM",
         "RwkvModel",
         "RwkvPreTrainedModel",
@@ -40,7 +39,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_rwkv import RWKV_PRETRAINED_CONFIG_ARCHIVE_MAP, RwkvConfig, RwkvOnnxConfig
+    from .configuration_rwkv import RwkvConfig, RwkvOnnxConfig
 
     try:
         if not is_torch_available():
@@ -49,7 +48,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_rwkv import (
-            RWKV_PRETRAINED_MODEL_ARCHIVE_LIST,
             RwkvForCausalLM,
             RwkvModel,
             RwkvPreTrainedModel,

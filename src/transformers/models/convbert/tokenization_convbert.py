@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization classes for ConvBERT."""
+
 import collections
 import os
 import unicodedata
@@ -25,29 +26,6 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
-
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "YituTech/conv-bert-base": "https://huggingface.co/YituTech/conv-bert-base/resolve/main/vocab.txt",
-        "YituTech/conv-bert-medium-small": (
-            "https://huggingface.co/YituTech/conv-bert-medium-small/resolve/main/vocab.txt"
-        ),
-        "YituTech/conv-bert-small": "https://huggingface.co/YituTech/conv-bert-small/resolve/main/vocab.txt",
-    }
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "YituTech/conv-bert-base": 512,
-    "YituTech/conv-bert-medium-small": 512,
-    "YituTech/conv-bert-small": 512,
-}
-
-
-PRETRAINED_INIT_CONFIGURATION = {
-    "YituTech/conv-bert-base": {"do_lower_case": True},
-    "YituTech/conv-bert-medium-small": {"do_lower_case": True},
-    "YituTech/conv-bert-small": {"do_lower_case": True},
-}
 
 
 # Copied from transformers.models.bert.tokenization_bert.load_vocab
@@ -116,9 +94,6 @@ class ConvBertTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
     def __init__(
         self,
@@ -310,7 +285,7 @@ class ConvBertTokenizer(PreTrainedTokenizer):
 
 
 # Copied from transformers.models.bert.tokenization_bert.BasicTokenizer
-class BasicTokenizer(object):
+class BasicTokenizer:
     """
     Constructs a BasicTokenizer that will run basic tokenization (punctuation splitting, lower casing, etc.).
 
@@ -472,7 +447,7 @@ class BasicTokenizer(object):
 
 
 # Copied from transformers.models.bert.tokenization_bert.WordpieceTokenizer
-class WordpieceTokenizer(object):
+class WordpieceTokenizer:
     """Runs WordPiece tokenization."""
 
     def __init__(self, vocab, unk_token, max_input_chars_per_word=100):

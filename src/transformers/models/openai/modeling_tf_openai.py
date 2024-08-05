@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TF 2.0 OpenAI GPT model."""
+"""TF 2.0 OpenAI GPT model."""
 
 from __future__ import annotations
 
@@ -54,11 +54,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "openai-community/openai-gpt"
 _CONFIG_FOR_DOC = "OpenAIGPTConfig"
-
-TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "openai-community/openai-gpt",
-    # See all OpenAI GPT models at https://huggingface.co/models?filter=openai-community/openai-gpt
-]
 
 
 class TFAttention(keras.layers.Layer):
@@ -897,7 +892,7 @@ class TFOpenAIGPTForSequenceClassification(TFOpenAIGPTPreTrainedModel, TFSequenc
                 in_logits = tf.gather(logits, sequence_lengths, batch_dims=1, axis=1)
             else:
                 sequence_lengths = -1
-                logger.warning(
+                logger.warning_once(
                     f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
                     "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
                 )

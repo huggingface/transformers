@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" T5 model configuration"""
+"""T5 model configuration"""
+
 from typing import Mapping
 
 from ...configuration_utils import PretrainedConfig
@@ -21,14 +22,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-T5_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google-t5/t5-small": "https://huggingface.co/google-t5/t5-small/resolve/main/config.json",
-    "google-t5/t5-base": "https://huggingface.co/google-t5/t5-base/resolve/main/config.json",
-    "google-t5/t5-large": "https://huggingface.co/google-t5/t5-large/resolve/main/config.json",
-    "google-t5/t5-3b": "https://huggingface.co/google-t5/t5-3b/resolve/main/config.json",
-    "google-t5/t5-11b": "https://huggingface.co/google-t5/t5-11b/resolve/main/config.json",
-}
 
 
 class T5Config(PretrainedConfig):

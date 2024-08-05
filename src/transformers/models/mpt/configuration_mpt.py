@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Mpt configuration"""
+"""Mpt configuration"""
+
 from typing import TYPE_CHECKING, Optional, Union
 
 
@@ -24,10 +25,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-MPT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "mosaicml/mpt-7b": "https://huggingface.co/mosaicml/mpt-7b/resolve/main/config.json",
-}
 
 
 class MptAttentionConfig(PretrainedConfig):

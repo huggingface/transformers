@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Depth Anything model."""
-
+"""PyTorch Depth Anything model."""
 
 from typing import List, Optional, Tuple, Union
 
@@ -29,7 +28,7 @@ from ...file_utils import (
 from ...modeling_outputs import DepthEstimatorOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
-from ..auto import AutoBackbone
+from ...utils.backbone_utils import load_backbone
 from .configuration_depth_anything import DepthAnythingConfig
 
 
@@ -37,11 +36,6 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "DepthAnythingConfig"
-
-DEPTH_ANYTHING_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "LiheYoung/depth-anything-small-hf",
-    # See all Depth Anything models at https://huggingface.co/models?filter=depth_anything
-]
 
 
 DEPTH_ANYTHING_START_DOCSTRING = r"""
@@ -304,7 +298,7 @@ class DepthAnythingNeck(nn.Module):
                 List of hidden states from the backbone.
         """
         if not isinstance(hidden_states, (tuple, list)):
-            raise ValueError("hidden_states should be a tuple or list of tensors")
+            raise TypeError("hidden_states should be a tuple or list of tensors")
 
         if len(hidden_states) != len(self.config.neck_hidden_sizes):
             raise ValueError("The number of hidden states should be equal to the number of neck hidden sizes.")
@@ -366,10 +360,12 @@ class DepthAnythingDepthEstimationHead(nn.Module):
     DEPTH_ANYTHING_START_DOCSTRING,
 )
 class DepthAnythingForDepthEstimation(DepthAnythingPreTrainedModel):
+    _no_split_modules = ["DPTViTEmbeddings"]
+
     def __init__(self, config):
         super().__init__(config)
 
-        self.backbone = AutoBackbone.from_config(config.backbone_config)
+        self.backbone = load_backbone(config)
         self.neck = DepthAnythingNeck(config)
         self.head = DepthAnythingDepthEstimationHead(config)
 
@@ -426,6 +422,10 @@ class DepthAnythingForDepthEstimation(DepthAnythingPreTrainedModel):
         >>> formatted = (output * 255 / np.max(output)).astype("uint8")
         >>> depth = Image.fromarray(formatted)
         ```"""
+        loss = None
+        if labels is not None:
+            raise NotImplementedError("Training is not implemented yet")
+
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -445,10 +445,6 @@ class DepthAnythingForDepthEstimation(DepthAnythingPreTrainedModel):
         hidden_states = self.neck(hidden_states, patch_height, patch_width)
 
         predicted_depth = self.head(hidden_states, patch_height, patch_width)
-
-        loss = None
-        if labels is not None:
-            raise NotImplementedError("Training is not implemented yet")
 
         if not return_dict:
             if output_hidden_states:

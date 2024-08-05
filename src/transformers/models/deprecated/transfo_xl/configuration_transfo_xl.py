@@ -13,17 +13,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Transformer XL configuration"""
+"""Transformer XL configuration"""
 
 from ....configuration_utils import PretrainedConfig
 from ....utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "transfo-xl/transfo-xl-wt103": "https://huggingface.co/transfo-xl/transfo-xl-wt103/resolve/main/config.json",
-}
 
 
 class TransfoXLConfig(PretrainedConfig):

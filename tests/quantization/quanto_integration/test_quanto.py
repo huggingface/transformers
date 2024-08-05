@@ -17,12 +17,21 @@ import tempfile
 import unittest
 
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, QuantoConfig
-from transformers.testing_utils import require_accelerate, require_quanto, require_torch_gpu, slow
+from transformers.testing_utils import (
+    require_accelerate,
+    require_quanto,
+    require_read_token,
+    require_torch_gpu,
+    slow,
+    torch_device,
+)
 from transformers.utils import is_accelerate_available, is_quanto_available, is_torch_available
 
 
 if is_torch_available():
     import torch
+
+    from transformers import LlamaForCausalLM, LlamaTokenizer
 
 if is_accelerate_available():
     from accelerate import init_empty_weights
@@ -323,20 +332,23 @@ class QuantoQuantizationOffloadTest(QuantoQuantizationTest):
         "lm_head": 0,
     }
 
-    # the execution device is a gpu
+    @unittest.skip(reason="The execution device is a gpu")
     def test_generate_quality_cpu(self):
         pass
 
-    # we can't save offloaded values
+    @unittest.skip(reason="We can't save offloaded values")
     def test_serialization_bin(self):
         pass
 
+    @unittest.skip
     def test_serialization_safetensors(self):
         pass
 
+    @unittest.skip
     def test_compare_with_quanto(self):
         pass
 
+    @unittest.skip
     def test_load_from_quanto_saved(self):
         pass
 
@@ -361,7 +373,7 @@ class QuantoQuantizationOffloadTest(QuantoQuantizationTest):
             )
 
 
-@unittest.skip("Skipping test class because serialization is not supported yet")
+@unittest.skip(reason="Skipping test class because serialization is not supported yet")
 class QuantoQuantizationSerializationTest(QuantoQuantizationTest):
     """
     Perform the same tests as in QuantoQuantizationTest but with a serialized model.
@@ -394,7 +406,7 @@ class QuantoQuantizationSerializationTest(QuantoQuantizationTest):
         )
 
 
-@unittest.skip("Skipping test class because serialization is not supported yet")
+@unittest.skip(reason="Skipping test class because serialization is not supported yet")
 class QuantoQuantizationSerializationCudaTest(QuantoQuantizationTest):
     """
     Perform the same tests as in QuantoQuantizationTest but with model on cuda
@@ -404,18 +416,18 @@ class QuantoQuantizationSerializationCudaTest(QuantoQuantizationTest):
 
 
 class QuantoQuantizationQBitsTensorTest(QuantoQuantizationTest):
-    EXPECTED_OUTPUTS = "Hello my name is John, I am a young man from the Philippines"
+    EXPECTED_OUTPUTS = "Hello my name is Nils, I am a student of the University"
     weights = "int4"
 
 
 class QuantoQuantizationQBitsTensorOffloadTest(QuantoQuantizationOffloadTest):
-    EXPECTED_OUTPUTS = "Hello my name is John, I am a young man from the Philippines"
+    EXPECTED_OUTPUTS = "Hello my name is Nils, I am a student of the University"
     weights = "int4"
 
 
-@unittest.skip("Skipping test class because serialization is not supported yet")
+@unittest.skip(reason="Skipping test class because serialization is not supported yet")
 class QuantoQuantizationQBitsTensorSerializationTest(QuantoQuantizationSerializationTest):
-    EXPECTED_OUTPUTS = "Hello my name is John, I am a young man from the Philippines"
+    EXPECTED_OUTPUTS = "Hello my name is Nils, I am a student of the University"
     weights = "int4"
 
 
@@ -429,3 +441,29 @@ class QuantoQuantizationActivationTest(unittest.TestCase):
         with self.assertRaises(ValueError) as e:
             AutoModelForCausalLM.from_pretrained("bigscience/bloom-560m", quantization_config=quantization_config)
         self.assertIn("We don't support quantizing the activations with transformers library", str(e.exception))
+
+
+@require_quanto
+@require_torch_gpu
+class QuantoKVCacheQuantizationTest(unittest.TestCase):
+    @slow
+    @require_read_token
+    def test_quantized_cache(self):
+        EXPECTED_TEXT_COMPLETION = [
+            "Simply put, the theory of relativity states that 1) the speed of light is the same for all observers, and 2) the laws of physics are the same for all observers.\nThe first part of the theory of relativity",
+            "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on my eggs, my fries, my chicken, my burgers, my hot dogs, my sandwiches, my salads, my p",
+        ]
+
+        prompts = [
+            "Simply put, the theory of relativity states that ",
+            "My favorite all time favorite condiment is ketchup.",
+        ]
+        tokenizer = LlamaTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf", pad_token="</s>", padding_side="left")
+        model = LlamaForCausalLM.from_pretrained(
+            "meta-llama/Llama-2-7b-hf", device_map="sequential", torch_dtype=torch.float16
+        )
+        inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(torch_device)
+
+        generated_ids = model.generate(**inputs, max_new_tokens=40, do_sample=False, cache_implementation="quantized")
+        text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)

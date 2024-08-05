@@ -20,7 +20,7 @@ from ...utils import (
 )
 
 
-_import_structure = {"configuration_vitdet": ["VITDET_PRETRAINED_CONFIG_ARCHIVE_MAP", "VitDetConfig"]}
+_import_structure = {"configuration_vitdet": ["VitDetConfig"]}
 
 try:
     if not is_torch_available():
@@ -29,14 +29,13 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_vitdet"] = [
-        "VITDET_PRETRAINED_MODEL_ARCHIVE_LIST",
         "VitDetModel",
         "VitDetPreTrainedModel",
         "VitDetBackbone",
     ]
 
 if TYPE_CHECKING:
-    from .configuration_vitdet import VITDET_PRETRAINED_CONFIG_ARCHIVE_MAP, VitDetConfig
+    from .configuration_vitdet import VitDetConfig
 
     try:
         if not is_torch_available():
@@ -45,7 +44,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_vitdet import (
-            VITDET_PRETRAINED_MODEL_ARCHIVE_LIST,
             VitDetBackbone,
             VitDetModel,
             VitDetPreTrainedModel,

@@ -154,7 +154,7 @@ class XLNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 ".",
             ],
         )
-        self.assertListEqual(tokenizer.tokenize("H\u00E9llo"), ["▁he", "ll", "o"])
+        self.assertListEqual(tokenizer.tokenize("H\u00e9llo"), ["▁he", "ll", "o"])
 
     def test_tokenizer_no_lower(self):
         tokenizer = XLNetTokenizer(SAMPLE_VOCAB, do_lower_case=False)

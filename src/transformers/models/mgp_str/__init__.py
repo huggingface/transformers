@@ -21,7 +21,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 
 _import_structure = {
-    "configuration_mgp_str": ["MGP_STR_PRETRAINED_CONFIG_ARCHIVE_MAP", "MgpstrConfig"],
+    "configuration_mgp_str": ["MgpstrConfig"],
     "processing_mgp_str": ["MgpstrProcessor"],
     "tokenization_mgp_str": ["MgpstrTokenizer"],
 }
@@ -33,14 +33,13 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_mgp_str"] = [
-        "MGP_STR_PRETRAINED_MODEL_ARCHIVE_LIST",
         "MgpstrModel",
         "MgpstrPreTrainedModel",
         "MgpstrForSceneTextRecognition",
     ]
 
 if TYPE_CHECKING:
-    from .configuration_mgp_str import MGP_STR_PRETRAINED_CONFIG_ARCHIVE_MAP, MgpstrConfig
+    from .configuration_mgp_str import MgpstrConfig
     from .processing_mgp_str import MgpstrProcessor
     from .tokenization_mgp_str import MgpstrTokenizer
 
@@ -51,7 +50,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_mgp_str import (
-            MGP_STR_PRETRAINED_MODEL_ARCHIVE_LIST,
             MgpstrForSceneTextRecognition,
             MgpstrModel,
             MgpstrPreTrainedModel,
