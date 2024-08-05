@@ -32,10 +32,10 @@ pip install optimum[exporters-tf]
 optimum-cli export tflite --help
 ```
 
-运行以下命令，以从 🤗 Hub 导出模型的检查点（checkpoint），以 `bert-base-uncased` 为例：
+运行以下命令，以从 🤗 Hub 导出模型的检查点（checkpoint），以 `google-bert/bert-base-uncased` 为例：
 
 ```bash
-optimum-cli export tflite --model bert-base-uncased --sequence_length 128 bert_tflite/
+optimum-cli export tflite --model google-bert/bert-base-uncased --sequence_length 128 bert_tflite/
 ```
 
 你应该能在日志中看到导出进度以及生成的 `model.tflite` 文件的保存位置，如下所示：

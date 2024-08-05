@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # Entrenamiento con scripts
 
-Junto con los [notebooks](./noteboks/README) de 🤗 Transformers, también hay scripts con ejemplos que muestran cómo entrenar un modelo para una tarea en [PyTorch](https://github.com/huggingface/transformers/tree/main/examples/pytorch), [TensorFlow](https://github.com/huggingface/transformers/tree/main/examples/tensorflow), o [JAX/Flax](https://github.com/huggingface/transformers/tree/main/examples/flax).
+Junto con los [notebooks](./notebooks) de 🤗 Transformers, también hay scripts con ejemplos que muestran cómo entrenar un modelo para una tarea en [PyTorch](https://github.com/huggingface/transformers/tree/main/examples/pytorch), [TensorFlow](https://github.com/huggingface/transformers/tree/main/examples/tensorflow), o [JAX/Flax](https://github.com/huggingface/transformers/tree/main/examples/flax).
 
 También encontrarás scripts que hemos usado en nuestros [proyectos de investigación](https://github.com/huggingface/transformers/tree/main/examples/research_projects) y [ejemplos pasados](https://github.com/huggingface/transformers/tree/main/examples/legacy) que en su mayoría son aportados por la comunidad. Estos scripts no se mantienen activamente y requieren una versión específica de 🤗 Transformers que probablemente sea incompatible con la última versión de la biblioteca.
 
@@ -87,11 +87,11 @@ pip install -r requirements.txt
 
 <frameworkcontent>
 <pt>
-El script de ejemplo descarga y preprocesa un conjunto de datos de la biblioteca 🤗 [Datasets](https://huggingface.co/docs/datasets/). Luego, el script ajusta un conjunto de datos con [Trainer](https://huggingface.co/docs/transformers/main_classes/trainer) en una arquitectura que soporta la tarea de resumen. El siguiente ejemplo muestra cómo ajustar un [T5-small](https://huggingface.co/t5-small) en el conjunto de datos [CNN/DailyMail](https://huggingface.co/datasets/cnn_dailymail). El modelo T5 requiere un argumento adicional `source_prefix` debido a cómo fue entrenado. Este aviso le permite a T5 saber que se trata de una tarea de resumir.
+El script de ejemplo descarga y preprocesa un conjunto de datos de la biblioteca 🤗 [Datasets](https://huggingface.co/docs/datasets/). Luego, el script ajusta un conjunto de datos con [Trainer](https://huggingface.co/docs/transformers/main_classes/trainer) en una arquitectura que soporta la tarea de resumen. El siguiente ejemplo muestra cómo ajustar un [T5-small](https://huggingface.co/google-t5/t5-small) en el conjunto de datos [CNN/DailyMail](https://huggingface.co/datasets/cnn_dailymail). El modelo T5 requiere un argumento adicional `source_prefix` debido a cómo fue entrenado. Este aviso le permite a T5 saber que se trata de una tarea de resumir.
 
 ```bash
 python examples/pytorch/summarization/run_summarization.py \
-    --model_name_or_path t5-small \
+    --model_name_or_path google-t5/t5-small \
     --do_train \
     --do_eval \
     --dataset_name cnn_dailymail \
@@ -105,11 +105,11 @@ python examples/pytorch/summarization/run_summarization.py \
 ```
 </pt>
 <tf>
-El script de ejemplo descarga y preprocesa un conjunto de datos de la biblioteca 🤗 [Datasets](https://huggingface.co/docs/datasets/). Luego, el script ajusta un conjunto de datos utilizando Keras en una arquitectura que soporta la tarea de resumir. El siguiente ejemplo muestra cómo ajustar un [T5-small](https://huggingface.co/t5-small) en el conjunto de datos [CNN/DailyMail](https://huggingface.co/datasets/cnn_dailymail). El modelo T5 requiere un argumento adicional `source_prefix` debido a cómo fue entrenado. Este aviso le permite a T5 saber que se trata de una tarea de resumir.
+El script de ejemplo descarga y preprocesa un conjunto de datos de la biblioteca 🤗 [Datasets](https://huggingface.co/docs/datasets/). Luego, el script ajusta un conjunto de datos utilizando Keras en una arquitectura que soporta la tarea de resumir. El siguiente ejemplo muestra cómo ajustar un [T5-small](https://huggingface.co/google-t5/t5-small) en el conjunto de datos [CNN/DailyMail](https://huggingface.co/datasets/cnn_dailymail). El modelo T5 requiere un argumento adicional `source_prefix` debido a cómo fue entrenado. Este aviso le permite a T5 saber que se trata de una tarea de resumir.
 
 ```bash
 python examples/tensorflow/summarization/run_summarization.py  \
-    --model_name_or_path t5-small \
+    --model_name_or_path google-t5/t5-small \
     --dataset_name cnn_dailymail \
     --dataset_config "3.0.0" \
     --output_dir /tmp/tst-summarization  \
@@ -133,7 +133,7 @@ python examples/tensorflow/summarization/run_summarization.py  \
 torchrun \
     --nproc_per_node 8 pytorch/summarization/run_summarization.py \
     --fp16 \
-    --model_name_or_path t5-small \
+    --model_name_or_path google-t5/t5-small \
     --do_train \
     --do_eval \
     --dataset_name cnn_dailymail \
@@ -157,7 +157,7 @@ Las Unidades de Procesamiento de Tensor (TPUs) están diseñadas específicament
 ```bash
 python xla_spawn.py --num_cores 8 \
     summarization/run_summarization.py \
-    --model_name_or_path t5-small \
+    --model_name_or_path google-t5/t5-small \
     --do_train \
     --do_eval \
     --dataset_name cnn_dailymail \
@@ -176,7 +176,7 @@ Las Unidades de Procesamiento de Tensor (TPUs) están diseñadas específicament
 ```bash
 python run_summarization.py  \
     --tpu name_of_tpu_resource \
-    --model_name_or_path t5-small \
+    --model_name_or_path google-t5/t5-small \
     --dataset_name cnn_dailymail \
     --dataset_config "3.0.0" \
     --output_dir /tmp/tst-summarization  \
@@ -214,7 +214,7 @@ Todo listo para iniciar el entrenamiento:
 
 ```bash
 accelerate launch run_summarization_no_trainer.py \
-    --model_name_or_path t5-small \
+    --model_name_or_path google-t5/t5-small \
     --dataset_name cnn_dailymail \
     --dataset_config "3.0.0" \
     --source_prefix "summarize: " \
@@ -233,7 +233,7 @@ Un script para resumir que utiliza un conjunto de datos personalizado se vera as
 
 ```bash
 python examples/pytorch/summarization/run_summarization.py \
-    --model_name_or_path t5-small \
+    --model_name_or_path google-t5/t5-small \
     --do_train \
     --do_eval \
     --train_file path_to_csv_or_jsonlines_file \
@@ -258,7 +258,7 @@ A veces, es una buena idea ejecutar tu secuencia de comandos en una cantidad men
 
 ```bash
 python examples/pytorch/summarization/run_summarization.py \
-    --model_name_or_path t5-small \
+    --model_name_or_path google-t5/t5-small \
     --max_train_samples 50 \
     --max_eval_samples 50 \
     --max_predict_samples 50 \
@@ -288,7 +288,7 @@ El primer método utiliza el argumento `output_dir previous_output_dir` para rea
 
 ```bash
 python examples/pytorch/summarization/run_summarization.py
-    --model_name_or_path t5-small \
+    --model_name_or_path google-t5/t5-small \
     --do_train \
     --do_eval \
     --dataset_name cnn_dailymail \
@@ -305,7 +305,7 @@ El segundo método utiliza el argumento `resume_from_checkpoint path_to_specific
 
 ```bash
 python examples/pytorch/summarization/run_summarization.py
-    --model_name_or_path t5-small \
+    --model_name_or_path google-t5/t5-small \
     --do_train \
     --do_eval \
     --dataset_name cnn_dailymail \
@@ -335,7 +335,7 @@ El siguiente ejemplo muestra cómo cargar un modelo con un nombre de repositorio
 
 ```bash
 python examples/pytorch/summarization/run_summarization.py
-    --model_name_or_path t5-small \
+    --model_name_or_path google-t5/t5-small \
     --do_train \
     --do_eval \
     --dataset_name cnn_dailymail \

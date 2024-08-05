@@ -121,7 +121,7 @@ from .utils import (
     is_torch_fx_proxy,
     is_torch_mps_available,
     is_torch_tf32_available,
-    is_torch_tpu_available,
+    is_torch_xla_available,
     is_torchaudio_available,
     is_training_run_on_sagemaker,
     is_vision_available,

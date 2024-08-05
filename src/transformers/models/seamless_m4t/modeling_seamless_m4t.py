@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch SeamlessM4T model."""
-
+"""PyTorch SeamlessM4T model."""
 
 import copy
 import math
@@ -49,15 +48,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "facebook/hf-seamless-m4t-medium"
 _CONFIG_FOR_DOC = "SeamlessM4TConfig"
-
-SEAMLESS_M4T_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/hf-seamless-m4t-medium",
-    # See all SeamlessM4T models at https://huggingface.co/models?filter=seamless_m4t
-]
-
-SPEECHT5_PRETRAINED_HIFIGAN_CONFIG_ARCHIVE_MAP = {
-    "microsoft/speecht5_hifigan": "https://huggingface.co/microsoft/speecht5_hifigan/resolve/main/config.json",
-}
 
 
 @dataclass
@@ -335,8 +325,14 @@ class SeamlessM4TConformerPositionalConvEmbedding(nn.Module):
 
             with deepspeed.zero.GatheredParameters(self.conv.weight, modifier_rank=0):
                 self.conv = weight_norm(self.conv, name="weight", dim=2)
-            deepspeed.zero.register_external_parameter(self, self.conv.weight_v)
-            deepspeed.zero.register_external_parameter(self, self.conv.weight_g)
+            if hasattr(self.conv, "parametrizations"):
+                weight_g = self.conv.parametrizations.weight.original0
+                weight_v = self.conv.parametrizations.weight.original1
+            else:
+                weight_g = self.conv.weight_g
+                weight_v = self.conv.weight_v
+            deepspeed.zero.register_external_parameter(self, weight_v)
+            deepspeed.zero.register_external_parameter(self, weight_g)
         else:
             self.conv = weight_norm(self.conv, name="weight", dim=2)
 
@@ -365,7 +361,7 @@ class SeamlessM4TConformerRotaryPositionalEmbedding(nn.Module):
         dim = config.hidden_size // config.speech_encoder_attention_heads
         base = config.rotary_embedding_base
 
-        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2).float() / dim))
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.int64).float() / dim))
         self.register_buffer("inv_freq", inv_freq)
         self.cached_sequence_length = None
         self.cached_rotary_positional_embedding = None
@@ -414,9 +410,9 @@ class SeamlessM4TConformerRelPositionalEmbedding(nn.Module):
         # are to the left (i>j) and negative relative positions otherwise (i<j).
         pe_positive = torch.zeros(x.size(1), self.d_model)
         pe_negative = torch.zeros(x.size(1), self.d_model)
-        position = torch.arange(0, x.size(1), dtype=torch.float32).unsqueeze(1)
+        position = torch.arange(0, x.size(1), dtype=torch.int64).float().unsqueeze(1)
         div_term = torch.exp(
-            torch.arange(0, self.d_model, 2, dtype=torch.float32) * -(math.log(10000.0) / self.d_model)
+            torch.arange(0, self.d_model, 2, dtype=torch.int64).float() * -(math.log(10000.0) / self.d_model)
         )
         pe_positive[:, 0::2] = torch.sin(position * div_term)
         pe_positive[:, 1::2] = torch.cos(position * div_term)
@@ -846,6 +842,8 @@ class SeamlessM4TConformerEncoder(nn.Module):
                         hidden_states,
                         attention_mask,
                         relative_position_embeddings,
+                        output_attentions,
+                        conv_attention_mask,
                     )
                 else:
                     layer_outputs = layer(
@@ -992,6 +990,20 @@ class SeamlessM4TConformerAdapter(nn.Module):
 ############ TEXT / UNITS related code ################
 
 
+# Copied from transformers.models.m2m_100.modeling_m2m_100.M2M100ScaledWordEmbedding with M2M100->SeamlessM4T
+class SeamlessM4TScaledWordEmbedding(nn.Embedding):
+    """
+    This module overrides nn.Embeddings' forward by multiplying with embeddings scale.
+    """
+
+    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, embed_scale: Optional[float] = 1.0):
+        super().__init__(num_embeddings, embedding_dim, padding_idx)
+        self.embed_scale = embed_scale
+
+    def forward(self, input_ids: torch.Tensor):
+        return super().forward(input_ids) * self.embed_scale
+
+
 # Copied from transformers.models.m2m_100.modeling_m2m_100.M2M100SinusoidalPositionalEmbedding
 class SeamlessM4TSinusoidalPositionalEmbedding(nn.Module):
     """This module produces sinusoidal positional embeddings of any length."""
@@ -1021,8 +1033,8 @@ class SeamlessM4TSinusoidalPositionalEmbedding(nn.Module):
         """
         half_dim = embedding_dim // 2
         emb = math.log(10000) / (half_dim - 1)
-        emb = torch.exp(torch.arange(half_dim, dtype=torch.float) * -emb)
-        emb = torch.arange(num_embeddings, dtype=torch.float).unsqueeze(1) * emb.unsqueeze(0)
+        emb = torch.exp(torch.arange(half_dim, dtype=torch.int64).float() * -emb)
+        emb = torch.arange(num_embeddings, dtype=torch.int64).float().unsqueeze(1) * emb.unsqueeze(0)
         emb = torch.cat([torch.sin(emb), torch.cos(emb)], dim=1).view(num_embeddings, -1)
         if embedding_dim % 2 == 1:
             # zero pad
@@ -1634,9 +1646,11 @@ class SeamlessM4TEncoder(SeamlessM4TPreTrainedModel):
         self.max_source_positions = config.max_position_embeddings
 
         if not self.is_t2u_encoder:
-            self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
+            embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
 
-            self.embed_tokens = nn.Embedding(config.vocab_size, embed_dim, self.padding_idx)
+            self.embed_tokens = SeamlessM4TScaledWordEmbedding(
+                config.vocab_size, embed_dim, self.padding_idx, embed_scale=embed_scale
+            )
 
             if embed_tokens is not None:
                 self.embed_tokens.weight = embed_tokens.weight
@@ -1729,7 +1743,7 @@ class SeamlessM4TEncoder(SeamlessM4TPreTrainedModel):
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
+            inputs_embeds = self.embed_tokens(input_ids)
 
         if not self.is_t2u_encoder:
             embed_pos = self.embed_positions(input)
@@ -1812,14 +1826,18 @@ class SeamlessM4TDecoder(SeamlessM4TPreTrainedModel):
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
         self.max_target_positions = config.max_position_embeddings
-        self.embed_scale = math.sqrt(config.hidden_size) if config.scale_embedding else 1.0
+        embed_scale = math.sqrt(config.hidden_size) if config.scale_embedding else 1.0
 
         if embed_tokens is not None:
             # if embed_tokens defined, use its shape instead
-            self.embed_tokens = nn.Embedding(embed_tokens.num_embeddings, embed_tokens.embedding_dim, self.padding_idx)
+            self.embed_tokens = SeamlessM4TScaledWordEmbedding(
+                embed_tokens.num_embeddings, embed_tokens.embedding_dim, self.padding_idx, embed_scale=embed_scale
+            )
             self.embed_tokens.weight = embed_tokens.weight
         else:
-            self.embed_tokens = nn.Embedding(self.vocab_size, config.hidden_size, self.padding_idx)
+            self.embed_tokens = SeamlessM4TScaledWordEmbedding(
+                self.vocab_size, config.hidden_size, self.padding_idx, embed_scale=embed_scale
+            )
 
         self.embed_positions = SeamlessM4TSinusoidalPositionalEmbedding(
             self.max_target_positions,
@@ -1938,7 +1956,7 @@ class SeamlessM4TDecoder(SeamlessM4TPreTrainedModel):
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
         if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
+            inputs_embeds = self.embed_tokens(input_ids)
 
         attention_mask = _prepare_4d_causal_attention_mask(
             attention_mask, input_shape, inputs_embeds, past_key_values_length
@@ -2845,11 +2863,8 @@ class SeamlessM4TForTextToText(SeamlessM4TPreTrainedModel):
             [`~utils.ModelOutput`] or `torch.LongTensor`: A [`~utils.ModelOutput`] (if `return_dict_in_generate=True`
             or when `config.return_dict_in_generate=True`) or a `torch.FloatTensor`. The possible
             [`~utils.ModelOutput`] types are:
-
-                - [`~generation.GreedySearchEncoderDecoderOutput`],
-                - [`~generation.SampleEncoderDecoderOutput`],
-                - [`~generation.BeamSearchEncoderDecoderOutput`],
-                - [`~generation.BeamSampleEncoderDecoderOutput`]
+                - [`~generation.GenerateEncoderDecoderOutput`],
+                - [`~generation.GenerateBeamEncoderDecoderOutput`]
         """
         # prepare text_decoder_input_ids
         text_decoder_input_ids = kwargs.pop("decoder_input_ids", None)
@@ -3134,14 +3149,12 @@ class SeamlessM4TForSpeechToText(SeamlessM4TPreTrainedModel):
             [`~utils.ModelOutput`] or `torch.LongTensor`: A [`~utils.ModelOutput`] (if `return_dict_in_generate=True`
             or when `config.return_dict_in_generate=True`) or a `torch.FloatTensor`. The possible
             [`~utils.ModelOutput`] types are:
-
-                - [`~generation.GreedySearchEncoderDecoderOutput`],
-                - [`~generation.SampleEncoderDecoderOutput`],
-                - [`~generation.BeamSearchEncoderDecoderOutput`],
-                - [`~generation.BeamSampleEncoderDecoderOutput`]
+                - [`~generation.GenerateEncoderDecoderOutput`],
+                - [`~generation.GenerateBeamEncoderDecoderOutput`]
         """
         text_decoder_input_ids = kwargs.pop("decoder_input_ids", None)
         # overwrite text_decoder_input_ids if tgt_lang is passed. The latter gets priority over decoder_input_ids.
+        input_features = input_features if input_features is not None else kwargs.pop("inputs")
         if tgt_lang is not None:
             inputs = kwargs.get("input_embeds") if input_features is None else input_features
             inputs = (
@@ -3505,7 +3518,6 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TPreTrainedModel):
             self.device
         )
         kwargs_speech["decoder_input_ids"] = t2u_decoder_input_ids
-
         # second generation
         unit_ids = self.t2u_model.generate(inputs_embeds=t2u_input_embeds, **kwargs_speech)
         output_unit_ids = unit_ids.detach().clone()

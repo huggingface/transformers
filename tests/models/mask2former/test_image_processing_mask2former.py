@@ -98,6 +98,8 @@ class Mask2FormerImageProcessingTester(unittest.TestCase):
             image = image_inputs[0]
             if isinstance(image, Image.Image):
                 w, h = image.size
+            elif isinstance(image, np.ndarray):
+                h, w = image.shape[0], image.shape[1]
             else:
                 h, w = image.shape[1], image.shape[2]
             if w < h:
@@ -149,6 +151,7 @@ class Mask2FormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
     image_processing_class = Mask2FormerImageProcessor if (is_vision_available() and is_torch_available()) else None
 
     def setUp(self):
+        super().setUp()
         self.image_processor_tester = Mask2FormerImageProcessingTester(self)
 
     @property
@@ -274,7 +277,7 @@ class Mask2FormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         instance_seg2, inst2class2 = get_instance_segmentation_and_mapping(annotation2)
 
         # create a image processor
-        image_processing = Mask2FormerImageProcessor(reduce_labels=True, ignore_index=255, size=(512, 512))
+        image_processing = Mask2FormerImageProcessor(do_reduce_labels=True, ignore_index=255, size=(512, 512))
 
         # prepare the images and annotations
         inputs = image_processing(
@@ -297,8 +300,8 @@ class Mask2FormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         self.assertEqual(len(inputs["mask_labels"]), 2)
         self.assertEqual(inputs["mask_labels"][0].shape, (2, 512, 512))
         self.assertEqual(inputs["mask_labels"][1].shape, (4, 512, 512))
-        self.assertEquals(inputs["mask_labels"][0].sum().item(), 41527.0)
-        self.assertEquals(inputs["mask_labels"][1].sum().item(), 26259.0)
+        self.assertEqual(inputs["mask_labels"][0].sum().item(), 41527.0)
+        self.assertEqual(inputs["mask_labels"][1].sum().item(), 26259.0)
 
     def test_integration_semantic_segmentation(self):
         # load 2 images and corresponding semantic annotations from the hub
@@ -317,7 +320,7 @@ class Mask2FormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         )
 
         # create a image processor
-        image_processing = Mask2FormerImageProcessor(reduce_labels=True, ignore_index=255, size=(512, 512))
+        image_processing = Mask2FormerImageProcessor(do_reduce_labels=True, ignore_index=255, size=(512, 512))
 
         # prepare the images and annotations
         inputs = image_processing(
@@ -339,8 +342,8 @@ class Mask2FormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         self.assertEqual(len(inputs["mask_labels"]), 2)
         self.assertEqual(inputs["mask_labels"][0].shape, (3, 512, 512))
         self.assertEqual(inputs["mask_labels"][1].shape, (8, 512, 512))
-        self.assertEquals(inputs["mask_labels"][0].sum().item(), 170200.0)
-        self.assertEquals(inputs["mask_labels"][1].sum().item(), 257036.0)
+        self.assertEqual(inputs["mask_labels"][0].sum().item(), 170200.0)
+        self.assertEqual(inputs["mask_labels"][1].sum().item(), 257036.0)
 
     def test_integration_panoptic_segmentation(self):
         # load 2 images and corresponding panoptic annotations from the hub
@@ -400,8 +403,8 @@ class Mask2FormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         self.assertEqual(len(inputs["mask_labels"]), 2)
         self.assertEqual(inputs["mask_labels"][0].shape, (79, 512, 711))
         self.assertEqual(inputs["mask_labels"][1].shape, (61, 512, 711))
-        self.assertEquals(inputs["mask_labels"][0].sum().item(), 315193.0)
-        self.assertEquals(inputs["mask_labels"][1].sum().item(), 350747.0)
+        self.assertEqual(inputs["mask_labels"][0].sum().item(), 315193.0)
+        self.assertEqual(inputs["mask_labels"][1].sum().item(), 350747.0)
 
     def test_binary_mask_to_rle(self):
         fake_binary_mask = np.zeros((20, 50))
@@ -490,3 +493,16 @@ class Mask2FormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
             expected_num_segments = max([el["id"] for el in el_unfused]) - num_to_fuse
             num_segments_fused = max([el["id"] for el in el_fused])
             self.assertEqual(num_segments_fused, expected_num_segments)
+
+    def test_removed_deprecated_kwargs(self):
+        image_processor_dict = dict(self.image_processor_dict)
+        image_processor_dict.pop("do_reduce_labels", None)
+        image_processor_dict["reduce_labels"] = True
+
+        # test we are able to create the image processor with the deprecated kwargs
+        image_processor = self.image_processing_class(**image_processor_dict)
+        self.assertEqual(image_processor.do_reduce_labels, True)
+
+        # test we still support reduce_labels with config
+        image_processor = self.image_processing_class.from_dict(image_processor_dict)
+        self.assertEqual(image_processor.do_reduce_labels, True)

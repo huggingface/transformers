@@ -12,11 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """PyTorch GPTBigCode model."""
+
 import math
 from typing import List, Optional, Tuple, Union
 
 import torch
-import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
@@ -30,6 +30,7 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import is_torch_greater_or_equal_than_2_2
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -42,19 +43,13 @@ from .configuration_gpt_bigcode import GPTBigCodeConfig
 
 
 if is_flash_attn_2_available():
-    from flash_attn import flash_attn_func, flash_attn_varlen_func
-    from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
+    from ...modeling_flash_attention_utils import _flash_attention_forward
 
 
 logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "bigcode/gpt_bigcode-santacoder"
 _CONFIG_FOR_DOC = "GPTBigCodeConfig"
-
-GPT_BIGCODE_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "bigcode/gpt_bigcode-santacoder",
-    # See all GPTBigCode models at https://huggingface.co/models?filter=gpt_bigcode
-]
 
 
 # Fused kernels
@@ -85,19 +80,6 @@ def masked_softmax(x: torch.Tensor, mask: torch.Tensor, mask_value: torch.Tensor
     x = torch.where(mask, x, mask_value)
     x = torch.nn.functional.softmax(x, dim=-1)
     return x
-
-
-# Copied from transformers.models.llama.modeling_llama._get_unpad_data
-def _get_unpad_data(attention_mask):
-    seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
-    indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
-    max_seqlen_in_batch = seqlens_in_batch.max().item()
-    cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.torch.int32), (1, 0))
-    return (
-        indices,
-        cu_seqlens,
-        max_seqlen_in_batch,
-    )
 
 
 class GPTBigCodeAttention(nn.Module):
@@ -363,13 +345,6 @@ class GPTBigCodeFlashAttention2(GPTBigCodeAttention):
 
         attn_dropout = self.attn_pdrop if self.training else 0.0
 
-        softmax_dtype = torch.float32 if self.attention_softmax_in_fp32 else query.dtype
-        upcast = query.dtype != softmax_dtype
-        softmax_scale = self.layer_idx + 1 if self.scale_attention_softmax_in_fp32 and upcast else 1
-        softmax_scale = softmax_scale**-1
-        if self.scale_attn_weights:
-            softmax_scale /= self.head_dim**0.5
-
         # In PEFT, usually we cast the layer norms in float32 for training stability reasons
         # therefore the input hidden states gets silently casted in float32. Hence, we need
         # cast them back in float16 just to be sure everything works as expected.
@@ -392,8 +367,15 @@ class GPTBigCodeFlashAttention2(GPTBigCodeAttention):
             key = key.to(target_dtype)
             value = value.to(target_dtype)
 
-        attn_output = self._flash_attention_forward(
-            query, key, value, attention_mask, query_length, dropout=attn_dropout, softmax_scale=softmax_scale
+        attn_output = _flash_attention_forward(
+            query,
+            key,
+            value,
+            attention_mask,
+            query_length,
+            dropout=attn_dropout,
+            is_causal=self.is_causal,
+            use_top_left_mask=self._flash_attn_uses_top_left_mask,
         )
 
         attn_weights_reshaped = attn_output.reshape(batch_size, query_length, self.num_heads * self.head_dim)
@@ -412,105 +394,6 @@ class GPTBigCodeFlashAttention2(GPTBigCodeAttention):
         outputs += (attn_weights_reshaped,)
 
         return outputs  # a, present, (attentions)
-
-    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._flash_attention_forward
-    def _flash_attention_forward(
-        self, query_states, key_states, value_states, attention_mask, query_length, dropout=0.0, softmax_scale=None
-    ):
-        """
-        Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
-        first unpad the input, then computes the attention scores and pad the final attention scores.
-
-        Args:
-            query_states (`torch.Tensor`):
-                Input query states to be passed to Flash Attention API
-            key_states (`torch.Tensor`):
-                Input key states to be passed to Flash Attention API
-            value_states (`torch.Tensor`):
-                Input value states to be passed to Flash Attention API
-            attention_mask (`torch.Tensor`):
-                The padding mask - corresponds to a tensor of size `(batch_size, seq_len)` where 0 stands for the
-                position of padding tokens and 1 for the position of non-padding tokens.
-            dropout (`int`, *optional*):
-                Attention dropout
-            softmax_scale (`float`, *optional*):
-                The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
-        """
-        if not self._flash_attn_uses_top_left_mask:
-            causal = self.is_causal
-        else:
-            # TODO: Remove the `query_length != 1` check once Flash Attention for RoCm is bumped to 2.1. For details, please see the comment in LlamaFlashAttention2 __init__.
-            causal = self.is_causal and query_length != 1
-
-        # Contains at least one padding token in the sequence
-        if attention_mask is not None:
-            batch_size = query_states.shape[0]
-            query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = self._upad_input(
-                query_states, key_states, value_states, attention_mask, query_length
-            )
-
-            cu_seqlens_q, cu_seqlens_k = cu_seq_lens
-            max_seqlen_in_batch_q, max_seqlen_in_batch_k = max_seq_lens
-
-            attn_output_unpad = flash_attn_varlen_func(
-                query_states,
-                key_states,
-                value_states,
-                cu_seqlens_q=cu_seqlens_q,
-                cu_seqlens_k=cu_seqlens_k,
-                max_seqlen_q=max_seqlen_in_batch_q,
-                max_seqlen_k=max_seqlen_in_batch_k,
-                dropout_p=dropout,
-                softmax_scale=softmax_scale,
-                causal=causal,
-            )
-
-            attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
-        else:
-            attn_output = flash_attn_func(
-                query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=causal
-            )
-
-        return attn_output
-
-    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._upad_input
-    def _upad_input(self, query_layer, key_layer, value_layer, attention_mask, query_length):
-        indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(attention_mask)
-        batch_size, kv_seq_len, num_key_value_heads, head_dim = key_layer.shape
-
-        key_layer = index_first_axis(
-            key_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim), indices_k
-        )
-        value_layer = index_first_axis(
-            value_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim), indices_k
-        )
-        if query_length == kv_seq_len:
-            query_layer = index_first_axis(
-                query_layer.reshape(batch_size * kv_seq_len, self.num_heads, head_dim), indices_k
-            )
-            cu_seqlens_q = cu_seqlens_k
-            max_seqlen_in_batch_q = max_seqlen_in_batch_k
-            indices_q = indices_k
-        elif query_length == 1:
-            max_seqlen_in_batch_q = 1
-            cu_seqlens_q = torch.arange(
-                batch_size + 1, dtype=torch.int32, device=query_layer.device
-            )  # There is a memcpy here, that is very bad.
-            indices_q = cu_seqlens_q[:-1]
-            query_layer = query_layer.squeeze(1)
-        else:
-            # The -q_len: slice assumes left padding.
-            attention_mask = attention_mask[:, -query_length:]
-            query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q = unpad_input(query_layer, attention_mask)
-
-        return (
-            query_layer,
-            key_layer,
-            value_layer,
-            indices_q,
-            (cu_seqlens_q, cu_seqlens_k),
-            (max_seqlen_in_batch_q, max_seqlen_in_batch_k),
-        )
 
 
 class GPTBigCodeSdpaAttention(GPTBigCodeAttention):
@@ -541,21 +424,16 @@ class GPTBigCodeSdpaAttention(GPTBigCodeAttention):
             key = key.unsqueeze(1)
             value = value.unsqueeze(1)
 
-            # Although these expand are not numerically useful, PyTorch 2.1 can not dispatch to memory-efficient backend
+            # Although these expand are not numerically useful, PyTorch can not dispatch to memory-efficient backend
             # and flash attention backend (No available kernel.  Aborting execution.) from the shapes
             # query = [batch_size, num_heads, query_length, head_dim]
             # key = [batch_size, 1, past_length, head_dim]
             # value = [batch_size, 1, past_length, head_dim]
             #
-            # so we could do:
-            #
-            # key = key.expand(-1, self.num_heads, -1, -1)
-            # value = value.expand(-1, self.num_heads, -1, -1)
-            #
-            # However SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
-            # so we always dispatch to the math path: https://github.com/pytorch/pytorch/issues/112577.
-            # Arguably we could still do expand + contiguous when `query.device.type == "cuda"` in order to dispatch on memory-efficient
-            # backend, but it feels very hacky.
+            # torch==2.1.2 is bugged with non-contiguous inputs with custom attn_mask (https://github.com/pytorch/pytorch/issues/112577), hence the check.
+            if is_torch_greater_or_equal_than_2_2:
+                key = key.expand(-1, self.num_heads, -1, -1)
+                value = value.expand(-1, self.num_heads, -1, -1)
         else:
             query_length = query_shape[-1]
 
@@ -565,14 +443,19 @@ class GPTBigCodeSdpaAttention(GPTBigCodeAttention):
                 key = key.contiguous()
                 value = value.contiguous()
 
+        # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
+        # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
+        # The query_length > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not
+        # create a causal mask in case query_length == 1.
+        is_causal = True if self.is_causal and attention_mask is None and query_length > 1 else False
+
         sdpa_result = torch.nn.functional.scaled_dot_product_attention(
             query,
             key,
             value,
             attn_mask=attention_mask,
             dropout_p=self.attn_pdrop if self.training else 0.0,
-            # The query_length > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case query_length == 1.
-            is_causal=self.is_causal and attention_mask is None and query_length > 1,
+            is_causal=is_causal,
             scale=scale,
         )
 
@@ -716,6 +599,7 @@ class GPTBigCodeBlock(nn.Module):
         encoder_attention_mask: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = False,
         output_attentions: Optional[bool] = False,
+        **kwargs,
     ) -> Union[
         Tuple[torch.Tensor], Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor, torch.Tensor, torch.Tensor]
     ]:
@@ -1027,6 +911,15 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
             self_attention_mask = self_attention_mask.unsqueeze(2 if self.multi_query else 1)
 
             if self._use_sdpa and head_mask is None and not output_attentions:
+                # SDPA with a custom mask is much faster in fp16/fp32 dtype rather than bool. Cast here to floating point instead of at every layer.
+                dtype = self.wte.weight.dtype
+                min_dtype = torch.finfo(dtype).min
+                self_attention_mask = torch.where(
+                    self_attention_mask,
+                    torch.full([], 0.0, dtype=dtype, device=self_attention_mask.device),
+                    torch.full([], min_dtype, dtype=dtype, device=self_attention_mask.device),
+                )
+
                 # output_attentions=True can not be supported when using SDPA, and we fall back on
                 # the manual implementation that requires a 4D causal mask in all cases.
                 if self.multi_query:
@@ -1034,22 +927,12 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
                     # [batch_size, target_length, 1, source_length], not compatible with SDPA, hence this transpose.
                     self_attention_mask = self_attention_mask.transpose(1, 2)
 
-                if query_length > 1 and attention_mask is not None:
+                if query_length > 1 and attention_mask is not None and attention_mask.device.type == "cuda":
                     # From PyTorch 2.1 onwards, F.scaled_dot_product_attention with the memory-efficient attention backend
                     # produces nans if sequences are completely unattended in the attention mask. Details: https://github.com/pytorch/pytorch/issues/110213
                     self_attention_mask = AttentionMaskConverter._unmask_unattended(
-                        self_attention_mask, attention_mask, unmasked_value=True
+                        self_attention_mask, min_dtype=min_dtype
                     )
-
-                # SDPA with a custom mask is much faster in fp16/fp32 dtype rather than bool. Cast here to floating point instead of at every layer.
-                dtype = self.wte.weight.dtype
-                self_attention_mask = torch.where(
-                    self_attention_mask,
-                    torch.full([], 0.0, dtype=dtype, device=self_attention_mask.device),
-                    torch.full(
-                        [], torch.finfo(self.wte.weight.dtype).min, dtype=dtype, device=self_attention_mask.device
-                    ),
-                )
 
             attention_mask = self_attention_mask
 
@@ -1223,6 +1106,24 @@ class GPTBigCodeForCausalLM(GPTBigCodePreTrainedModel):
         )
         return model_inputs
 
+    def _get_initial_cache_position(self, input_ids, model_kwargs):
+        """
+        Calculates `cache_position` for the pre-fill stage based on `input_ids` and optionally past length.
+        Since gpt bigcode is special, the method is overridden here, other models use it from `generation.utils.py`.
+        """
+        past_length = 0
+        if "past_key_values" in model_kwargs:
+            if self.config.multi_query:
+                past_length = model_kwargs["past_key_values"][0].shape[1]
+            else:
+                past_length = model_kwargs["past_key_values"][0].shape[2]
+        if "inputs_embeds" in model_kwargs:
+            cur_len = model_kwargs["inputs_embeds"].shape[1]
+        else:
+            cur_len = input_ids.shape[-1]
+        model_kwargs["cache_position"] = torch.arange(past_length, cur_len, device=input_ids.device)
+        return model_kwargs
+
     @add_start_docstrings_to_model_forward(GPT_BIGCODE_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -1390,7 +1291,7 @@ class GPTBigCodeForSequenceClassification(GPTBigCodePreTrainedModel):
                 sequence_lengths = sequence_lengths.to(logits.device)
             else:
                 sequence_lengths = -1
-                logger.warning(
+                logger.warning_once(
                     f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
                     "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
                 )

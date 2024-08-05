@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Finetuning the library models for question-answering on SQuAD (DistilBERT, Bert, XLM, XLNet)."""
+"""Finetuning the library models for question-answering on SQuAD (DistilBERT, Bert, XLM, XLNet)."""
+
 import argparse
 import logging
 import os
@@ -275,7 +276,7 @@ else:
 # https://huggingface.co/docs/datasets/loading_datasets.
 
 # Preprocessing the datasets.
-# Preprocessing is slighlty different for training and evaluation.
+# Preprocessing is slightly different for training and evaluation.
 
 column_names = raw_datasets["validation"].column_names
 

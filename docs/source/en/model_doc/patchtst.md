@@ -34,6 +34,9 @@ This model was contributed by [namctin](https://huggingface.co/namctin), [gsinth
 
 The model can also be used for time series classification and time series regression. See the respective [`PatchTSTForClassification`] and [`PatchTSTForRegression`] classes.
 
+## Resources
+
+- A blog post explaining PatchTST in depth can be found [here](https://huggingface.co/blog/patchtst). The blog can also be opened in Google Colab.
 
 ## PatchTSTConfig
 

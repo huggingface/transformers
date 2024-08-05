@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Deformable DETR model. """
-
+"""Testing suite for the PyTorch Deformable DETR model."""
 
 import inspect
 import math
@@ -26,6 +25,7 @@ from transformers.testing_utils import (
     require_timm,
     require_torch,
     require_torch_accelerator,
+    require_torch_bf16,
     require_vision,
     slow,
     torch_device,
@@ -149,7 +149,9 @@ class DeformableDetrModelTester:
             encoder_n_points=self.encoder_n_points,
             decoder_n_points=self.decoder_n_points,
             use_timm_backbone=False,
+            backbone=None,
             backbone_config=resnet_config,
+            use_pretrained_backbone=False,
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -189,7 +191,7 @@ class DeformableDetrModelTester:
 class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (DeformableDetrModel, DeformableDetrForObjectDetection) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": DeformableDetrModel, "object-detection": DeformableDetrForObjectDetection}
+        {"image-feature-extraction": DeformableDetrModel, "object-detection": DeformableDetrForObjectDetection}
         if is_torch_available()
         else {}
     )
@@ -228,15 +230,15 @@ class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
 
     def setUp(self):
         self.model_tester = DeformableDetrModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=DeformableDetrConfig, has_text_modality=False)
+        self.config_tester = ConfigTester(
+            self,
+            config_class=DeformableDetrConfig,
+            has_text_modality=False,
+            common_properties=["num_channels", "d_model", "encoder_attention_heads", "decoder_attention_heads"],
+        )
 
     def test_config(self):
-        # we don't test common_properties and arguments_init as these don't apply for Deformable DETR
-        self.config_tester.create_and_test_config_to_json_string()
-        self.config_tester.create_and_test_config_to_json_file()
-        self.config_tester.create_and_test_config_from_and_save_pretrained()
-        self.config_tester.create_and_test_config_with_num_labels()
-        self.config_tester.check_config_can_be_init_without_params()
+        self.config_tester.run_common_tests()
 
     def test_deformable_detr_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -250,8 +252,12 @@ class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
     def test_inputs_embeds(self):
         pass
 
+    @unittest.skip(reason="Deformable DETR does not use inputs_embeds")
+    def test_inputs_embeds_matches_input_ids(self):
+        pass
+
     @unittest.skip(reason="Deformable DETR does not have a get_input_embeddings method")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     @unittest.skip(reason="Deformable DETR is not a generative model")
@@ -476,6 +482,22 @@ class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
         self.assertIsNotNone(decoder_attentions.grad)
         self.assertIsNotNone(cross_attentions.grad)
 
+    def test_forward_auxiliary_loss(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.auxiliary_loss = True
+
+        # only test for object detection and segmentation model
+        for model_class in self.all_model_classes[1:]:
+            model = model_class(config)
+            model.to(torch_device)
+
+            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+
+            outputs = model(**inputs)
+
+            self.assertIsNotNone(outputs.auxiliary_outputs)
+            self.assertEqual(len(outputs.auxiliary_outputs), self.model_tester.num_hidden_layers - 1)
+
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -502,6 +524,9 @@ class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
 
         # let's pick a random timm backbone
         config.backbone = "tf_mobilenetv3_small_075"
+        config.backbone_config = None
+        config.use_timm_backbone = True
+        config.backbone_kwargs = {"out_indices": [1, 2, 3, 4]}
 
         for model_class in self.all_model_classes:
             model = model_class(config)
@@ -517,6 +542,43 @@ class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
                     self.model_tester.num_labels,
                 )
                 self.assertEqual(outputs.logits.shape, expected_shape)
+                # Confirm out_indices was propogated to backbone
+                self.assertEqual(len(model.model.backbone.conv_encoder.intermediate_channel_sizes), 4)
+            else:
+                # Confirm out_indices was propogated to backbone
+                self.assertEqual(len(model.backbone.conv_encoder.intermediate_channel_sizes), 4)
+
+            self.assertTrue(outputs)
+
+    def test_hf_backbone(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        # Load a pretrained HF checkpoint as backbone
+        config.backbone = "microsoft/resnet-18"
+        config.backbone_config = None
+        config.use_timm_backbone = False
+        config.use_pretrained_backbone = True
+        config.backbone_kwargs = {"out_indices": [1, 2, 3, 4]}
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            if model_class.__name__ == "DeformableDetrForObjectDetection":
+                expected_shape = (
+                    self.model_tester.batch_size,
+                    self.model_tester.num_queries,
+                    self.model_tester.num_labels,
+                )
+                self.assertEqual(outputs.logits.shape, expected_shape)
+                # Confirm out_indices was propogated to backbone
+                self.assertEqual(len(model.model.backbone.conv_encoder.intermediate_channel_sizes), 4)
+            else:
+                # Confirm out_indices was propogated to backbone
+                self.assertEqual(len(model.backbone.conv_encoder.intermediate_channel_sizes), 4)
 
             self.assertTrue(outputs)
 
@@ -544,6 +606,18 @@ class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
 
+    @unittest.skip(reason="No support for low_cpu_mem_usage=True.")
+    def test_save_load_low_cpu_mem_usage(self):
+        pass
+
+    @unittest.skip(reason="No support for low_cpu_mem_usage=True.")
+    def test_save_load_low_cpu_mem_usage_checkpoints(self):
+        pass
+
+    @unittest.skip(reason="No support for low_cpu_mem_usage=True.")
+    def test_save_load_low_cpu_mem_usage_no_safetensors(self):
+        pass
+
     def test_two_stage_training(self):
         model_class = DeformableDetrForObjectDetection
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -558,6 +632,30 @@ class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
         inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
         loss = model(**inputs).loss
         loss.backward()
+
+    def create_and_check_model_fp16_forward(self):
+        model_class = DeformableDetrForObjectDetection
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        model = model_class(config)
+        model.to(torch_device)
+        model.half()
+        model.eval()
+        inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+        output = model(**inputs)["last_hidden_state"]
+        self.parent.assertFalse(torch.isnan(output).any().item())
+
+    @require_torch_bf16
+    def create_and_check_model_bf16_forward(self):
+        model_class = DeformableDetrForObjectDetection
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        model = model_class(config, torch_dtype=torch.bfloat16)
+        model.to(torch_device)
+        model.eval()
+        inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+        output = model(**inputs)["last_hidden_state"]
+        self.parent.assertFalse(torch.isnan(output).any().item())
 
 
 TOLERANCE = 1e-4

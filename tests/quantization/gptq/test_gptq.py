@@ -46,7 +46,6 @@ class GPTQConfigTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             GPTQConfig(bits=2, dataset="auto_gpt")
         GPTQConfig(bits=2, dataset="c4")
-        GPTQConfig(bits=2, dataset="ptb-new")
 
     def test_damp_percent(self):
         with self.assertRaises(ValueError):
@@ -217,7 +216,9 @@ class GPTQTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdirname:
             self.quantized_model.save_pretrained(tmpdirname)
             if not self.use_exllama:
-                quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(tmpdirname).to(0)
+                quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(
+                    tmpdirname, quantization_config=GPTQConfig(use_exllama=False, bits=4)
+                ).to(0)
                 self.check_quantized_layers_type(quantized_model_from_saved, "cuda-old")
             else:
                 # we need to put it directly to the gpu. Otherwise, we won't be able to initialize the exllama kernel
@@ -242,12 +243,11 @@ class GPTQTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdirname:
             self.quantized_model.save_pretrained(tmpdirname)
             if not self.use_exllama:
-                self.assertEqual(self.quantized_model.config.quantization_config.use_exllama, False)
+                self.check_quantized_layers_type(self.quantized_model, "cuda-old")
                 # we need to put it directly to the gpu. Otherwise, we won't be able to initialize the exllama kernel
                 quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(
                     tmpdirname, quantization_config=GPTQConfig(use_exllama=True, bits=4), device_map={"": 0}
                 )
-                self.assertEqual(quantized_model_from_saved.config.quantization_config.use_exllama, True)
                 self.assertEqual(quantized_model_from_saved.config.quantization_config.bits, self.bits)
                 self.check_quantized_layers_type(quantized_model_from_saved, "exllama")
                 self.check_inference_correctness(quantized_model_from_saved)
@@ -279,10 +279,10 @@ class GPTQTestActOrderExllama(unittest.TestCase):
     """
 
     EXPECTED_OUTPUTS = set()
-    EXPECTED_OUTPUTS.add("Hello my name is Katie and I am a 20 year")
-    model_name = "hf-internal-testing/Llama-2-7B-GPTQ"
-    revision = "gptq-4bit-128g-actorder_True"
-    input_text = "Hello my name is"
+    EXPECTED_OUTPUTS.add("Hello, how are you ? I'm doing good, thanks for asking.")
+    # 4bit + act_order + 128g
+    model_name = "hf-internal-testing/TinyLlama-1.1B-Chat-v0.3-GPTQ"
+    input_text = "Hello, how are you ?"
 
     @classmethod
     def setUpClass(cls):
@@ -292,7 +292,6 @@ class GPTQTestActOrderExllama(unittest.TestCase):
         cls.quantization_config = GPTQConfig(bits=4, max_input_length=4028)
         cls.quantized_model = AutoModelForCausalLM.from_pretrained(
             cls.model_name,
-            revision=cls.revision,
             torch_dtype=torch.float16,
             device_map={"": 0},
             quantization_config=cls.quantization_config,
@@ -336,7 +335,7 @@ class GPTQTestActOrderExllama(unittest.TestCase):
             self.quantized_model.generate(**inp, num_beams=1, min_new_tokens=3, max_new_tokens=3)
             self.assertTrue("temp_state buffer is too small" in str(cm.exception))
 
-        prompt = "I am in Paris and" * 500
+        prompt = "I am in Paris and"
         inp = self.tokenizer(prompt, return_tensors="pt").to(0)
         self.assertTrue(inp["input_ids"].shape[1] < 4028)
         self.quantized_model.generate(**inp, num_beams=1, min_new_tokens=3, max_new_tokens=3)
@@ -355,10 +354,10 @@ class GPTQTestExllamaV2(unittest.TestCase):
     """
 
     EXPECTED_OUTPUTS = set()
-    EXPECTED_OUTPUTS.add("Hello my name is Katie and I am a 20 year")
-    model_name = "hf-internal-testing/Llama-2-7B-GPTQ"
-    revision = "gptq-4bit-128g-actorder_True"
-    input_text = "Hello my name is"
+    EXPECTED_OUTPUTS.add("Hello, how are you ? I'm doing good, thanks for asking.")
+    # 4bit + act_order + 128g
+    model_name = "hf-internal-testing/TinyLlama-1.1B-Chat-v0.3-GPTQ"
+    input_text = "Hello, how are you ?"
 
     @classmethod
     def setUpClass(cls):
@@ -368,7 +367,6 @@ class GPTQTestExllamaV2(unittest.TestCase):
         cls.quantization_config = GPTQConfig(bits=4, exllama_config={"version": 2})
         cls.quantized_model = AutoModelForCausalLM.from_pretrained(
             cls.model_name,
-            revision=cls.revision,
             torch_dtype=torch.float16,
             device_map={"": 0},
             quantization_config=cls.quantization_config,

@@ -43,7 +43,7 @@ If you want to use a specific model from the [hub](https://huggingface.co) you c
 the hub already defines it:
 
 ```python
->>> pipe = pipeline(model="roberta-large-mnli")
+>>> pipe = pipeline(model="FacebookAI/roberta-large-mnli")
 >>> pipe("This restaurant is awesome")
 [{'label': 'NEUTRAL', 'score': 0.7313136458396912}]
 ```
@@ -270,6 +270,11 @@ This is a simplified view, since the pipeline can handle automatically the batch
 about how many forward passes you inputs are actually going to trigger, you can optimize the `batch_size`
 independently of the inputs. The caveats from the previous section still apply.
 
+## Pipeline FP16 inference
+Models can be run in FP16 which can be significantly faster on GPU while saving memory. Most models will not suffer noticeable performance loss from this. The larger the model, the less likely that it will.
+
+To enable FP16 inference, you can simply pass `torch_dtype=torch.float16` or `torch_dtype='float16'` to the pipeline constructor. Note that this only works for models with a PyTorch backend. Your inputs will be converted to FP16 internally.
+
 ## Pipeline custom code
 
 If you want to override a specific pipeline.
@@ -386,14 +391,6 @@ Pipelines available for computer vision tasks include the following.
 
 Pipelines available for natural language processing tasks include the following.
 
-### ConversationalPipeline
-
-[[autodoc]] Conversation
-
-[[autodoc]] ConversationalPipeline
-    - __call__
-    - all
-
 ### FillMaskPipeline
 
 [[autodoc]] FillMaskPipeline
@@ -466,6 +463,12 @@ Pipelines available for multimodal tasks include the following.
 ### FeatureExtractionPipeline
 
 [[autodoc]] FeatureExtractionPipeline
+    - __call__
+    - all
+
+### ImageFeatureExtractionPipeline
+
+[[autodoc]] ImageFeatureExtractionPipeline
     - __call__
     - all
 

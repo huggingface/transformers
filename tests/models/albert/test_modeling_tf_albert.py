@@ -32,7 +32,6 @@ if is_tf_available():
 
     from transformers import TF_MODEL_FOR_PRETRAINING_MAPPING
     from transformers.models.albert.modeling_tf_albert import (
-        TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFAlbertForMaskedLM,
         TFAlbertForMultipleChoice,
         TFAlbertForPreTraining,
@@ -302,16 +301,16 @@ class TFAlbertModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFAlbertModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "albert/albert-base-v1"
+        model = TFAlbertModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @require_tf
 class TFAlbertModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_masked_lm(self):
-        model = TFAlbertForPreTraining.from_pretrained("albert-base-v2")
+        model = TFAlbertForPreTraining.from_pretrained("albert/albert-base-v2")
         input_ids = tf.constant([[0, 1, 2, 3, 4, 5]])
         output = model(input_ids)[0]
 

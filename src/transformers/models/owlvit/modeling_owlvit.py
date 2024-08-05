@@ -12,13 +12,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch OWL-ViT model."""
+"""PyTorch OWL-ViT model."""
 
-import warnings
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Any, Dict, Optional, Tuple, Union
 
-import numpy as np
 import torch
 import torch.utils.checkpoint
 from torch import Tensor, nn
@@ -47,11 +46,6 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "google/owlvit-base-patch32"
 
 # See all OwlViT models at https://huggingface.co/models?filter=owlvit
-OWLVIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/owlvit-base-patch32",
-    "google/owlvit-base-patch16",
-    "google/owlvit-large-patch14",
-]
 
 
 # Copied from transformers.models.clip.modeling_clip.contrastive_loss with clip->owlvit
@@ -457,7 +451,7 @@ class OwlViTMLP(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPEncoderLayer with CLIP->OwlViT
+# Copied from transformers.models.altclip.modeling_altclip.AltCLIPEncoderLayer with AltCLIP->OwlViT
 class OwlViTEncoderLayer(nn.Module):
     def __init__(self, config: OwlViTConfig):
         super().__init__()
@@ -1004,13 +998,13 @@ class OwlViTModel(OwlViTPreTrainedModel):
         super().__init__(config)
 
         if not isinstance(config.text_config, OwlViTTextConfig):
-            raise ValueError(
+            raise TypeError(
                 "config.text_config is expected to be of type OwlViTTextConfig but is of type"
                 f" {type(config.text_config)}."
             )
 
         if not isinstance(config.vision_config, OwlViTVisionConfig):
-            raise ValueError(
+            raise TypeError(
                 "config.vision_config is expected to be of type OwlViTVisionConfig but is of type"
                 f" {type(config.vision_config)}."
             )
@@ -1185,16 +1179,7 @@ class OwlViTModel(OwlViTPreTrainedModel):
         if return_loss:
             loss = owlvit_loss(logits_per_text)
 
-        if return_base_image_embeds:
-            warnings.warn(
-                "`return_base_image_embeds` is deprecated and will be removed in v4.27 of Transformers, one can"
-                " obtain the base (unprojected) image embeddings from outputs.vision_model_output.",
-                FutureWarning,
-            )
-            last_hidden_state = vision_outputs[0]
-            image_embeds = self.vision_model.post_layernorm(last_hidden_state)
-        else:
-            text_embeds = text_embeds_norm
+        text_embeds = text_embeds_norm
 
         if not return_dict:
             output = (logits_per_image, logits_per_text, text_embeds, image_embeds, text_outputs, vision_outputs)
@@ -1272,8 +1257,7 @@ class OwlViTClassPredictionHead(nn.Module):
             if query_mask.ndim > 1:
                 query_mask = torch.unsqueeze(query_mask, dim=-2)
 
-            pred_logits = pred_logits.to(torch.float64)
-            pred_logits = torch.where(query_mask == 0, -1e6, pred_logits)
+            pred_logits = torch.where(query_mask == 0, torch.finfo(pred_logits.dtype).min, pred_logits)
             pred_logits = pred_logits.to(torch.float32)
 
         return (pred_logits, image_class_embeds)
@@ -1292,37 +1276,38 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         self.layer_norm = nn.LayerNorm(config.vision_config.hidden_size, eps=config.vision_config.layer_norm_eps)
         self.sigmoid = nn.Sigmoid()
 
-    def normalize_grid_corner_coordinates(self, feature_map: torch.FloatTensor):
-        # Computes normalized xy corner coordinates from feature_map.
-        if not feature_map.ndim == 4:
-            raise ValueError("Expected input shape is [batch_size, num_patches, num_patches, hidden_dim]")
+        self.sqrt_num_patches = config.vision_config.image_size // config.vision_config.patch_size
+        self.box_bias = self.compute_box_bias(self.sqrt_num_patches)
 
-        device = feature_map.device
-        num_patches = feature_map.shape[1]
+    @staticmethod
+    def normalize_grid_corner_coordinates(num_patches: int) -> torch.Tensor:
+        # Create grid coordinates using torch
+        x_coordinates = torch.arange(1, num_patches + 1, dtype=torch.float32)
+        y_coordinates = torch.arange(1, num_patches + 1, dtype=torch.float32)
+        xx, yy = torch.meshgrid(x_coordinates, y_coordinates, indexing="xy")
 
-        box_coordinates = np.stack(
-            np.meshgrid(np.arange(1, num_patches + 1), np.arange(1, num_patches + 1)), axis=-1
-        ).astype(np.float32)
-        box_coordinates /= np.array([num_patches, num_patches], np.float32)
+        # Stack the coordinates and divide by num_patches
+        box_coordinates = torch.stack((xx, yy), dim=-1)
+        box_coordinates /= num_patches
 
         # Flatten (h, w, 2) -> (h*w, 2)
-        box_coordinates = box_coordinates.reshape(
-            box_coordinates.shape[0] * box_coordinates.shape[1], box_coordinates.shape[2]
-        )
-        box_coordinates = torch.from_numpy(box_coordinates).to(device)
+        box_coordinates = box_coordinates.view(-1, 2)
 
         return box_coordinates
 
-    def compute_box_bias(self, feature_map: torch.FloatTensor) -> torch.FloatTensor:
+    @lru_cache(maxsize=2)
+    def compute_box_bias(self, num_patches: int, feature_map: Optional[torch.FloatTensor] = None) -> torch.Tensor:
+        if feature_map is not None:
+            raise ValueError("feature_map has been deprecated as an input. Please pass in num_patches instead")
         # The box center is biased to its position on the feature grid
-        box_coordinates = self.normalize_grid_corner_coordinates(feature_map)
+        box_coordinates = self.normalize_grid_corner_coordinates(num_patches)
         box_coordinates = torch.clip(box_coordinates, 0.0, 1.0)
 
         # Unnormalize xy
         box_coord_bias = torch.log(box_coordinates + 1e-4) - torch.log1p(-box_coordinates + 1e-4)
 
         # The box size is biased to the patch size
-        box_size = torch.full_like(box_coord_bias, 1.0 / feature_map.shape[-2])
+        box_size = torch.full_like(box_coord_bias, 1.0 / num_patches)
         box_size_bias = torch.log(box_size + 1e-4) - torch.log1p(-box_size + 1e-4)
 
         # Compute box bias
@@ -1348,7 +1333,8 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         pred_boxes = self.box_head(image_feats)
 
         # Compute the location of each token on the grid and use it to compute a bias for the bbox prediction
-        pred_boxes += self.compute_box_bias(feature_map)
+        box_bias = self.box_bias.to(feature_map.device)
+        pred_boxes += box_bias
         pred_boxes = self.sigmoid(pred_boxes)
         return pred_boxes
 
@@ -1394,8 +1380,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         image_embeds = self.owlvit.vision_model.post_layernorm(last_hidden_state)
 
         # Resize class token
-        new_size = tuple(np.array(image_embeds.shape) - np.array((0, 1, 0)))
-        class_token_out = torch.broadcast_to(image_embeds[:, :1, :], new_size)
+        class_token_out = torch.broadcast_to(image_embeds[:, :1, :], image_embeds[:, :-1].shape)
 
         # Merge image embedding with class tokens
         image_embeds = image_embeds[:, 1:, :] * class_token_out
@@ -1404,8 +1389,8 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         # Resize to [batch_size, num_patches, num_patches, hidden_size]
         new_size = (
             image_embeds.shape[0],
-            int(np.sqrt(image_embeds.shape[1])),
-            int(np.sqrt(image_embeds.shape[1])),
+            self.sqrt_num_patches,
+            self.sqrt_num_patches,
             image_embeds.shape[-1],
         )
         image_embeds = image_embeds.reshape(new_size)
@@ -1427,8 +1412,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         image_embeds = self.owlvit.vision_model.post_layernorm(last_hidden_state)
 
         # Resize class token
-        new_size = tuple(np.array(image_embeds.shape) - np.array((0, 1, 0)))
-        class_token_out = torch.broadcast_to(image_embeds[:, :1, :], new_size)
+        class_token_out = torch.broadcast_to(image_embeds[:, :1, :], image_embeds[:, :-1].shape)
 
         # Merge image embedding with class tokens
         image_embeds = image_embeds[:, 1:, :] * class_token_out
@@ -1437,8 +1421,8 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         # Resize to [batch_size, num_patches, num_patches, hidden_size]
         new_size = (
             image_embeds.shape[0],
-            int(np.sqrt(image_embeds.shape[1])),
-            int(np.sqrt(image_embeds.shape[1])),
+            self.sqrt_num_patches,
+            self.sqrt_num_patches,
             image_embeds.shape[-1],
         )
         image_embeds = image_embeds.reshape(new_size)

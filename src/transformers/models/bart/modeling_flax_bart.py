@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Flax Bart model."""
+"""Flax Bart model."""
 
 import math
 import random
@@ -1599,7 +1599,7 @@ class FlaxBartForSequenceClassificationModule(nn.Module):
         eos_mask = jnp.where(input_ids == self.config.eos_token_id, 1, 0)
 
         # The first condition is necessary to overcome jax._src.errors.ConcretizationTypeError during JIT compilation
-        if type(eos_mask) != jax.interpreters.partial_eval.DynamicJaxprTracer:
+        if not isinstance(eos_mask, jax.interpreters.partial_eval.DynamicJaxprTracer):
             if len(jnp.unique(eos_mask.sum(1))) > 1:
                 raise ValueError("All examples must have the same number of <eos> tokens.")
 

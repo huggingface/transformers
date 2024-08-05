@@ -12,30 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Funnel Transformer model configuration"""
+"""Funnel Transformer model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "funnel-transformer/small": "https://huggingface.co/funnel-transformer/small/resolve/main/config.json",
-    "funnel-transformer/small-base": "https://huggingface.co/funnel-transformer/small-base/resolve/main/config.json",
-    "funnel-transformer/medium": "https://huggingface.co/funnel-transformer/medium/resolve/main/config.json",
-    "funnel-transformer/medium-base": "https://huggingface.co/funnel-transformer/medium-base/resolve/main/config.json",
-    "funnel-transformer/intermediate": (
-        "https://huggingface.co/funnel-transformer/intermediate/resolve/main/config.json"
-    ),
-    "funnel-transformer/intermediate-base": (
-        "https://huggingface.co/funnel-transformer/intermediate-base/resolve/main/config.json"
-    ),
-    "funnel-transformer/large": "https://huggingface.co/funnel-transformer/large/resolve/main/config.json",
-    "funnel-transformer/large-base": "https://huggingface.co/funnel-transformer/large-base/resolve/main/config.json",
-    "funnel-transformer/xlarge": "https://huggingface.co/funnel-transformer/xlarge/resolve/main/config.json",
-    "funnel-transformer/xlarge-base": "https://huggingface.co/funnel-transformer/xlarge-base/resolve/main/config.json",
-}
 
 
 class FunnelConfig(PretrainedConfig):

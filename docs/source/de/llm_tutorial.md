@@ -103,7 +103,7 @@ Als nächstes müssen Sie Ihre Texteingabe mit einem [tokenizer](tokenizer_summa
 
 Die Variable `model_inputs` enthält die tokenisierte Texteingabe sowie die Aufmerksamkeitsmaske. Obwohl [`~generation.GenerationMixin.generate`] sein Bestes tut, um die Aufmerksamkeitsmaske abzuleiten, wenn sie nicht übergeben wird, empfehlen wir, sie für optimale Ergebnisse wann immer möglich zu übergeben.
 
-Rufen Sie schließlich die Methode [~generation.GenerationMixin.generate] auf, um die generierten Token zurückzugeben, die vor dem Drucken in Text umgewandelt werden sollten.
+Rufen Sie schließlich die Methode [`~generation.GenerationMixin.generate`] auf, um die generierten Token zurückzugeben, die vor dem Drucken in Text umgewandelt werden sollten.
 
 ```py
 >>> generated_ids = model.generate(**model_inputs)
@@ -130,7 +130,7 @@ Es gibt viele [Generierungsstrategien](generation_strategies), und manchmal sind
 
 ### Generierte Ausgabe ist zu kurz/lang
 
-Wenn in der Datei [~generation.GenerationConfig`] nichts angegeben ist, gibt `generate` standardmäßig bis zu 20 Token zurück. Wir empfehlen dringend, `max_new_tokens` in Ihrem `generate`-Aufruf manuell zu setzen, um die maximale Anzahl neuer Token zu kontrollieren, die zurückgegeben werden können. Beachten Sie, dass LLMs (genauer gesagt, [decoder-only models](https://huggingface.co/learn/nlp-course/chapter1/6?fw=pt)) auch die Eingabeaufforderung als Teil der Ausgabe zurückgeben.
+Wenn in der Datei [`~generation.GenerationConfig`] nichts angegeben ist, gibt `generate` standardmäßig bis zu 20 Token zurück. Wir empfehlen dringend, `max_new_tokens` in Ihrem `generate`-Aufruf manuell zu setzen, um die maximale Anzahl neuer Token zu kontrollieren, die zurückgegeben werden können. Beachten Sie, dass LLMs (genauer gesagt, [decoder-only models](https://huggingface.co/learn/nlp-course/chapter1/6?fw=pt)) auch die Eingabeaufforderung als Teil der Ausgabe zurückgeben.
 
 
 ```py
@@ -149,7 +149,7 @@ Wenn in der Datei [~generation.GenerationConfig`] nichts angegeben ist, gibt `ge
 
 ### Falscher Generierungsmodus
 
-Standardmäßig und sofern nicht in der Datei [~generation.GenerationConfig`] angegeben, wählt `generate` bei jeder Iteration das wahrscheinlichste Token aus (gierige Dekodierung). Je nach Aufgabe kann dies unerwünscht sein; kreative Aufgaben wie Chatbots oder das Schreiben eines Aufsatzes profitieren vom Sampling. Andererseits profitieren Aufgaben, bei denen es auf die Eingabe ankommt, wie z.B. Audiotranskription oder Übersetzung, von der gierigen Dekodierung. Aktivieren Sie das Sampling mit `do_sample=True`. Mehr zu diesem Thema erfahren Sie in diesem [Blogbeitrag] (https://huggingface.co/blog/how-to-generate).
+Standardmäßig und sofern nicht in der Datei [`~generation.GenerationConfig`] angegeben, wählt `generate` bei jeder Iteration das wahrscheinlichste Token aus (gierige Dekodierung). Je nach Aufgabe kann dies unerwünscht sein; kreative Aufgaben wie Chatbots oder das Schreiben eines Aufsatzes profitieren vom Sampling. Andererseits profitieren Aufgaben, bei denen es auf die Eingabe ankommt, wie z.B. Audiotranskription oder Übersetzung, von der gierigen Dekodierung. Aktivieren Sie das Sampling mit `do_sample=True`. Mehr zu diesem Thema erfahren Sie in diesem [Blogbeitrag](https://huggingface.co/blog/how-to-generate).
 
 ```py
 >>> # Set seed or reproducibility -- you don't need this unless you want full reproducibility

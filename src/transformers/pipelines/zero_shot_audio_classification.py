@@ -23,17 +23,23 @@ from ..utils import (
     logging,
 )
 from .audio_classification import ffmpeg_read
-from .base import PIPELINE_INIT_ARGS, Pipeline
+from .base import Pipeline, build_pipeline_init_args
 
 
 logger = logging.get_logger(__name__)
 
 
-@add_end_docstrings(PIPELINE_INIT_ARGS)
+@add_end_docstrings(build_pipeline_init_args(has_feature_extractor=True, has_tokenizer=True))
 class ZeroShotAudioClassificationPipeline(Pipeline):
     """
     Zero shot audio classification pipeline using `ClapModel`. This pipeline predicts the class of an audio when you
     provide an audio and a set of `candidate_labels`.
+
+    <Tip warning={true}>
+
+    The default `hypothesis_template` is : `"This is a sound of {}."`. Make sure you update it for your usage.
+
+    </Tip>
 
     Example:
     ```python
@@ -108,13 +114,15 @@ class ZeroShotAudioClassificationPipeline(Pipeline):
             audio = ffmpeg_read(audio, self.feature_extractor.sampling_rate)
 
         if not isinstance(audio, np.ndarray):
-            raise ValueError("We expect a numpy ndarray as input")
+            raise TypeError("We expect a numpy ndarray as input")
         if len(audio.shape) != 1:
             raise ValueError("We expect a single channel audio input for ZeroShotAudioClassificationPipeline")
 
         inputs = self.feature_extractor(
             [audio], sampling_rate=self.feature_extractor.sampling_rate, return_tensors="pt"
         )
+        if self.framework == "pt":
+            inputs = inputs.to(self.torch_dtype)
         inputs["candidate_labels"] = candidate_labels
         sequences = [hypothesis_template.format(x) for x in candidate_labels]
         text_inputs = self.tokenizer(sequences, return_tensors=self.framework, padding=True)

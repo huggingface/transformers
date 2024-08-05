@@ -146,7 +146,7 @@ optional arguments:
 A exportação de um checkpoint usando uma configuração pronta pode ser feita da seguinte forma:
 
 ```bash
-python -m transformers.onnx --model=distilbert-base-uncased onnx/
+python -m transformers.onnx --model=distilbert/distilbert-base-uncased onnx/
 ```
 
 Você deve ver os seguintes logs:
@@ -161,7 +161,7 @@ All good, model saved at: onnx/model.onnx
 ```
 
 Isso exporta um grafo ONNX do ponto de verificação definido pelo argumento `--model`. Nisso
-Por exemplo, é `distilbert-base-uncased`, mas pode ser qualquer checkpoint no Hugging
+Por exemplo, é `distilbert/distilbert-base-uncased`, mas pode ser qualquer checkpoint no Hugging
 Face Hub ou um armazenado localmente.
 
 O arquivo `model.onnx` resultante pode ser executado em um dos [muitos
@@ -173,7 +173,7 @@ Tempo de execução](https://onnxruntime.ai/) da seguinte forma:
 >>> from transformers import AutoTokenizer
 >>> from onnxruntime import InferenceSession
 
->>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
+>>> tokenizer = AutoTokenizer.from_pretrained("distilbert/distilbert-base-uncased")
 >>> session = InferenceSession("onnx/model.onnx")
 >>> # ONNX Runtime expects NumPy arrays as input
 >>> inputs = tokenizer("Using DistilBERT with ONNX Runtime!", return_tensors="np")
@@ -207,8 +207,8 @@ arquivos tokenizer armazenados em um diretório. Por exemplo, podemos carregar e
 >>> from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
 >>> # Load tokenizer and PyTorch weights form the Hub
->>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
->>> pt_model = AutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased")
+>>> tokenizer = AutoTokenizer.from_pretrained("distilbert/distilbert-base-uncased")
+>>> pt_model = AutoModelForSequenceClassification.from_pretrained("distilbert/distilbert-base-uncased")
 >>> # Save to disk
 >>> tokenizer.save_pretrained("local-pt-checkpoint")
 >>> pt_model.save_pretrained("local-pt-checkpoint")
@@ -225,8 +225,8 @@ python -m transformers.onnx --model=local-pt-checkpoint onnx/
 >>> from transformers import AutoTokenizer, TFAutoModelForSequenceClassification
 
 >>> # Load tokenizer and TensorFlow weights from the Hub
->>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
->>> tf_model = TFAutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased")
+>>> tokenizer = AutoTokenizer.from_pretrained("distilbert/distilbert-base-uncased")
+>>> tf_model = TFAutoModelForSequenceClassification.from_pretrained("distilbert/distilbert-base-uncased")
 >>> # Save to disk
 >>> tokenizer.save_pretrained("local-tf-checkpoint")
 >>> tf_model.save_pretrained("local-tf-checkpoint")
@@ -271,7 +271,7 @@ pacote `transformers.onnx`. Por exemplo, para exportar um modelo de classificaç
 escolher um modelo ajustado no Hub e executar:
 
 ```bash
-python -m transformers.onnx --model=distilbert-base-uncased-finetuned-sst-2-english \
+python -m transformers.onnx --model=distilbert/distilbert-base-uncased-finetuned-sst-2-english \
                             --feature=sequence-classification onnx/
 ```
 
@@ -287,7 +287,7 @@ All good, model saved at: onnx/model.onnx
 ```
 
 Observe que, neste caso, os nomes de saída do modelo ajustado são `logits`
-em vez do `last_hidden_state` que vimos com o checkpoint `distilbert-base-uncased`
+em vez do `last_hidden_state` que vimos com o checkpoint `distilbert/distilbert-base-uncased`
 mais cedo. Isso é esperado, pois o modelo ajustado (fine-tuned) possui uma cabeça de classificação de sequência.
 
 <Tip>
@@ -379,7 +379,7 @@ configuração do modelo base da seguinte forma:
 ```python
 >>> from transformers import AutoConfig
 
->>> config = AutoConfig.from_pretrained("distilbert-base-uncased")
+>>> config = AutoConfig.from_pretrained("distilbert/distilbert-base-uncased")
 >>> onnx_config = DistilBertOnnxConfig(config)
 ```
 
@@ -410,7 +410,7 @@ de classificação, poderíamos usar:
 ```python
 >>> from transformers import AutoConfig
 
->>> config = AutoConfig.from_pretrained("distilbert-base-uncased")
+>>> config = AutoConfig.from_pretrained("distilbert/distilbert-base-uncased")
 >>> onnx_config_for_seq_clf = DistilBertOnnxConfig(config, task="sequence-classification")
 >>> print(onnx_config_for_seq_clf.outputs)
 OrderedDict([('logits', {0: 'batch'})])
@@ -437,7 +437,7 @@ e o caminho para salvar o arquivo exportado:
 >>> from transformers import AutoTokenizer, AutoModel
 
 >>> onnx_path = Path("model.onnx")
->>> model_ckpt = "distilbert-base-uncased"
+>>> model_ckpt = "distilbert/distilbert-base-uncased"
 >>> base_model = AutoModel.from_pretrained(model_ckpt)
 >>> tokenizer = AutoTokenizer.from_pretrained(model_ckpt)
 

@@ -14,7 +14,6 @@
 # limitations under the License.
 """Convert OPT checkpoint."""
 
-
 import argparse
 from pathlib import Path
 

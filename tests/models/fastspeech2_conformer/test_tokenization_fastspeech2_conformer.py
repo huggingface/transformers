@@ -24,6 +24,7 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 @require_g2p_en
 class FastSpeech2ConformerTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "espnet/fastspeech2_conformer"
     tokenizer_class = FastSpeech2ConformerTokenizer
     test_rust_tokenizer = False
 
@@ -173,7 +174,7 @@ class FastSpeech2ConformerTokenizerTest(TokenizerTesterMixin, unittest.TestCase)
     def test_convert_tokens_to_string_format(self):
         pass
 
-    @unittest.skip("FastSpeech2Conformer tokenizer does not support pairs.")
+    @unittest.skip(reason="FastSpeech2Conformer tokenizer does not support pairs.")
     def test_maximum_encoding_length_pair_input(self):
         pass
 

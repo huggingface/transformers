@@ -15,6 +15,7 @@
 """
 isort:skip_file
 """
+
 import os
 import pickle
 import tempfile
@@ -91,8 +92,8 @@ class TokenizerUtilsTest(unittest.TestCase):
     def test_batch_encoding_pickle(self):
         import numpy as np
 
-        tokenizer_p = BertTokenizer.from_pretrained("bert-base-cased")
-        tokenizer_r = BertTokenizerFast.from_pretrained("bert-base-cased")
+        tokenizer_p = BertTokenizer.from_pretrained("google-bert/bert-base-cased")
+        tokenizer_r = BertTokenizerFast.from_pretrained("google-bert/bert-base-cased")
 
         # Python no tensor
         with self.subTest("BatchEncoding (Python, return_tensors=None)"):
@@ -119,8 +120,8 @@ class TokenizerUtilsTest(unittest.TestCase):
         def tf_array_equals(t1, t2):
             return tf.reduce_all(tf.equal(t1, t2))
 
-        tokenizer_p = BertTokenizer.from_pretrained("bert-base-cased")
-        tokenizer_r = BertTokenizerFast.from_pretrained("bert-base-cased")
+        tokenizer_p = BertTokenizer.from_pretrained("google-bert/bert-base-cased")
+        tokenizer_r = BertTokenizerFast.from_pretrained("google-bert/bert-base-cased")
 
         with self.subTest("BatchEncoding (Python, return_tensors=TENSORFLOW)"):
             self.assert_dump_and_restore(
@@ -137,8 +138,8 @@ class TokenizerUtilsTest(unittest.TestCase):
     def test_batch_encoding_pickle_pt(self):
         import torch
 
-        tokenizer_p = BertTokenizer.from_pretrained("bert-base-cased")
-        tokenizer_r = BertTokenizerFast.from_pretrained("bert-base-cased")
+        tokenizer_p = BertTokenizer.from_pretrained("google-bert/bert-base-cased")
+        tokenizer_r = BertTokenizerFast.from_pretrained("google-bert/bert-base-cased")
 
         with self.subTest("BatchEncoding (Python, return_tensors=PYTORCH)"):
             self.assert_dump_and_restore(
@@ -152,8 +153,8 @@ class TokenizerUtilsTest(unittest.TestCase):
 
     @require_tokenizers
     def test_batch_encoding_is_fast(self):
-        tokenizer_p = BertTokenizer.from_pretrained("bert-base-cased")
-        tokenizer_r = BertTokenizerFast.from_pretrained("bert-base-cased")
+        tokenizer_p = BertTokenizer.from_pretrained("google-bert/bert-base-cased")
+        tokenizer_r = BertTokenizerFast.from_pretrained("google-bert/bert-base-cased")
 
         with self.subTest("Python Tokenizer"):
             self.assertFalse(tokenizer_p("Small example to_encode").is_fast)
@@ -163,7 +164,7 @@ class TokenizerUtilsTest(unittest.TestCase):
 
     @require_tokenizers
     def test_batch_encoding_word_to_tokens(self):
-        tokenizer_r = BertTokenizerFast.from_pretrained("bert-base-cased")
+        tokenizer_r = BertTokenizerFast.from_pretrained("google-bert/bert-base-cased")
         encoded = tokenizer_r(["Test", "\xad", "test"], is_split_into_words=True)
 
         self.assertEqual(encoded.word_to_tokens(0), TokenSpan(start=1, end=2))
@@ -235,7 +236,7 @@ class TokenizerUtilsTest(unittest.TestCase):
 
     def test_padding_accepts_tensors(self):
         features = [{"input_ids": np.array([0, 1, 2])}, {"input_ids": np.array([0, 1, 2, 3])}]
-        tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
+        tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-cased")
 
         batch = tokenizer.pad(features, padding=True)
         self.assertTrue(isinstance(batch["input_ids"], np.ndarray))
@@ -249,7 +250,7 @@ class TokenizerUtilsTest(unittest.TestCase):
         import torch
 
         features = [{"input_ids": torch.tensor([0, 1, 2])}, {"input_ids": torch.tensor([0, 1, 2, 3])}]
-        tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
+        tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-cased")
 
         batch = tokenizer.pad(features, padding=True)
         self.assertTrue(isinstance(batch["input_ids"], torch.Tensor))
@@ -263,7 +264,7 @@ class TokenizerUtilsTest(unittest.TestCase):
         import tensorflow as tf
 
         features = [{"input_ids": tf.constant([0, 1, 2])}, {"input_ids": tf.constant([0, 1, 2, 3])}]
-        tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
+        tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-cased")
 
         batch = tokenizer.pad(features, padding=True)
         self.assertTrue(isinstance(batch["input_ids"], tf.Tensor))
@@ -283,3 +284,15 @@ class TokenizerUtilsTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdirname:
             bert_tokenizer.save(os.path.join(tmpdirname, "tokenizer.json"))
             PreTrainedTokenizerFast(tokenizer_file=os.path.join(tmpdirname, "tokenizer.json"))
+
+    def test_len_tokenizer(self):
+        for tokenizer_class in [BertTokenizer, BertTokenizerFast]:
+            with self.subTest(f"{tokenizer_class}"):
+                tokenizer = tokenizer_class.from_pretrained("bert-base-uncased")
+                added_tokens_size = len(tokenizer.added_tokens_decoder)
+                self.assertEqual(len(tokenizer), tokenizer.vocab_size)
+
+                tokenizer.add_tokens(["<test_token>"])
+                self.assertEqual(len(tokenizer), tokenizer.vocab_size + 1)
+                self.assertEqual(len(tokenizer.added_tokens_decoder), added_tokens_size + 1)
+                self.assertEqual(len(tokenizer.added_tokens_encoder), added_tokens_size + 1)

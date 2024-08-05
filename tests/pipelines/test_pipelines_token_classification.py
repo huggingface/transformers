@@ -56,8 +56,8 @@ class TokenClassificationPipelineTests(unittest.TestCase):
             config: model for config, model in tf_model_mapping.items() if config.__name__ not in _TO_SKIP
         }
 
-    def get_test_pipeline(self, model, tokenizer, processor):
-        token_classifier = TokenClassificationPipeline(model=model, tokenizer=tokenizer)
+    def get_test_pipeline(self, model, tokenizer, processor, torch_dtype="float32"):
+        token_classifier = TokenClassificationPipeline(model=model, tokenizer=tokenizer, torch_dtype=torch_dtype)
         return token_classifier, ["A simple string", "A simple string that is quite a bit longer"]
 
     def run_pipeline_test(self, token_classifier, _):
@@ -468,7 +468,7 @@ class TokenClassificationPipelineTests(unittest.TestCase):
     @slow
     def test_aggregation_strategy_byte_level_tokenizer(self):
         sentence = "Groenlinks praat over Schiphol."
-        ner = pipeline("ner", model="xlm-roberta-large-finetuned-conll02-dutch", aggregation_strategy="max")
+        ner = pipeline("ner", model="FacebookAI/xlm-roberta-large-finetuned-conll02-dutch", aggregation_strategy="max")
         self.assertEqual(
             nested_simplify(ner(sentence)),
             [

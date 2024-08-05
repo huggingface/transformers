@@ -13,20 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-""" Phi model configuration"""
-
+"""Phi model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-PHI_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/phi-1": "https://huggingface.co/microsoft/phi-1/resolve/main/config.json",
-    "microsoft/phi-1_5": "https://huggingface.co/microsoft/phi-1_5/resolve/main/config.json",
-    "microsoft/phi-2": "https://huggingface.co/microsoft/phi-2/resolve/main/config.json",
-}
 
 
 class PhiConfig(PretrainedConfig):
@@ -54,7 +47,7 @@ class PhiConfig(PretrainedConfig):
         num_key_value_heads (`int`, *optional*):
             This is the number of key_value heads that should be used to implement Grouped Query Attention. If
             `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
-            `num_key_value_heads=1 the model will use Multi Query Attention (MQA) otherwise GQA is used. When
+            `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
             by meanpooling all the original heads within that group. For more details checkout [this
             paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to
@@ -172,7 +165,6 @@ class PhiConfig(PretrainedConfig):
             **kwargs,
         )
 
-    # Copied from transformers.models.llama.configuration_llama.LlamaConfig._rope_scaling_validation
     def _rope_scaling_validation(self):
         """
         Validate the `rope_scaling` configuration.
@@ -182,8 +174,7 @@ class PhiConfig(PretrainedConfig):
 
         if not isinstance(self.rope_scaling, dict) or len(self.rope_scaling) != 2:
             raise ValueError(
-                "`rope_scaling` must be a dictionary with with two fields, `type` and `factor`, "
-                f"got {self.rope_scaling}"
+                "`rope_scaling` must be a dictionary with two fields, `type` and `factor`, " f"got {self.rope_scaling}"
             )
         rope_scaling_type = self.rope_scaling.get("type", None)
         rope_scaling_factor = self.rope_scaling.get("factor", None)

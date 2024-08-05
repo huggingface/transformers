@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Tokenization class for model T5."""
-
+"""Tokenization class for model T5."""
 
 import os
 import re
@@ -37,25 +36,8 @@ logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "t5-small": "https://huggingface.co/t5-small/resolve/main/spiece.model",
-        "t5-base": "https://huggingface.co/t5-base/resolve/main/spiece.model",
-        "t5-large": "https://huggingface.co/t5-large/resolve/main/spiece.model",
-        "t5-3b": "https://huggingface.co/t5-3b/resolve/main/spiece.model",
-        "t5-11b": "https://huggingface.co/t5-11b/resolve/main/spiece.model",
-    }
-}
-
 
 # TODO(PVP) - this should be removed in Transformers v5
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "t5-small": 512,
-    "t5-base": 512,
-    "t5-large": 512,
-    "t5-3b": 512,
-    "t5-11b": 512,
-}
 
 SPIECE_UNDERLINE = "▁"
 
@@ -117,7 +99,7 @@ class T5Tokenizer(PreTrainedTokenizer):
             ```python
             >>> from transformers import T5Tokenizer
 
-            >>> tokenizer = T5Tokenizer.from_pretrained("t5-base", legacy=True)
+            >>> tokenizer = T5Tokenizer.from_pretrained("google-t5/t5-base", legacy=True)
             >>> tokenizer.encode("Hello <extra_id_0>.")
             [8774, 32099, 3, 5, 1]
             ```
@@ -125,11 +107,14 @@ class T5Tokenizer(PreTrainedTokenizer):
             ```python
             >>> from transformers import T5Tokenizer
 
-            >>> tokenizer = T5Tokenizer.from_pretrained("t5-base", legacy=False)
+            >>> tokenizer = T5Tokenizer.from_pretrained("google-t5/t5-base", legacy=False)
             >>> tokenizer.encode("Hello <extra_id_0>.")  # the extra space `[3]` is no longer here
             [8774, 32099, 5, 1]
             ```
             Checkout the [pull request](https://github.com/huggingface/transformers/pull/24565) for more details.
+        add_prefix_space (`bool`, *optional*, defaults to `False`):
+            Whether or not to add an initial space to the input. This allows to treat the leading word just as any
+            other word.
 
     Attributes:
         sp_model (`SentencePieceProcessor`):
@@ -137,8 +122,6 @@ class T5Tokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
@@ -151,6 +134,7 @@ class T5Tokenizer(PreTrainedTokenizer):
         additional_special_tokens=None,
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
         legacy=None,
+        add_prefix_space=True,
         **kwargs,
     ) -> None:
         pad_token = AddedToken(pad_token, special=True) if isinstance(pad_token, str) else pad_token
@@ -200,6 +184,7 @@ class T5Tokenizer(PreTrainedTokenizer):
         self.sp_model = self.get_spm_processor(kwargs.pop("from_slow", False))
         self.vocab_file = vocab_file
         self._extra_ids = extra_ids
+        self.add_prefix_space = add_prefix_space
 
         super().__init__(
             eos_token=eos_token,
@@ -209,6 +194,7 @@ class T5Tokenizer(PreTrainedTokenizer):
             additional_special_tokens=additional_special_tokens,
             sp_model_kwargs=self.sp_model_kwargs,
             legacy=legacy,
+            add_prefix_space=add_prefix_space,
             **kwargs,
         )
 
@@ -371,8 +357,7 @@ class T5Tokenizer(PreTrainedTokenizer):
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(self.vocab_file)
 
-    # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.tokenize
-    def tokenize(self, text: "TextInput", add_special_tokens=False, **kwargs) -> List[str]:
+    def tokenize(self, text: "TextInput", **kwargs) -> List[str]:
         """
         Converts a string to a list of tokens. If `self.legacy` is set to `False`, a prefix token is added unless the
         first token is special.
@@ -380,7 +365,11 @@ class T5Tokenizer(PreTrainedTokenizer):
         if self.legacy or len(text) == 0:
             return super().tokenize(text, **kwargs)
 
-        tokens = super().tokenize(SPIECE_UNDERLINE + text.replace(SPIECE_UNDERLINE, " "), **kwargs)
+        text = text.replace(SPIECE_UNDERLINE, " ")
+        if self.add_prefix_space:
+            text = SPIECE_UNDERLINE + text
+
+        tokens = super().tokenize(text, **kwargs)
 
         if len(tokens) > 1 and tokens[0] == SPIECE_UNDERLINE and tokens[1] in self.all_special_tokens:
             tokens = tokens[1:]
@@ -400,9 +389,8 @@ class T5Tokenizer(PreTrainedTokenizer):
         `unk_token`. Here is an example with `unk_token = "<unk>"` and `unk_token_length = 4`.
         `self.tokenizer.sp_model.encode("<unk> Hey", out_type = str)[4:]`.
         """
-        tokens = self.sp_model.encode(text, out_type=str)
         if self.legacy or not text.startswith((SPIECE_UNDERLINE, " ")):
-            return tokens
+            return self.sp_model.encode(text, out_type=str)
 
         # 1. Encode string + prefix ex: "<unk> Hey"
         tokens = self.sp_model.encode(self.unk_token + text, out_type=str)
@@ -420,9 +408,11 @@ class T5Tokenizer(PreTrainedTokenizer):
 
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (string) in a single string."""
+        # since we manually add the prefix space, we have to remove it when decoding
+        if tokens[0].startswith(SPIECE_UNDERLINE) and self.add_prefix_space:
+            tokens[0] = tokens[0][1:]
+
         current_sub_tokens = []
-        # since we manually add the prefix space, we have to remove it
-        tokens[0] = tokens[0].lstrip(SPIECE_UNDERLINE)
         out_string = ""
         prev_is_special = False
         for token in tokens:

@@ -73,7 +73,7 @@ Many image captioning datasets contain multiple captions per image. In those cas
 
 </Tip>
 
-Split the dataset’s train split into a train and test set with the [~datasets.Dataset.train_test_split] method:
+Split the dataset’s train split into a train and test set with the [`~datasets.Dataset.train_test_split`] method:
 
 
 ```python
@@ -196,7 +196,7 @@ training_args = TrainingArguments(
     per_device_eval_batch_size=32,
     gradient_accumulation_steps=2,
     save_total_limit=3,
-    evaluation_strategy="steps",
+    eval_strategy="steps",
     eval_steps=50,
     save_strategy="steps",
     save_steps=50,

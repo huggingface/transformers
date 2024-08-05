@@ -25,6 +25,7 @@ from ...test_tokenization_common import TokenizerTesterMixin
 @require_sentencepiece
 @slow  # see https://github.com/huggingface/transformers/issues/11457
 class BarthezTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "moussaKam/mbarthez"
     tokenizer_class = BarthezTokenizer
     rust_tokenizer_class = BarthezTokenizerFast
     test_rust_tokenizer = True
@@ -74,7 +75,7 @@ class BarthezTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_rust_and_python_full_tokenizers(self):
         if not self.test_rust_tokenizer:
-            return
+            self.skipTest(reason="test_rust_tokenizer is set to False")
 
         tokenizer = self.get_tokenizer()
         rust_tokenizer = self.get_rust_tokenizer()

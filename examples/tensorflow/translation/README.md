@@ -29,11 +29,11 @@ can also be used by passing the name of the TPU resource with the `--tpu` argume
 
 MBart and some T5 models require special handling.
 
-T5 models `t5-small`, `t5-base`, `t5-large`, `t5-3b` and `t5-11b` must use an additional argument: `--source_prefix "translate {source_lang} to {target_lang}"`. For example:
+T5 models `google-t5/t5-small`, `google-t5/t5-base`, `google-t5/t5-large`, `google-t5/t5-3b` and `google-t5/t5-11b` must use an additional argument: `--source_prefix "translate {source_lang} to {target_lang}"`. For example:
 
 ```bash
 python run_translation.py \
-    --model_name_or_path t5-small \
+    --model_name_or_path google-t5/t5-small \
     --do_train \
     --do_eval \
     --source_lang en \

@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Fast Tokenization class for Blenderbot."""
+
 import json
 from typing import List, Optional, Tuple
 
@@ -32,16 +33,6 @@ VOCAB_FILES_NAMES = {
     "merges_file": "merges.txt",
     "tokenizer_config_file": "tokenizer_config.json",
 }
-
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {"facebook/blenderbot-3B": "https://huggingface.co/facebook/blenderbot-3B/resolve/main/vocab.json"},
-    "merges_file": {"facebook/blenderbot-3B": "https://huggingface.co/facebook/blenderbot-3B/resolve/main/merges.txt"},
-    "tokenizer_config_file": {
-        "facebook/blenderbot-3B": "https://huggingface.co/facebook/blenderbot-3B/resolve/main/tokenizer_config.json"
-    },
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"facebook/blenderbot-3B": 128}
 
 
 class BlenderbotTokenizerFast(PreTrainedTokenizerFast):
@@ -126,8 +117,6 @@ class BlenderbotTokenizerFast(PreTrainedTokenizerFast):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
     slow_tokenizer_class = BlenderbotTokenizer
 
@@ -298,24 +287,3 @@ class BlenderbotTokenizerFast(PreTrainedTokenizerFast):
             `List[int]`: list of [input IDs](../glossary#input-ids) with the appropriate special tokens.
         """
         return token_ids_0 + [self.eos_token_id]
-
-    @property
-    # Copied from transformers.models.blenderbot.tokenization_blenderbot.BlenderbotTokenizer.default_chat_template
-    def default_chat_template(self):
-        """
-        A very simple chat template that just adds whitespace between messages.
-        """
-        logger.warning_once(
-            "\nNo chat template is defined for this tokenizer - using the default template "
-            f"for the {self.__class__.__name__} class. If the default is not appropriate for "
-            "your model, please set `tokenizer.chat_template` to an appropriate template. "
-            "See https://huggingface.co/docs/transformers/main/chat_templating for more information.\n"
-        )
-        return (
-            "{% for message in messages %}"
-            "{% if message['role'] == 'user' %}{{ ' ' }}{% endif %}"
-            "{{ message['content'] }}"
-            "{% if not loop.last %}{{ '  ' }}{% endif %}"
-            "{% endfor %}"
-            "{{ eos_token }}"
-        )

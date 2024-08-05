@@ -462,7 +462,7 @@ sudo ln -s /usr/bin/g++-7  /usr/local/cuda-10.2/bin/g++
 export TASK_NAME=mrpc
 
 python examples/pytorch/text-classification/run_glue.py \
-  --model_name_or_path bert-base-cased \
+  --model_name_or_path google-bert/bert-base-cased \
   --task_name $TASK_NAME \
   --do_train \
   --do_eval \
@@ -597,7 +597,7 @@ cd transformers
 
 accelerate launch \
 ./examples/pytorch/text-classification/run_glue.py \
---model_name_or_path bert-base-cased \
+--model_name_or_path google-bert/bert-base-cased \
 --task_name $TASK_NAME \
 --do_train \
 --do_eval \
@@ -622,7 +622,7 @@ accelerate launch --num_processes=2 \
 --fsdp_sharding_strategy=1 \
 --fsdp_state_dict_type=FULL_STATE_DICT \
 ./examples/pytorch/text-classification/run_glue.py
---model_name_or_path bert-base-cased \
+--model_name_or_path google-bert/bert-base-cased \
 --task_name $TASK_NAME \
 --do_train \
 --do_eval \

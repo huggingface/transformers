@@ -71,7 +71,7 @@ python run_wikisql_with_tapex.py \
   --eval_steps 1000 \
   --save_steps 1000 \
   --warmup_steps 1000 \
-  --evaluation_strategy steps \
+  --eval_strategy steps \
   --predict_with_generate \
   --num_beams 5 \
   --weight_decay 1e-2 \
@@ -101,7 +101,7 @@ python run_wikisql_with_tapex.py \
   --eval_steps 1000 \
   --save_steps 1000 \
   --warmup_steps 1000 \
-  --evaluation_strategy steps \
+  --eval_strategy steps \
   --predict_with_generate \
   --num_beams 5 \
   --weight_decay 1e-2 \
@@ -132,7 +132,7 @@ python run_wikitablequestions_with_tapex.py \
   --eval_steps 1000 \
   --save_steps 1000 \
   --warmup_steps 1000 \
-  --evaluation_strategy steps \
+  --eval_strategy steps \
   --predict_with_generate \
   --num_beams 5 \
   --weight_decay 1e-2 \
@@ -162,7 +162,7 @@ python run_wikitablequestions_with_tapex.py \
   --eval_steps 1000 \
   --save_steps 1000 \
   --warmup_steps 1000 \
-  --evaluation_strategy steps \
+  --eval_strategy steps \
   --predict_with_generate \
   --num_beams 5 \
   --weight_decay 1e-2 \
@@ -223,7 +223,7 @@ python run_tabfact_with_tapex.py \
   --learning_rate 3e-5 \
   --eval_steps 1000 \
   --save_steps 1000 \
-  --evaluation_strategy steps \
+  --eval_strategy steps \
   --weight_decay 1e-2 \
   --max_steps 30000 \
   --max_grad_norm 0.1
@@ -252,7 +252,7 @@ python run_tabfact_with_tapex.py \
   --learning_rate 3e-5 \
   --eval_steps 1000 \
   --save_steps 1000 \
-  --evaluation_strategy steps \
+  --eval_strategy steps \
   --weight_decay 1e-2 \
   --max_steps 30000 \
   --max_grad_norm 0.1

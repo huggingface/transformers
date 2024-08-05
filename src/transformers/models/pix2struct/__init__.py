@@ -18,7 +18,6 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 _import_structure = {
     "configuration_pix2struct": [
-        "PIX2STRUCT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "Pix2StructConfig",
         "Pix2StructTextConfig",
         "Pix2StructVisionConfig",
@@ -42,7 +41,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_pix2struct"] = [
-        "PIX2STRUCT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "Pix2StructPreTrainedModel",
         "Pix2StructForConditionalGeneration",
         "Pix2StructVisionModel",
@@ -51,7 +49,6 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_pix2struct import (
-        PIX2STRUCT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         Pix2StructConfig,
         Pix2StructTextConfig,
         Pix2StructVisionConfig,
@@ -73,7 +70,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_pix2struct import (
-            PIX2STRUCT_PRETRAINED_MODEL_ARCHIVE_LIST,
             Pix2StructForConditionalGeneration,
             Pix2StructPreTrainedModel,
             Pix2StructTextModel,

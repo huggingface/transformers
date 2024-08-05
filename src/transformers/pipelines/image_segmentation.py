@@ -3,7 +3,7 @@ from typing import Any, Dict, List, Union
 import numpy as np
 
 from ..utils import add_end_docstrings, is_torch_available, is_vision_available, logging, requires_backends
-from .base import PIPELINE_INIT_ARGS, Pipeline
+from .base import Pipeline, build_pipeline_init_args
 
 
 if is_vision_available():
@@ -27,7 +27,7 @@ Prediction = Dict[str, Any]
 Predictions = List[Prediction]
 
 
-@add_end_docstrings(PIPELINE_INIT_ARGS)
+@add_end_docstrings(build_pipeline_init_args(has_image_processor=True))
 class ImageSegmentationPipeline(Pipeline):
     """
     Image segmentation pipeline using any `AutoModelForXXXSegmentation`. This pipeline predicts masks of objects and
@@ -147,6 +147,8 @@ class ImageSegmentationPipeline(Pipeline):
             else:
                 kwargs = {"task_inputs": [subtask]}
             inputs = self.image_processor(images=[image], return_tensors="pt", **kwargs)
+            if self.framework == "pt":
+                inputs = inputs.to(self.torch_dtype)
             inputs["task_inputs"] = self.tokenizer(
                 inputs["task_inputs"],
                 padding="max_length",
@@ -155,6 +157,8 @@ class ImageSegmentationPipeline(Pipeline):
             )["input_ids"]
         else:
             inputs = self.image_processor(images=[image], return_tensors="pt")
+            if self.framework == "pt":
+                inputs = inputs.to(self.torch_dtype)
         inputs["target_size"] = target_size
         return inputs
 

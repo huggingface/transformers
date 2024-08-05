@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch MGP-STR model. """
+"""Testing suite for the PyTorch MGP-STR model."""
 
 import unittest
 
@@ -31,7 +31,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import MgpstrForSceneTextRecognition
+    from transformers import MgpstrForSceneTextRecognition, MgpstrModel
 
 
 if is_vision_available():
@@ -118,7 +118,11 @@ class MgpstrModelTester:
 @require_torch
 class MgpstrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (MgpstrForSceneTextRecognition,) if is_torch_available() else ()
-    pipeline_model_mapping = {"feature-extraction": MgpstrForSceneTextRecognition} if is_torch_available() else {}
+    pipeline_model_mapping = (
+        {"feature-extraction": MgpstrForSceneTextRecognition, "image-feature-extraction": MgpstrModel}
+        if is_torch_available()
+        else {}
+    )
     fx_compatible = False
 
     test_pruning = False
@@ -141,7 +145,7 @@ class MgpstrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:

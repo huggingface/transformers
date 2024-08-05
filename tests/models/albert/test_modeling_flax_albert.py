@@ -139,7 +139,7 @@ class FlaxAlbertModelTest(FlaxModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_class_name in self.all_model_classes:
-            model = model_class_name.from_pretrained("albert-base-v2")
+            model = model_class_name.from_pretrained("albert/albert-base-v2")
             outputs = model(np.ones((1, 1)))
             self.assertIsNotNone(outputs)
 
@@ -148,7 +148,7 @@ class FlaxAlbertModelTest(FlaxModelTesterMixin, unittest.TestCase):
 class FlaxAlbertModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_no_head_absolute_embedding(self):
-        model = FlaxAlbertModel.from_pretrained("albert-base-v2")
+        model = FlaxAlbertModel.from_pretrained("albert/albert-base-v2")
         input_ids = np.array([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]])
         attention_mask = np.array([[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
         output = model(input_ids, attention_mask=attention_mask)[0]

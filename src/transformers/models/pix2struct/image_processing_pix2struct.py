@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Image processor class for Pix2Struct."""
+
 import io
 import math
 from typing import Dict, Optional, Union

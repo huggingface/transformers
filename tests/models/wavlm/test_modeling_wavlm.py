@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch WavLM model. """
+"""Testing suite for the PyTorch WavLM model."""
 
 import math
 import unittest
@@ -288,6 +288,15 @@ class WavLMModelTester:
 
         loss.backward()
 
+    def check_output_attentions(self, config, input_values, attention_mask):
+        model = WavLMModel(config=config)
+        model.config.layerdrop = 1.0
+        model.to(torch_device)
+        model.train()
+
+        outputs = model(input_values, attention_mask=attention_mask, output_attentions=True)
+        self.parent.assertTrue(len(outputs.attentions) > 0)
+
     def check_labels_out_of_vocab(self, config, input_values, *args):
         model = WavLMForCTC(config)
         model.to(torch_device)
@@ -354,27 +363,28 @@ class WavLMModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_seq_classifier_training(*config_and_inputs)
 
+    def test_output_attentions(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.check_output_attentions(*config_and_inputs)
+
     def test_labels_out_of_vocab(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_labels_out_of_vocab(*config_and_inputs)
 
-    # WavLM has no inputs_embeds
+    @unittest.skip(reason="WavLM has no inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
     # `input_ids` is renamed to `input_values`
+    @unittest.skip(reason="WavLM has no input_ids")
     def test_forward_signature(self):
         pass
 
-    # WavLM cannot resize token embeddings
-    # since it has no tokens embeddings
+    @unittest.skip(reason="WavLM has no token embeddings")
     def test_resize_tokens_embeddings(self):
         pass
 
-    # WavLM has no inputs_embeds
-    # and thus the `get_input_embeddings` fn
-    # is not implemented
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     # WavLM uses PyTorch's multi-head-attention class
@@ -490,7 +500,7 @@ class WavLMModelIntegrationTest(unittest.TestCase):
         return [x["array"] for x in speech_samples]
 
     def _load_superb(self, task, num_samples):
-        ds = load_dataset("anton-l/superb_dummy", task, split="test")
+        ds = load_dataset("anton-l/superb_dummy", task, split="test", trust_remote_code=True)
 
         return ds[:num_samples]
 

@@ -593,7 +593,7 @@ class TFElectraModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
     @slow
     def test_model_from_pretrained(self):
-        # for model_name in TF_ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+        #     model_name = 'google/electra-small-generator'
         for model_name in ["google/electra-small-discriminator"]:
             model = TFElectraModel.from_pretrained(model_name)
             self.assertIsNotNone(model)

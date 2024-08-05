@@ -41,7 +41,7 @@ class Pix2StructProcessorTest(unittest.TestCase):
         self.tmpdirname = tempfile.mkdtemp()
 
         image_processor = Pix2StructImageProcessor()
-        tokenizer = T5Tokenizer.from_pretrained("t5-small")
+        tokenizer = T5Tokenizer.from_pretrained("google-t5/t5-small")
 
         processor = Pix2StructProcessor(image_processor, tokenizer)
 

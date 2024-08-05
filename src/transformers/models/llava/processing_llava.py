@@ -16,7 +16,6 @@
 Processor class for Llava.
 """
 
-
 from typing import List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
@@ -38,14 +37,17 @@ class LlavaProcessor(ProcessorMixin):
             The image processor is a required input.
         tokenizer ([`LlamaTokenizerFast`], *optional*):
             The tokenizer is a required input.
+        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
+            in a chat into a tokenizable string.
     """
 
     attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "CLIPImageProcessor"
-    tokenizer_class = ("LlamaTokenizer", "LlamaTokenizerFast")
+    valid_kwargs = ["chat_template"]
+    image_processor_class = "AutoImageProcessor"
+    tokenizer_class = "AutoTokenizer"
 
-    def __init__(self, image_processor=None, tokenizer=None):
-        super().__init__(image_processor, tokenizer)
+    def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
+        super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     def __call__(
         self,
@@ -70,8 +72,7 @@ class LlavaProcessor(ProcessorMixin):
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
             images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
-                number of channels, H and W are image height and width.
+                tensor. Both channels-first and channels-last formats are supported.
             padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
                 Select a strategy to pad the returned sequences (according to the model's padding side and padding
                 index) among:
@@ -103,14 +104,14 @@ class LlavaProcessor(ProcessorMixin):
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
         if images is not None:
-            pixel_values = self.image_processor(images, return_tensors=return_tensors)["pixel_values"]
+            image_inputs = self.image_processor(images, return_tensors=return_tensors)
         else:
-            pixel_values = None
+            image_inputs = {}
         text_inputs = self.tokenizer(
             text, return_tensors=return_tensors, padding=padding, truncation=truncation, max_length=max_length
         )
 
-        return BatchFeature(data={**text_inputs, "pixel_values": pixel_values})
+        return BatchFeature(data={**text_inputs, **image_inputs})
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama
     def batch_decode(self, *args, **kwargs):

@@ -13,11 +13,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-""" Collection of utils to be used by backbones and their components."""
+"""Collection of utils to be used by backbones and their components."""
 
 import enum
 import inspect
-from typing import Iterable, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Iterable, List, Optional, Tuple, Union
+
+
+if TYPE_CHECKING:
+    from ..configuration_utils import PretrainedConfig
 
 
 class BackboneType(enum.Enum):
@@ -47,8 +51,8 @@ def verify_out_features_out_indices(
             )
 
     if out_indices is not None:
-        if not isinstance(out_indices, (list, tuple)):
-            raise ValueError(f"out_indices must be a list or tuple, got {type(out_indices)}")
+        if not isinstance(out_indices, list):
+            raise ValueError(f"out_indices must be a list, got {type(out_indices)}")
         # Convert negative indices to their positive equivalent: [-1,] -> [len(stage_names) - 1,]
         positive_indices = tuple(idx % len(stage_names) if idx < 0 else idx for idx in out_indices)
         if any(idx for idx in positive_indices if idx not in range(len(stage_names))):
@@ -58,7 +62,7 @@ def verify_out_features_out_indices(
             msg += f"(equivalent to {positive_indices}))" if positive_indices != out_indices else ""
             raise ValueError(msg)
         if positive_indices != tuple(sorted(positive_indices)):
-            sorted_negative = tuple(idx for _, idx in sorted(zip(positive_indices, out_indices), key=lambda x: x[0]))
+            sorted_negative = [idx for _, idx in sorted(zip(positive_indices, out_indices), key=lambda x: x[0])]
             raise ValueError(
                 f"out_indices must be in the same order as stage_names, expected {sorted_negative} got {out_indices}"
             )
@@ -122,6 +126,7 @@ def get_aligned_output_features_output_indices(
         out_indices (`List[int]` or `Tuple[int]`): The indices of the features for the backbone to output.
         stage_names (`List[str]`): The names of the stages of the backbone.
     """
+    out_indices = list(out_indices) if out_indices is not None else None
     # First verify that the out_features and out_indices are valid
     verify_out_features_out_indices(out_features=out_features, out_indices=out_indices, stage_names=stage_names)
     output_features, output_indices = _align_output_features_output_indices(
@@ -147,7 +152,10 @@ class BackboneMixin:
         # the timm model has out_features = ['act', 'layer1', 'layer2', 'layer3', 'layer4']
         self.stage_names = [stage["module"] for stage in self._backbone.feature_info.info]
         self.num_features = [stage["num_chs"] for stage in self._backbone.feature_info.info]
-        out_indices = self._backbone.feature_info.out_indices
+
+        # In some timm versions, out_indices reflects the input type of out_indices on the `create_model` call,
+        # in later versions >= 1, it is always a tuple
+        out_indices = list(self._backbone.feature_info.out_indices)
         out_features = self._backbone.feature_info.module_name()
 
         # We verify the out indices and out features are valid
@@ -286,3 +294,84 @@ class BackboneConfigMixin:
         output["out_features"] = output.pop("_out_features")
         output["out_indices"] = output.pop("_out_indices")
         return output
+
+
+def load_backbone(config):
+    """
+    Loads the backbone model from a config object.
+
+    If the config is from the backbone model itself, then we return a backbone model with randomly initialized
+    weights.
+
+    If the config is from the parent model of the backbone model itself, then we load the pretrained backbone weights
+    if specified.
+    """
+    from transformers import AutoBackbone, AutoConfig
+
+    backbone_config = getattr(config, "backbone_config", None)
+    use_timm_backbone = getattr(config, "use_timm_backbone", None)
+    use_pretrained_backbone = getattr(config, "use_pretrained_backbone", None)
+    backbone_checkpoint = getattr(config, "backbone", None)
+    backbone_kwargs = getattr(config, "backbone_kwargs", None)
+    backbone_kwargs = {} if backbone_kwargs is None else backbone_kwargs
+
+    if backbone_kwargs and backbone_config is not None:
+        raise ValueError("You can't specify both `backbone_kwargs` and `backbone_config`.")
+
+    # If there is a backbone_config and a backbone checkpoint, and use_pretrained_backbone=False then the desired
+    # behaviour is ill-defined: do you want to load from the checkpoint's config or the backbone_config?
+    if backbone_config is not None and backbone_checkpoint is not None and use_pretrained_backbone is not None:
+        raise ValueError("Cannot specify both config.backbone_config and config.backbone")
+
+    # If any of thhe following are set, then the config passed in is from a model which contains a backbone.
+    if (
+        backbone_config is None
+        and use_timm_backbone is None
+        and backbone_checkpoint is None
+        and backbone_checkpoint is None
+    ):
+        return AutoBackbone.from_config(config=config, **backbone_kwargs)
+
+    # config from the parent model that has a backbone
+    if use_timm_backbone:
+        if backbone_checkpoint is None:
+            raise ValueError("config.backbone must be set if use_timm_backbone is True")
+        # Because of how timm backbones were originally added to models, we need to pass in use_pretrained_backbone
+        # to determine whether to load the pretrained weights.
+        backbone = AutoBackbone.from_pretrained(
+            backbone_checkpoint,
+            use_timm_backbone=use_timm_backbone,
+            use_pretrained_backbone=use_pretrained_backbone,
+            **backbone_kwargs,
+        )
+    elif use_pretrained_backbone:
+        if backbone_checkpoint is None:
+            raise ValueError("config.backbone must be set if use_pretrained_backbone is True")
+        backbone = AutoBackbone.from_pretrained(backbone_checkpoint, **backbone_kwargs)
+    else:
+        if backbone_config is None and backbone_checkpoint is None:
+            raise ValueError("Either config.backbone_config or config.backbone must be set")
+        if backbone_config is None:
+            backbone_config = AutoConfig.from_pretrained(backbone_checkpoint, **backbone_kwargs)
+        backbone = AutoBackbone.from_config(config=backbone_config)
+    return backbone
+
+
+def verify_backbone_config_arguments(
+    use_timm_backbone: bool,
+    use_pretrained_backbone: bool,
+    backbone: Optional[str],
+    backbone_config: Optional[Union[dict, "PretrainedConfig"]],
+    backbone_kwargs: Optional[dict],
+):
+    """
+    Verify that the config arguments to be passed to load_backbone are valid
+    """
+    if backbone_config is not None and backbone is not None:
+        raise ValueError("You can't specify both `backbone` and `backbone_config`.")
+
+    if backbone_config is not None and use_timm_backbone:
+        raise ValueError("You can't specify both `backbone_config` and `use_timm_backbone`.")
+
+    if backbone_kwargs is not None and backbone_kwargs and backbone_config is not None:
+        raise ValueError("You can't specify both `backbone_kwargs` and `backbone_config`.")

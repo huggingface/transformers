@@ -96,7 +96,7 @@ class BeitImageProcessingTester(unittest.TestCase):
 
 
 def prepare_semantic_single_inputs():
-    dataset = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
+    dataset = load_dataset("hf-internal-testing/fixtures_ade20k", split="test", trust_remote_code=True)
 
     image = Image.open(dataset[0]["file"])
     map = Image.open(dataset[1]["file"])
@@ -105,7 +105,7 @@ def prepare_semantic_single_inputs():
 
 
 def prepare_semantic_batch_inputs():
-    ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
+    ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test", trust_remote_code=True)
 
     image1 = Image.open(ds[0]["file"])
     map1 = Image.open(ds[1]["file"])
@@ -121,6 +121,7 @@ class BeitImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = BeitImageProcessor if is_vision_available() else None
 
     def setUp(self):
+        super().setUp()
         self.image_processor_tester = BeitImageProcessingTester(self)
 
     @property
@@ -136,6 +137,7 @@ class BeitImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertTrue(hasattr(image_processing, "do_normalize"))
         self.assertTrue(hasattr(image_processing, "image_mean"))
         self.assertTrue(hasattr(image_processing, "image_std"))
+        self.assertTrue(hasattr(image_processing, "do_reduce_labels"))
 
     def test_image_processor_from_dict_with_kwargs(self):
         image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
@@ -144,7 +146,7 @@ class BeitImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertEqual(image_processor.do_reduce_labels, False)
 
         image_processor = self.image_processing_class.from_dict(
-            self.image_processor_dict, size=42, crop_size=84, reduce_labels=True
+            self.image_processor_dict, size=42, crop_size=84, do_reduce_labels=True
         )
         self.assertEqual(image_processor.size, {"height": 42, "width": 42})
         self.assertEqual(image_processor.crop_size, {"height": 84, "width": 84})
@@ -270,3 +272,16 @@ class BeitImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         encoding = image_processing(image, map, return_tensors="pt")
         self.assertTrue(encoding["labels"].min().item() >= 0)
         self.assertTrue(encoding["labels"].max().item() <= 255)
+
+    def test_removed_deprecated_kwargs(self):
+        image_processor_dict = dict(self.image_processor_dict)
+        image_processor_dict.pop("do_reduce_labels", None)
+        image_processor_dict["reduce_labels"] = True
+
+        # test we are able to create the image processor with the deprecated kwargs
+        image_processor = self.image_processing_class(**image_processor_dict)
+        self.assertEqual(image_processor.do_reduce_labels, True)
+
+        # test we still support reduce_labels with config
+        image_processor = self.image_processing_class.from_dict(image_processor_dict)
+        self.assertEqual(image_processor.do_reduce_labels, True)

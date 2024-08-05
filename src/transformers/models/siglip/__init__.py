@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
+    is_sentencepiece_available,
     is_torch_available,
     is_vision_available,
 )
@@ -23,14 +24,21 @@ from ...utils import (
 
 _import_structure = {
     "configuration_siglip": [
-        "SIGLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "SiglipConfig",
         "SiglipTextConfig",
         "SiglipVisionConfig",
     ],
     "processing_siglip": ["SiglipProcessor"],
-    "tokenization_siglip": ["SiglipTokenizer"],
 }
+
+try:
+    if not is_sentencepiece_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["tokenization_siglip"] = ["SiglipTokenizer"]
+
 
 try:
     if not is_vision_available():
@@ -47,23 +55,29 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_siglip"] = [
-        "SIGLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
         "SiglipModel",
         "SiglipPreTrainedModel",
         "SiglipTextModel",
         "SiglipVisionModel",
+        "SiglipForImageClassification",
     ]
 
 
 if TYPE_CHECKING:
     from .configuration_siglip import (
-        SIGLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
         SiglipConfig,
         SiglipTextConfig,
         SiglipVisionConfig,
     )
     from .processing_siglip import SiglipProcessor
-    from .tokenization_siglip import SiglipTokenizer
+
+    try:
+        if not is_sentencepiece_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .tokenization_siglip import SiglipTokenizer
 
     try:
         if not is_vision_available():
@@ -80,7 +94,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_siglip import (
-            SIGLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
+            SiglipForImageClassification,
             SiglipModel,
             SiglipPreTrainedModel,
             SiglipTextModel,

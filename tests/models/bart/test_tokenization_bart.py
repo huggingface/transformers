@@ -25,6 +25,7 @@ from ...test_tokenization_common import TokenizerTesterMixin, filter_roberta_det
 
 @require_tokenizers
 class TestTokenizationBart(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "facebook/bart-base"
     tokenizer_class = BartTokenizer
     rust_tokenizer_class = BartTokenizerFast
     test_rust_tokenizer = True
@@ -146,6 +147,7 @@ class TestTokenizationBart(TokenizerTesterMixin, unittest.TestCase):
             self.assertTrue((input_ids[:, -1] == tokenizer.eos_token_id).all().item())
             self.assertTrue((labels[:, -1] == tokenizer.eos_token_id).all().item())
 
+    @unittest.skip
     def test_pretokenized_inputs(self):
         pass
 

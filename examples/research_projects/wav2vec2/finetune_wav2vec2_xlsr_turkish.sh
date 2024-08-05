@@ -6,7 +6,7 @@ python run_common_voice.py \
     --overwrite_output_dir \
     --num_train_epochs="5" \
     --per_device_train_batch_size="16" \
-    --evaluation_strategy="steps" \
+    --eval_strategy="steps" \
     --learning_rate="3e-4" \
     --warmup_steps="500" \
     --fp16 \

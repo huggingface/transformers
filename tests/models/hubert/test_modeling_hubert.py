@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Hubert model. """
-
+"""Testing suite for the PyTorch Hubert model."""
 
 import math
 import os
@@ -351,23 +350,22 @@ class HubertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_labels_out_of_vocab(*config_and_inputs)
 
-    # Hubert has no inputs_embeds
+    @unittest.skip(reason="Hubert has no inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
-    # `input_ids` is renamed to `input_values`
+    @unittest.skip(reason="Hubert has no inputs_embeds")
     def test_forward_signature(self):
         pass
 
     # Hubert cannot resize token embeddings
     # since it has no tokens embeddings
+    @unittest.skip(reason="Hubert has no tokens embeddings")
     def test_resize_tokens_embeddings(self):
         pass
 
-    # Hubert has no inputs_embeds
-    # and thus the `get_input_embeddings` fn
-    # is not implemented
-    def test_model_common_attributes(self):
+    @unittest.skip(reason="Hubert has no inputs_embeds")
+    def test_model_get_set_embeddings(self):
         pass
 
     def test_retain_grad_hidden_states_attentions(self):
@@ -439,10 +437,10 @@ class HubertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     # Hubert cannot be TorchScripted because of torch.nn.utils.weight_norm
     def _create_and_check_torch_fx_tracing(self, config, inputs_dict, output_loss=False):
         # TODO: fix it
-        self.skipTest("torch 2.1 breaks torch fx tests for wav2vec2/hubert.")
+        self.skipTest(reason="torch 2.1 breaks torch fx tests for wav2vec2/hubert.")
 
         if not is_torch_fx_available() or not self.fx_compatible:
-            return
+            self.skipTest(reason="torch fx is not available or not compatible with this model")
 
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
         configs_no_init.return_dict = False
@@ -616,23 +614,20 @@ class HubertRobustModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_labels_out_of_vocab(*config_and_inputs)
 
-    # Hubert has no inputs_embeds
+    @unittest.skip(reason="Hubert has no inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
-    # `input_ids` is renamed to `input_values`
+    @unittest.skip(reason="Hubert has input_values instead of input_ids")
     def test_forward_signature(self):
         pass
 
-    # Hubert cannot resize token embeddings
-    # since it has no tokens embeddings
+    @unittest.skip(reason="Hubert has no tokens embeddings")
     def test_resize_tokens_embeddings(self):
         pass
 
-    # Hubert has no inputs_embeds
-    # and thus the `get_input_embeddings` fn
-    # is not implemented
-    def test_model_common_attributes(self):
+    @unittest.skip(reason="Hubert has no inputs_embeds")
+    def test_model_get_set_embeddings(self):
         pass
 
     def test_retain_grad_hidden_states_attentions(self):
@@ -769,7 +764,7 @@ class HubertModelIntegrationTest(unittest.TestCase):
     def _load_superb(self, task, num_samples):
         from datasets import load_dataset
 
-        ds = load_dataset("anton-l/superb_dummy", task, split="test")
+        ds = load_dataset("anton-l/superb_dummy", task, split="test", trust_remote_code=True)
 
         return ds[:num_samples]
 

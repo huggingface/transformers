@@ -73,7 +73,7 @@ The following example shows how to get the last hidden state using [`VisualBertM
 >>> from transformers import BertTokenizer, VisualBertModel
 
 >>> model = VisualBertModel.from_pretrained("uclanlp/visualbert-vqa-coco-pre")
->>> tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+>>> tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-uncased")
 
 >>> inputs = tokenizer("What is the man eating?", return_tensors="pt")
 >>> # this is a custom function that returns the visual embeddings given the image path

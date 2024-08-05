@@ -12,13 +12,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch ESM model. """
-
+"""Testing suite for the PyTorch ESM model."""
 
 import unittest
 
 from transformers import EsmConfig, is_torch_available
-from transformers.testing_utils import TestCasePlus, require_torch, slow, torch_device
+from transformers.testing_utils import TestCasePlus, require_bitsandbytes, require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
@@ -30,7 +29,6 @@ if is_torch_available():
 
     from transformers import EsmForMaskedLM, EsmForSequenceClassification, EsmForTokenClassification, EsmModel
     from transformers.models.esm.modeling_esm import (
-        ESM_PRETRAINED_MODEL_ARCHIVE_LIST,
         EsmEmbeddings,
         create_position_ids_from_input_ids,
     )
@@ -243,13 +241,12 @@ class EsmModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in ESM_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = EsmModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "facebook/esm2_t6_8M_UR50D"
+        model = EsmModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def test_create_position_ids_respects_padding_index(self):
-        """Ensure that the default position ids only assign a sequential . This is a regression
-        test for https://github.com/huggingface/transformers/issues/1761
+        """This is a regression test for https://github.com/huggingface/transformers/issues/1761
 
         The position ids should be masked with the embedding object's padding index. Therefore, the
         first available non-padding position index is EsmEmbeddings.padding_idx + 1
@@ -273,8 +270,7 @@ class EsmModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.assertTrue(torch.all(torch.eq(position_ids, expected_positions)))
 
     def test_create_position_ids_from_inputs_embeds(self):
-        """Ensure that the default position ids only assign a sequential . This is a regression
-        test for https://github.com/huggingface/transformers/issues/1761
+        """This is a regression test for https://github.com/huggingface/transformers/issues/1761
 
         The position ids should be masked with the embedding object's padding index. Therefore, the
         first available non-padding position index is EsmEmbeddings.padding_idx + 1
@@ -294,18 +290,18 @@ class EsmModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.assertEqual(position_ids.shape, expected_positions.shape)
         self.assertTrue(torch.all(torch.eq(position_ids, expected_positions)))
 
-    @unittest.skip("Esm does not support embedding resizing")
+    @unittest.skip(reason="Esm does not support embedding resizing")
     def test_resize_embeddings_untied(self):
         pass
 
-    @unittest.skip("Esm does not support embedding resizing")
+    @unittest.skip(reason="Esm does not support embedding resizing")
     def test_resize_tokens_embeddings(self):
         pass
 
 
+@slow
 @require_torch
 class EsmModelIntegrationTest(TestCasePlus):
-    @slow
     def test_inference_masked_lm(self):
         with torch.no_grad():
             model = EsmForMaskedLM.from_pretrained("facebook/esm2_t6_8M_UR50D")
@@ -323,7 +319,6 @@ class EsmModelIntegrationTest(TestCasePlus):
             )
             self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
 
-    @slow
     def test_inference_no_head(self):
         with torch.no_grad():
             model = EsmModel.from_pretrained("facebook/esm2_t6_8M_UR50D")
@@ -336,3 +331,18 @@ class EsmModelIntegrationTest(TestCasePlus):
                 [[[0.1444, 0.5413, 0.3248], [0.3034, 0.0053, 0.3108], [0.3228, -0.2499, 0.3415]]]
             )
             self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+
+    @require_bitsandbytes
+    def test_inference_bitsandbytes(self):
+        model = EsmForMaskedLM.from_pretrained("facebook/esm2_t36_3B_UR50D", load_in_8bit=True)
+
+        input_ids = torch.tensor([[0, 6, 4, 13, 5, 4, 16, 12, 11, 7, 2]])
+        # Just test if inference works
+        with torch.no_grad():
+            _ = model(input_ids)[0]
+
+        model = EsmForMaskedLM.from_pretrained("facebook/esm2_t36_3B_UR50D", load_in_4bit=True)
+
+        input_ids = torch.tensor([[0, 6, 4, 13, 5, 4, 16, 12, 11, 7, 2]])
+        # Just test if inference works
+        _ = model(input_ids)[0]

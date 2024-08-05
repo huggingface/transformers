@@ -1,7 +1,7 @@
 from typing import Any, Dict, List, Union
 
 from ..utils import add_end_docstrings, is_torch_available, is_vision_available, logging, requires_backends
-from .base import PIPELINE_INIT_ARGS, ChunkPipeline
+from .base import ChunkPipeline, build_pipeline_init_args
 
 
 if is_vision_available():
@@ -19,7 +19,7 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
-@add_end_docstrings(PIPELINE_INIT_ARGS)
+@add_end_docstrings(build_pipeline_init_args(has_image_processor=True))
 class ZeroShotObjectDetectionPipeline(ChunkPipeline):
     """
     Zero shot object detection pipeline using `OwlViTForObjectDetection`. This pipeline predicts bounding boxes of
@@ -156,6 +156,8 @@ class ZeroShotObjectDetectionPipeline(ChunkPipeline):
         for i, candidate_label in enumerate(candidate_labels):
             text_inputs = self.tokenizer(candidate_label, return_tensors=self.framework)
             image_features = self.image_processor(image, return_tensors=self.framework)
+            if self.framework == "pt":
+                image_features = image_features.to(self.torch_dtype)
             yield {
                 "is_last": i == len(candidate_labels) - 1,
                 "target_size": target_size,

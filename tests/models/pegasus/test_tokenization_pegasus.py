@@ -27,6 +27,7 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece_no_bos.model")
 @require_sentencepiece
 @require_tokenizers
 class PegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "google/pegasus-xsum"
     tokenizer_class = PegasusTokenizer
     rust_tokenizer_class = PegasusTokenizerFast
     test_rust_tokenizer = True
@@ -127,14 +128,11 @@ class PegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             revision="ba85d0851d708441f91440d509690f1ab6353415",
         )
 
-    # @unittest.skip("We have to use from_slow")
-    # def test_added_tokens_serialization(self):
-    #     pass
-
 
 @require_sentencepiece
 @require_tokenizers
 class BigBirdPegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "google/pegasus-xsum"
     tokenizer_class = PegasusTokenizer
     rust_tokenizer_class = PegasusTokenizerFast
     test_rust_tokenizer = True
@@ -213,7 +211,3 @@ class BigBirdPegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             token_ids,
             [182, 117, 142, 587, 4211, 120, 117, 263, 112, 804, 109, 856, 25016, 3137, 464, 109, 26955, 3137, 1],
         )
-
-    # @unittest.skip("We have to use from_slow")
-    # def test_added_tokens_serialization(self):
-    #     pass

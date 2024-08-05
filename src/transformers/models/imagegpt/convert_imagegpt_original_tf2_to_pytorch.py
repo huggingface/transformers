@@ -14,7 +14,6 @@
 # limitations under the License.
 """Convert OpenAI Image GPT checkpoints."""
 
-
 import argparse
 
 import torch

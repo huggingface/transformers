@@ -24,7 +24,7 @@ from ...utils import (
 )
 
 
-_import_structure = {"configuration_xlnet": ["XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLNetConfig"]}
+_import_structure = {"configuration_xlnet": ["XLNetConfig"]}
 
 try:
     if not is_sentencepiece_available():
@@ -49,7 +49,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_xlnet"] = [
-        "XLNET_PRETRAINED_MODEL_ARCHIVE_LIST",
         "XLNetForMultipleChoice",
         "XLNetForQuestionAnswering",
         "XLNetForQuestionAnsweringSimple",
@@ -68,7 +67,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_tf_xlnet"] = [
-        "TF_XLNET_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFXLNetForMultipleChoice",
         "TFXLNetForQuestionAnsweringSimple",
         "TFXLNetForSequenceClassification",
@@ -81,7 +79,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_xlnet import XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP, XLNetConfig
+    from .configuration_xlnet import XLNetConfig
 
     try:
         if not is_sentencepiece_available():
@@ -106,7 +104,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_xlnet import (
-            XLNET_PRETRAINED_MODEL_ARCHIVE_LIST,
             XLNetForMultipleChoice,
             XLNetForQuestionAnswering,
             XLNetForQuestionAnsweringSimple,
@@ -125,7 +122,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_tf_xlnet import (
-            TF_XLNET_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFXLNetForMultipleChoice,
             TFXLNetForQuestionAnsweringSimple,
             TFXLNetForSequenceClassification,

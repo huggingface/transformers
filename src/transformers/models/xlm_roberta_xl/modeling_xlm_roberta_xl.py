@@ -47,14 +47,8 @@ from .configuration_xlm_roberta_xl import XLMRobertaXLConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "xlm-roberta-xlarge"
+_CHECKPOINT_FOR_DOC = "facebook/xlm-roberta-xl"
 _CONFIG_FOR_DOC = "XLMRobertaXLConfig"
-
-XLM_ROBERTA_XL_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/xlm-roberta-xl",
-    "facebook/xlm-roberta-xxl",
-    # See all RoBERTa models at https://huggingface.co/models?filter=xlm-roberta-xl
-]
 
 
 class XLMRobertaXLEmbeddings(nn.Module):
@@ -578,6 +572,7 @@ class XLMRobertaXLPreTrainedModel(PreTrainedModel):
 
     config_class = XLMRobertaXLConfig
     base_model_prefix = "roberta"
+    _no_split_modules = ["XLMRobertaXLEmbeddings", "XLMRobertaXLLayer"]
 
     # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights
     def _init_weights(self, module):
@@ -653,7 +648,7 @@ XLM_ROBERTA_XL_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare XLM-RoBERTa-xlarge Model transformer outputting raw hidden-states without any specific head on top.",
+    "The bare XLM-RoBERTa-XL Model transformer outputting raw hidden-states without any specific head on top.",
     XLM_ROBERTA_XL_START_DOCSTRING,
 )
 class XLMRobertaXLModel(XLMRobertaXLPreTrainedModel):
@@ -667,7 +662,7 @@ class XLMRobertaXLModel(XLMRobertaXLPreTrainedModel):
     an input to the forward pass. .. _*Attention is all you need*: https://arxiv.org/abs/1706.03762
     """
 
-    # Copied from transformers.models.bert.modeling_bert.BertModel.__init__ with Bert->XLMRobertaXL
+    # Copied from transformers.models.clap.modeling_clap.ClapTextModel.__init__ with ClapText->XLMRobertaXL
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
@@ -700,7 +695,7 @@ class XLMRobertaXLModel(XLMRobertaXLPreTrainedModel):
         output_type=BaseModelOutputWithPoolingAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
     )
-    # Copied from transformers.models.bert.modeling_bert.BertModel.forward
+    # Copied from transformers.models.clap.modeling_clap.ClapTextModel.forward
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -833,7 +828,7 @@ class XLMRobertaXLModel(XLMRobertaXLPreTrainedModel):
 
 
 @add_start_docstrings(
-    """XLM-RoBERTa-xlarge Model with a `language modeling` head on top for CLM fine-tuning.""",
+    """XLM-RoBERTa-XL Model with a `language modeling` head on top for CLM fine-tuning.""",
     XLM_ROBERTA_XL_START_DOCSTRING,
 )
 class XLMRobertaXLForCausalLM(XLMRobertaXLPreTrainedModel):
@@ -855,6 +850,7 @@ class XLMRobertaXLForCausalLM(XLMRobertaXLPreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.lm_head.decoder = new_embeddings
+        self.lm_head.bias = new_embeddings.bias
 
     @add_start_docstrings_to_model_forward(XLM_ROBERTA_XL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
@@ -906,10 +902,10 @@ class XLMRobertaXLForCausalLM(XLMRobertaXLPreTrainedModel):
         >>> from transformers import AutoTokenizer, RobertaForCausalLM, RobertaConfig
         >>> import torch
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("roberta-base")
-        >>> config = RobertaConfig.from_pretrained("roberta-base")
+        >>> tokenizer = AutoTokenizer.from_pretrained("FacebookAI/roberta-base")
+        >>> config = RobertaConfig.from_pretrained("FacebookAI/roberta-base")
         >>> config.is_decoder = True
-        >>> model = RobertaForCausalLM.from_pretrained("roberta-base", config=config)
+        >>> model = RobertaForCausalLM.from_pretrained("FacebookAI/roberta-base", config=config)
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
         >>> prediction_logits = outputs.logits
@@ -990,7 +986,7 @@ class XLMRobertaXLForCausalLM(XLMRobertaXLPreTrainedModel):
 
 
 @add_start_docstrings(
-    """XLM-RoBERTa-xlarge Model with a `language modeling` head on top.""", XLM_ROBERTA_XL_START_DOCSTRING
+    """XLM-RoBERTa-XL Model with a `language modeling` head on top.""", XLM_ROBERTA_XL_START_DOCSTRING
 )
 class XLMRobertaXLForMaskedLM(XLMRobertaXLPreTrainedModel):
     _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
@@ -1014,6 +1010,7 @@ class XLMRobertaXLForMaskedLM(XLMRobertaXLPreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.lm_head.decoder = new_embeddings
+        self.lm_head.bias = new_embeddings.bias
 
     @add_start_docstrings_to_model_forward(XLM_ROBERTA_XL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -1042,7 +1039,7 @@ class XLMRobertaXLForMaskedLM(XLMRobertaXLPreTrainedModel):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
             config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
             loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
-        kwargs (`Dict[str, any]`, optional, defaults to *{}*):
+        kwargs (`Dict[str, any]`, *optional*, defaults to `{}`):
             Used to hide legacy arguments that have been deprecated.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1081,7 +1078,7 @@ class XLMRobertaXLForMaskedLM(XLMRobertaXLPreTrainedModel):
 
 
 class XLMRobertaXLLMHead(nn.Module):
-    """XLM-Roberta-xlarge Head for masked language modeling."""
+    """XLM-RoBERTa-XL Head for masked language modeling."""
 
     def __init__(self, config):
         super().__init__()
@@ -1102,14 +1099,18 @@ class XLMRobertaXLLMHead(nn.Module):
 
         return x
 
-    def _tie_weights(self):
-        # To tie those two weights if they get disconnected (on TPU or when the bias is resized)
-        self.bias = self.decoder.bias
+    def _tie_weights(self) -> None:
+        # For accelerate compatibility and to not break backward compatibility
+        if self.decoder.bias.device.type == "meta":
+            self.decoder.bias = self.bias
+        else:
+            # To tie those two weights if they get disconnected (on TPU or when the bias is resized)
+            self.bias = self.decoder.bias
 
 
 @add_start_docstrings(
     """
-    XLM-RoBERTa-xlarge Model transformer with a sequence classification/regression head on top (a linear layer on top
+    XLM-RoBERTa-XL Model transformer with a sequence classification/regression head on top (a linear layer on top
     of the pooled output) e.g. for GLUE tasks.
     """,
     XLM_ROBERTA_XL_START_DOCSTRING,
@@ -1203,7 +1204,7 @@ class XLMRobertaXLForSequenceClassification(XLMRobertaXLPreTrainedModel):
 
 @add_start_docstrings(
     """
-    XLM-Roberta-xlarge Model with a multiple choice classification head on top (a linear layer on top of the pooled
+    XLM-RoBERTa-XL Model with a multiple choice classification head on top (a linear layer on top of the pooled
     output and a softmax) e.g. for RocStories/SWAG tasks.
     """,
     XLM_ROBERTA_XL_START_DOCSTRING,
@@ -1294,7 +1295,7 @@ class XLMRobertaXLForMultipleChoice(XLMRobertaXLPreTrainedModel):
 
 @add_start_docstrings(
     """
-    XLM-Roberta-xlarge Model with a token classification head on top (a linear layer on top of the hidden-states
+    XLM-RoBERTa-XL Model with a token classification head on top (a linear layer on top of the hidden-states
     output) e.g. for Named-Entity-Recognition (NER) tasks.
     """,
     XLM_ROBERTA_XL_START_DOCSTRING,
@@ -1405,7 +1406,7 @@ class XLMRobertaXLClassificationHead(nn.Module):
 
 @add_start_docstrings(
     """
-    XLM-Roberta-xlarge Model with a span classification head on top for extractive question-answering tasks like SQuAD
+    XLM-RoBERTa-XL Model with a span classification head on top for extractive question-answering tasks like SQuAD
     (a linear layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
     """,
     XLM_ROBERTA_XL_START_DOCSTRING,

@@ -331,6 +331,7 @@ IGNORE_SUBMODULES = [
     "models.esm.openfold_utils",
     "modeling_attn_mask_utils",
     "safetensors_conversion",
+    "modeling_gguf_pytorch_utils",
 ]
 
 

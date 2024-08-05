@@ -102,15 +102,15 @@ def convert_state_dict(orig_state_dict, model):
             dim = model.swin.encoder.layers[layer_num].blocks[block_num].attention.self.all_head_size
 
             if "weight" in key:
-                orig_state_dict[
-                    f"swin.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.query.weight"
-                ] = val[:dim, :]
+                orig_state_dict[f"swin.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.query.weight"] = (
+                    val[:dim, :]
+                )
                 orig_state_dict[f"swin.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.key.weight"] = val[
                     dim : dim * 2, :
                 ]
-                orig_state_dict[
-                    f"swin.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.value.weight"
-                ] = val[-dim:, :]
+                orig_state_dict[f"swin.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.value.weight"] = (
+                    val[-dim:, :]
+                )
             else:
                 orig_state_dict[f"swin.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.query.bias"] = val[
                     :dim

@@ -48,7 +48,7 @@ Wie Sie nun wissen, benötigen Sie einen Tokenizer, um den Text zu verarbeiten u
 ```py
 >>> from transformers import AutoTokenizer
 
->>> tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
+>>> tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-cased")
 
 
 >>> def tokenize_function(examples):
@@ -86,7 +86,7 @@ Beginnen Sie mit dem Laden Ihres Modells und geben Sie die Anzahl der erwarteten
 ```py
 >>> from transformers import AutoModelForSequenceClassification
 
->>> model = AutoModelForSequenceClassification.from_pretrained("bert-base-cased", num_labels=5)
+>>> model = AutoModelForSequenceClassification.from_pretrained("google-bert/bert-base-cased", num_labels=5)
 ```
 
 <Tip>
@@ -128,12 +128,12 @@ Rufen Sie [`~evaluate.compute`] auf `metric` auf, um die Genauigkeit Ihrer Vorhe
 ...     return metric.compute(predictions=predictions, references=labels)
 ```
 
-Wenn Sie Ihre Bewertungsmetriken während der Feinabstimmung überwachen möchten, geben Sie den Parameter `evaluation_strategy` in Ihren Trainingsargumenten an, um die Bewertungsmetrik am Ende jeder Epoche zu ermitteln:
+Wenn Sie Ihre Bewertungsmetriken während der Feinabstimmung überwachen möchten, geben Sie den Parameter `eval_strategy` in Ihren Trainingsargumenten an, um die Bewertungsmetrik am Ende jeder Epoche zu ermitteln:
 
 ```py
 >>> from transformers import TrainingArguments, Trainer
 
->>> training_args = TrainingArguments(output_dir="test_trainer", evaluation_strategy="epoch")
+>>> training_args = TrainingArguments(output_dir="test_trainer", eval_strategy="epoch")
 ```
 
 ### Trainer
@@ -187,7 +187,7 @@ Wir können sie also ohne Tokenisierung direkt in ein NumPy-Array konvertieren!
 ```py
 from transformers import AutoTokenizer
 
-tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
+tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-cased")
 tokenized_data = tokenizer(dataset["text"], return_tensors="np", padding=True)
 # Tokenizer returns a BatchEncoding, but we convert that to a dict for Keras
 tokenized_data = dict(tokenized_data)
@@ -202,7 +202,7 @@ from transformers import TFAutoModelForSequenceClassification
 from tensorflow.keras.optimizers import Adam
 
 # Load and compile our model
-model = TFAutoModelForSequenceClassification.from_pretrained("bert-base-cased")
+model = TFAutoModelForSequenceClassification.from_pretrained("google-bert/bert-base-cased")
 # Lower learning rates are often better for fine-tuning transformers
 model.compile(optimizer=Adam(3e-5))
 
@@ -229,10 +229,10 @@ tf.data"-Pipeline schreiben können, wenn Sie wollen, haben wir zwei bequeme Met
 - [`~TFPreTrainedModel.prepare_tf_dataset`]: Dies ist die Methode, die wir in den meisten Fällen empfehlen. Da es sich um eine Methode
 Ihres Modells ist, kann sie das Modell inspizieren, um automatisch herauszufinden, welche Spalten als Modelleingaben verwendet werden können, und
 verwirft die anderen, um einen einfacheren, leistungsfähigeren Datensatz zu erstellen.
-- [~datasets.Dataset.to_tf_dataset`]: Diese Methode ist eher auf niedriger Ebene angesiedelt und ist nützlich, wenn Sie genau kontrollieren wollen, wie
+- [`~datasets.Dataset.to_tf_dataset`]: Diese Methode ist eher auf niedriger Ebene angesiedelt und ist nützlich, wenn Sie genau kontrollieren wollen, wie
 Dataset erstellt wird, indem man genau angibt, welche `columns` und `label_cols` einbezogen werden sollen.
 
-Bevor Sie [~TFPreTrainedModel.prepare_tf_dataset`] verwenden können, müssen Sie die Tokenizer-Ausgaben als Spalten zu Ihrem Datensatz hinzufügen, wie in
+Bevor Sie [`~TFPreTrainedModel.prepare_tf_dataset`] verwenden können, müssen Sie die Tokenizer-Ausgaben als Spalten zu Ihrem Datensatz hinzufügen, wie in
 dem folgenden Codebeispiel:
 
 ```py
@@ -333,7 +333,7 @@ Laden Sie Ihr Modell mit der Anzahl der erwarteten Kennzeichnungen:
 ```py
 >>> from transformers import AutoModelForSequenceClassification
 
->>> model = AutoModelForSequenceClassification.from_pretrained("bert-base-cased", num_labels=5)
+>>> model = AutoModelForSequenceClassification.from_pretrained("google-bert/bert-base-cased", num_labels=5)
 ```
 
 ### Optimierer und Lernratensteuerung

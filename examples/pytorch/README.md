@@ -46,6 +46,8 @@ Coming soon!
 | [**`image-pretraining`**](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-pretraining) | [ImageNet-1k](https://huggingface.co/datasets/imagenet-1k) | ✅ | - |✅ | /
 | [**`image-classification`**](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-classification) | [CIFAR-10](https://huggingface.co/datasets/cifar10) | ✅ | ✅ |✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb)
 | [**`semantic-segmentation`**](https://github.com/huggingface/transformers/tree/main/examples/pytorch/semantic-segmentation) | [SCENE_PARSE_150](https://huggingface.co/datasets/scene_parse_150) | ✅ | ✅ |✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/semantic_segmentation.ipynb)
+| [**`object-detection`**](https://github.com/huggingface/transformers/tree/main/examples/pytorch/object-detection) | [CPPE-5](https://huggingface.co/datasets/cppe-5) | ✅ | ✅ |✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/main/transformers_doc/en/pytorch/object_detection.ipynb)
+| [**`instance-segmentation`**](https://github.com/huggingface/transformers/tree/main/examples/pytorch/instance-segmentation) | [ADE20K sample](https://huggingface.co/datasets/qubvel-hf/ade20k-mini) | ✅ | ✅ |✅ |
 
 
 ## Running quick tests
@@ -53,7 +55,7 @@ Coming soon!
 Most examples are equipped with a mechanism to truncate the number of dataset samples to the desired length. This is useful for debugging purposes, for example to quickly check that all stages of the programs can complete, before running the same setup on the full dataset which may take hours to complete.
 
 For example here is how to truncate all three splits to just 50 samples each:
-```
+```bash
 examples/pytorch/token-classification/run_ner.py \
 --max_train_samples 50 \
 --max_eval_samples 50 \
@@ -62,7 +64,7 @@ examples/pytorch/token-classification/run_ner.py \
 ```
 
 Most example scripts should have the first two command line arguments and some have the third one. You can quickly check if a given example supports any of these by passing a `-h` option, e.g.:
-```
+```bash
 examples/pytorch/token-classification/run_ner.py -h
 ```
 
@@ -109,7 +111,7 @@ classification MNLI task using the `run_glue` script, with 8 GPUs:
 ```bash
 torchrun \
     --nproc_per_node 8 pytorch/text-classification/run_glue.py \
-    --model_name_or_path bert-large-uncased-whole-word-masking \
+    --model_name_or_path google-bert/bert-large-uncased-whole-word-masking \
     --task_name mnli \
     --do_train \
     --do_eval \
@@ -153,7 +155,7 @@ classification MNLI task using the `run_glue` script, with 8 TPUs (from this fol
 ```bash
 python xla_spawn.py --num_cores 8 \
     text-classification/run_glue.py \
-    --model_name_or_path bert-large-uncased-whole-word-masking \
+    --model_name_or_path google-bert/bert-large-uncased-whole-word-masking \
     --task_name mnli \
     --do_train \
     --do_eval \
@@ -198,7 +200,7 @@ You can easily log and monitor your runs code. The following are currently suppo
 
 * [TensorBoard](https://www.tensorflow.org/tensorboard)
 * [Weights & Biases](https://docs.wandb.ai/integrations/huggingface)
-* [Comet ML](https://www.comet.ml/docs/python-sdk/huggingface/)
+* [Comet ML](https://www.comet.com/docs/v2/integrations/ml-frameworks/transformers/)
 * [Neptune](https://docs.neptune.ai/integrations-and-supported-tools/model-training/hugging-face)
 * [ClearML](https://clear.ml/docs/latest/docs/getting_started/ds/ds_first_steps)
 * [DVCLive](https://dvc.org/doc/dvclive/ml-frameworks/huggingface)
@@ -226,7 +228,7 @@ wandb.login()
 
 To enable logging to W&B, include `"wandb"` in the `report_to` of your `TrainingArguments` or script. Or just pass along `--report_to_all` if you have `wandb` installed.
 
-Whenever you use `Trainer` or `TFTrainer` classes, your losses, evaluation metrics, model topology and gradients (for `Trainer` only) will automatically be logged.
+Whenever you use the `Trainer` class, your losses, evaluation metrics, model topology and gradients will automatically be logged.
 
 Advanced configuration is possible by setting environment variables:
 
@@ -242,7 +244,7 @@ Additional configuration options are available through generic [wandb environmen
 
 Refer to related [documentation & examples](https://docs.wandb.ai/integrations/huggingface).
 
-### Comet.ml
+### Comet
 
 To use `comet_ml`, install the Python package with:
 
@@ -282,8 +284,8 @@ To enable Neptune logging, in your `TrainingArguments`, set the `report_to` argu
 
 ```python
 training_args = TrainingArguments(
-    "quick-training-distilbert-mrpc", 
-    evaluation_strategy="steps",
+    "quick-training-distilbert-mrpc",
+    eval_strategy="steps",
     eval_steps=20,
     report_to="neptune",
 )

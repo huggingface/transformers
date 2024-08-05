@@ -17,12 +17,6 @@ rendered properly in your Markdown viewer.
 
 Die 🤗 Transformers-Bibliothek ist dank der Beiträge der Community oft in der Lage, neue Modelle anzubieten. Aber das kann ein anspruchsvolles Projekt sein und erfordert eine eingehende Kenntnis der 🤗 Transformers-Bibliothek und des zu implementierenden Modells. Bei Hugging Face versuchen wir, mehr Mitgliedern der Community die Möglichkeit zu geben, aktiv Modelle hinzuzufügen, und wir haben diese Anleitung zusammengestellt, die Sie durch den Prozess des Hinzufügens eines PyTorch-Modells führt (stellen Sie sicher, dass Sie [PyTorch installiert haben](https://pytorch.org/get-started/locally/)).
 
-<Tip>
-
-Wenn Sie daran interessiert sind, ein TensorFlow-Modell zu implementieren, werfen Sie einen Blick in die Anleitung [How to convert a 🤗 Transformers model to TensorFlow](add_tensorflow_model)!
-
-</Tip>
-
 Auf dem Weg dorthin, werden Sie:
 
 - Einblicke in bewährte Open-Source-Verfahren erhalten
@@ -89,8 +83,8 @@ model.config  # model has access to its config
 Ähnlich wie das Modell erbt die Konfiguration grundlegende Serialisierungs- und Deserialisierungsfunktionalitäten von
 [`PretrainedConfig`]. Beachten Sie, dass die Konfiguration und das Modell immer in zwei verschiedene Formate serialisiert werden
 unterschiedliche Formate serialisiert werden - das Modell in eine *pytorch_model.bin* Datei und die Konfiguration in eine *config.json* Datei. Aufruf von
-[~PreTrainedModel.save_pretrained`] wird automatisch
-[~PretrainedConfig.save_pretrained`] auf, so dass sowohl das Modell als auch die Konfiguration gespeichert werden.
+[`~PreTrainedModel.save_pretrained`] wird automatisch
+[`~PretrainedConfig.save_pretrained`] auf, so dass sowohl das Modell als auch die Konfiguration gespeichert werden.
 
 
 ### Code-Stil
@@ -404,12 +398,14 @@ In dem speziellen Fall, dass Sie ein Modell hinzufügen, dessen Architektur gena
 Modells übereinstimmt, müssen Sie nur ein Konvertierungsskript hinzufügen, wie in [diesem Abschnitt](#write-a-conversion-script) beschrieben.
 In diesem Fall können Sie einfach die gesamte Modellarchitektur des bereits vorhandenen Modells wiederverwenden.
 
-Andernfalls beginnen wir mit der Erstellung eines neuen Modells. Sie haben hier zwei Möglichkeiten:
+Andernfalls beginnen wir mit der Erstellung eines neuen Modells. Wir empfehlen die Verwendung des folgenden Skripts, um ein Modell hinzuzufügen
+ein bestehendes Modell:
 
-- `transformers-cli add-new-model-like`, um ein neues Modell wie ein bestehendes hinzuzufügen
-- `transformers-cli add-new-model`, um ein neues Modell aus unserer Vorlage hinzuzufügen (sieht dann aus wie BERT oder Bart, je nachdem, welche Art von Modell Sie wählen)
+```bash
+transformers-cli add-new-model-like
+```
 
-In beiden Fällen werden Sie mit einem Fragebogen aufgefordert, die grundlegenden Informationen zu Ihrem Modell auszufüllen. Für den zweiten Befehl müssen Sie `cookiecutter` installieren, weitere Informationen dazu finden Sie [hier](https://github.com/huggingface/transformers/tree/main/templates/adding_a_new_model).
+Sie werden mit einem Fragebogen aufgefordert, die grundlegenden Informationen Ihres Modells einzugeben.
 
 **Eröffnen Sie einen Pull Request auf dem Haupt-Repositorium huggingface/transformers**
 
@@ -531,7 +527,7 @@ aber alle anderen sollten eine Initialisierung wie oben verwenden. Dies ist wie 
 ```py
 def _init_weights(self, module):
     """Initialize the weights"""
-    if isinstnace(module, Wav2Vec2ForPreTraining):
+    if isinstance(module, Wav2Vec2ForPreTraining):
         module.project_hid.reset_parameters()
         module.project_q.reset_parameters()
         module.project_hid._is_hf_initialized = True
@@ -543,7 +539,7 @@ def _init_weights(self, module):
 ```
 
 Das Flag `_is_hf_initialized` wird intern verwendet, um sicherzustellen, dass wir ein Submodul nur einmal initialisieren. Wenn Sie es auf
-True` für `module.project_q` und `module.project_hid` setzen, stellen wir sicher, dass die benutzerdefinierte Initialisierung, die wir vorgenommen haben, später nicht überschrieben wird,
+`True` für `module.project_q` und `module.project_hid` setzen, stellen wir sicher, dass die benutzerdefinierte Initialisierung, die wir vorgenommen haben, später nicht überschrieben wird,
 die Funktion `_init_weights` nicht auf sie angewendet wird.
 
 **6. Schreiben Sie ein Konvertierungsskript**
@@ -556,7 +552,7 @@ demselben Framework wie *brand_new_bert* geschrieben wurde. Normalerweise reicht
 es für Ihren Anwendungsfall leicht anzupassen. Zögern Sie nicht, das Hugging Face Team zu bitten, Sie auf ein ähnliches, bereits vorhandenes
 Konvertierungsskript für Ihr Modell zu finden.
 
-- Wenn Sie ein Modell von TensorFlow nach PyTorch portieren, ist ein guter Ausgangspunkt das Konvertierungsskript von BERT [hier] (https://github.com/huggingface/transformers/blob/7acfa95afb8194f8f9c1f4d2c6028224dbed35a2/src/transformers/models/bert/modeling_bert.py#L91)
+- Wenn Sie ein Modell von TensorFlow nach PyTorch portieren, ist ein guter Ausgangspunkt das Konvertierungsskript von BERT [hier](https://github.com/huggingface/transformers/blob/7acfa95afb8194f8f9c1f4d2c6028224dbed35a2/src/transformers/models/bert/modeling_bert.py#L91)
 - Wenn Sie ein Modell von PyTorch nach PyTorch portieren, ist ein guter Ausgangspunkt das Konvertierungsskript von BART [hier](https://github.com/huggingface/transformers/blob/main/src/transformers/models/bart/convert_bart_original_pytorch_checkpoint_to_pytorch.py)
 
 Im Folgenden werden wir kurz erklären, wie PyTorch-Modelle Ebenengewichte speichern und Ebenennamen definieren. In PyTorch wird der
@@ -682,7 +678,7 @@ model.save_pretrained("/path/to/converted/checkpoint/folder")
 **7. Implementieren Sie den Vorwärtspass**
 
 Nachdem es Ihnen gelungen ist, die trainierten Gewichte korrekt in die 🤗 Transformers-Implementierung zu laden, sollten Sie nun dafür sorgen
-sicherstellen, dass der Forward Pass korrekt implementiert ist. In [Machen Sie sich mit dem ursprünglichen Repository vertraut](#34-run-a-pretrained-checkpoint-using-the-original-repository) haben Sie bereits ein Skript erstellt, das einen Forward Pass
+sicherstellen, dass der Forward Pass korrekt implementiert ist. In [Machen Sie sich mit dem ursprünglichen Repository vertraut](#3-4-führen-sie-einen-pre-training-checkpoint-mit-dem-original-repository-durch) haben Sie bereits ein Skript erstellt, das einen Forward Pass
 Durchlauf des Modells unter Verwendung des Original-Repositorys durchführt. Jetzt sollten Sie ein analoges Skript schreiben, das die 🤗 Transformers
 Implementierung anstelle der Originalimplementierung verwenden. Es sollte wie folgt aussehen:
 
@@ -759,7 +755,7 @@ Falls Sie Windows verwenden, sollten Sie `RUN_SLOW=1` durch `SET RUN_SLOW=1` ers
 </Tip>
 
 Zweitens sollten alle Funktionen, die speziell für *brand_new_bert* sind, zusätzlich in einem separaten Test getestet werden unter
-`BrandNewBertModelTester`/``BrandNewBertModelTest`. Dieser Teil wird oft vergessen, ist aber in zweierlei Hinsicht äußerst nützlich
+`BrandNewBertModelTester`/`BrandNewBertModelTest`. Dieser Teil wird oft vergessen, ist aber in zweierlei Hinsicht äußerst nützlich
 Weise:
 
 - Er hilft dabei, das Wissen, das Sie während der Modellerweiterung erworben haben, an die Community weiterzugeben, indem er zeigt, wie die

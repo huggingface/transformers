@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Tokenization class for model LayoutLM."""
+"""Tokenization class for model LayoutLM."""
 
 import collections
 import os
@@ -26,27 +26,6 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
-
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "microsoft/layoutlm-base-uncased": (
-            "https://huggingface.co/microsoft/layoutlm-base-uncased/resolve/main/vocab.txt"
-        ),
-        "microsoft/layoutlm-large-uncased": (
-            "https://huggingface.co/microsoft/layoutlm-large-uncased/resolve/main/vocab.txt"
-        ),
-    }
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "microsoft/layoutlm-base-uncased": 512,
-    "microsoft/layoutlm-large-uncased": 512,
-}
-
-PRETRAINED_INIT_CONFIGURATION = {
-    "microsoft/layoutlm-base-uncased": {"do_lower_case": True},
-    "microsoft/layoutlm-large-uncased": {"do_lower_case": True},
-}
 
 
 # Copied from transformers.models.bert.tokenization_bert.load_vocab
@@ -115,9 +94,6 @@ class LayoutLMTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
     def __init__(
         self,
@@ -309,7 +285,7 @@ class LayoutLMTokenizer(PreTrainedTokenizer):
 
 
 # Copied from transformers.models.bert.tokenization_bert.BasicTokenizer
-class BasicTokenizer(object):
+class BasicTokenizer:
     """
     Constructs a BasicTokenizer that will run basic tokenization (punctuation splitting, lower casing, etc.).
 
@@ -471,7 +447,7 @@ class BasicTokenizer(object):
 
 
 # Copied from transformers.models.bert.tokenization_bert.WordpieceTokenizer
-class WordpieceTokenizer(object):
+class WordpieceTokenizer:
     """Runs WordPiece tokenization."""
 
     def __init__(self, vocab, unk_token, max_input_chars_per_word=100):

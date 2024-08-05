@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Flax LongT5 model."""
-
+"""Flax LongT5 model."""
 
 import copy
 from typing import Any, Callable, List, Optional, Tuple
@@ -1828,7 +1827,7 @@ class FlaxLongT5PreTrainedModel(FlaxPreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, FlaxLongT5ForConditionalGeneration
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("t5-base")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-base")
         >>> model = FlaxLongT5ForConditionalGeneration.from_pretrained("google/long-t5-local-base")
 
         >>> text = "My friends are cool but they eat too many carbs."
@@ -1890,7 +1889,7 @@ class FlaxLongT5PreTrainedModel(FlaxPreTrainedModel):
         >>> from transformers import AutoTokenizer, FlaxLongT5ForConditionalGeneration
         >>> import jax.numpy as jnp
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("t5-base")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-base")
         >>> model = FlaxLongT5ForConditionalGeneration.from_pretrained("google/long-t5-local-base")
 
         >>> text = "My friends are cool but they eat too many carbs."
@@ -2119,7 +2118,7 @@ FLAX_LONGT5_MODEL_DOCSTRING = """
     ```python
     >>> from transformers import AutoTokenizer, FlaxLongT5Model
 
-    >>> tokenizer = AutoTokenizer.from_pretrained("t5-base")
+    >>> tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-base")
     >>> model = FlaxLongT5Model.from_pretrained("google/long-t5-local-base")
 
     >>> input_ids = tokenizer(
@@ -2278,7 +2277,7 @@ class FlaxLongT5ForConditionalGeneration(FlaxLongT5PreTrainedModel):
         >>> from transformers import AutoTokenizer, FlaxLongT5ForConditionalGeneration
         >>> import jax.numpy as jnp
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("t5-base")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-base")
         >>> model = FlaxLongT5ForConditionalGeneration.from_pretrained("google/long-t5-local-base")
 
         >>> text = "summarize: My friends are cool but they eat too many carbs."
@@ -2426,7 +2425,7 @@ FLAX_LONGT5_CONDITIONAL_GENERATION_DOCSTRING = """
     ```python
     >>> from transformers import AutoTokenizer, FlaxLongT5ForConditionalGeneration
 
-    >>> tokenizer = AutoTokenizer.from_pretrained("t5-base")
+    >>> tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-base")
     >>> model = FlaxLongT5ForConditionalGeneration.from_pretrained("google/long-t5-local-base")
 
     >>> ARTICLE_TO_SUMMARIZE = "summarize: My friends are cool but they eat too many carbs."

@@ -47,9 +47,10 @@ class PreTrainedTokenizationFastTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = PreTrainedTokenizerFast.from_pretrained(model_paths[0])
         tokenizer.save_pretrained(self.tmpdirname)
 
+    @unittest.skip(
+        "We disable this test for PreTrainedTokenizerFast because it is the only tokenizer that is not linked to any model"
+    )
     def test_tokenizer_mismatch_warning(self):
-        # We disable this test for PreTrainedTokenizerFast because it is the only tokenizer that is not linked to any
-        # model
         pass
 
     @unittest.skip(
@@ -70,18 +71,12 @@ class PreTrainedTokenizationFastTest(TokenizerTesterMixin, unittest.TestCase):
     def test_additional_special_tokens_serialization(self):
         pass
 
-    def test_pretrained_model_lists(self):
-        # We disable this test for PreTrainedTokenizerFast because it is the only tokenizer that is not linked to any
-        # model
-        pass
-
+    @unittest.skip(reason="PreTrainedTokenizerFast is the only tokenizer that is not linked to any model")
     def test_prepare_for_model(self):
-        # We disable this test for PreTrainedTokenizerFast because it is the only tokenizer that is not linked to any
-        # model
         pass
 
+    @unittest.skip(reason="PreTrainedTokenizerFast doesn't have tokenizer_file in its signature")
     def test_rust_tokenizer_signature(self):
-        # PreTrainedTokenizerFast doesn't have tokenizer_file in its signature
         pass
 
     def test_training_new_tokenizer(self):
@@ -132,7 +127,7 @@ class PreTrainedTokenizationFastTest(TokenizerTesterMixin, unittest.TestCase):
 
         sentences = ["Hello, y'all!", "How are you 😁 ? There should not be any issue right?"]
 
-        tokenizer = Tokenizer.from_pretrained("t5-base")
+        tokenizer = Tokenizer.from_pretrained("google-t5/t5-base")
         # Enable padding
         tokenizer.enable_padding(pad_id=0, pad_token="<pad>", length=512, pad_to_multiple_of=8)
         self.assertEqual(
@@ -179,7 +174,7 @@ class PreTrainedTokenizationFastTest(TokenizerTesterMixin, unittest.TestCase):
 @require_tokenizers
 class TokenizerVersioningTest(unittest.TestCase):
     def test_local_versioning(self):
-        tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
+        tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-cased")
         json_tokenizer = json.loads(tokenizer._tokenizer.to_str())
         json_tokenizer["model"]["vocab"]["huggingface"] = len(tokenizer)
 

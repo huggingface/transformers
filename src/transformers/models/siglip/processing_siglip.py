@@ -50,9 +50,9 @@ class SiglipProcessor(ProcessorMixin):
         self,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
         images: ImageInput = None,
-        padding: Union[bool, str, PaddingStrategy] = "max_length",
+        padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
-        max_length=None,
+        max_length: int = None,
         return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH,
     ) -> BatchFeature:
         """
@@ -69,9 +69,8 @@ class SiglipProcessor(ProcessorMixin):
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
             images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
-                number of channels, H and W are image height and width.
-            padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `max_length`):
+                tensor. Both channels-first and channels-last formats are supported.
+            padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
                 Select a strategy to pad the returned sequences (according to the model's padding side and padding
                 index) among:
                 - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single

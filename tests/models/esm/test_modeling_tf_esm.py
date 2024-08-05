@@ -30,8 +30,8 @@ if is_tf_available():
     import numpy
     import tensorflow as tf
 
+    from transformers.modeling_tf_utils import keras
     from transformers.models.esm.modeling_tf_esm import (
-        TF_ESM_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFEsmForMaskedLM,
         TFEsmForSequenceClassification,
         TFEsmForTokenClassification,
@@ -252,9 +252,9 @@ class TFEsmModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TF_ESM_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFEsmModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "facebook/esm2_t6_8M_UR50D"
+        model = TFEsmModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     @unittest.skip("Protein models do not support embedding resizing.")
     def test_resize_token_embeddings(self):
@@ -269,7 +269,7 @@ class TFEsmModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            assert isinstance(model.get_input_embeddings(), tf.keras.layers.Layer)
+            assert isinstance(model.get_input_embeddings(), keras.layers.Layer)
             if model_class is TFEsmForMaskedLM:
                 # Output embedding test differs from the main test because they're a matrix, not a layer
                 name = model.get_bias()

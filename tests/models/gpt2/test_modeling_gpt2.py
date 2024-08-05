@@ -19,8 +19,17 @@ import gc
 import math
 import unittest
 
+import pytest
+
 from transformers import GPT2Config, is_torch_available
-from transformers.testing_utils import backend_empty_cache, require_torch, slow, torch_device
+from transformers.testing_utils import (
+    backend_empty_cache,
+    require_flash_attn,
+    require_torch,
+    require_torch_gpu,
+    slow,
+    torch_device,
+)
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -32,7 +41,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        GPT2_PRETRAINED_MODEL_ARCHIVE_LIST,
         GPT2DoubleHeadsModel,
         GPT2ForQuestionAnswering,
         GPT2ForSequenceClassification,
@@ -98,7 +106,7 @@ class GPT2ModelTester:
         self.pad_token_id = vocab_size - 1
 
     def get_large_model_config(self):
-        return GPT2Config.from_pretrained("gpt2")
+        return GPT2Config.from_pretrained("openai-community/gpt2")
 
     def prepare_config_and_inputs(
         self, gradient_checkpointing=False, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False
@@ -418,6 +426,36 @@ class GPT2ModelTester:
                 self.parent.assertLessEqual(abs(torch.std(model.state_dict()[key]) - model_std), 0.001)
                 self.parent.assertLessEqual(abs(torch.mean(model.state_dict()[key]) - 0.0), 0.01)
 
+    def create_and_check_cached_forward_with_and_without_attention_mask(self, config, input_ids, *args):
+        # Relevant issue: https://github.com/huggingface/transformers/issues/31943
+        model = GPT2Model(config)
+        model.to(torch_device)
+        model.eval()
+
+        # We want this for SDPA, eager works with a `None` attention mask
+        assert (
+            model.config._attn_implementation == "sdpa"
+        ), "This test assumes the model to have the SDPA implementation for its attention calculations."
+
+        # Prepare cache and non_cache input, needs a full attention mask
+        cached_len = input_ids.shape[-1] // 2
+        input_mask = torch.ones(size=input_ids.size()).to(torch_device)
+        cache_inputs = {"input_ids": input_ids[:, :cached_len], "attention_mask": input_mask[:, :cached_len]}
+        non_cache_inputs = {"input_ids": input_ids[:, cached_len:], "attention_mask": input_mask}
+
+        # Cached forward once with the attention mask provided and the other time without it (which should assume full attention)
+        cache_outputs = model(**cache_inputs)
+        full_outputs_with_attention_mask = model(
+            **non_cache_inputs, past_key_values=cache_outputs.past_key_values
+        ).last_hidden_state
+        full_outputs_without_attention_mask = model(
+            non_cache_inputs["input_ids"], past_key_values=cache_outputs.past_key_values
+        ).last_hidden_state
+
+        self.parent.assertTrue(
+            torch.allclose(full_outputs_with_attention_mask, full_outputs_without_attention_mask, atol=1e-5)
+        )
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
 
@@ -562,6 +600,10 @@ class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_gpt2_weight_initialization(*config_and_inputs)
 
+    def test_cached_forward_with_and_without_attention_mask(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_cached_forward_with_and_without_attention_mask(*config_and_inputs)
+
     @unittest.skip(
         reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
@@ -582,9 +624,9 @@ class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
     @slow
     def test_batch_generation(self):
-        model = GPT2LMHeadModel.from_pretrained("gpt2")
+        model = GPT2LMHeadModel.from_pretrained("openai-community/gpt2")
         model.to(torch_device)
-        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+        tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
 
         tokenizer.padding_side = "left"
 
@@ -641,9 +683,9 @@ class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
     @slow
     def test_batch_generation_2heads(self):
-        model = GPT2DoubleHeadsModel.from_pretrained("gpt2")
+        model = GPT2DoubleHeadsModel.from_pretrained("openai-community/gpt2")
         model.to(torch_device)
-        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+        tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
 
         tokenizer.padding_side = "left"
 
@@ -701,9 +743,9 @@ class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in GPT2_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = GPT2Model.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "openai-community/gpt2"
+        model = GPT2Model.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @require_torch
@@ -722,7 +764,7 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
         verify_outputs=True,
     ):
         model = GPT2LMHeadModel.from_pretrained(
-            "gpt2",
+            "openai-community/gpt2",
             reorder_and_upcast_attn=reorder_and_upcast_attn,
             scale_attn_by_inverse_layer_idx=scale_attn_by_inverse_layer_idx,
         )
@@ -759,8 +801,8 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
 
     @slow
     def test_gpt2_sample(self):
-        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
-        model = GPT2LMHeadModel.from_pretrained("gpt2")
+        tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
+        model = GPT2LMHeadModel.from_pretrained("openai-community/gpt2")
         model.to(torch_device)
 
         torch.manual_seed(0)
@@ -787,8 +829,8 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
 
     @slow
     def test_gpt2_sample_max_time(self):
-        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
-        model = GPT2LMHeadModel.from_pretrained("gpt2")
+        tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
+        model = GPT2LMHeadModel.from_pretrained("openai-community/gpt2")
         model.to(torch_device)
 
         torch.manual_seed(0)
@@ -824,7 +866,8 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
         start = datetime.datetime.now()
         model.generate(input_ids, do_sample=False, max_time=None, max_length=256)
         duration = datetime.datetime.now() - start
-        self.assertGreater(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
+        self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
+        self.assertLess(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
 
     @slow
     def test_contrastive_search_gpt2(self):
@@ -833,8 +876,8 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
             "laboratory founded in 2010. DeepMind was acquired by Google in 2014. The company is based"
         )
 
-        gpt2_tokenizer = GPT2Tokenizer.from_pretrained("gpt2-large")
-        gpt2_model = GPT2LMHeadModel.from_pretrained("gpt2-large").to(torch_device)
+        gpt2_tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2-large")
+        gpt2_model = GPT2LMHeadModel.from_pretrained("openai-community/gpt2-large").to(torch_device)
         input_ids = gpt2_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
 
         outputs = gpt2_model.generate(input_ids, penalty_alpha=0.6, top_k=4, max_length=256)
@@ -859,3 +902,40 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
                 "but said in a statement to The Associated Press that"
             ],
         )
+
+    @require_flash_attn
+    @require_torch_gpu
+    @pytest.mark.flash_attn_test
+    @slow
+    def test_flash_attn_2_generate_padding_left(self):
+        """
+        Overwritting the common test as the test is flaky on tiny models
+        """
+        model = GPT2LMHeadModel.from_pretrained("gpt2", torch_dtype=torch.float16).to(0)
+
+        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+
+        texts = ["hi", "Hello this is a very long sentence"]
+
+        tokenizer.padding_side = "left"
+        tokenizer.pad_token = tokenizer.eos_token
+
+        inputs = tokenizer(texts, return_tensors="pt", padding=True).to(0)
+
+        output_native = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        output_native = tokenizer.batch_decode(output_native)
+
+        model = GPT2LMHeadModel.from_pretrained(
+            "gpt2", device_map={"": 0}, attn_implementation="flash_attention_2", torch_dtype=torch.float16
+        )
+
+        output_fa_2 = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        output_fa_2 = tokenizer.batch_decode(output_fa_2)
+
+        expected_output = [
+            "<|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|>hi, who was born in the city of Kolkata, was a member of the Kolkata",
+            "Hello this is a very long sentence. I'm sorry. I'm sorry. I'm sorry. I'm sorry. I'm sorry",
+        ]
+
+        self.assertListEqual(output_native, output_fa_2)
+        self.assertListEqual(output_native, expected_output)

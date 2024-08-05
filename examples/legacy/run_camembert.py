@@ -39,8 +39,8 @@ def fill_mask(masked_input, model, tokenizer, topk=5):
     return topk_filled_outputs
 
 
-tokenizer = CamembertTokenizer.from_pretrained("camembert-base")
-model = CamembertForMaskedLM.from_pretrained("camembert-base")
+tokenizer = CamembertTokenizer.from_pretrained("almanach/camembert-base")
+model = CamembertForMaskedLM.from_pretrained("almanach/camembert-base")
 model.eval()
 
 masked_input = "Le camembert est <mask> :)"

@@ -24,7 +24,6 @@ import logging
 import os
 import sys
 import time
-import warnings
 from dataclasses import asdict, dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -42,7 +41,7 @@ from flax import jax_utils
 from flax.jax_utils import pad_shard_unpad, unreplicate
 from flax.training import train_state
 from flax.training.common_utils import get_metrics, onehot, shard, shard_prng_key
-from huggingface_hub import Repository, create_repo
+from huggingface_hub import HfApi
 from tqdm import tqdm
 
 import transformers
@@ -169,17 +168,11 @@ class ModelArguments:
             )
         },
     )
-    use_auth_token: bool = field(
-        default=None,
-        metadata={
-            "help": "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token` instead."
-        },
-    )
     trust_remote_code: bool = field(
         default=False,
         metadata={
             "help": (
-                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option"
+                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option "
                 "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
                 "execute code present on the Hub on your local machine."
             )
@@ -274,15 +267,6 @@ def main():
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
-    if model_args.use_auth_token is not None:
-        warnings.warn(
-            "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token` instead.",
-            FutureWarning,
-        )
-        if model_args.token is not None:
-            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
-        model_args.token = model_args.use_auth_token
-
     # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
     # information sent is the one passed as arguments along with your Python/PyTorch versions.
     send_example_telemetry("run_image_classification", model_args, data_args, framework="flax")
@@ -324,13 +308,12 @@ def main():
         if repo_name is None:
             repo_name = Path(training_args.output_dir).absolute().name
         # Create repo and retrieve repo_id
-        repo_id = create_repo(repo_name, exist_ok=True, token=training_args.hub_token).repo_id
-        # Clone repo locally
-        repo = Repository(training_args.output_dir, clone_from=repo_id, token=training_args.hub_token)
+        api = HfApi()
+        repo_id = api.create_repo(repo_name, exist_ok=True, token=training_args.hub_token).repo_id
 
     # Initialize datasets and pre-processing transforms
     # We use torchvision here for faster pre-processing
-    # Note that here we are using some default pre-processing, for maximum accuray
+    # Note that here we are using some default pre-processing, for maximum accuracy
     # one should tune this part and carefully select what transformations to use.
     normalize = transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
     train_dataset = torchvision.datasets.ImageFolder(
@@ -595,7 +578,13 @@ def main():
             params = jax.device_get(jax.tree_util.tree_map(lambda x: x[0], state.params))
             model.save_pretrained(training_args.output_dir, params=params)
             if training_args.push_to_hub:
-                repo.push_to_hub(commit_message=f"Saving weights and logs of epoch {epoch}", blocking=False)
+                api.upload_folder(
+                    commit_message=f"Saving weights and logs of epoch {epoch}",
+                    folder_path=training_args.output_dir,
+                    repo_id=repo_id,
+                    repo_type="model",
+                    token=training_args.hub_token,
+                )
 
 
 if __name__ == "__main__":

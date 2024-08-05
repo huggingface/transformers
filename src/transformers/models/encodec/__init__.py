@@ -21,10 +21,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_encodec": [
-        "ENCODEC_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "EncodecConfig",
-    ],
+    "configuration_encodec": ["EncodecConfig"],
     "feature_extraction_encodec": ["EncodecFeatureExtractor"],
 }
 
@@ -35,14 +32,12 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_encodec"] = [
-        "ENCODEC_PRETRAINED_MODEL_ARCHIVE_LIST",
         "EncodecModel",
         "EncodecPreTrainedModel",
     ]
 
 if TYPE_CHECKING:
     from .configuration_encodec import (
-        ENCODEC_PRETRAINED_CONFIG_ARCHIVE_MAP,
         EncodecConfig,
     )
     from .feature_extraction_encodec import EncodecFeatureExtractor
@@ -54,7 +49,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_encodec import (
-            ENCODEC_PRETRAINED_MODEL_ARCHIVE_LIST,
             EncodecModel,
             EncodecPreTrainedModel,
         )

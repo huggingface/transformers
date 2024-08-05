@@ -45,6 +45,7 @@ else:
 
 @require_sentencepiece
 class MarianTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "Helsinki-NLP/opus-mt-en-de"
     tokenizer_class = MarianTokenizer
     test_rust_tokenizer = False
     test_sentencepiece = True

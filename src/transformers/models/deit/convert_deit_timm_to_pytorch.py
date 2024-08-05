@@ -14,7 +14,6 @@
 # limitations under the License.
 """Convert DeiT distilled checkpoints from the timm library."""
 
-
 import argparse
 import json
 from pathlib import Path

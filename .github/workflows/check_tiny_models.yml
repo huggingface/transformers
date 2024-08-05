@@ -17,11 +17,11 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout transformers
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 2
 
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Set up Python 3.8
         uses: actions/setup-python@v4
         with:
@@ -44,7 +44,7 @@ jobs:
 
       - name: Local tiny model reports artifacts
         if: ${{ always() }}
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: tiny_local_model_creation_reports
           path: tiny_local_models/reports
@@ -56,7 +56,7 @@ jobs:
 
       - name: Test suite reports artifacts
         if: ${{ always() }}
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: tiny_local_model_creation_reports
           path: reports/tests_pipelines
@@ -76,7 +76,7 @@ jobs:
 
       - name: New tiny model creation reports artifacts
         if: ${{ always() }}
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: tiny_model_creation_reports
           path: tiny_models/reports

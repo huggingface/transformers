@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Donut Swin model. """
+"""Testing suite for the PyTorch Donut Swin model."""
 
 import collections
 import unittest
@@ -31,7 +31,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import DonutSwinModel
-    from transformers.models.donut.modeling_donut_swin import DONUT_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class DonutSwinModelTester:
@@ -145,7 +144,7 @@ class DonutSwinModelTester:
 @require_torch
 class DonutSwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (DonutSwinModel,) if is_torch_available() else ()
-    pipeline_model_mapping = {"feature-extraction": DonutSwinModel} if is_torch_available() else {}
+    pipeline_model_mapping = {"image-feature-extraction": DonutSwinModel} if is_torch_available() else {}
     fx_compatible = True
 
     test_pruning = False
@@ -154,29 +153,26 @@ class DonutSwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 
     def setUp(self):
         self.model_tester = DonutSwinModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=DonutSwinConfig, embed_dim=37)
+        self.config_tester = ConfigTester(
+            self,
+            config_class=DonutSwinConfig,
+            has_text_modality=False,
+            embed_dim=37,
+            common_properties=["image_size", "patch_size", "num_channels"],
+        )
 
     def test_config(self):
-        self.create_and_test_config_common_properties()
-        self.config_tester.create_and_test_config_to_json_string()
-        self.config_tester.create_and_test_config_to_json_file()
-        self.config_tester.create_and_test_config_from_and_save_pretrained()
-        self.config_tester.create_and_test_config_with_num_labels()
-        self.config_tester.check_config_can_be_init_without_params()
-        self.config_tester.check_config_arguments_init()
-
-    def create_and_test_config_common_properties(self):
-        return
+        self.config_tester.run_common_tests()
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    @unittest.skip(reason="DonutSwin does not use inputs_embeds")
     def test_inputs_embeds(self):
-        # DonutSwin does not use inputs_embeds
         pass
 
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -334,9 +330,9 @@ class DonutSwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in DONUT_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = DonutSwinModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "naver-clova-ix/donut-base"
+        model = DonutSwinModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

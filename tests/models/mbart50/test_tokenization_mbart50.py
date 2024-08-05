@@ -41,6 +41,7 @@ RO_CODE = 250020
 @require_sentencepiece
 @require_tokenizers
 class MBart50TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "facebook/mbart-large-50-one-to-many-mmt"
     tokenizer_class = MBart50Tokenizer
     rust_tokenizer_class = MBart50TokenizerFast
     test_rust_tokenizer = True
@@ -111,7 +112,7 @@ class MBart50TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_save_pretrained(self):
         if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
-            return
+            self.skipTest(reason="test_slow_tokenizer is set to False")
 
         self.tokenizers_list[0] = (self.rust_tokenizer_class, "hf-internal-testing/tiny-random-mbart50", {})
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:

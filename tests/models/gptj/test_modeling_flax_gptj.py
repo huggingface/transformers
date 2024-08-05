@@ -199,7 +199,9 @@ class FlaxGPTJModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unittes
 
     @tooslow
     def test_batch_generation(self):
-        tokenizer = GPT2Tokenizer.from_pretrained("gpt2", pad_token="<|endoftext|>", padding_side="left")
+        tokenizer = GPT2Tokenizer.from_pretrained(
+            "openai-community/gpt2", pad_token="<|endoftext|>", padding_side="left"
+        )
         inputs = tokenizer(["Hello this is a long string", "Hey"], return_tensors="np", padding=True, truncation=True)
 
         model = FlaxGPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B")

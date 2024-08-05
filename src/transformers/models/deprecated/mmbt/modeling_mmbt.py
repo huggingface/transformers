@@ -15,7 +15,6 @@
 # limitations under the License.
 """PyTorch MMBT model."""
 
-
 import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
@@ -213,7 +212,7 @@ class MMBTModel(nn.Module, ModuleUtilsMixin):
 
         ```python
         # For example purposes. Not runnable.
-        transformer = BertModel.from_pretrained("bert-base-uncased")
+        transformer = BertModel.from_pretrained("google-bert/bert-base-uncased")
         encoder = ImageEncoder(args)
         mmbt = MMBTModel(config, transformer, encoder)
         ```"""
@@ -333,7 +332,7 @@ class MMBTForClassification(nn.Module):
 
     ```python
     # For example purposes. Not runnable.
-    transformer = BertModel.from_pretrained("bert-base-uncased")
+    transformer = BertModel.from_pretrained("google-bert/bert-base-uncased")
     encoder = ImageEncoder(args)
     model = MMBTForClassification(config, transformer, encoder)
     outputs = model(input_modal, input_ids, labels=labels)

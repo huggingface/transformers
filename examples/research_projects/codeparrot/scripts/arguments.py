@@ -132,7 +132,7 @@ class PreprocessingArguments:
         default="transformersbook/codeparrot", metadata={"help": "Folder or name of dataset to process."}
     )
     output_dir: Optional[str] = field(
-        default="codeparrot-clean", metadata={"help": "Folder to save processed processed dataset."}
+        default="codeparrot-clean", metadata={"help": "Folder to save processed dataset."}
     )
     samples_per_file: Optional[int] = field(
         default=100_000, metadata={"help": "Number of files to save per JSON output file."}
@@ -172,7 +172,7 @@ class TokenizerTrainingArguments:
     """
 
     base_tokenizer: Optional[str] = field(
-        default="gpt2", metadata={"help": "Base tokenizer to build new tokenizer from."}
+        default="openai-community/gpt2", metadata={"help": "Base tokenizer to build new tokenizer from."}
     )
     dataset_name: Optional[str] = field(
         default="transformersbook/codeparrot-train", metadata={"help": "Dataset to train tokenizer on."}
@@ -211,7 +211,7 @@ class InitializationArguments:
     """
 
     config_name: Optional[str] = field(
-        default="gpt2-large", metadata={"help": "Configuration to use for model initialization."}
+        default="openai-community/gpt2-large", metadata={"help": "Configuration to use for model initialization."}
     )
     tokenizer_name: Optional[str] = field(
         default="codeparrot/codeparrot", metadata={"help": "Tokenizer attached to model."}

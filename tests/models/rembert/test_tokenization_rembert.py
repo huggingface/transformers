@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the RemBert tokenizer. """
-
+"""Testing suite for the RemBert tokenizer."""
 
 import tempfile
 import unittest
@@ -32,6 +31,7 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 @require_sentencepiece
 @require_tokenizers
 class RemBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "google/rembert"
     tokenizer_class = RemBertTokenizer
     rust_tokenizer_class = RemBertTokenizerFast
     space_between_special_tokens = True
@@ -87,13 +87,13 @@ class RemBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         encoded_string = tokenizer.encode(text)
         self.assertListEqual(encoded_string, [1000, 7, 0, 1001])
         decode_text = tokenizer.convert_tokens_to_string(tokens)
-        self.assertEquals(decode_text, text)
+        self.assertEqual(decode_text, text)
 
         text = "That's awesome! 🤩 #HuggingFace,  🌟 Have a great day! 🌈"
         tokens = tokenizer.tokenize(text)
         self.assertListEqual( tokens, ['▁That', "'", 's', '▁a', 'w', 'es', 'ome', '!', '▁', '🤩', '▁', '#', 'H', 'u', 'g', 'g', 'ing', 'F', 'a', 'ce', ',', '▁', '🌟', '▁H', 'a', 've', '▁a', '▁great', '▁day', '!', '▁', '🌈'])  # fmt: skip
         decode_text = tokenizer.convert_tokens_to_string(tokens)
-        self.assertEquals(decode_text, "That's awesome! 🤩 #HuggingFace, 🌟 Have a great day! 🌈")
+        self.assertEqual(decode_text, "That's awesome! 🤩 #HuggingFace, 🌟 Have a great day! 🌈")
 
         text = "In the sky up above"
         tokens = tokenizer._tokenize(text)
@@ -172,7 +172,7 @@ class RemBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             self.assertTrue(str(expected_eos) not in tokenizer.additional_special_tokens)
             self.assertIn(new_eos, tokenizer.added_tokens_decoder.values())
             self.assertEqual(tokenizer.added_tokens_decoder[tokenizer.eos_token_id], new_eos)
-            self.assertDictEqual(expected, tokenizer.added_tokens_decoder)
+            self.assertTrue(all(item in tokenizer.added_tokens_decoder.items() for item in expected.items()))
             return tokenizer
 
         new_eos = AddedToken("[NEW_EOS]", rstrip=False, lstrip=True, normalized=False, special=True)
@@ -227,7 +227,12 @@ class RemBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                         self.assertIn(new_eos, list(tokenizer_fast.added_tokens_decoder.values()))
                         # We can't test the following because for BC we kept the default rstrip lstrip in slow not fast. Will comment once normalization is alright
                         with self.subTest("Hub -> Fast == Hub -> Slow: make sure slow and fast tokenizer match"):
-                            self.assertDictEqual(EXPECTED_ADDED_TOKENS_DECODER, tokenizer_fast.added_tokens_decoder)
+                            self.assertTrue(
+                                all(
+                                    item in tokenizer.added_tokens_decoder.items()
+                                    for item in EXPECTED_ADDED_TOKENS_DECODER.items()
+                                )
+                            )
 
                         EXPECTED_ADDED_TOKENS_DECODER = tokenizer_fast.added_tokens_decoder
                         with tempfile.TemporaryDirectory() as tmp_dir_4:

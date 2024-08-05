@@ -28,6 +28,8 @@ from ...image_utils import (
     make_list_of_images,
     to_numpy_array,
     valid_images,
+    validate_kwargs,
+    validate_preprocess_arguments,
 )
 from ...utils import TensorType, logging
 
@@ -64,6 +66,16 @@ class Swin2SRImageProcessor(BaseImageProcessor):
         self.rescale_factor = rescale_factor
         self.do_pad = do_pad
         self.pad_size = pad_size
+        self._valid_processor_keys = [
+            "images",
+            "do_rescale",
+            "rescale_factor",
+            "do_pad",
+            "pad_size",
+            "return_tensors",
+            "data_format",
+            "input_data_format",
+        ]
 
     def pad(
         self,
@@ -160,14 +172,19 @@ class Swin2SRImageProcessor(BaseImageProcessor):
 
         images = make_list_of_images(images)
 
+        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
+
         if not valid_images(images):
             raise ValueError(
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
-
-        if do_rescale and rescale_factor is None:
-            raise ValueError("Rescale factor must be specified if do_rescale is True.")
+        validate_preprocess_arguments(
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_pad=do_pad,
+            size_divisibility=pad_size,  # Here the pad function simply requires pad_size.
+        )
 
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]

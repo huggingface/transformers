@@ -40,8 +40,7 @@ There are several ways you can contribute to 🤗 Transformers:
 
 If you don't know where to start, there is a special [Good First
 Issue](https://github.com/huggingface/transformers/contribute) listing. It will give you a list of
-open issues that are beginner-friendly and help you start contributing to open-source. Just comment on the issue that you'd like to work
-on. 
+open issues that are beginner-friendly and help you start contributing to open-source. The best way to do that is to open a Pull Request and link it to the issue that you'd like to work on. We try to give priority to opened PRs as we can easily track the progress of the fix, and if the contributor does not have time anymore, someone else can take the PR over.
 
 For something slightly more challenging, you can also take a look at the [Good Second Issue](https://github.com/huggingface/transformers/labels/Good%20Second%20Issue) list. In general though, if you feel like you know what you're doing, go for it and we'll help you get there! 🚀
 
@@ -49,7 +48,7 @@ For something slightly more challenging, you can also take a look at the [Good S
 
 ## Fixing outstanding issues
 
-If you notice an issue with the existing code and have a fix in mind, feel free to [start contributing](https://github.com/huggingface/transformers/blob/main/CONTRIBUTING.md/#create-a-pull-request) and open a Pull Request!
+If you notice an issue with the existing code and have a fix in mind, feel free to [start contributing](#create-a-pull-request) and open a Pull Request!
 
 ## Submitting a bug-related issue or feature request
 
@@ -62,7 +61,10 @@ feedback.
 The 🤗 Transformers library is robust and reliable thanks to users who report the problems they encounter.
 
 Before you report an issue, we would really appreciate it if you could **make sure the bug was not
-already reported** (use the search bar on GitHub under Issues). Your issue should also be related to bugs in the library itself, and not your code. If you're unsure whether the bug is in your code or the library, please ask in the [forum](https://discuss.huggingface.co/) first. This helps us respond quicker to fixing issues related to the library versus general questions.
+already reported** (use the search bar on GitHub under Issues). Your issue should also be related to bugs in the library itself, and not your code. If you're unsure whether the bug is in your code or the library, please ask in the [forum](https://discuss.huggingface.co/) or on our [discord](https://discord.com/invite/hugging-face-879548962464493619) first. This helps us respond quicker to fixing issues related to the library versus general questions.
+
+> [!TIP]
+> We have a [docs bot](https://huggingface.co/spaces/huggingchat/hf-docs-chat), and we highly encourage you to ask all your questions there. There is always a chance your bug can be fixed with a simple flag 👾🔫
 
 Once you've confirmed the bug hasn't already been reported, please include the following information in your issue so we can quickly resolve it:
 
@@ -103,7 +105,7 @@ We have added [templates](https://github.com/huggingface/transformers/tree/main/
 
 ## Do you want to implement a new model?
 
-New models are constantly released and if you want to implement a new model, please provide the following information
+New models are constantly released and if you want to implement a new model, please provide the following information:
 
 * A short description of the model and a link to the paper.
 * Link to the implementation if it is open-sourced.
@@ -111,7 +113,7 @@ New models are constantly released and if you want to implement a new model, ple
 
 If you are willing to contribute the model yourself, let us know so we can help you add it to 🤗 Transformers!
 
-We have added a [detailed guide and templates](https://github.com/huggingface/transformers/tree/main/templates) to help you get started with adding a new model, and we also have a more technical guide for [how to add a model to 🤗 Transformers](https://huggingface.co/docs/transformers/add_new_model).
+We have a technical guide for [how to add a model to 🤗 Transformers](https://huggingface.co/docs/transformers/add_new_model).
 
 ## Do you want to add documentation?
 
@@ -130,7 +132,7 @@ You will need basic `git` proficiency to contribute to
 manual. Type `git --help` in a shell and enjoy! If you prefer books, [Pro
 Git](https://git-scm.com/book/en/v2) is a very good reference.
 
-You'll need **[Python 3.8]((https://github.com/huggingface/transformers/blob/main/setup.py#L426))** or above to contribute to 🤗 Transformers. Follow the steps below to start contributing:
+You'll need **[Python 3.8](https://github.com/huggingface/transformers/blob/main/setup.py#L449)** or above to contribute to 🤗 Transformers. Follow the steps below to start contributing:
 
 1. Fork the [repository](https://github.com/huggingface/transformers) by
    clicking on the **[Fork](https://github.com/huggingface/transformers/fork)** button on the repository's page. This creates a copy of the code
@@ -161,7 +163,7 @@ You'll need **[Python 3.8]((https://github.com/huggingface/transformers/blob/mai
    If 🤗 Transformers was already installed in the virtual environment, remove
    it with `pip uninstall transformers` before reinstalling it in editable
    mode with the `-e` flag.
-   
+
    Depending on your OS, and since the number of optional dependencies of Transformers is growing, you might get a
    failure with this command. If that's the case make sure to install the Deep Learning framework you are working with
    (PyTorch, TensorFlow and/or Flax) then do:
@@ -220,7 +222,7 @@ You'll need **[Python 3.8]((https://github.com/huggingface/transformers/blob/mai
 
    If you're modifying documents under the `docs/source` directory, make sure the documentation can still be built. This check will also run in the CI when you open a pull request. To run a local check
    make sure you install the documentation builder:
-   
+
    ```bash
    pip install ".[docs]"
    ```
@@ -261,7 +263,7 @@ You'll need **[Python 3.8]((https://github.com/huggingface/transformers/blob/mai
 
    If you've already opened a pull request, you'll need to force push with the `--force` flag. Otherwise, if the pull request hasn't been opened yet, you can just push your changes normally.
 
-6. Now you can go to your fork of the repository on GitHub and click on **Pull Request** to open a pull request. Make sure you tick off all the boxes on our [checklist](https://github.com/huggingface/transformers/blob/main/CONTRIBUTING.md/#pull-request-checklist) below. When you're ready, you can send your changes to the project maintainers for review.
+6. Now you can go to your fork of the repository on GitHub and click on **Pull Request** to open a pull request. Make sure you tick off all the boxes on our [checklist](#pull-request-checklist) below. When you're ready, you can send your changes to the project maintainers for review.
 
 7. It's ok if maintainers request changes, it happens to our core contributors
    too! So everyone can see the changes in the pull request, work in your local
@@ -295,7 +297,7 @@ repository such as [`hf-internal-testing`](https://huggingface.co/hf-internal-te
 to host these files and reference them by URL. We recommend placing documentation
 related images in the following repository:
 [huggingface/documentation-images](https://huggingface.co/datasets/huggingface/documentation-images).
-You can open a PR on this dataset repostitory and ask a Hugging Face member to merge it.
+You can open a PR on this dataset repository and ask a Hugging Face member to merge it.
 
 For more information about the checks run on a pull request, take a look at our [Checks on a Pull Request](https://huggingface.co/docs/transformers/pr_checks) guide.
 
@@ -306,7 +308,7 @@ the [tests](https://github.com/huggingface/transformers/tree/main/tests) folder 
 [examples](https://github.com/huggingface/transformers/tree/main/examples) folder.
 
 We like `pytest` and `pytest-xdist` because it's faster. From the root of the
-repository, specify a *path to a subfolder or a test file* to run the test.
+repository, specify a *path to a subfolder or a test file* to run the test:
 
 ```bash
 python -m pytest -n auto --dist=loadfile -s -v ./tests/models/my_new_model
@@ -339,12 +341,12 @@ RUN_SLOW=yes python -m pytest -n auto --dist=loadfile -s -v ./tests/models/my_ne
 RUN_SLOW=yes python -m pytest -n auto --dist=loadfile -s -v ./examples/pytorch/text-classification
 ```
 
-Like the slow tests, there are other environment variables available which not enabled by default during testing:
+Like the slow tests, there are other environment variables available which are not enabled by default during testing:
 - `RUN_CUSTOM_TOKENIZERS`: Enables tests for custom tokenizers.
 - `RUN_PT_FLAX_CROSS_TESTS`: Enables tests for PyTorch + Flax integration.
 - `RUN_PT_TF_CROSS_TESTS`: Enables tests for TensorFlow + PyTorch integration.
 
-More environment variables and additional information can be found in the [testing_utils.py](src/transformers/testing_utils.py).
+More environment variables and additional information can be found in the [testing_utils.py](https://github.com/huggingface/transformers/blob/main/src/transformers/testing_utils.py).
 
 🤗 Transformers uses `pytest` as a test runner only. It doesn't use any
 `pytest`-specific features in the test suite itself.
@@ -378,7 +380,7 @@ One way to run the `make` command on Windows is with MSYS2:
 3. Run in the shell: `pacman -Syu` and install `make` with `pacman -S make`.
 4. Add `C:\msys64\usr\bin` to your PATH environment variable.
 
-You can now use `make` from any terminal (Powershell, cmd.exe, etc.)! 🎉
+You can now use `make` from any terminal (PowerShell, cmd.exe, etc.)! 🎉
 
 ### Sync a forked repository with upstream main (the Hugging Face repository)
 
@@ -387,9 +389,9 @@ When updating the main branch of a forked repository, please follow these steps 
 1. When possible, avoid syncing with the upstream using a branch and PR on the forked repository. Instead, merge directly into the forked main.
 2. If a PR is absolutely necessary, use the following steps after checking out your branch:
 
-```bash
-git checkout -b your-branch-for-syncing
-git pull --squash --no-commit upstream main
-git commit -m '<your message without GitHub references>'
-git push --set-upstream origin your-branch-for-syncing
-```
+   ```bash
+   git checkout -b your-branch-for-syncing
+   git pull --squash --no-commit upstream main
+   git commit -m '<your message without GitHub references>'
+   git push --set-upstream origin your-branch-for-syncing
+   ```

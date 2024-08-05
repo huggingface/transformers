@@ -27,6 +27,7 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 @require_tokenizers
 class OpenAIGPTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "openai-community/openai-gpt"
     """Tests OpenAIGPTTokenizer that uses BERT BasicTokenizer."""
 
     tokenizer_class = OpenAIGPTTokenizer
@@ -130,7 +131,7 @@ class OpenAIGPTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     padding="max_length",
                 )
 
-    # tokenizer has no padding token
+    @unittest.skip(reason="tokenizer has no padding token")
     def test_padding_different_model_input_name(self):
         pass
 

@@ -12,13 +12,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Pvt model. """
-
+"""Testing suite for the PyTorch Pvt model."""
 
 import unittest
 
 from transformers import is_torch_available, is_vision_available
-from transformers.models.auto import get_values
 from transformers.testing_utils import (
     require_accelerate,
     require_torch,
@@ -36,8 +34,8 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import MODEL_MAPPING, PvtConfig, PvtForImageClassification, PvtImageProcessor, PvtModel
-    from transformers.models.pvt.modeling_pvt import PVT_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers import PvtConfig, PvtForImageClassification, PvtImageProcessor, PvtModel
+    from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES
 
 
 if is_vision_available():
@@ -158,7 +156,7 @@ def prepare_img():
 class PvtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (PvtModel, PvtForImageClassification) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": PvtModel, "image-classification": PvtForImageClassification}
+        {"image-feature-extraction": PvtModel, "image-classification": PvtForImageClassification}
         if is_torch_available()
         else {}
     )
@@ -180,12 +178,12 @@ class PvtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip("Pvt does not use inputs_embeds")
+    @unittest.skip(reason="Pvt does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip("Pvt does not have get_input_embeddings method and get_output_embeddings methods")
-    def test_model_common_attributes(self):
+    @unittest.skip(reason="Pvt does not have get_input_embeddings method and get_output_embeddings methods")
+    def test_model_get_set_embeddings(self):
         pass
 
     def test_initialization(self):
@@ -237,13 +235,13 @@ class PvtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def test_training(self):
         if not self.model_tester.is_training:
-            return
+            self.skipTest(reason="model_tester.is_training is set to False")
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
 
         for model_class in self.all_model_classes:
-            if model_class in get_values(MODEL_MAPPING):
+            if model_class.__name__ in MODEL_MAPPING_NAMES.values():
                 continue
             model = model_class(config)
             model.to(torch_device)
@@ -254,9 +252,9 @@ class PvtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in PVT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = PvtModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "Zetatech/pvt-tiny-224"
+        model = PvtModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @require_torch

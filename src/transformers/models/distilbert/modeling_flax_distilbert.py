@@ -146,7 +146,7 @@ class FlaxEmbeddings(nn.Module):
             position_embeds = self.position_embeddings(position_ids.astype("i4"))
         else:
             position_embeds = self.pos_encoding[:, :seq_length, :]
-            # explictly cast the positions here, since self.embed_positions are not registered as parameters
+            # explicitly cast the positions here, since self.embed_positions are not registered as parameters
             position_embeds = position_embeds.astype(inputs_embeds.dtype)
 
         # Sum all embeddings
@@ -304,7 +304,7 @@ class FlaxTransformerBlock(nn.Module):
         if output_attentions:
             sa_output, sa_weights = sa_output
         else:
-            assert type(sa_output) == tuple
+            assert type(sa_output) is tuple
             sa_output = sa_output[0]
         sa_output = self.sa_layer_norm(sa_output + hidden_states)
 

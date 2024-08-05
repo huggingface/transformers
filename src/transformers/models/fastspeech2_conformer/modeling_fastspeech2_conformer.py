@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch FastSpeech2Conformer model."""
+"""PyTorch FastSpeech2Conformer model."""
 
 import math
 from dataclasses import dataclass
@@ -32,11 +32,6 @@ from .configuration_fastspeech2_conformer import (
 
 
 logger = logging.get_logger(__name__)
-
-FASTSPEECH2_CONFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "espnet/fastspeech2_conformer",
-    # See all FastSpeech2Conformer models at https://huggingface.co/models?filter=fastspeech2_conformer
-]
 
 
 @dataclass
@@ -820,9 +815,9 @@ class FastSpeech2ConformerRelPositionalEncoding(nn.Module):
         # are to the left (i>j) and negative relative positions otherwise (i<j).
         pos_enc_positive = torch.zeros(x.size(1), self.embed_dim)
         pos_enc_negative = torch.zeros(x.size(1), self.embed_dim)
-        position = torch.arange(0, x.size(1), dtype=torch.float32).unsqueeze(1)
+        position = torch.arange(0, x.size(1), dtype=torch.int64).float().unsqueeze(1)
         div_term = torch.exp(
-            torch.arange(0, self.embed_dim, 2, dtype=torch.float32) * -(math.log(10000.0) / self.embed_dim)
+            torch.arange(0, self.embed_dim, 2, dtype=torch.int64).float() * -(math.log(10000.0) / self.embed_dim)
         )
         pos_enc_positive[:, 0::2] = torch.sin(position * div_term)
         pos_enc_positive[:, 1::2] = torch.cos(position * div_term)
@@ -1256,7 +1251,7 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
         )
 
         if attention_mask is None:
-            attention_mask = torch.ones(input_ids.shape)
+            attention_mask = torch.ones(input_ids.shape, device=input_ids.device)
 
         has_missing_labels = (
             spectrogram_labels is None or duration_labels is None or pitch_labels is None or energy_labels is None

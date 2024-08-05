@@ -10,12 +10,13 @@ from transformers.testing_utils import require_keras_nlp, require_tf, slow
 if is_tf_available():
     import tensorflow as tf
 
+
 if is_keras_nlp_available():
     from transformers.models.gpt2 import TFGPT2Tokenizer
 
 
-TOKENIZER_CHECKPOINTS = ["gpt2"]
-TINY_MODEL_CHECKPOINT = "gpt2"
+TOKENIZER_CHECKPOINTS = ["openai-community/gpt2"]
+TINY_MODEL_CHECKPOINT = "openai-community/gpt2"
 
 if is_tf_available():
 
@@ -54,7 +55,7 @@ class GPTTokenizationTest(unittest.TestCase):
 
         self.test_sentences = [
             "This is a straightforward English test sentence.",
-            "This one has some weird characters\rto\nsee\r\nif  those\u00E9break things.",
+            "This one has some weird characters\rto\nsee\r\nif  those\u00e9break things.",
             "Now we're going to add some Chinese: 一 二 三 一二三",
             "And some much more rare Chinese: 齉 堃 齉堃",
             "Je vais aussi écrire en français pour tester les accents",

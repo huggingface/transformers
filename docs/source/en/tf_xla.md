@@ -85,8 +85,8 @@ from transformers.utils import check_min_version
 check_min_version("4.21.0")
 
 
-tokenizer = AutoTokenizer.from_pretrained("gpt2", padding_side="left", pad_token="</s>")
-model = TFAutoModelForCausalLM.from_pretrained("gpt2")
+tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2", padding_side="left", pad_token="</s>")
+model = TFAutoModelForCausalLM.from_pretrained("openai-community/gpt2")
 input_string = ["TensorFlow is"]
 
 # One line to create an XLA generation function
@@ -114,8 +114,8 @@ To ensure `xla_generate()` always operates with the same input shapes, you can s
 import tensorflow as tf
 from transformers import AutoTokenizer, TFAutoModelForCausalLM
 
-tokenizer = AutoTokenizer.from_pretrained("gpt2", padding_side="left", pad_token="</s>")
-model = TFAutoModelForCausalLM.from_pretrained("gpt2")
+tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2", padding_side="left", pad_token="</s>")
+model = TFAutoModelForCausalLM.from_pretrained("openai-community/gpt2")
 input_string = ["TensorFlow is"]
 
 xla_generate = tf.function(model.generate, jit_compile=True)
@@ -135,8 +135,8 @@ import time
 import tensorflow as tf
 from transformers import AutoTokenizer, TFAutoModelForCausalLM
 
-tokenizer = AutoTokenizer.from_pretrained("gpt2", padding_side="left", pad_token="</s>")
-model = TFAutoModelForCausalLM.from_pretrained("gpt2")
+tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2", padding_side="left", pad_token="</s>")
+model = TFAutoModelForCausalLM.from_pretrained("openai-community/gpt2")
 
 xla_generate = tf.function(model.generate, jit_compile=True)
 
@@ -157,7 +157,7 @@ Execution time -- 79.0 ms
 
 Execution time -- 78.9 ms
 ```
-The first call to `xla_generate()` is time-consuming because of tracing, but the successive calls are orders of magnitude faster. Keep in mind that any change in the generation options at any point with trigger re-tracing and thus leading to slow-downs in the generation time. 
+The first call to `xla_generate()` is time-consuming because of tracing, but the successive calls are orders of magnitude faster. Keep in mind that any change in the generation options at any point will trigger re-tracing and thus leading to slow-downs in the generation time. 
 
 We didn’t cover all the text generation options 🤗 Transformers provides in this document. We encourage you to read the documentation for advanced use cases.
 
@@ -171,4 +171,4 @@ Here, we leave you with some additional resources if you want to delve deeper in
 * Recommended posts for learning more about XLA and TensorFlow graphs in general:
     * [XLA: Optimizing Compiler for Machine Learning](https://www.tensorflow.org/xla)
     * [Introduction to graphs and tf.function](https://www.tensorflow.org/guide/intro_to_graphs)
-    * [Better performance with tf.function](https://www.tensorflow.org/guide/function) 
+    * [Better performance with tf.function](https://www.tensorflow.org/guide/function)

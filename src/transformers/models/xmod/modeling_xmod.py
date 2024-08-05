@@ -41,19 +41,6 @@ from .configuration_xmod import XmodConfig
 
 logger = logging.get_logger(__name__)
 
-XMOD_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/xmod-base",
-    "facebook/xmod-large-prenorm",
-    "facebook/xmod-base-13-125k",
-    "facebook/xmod-base-30-125k",
-    "facebook/xmod-base-30-195k",
-    "facebook/xmod-base-60-125k",
-    "facebook/xmod-base-60-265k",
-    "facebook/xmod-base-75-125k",
-    "facebook/xmod-base-75-269k",
-    # See all X-MOD models at https://huggingface.co/models?filter=xmod
-]
-
 
 # Copied from transformers.models.roberta.modeling_roberta.RobertaEmbeddings with Roberta->Xmod
 class XmodEmbeddings(nn.Module):
@@ -793,7 +780,7 @@ class XmodModel(XmodPreTrainedModel):
 
     """
 
-    # Copied from transformers.models.bert.modeling_bert.BertModel.__init__ with Bert->Xmod
+    # Copied from transformers.models.clap.modeling_clap.ClapTextModel.__init__ with ClapText->Xmod
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
@@ -1045,7 +1032,7 @@ class XmodForCausalLM(XmodPreTrainedModel):
         >>> from transformers import AutoTokenizer, XmodForCausalLM, AutoConfig
         >>> import torch
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("xlm-roberta-base")
+        >>> tokenizer = AutoTokenizer.from_pretrained("FacebookAI/xlm-roberta-base")
         >>> config = AutoConfig.from_pretrained("facebook/xmod-base")
         >>> config.is_decoder = True
         >>> model = XmodForCausalLM.from_pretrained("facebook/xmod-base", config=config)
@@ -1186,7 +1173,7 @@ class XmodForMaskedLM(XmodPreTrainedModel):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
             config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
             loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
-        kwargs (`Dict[str, any]`, optional, defaults to *{}*):
+        kwargs (`Dict[str, any]`, *optional*, defaults to *{}*):
             Used to hide legacy arguments that have been deprecated.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict

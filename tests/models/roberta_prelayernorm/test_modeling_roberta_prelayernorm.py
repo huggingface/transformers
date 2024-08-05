@@ -38,7 +38,6 @@ if is_torch_available():
         RobertaPreLayerNormModel,
     )
     from transformers.models.roberta_prelayernorm.modeling_roberta_prelayernorm import (
-        ROBERTA_PRELAYERNORM_PRETRAINED_MODEL_ARCHIVE_LIST,
         RobertaPreLayerNormEmbeddings,
         create_position_ids_from_input_ids,
     )
@@ -482,16 +481,14 @@ class RobertaPreLayerNormModelTest(ModelTesterMixin, GenerationTesterMixin, Pipe
         self.model_tester.create_and_check_for_question_answering(*config_and_inputs)
 
     @slow
-    # Copied from tests.models.roberta.test_modeling_roberta.RobertaModelTest.test_model_from_pretrained with ROBERTA->ROBERTA_PRELAYERNORM,Roberta->RobertaPreLayerNorm
     def test_model_from_pretrained(self):
-        for model_name in ROBERTA_PRELAYERNORM_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = RobertaPreLayerNormModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "andreasmadsen/efficient_mlm_m0.15"
+        model = RobertaPreLayerNormModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     # Copied from tests.models.roberta.test_modeling_roberta.RobertaModelTest.test_create_position_ids_respects_padding_index with Roberta->RobertaPreLayerNorm
     def test_create_position_ids_respects_padding_index(self):
-        """Ensure that the default position ids only assign a sequential . This is a regression
-        test for https://github.com/huggingface/transformers/issues/1761
+        """This is a regression test for https://github.com/huggingface/transformers/issues/1761
 
         The position ids should be masked with the embedding object's padding index. Therefore, the
         first available non-padding position index is RobertaPreLayerNormEmbeddings.padding_idx + 1
@@ -510,8 +507,7 @@ class RobertaPreLayerNormModelTest(ModelTesterMixin, GenerationTesterMixin, Pipe
 
     # Copied from tests.models.roberta.test_modeling_roberta.RobertaModelTest.test_create_position_ids_from_inputs_embeds with Roberta->RobertaPreLayerNorm
     def test_create_position_ids_from_inputs_embeds(self):
-        """Ensure that the default position ids only assign a sequential . This is a regression
-        test for https://github.com/huggingface/transformers/issues/1761
+        """This is a regression test for https://github.com/huggingface/transformers/issues/1761
 
         The position ids should be masked with the embedding object's padding index. Therefore, the
         first available non-padding position index is RobertaPreLayerNormEmbeddings.padding_idx + 1

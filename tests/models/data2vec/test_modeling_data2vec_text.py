@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Data2VecAudio model. """
+"""Testing suite for the PyTorch Data2VecAudio model."""
 
 import unittest
 
@@ -39,7 +39,6 @@ if is_torch_available():
         Data2VecTextModel,
     )
     from transformers.models.data2vec.modeling_data2vec_text import (
-        DATA2VEC_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST,
         Data2VecTextForTextEmbeddings,
         create_position_ids_from_input_ids,
     )
@@ -470,13 +469,12 @@ class Data2VecTextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in DATA2VEC_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = Data2VecTextModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "facebook/data2vec-text-base"
+        model = Data2VecTextModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def test_create_position_ids_respects_padding_index(self):
-        """Ensure that the default position ids only assign a sequential . This is a regression
-        test for https://github.com/huggingface/transformers/issues/1761
+        """This is a regression test for https://github.com/huggingface/transformers/issues/1761
 
         The position ids should be masked with the embedding object's padding index. Therefore, the
         first available non-padding position index is Data2VecTextForTextEmbeddings.padding_idx + 1
@@ -494,8 +492,7 @@ class Data2VecTextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
         self.assertTrue(torch.all(torch.eq(position_ids, expected_positions)))
 
     def test_create_position_ids_from_inputs_embeds(self):
-        """Ensure that the default position ids only assign a sequential . This is a regression
-        test for https://github.com/huggingface/transformers/issues/1761
+        """This is a regression test for https://github.com/huggingface/transformers/issues/1761
 
         The position ids should be masked with the embedding object's padding index. Therefore, the
         first available non-padding position index is Data2VecTextForTextEmbeddings.padding_idx + 1

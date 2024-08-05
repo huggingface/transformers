@@ -14,7 +14,6 @@
 # limitations under the License.
 """Convert ViT checkpoints trained with the DINO method."""
 
-
 import argparse
 import json
 from pathlib import Path

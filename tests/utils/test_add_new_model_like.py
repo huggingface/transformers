@@ -228,7 +228,7 @@ class SomeClass:
         )
 
     def test_replace_model_patterns(self):
-        bert_model_patterns = ModelPatterns("Bert", "bert-base-cased")
+        bert_model_patterns = ModelPatterns("Bert", "google-bert/bert-base-cased")
         new_bert_model_patterns = ModelPatterns("New Bert", "huggingface/bert-new-base")
         bert_test = '''class TFBertPreTrainedModel(PreTrainedModel):
     """
@@ -312,14 +312,14 @@ GPT_NEW_NEW_CONSTANT = "value"
         # in others.
         self.assertEqual(replacements, "")
 
-        roberta_model_patterns = ModelPatterns("RoBERTa", "roberta-base", model_camel_cased="Roberta")
+        roberta_model_patterns = ModelPatterns("RoBERTa", "FacebookAI/roberta-base", model_camel_cased="Roberta")
         new_roberta_model_patterns = ModelPatterns(
             "RoBERTa-New", "huggingface/roberta-new-base", model_camel_cased="RobertaNew"
         )
         roberta_test = '''# Copied from transformers.models.bert.BertModel with Bert->Roberta
 class RobertaModel(RobertaPreTrainedModel):
     """ The base RoBERTa model. """
-    checkpoint = roberta-base
+    checkpoint = FacebookAI/roberta-base
     base_model_prefix = "roberta"
         '''
         roberta_expected = '''# Copied from transformers.models.bert.BertModel with Bert->RobertaNew
@@ -346,7 +346,7 @@ class RobertaNewModel(RobertaNewPreTrainedModel):
             get_module_from_file("/models/gpt2/modeling_gpt2.py")
 
     def test_duplicate_module(self):
-        bert_model_patterns = ModelPatterns("Bert", "bert-base-cased")
+        bert_model_patterns = ModelPatterns("Bert", "google-bert/bert-base-cased")
         new_bert_model_patterns = ModelPatterns("New Bert", "huggingface/bert-new-base")
         bert_test = '''class TFBertPreTrainedModel(PreTrainedModel):
     """
@@ -395,7 +395,7 @@ NEW_BERT_CONSTANT = "value"
             self.check_result(dest_file_name, bert_expected)
 
     def test_duplicate_module_with_copied_from(self):
-        bert_model_patterns = ModelPatterns("Bert", "bert-base-cased")
+        bert_model_patterns = ModelPatterns("Bert", "google-bert/bert-base-cased")
         new_bert_model_patterns = ModelPatterns("New Bert", "huggingface/bert-new-base")
         bert_test = '''# Copied from transformers.models.xxx.XxxModel with Xxx->Bert
 class TFBertPreTrainedModel(PreTrainedModel):
@@ -656,7 +656,7 @@ NEW_BERT_CONSTANT = "value"
         self.assertEqual(test_files, wav2vec2_test_files)
 
     def test_find_base_model_checkpoint(self):
-        self.assertEqual(find_base_model_checkpoint("bert"), "bert-base-uncased")
+        self.assertEqual(find_base_model_checkpoint("bert"), "google-bert/bert-base-uncased")
         self.assertEqual(find_base_model_checkpoint("gpt2"), "gpt2")
 
     def test_retrieve_model_classes(self):
@@ -719,7 +719,7 @@ NEW_BERT_CONSTANT = "value"
 
         bert_model_patterns = bert_info["model_patterns"]
         self.assertEqual(bert_model_patterns.model_name, "BERT")
-        self.assertEqual(bert_model_patterns.checkpoint, "bert-base-uncased")
+        self.assertEqual(bert_model_patterns.checkpoint, "google-bert/bert-base-uncased")
         self.assertEqual(bert_model_patterns.model_type, "bert")
         self.assertEqual(bert_model_patterns.model_lower_cased, "bert")
         self.assertEqual(bert_model_patterns.model_camel_cased, "Bert")
@@ -768,7 +768,7 @@ NEW_BERT_CONSTANT = "value"
 
         bert_model_patterns = bert_info["model_patterns"]
         self.assertEqual(bert_model_patterns.model_name, "BERT")
-        self.assertEqual(bert_model_patterns.checkpoint, "bert-base-uncased")
+        self.assertEqual(bert_model_patterns.checkpoint, "google-bert/bert-base-uncased")
         self.assertEqual(bert_model_patterns.model_type, "bert")
         self.assertEqual(bert_model_patterns.model_lower_cased, "bert")
         self.assertEqual(bert_model_patterns.model_camel_cased, "Bert")
@@ -883,7 +883,7 @@ from typing import TYPE_CHECKING
 from ...utils import _LazyModule, is_flax_available, is_tf_available, is_tokenizers_available, is_torch_available
 
 _import_structure = {
-    "configuration_gpt2": ["GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPT2Config", "GPT2OnnxConfig"],
+    "configuration_gpt2": ["GPT2Config", "GPT2OnnxConfig"],
     "tokenization_gpt2": ["GPT2Tokenizer"],
 }
 
@@ -920,7 +920,7 @@ else:
     _import_structure["modeling_flax_gpt2"] = ["FlaxGPT2Model"]
 
 if TYPE_CHECKING:
-    from .configuration_gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config, GPT2OnnxConfig
+    from .configuration_gpt2 import GPT2Config, GPT2OnnxConfig
     from .tokenization_gpt2 import GPT2Tokenizer
 
     try:
@@ -967,7 +967,7 @@ from typing import TYPE_CHECKING
 from ...utils import _LazyModule, is_flax_available, is_tf_available, is_torch_available
 
 _import_structure = {
-    "configuration_gpt2": ["GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPT2Config", "GPT2OnnxConfig"],
+    "configuration_gpt2": ["GPT2Config", "GPT2OnnxConfig"],
 }
 
 try:
@@ -995,7 +995,7 @@ else:
     _import_structure["modeling_flax_gpt2"] = ["FlaxGPT2Model"]
 
 if TYPE_CHECKING:
-    from .configuration_gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config, GPT2OnnxConfig
+    from .configuration_gpt2 import GPT2Config, GPT2OnnxConfig
 
     try:
         if not is_torch_available():
@@ -1033,7 +1033,7 @@ from typing import TYPE_CHECKING
 from ...utils import _LazyModule, is_tokenizers_available, is_torch_available
 
 _import_structure = {
-    "configuration_gpt2": ["GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPT2Config", "GPT2OnnxConfig"],
+    "configuration_gpt2": ["GPT2Config", "GPT2OnnxConfig"],
     "tokenization_gpt2": ["GPT2Tokenizer"],
 }
 
@@ -1054,7 +1054,7 @@ else:
     _import_structure["modeling_gpt2"] = ["GPT2Model"]
 
 if TYPE_CHECKING:
-    from .configuration_gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config, GPT2OnnxConfig
+    from .configuration_gpt2 import GPT2Config, GPT2OnnxConfig
     from .tokenization_gpt2 import GPT2Tokenizer
 
     try:
@@ -1085,7 +1085,7 @@ from typing import TYPE_CHECKING
 from ...utils import _LazyModule, is_torch_available
 
 _import_structure = {
-    "configuration_gpt2": ["GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPT2Config", "GPT2OnnxConfig"],
+    "configuration_gpt2": ["GPT2Config", "GPT2OnnxConfig"],
 }
 
 try:
@@ -1097,7 +1097,7 @@ else:
     _import_structure["modeling_gpt2"] = ["GPT2Model"]
 
 if TYPE_CHECKING:
-    from .configuration_gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config, GPT2OnnxConfig
+    from .configuration_gpt2 import GPT2Config, GPT2OnnxConfig
 
     try:
         if not is_torch_available():
@@ -1135,7 +1135,7 @@ from typing import TYPE_CHECKING
 from ...utils import _LazyModule, is_flax_available, is_tf_available, is_torch_available, is_vision_available
 
 _import_structure = {
-    "configuration_vit": ["VIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTConfig"],
+    "configuration_vit": ["ViTConfig"],
 }
 
 try:
@@ -1171,7 +1171,7 @@ else:
     _import_structure["modeling_flax_vit"] = ["FlaxViTModel"]
 
 if TYPE_CHECKING:
-    from .configuration_vit import VIT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTConfig
+    from .configuration_vit import ViTConfig
 
     try:
         if not is_vision_available():
@@ -1217,7 +1217,7 @@ from typing import TYPE_CHECKING
 from ...utils import _LazyModule, is_flax_available, is_tf_available, is_torch_available
 
 _import_structure = {
-    "configuration_vit": ["VIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTConfig"],
+    "configuration_vit": ["ViTConfig"],
 }
 
 try:
@@ -1245,7 +1245,7 @@ else:
     _import_structure["modeling_flax_vit"] = ["FlaxViTModel"]
 
 if TYPE_CHECKING:
-    from .configuration_vit import VIT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTConfig
+    from .configuration_vit import ViTConfig
 
     try:
         if not is_torch_available():
@@ -1283,7 +1283,7 @@ from typing import TYPE_CHECKING
 from ...utils import _LazyModule, is_torch_available, is_vision_available
 
 _import_structure = {
-    "configuration_vit": ["VIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTConfig"],
+    "configuration_vit": ["ViTConfig"],
 }
 
 try:
@@ -1303,7 +1303,7 @@ else:
     _import_structure["modeling_vit"] = ["ViTModel"]
 
 if TYPE_CHECKING:
-    from .configuration_vit import VIT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTConfig
+    from .configuration_vit import ViTConfig
 
     try:
         if not is_vision_available():
@@ -1333,7 +1333,7 @@ from typing import TYPE_CHECKING
 from ...utils import _LazyModule, is_torch_available
 
 _import_structure = {
-    "configuration_vit": ["VIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTConfig"],
+    "configuration_vit": ["ViTConfig"],
 }
 
 try:
@@ -1345,7 +1345,7 @@ else:
     _import_structure["modeling_vit"] = ["ViTModel"]
 
 if TYPE_CHECKING:
-    from .configuration_vit import VIT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTConfig
+    from .configuration_vit import ViTConfig
 
     try:
         if not is_torch_available():

@@ -737,6 +737,27 @@ class FlaxEncoderDecoderModel(metaclass=DummyObject):
         requires_backends(self, ["flax"])
 
 
+class FlaxGemmaForCausalLM(metaclass=DummyObject):
+    _backends = ["flax"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxGemmaModel(metaclass=DummyObject):
+    _backends = ["flax"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxGemmaPreTrainedModel(metaclass=DummyObject):
+    _backends = ["flax"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
 class FlaxGPT2LMHeadModel(metaclass=DummyObject):
     _backends = ["flax"]
 
@@ -892,6 +913,27 @@ class FlaxMBartModel(metaclass=DummyObject):
 
 
 class FlaxMBartPreTrainedModel(metaclass=DummyObject):
+    _backends = ["flax"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxMistralForCausalLM(metaclass=DummyObject):
+    _backends = ["flax"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxMistralModel(metaclass=DummyObject):
+    _backends = ["flax"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxMistralPreTrainedModel(metaclass=DummyObject):
     _backends = ["flax"]
 
     def __init__(self, *args, **kwargs):
@@ -1309,9 +1351,6 @@ class FlaxXGLMPreTrainedModel(metaclass=DummyObject):
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["flax"])
-
-
-FLAX_XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
 class FlaxXLMRobertaForCausalLM(metaclass=DummyObject):

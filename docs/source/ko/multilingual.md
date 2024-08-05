@@ -21,7 +21,7 @@ rendered properly in your Markdown viewer.
 🤗 Transformers에는 여러 종류의 다국어(multilingual) 모델이 있으며, 단일 언어(monolingual) 모델과 추론 시 사용법이 다릅니다.
 그렇다고 해서 *모든* 다국어 모델의 사용법이 다른 것은 아닙니다.
 
-[bert-base-multilingual-uncased](https://huggingface.co/bert-base-multilingual-uncased)와 같은 몇몇 모델은 단일 언어 모델처럼 사용할 수 있습니다.
+[google-bert/bert-base-multilingual-uncased](https://huggingface.co/google-bert/bert-base-multilingual-uncased)와 같은 몇몇 모델은 단일 언어 모델처럼 사용할 수 있습니다.
 이번 가이드에서 다국어 모델의 추론 시 사용 방법을 알아볼 것입니다.
 
 ## XLM[[xlm]]
@@ -33,25 +33,25 @@ XLM에는 10가지 체크포인트(checkpoint)가 있는데, 이 중 하나만 �
 
 다음 XLM 모델은 추론 시에 언어 임베딩을 사용합니다:
 
-- `xlm-mlm-ende-1024` (마스킹된 언어 모델링, 영어-독일어)
-- `xlm-mlm-enfr-1024` (마스킹된 언어 모델링, 영어-프랑스어)
-- `xlm-mlm-enro-1024` (마스킹된 언어 모델링, 영어-루마니아어)
-- `xlm-mlm-xnli15-1024` (마스킹된 언어 모델링, XNLI 데이터 세트에서 제공하는 15개 국어)
-- `xlm-mlm-tlm-xnli15-1024` (마스킹된 언어 모델링 + 번역, XNLI 데이터 세트에서 제공하는 15개 국어)
-- `xlm-clm-enfr-1024` (Causal language modeling, 영어-프랑스어)
-- `xlm-clm-ende-1024` (Causal language modeling, 영어-독일어)
+- `FacebookAI/xlm-mlm-ende-1024` (마스킹된 언어 모델링, 영어-독일어)
+- `FacebookAI/xlm-mlm-enfr-1024` (마스킹된 언어 모델링, 영어-프랑스어)
+- `FacebookAI/xlm-mlm-enro-1024` (마스킹된 언어 모델링, 영어-루마니아어)
+- `FacebookAI/xlm-mlm-xnli15-1024` (마스킹된 언어 모델링, XNLI 데이터 세트에서 제공하는 15개 국어)
+- `FacebookAI/xlm-mlm-tlm-xnli15-1024` (마스킹된 언어 모델링 + 번역, XNLI 데이터 세트에서 제공하는 15개 국어)
+- `FacebookAI/xlm-clm-enfr-1024` (Causal language modeling, 영어-프랑스어)
+- `FacebookAI/xlm-clm-ende-1024` (Causal language modeling, 영어-독일어)
 
 언어 임베딩은 모델에 전달된 `input_ids`와 동일한 shape의 텐서로 표현됩니다.
 이러한 텐서의 값은 사용된 언어에 따라 다르며 토크나이저의 `lang2id` 및 `id2lang` 속성에 의해 식별됩니다.
 
-다음 예제에서는 `xlm-clm-enfr-1024` 체크포인트(코잘 언어 모델링(causal language modeling), 영어-프랑스어)를 가져옵니다:
+다음 예제에서는 `FacebookAI/xlm-clm-enfr-1024` 체크포인트(코잘 언어 모델링(causal language modeling), 영어-프랑스어)를 가져옵니다:
 
 ```py
 >>> import torch
 >>> from transformers import XLMTokenizer, XLMWithLMHeadModel
 
->>> tokenizer = XLMTokenizer.from_pretrained("xlm-clm-enfr-1024")
->>> model = XLMWithLMHeadModel.from_pretrained("xlm-clm-enfr-1024")
+>>> tokenizer = XLMTokenizer.from_pretrained("FacebookAI/xlm-clm-enfr-1024")
+>>> model = XLMWithLMHeadModel.from_pretrained("FacebookAI/xlm-clm-enfr-1024")
 ```
 
 토크나이저의 `lang2id` 속성은 모델의 언어와 해당 ID를 표시합니다:
@@ -91,8 +91,8 @@ XLM에는 10가지 체크포인트(checkpoint)가 있는데, 이 중 하나만 �
 
 다음 XLM 모델은 추론 시에 언어 임베딩이 필요하지 않습니다:
 
-- `xlm-mlm-17-1280` (마스킹된 언어 모델링, 17개 국어)
-- `xlm-mlm-100-1280` (마스킹된 언어 모델링, 100개 국어)
+- `FacebookAI/xlm-mlm-17-1280` (마스킹된 언어 모델링, 17개 국어)
+- `FacebookAI/xlm-mlm-100-1280` (마스킹된 언어 모델링, 100개 국어)
 
 이전의 XLM 체크포인트와 달리 이 모델은 일반 문장 표현에 사용됩니다.
 
@@ -100,8 +100,8 @@ XLM에는 10가지 체크포인트(checkpoint)가 있는데, 이 중 하나만 �
 
 다음 BERT 모델은 다국어 태스크에 사용할 수 있습니다:
 
-- `bert-base-multilingual-uncased` (마스킹된 언어 모델링 + 다음 문장 예측, 102개 국어)
-- `bert-base-multilingual-cased` (마스킹된 언어 모델링 + 다음 문장 예측, 104개 국어)
+- `google-bert/bert-base-multilingual-uncased` (마스킹된 언어 모델링 + 다음 문장 예측, 102개 국어)
+- `google-bert/bert-base-multilingual-cased` (마스킹된 언어 모델링 + 다음 문장 예측, 104개 국어)
 
 이러한 모델은 추론 시에 언어 임베딩이 필요하지 않습니다. 
 문맥에서 언어를 식별하고, 식별된 언어로 추론합니다.
@@ -110,8 +110,8 @@ XLM에는 10가지 체크포인트(checkpoint)가 있는데, 이 중 하나만 �
 
 다음 XLM-RoBERTa 또한 다국어 다국어 태스크에 사용할 수 있습니다:
 
-- `xlm-roberta-base` (마스킹된 언어 모델링, 100개 국어)
-- `xlm-roberta-large` (마스킹된 언어 모델링, 100개 국어)
+- `FacebookAI/xlm-roberta-base` (마스킹된 언어 모델링, 100개 국어)
+- `FacebookAI/xlm-roberta-large` (마스킹된 언어 모델링, 100개 국어)
 
 XLM-RoBERTa는 100개 국어에 대해 새로 생성되고 정제된 2.5TB 규모의 CommonCrawl 데이터로 학습되었습니다.
 이전에 공개된 mBERT나 XLM과 같은 다국어 모델에 비해 분류, 시퀀스 라벨링, 질의 응답과 같은 다운스트림(downstream) 작업에서 이점이 있습니다.

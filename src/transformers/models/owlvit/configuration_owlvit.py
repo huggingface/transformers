@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" OWL-ViT model configuration"""
+"""OWL-ViT model configuration"""
 
 import os
 from collections import OrderedDict
@@ -29,12 +29,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-OWLVIT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/owlvit-base-patch32": "https://huggingface.co/google/owlvit-base-patch32/resolve/main/config.json",
-    "google/owlvit-base-patch16": "https://huggingface.co/google/owlvit-base-patch16/resolve/main/config.json",
-    "google/owlvit-large-patch14": "https://huggingface.co/google/owlvit-large-patch14/resolve/main/config.json",
-}
 
 
 class OwlViTTextConfig(PretrainedConfig):
@@ -65,7 +59,7 @@ class OwlViTTextConfig(PretrainedConfig):
             just in case (e.g., 512 or 1024 or 2048).
         hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` ``"quick_gelu"` are supported.
+            `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
         layer_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the layer normalization layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -177,7 +171,7 @@ class OwlViTVisionConfig(PretrainedConfig):
             The size (resolution) of each patch.
         hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` ``"quick_gelu"` are supported.
+            `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
         layer_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the layer normalization layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -273,7 +267,7 @@ class OwlViTConfig(PretrainedConfig):
         projection_dim (`int`, *optional*, defaults to 512):
             Dimensionality of text and vision projection layers.
         logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
-            The inital value of the *logit_scale* parameter. Default is used as per the original OWL-ViT
+            The initial value of the *logit_scale* parameter. Default is used as per the original OWL-ViT
             implementation.
         return_dict (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return a dictionary. If `False`, returns a tuple.
