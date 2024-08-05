@@ -19,10 +19,11 @@ from typing import Mapping
 
 from packaging import version
 
+from ...utils.backbone_utils import verify_backbone_config_arguments
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
-from ..auto import CONFIG_MAPPING
+# from ..auto import CONFIG_MAPPING
 
 
 logger = logging.get_logger(__name__)
@@ -127,8 +128,6 @@ class DABDETRConfig(PretrainedConfig):
             Whether to use dynamic iterative anchor updates.
         query_dim (`int`, *optional*, defaults to 4):
             Query dimension parameter represents the size of the output vector.
-        decoder_query_dim (`int`, *optional*, defaults to 4):
-            Dimension parameter used in the MLP, where it projects a vector of size 2D to a vector of size D.
         bbox_embed_diff_each_layer (`bool`, *optional*, defaults to `False`):
             Whether to perform layer-by-layer bounding box embedding refinement.
         decoder_bbox_embed_diff_each_layer (`bool`, *optional*, defaults to `False`):
@@ -178,6 +177,9 @@ class DABDETRConfig(PretrainedConfig):
         self,
         use_timm_backbone=True,
         backbone_config=None,
+        backbone="resnet50",
+        use_pretrained_backbone=True,
+        backbone_kwargs=None,
         num_channels=3,
         num_queries=300,
         encoder_layers=6,
@@ -198,9 +200,6 @@ class DABDETRConfig(PretrainedConfig):
         init_xavier_std=1.0,
         auxiliary_loss=False,
         position_embedding_type="sine",
-        backbone="resnet50",
-        use_pretrained_backbone=True,
-        backbone_kwargs=None,
         dilation=False,
         class_cost=2,
         bbox_cost=5,
@@ -215,7 +214,6 @@ class DABDETRConfig(PretrainedConfig):
         temperature_width=20,
         iter_update=True,
         query_dim=4,
-        decoder_query_dim=4,
         bbox_embed_diff_each_layer=False,
         decoder_bbox_embed_diff_each_layer=False,
         random_refpoints_xy=False,
@@ -231,30 +229,37 @@ class DABDETRConfig(PretrainedConfig):
             raise ValueError(
                 "Loading pretrained backbone weights from the transformers library is not supported yet. `use_timm_backbone` must be set to `True` when `use_pretrained_backbone=True`"
             )
-
-        if backbone_config is not None and backbone is not None:
-            raise ValueError("You can't specify both `backbone` and `backbone_config`.")
-
-        if backbone_config is not None and use_timm_backbone:
-            raise ValueError("You can't specify both `backbone_config` and `use_timm_backbone`.")
+               
+        if query_dim != 4:
+            raise ValueError(
+                "The query dimensions has to be 4."
+            )
 
         # We default to values which were previously hard-coded in the model. This enables configurability of the config
         # while keeping the default behavior the same.
-        if use_timm_backbone and backbone_kwargs is None:
-            backbone_kwargs = {}
-            if dilation:
-                backbone_kwargs["output_stride"] = 16
-            backbone_kwargs["out_indices"] = [1, 2, 3, 4]
-            backbone_kwargs["in_chans"] = num_channels
+        # if use_timm_backbone and backbone_kwargs is None:
+        #     backbone_kwargs = {}
+        #     if dilation:
+        #         backbone_kwargs["output_stride"] = 16
+        #     backbone_kwargs["out_indices"] = [1, 2, 3, 4]
+        #     backbone_kwargs["in_chans"] = num_channels
         # Backwards compatibility
-        elif not use_timm_backbone and backbone in (None, "resnet50"):
-            if backbone_config is None:
-                logger.info("`backbone_config` is `None`. Initializing the config with the default `ResNet` backbone.")
-                backbone_config = CONFIG_MAPPING["resnet"](out_features=["stage4"])
-            elif isinstance(backbone_config, dict):
-                backbone_model_type = backbone_config.get("model_type")
-                config_class = CONFIG_MAPPING[backbone_model_type]
-                backbone_config = config_class.from_dict(backbone_config)
+        # if backbone in (None, "resnet50"):
+        #     if backbone_config is None:
+        #         logger.info("`backbone_config` is `None`. Initializing the config with the default `ResNet` backbone.")
+        #         backbone_config = CONFIG_MAPPING["resnet"](out_features=["stage4"])
+        #     elif isinstance(backbone_config, dict):
+        #         backbone_model_type = backbone_config.get("model_type")
+        #         config_class = CONFIG_MAPPING[backbone_model_type]
+        #         backbone_config = config_class.from_dict(backbone_config)
+
+        verify_backbone_config_arguments(
+            use_timm_backbone=use_timm_backbone,
+            use_pretrained_backbone=use_pretrained_backbone,
+            backbone=backbone,
+            backbone_config=backbone_config,
+            backbone_kwargs=backbone_kwargs,
+        )
 
         self.use_timm_backbone = use_timm_backbone
         self.backbone_config = backbone_config
@@ -296,7 +301,6 @@ class DABDETRConfig(PretrainedConfig):
         self.bbox_embed_diff_each_layer = bbox_embed_diff_each_layer
         self.random_refpoints_xy = random_refpoints_xy
         self.query_scale_type = query_scale_type
-        self.decoder_query_dim = decoder_query_dim
         self.keep_query_pos = keep_query_pos
         self.decoder_modulate_hw_attn = decoder_modulate_hw_attn
         self.decoder_bbox_embed_diff_each_layer = decoder_bbox_embed_diff_each_layer
