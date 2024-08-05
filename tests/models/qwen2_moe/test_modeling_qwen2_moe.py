@@ -478,6 +478,7 @@ class Qwen2MoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
     @require_flash_attn
     @require_torch_gpu
     @pytest.mark.flash_attn_test
+    @slow
     def test_flash_attn_2_generate_use_cache(self):
         import torch
 
