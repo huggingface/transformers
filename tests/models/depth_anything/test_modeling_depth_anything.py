@@ -236,12 +236,9 @@ class DepthAnythingModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
 
 
 # We will verify our results on an image of cute cats
-def predict_depth(image_processor, model):
-    image = image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-    inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
-    with torch.no_grad():
-        outputs = model(**inputs)
-    return outputs.predicted_depth
+def prepare_img():
+    image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+    return image
 
 
 @require_torch
@@ -253,7 +250,13 @@ class DepthAnythingModelIntegrationTest(unittest.TestCase):
         image_processor = DPTImageProcessor.from_pretrained("LiheYoung/depth-anything-small-hf")
         model = DepthAnythingForDepthEstimation.from_pretrained("LiheYoung/depth-anything-small-hf").to(torch_device)
 
-        predicted_depth = predict_depth(image_processor, model)
+        image = prepare_img()
+        inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(**inputs)
+            predicted_depth = outputs.predicted_depth
 
         # verify the predicted depth
         expected_shape = torch.Size([1, 518, 686])
@@ -271,7 +274,12 @@ class DepthAnythingModelIntegrationTest(unittest.TestCase):
             "depth-anything/depth-anything-V2-metric-indoor-small-hf"
         ).to(torch_device)
 
-        predicted_depth = predict_depth(image_processor, model)
+        inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(**inputs)
+            predicted_depth = outputs.predicted_depth
 
         # verify the predicted depth
         expected_shape = torch.Size([1, 518, 686])
