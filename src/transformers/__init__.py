@@ -656,7 +656,6 @@ _import_structure = {
     "models.qwen2_moe": ["Qwen2MoeConfig"],
     "models.qwen2_vl": [
         "Qwen2VLConfig",
-        "Qwen2VLImageProcessor",
         "Qwen2VLProcessor",
     ],
     "models.rag": ["RagConfig", "RagRetriever", "RagTokenizer"],
@@ -5369,7 +5368,6 @@ if TYPE_CHECKING:
     from .models.qwen2_moe import Qwen2MoeConfig
     from .models.qwen2_vl import (
         Qwen2VLConfig,
-        Qwen2VLImageProcessor,
         Qwen2VLProcessor,
     )
     from .models.rag import RagConfig, RagRetriever, RagTokenizer
