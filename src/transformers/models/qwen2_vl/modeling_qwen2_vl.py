@@ -1157,13 +1157,6 @@ class Qwen2VLPreTrainedModel(PreTrainedModel):
     QWEN2VL_START_DOCSTRING,
 )
 class Qwen2VLModel(Qwen2VLPreTrainedModel):
-    """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`Qwen2VLDecoderLayer`]
-
-    Args:
-        config: Qwen2VLConfig
-    """
-
     def __init__(self, config: Qwen2VLConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
