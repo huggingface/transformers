@@ -39,7 +39,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import M2M100ForConditionalGeneration, M2M100Model, M2M100Tokenizer
+    from transformers import M2M100ForConditionalGeneration, M2M100Model, M2M100Tokenizer, M2M100DecoderModel, M2M100EncoderModel
     from transformers.models.m2m_100.modeling_m2m_100 import M2M100Decoder, M2M100Encoder
 
 
@@ -233,6 +233,8 @@ class M2M100ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         (
             M2M100Model,
             M2M100ForConditionalGeneration,
+            M2M100DecoderModel,
+            M2M100EncoderModel,
         )
         if is_torch_available()
         else ()

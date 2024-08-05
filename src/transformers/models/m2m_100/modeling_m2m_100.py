@@ -1578,6 +1578,7 @@ class M2M100EncoderModel(M2M100PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        pool_last_hidden_state: bool = False,
     ) -> Union[Tuple[torch.FloatTensor], BaseModelOutput]:
         r"""
         Returns:
@@ -1606,5 +1607,15 @@ class M2M100EncoderModel(M2M100PreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
+        if pool_last_hidden_state:
+            last_hidden_state = encoder_outputs.last_hidden_state
+            if attention_mask is None:
+                mean_state = last_hidden_state.mean(1, keepdims=True)
+            else:
+                input_mask_expanded = attention_mask.unsqueeze(-1).expand(last_hidden_state.size()).float()
+                sum_embeddings = torch.sum(last_hidden_state * input_mask_expanded, 1, keepdims=True)
+                sum_mask = torch.clamp(input_mask_expanded.sum(1), min=1e-9, keepdims=True)
+                mean_state = sum_embeddings / sum_mask
+            encoder_outputs.last_hidden_state = mean_state
 
         return encoder_outputs
