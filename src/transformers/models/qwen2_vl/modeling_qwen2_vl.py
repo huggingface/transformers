@@ -195,18 +195,6 @@ def apply_multimodal_rotary_pos_emb(q, k, cos, sin, position_ids, mrope_section=
     return q_embed, k_embed
 
 
-def quick_gelu(x: torch.Tensor, inplace: bool = False) -> torch.Tensor:
-    return x * torch.sigmoid(1.702 * x)
-
-
-class QuickGELU(nn.Module):
-    def __init__(self, inplace: bool = False) -> None:
-        super(QuickGELU, self).__init__()
-
-    def forward(self, input: torch.Tensor) -> torch.Tensor:
-        return quick_gelu(input)
-
-
 def apply_rotary_pos_emb_vision(t: torch.Tensor, freqs: torch.Tensor) -> torch.Tensor:
     if apply_rotary_emb is None:
         t_ = t.float()
@@ -290,10 +278,10 @@ class PatchMerger(nn.Module):
 
 
 class VisionMlp(nn.Module):
-    def __init__(self, dim: int, hidden_dim: int, act_layer: nn.Module = QuickGELU) -> None:
+    def __init__(self, dim: int, hidden_dim: int) -> None:
         super().__init__()
         self.fc1 = nn.Linear(dim, hidden_dim)
-        self.act = act_layer()
+        self.act = ACT2FN["quick_gelu"]
         self.fc2 = nn.Linear(hidden_dim, dim)
 
     def forward(self, x) -> torch.Tensor:
@@ -341,7 +329,6 @@ class Qwen2VLVisionBlock(nn.Module):
         dim: int,
         num_heads: int,
         mlp_ratio: float,
-        act_layer: nn.Module = QuickGELU,
         norm_layer: nn.Module = partial(LayerNorm, eps=1e-6),
         use_flash_attention: bool = False,
     ) -> None:
@@ -351,7 +338,7 @@ class Qwen2VLVisionBlock(nn.Module):
         mlp_hidden_dim = int(dim * mlp_ratio)
 
         self.attn = VisionAttention(dim, num_heads=num_heads, use_flash_attention=use_flash_attention)
-        self.mlp = VisionMlp(dim=dim, hidden_dim=mlp_hidden_dim, act_layer=act_layer)
+        self.mlp = VisionMlp(dim=dim, hidden_dim=mlp_hidden_dim)
 
     def forward(self, x, cu_seqlens, rotary_pos_emb) -> torch.Tensor:
         x = x + self.attn(self.norm1(x), cu_seqlens=cu_seqlens, rotary_pos_emb=rotary_pos_emb)
