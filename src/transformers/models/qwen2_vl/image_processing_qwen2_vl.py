@@ -45,7 +45,7 @@ from ...image_utils import (
     to_numpy_array,
     validate_preprocess_arguments,
 )
-from ...utils import TensorType, is_torch_available, is_vision_available, logging
+from ...utils import TensorType, is_vision_available, logging
 
 
 logger = logging.get_logger(__name__)
@@ -53,10 +53,6 @@ logger = logging.get_logger(__name__)
 
 if is_vision_available():
     from PIL import Image
-
-
-if is_torch_available():
-    import torch
 
 
 def round_by_factor(number: int, factor: int) -> int:
@@ -310,11 +306,11 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
             to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
         ]
 
-        patches = torch.from_numpy(np.array(images))
-        if patches.size(0) == 1:
-            patches = patches.expand(self.temporal_patch_size, -1, -1, -1)
-        c = patches.size(1)
-        grid_t = patches.size(0) // self.temporal_patch_size
+        patches = np.array(images)
+        if patches.shape[0] == 1:
+            patches = np.tile(patches, (self.temporal_patch_size, 1, 1, 1))
+        c = patches.shape[1]
+        grid_t = patches.shape[0] // self.temporal_patch_size
         grid_h, grid_w = resized_height // self.patch_size, resized_width // self.patch_size
         flatten_patches = (
             patches.reshape(
@@ -328,9 +324,8 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
                 self.merge_size,
                 self.patch_size,
             )
-            .permute(0, 3, 6, 4, 7, 2, 1, 5, 8)
+            .transpose(0, 3, 6, 4, 7, 2, 1, 5, 8)
             .reshape(grid_t * grid_h * grid_w, c * self.temporal_patch_size * self.patch_size * self.patch_size)
-            .numpy()
         )
 
         return flatten_patches, (grid_t, grid_h, grid_w)
