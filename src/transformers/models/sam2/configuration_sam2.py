@@ -143,6 +143,7 @@ class Sam2Config(PretrainedConfig):
         memory_encoder_config (Union[`dict`, `Sam2MemoryEncoderConfig`], *optional*):
             Dictionary of configuration options used to initialize [`Sam2MemoryEncoderConfig`].
 
+        initializer_range (`<fill_type>`, *optional*, defaults to 0.02): <fill_docstring>
         kwargs (*optional*):
             Dictionary of keyword arguments.
 

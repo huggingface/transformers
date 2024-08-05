@@ -16,20 +16,17 @@ from typing import TYPE_CHECKING
 from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
-    is_tf_available,
     is_torch_available,
-    is_vision_available,
 )
 
 
 _import_structure = {
     "configuration_sam2": [
         "Sam2Config",
+        "Sam2ImageEncoderConfig",
         "Sam2MemoryAttentionConfig",
         "Sam2MemoryEncoderConfig",
-        "Sam2ImageEncoderConfig",
     ],
-    # "processing_sam2": ["Sam2Processor"],
 }
 
 
@@ -41,27 +38,11 @@ except OptionalDependencyNotAvailable:
 else:
     pass
     _import_structure["modeling_sam2"] = [
+        "Sam2ImagePredictor",
         "Sam2Model",
         "Sam2PreTrainedModel",
+        "Sam2VideoPredictor",
     ]
-# try:
-#     if not is_tf_available():
-#         raise OptionalDependencyNotAvailable()
-# except OptionalDependencyNotAvailable:
-#     pass
-# else:
-#     _import_structure["modeling_tf_sam"] = [
-#         "TFSamModel",
-#         "TFSamPreTrainedModel",
-#     ]
-# try:
-#     if not is_vision_available():
-#         raise OptionalDependencyNotAvailable()
-# except OptionalDependencyNotAvailable:
-#     pass
-# else:
-#     _import_structure["image_processing_sam"] = ["SamImageProcessor"]
-
 
 if TYPE_CHECKING:
     from .configuration_sam2 import Sam2Config, Sam2MaskDecoderConfig, Sam2VisionConfig
@@ -74,23 +55,12 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_sam2 import Sam2Model, Sam2PreTrainedModel
-
-    # try:
-    #     if not is_tf_available():
-    #         raise OptionalDependencyNotAvailable()
-    # except OptionalDependencyNotAvailable:
-    #     pass
-    # else:
-    #     from .modeling_tf_sam import TFSamModel, TFSamPreTrainedModel
-
-    # try:
-    #     if not is_vision_available():
-    #         raise OptionalDependencyNotAvailable()
-    # except OptionalDependencyNotAvailable:
-    #     pass
-    # else:
-    #     from .image_processing_sam import SamImageProcessor
+        from .modeling_sam2 import (
+            Sam2ImageEncoder,
+            Sam2Model,
+            Sam2PreTrainedModel,
+            Sam2VideoPredictor,
+        )
 
 else:
     import sys
