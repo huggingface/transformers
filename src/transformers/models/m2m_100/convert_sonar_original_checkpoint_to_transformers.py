@@ -174,7 +174,7 @@ def test_conversion_accuracy(fairseq2_encoder_path, fairseq2_decoder_path):
     from transformers.modeling_outputs import BaseModelOutput
 
     tokenizer = NllbTokenizer.from_pretrained("facebook/nllb-200-distilled-600M", clean_up_tokenization_spaces=True)
-    sentences = ['My name is SONAR.', 'I can embed the sentences into vectorial space.']
+    sentences = ["My name is SONAR.", "I can embed the sentences into vectorial space."]
     tokenizer.src_lang = "eng_Latn"
     batch = tokenizer(sentences, padding=True, return_tensors="pt")
 
@@ -188,10 +188,9 @@ def test_conversion_accuracy(fairseq2_encoder_path, fairseq2_decoder_path):
     assert enc_out.last_hidden_state.shape == (2, 1, 1024)
     embeddings = enc_out.last_hidden_state.squeeze(1)
 
-    ref_embeddings = torch.tensor([
-        [-0.005286,  0.002008, -0.000562,  0.006344,  0.006329],
-        [-0.000330, -0.007055,  0.007644,  0.001841,  0.003727]
-    ])
+    ref_embeddings = torch.tensor(
+        [[-0.005286, 0.002008, -0.000562, 0.006344, 0.006329], [-0.000330, -0.007055, 0.007644, 0.001841, 0.003727]]
+    )
     assert torch.allclose(embeddings[:, :5], ref_embeddings, rtol=1e-3)
     print("The embedding accuracy test has passed!")
 
@@ -203,12 +202,12 @@ def test_conversion_accuracy(fairseq2_encoder_path, fairseq2_decoder_path):
     gen_out = dec.generate(
         # passing encoder_outputs is not recommended, because beam search decoding modifies them in place, which is ugly
         # encoder_outputs=enc_out,
-        encoder_outputs=BaseModelOutput(last_hidden_state=enc_out.last_hidden_state.clone()), 
+        encoder_outputs=BaseModelOutput(last_hidden_state=enc_out.last_hidden_state.clone()),
         num_beams=5,
         forced_bos_token_id=tokenizer.convert_tokens_to_ids("eng_Latn"),
     )
     text_out = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
-    assert text_out == ['My name is SONAR.', 'I can embed the sentences into vector space.']
+    assert text_out == ["My name is SONAR.", "I can embed the sentences into vector space."]
     print("The decoding accuracy test has passed!")
 
 

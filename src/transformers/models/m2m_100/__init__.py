@@ -29,7 +29,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_m2m_100"] = [
-        "M2M_100_PRETRAINED_MODEL_ARCHIVE_LIST",
         "M2M100DecoderModel",
         "M2M100EncoderModel",
         "M2M100ForConditionalGeneration",
@@ -49,7 +48,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_m2m_100 import (
-            M2M_100_PRETRAINED_MODEL_ARCHIVE_LIST,
             M2M100DecoderModel,
             M2M100EncoderModel,
             M2M100ForConditionalGeneration,
