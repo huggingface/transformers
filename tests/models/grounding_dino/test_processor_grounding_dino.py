@@ -22,7 +22,6 @@ import numpy as np
 import pytest
 
 from transformers import BertTokenizer, BertTokenizerFast, GroundingDinoProcessor
-from transformers.models.auto.processing_auto import processor_class_from_name
 from transformers.models.bert.tokenization_bert import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import IMAGE_PROCESSOR_NAME, is_torch_available, is_vision_available
@@ -80,17 +79,6 @@ class GroundingDinoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.num_queries = 5
         self.embed_dim = 5
         self.seq_length = 5
-
-    def get_component(self, attribute, **kwargs):
-        assert attribute in self.processor_class.attributes
-        component_class_name = getattr(self.processor_class, f"{attribute}_class")
-        if isinstance(component_class_name, tuple):
-            component_class_name = component_class_name[0]
-
-        component_class = processor_class_from_name(component_class_name)
-        component = component_class.from_pretrained(self.tmpdirname, **kwargs)  # noqa
-
-        return component
 
     # Copied from tests.models.clip.test_processor_clip.CLIPProcessorTest.get_tokenizer with CLIP->Bert
     def get_tokenizer(self, **kwargs):
@@ -306,8 +294,10 @@ class GroundingDinoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()
 
-        inputs = processor(text=input_str, images=image_input, return_tensors="pt", max_length=112)
-        self.assertEqual(len(inputs["input_ids"][0]), 4)
+        inputs = processor(
+            text=input_str, images=image_input, return_tensors="pt", padding="max_length", max_length=112
+        )
+        self.assertEqual(len(inputs["input_ids"][0]), 112)
 
     @require_vision
     @require_torch
@@ -322,8 +312,8 @@ class GroundingDinoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()
 
-        inputs = processor(text=input_str, images=image_input, return_tensors="pt")
-        self.assertEqual(len(inputs["input_ids"][0]), 4)
+        inputs = processor(text=input_str, images=image_input, return_tensors="pt", padding="max_length")
+        self.assertEqual(len(inputs["input_ids"][0]), 117)
 
     @require_torch
     @require_vision
