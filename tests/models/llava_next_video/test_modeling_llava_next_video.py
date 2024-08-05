@@ -487,7 +487,7 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             output_train = model(**inputs_batched, output_hidden_states=True)
         self.assertTrue((output_train.hidden_states[0][0, -1482:, ...] == 0).all().item())
-    
+
     @slow
     @require_bitsandbytes
     def test_expansion_in_processing(self):

@@ -137,20 +137,18 @@ class LlavaProcessor(ProcessorMixin):
 
         # try to expand inputs in processing if we have the necessary parts
         if image_inputs.get("pixel_values") is not None:
-            if (self.patch_size is not None
-            and self.vision_feature_select_strategy is not None
-        ):
-            # Replace the image token with the expanded image token sequence
-            pixel_values = image_inputs["pixel_values"]
-            height, width = get_image_size(to_numpy_array(pixel_values[0]))
-            num_image_tokens = (height // self.patch_size) * (width // self.patch_size) + 1
-            if self.vision_feature_select_strategy == "default":
-                num_image_tokens -= 1
+            if self.patch_size is not None and self.vision_feature_select_strategy is not None:
+                # Replace the image token with the expanded image token sequence
+                pixel_values = image_inputs["pixel_values"]
+                height, width = get_image_size(to_numpy_array(pixel_values[0]))
+                num_image_tokens = (height // self.patch_size) * (width // self.patch_size) + 1
+                if self.vision_feature_select_strategy == "default":
+                    num_image_tokens -= 1
 
-            prompt_strings = []
-            for sample in text:
-                sample = sample.replace(self.image_token, self.image_token * num_image_tokens)
-                prompt_strings.append(sample)
+                prompt_strings = []
+                for sample in text:
+                    sample = sample.replace(self.image_token, self.image_token * num_image_tokens)
+                    prompt_strings.append(sample)
             else:
                 prompt_strings = text
                 logger.warning_once(
