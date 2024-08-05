@@ -196,9 +196,8 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
         formatted_prompt = self.processor.apply_chat_template(messages, add_generation_prompt=True)
 
         inputs = self.processor(text=formatted_prompt, audios=[raw_audio], return_tensors="pt", padding=True)
-        print(inputs["input_ids"])
+
         output = model.generate(**inputs, max_new_tokens=32)
-        print(self.processor.decode(output[0], skip_special_tokens=False))
 
         EXPECTED_INPUT_IDS = torch.tensor(
             [
@@ -313,8 +312,6 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
         inputs = self.processor(text=text, audios=audios, return_tensors="pt", padding=True)
 
         output = model.generate(**inputs, max_new_tokens=32)
-
-        print(self.processor.batch_decode(output, skip_special_tokens=True))
 
         EXPECTED_DECODED_TEXT = [
             "system\nYou are a helpful assistant.\nuser\nAudio 1: \nWhat's that sound?\nassistant\nIt is the sound of glass shattering.\nuser\nAudio 2: \nWhat can you hear?\nassistant\ncough and throat clearing.",
