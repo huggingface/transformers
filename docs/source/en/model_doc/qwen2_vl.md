@@ -55,7 +55,7 @@ messages = [{"role": "user", "content": [{"type": "image", "image": "data:image;
 messages = [{"role": "user", "content": [{"type": "image", "image": "file:///path/to/your/image.jpg", "resized_height": 280, "resized_width": 420}, {"type": "text", "text": "Describe this image."}]}]
 
 # Preparation for inference
-text, vision_infos = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+text, vision_infos = processor.apply_chat_template(messages, add_generation_prompt=True)
 inputs = processor(text=[text], vision_infos=[vision_infos], padding=True, return_tensors="pt")
 inputs = inputs.to('cuda')
 
@@ -75,7 +75,7 @@ print(output_text)
 messages = [{"role": "user", "content": [{"type": "image", "image": "file:///path/to/image1.jpg"}, {"type": "image", "image": "file:///path/to/image2.jpg"}, {"type": "text", "text": "Identify the similarities between these images."}]}]
 
 # Preparation for inference
-text, vision_infos = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+text, vision_infos = processor.apply_chat_template(messages, add_generation_prompt=True)
 inputs = processor(text=[text], vision_infos=[vision_infos], padding=True, return_tensors="pt")
 inputs = inputs.to('cuda')
 
@@ -98,7 +98,7 @@ messages = [{"role": "user", "content": [{"type": "video", "video": ["file:///pa
 messages = [{"role": "user", "content": [{"type": "video", "video": "file:///path/to/video1.mp4", 'max_pixels': 360*420, 'fps': 1.0}, {"type": "text", "text": "Describe this video."}]}]
 
 # Preparation for inference
-text, vision_infos = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+text, vision_infos = processor.apply_chat_template(messages, add_generation_prompt=True)
 inputs = processor(text=[text], vision_infos=[vision_infos], padding=True, return_tensors="pt")
 inputs = inputs.to('cuda')
 
@@ -121,7 +121,7 @@ messages2 = [{"role": "system", "content": "You are a helpful assistant."}, {"ro
 messages = [messages1, messages1]
 
 # Preparation for batch inference
-texts, vision_infos = zip(*[processor.apply_chat_template(msg, tokenize=False, add_generation_prompt=True) for msg in messages])
+texts, vision_infos = zip(*[processor.apply_chat_template(msg, add_generation_prompt=True) for msg in messages])
 inputs = processor(text=texts, vision_infos=vision_infos, padding=True, return_tensors="pt")
 inputs = inputs.to('cuda')
 
