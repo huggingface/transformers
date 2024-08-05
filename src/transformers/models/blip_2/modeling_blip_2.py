@@ -1894,7 +1894,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
             attention_mask = torch.ones_like(input_ids)
 
         # if the model already has "image_token_index" then the input is expanded to account for image embeds
-        # otherwise we expand manually by concating
+        # otherwise we expand manually by concatenating
         if hasattr(self.config, "image_token_index"):
             special_image_mask = (input_ids == self.config.image_token_index).unsqueeze(-1).expand_as(inputs_embeds)
             inputs_embeds[special_image_mask] = language_model_inputs.flatten()
