@@ -97,7 +97,7 @@ jinja2-time==0.2.0
 jmespath==0.10.0
 joblib==1.2.0
 jsonschema==4.4.0
-keras==2.8.0
+keras==2.13.1
 Keras-Preprocessing==1.1.2
 kiwisolver==1.4.0
 kubernetes==12.0.1

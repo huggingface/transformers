@@ -770,7 +770,7 @@ class TrainingArguments:
             If not `None`, this will activate NEFTune noise embeddings. This can drastically improve model performance
             for instruction fine-tuning. Check out the [original paper](https://arxiv.org/abs/2310.05914) and the
             [original code](https://github.com/neelsjain/NEFTune). Support transformers `PreTrainedModel` and also
-            `PeftModel` from peft.
+            `PeftModel` from peft. The original paper used values in the range [5.0, 15.0].
         optim_target_modules (`Union[str, List[str]]`, *optional*):
             The target modules to optimize, i.e. the module names that you would like to train, right now this is used only for GaLore algorithm
             https://arxiv.org/abs/2403.03507
