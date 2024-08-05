@@ -630,7 +630,7 @@ class Qwen2VLAttention(nn.Module):
 
 class Qwen2VLFlashAttention2(Qwen2VLAttention):
     """
-    Qwen2 flash attention module, following Qwen2 attention module. This module inherits from `Qwen2VLAttention`
+    Qwen2VL flash attention module, following Qwen2VL attention module. This module inherits from `Qwen2VLAttention`
     as the weights of the module stays untouched. The only required change would be on the forward pass
     where it needs to correctly call the public API of flash attention and deal with padding tokens
     in case the input contains any of them. Additionally, for sliding window attention, we apply SWA only to the bottom
