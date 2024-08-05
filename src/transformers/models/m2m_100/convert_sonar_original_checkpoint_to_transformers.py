@@ -150,6 +150,68 @@ def convert_sonar_checkpoint_from_disk(checkpoint_path):
     return model
 
 
+def test_conversion_accuracy(fairseq2_encoder_path, fairseq2_decoder_path):
+    """
+    This test is not directly invoked, because the encoder and decoder paths should be provided explicitly,
+    and these checkpoints are too heavy to download them by default, just for a test.
+    Please run the test from your code like below:
+    ```
+    from transformers.models.m2m_100.convert_sonar_original_checkpoint_to_transformers import test_conversion_accuracy
+    test_conversion_accuracy(PATH_TO_ENCODER, PATH_TO_DECODER)
+    ```
+    The fairseq2 checkpoints can be downloaded from the urls indicated in the following cards:
+        - https://github.com/facebookresearch/SONAR/blob/main/sonar/cards/text_sonar_basic_encoder.yaml
+        - https://github.com/facebookresearch/SONAR/blob/main/sonar/cards/text_sonar_basic_decoder.yaml
+
+    The reference embeddings were obtained with:
+    ```
+    from sonar.inference_pipelines.text import TextToEmbeddingModelPipeline
+    t2vec_model = TextToEmbeddingModelPipeline(encoder="text_sonar_basic_encoder", tokenizer="text_sonar_basic_encoder")
+    ref_embeddings = t2vec_model.predict(sentences, source_lang="eng_Latn")[:, :5]
+    ```
+    """
+    from transformers import NllbTokenizer
+    from transformers.modeling_outputs import BaseModelOutput
+
+    tokenizer = NllbTokenizer.from_pretrained("facebook/nllb-200-distilled-600M", clean_up_tokenization_spaces=True)
+    sentences = ['My name is SONAR.', 'I can embed the sentences into vectorial space.']
+    tokenizer.src_lang = "eng_Latn"
+    batch = tokenizer(sentences, padding=True, return_tensors="pt")
+
+    print("Converting the encoder...")
+    enc = convert_sonar_checkpoint_from_disk(fairseq2_encoder_path).eval()
+    assert isinstance(enc, M2M100EncoderModel)
+
+    print("Conversion completed, testing the embedding accuracy...")
+    with torch.inference_mode():
+        enc_out = enc(**batch, pool_last_hidden_state=True)
+    assert enc_out.last_hidden_state.shape == (2, 1, 1024)
+    embeddings = enc_out.last_hidden_state.squeeze(1)
+
+    ref_embeddings = torch.tensor([
+        [-0.005286,  0.002008, -0.000562,  0.006344,  0.006329],
+        [-0.000330, -0.007055,  0.007644,  0.001841,  0.003727]
+    ])
+    assert torch.allclose(embeddings[:, :5], ref_embeddings, rtol=1e-3)
+    print("The embedding accuracy test has passed!")
+
+    print("Converting the decoder...")
+    dec = convert_sonar_checkpoint_from_disk(fairseq2_decoder_path).eval()
+    assert isinstance(dec, M2M100DecoderModel)
+
+    print("Conversion completed, testing the decoding accuracy...")
+    gen_out = dec.generate(
+        # passing encoder_outputs is not recommended, because beam search decoding modifies them in place, which is ugly
+        # encoder_outputs=enc_out,
+        encoder_outputs=BaseModelOutput(last_hidden_state=enc_out.last_hidden_state.clone()), 
+        num_beams=5,
+        forced_bos_token_id=tokenizer.convert_tokens_to_ids("eng_Latn"),
+    )
+    text_out = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
+    assert text_out == ['My name is SONAR.', 'I can embed the sentences into vector space.']
+    print("The decoding accuracy test has passed!")
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
