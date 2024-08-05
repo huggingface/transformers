@@ -51,6 +51,13 @@ class HQQQuantizedCache(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class HybridCache(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class QuantizedCache(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -73,6 +80,13 @@ class QuantoQuantizedCache(metaclass=DummyObject):
 
 
 class SinkCache(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class SlidingWindowCache(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
