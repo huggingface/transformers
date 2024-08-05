@@ -629,6 +629,8 @@
         title: NAT
       - local: model_doc/poolformer
         title: PoolFormer
+      - local: model_doc/propainter
+        title: ProPainter
       - local: model_doc/pvt
         title: Pyramid Vision Transformer (PVT)
       - local: model_doc/pvt_v2

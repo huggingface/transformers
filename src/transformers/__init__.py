@@ -771,6 +771,7 @@ _import_structure = {
     ],
     "models.visual_bert": ["VisualBertConfig"],
     "models.vit": ["ViTConfig"],
+    "models.propainter": ["ProPainterConfig"],
     "models.vit_mae": ["ViTMAEConfig"],
     "models.vit_msn": ["ViTMSNConfig"],
     "models.vitdet": ["VitDetConfig"],
@@ -3430,6 +3431,14 @@ else:
             "ViTPreTrainedModel",
         ]
     )
+    _import_structure["models.propainter"].extend(
+        [
+            "ProPainterForImageClassification",
+            "ProPainterForMaskedImageModeling",
+            "ProPainterModel",
+            "ProPainterPreTrainedModel",
+        ]
+    )
     _import_structure["models.vit_mae"].extend(
         [
             "ViTMAEForPreTraining",
@@ -5493,6 +5502,7 @@ if TYPE_CHECKING:
         VisualBertConfig,
     )
     from .models.vit import ViTConfig
+    from .models.propainter import ProPainterConfig
     from .models.vit_mae import ViTMAEConfig
     from .models.vit_msn import ViTMSNConfig
     from .models.vitdet import VitDetConfig
@@ -7714,6 +7724,12 @@ if TYPE_CHECKING:
             ViTForMaskedImageModeling,
             ViTModel,
             ViTPreTrainedModel,
+        )
+        from .models.propainter import (
+            ProPainterForImageClassification,
+            ProPainterForMaskedImageModeling,
+            ProPainterModel,
+            ProPainterPreTrainedModel,
         )
         from .models.vit_mae import (
             ViTMAEForPreTraining,
