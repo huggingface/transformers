@@ -1758,14 +1758,9 @@ class Kosmos2_5PreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(self, (Kosmos2_5TextModel, Kosmos2_5TextForCausalLM)):
-            std = self.config.init_std
-            factor = self.config.initializer_factor
-            # initializer_range = self.config.initializer_range
-        elif isinstance(self, (Kosmos2_5Model, Kosmos2_5ForConditionalGeneration)):
-            std = self.config.text_config.init_std
-            factor = self.config.text_config.initializer_factor
-            # initializer_range = self.config.text_config.initializer_range
+        factor = self.config.vision_config.initializer_factor
+        std = self.config.text_config.init_std
+
         if isinstance(module, Kosmos2_5VisionEmbeddings):
             nn.init.normal_(module.column_embedder.weight, std=std)
             nn.init.normal_(module.row_embedder.weight, std=std)

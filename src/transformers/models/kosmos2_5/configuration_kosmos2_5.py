@@ -94,8 +94,6 @@ class Kosmos2_5TextConfig(PretrainedConfig):
         layerdrop=0.0,
         layer_norm_eps=1e-5,
         init_std=0.02,
-        initializer_factor=1.0,
-        initializer_range=1e-10,
         scale_embedding=True,
         use_cache=True,
         pad_token_id=1,
@@ -123,8 +121,6 @@ class Kosmos2_5TextConfig(PretrainedConfig):
         self.layerdrop = layerdrop
         self.layer_norm_eps = layer_norm_eps
         self.init_std = init_std
-        self.initializer_factor = initializer_factor
-        self.initializer_range = initializer_range
         self.scale_embedding = scale_embedding
         self.use_cache = use_cache
 
@@ -211,6 +207,8 @@ class Kosmos2_5VisionConfig(PretrainedConfig):
         dropout_rate=0.0,
         attention_dropout=0.0,
         seq_len=4096,
+        initializer_factor=1.0,
+        initializer_range=1e-10,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -226,6 +224,8 @@ class Kosmos2_5VisionConfig(PretrainedConfig):
         self.dense_act_fn = dense_act_fn
         self.seq_len = seq_len
         self.d_kv = d_kv
+        self.initializer_factor = initializer_factor
+        self.initializer_range = initializer_range
 
     @classmethod
     def from_pretrained(
