@@ -156,5 +156,5 @@ if __name__ == "__main__":
     parser.add_argument("fairseq_path", type=str, help="path to a model.pt on local filesystem.")
     parser.add_argument("dump_folder_path", default=None, type=str, help="Path to the output transformers model.")
     args = parser.parse_args()
-    model = convert_sonar_checkpoint_from_disk(args.fairseq_pathß)
+    model = convert_sonar_checkpoint_from_disk(args.fairseq_path)
     model.save_pretrained(args.dump_folder_path)

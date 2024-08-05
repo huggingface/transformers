@@ -1746,7 +1746,7 @@ class M2M100EncoderModel(M2M100PreTrainedModel):
             else:
                 input_mask_expanded = attention_mask.unsqueeze(-1).expand(last_hidden_state.size()).float()
                 sum_embeddings = torch.sum(last_hidden_state * input_mask_expanded, 1, keepdims=True)
-                sum_mask = torch.clamp(input_mask_expanded.sum(1), min=1e-9, keepdims=True)
+                sum_mask = torch.clamp(input_mask_expanded.sum(1, keepdims=True), min=1e-9)
                 mean_state = sum_embeddings / sum_mask
             encoder_outputs.last_hidden_state = mean_state
 
