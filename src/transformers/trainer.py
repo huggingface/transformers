@@ -22,6 +22,7 @@ import functools
 import glob
 import importlib.metadata
 import inspect
+import json
 import math
 import os
 import random
@@ -99,6 +100,7 @@ from .trainer_pt_utils import (
     get_model_param_count,
     get_module_class_from_name,
     get_parameter_names,
+    is_deepspeed_zero3_enabled,
     nested_concat,
     nested_detach,
     nested_numpify,
@@ -221,6 +223,11 @@ if is_accelerate_available():
         DistributedDataParallelKwargs,
         DistributedType,
         GradientAccumulationPlugin,
+        is_mlu_available,
+        is_mps_available,
+        is_npu_available,
+        is_torch_version,
+        is_xpu_available,
         load_fsdp_model,
         load_fsdp_optimizer,
         save_fsdp_model,
@@ -428,6 +435,15 @@ class Trainer:
                     FutureWarning,
                 )
             self.model_init = model_init
+
+        # Will reach this branch if the user has
+        # 1. Used `.from_pretrained` or `.from_config` to initialize their model
+        # 2. Did not configure Zero-3 via `TrainingArguments` or `accelerate launch` beforehand
+        # New models init such as `MyModel()` will not hit this step
+        if is_deepspeed_zero3_enabled() and not getattr(model, "_transformers_zero3_init_used", True):
+            raise ValueError(
+                "Model was not initialized with `Zero-3` despite being configured for DeepSpeed Zero-3. Please re-initialize your model via `Model.from_pretrained(...)` or `Model.from_config(...)` after creating your `TrainingArguments`!"
+            )
 
         if model.__class__.__name__ in MODEL_MAPPING_NAMES:
             raise ValueError(
@@ -739,7 +755,7 @@ class Trainer:
         Add a callback to the current list of [`~transformers.TrainerCallback`].
 
         Args:
-           callback (`type` or [`~transformers.TrainerCallback`]):
+           callback (`type` or [`~transformers.TrainerCallback]`):
                A [`~transformers.TrainerCallback`] class or an instance of a [`~transformers.TrainerCallback`]. In the
                first case, will instantiate a member of that class.
         """
@@ -752,7 +768,7 @@ class Trainer:
         If the callback is not found, returns `None` (and no error is raised).
 
         Args:
-           callback (`type` or [`~transformers.TrainerCallback`]):
+           callback (`type` or [`~transformers.TrainerCallback]`):
                A [`~transformers.TrainerCallback`] class or an instance of a [`~transformers.TrainerCallback`]. In the
                first case, will pop the first member of that class found in the list of callbacks.
 
@@ -766,7 +782,7 @@ class Trainer:
         Remove a callback from the current list of [`~transformers.TrainerCallback`].
 
         Args:
-           callback (`type` or [`~transformers.TrainerCallback`]):
+           callback (`type` or [`~transformers.TrainerCallback]`):
                A [`~transformers.TrainerCallback`] class or an instance of a [`~transformers.TrainerCallback`]. In the
                first case, will remove the first member of that class found in the list of callbacks.
         """
@@ -1073,7 +1089,7 @@ class Trainer:
                 },
             ]
 
-            optimizer_cls, optimizer_kwargs = Trainer.get_optimizer_cls_and_kwargs(self.args, opt_model)
+            optimizer_cls, optimizer_kwargs = self.get_optimizer_cls_and_kwargs(self.args, opt_model)
 
             # Overwrite `params` in case it's created by `get_optimizer_cls_and_kwargs`
             # e.g. for GaLore optimizer.
@@ -2149,7 +2165,7 @@ class Trainer:
             self.state = TrainerState.load_from_json(os.path.join(resume_from_checkpoint, TRAINER_STATE_NAME))
             self.compare_trainer_and_checkpoint_args(self.args, self.state)
             self._load_callback_state()
-            epochs_trained = self.state.global_step // num_update_steps_per_epoch
+            epochs_trained = int(self.state.global_step // num_update_steps_per_epoch)
             if not args.ignore_data_skip:
                 steps_trained_in_current_epoch = self.state.global_step % (num_update_steps_per_epoch)
                 steps_trained_in_current_epoch *= args.gradient_accumulation_steps
@@ -2239,12 +2255,17 @@ class Trainer:
                             "a `main_input_name` attribute to the model class you are using."
                         )
                     else:
-                        input_device = inputs[main_input_name].device
-                        self.state.num_input_tokens_seen += torch.sum(
-                            self.accelerator.gather(
-                                torch.tensor(inputs[main_input_name].numel(), device=input_device, dtype=torch.int64)
+                        self.state.num_input_tokens_seen += (
+                            torch.sum(
+                                self.accelerator.gather(
+                                    torch.tensor(
+                                        inputs[main_input_name].numel(), device=self.args.device, dtype=torch.int64
+                                    )
+                                )
                             )
-                        ).item()
+                            .cpu()
+                            .item()
+                        )
                 if rng_to_sync:
                     self._load_rng_state(resume_from_checkpoint)
                     rng_to_sync = False
@@ -3307,6 +3328,20 @@ class Trainer:
             loss = self.compute_loss(model, inputs)
 
         del inputs
+        if (
+            self.args.torch_empty_cache_steps is not None
+            and self.state.global_step % self.args.torch_empty_cache_steps == 0
+        ):
+            if is_xpu_available():
+                torch.xpu.empty_cache()
+            elif is_mlu_available():
+                torch.mlu.empty_cache()
+            elif is_npu_available():
+                torch.npu.empty_cache()
+            elif is_torch_version(">=", "2.0") and is_mps_available():
+                torch.mps.empty_cache()
+            else:
+                torch.cuda.empty_cache()
 
         kwargs = {}
 
@@ -3651,6 +3686,8 @@ class Trainer:
         total_batch_size = self.args.eval_batch_size * self.args.world_size
         if f"{metric_key_prefix}_jit_compilation_time" in output.metrics:
             start_time += output.metrics[f"{metric_key_prefix}_jit_compilation_time"]
+        if f"{metric_key_prefix}_model_preparation_time" in output.metrics:
+            start_time += output.metrics[f"{metric_key_prefix}_model_preparation_time"]
         output.metrics.update(
             speed_metrics(
                 metric_key_prefix,
@@ -3720,6 +3757,8 @@ class Trainer:
         total_batch_size = self.args.eval_batch_size * self.args.world_size
         if f"{metric_key_prefix}_jit_compilation_time" in output.metrics:
             start_time += output.metrics[f"{metric_key_prefix}_jit_compilation_time"]
+        if f"{metric_key_prefix}_model_preparation_time" in output.metrics:
+            start_time += output.metrics[f"{metric_key_prefix}_model_preparation_time"]
         output.metrics.update(
             speed_metrics(
                 metric_key_prefix,
@@ -3758,11 +3797,13 @@ class Trainer:
         model = self._wrap_model(self.model, training=False, dataloader=dataloader)
 
         if len(self.accelerator._models) == 0 and model is self.model:
+            start_time = time.time()
             model = (
                 self.accelerator.prepare(model)
                 if self.is_deepspeed_enabled
                 else self.accelerator.prepare_model(model, evaluation_mode=True)
             )
+            self.model_preparation_time = round(time.time() - start_time, 4)
 
             if self.is_fsdp_enabled:
                 self.model = model
@@ -3935,6 +3976,8 @@ class Trainer:
             metrics[f"{metric_key_prefix}_loss"] = all_losses.mean().item()
         if hasattr(self, "jit_compilation_time"):
             metrics[f"{metric_key_prefix}_jit_compilation_time"] = self.jit_compilation_time
+        if hasattr(self, "model_preparation_time"):
+            metrics[f"{metric_key_prefix}_model_preparation_time"] = self.model_preparation_time
 
         # Prefix all keys with metric_key_prefix + '_'
         for key in list(metrics.keys()):
@@ -4188,6 +4231,15 @@ class Trainer:
         output_dir = self.args.output_dir
         # To avoid a new synchronization of all model weights, we just copy the file from the checkpoint folder
         modeling_files = [CONFIG_NAME, WEIGHTS_NAME, SAFE_WEIGHTS_NAME]
+        #  Add sharded checkpoints if we have an index
+        for index_file in [WEIGHTS_INDEX_NAME, SAFE_WEIGHTS_INDEX_NAME]:
+            index_path = os.path.join(checkpoint_folder, index_file)
+            if os.path.isfile(index_path):
+                modeling_files.append(index_file)
+                with open(index_path) as f:
+                    index = json.loads(f.read())
+                shard_files = list(set(index["weight_map"].values()))
+                modeling_files.extend(shard_files)
         if is_peft_available():
             modeling_files.extend([ADAPTER_CONFIG_NAME, ADAPTER_WEIGHTS_NAME, ADAPTER_SAFE_WEIGHTS_NAME])
         for modeling_file in modeling_files:

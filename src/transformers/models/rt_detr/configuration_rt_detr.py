@@ -37,6 +37,9 @@ class RTDetrConfig(PretrainedConfig):
     Args:
         initializer_range (`float`, *optional*, defaults to 0.01):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        initializer_bias_prior_prob (`float`, *optional*):
+            The prior probability used by the bias initializer to initialize biases for `enc_score_head` and `class_embed`.
+            If `None`, `prior_prob` computed as `prior_prob = 1 / (num_labels + 1)` while initializing model weights.
         layer_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the layer normalization layers.
         batch_norm_eps (`float`, *optional*, defaults to 1e-05):
@@ -179,6 +182,7 @@ class RTDetrConfig(PretrainedConfig):
     def __init__(
         self,
         initializer_range=0.01,
+        initializer_bias_prior_prob=None,
         layer_norm_eps=1e-5,
         batch_norm_eps=1e-5,
         # backbone
@@ -239,6 +243,7 @@ class RTDetrConfig(PretrainedConfig):
         **kwargs,
     ):
         self.initializer_range = initializer_range
+        self.initializer_bias_prior_prob = initializer_bias_prior_prob
         self.layer_norm_eps = layer_norm_eps
         self.batch_norm_eps = batch_norm_eps
         # backbone

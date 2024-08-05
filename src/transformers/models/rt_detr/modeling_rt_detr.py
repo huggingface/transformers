@@ -1148,14 +1148,27 @@ class RTDetrPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initalize the weights"""
 
-        """initialize conv/fc bias value according to a given probability value."""
-        if isinstance(module, nn.Linear) and hasattr(module, "class_embed"):
-            prior_prob = self.config.initializer_range
+        """initialize linear layer bias value according to a given probability value."""
+        if isinstance(module, (RTDetrForObjectDetection, RTDetrDecoder)):
+            if module.class_embed is not None:
+                for layer in module.class_embed:
+                    prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
+                    bias = float(-math.log((1 - prior_prob) / prior_prob))
+                    nn.init.xavier_uniform_(layer.weight)
+                    nn.init.constant_(layer.bias, bias)
+
+            if module.bbox_embed is not None:
+                for layer in module.bbox_embed:
+                    nn.init.constant_(layer.layers[-1].weight, 0)
+                    nn.init.constant_(layer.layers[-1].bias, 0)
+
+        if isinstance(module, RTDetrModel):
+            prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
             bias = float(-math.log((1 - prior_prob) / prior_prob))
-            nn.init.xavier_uniform_(module.weight)
-            if module.bias is not None:
-                nn.init.constant_(module.bias, bias)
-        elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
+            nn.init.xavier_uniform_(module.enc_score_head.weight)
+            nn.init.constant_(module.enc_score_head.bias, bias)
+
+        if isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -1656,7 +1669,11 @@ class RTDetrModel(RTDetrPreTrainedModel):
             param.requires_grad_(True)
 
     @lru_cache(maxsize=32)
-    def generate_anchors(self, spatial_shapes=None, grid_size=0.05, dtype=torch.float32, device="cpu"):
+    def generate_anchors(self, spatial_shapes=None, grid_size=0.05):
+        # We always generate anchors in float32 to preserve equivalence between
+        # dynamic and static anchor inference
+        dtype = torch.float32
+
         if spatial_shapes is None:
             spatial_shapes = [
                 [int(self.config.anchor_image_size[0] / s), int(self.config.anchor_image_size[1] / s)]
@@ -1674,7 +1691,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
             anchors.append(torch.concat([grid_xy, wh], -1).reshape(-1, height * width, 4))
         # define the valid range for anchor coordinates
         eps = 1e-2
-        anchors = torch.concat(anchors, 1).to(device)
+        anchors = torch.concat(anchors, 1)
         valid_mask = ((anchors > eps) * (anchors < 1 - eps)).all(-1, keepdim=True)
         anchors = torch.log(anchors / (1 - anchors))
         anchors = torch.where(valid_mask, anchors, torch.inf)
@@ -1769,15 +1786,15 @@ class RTDetrModel(RTDetrPreTrainedModel):
 
         # Prepare encoder inputs (by flattening)
         source_flatten = []
-        spatial_shapes = []
+        spatial_shapes_list = []
         for level, source in enumerate(sources):
             batch_size, num_channels, height, width = source.shape
             spatial_shape = (height, width)
-            spatial_shapes.append(spatial_shape)
+            spatial_shapes_list.append(spatial_shape)
             source = source.flatten(2).transpose(1, 2)
             source_flatten.append(source)
         source_flatten = torch.cat(source_flatten, 1)
-        spatial_shapes = torch.as_tensor(spatial_shapes, dtype=torch.long, device=source_flatten.device)
+        spatial_shapes = torch.as_tensor(spatial_shapes_list, dtype=torch.long, device=source_flatten.device)
         level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
 
         # prepare denoising training
@@ -1805,9 +1822,14 @@ class RTDetrModel(RTDetrPreTrainedModel):
 
         # prepare input for decoder
         if self.training or self.config.anchor_image_size is None:
-            anchors, valid_mask = self.generate_anchors(spatial_shapes, device=device, dtype=dtype)
+            # Pass spatial_shapes as tuple to make it hashable and make sure
+            # lru_cache is working for generate_anchors()
+            spatial_shapes_tuple = tuple(spatial_shapes_list)
+            anchors, valid_mask = self.generate_anchors(spatial_shapes_tuple)
         else:
-            anchors, valid_mask = self.anchors.to(device, dtype), self.valid_mask.to(device, dtype)
+            anchors, valid_mask = self.anchors, self.valid_mask
+
+        anchors, valid_mask = anchors.to(device, dtype), valid_mask.to(device, dtype)
 
         # use the valid_mask to selectively retain values in the feature map where the mask is `True`
         memory = valid_mask.to(source_flatten.dtype) * source_flatten
@@ -2141,7 +2163,7 @@ class RTDetrLoss(nn.Module):
         target_classes[idx] = target_classes_original
 
         target = F.one_hot(target_classes, num_classes=self.num_classes + 1)[..., :-1]
-        loss = sigmoid_focal_loss(src_logits, target, self.alpha, self.gamma, reduction="none")
+        loss = sigmoid_focal_loss(src_logits, target, self.alpha, self.gamma)
         loss = loss.mean(1).sum() * src_logits.shape[1] / num_boxes
         return {"loss_focal": loss}
 
@@ -2430,7 +2452,7 @@ def _max_by_axis(the_list):
 
 
 # Copied from transformers.models.detr.modeling_detr.NestedTensor
-class NestedTensor(object):
+class NestedTensor:
     def __init__(self, tensors, mask: Optional[Tensor]):
         self.tensors = tensors
         self.mask = mask

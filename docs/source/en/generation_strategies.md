@@ -178,7 +178,7 @@ An increasing sequence: one, two, three, four, five, six, seven, eight, nine, te
 
 The `generate()` method supports caching keys and values to enhance efficiency and avoid re-computations. However the key and value
 cache can occupy a large portion of memory, becoming a bottleneck for long-context generation, especially for Large Language Models.
-Quantizing the cache when using `generate()` can significantly reduce memory requirements at the cost of speed. 
+Quantizing the cache when using `generate()` can significantly reduce memory requirements at the cost of speed.
 
 KV Cache quantization in `transformers` is largely inspired by the paper [KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache]
 (https://arxiv.org/abs/2402.02750) and currently supports `quanto` and `HQQ` as backends. For more information on the inner workings see the paper.
@@ -211,13 +211,87 @@ I like rock music because it's loud and energetic. It's a great way to express m
 I like rock music because it's loud and energetic. I like to listen to it when I'm feeling
 ```
 
+## KV Cache Offloading
+
+Similarly to KV cache quantization, this strategy aims to reduce GPU VRAM usage.
+It does so by moving the KV cache for most layers to the CPU.
+As the model's `forward()` method iterates over the layers, this strategy maintains the current layer cache on the GPU.
+At the same time it asynchronously prefetches the next layer cache as well as sending the previous layer cache back to the CPU.
+Unlike KV cache quantization, this strategy always produces the same result as the default KV cache implementation.
+Thus, it can serve as a drop-in replacement or a fallback for it.
+
+Depending on your model and the characteristics of your generation task (size of context, number of generated tokens, number of beams, etc.)
+you may notice a small degradation in generation throughput compared to the default KV cache implementation.
+
+To enable KV cache offloading, pass `cache_implementation="offloaded"` in the `generation_config`.
+
+```python
+>>> import torch
+>>> from transformers import AutoTokenizer, AutoModelForCausalLM
+>>> ckpt = "microsoft/Phi-3-mini-4k-instruct"
+
+>>> tokenizer = AutoTokenizer.from_pretrained(ckpt)
+>>> model = AutoModelForCausalLM.from_pretrained(ckpt, torch_dtype=torch.float16).to("cuda:0")
+>>> inputs = tokenizer("Fun fact: The shortest", return_tensors="pt").to(model.device)
+
+>>> out = model.generate(**inputs, do_sample=False, max_new_tokens=23, cache_implementation="offloaded")
+>>> print(tokenizer.batch_decode(out, skip_special_tokens=True)[0])
+Fun fact: The shortest war in history was between Britain and Zanzibar on August 27, 1896.
+
+>>> out = model.generate(**inputs, do_sample=False, max_new_tokens=23)
+>>> print(tokenizer.batch_decode(out, skip_special_tokens=True)[0])
+Fun fact: The shortest war in history was between Britain and Zanzibar on August 27, 1896.
+```
+
+<Tip warning={true}>
+
+Cache offloading requires a GPU and can be slower than the default KV cache. Use it if you are getting CUDA out of memory errors.
+
+</Tip>
+
+The example below shows how KV cache offloading can be used as a fallback strategy.
+```python
+>>> import torch
+>>> from transformers import AutoTokenizer, AutoModelForCausalLM
+>>> def resilient_generate(model, *args, **kwargs):
+...     oom = False
+...     try:
+...         return model.generate(*args, **kwargs)
+...     except torch.cuda.OutOfMemoryError as e:
+...         print(e)
+...         print("retrying with cache_implementation='offloaded'")
+...         oom = True
+...     if oom:
+...         torch.cuda.empty_cache()
+...         kwargs["cache_implementation"] = "offloaded"
+...         return model.generate(*args, **kwargs)
+...
+...
+>>> ckpt = "microsoft/Phi-3-mini-4k-instruct"
+>>> tokenizer = AutoTokenizer.from_pretrained(ckpt)
+>>> model = AutoModelForCausalLM.from_pretrained(ckpt, torch_dtype=torch.float16).to("cuda:0")
+>>> prompt = ["okay "*1000 + "Fun fact: The most"]
+>>> inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+>>> beams = { "num_beams": 40, "num_beam_groups": 40, "num_return_sequences": 40, "diversity_penalty": 1.0, "max_new_tokens": 23, "early_stopping": True, }
+>>> out = resilient_generate(model, **inputs, **beams)
+>>> responses = tokenizer.batch_decode(out[:,-28:], skip_special_tokens=True)
+```
+
+On a GPU with 50 GB of RAM, running this code will print
+```
+CUDA out of memory. Tried to allocate 4.83 GiB. GPU
+retrying with cache_implementation='offloaded'
+```
+before successfully generating 40 beams.
+
+
 ## Watermarking
 
-The `generate()` supports watermarking the generated text by randomly marking a portion of tokens as "green". 
+The `generate()` supports watermarking the generated text by randomly marking a portion of tokens as "green".
 When generating the "green" will have a small 'bias' value added to their logits, thus having a higher chance to be generated.
 The watermarked text can be detected by calculating the proportion of "green" tokens in the text and estimating how likely it is
-statistically to obtain that amount of "green" tokens for human-generated text. This watermarking strategy was proposed in the paper 
-["On the Reliability of Watermarks for Large Language Models"](https://arxiv.org/abs/2306.04634). For more information on 
+statistically to obtain that amount of "green" tokens for human-generated text. This watermarking strategy was proposed in the paper
+["On the Reliability of Watermarks for Large Language Models"](https://arxiv.org/abs/2306.04634). For more information on
 the inner functioning of watermarking, it is recommended to refer to the paper.
 
 The watermarking can be used with any generative model in `tranformers` and does not require an extra classification model
@@ -484,3 +558,59 @@ just like in multinomial sampling. However, in assisted decoding, reducing the t
 
 Alternativelly, you can also set the `prompt_lookup_num_tokens` to trigger n-gram based assisted decoding, as opposed
 to model based assisted decoding. You can read more about it [here](https://twitter.com/joao_gante/status/1747322413006643259).
+### DoLa Decoding
+
+**D**ecoding by C**o**ntrasting **La**yers (DoLa) is a contrastive decoding strategy to improve the factuality and reduce the
+hallucinations of LLMs, as described in this paper of ICLR 2024 [DoLa: Decoding by Contrasting Layers Improves Factuality in Large Language Models](https://arxiv.org/abs/2309.03883).
+
+DoLa is achieved by contrasting the differences in logits obtained from final
+layers versus earlier layers, thus amplify the factual knowledge localized to particular part of transformer layers.
+
+Do the following two steps to activate DoLa decoding when calling the `model.generate` function:
+1. Set the `dola_layers` argument, which can be either a string or a list of integers.
+    - If set to a string, it can be one of `low`, `high`.
+    - If set to a list of integers, it should be a list of layer indices between 0 and the total number of layers in the model. The 0-th layer is word embedding, and the 1st layer is the first transformer layer, and so on.
+2. Set `repetition_penalty = 1.2` is suggested to reduce repetition in DoLa decoding.
+
+See the following examples for DoLa decoding with the 32-layer LLaMA-7B model.
+
+```python
+>>> from transformers import AutoTokenizer, AutoModelForCausalLM, set_seed
+>>> import torch
+
+>>> tokenizer = AutoTokenizer.from_pretrained("huggyllama/llama-7b")
+>>> model = AutoModelForCausalLM.from_pretrained("huggyllama/llama-7b", torch_dtype=torch.float16)
+>>> device = 'cuda' if torch.cuda.is_available() else 'cpu'
+>>> model.to(device)
+>>> set_seed(42)
+
+>>> text = "On what date was the Declaration of Independence officially signed?"
+>>> inputs = tokenizer(text, return_tensors="pt").to(device)
+
+# Vanilla greddy decoding
+>>> vanilla_output = model.generate(**inputs, do_sample=False, max_new_tokens=50)
+>>> tokenizer.batch_decode(vanilla_output[:, inputs.input_ids.shape[-1]:], skip_special_tokens=True)
+['\nThe Declaration of Independence was signed on July 4, 1776.\nWhat was the date of the signing of the Declaration of Independence?\nThe Declaration of Independence was signed on July 4,']
+
+# DoLa decoding with contrasting higher part of layers (layers 16,18,...,30)
+>>> dola_high_output = model.generate(**inputs, do_sample=False, max_new_tokens=50, dola_layers='high')
+>>> tokenizer.batch_decode(dola_high_output[:, inputs.input_ids.shape[-1]:], skip_special_tokens=True)
+['\nJuly 4, 1776, when the Continental Congress voted to separate from Great Britain. The 56 delegates to the Continental Congress signed the Declaration on August 2, 1776.']
+
+# DoLa decoding with contrasting specific layers (layers 28 and 30)
+>>> dola_custom_output = model.generate(**inputs, do_sample=False, max_new_tokens=50, dola_layers=[28,30], repetition_penalty=1.2)
+>>> tokenizer.batch_decode(dola_custom_output[:, inputs.input_ids.shape[-1]:], skip_special_tokens=True)
+['\nIt was officially signed on 2 August 1776, when 56 members of the Second Continental Congress, representing the original 13 American colonies, voted unanimously for the resolution for independence. The 2']
+```
+
+#### Understanding the `dola_layers` argument
+
+`dola_layers` stands for the candidate layers in premature layer selection, as described in the DoLa paper. The selected premature layer will be contrasted with the final layer.
+
+Setting `dola_layers` to `'low'` or `'high'` will select the lower or higher part of the layers to contrast, respectively.
+- For `N`-layer models with `N <= 40` layers, the layers of `range(0, N // 2, 2)` and `range(N // 2, N, 2)` are used for `'low'` and `'high'` layers, respectively.
+- For models with `N > 40` layers, the layers of `range(0, 20, 2)` and `range(N - 20, N, 2)` are used for `'low'` and `'high'` layers, respectively.
+- If the model has tied word embeddings, we skip the word embeddings (0-th) layer and start from the 2nd layer, as the early exit from word embeddings will become identity function.
+- Set the `dola_layers` to a list of integers for layer indices to contrast manually specified layers. For example, setting `dola_layers=[28,30]` will contrast the final layer (32-th layer) with the 28-th and 30-th layers.
+
+The paper suggested that contrasting `'high'` layers to improve short-answer tasks like TruthfulQA, and contrasting `'low'` layers to improve all the other long-answer reasoning tasks, such as GSM8K, StrategyQA, FACTOR, and VicunaQA. Applying DoLa to smaller models like GPT-2 is not recommended, as the results shown in the Appendix N of the paper.

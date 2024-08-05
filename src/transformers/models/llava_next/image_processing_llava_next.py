@@ -513,7 +513,7 @@ class LlavaNextImageProcessor(BaseImageProcessor):
             List[np.array]: A list of NumPy arrays containing the processed image patches.
         """
         if not isinstance(grid_pinpoints, list):
-            raise ValueError("grid_pinpoints must be a list of possible resolutions.")
+            raise TypeError("grid_pinpoints must be a list of possible resolutions.")
 
         possible_resolutions = grid_pinpoints
 

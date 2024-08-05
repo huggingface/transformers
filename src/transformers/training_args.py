@@ -48,6 +48,7 @@ from .utils import (
     is_torch_bf16_cpu_available,
     is_torch_bf16_gpu_available,
     is_torch_mlu_available,
+    is_torch_mps_available,
     is_torch_neuroncore_available,
     is_torch_npu_available,
     is_torch_tf32_available,
@@ -267,6 +268,15 @@ class TrainingArguments:
         eval_delay (`float`, *optional*):
             Number of epochs or steps to wait for before the first evaluation can be performed, depending on the
             eval_strategy.
+        torch_empty_cache_steps (`int`, *optional*):
+            Number of steps to wait before calling `torch.<device>.empty_cache()`. If left unset or set to None, cache will not be emptied.
+
+            <Tip>
+
+            This can help avoid CUDA out-of-memory errors by lowering peak VRAM usage at a cost of about [10% slower performance](https://github.com/huggingface/transformers/issues/31372).
+
+            </Tip>
+
         learning_rate (`float`, *optional*, defaults to 5e-5):
             The initial learning rate for [`AdamW`] optimizer.
         weight_decay (`float`, *optional*, defaults to 0):
@@ -427,8 +437,9 @@ class TrainingArguments:
             use the corresponding output (usually index 2) as the past state and feed it to the model at the next
             training step under the keyword argument `mems`.
         run_name (`str`, *optional*, defaults to `output_dir`):
-            A descriptor for the run. Typically used for [wandb](https://www.wandb.com/) and
-            [mlflow](https://www.mlflow.org/) logging. If not specified, will be the same as `output_dir`.
+            A descriptor for the run. Typically used for [wandb](https://www.wandb.com/),
+            [mlflow](https://www.mlflow.org/) and [comet](https://www.comet.com/site) logging. If not specified, will
+            be the same as `output_dir`.
         disable_tqdm (`bool`, *optional*):
             Whether or not to disable the tqdm progress bars and table of metrics produced by
             [`~notebook.NotebookTrainingTracker`] in Jupyter Notebooks. Will default to `True` if the logging level is
@@ -759,7 +770,7 @@ class TrainingArguments:
             If not `None`, this will activate NEFTune noise embeddings. This can drastically improve model performance
             for instruction fine-tuning. Check out the [original paper](https://arxiv.org/abs/2310.05914) and the
             [original code](https://github.com/neelsjain/NEFTune). Support transformers `PreTrainedModel` and also
-            `PeftModel` from peft.
+            `PeftModel` from peft. The original paper used values in the range [5.0, 15.0].
         optim_target_modules (`Union[str, List[str]]`, *optional*):
             The target modules to optimize, i.e. the module names that you would like to train, right now this is used only for GaLore algorithm
             https://arxiv.org/abs/2403.03507
@@ -777,7 +788,7 @@ class TrainingArguments:
             Whether to perform a evaluation step (sanity check) before the training to ensure the validation steps works correctly.
 
         eval_use_gather_object (`bool`, *optional*, defaults to `False`):
-            Whether to run recursively gather object in a nested list/tuple/dictionary of objects from all devices.
+            Whether to run recursively gather object in a nested list/tuple/dictionary of objects from all devices. This should only be enabled if users are not just returning tensors, and this is actively discouraged by PyTorch.
     """
 
     framework = "pt"
@@ -848,6 +859,15 @@ class TrainingArguments:
                 "Number of epochs or steps to wait for before the first evaluation can be performed, depending on the"
                 " eval_strategy."
             )
+        },
+    )
+
+    torch_empty_cache_steps: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "Number of steps to wait before calling `torch.<device>.empty_cache()`."
+            "This can help avoid CUDA out-of-memory errors by lowering peak VRAM usage at a cost of about [10% slower performance](https://github.com/huggingface/transformers/issues/31372)."
+            "If left unset or set to None, cache will not be emptied."
         },
     )
 
@@ -1131,7 +1151,8 @@ class TrainingArguments:
     )
 
     run_name: Optional[str] = field(
-        default=None, metadata={"help": "An optional descriptor for the run. Notably used for wandb logging."}
+        default=None,
+        metadata={"help": "An optional descriptor for the run. Notably used for wandb, mlflow and comet logging."},
     )
     disable_tqdm: Optional[bool] = field(
         default=None, metadata={"help": "Whether or not to disable the tqdm progress bars."}
@@ -1532,6 +1553,12 @@ class TrainingArguments:
         if self.do_eval is False and self.eval_strategy != IntervalStrategy.NO:
             self.do_eval = True
 
+        if self.torch_empty_cache_steps is not None:
+            if not (isinstance(self.torch_empty_cache_steps, int) or self.torch_empty_cache_steps > 0):
+                raise ValueError(
+                    f"`torch_empty_cache_steps` must be an integer bigger than 0, got {self.torch_empty_cache_steps}."
+                )
+
         # eval_steps has to be defined and non-zero, fallbacks to logging_steps if the latter is non-zero
         if self.eval_strategy == IntervalStrategy.STEPS and (self.eval_steps is None or self.eval_steps == 0):
             if self.logging_steps > 0:
@@ -1789,11 +1816,11 @@ class TrainingArguments:
                 " during training"
             )
 
-        if not isinstance(self.warmup_steps, int) or self.warmup_steps < 0 or 0 < self.warmup_steps <= 1:
-            raise ValueError("warmup_steps must be either 0 or > 1")
+        if not isinstance(self.warmup_steps, int) or self.warmup_steps < 0:
+            raise ValueError("warmup_steps must be of type int and must be 0 or a positive integer.")
 
         if isinstance(self.fsdp, bool):
-            self.fsdp = "full_shard" if self.fsdp else ""
+            self.fsdp = [FSDPOption.FULL_SHARD] if self.fsdp else ""
         if isinstance(self.fsdp, str):
             self.fsdp = [FSDPOption(s) for s in self.fsdp.split()]
         if self.fsdp == [FSDPOption.OFFLOAD]:
@@ -1803,6 +1830,15 @@ class TrainingArguments:
             )
         elif FSDPOption.FULL_SHARD in self.fsdp and FSDPOption.SHARD_GRAD_OP in self.fsdp:
             raise ValueError("`--fsdp full_shard` is not compatible with `--fsdp shard_grad_op`.")
+
+        if self.gradient_checkpointing and (
+            FSDPOption.FULL_SHARD in self.fsdp or FSDPOption.HYBRID_SHARD in self.fsdp
+        ):
+            logger.warning(
+                "When using FSDP full shard, instead of using `gradient_checkpointing` in TrainingArguments, please"
+                " use `activation_checkpointing` in `fsdp_config`. The former introduces a redundant AllGather"
+                " operation in backward pass. Reference: https://github.com/huggingface/transformers/issues/30404"
+            )
 
         if self.fsdp_config is None:
             self.fsdp_config = {}
@@ -2004,7 +2040,7 @@ class TrainingArguments:
 
         if self.eval_use_gather_object and not is_accelerate_available("0.30.0"):
             raise ValueError(
-                "--eval_use_gather_object requires Accelerate to be version of `accelerate` < 0.30.0."
+                "--eval_use_gather_object requires Accelerate to be version of `accelerate` > 0.30.0."
                 "This is not supported and we recommend you to update your version."
             )
 
@@ -2152,6 +2188,8 @@ class TrainingArguments:
                     )
             if self.use_cpu:
                 device = torch.device("cpu")
+            elif is_torch_mps_available():
+                device = torch.device("mps")
             elif is_torch_xpu_available():
                 if not is_ipex_available() and not is_accelerate_available("0.32.0.dev"):
                     raise ImportError("Using the XPU PyTorch backend requires `accelerate>=0.32.0.dev`")
@@ -2170,7 +2208,9 @@ class TrainingArguments:
                 # trigger an error that a device index is missing. Index 0 takes into account the
                 # GPUs available in the environment, so `CUDA_VISIBLE_DEVICES=1,2` with `cuda:0`
                 # will use the first GPU in that env, i.e. GPU#1
-                device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+                device = torch.device(
+                    "cuda:0" if torch.cuda.is_available() else os.environ.get("ACCELERATE_TORCH_DEVICE", "cpu")
+                )
                 # Sometimes the line in the postinit has not been run before we end up here, so just checking we're not at
                 # the default value.
                 self._n_gpu = torch.cuda.device_count()
