@@ -77,10 +77,14 @@ if TYPE_CHECKING:
     if is_flax_available():
         import jax.numpy as jnp  # noqa: F401
 
-if is_protobuf_available():
-    from google.protobuf.message import DecodeError
-else:
-    raise ImportError(PROTOBUF_IMPORT_ERROR)
+
+def import_protobuf(error_message=""):
+    if is_protobuf_available():
+        from google.protobuf.message import DecodeError
+
+        return DecodeError
+    else:
+        raise ImportError(PROTOBUF_IMPORT_ERROR.format(error_message))
 
 
 if is_tokenizers_available():
@@ -2511,7 +2515,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # Instantiate the tokenizer.
         try:
             tokenizer = cls(*init_inputs, **init_kwargs)
-        except DecodeError:
+        except import_protobuf():
             logger.info(
                 "Unable to load tokenizer model from SPM, loading from TikToken will be attempted instead."
                 "(Google protobuf error: Tried to load SPM model with non-SPM vocab file).",
