@@ -620,6 +620,7 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     @require_flash_attn
     @require_torch_gpu
     @slow
+    @pytest.mark.flash_attn_test
     def test_use_flash_attention_2_true(self):
         """
         NOTE: this is the only test testing that the legacy `use_flash_attention=2` argument still works as intended.
