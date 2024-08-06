@@ -53,6 +53,7 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "NemotronConfig"
 
 
+# Copied from transformers.models.llama.modeling_llama._prepare_4d_causal_attention_mask_with_cache_position
 def _prepare_4d_causal_attention_mask_with_cache_position(
     attention_mask: torch.Tensor,
     sequence_length: int,
