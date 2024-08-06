@@ -922,13 +922,14 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
             inputs_embeds = self.embed_in(input_ids)
 
         use_legacy_cache = False
-        if use_cache and not isinstance(past_key_values, Cache) and not self.training:
+        if use_cache and not isinstance(past_key_values, Cache):
             use_legacy_cache = True
             past_key_values = DynamicCache.from_legacy_cache(past_key_values)
-            logger.warning_once(
-                "We detected that you are passing `past_key_values` as a tuple and this is deprecated and will be removed in v4.45. "
-                "Please use an appropriate `Cache` class (https://huggingface.co/docs/transformers/v4.41.3/en/internal/generation_utils#transformers.Cache)"
-            )
+            if not self.training:
+                logger.warning_once(
+                    "We detected that you are passing `past_key_values` as a tuple and this is deprecated and will be removed in v4.45. "
+                    "Please use an appropriate `Cache` class (https://huggingface.co/docs/transformers/v4.41.3/en/internal/generation_utils#transformers.Cache)"
+                )
 
         seq_length = inputs_embeds.shape[1]
         if cache_position is None:
@@ -1186,6 +1187,7 @@ class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+    # can't be copied from llama, gpt-neox has emebd_out and not lm_head
     def prepare_inputs_for_generation(
         self,
         input_ids,
