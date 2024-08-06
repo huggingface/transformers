@@ -368,16 +368,27 @@ def replace_model_patterns(
 
     # Now let's replace every other attribute by their placeholder
     for attr in attributes_to_check:
-        get_attr = getattr(old_model_patterns, attr)[0] if isinstance(getattr(old_model_patterns, attr), tuple) else getattr(old_model_patterns, attr)
+        get_attr = (
+            getattr(old_model_patterns, attr)[0]
+            if isinstance(getattr(old_model_patterns, attr), tuple)
+            else getattr(old_model_patterns, attr)
+        )
         text = text.replace(get_attr, ATTRIBUTE_TO_PLACEHOLDER[attr])
-
 
     # Finally we can replace the placeholder byt the new values.
     replacements = []
     for attr, placeholder in ATTRIBUTE_TO_PLACEHOLDER.items():
         if placeholder in text:
-            get_attr = getattr(old_model_patterns, attr)[0] if isinstance(getattr(old_model_patterns, attr), tuple) else getattr(old_model_patterns, attr)
-            get_attr_new = getattr(new_model_patterns, attr)[0] if isinstance(getattr(new_model_patterns, attr), tuple) else getattr(new_model_patterns, attr)
+            get_attr = (
+                getattr(old_model_patterns, attr)[0]
+                if isinstance(getattr(old_model_patterns, attr), tuple)
+                else getattr(old_model_patterns, attr)
+            )
+            get_attr_new = (
+                getattr(new_model_patterns, attr)[0]
+                if isinstance(getattr(new_model_patterns, attr), tuple)
+                else getattr(new_model_patterns, attr)
+            )
             replacements.append((get_attr, get_attr_new))
             text = text.replace(placeholder, get_attr_new)
 
@@ -534,8 +545,16 @@ def duplicate_module(
         special_pattern = False
         for pattern, attr in SPECIAL_PATTERNS.items():
             if pattern in obj:
-                obj_attr = getattr(old_model_patterns, attr)[0] if isinstance(getattr(old_model_patterns, attr), tuple) else getattr(old_model_patterns, attr)
-                obj_attr_new = getattr(new_model_patterns, attr)[0] if isinstance(getattr(new_model_patterns, attr), tuple) else getattr(new_model_patterns, attr)
+                obj_attr = (
+                    getattr(old_model_patterns, attr)[0]
+                    if isinstance(getattr(old_model_patterns, attr), tuple)
+                    else getattr(old_model_patterns, attr)
+                )
+                obj_attr_new = (
+                    getattr(new_model_patterns, attr)[0]
+                    if isinstance(getattr(new_model_patterns, attr), tuple)
+                    else getattr(new_model_patterns, attr)
+                )
                 obj = obj.replace(obj_attr, obj_attr_new)
                 new_objects.append(obj)
                 special_pattern = True
@@ -957,7 +976,9 @@ def add_model_to_main_init(
             if not with_processing:
                 processing_classes = [
                     old_model_patterns.tokenizer_class,
-                    old_model_patterns.image_processor_class[0] if isinstance(old_model_patterns.image_processor_class, tuple) else old_model_patterns.image_processor_class,
+                    old_model_patterns.image_processor_class[0]
+                    if isinstance(old_model_patterns.image_processor_class, tuple)
+                    else old_model_patterns.image_processor_class,
                     old_model_patterns.feature_extractor_class,
                     old_model_patterns.processor_class,
                 ]
@@ -1075,7 +1096,12 @@ def add_model_to_auto_classes(
                     and new_model_patterns.image_processor_class is not None
                 ):
                     new_patterns.append(
-                        pattern.replace("{image_processor_class}", old_model_patterns.image_processor_class[0] if isinstance(old_model_patterns.image_processor_class, tuple) else old_model_patterns.image_processor_class)
+                        pattern.replace(
+                            "{image_processor_class}",
+                            old_model_patterns.image_processor_class[0]
+                            if isinstance(old_model_patterns.image_processor_class, tuple)
+                            else old_model_patterns.image_processor_class,
+                        )
                     )
             elif "{feature_extractor_class}" in pattern:
                 if (
@@ -1634,7 +1660,8 @@ def get_user_input():
     )
 
     old_processing_classes = [
-        c_i for c in [old_image_processor_class, old_feature_extractor_class, old_tokenizer_class, old_processor_class]
+        c_i
+        for c in [old_image_processor_class, old_feature_extractor_class, old_tokenizer_class, old_processor_class]
         if c is not None
         for c_i in (c if isinstance(c, tuple) else [c])
         if c_i is not None
