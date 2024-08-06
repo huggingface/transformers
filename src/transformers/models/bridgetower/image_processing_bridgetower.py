@@ -286,9 +286,10 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
                 image.
         """
         warnings.warn("The do_center_crop method is deprecated and will be removed in two releases time.")
+        output_size = size["shortest_edge"]
         return center_crop(
             image,
-            size=(size["height"], size["width"]),
+            size=(output_size, output_size),
             data_format=data_format,
             input_data_format=input_data_format,
             **kwargs,
