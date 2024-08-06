@@ -368,3 +368,7 @@ AutoModel.register(NewModelConfig, NewModel)
 ### FlaxAutoModelForVision2Seq
 
 [[autodoc]] FlaxAutoModelForVision2Seq
+
+### AutoModelForImageTextToText
+
+[[autodoc]] AutoModelForImageTextToText
