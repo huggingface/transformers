@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 이 가이드는 LLM 추론을 가속하기 위해 Transformers에서 사용할 수 있는 최적화 기술을 사용하는 방법을 보여줍니다.
 
 > [!TIP]
-> Hugging Face는 LLM을 추론에 최적화하여 배포하고 서비스하는 데 전념하는 라이브러리인 [Text Generation Inference (TGI)](https://hf.co/docs/text-generation-inference)을 제공합니다. 이 라이브러리는 지속적인 배칭을 통한 처리량 증가와 다중 GPU 추론을 위한 텐서 병렬화와 같은 Transformers에 포함되지 않은 더 많은 최적화 기능을 포함합니다.
+> Hugging Face는 LLM을 추론에 최적화하여 배포하고 서비스하는 데 전념하는 라이브러리인 [Text Generation Inference (TGI)](https://hf.co/docs/text-generation-inference)을 제공합니다. 이 라이브러리는 처리량 증가를 위한 지속적인 배칭과 다중 GPU 추론을 위한 텐서 병렬화와 같은 Transformers에 포함되지 않은 더 많은 최적화 기능을 포함합니다.
 
 ## 정적 kv-cache와 torch.compile [[static-kv-cache-and-torchcompile]]
 
