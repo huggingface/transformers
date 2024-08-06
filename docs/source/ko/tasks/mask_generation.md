@@ -29,7 +29,7 @@ rendered properly in your Markdown viewer.
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/sam.png" alt="SAM Architecture"/>
 </div>
 
-SAM은 대규모 데이터를 다룰 수 있는 강력한 분할 기반 모델입니다. 이 모델은 100만 개의 이미지와 11억 개의 마스크를 포함하는 [SA-1B](https://ai.meta.com/datasets/segment-anything/) 데이터셋으로 학습되었습니다.
+SAM은 대규모 데이터를 다룰 수 있는 강력한 분할 기반 모델입니다. 이 모델은 100만 개의 이미지와 11억 개의 마스크를 포함하는 [SA-1B](https://ai.meta.com/datasets/segment-anything/) 데이터 세트로 학습되었습니다.
 
 이 가이드에서는 다음과 같은 내용을 배우게 됩니다:
 - 배치 처리와 함께 전체 분할 모드에서 추론하는 방법
