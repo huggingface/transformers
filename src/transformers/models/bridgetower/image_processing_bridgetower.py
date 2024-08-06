@@ -33,10 +33,9 @@ from ...image_utils import (
     is_scaled_image,
     to_numpy_array,
     valid_images,
-    validate_kwargs,
     validate_preprocess_arguments,
 )
-from ...utils import TensorType, is_vision_available, logging
+from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
 
 
 if is_vision_available():
@@ -196,22 +195,6 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else OPENAI_CLIP_MEAN
         self.image_std = image_std if image_std is not None else OPENAI_CLIP_STD
         self.do_pad = do_pad
-        self._valid_processor_keys = [
-            "images",
-            "do_resize",
-            "size",
-            "size_divisor",
-            "resample",
-            "do_rescale",
-            "rescale_factor",
-            "do_normalize",
-            "image_mean",
-            "image_std",
-            "do_pad",
-            "return_tensors",
-            "data_format",
-            "input_data_format",
-        ]
 
     # Copied from transformers.models.vilt.image_processing_vilt.ViltImageProcessor.resize
     def resize(
@@ -379,6 +362,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
 
         return BatchFeature(data=data, tensor_type=return_tensors)
 
+    @filter_out_non_signature_kwargs()
     def preprocess(
         self,
         images: ImageInput,
@@ -395,7 +379,6 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
     ) -> PIL.Image.Image:
         """
         Preprocess an image or batch of images.
@@ -459,8 +442,6 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
 
         size = size if size is not None else self.size
         size = get_size_dict(size, default_to_square=False)
-
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
 
         if not is_batched(images):
             images = [images]
