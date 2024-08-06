@@ -151,8 +151,7 @@ class OmDetTurboProcessor(ProcessorMixin):
         # some init_kwargs are not defined in the forward method of the tokenizer e.g "padding_side"
         output_kwargs = self._merge_kwargs(
             OmDetTurboProcessorKwargs,
-            tokenizer_init_kwargs=OmDetTurboProcessorKwargs._defaults["text_kwargs"],
-            # tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
 
