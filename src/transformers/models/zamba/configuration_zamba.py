@@ -29,6 +29,8 @@ class ZambaConfig(PretrainedConfig):
     Zamba model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the Zamba-v0.1 model.
 
+    [Zyphra/Zamba-7B-v1](https://huggingface.co/Zyphra/Zamba-7B-v1)
+
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
@@ -55,7 +57,8 @@ class ZambaConfig(PretrainedConfig):
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
             by meanpooling all the original heads within that group. For more details checkout [this
             paper](https://arxiv.org/pdf/2305.13245.pdf).
-        n_mamba_heads (`<fill_type>`, *optional*, defaults to 2): <fill_docstring>
+        n_mamba_heads (`int`, *optional*, defaults to 2):
+            Number of mamba heads for each mamba layer.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the decoder.
         hidden_mamba_act (`str` or `function`, *optional*, defaults to `"silu"`):
@@ -79,7 +82,6 @@ class ZambaConfig(PretrainedConfig):
             The id of the "beginning-of-sequence" token.
         eos_token_id (`int`, *optional*, defaults to 2):
             The id of the "end-of-sequence" token.
-        unk_token_id (`<fill_type>`, *optional*, defaults to 0): <fill_docstring>
         sliding_window (`int`, *optional*):
             Sliding window attention window size. If not specified, will default to `None`.
         max_position_embeddings (`int`, *optional*, defaults to 4096):
@@ -107,7 +109,6 @@ class ZambaConfig(PretrainedConfig):
             Flag indicating whether or not to use bias in the convolution layer of the mamba mixer block.
         mamba_proj_bias (`bool`, *optional*, defaults to `False`):
             Flag indicating whether or not to use bias in the input and output projections (["in_proj", "out_proj"]) of the mamba mixer block
-        rope_theta (`<fill_type>`, *optional*, defaults to 10000): <fill_docstring>
 
     """
 
@@ -145,7 +146,6 @@ class ZambaConfig(PretrainedConfig):
         mamba_dt_rank="auto",
         mamba_conv_bias=True,
         mamba_proj_bias=False,
-        rope_theta=10000,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -182,8 +182,6 @@ class ZambaConfig(PretrainedConfig):
         self.mamba_dt_rank = math.ceil(self.hidden_size / 16) if mamba_dt_rank == "auto" else mamba_dt_rank
         self.mamba_conv_bias = mamba_conv_bias
         self.mamba_proj_bias = mamba_proj_bias
-
-        self.rope_theta = rope_theta
 
         self.layers_block_type = self._layers_block_type(num_hidden_layers, attn_layer_period, attn_layer_offset)
 

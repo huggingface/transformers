@@ -129,6 +129,11 @@ SPECIAL_CASES_TO_ALLOW = {
         "t2u_variance_predictor_hidden_dim",
         "t2u_variance_predictor_kernel_size",
     ],
+    "ZambaConfig": [
+        "tie_word_embeddings",
+        "attn_layer_offset",
+        "attn_layer_period",
+    ],
 }
 
 

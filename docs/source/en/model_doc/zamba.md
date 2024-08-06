@@ -12,6 +12,7 @@ Zamba-7B-v1 is a hybrid between state-space models (Specifically [Mamba](https:/
 
 ## Quick start
 
+
 ### Presequities
 
 Jamba requires you use `transformers` version 4.39.0 or higher:
@@ -26,6 +27,7 @@ pip install mamba-ssm causal-conv1d>=1.2.0
 You also have to have the model on a CUDA device.
 
 You can run the model not using the optimized Mamba kernels, but it is **not** recommended as it will result in significantly lower latencies. In order to do that, you'll need to specify `use_mamba_kernels=False` when loading the model.
+
 
 ## Inference
 
@@ -43,14 +45,40 @@ outputs = model.generate(**input_ids, max_new_tokens=100)
 print(tokenizer.decode(outputs[0]))
 ```
 
+
 ## Model card
 
 The model cards can be found at:
 * [Zamba-7B](MODEL_CARD_ZAMBA-7B-v1.md)
 
+
 ## Issues
 For issues with model output, or community discussion, please use the Hugging Face community [forum](https://huggingface.co/zyphra/zamba-7b)
+
 
 ## License
 
 The model weights are open-sourced via an Apache 2.0 license.
+
+
+## ZambaConfig
+
+[[autodoc]] ZambaConfig
+
+
+## ZambaModel
+
+[[autodoc]] ZambaModel
+    - forward
+
+
+## ZambaForCausalLM
+
+[[autodoc]] ZambaForCausalLM
+    - forward
+
+
+## ZambaForSequenceClassification
+
+[[autodoc]] transformers.ZambaForSequenceClassification
+    - forward
