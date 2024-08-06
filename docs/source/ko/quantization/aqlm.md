@@ -19,7 +19,8 @@ rendered properly in your Markdown viewer.
 > [!TIP]
 > Try AQLM on [Google Colab](https://colab.research.google.com/drive/1-xZmBRXT5Fm3Ghn4Mwa2KRypORXb855X?usp=sharing)!
 
-Additive Quantization of Language Models([AQLM](https://arxiv.org/abs/2401.06118))은 LLM(Large Language Models) 압축 방법입니다. 여러 가중치를 함께 양자화하고 가중치 간의 상호 의존성을 활용합니다. AQLM은 8-16개의 가중치 그룹을 여러 벡터 코드의 합으로 나타냅니다.
+Additive Quantization of Language Models([AQLM](https://arxiv.org/abs/2401.06118))은 대규모 언어 모델 압축 방법입니다. 여러 가중치를 함께 양자화하고 가중치 간의 상호 의존성을 활용합니다. AQLM은 8-16개의 가중치 그룹을 여러 벡터 코드의 합으로 나타냅니다.
+
 
 AQLM에 대한 추론 지원은 `aqlm` 라이브러리에서 실현됩니다. 모델을 실행하기 위해 반드시 설치하십시오(aqlm은 python>=3.10에서만 작동합니다):
 ```bash
