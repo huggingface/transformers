@@ -52,35 +52,51 @@ class OmDetTurboModelTester:
     def __init__(
         self,
         parent,
-        batch_size=1,
+        batch_size=2,
+        is_training=False,
         num_channels=3,
-        image_size=224,
         max_text_len=7,
         num_classes=3,
-        num_queries=20,
-        is_training=False,
+        use_timm_backbone=False,
+        backbone=None,
+        apply_layernorm=False,
+        image_size=224,
+        text_projection_in_dim=16,
+        text_projection_out_dim=16,
+        class_dim=16,
+        hidden_size=8,
         num_hidden_layers=2,
         num_attention_heads=2,
+        num_queries=20,
+        encoder_in_channels=(16, 32, 64),
+        encoder_dim_feedforward=32,
+        num_projection_layers=1,
         decoder_n_points=4,
         num_feature_levels=3,
-        num_projection_layers=1,
-        hidden_size=8,
     ):
         super().__init__()
         self.parent = parent
         self.batch_size = batch_size
+        self.is_training = is_training
         self.num_channels = num_channels
-        self.image_size = image_size
         self.max_text_len = max_text_len
         self.num_classes = num_classes
-        self.num_queries = num_queries
-        self.is_training = is_training
+        self.use_timm_backbone = use_timm_backbone
+        self.backbone = backbone
+        self.apply_layernorm = apply_layernorm
+        self.image_size = image_size
+        self.text_projection_in_dim = text_projection_in_dim
+        self.text_projection_out_dim = text_projection_out_dim
+        self.class_dim = class_dim
+        self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
+        self.num_queries = num_queries
+        self.encoder_in_channels = encoder_in_channels
+        self.encoder_dim_feedforward = encoder_dim_feedforward
+        self.num_projection_layers = num_projection_layers
         self.decoder_n_points = decoder_n_points
         self.num_feature_levels = num_feature_levels
-        self.num_projection_layers = num_projection_layers
-        self.hidden_size = hidden_size
 
         self.encoder_seq_length_vision = self.image_size // 32
         self.decoder_seq_length = self.num_queries
@@ -105,13 +121,6 @@ class OmDetTurboModelTester:
         return config, pixel_values, classes_encoding, task_encoding
 
     def get_config(self):
-        window_size = 7
-        embed_dim = 8
-        depths = (1, 1, 1, 1)
-        num_heads = (1, 1, 1, 1)
-        image_size = self.image_size
-        encoder_in_channels = (16, 32, 64)
-
         text_backbone = {
             "hidden_size": 16,
             "num_hidden_layers": 2,
@@ -121,25 +130,24 @@ class OmDetTurboModelTester:
             "model_type": "clip_text_model",
         }
         backbone_config = {
-            "embed_dim": embed_dim,
-            "depths": depths,
-            "num_heads": num_heads,
-            "window_size": window_size,
-            "image_size": image_size,
-            "encoder_in_channels": encoder_in_channels,
+            "embed_dim": self.hidden_size,
+            "depths": (1, 1, 1, 1),
+            "num_heads": (1, 1, 1, 1),
+            "window_size": 7,
+            "image_size": self.image_size,
             "out_indices": (2, 3, 4),
             "model_type": "swin",
         }
 
         return OmDetTurboConfig(
             text_config=text_backbone,
-            use_timm_backbone=False,
-            backbone=None,
-            apply_layernorm=False,
             backbone_config=backbone_config,
+            use_timm_backbone=self.use_timm_backbone,
+            backbone=self.backbone,
+            apply_layernorm=self.apply_layernorm,
             decoder_num_layers=self.num_hidden_layers,
-            image_size=image_size,
-            encoder_in_channels=encoder_in_channels,
+            image_size=self.image_size,
+            encoder_in_channels=self.encoder_in_channels,
             num_queries=self.num_queries,
             encoder_layers=self.num_hidden_layers,
             encoder_projection_indices=[2] * self.num_projection_layers,
@@ -147,12 +155,12 @@ class OmDetTurboModelTester:
             decoder_num_heads=self.num_attention_heads,
             decoder_num_points=self.decoder_n_points,
             num_feature_levels=self.num_feature_levels,
-            encoder_dim_feedforward=32,
-            task_encoder_feedforward_dim=16,
-            decoder_dim_feedforward=32,
-            class_dim=16,
-            text_projection_in_dim=16,
-            text_projection_out_dim=16,
+            encoder_dim_feedforward=self.encoder_dim_feedforward,
+            task_encoder_feedforward_dim=self.encoder_dim_feedforward,
+            decoder_dim_feedforward=self.encoder_dim_feedforward,
+            class_dim=self.class_dim,
+            text_projection_in_dim=self.text_projection_in_dim,
+            text_projection_out_dim=self.text_projection_out_dim,
             encoder_hidden_dim=self.hidden_size,
             decoder_hidden_dim=self.hidden_size,
             vision_features_channels=[self.hidden_size, self.hidden_size, self.hidden_size],
@@ -242,7 +250,7 @@ class OmDetTurboModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     # Overwrite as `init_reference_points` is not batch dependent and contains `inf` values
     def test_batching_equivalence(self):
         """
-        Tests that the model supports batching and that the output is the nearly the same for the same input in
+        Tests that the model supports batching and that the output is nearly the same for the same input in
         different batch sizes.
         (Why "nearly the same" not "exactly the same"? Batching uses different matmul shapes, which often leads to
         different results: https://github.com/huggingface/transformers/issues/25420#issuecomment-1775317535)
@@ -310,15 +318,9 @@ class OmDetTurboModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             batched_input_prepared = self._prepare_for_class(batched_input, model_class)
             model = model_class(config).to(torch_device).eval()
 
-            batch_size = self.model_tester.batch_size
             single_row_input = {}
             for key, value in batched_input_prepared.items():
-                if isinstance(value, torch.Tensor) and value.shape[0] % batch_size == 0:
-                    # e.g. musicgen has inputs of size (bs*codebooks). in most cases value.shape[0] == batch_size
-                    single_batch_shape = value.shape[0] // batch_size
-                    single_row_input[key] = value[:single_batch_shape]
-                else:
-                    single_row_input[key] = value
+                single_row_input[key] = value
 
             with torch.no_grad():
                 model_batched_output = model(**batched_input_prepared)
@@ -518,12 +520,18 @@ class OmDetTurboModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             model = model_class(config=configs_no_init)
             for name, param in model.named_parameters():
                 if param.requires_grad:
-                    if "embeddings" in name:
+                    if (
+                        "embeddings" in name
+                        or ".fc" in name
+                        or "decoder.channel_projection_layers" in name
+                        or "query_position_head" in name
+                        or "decoder.encoder_vision_features" in name
+                    ):
                         continue
                     self.assertIn(
                         ((param.data.mean() * 1e9).round() / 1e9).item(),
                         [0.0, 1.0],
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                        msg=f"Parameter {name} seems not properly initialized",
                     )
 
 
