@@ -1226,10 +1226,14 @@ else:
         "DynamicCache",
         "EncoderDecoderCache",
         "HQQQuantizedCache",
+        "HybridCache",
+        "MambaCache",
+        "OffloadedCache",
         "QuantizedCache",
         "QuantizedCacheConfig",
         "QuantoQuantizedCache",
         "SinkCache",
+        "SlidingWindowCache",
         "StaticCache",
     ]
     _import_structure["data.datasets"] = [
@@ -5948,10 +5952,14 @@ if TYPE_CHECKING:
             DynamicCache,
             EncoderDecoderCache,
             HQQQuantizedCache,
+            HybridCache,
+            MambaCache,
+            OffloadedCache,
             QuantizedCache,
             QuantizedCacheConfig,
             QuantoQuantizedCache,
             SinkCache,
+            SlidingWindowCache,
             StaticCache,
         )
         from .data.datasets import (
