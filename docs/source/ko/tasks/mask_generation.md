@@ -32,7 +32,7 @@ rendered properly in your Markdown viewer.
 SAM은 대규모 데이터를 다룰 수 있는 강력한 분할 기반 모델입니다. 이 모델은 100만 개의 이미지와 11억 개의 마스크를 포함하는 [SA-1B](https://ai.meta.com/datasets/segment-anything/) 데이터셋으로 학습되었습니다.
 
 이 가이드에서는 다음과 같은 내용을 배우게 됩니다:
-- 배칭과 함께 모든 것 분할 모드에서 추론하는 방법
+- 배치 처리와 함께 전체 분할 모드에서 추론하는 방법
 - 포인트 프롬프팅 모드에서 추론하는 방법
 - 박스 프롬프팅 모드에서 추론하는 방법
 
@@ -67,7 +67,7 @@ image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg" alt="Example Image"/>
 </div>
 
-모든 것을 분할 해봅시다. `points-per-batch`는 모든 것 분할 모드에서 점들의 병렬 추론을 가능하게 합니다. 이를 통해 추론 속도가 빨라지지만, 더 많은 메모리를 소모하게 됩니다. 또한, SAM은 이미지가 아닌 점들에 대해서만 배칭을 지원합니다. `pred_iou_thresh`는 IoU 신뢰 임계값으로, 이 임계값을 초과하는 마스크만 반환됩니다.
+모든 것을 분할해봅시다. `points-per-batch`는 전체 분할 모드에서 점들의 병렬 추론을 가능하게 합니다. 이를 통해 추론 속도가 빨라지지만, 더 많은 메모리를 소모하게 됩니다. 또한, SAM은 이미지가 아닌 점들에 대해서만 배치 처리를 지원합니다. `pred_iou_thresh`는 IoU 신뢰 임계값으로, 이 임계값을 초과하는 마스크만 반환됩니다.
 
 ```python
 masks = mask_generator(image, points_per_batch=128, pred_iou_thresh=0.88)
@@ -106,7 +106,7 @@ plt.axis('off')
 plt.show()
 ```
 
-아래는 회색조(grayscale) 원본 이미지에 보라빛 맵이 오버레이된 모습입니다. 매우 인상적이지 않나요?
+아래는 회색조 원본 이미지에 다채로운 색상의 맵을 겹쳐놓은 모습입니다. 매우 인상적인 결과입니다.
 
 <div class="flex justify-center">
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee_segmented.png" alt="Visualized"/>
@@ -128,7 +128,7 @@ model = SamModel.from_pretrained("facebook/sam-vit-base").to(device)
 processor = SamProcessor.from_pretrained("facebook/sam-vit-base")
 ```
 
-포인트 프롬프팅을 하기 위해, 입력 포인트를 프로세서에 전달한 다음, 프로세서 출력을 받아 모델에 전달하여 추론합니다. 모델 출력을 후처리하려면, 출력과 함께 프로세서의 초기 출력에서 가져온 `original_sizes`와 `reshaped_input_sizes`를 전달해야 합니다. 왜냐하면, 프로세서가 이미지 크기를 리사이즈하고 출력을 추정해야 하기 때문입니다.
+포인트 프롬프팅을 하기 위해, 입력 포인트를 프로세서에 전달한 다음, 프로세서 출력을 받아 모델에 전달하여 추론합니다. 모델 출력을 후처리하려면, 출력과 함께 프로세서의 초기 출력에서 가져온 `original_sizes`와 `reshaped_input_sizes`를 전달해야 합니다. 왜냐하면, 프로세서가 이미지 크기를 조정하고 출력을 추정해야 하기 때문입니다.
 
 ```python
 input_points = [[[2592, 1728]]] # 벌의 포인트 위치
@@ -194,7 +194,7 @@ mask = processor.image_processor.post_process_masks(
 )[0][0][0].numpy()
 ```
 
-이제 아래와 같이, 벌 주위에 바운딩 박스를 시각화할 수 있습니다.
+이제 아래와 같이, 벌 주위의 바운딩 박스를 시각화할 수 있습니다.
 
 ```python
 import matplotlib.patches as patches
