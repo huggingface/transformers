@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# 채팅 모델을 위한 템플릿
+# 채팅 모델을 위한 템플릿[[templates-for-chat-models]]
 
 ## 소개
 
