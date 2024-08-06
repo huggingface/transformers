@@ -26,7 +26,7 @@ rendered properly in your Markdown viewer.
 
 이를 최적화하기 위해, 이전 키(key)와 값(value)을 재계산하지 않고 저장하는 kv-cache를 사용할 수 있습니다. 그러나 kv-cache는 각 생성 단계에서 증가하며 동적이기 때문에 PyTorch 코드를 빠르고 최적화된 커널로 통합하는 강력한 최적화 도구인 [torch.compile](./perf_torch_compile)을 사용하는 데 제약이 있습니다.
 
-*정적 kv-cache*는 최대 값을 미리 할당하여 이 문제를 해결하여 torch.compile과 결합할 수 있게 합니다. 이를 통해 최대 4배의 속도 향상이 가능합니다.
+*정적 kv-cache*는 최댓값을 미리 할당하여 이 문제를 해결하여 torch.compile과 결합할 수 있게 합니다. 이를 통해 최대 4배의 속도 향상이 가능합니다.
 
 > [!WARNING]
 현재 [Llama](./model_doc/llama2) 및 몇 가지 다른 모델만 정적 kv-cache와 torch.compile을 지원합니다. 실시간 모델 호환성 목록은 [이 이슈](https://github.com/huggingface/transformers/issues/28981)를 확인하십시오.
