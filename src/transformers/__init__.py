@@ -18,7 +18,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.43.0.dev0"
+__version__ = "4.44.0.dev0"
 
 from typing import TYPE_CHECKING
 
@@ -67,6 +67,7 @@ _import_structure = {
         "ToolCollection",
         "launch_gradio_demo",
         "load_tool",
+        "stream_to_gradio",
     ],
     "audio_utils": [],
     "benchmark": [],
@@ -103,6 +104,7 @@ _import_structure = {
         "DataCollatorForSOP",
         "DataCollatorForTokenClassification",
         "DataCollatorForWholeWordMask",
+        "DataCollatorWithFlattening",
         "DataCollatorWithPadding",
         "DefaultDataCollator",
         "default_data_collator",
@@ -934,6 +936,7 @@ _import_structure = {
         "AwqConfig",
         "BitsAndBytesConfig",
         "EetqConfig",
+        "FbgemmFp8Config",
         "GPTQConfig",
         "HqqConfig",
         "QuantoConfig",
@@ -1294,6 +1297,7 @@ else:
     )
     _import_structure["modeling_flash_attention_utils"] = []
     _import_structure["modeling_outputs"] = []
+    _import_structure["modeling_rope_utils"] = ["ROPE_INIT_FUNCTIONS"]
     _import_structure["modeling_utils"] = ["PreTrainedModel"]
 
     # PyTorch models structure
@@ -1616,7 +1620,7 @@ else:
     )
     _import_structure["models.chameleon"].extend(
         [
-            "ChameleonForCausalLM",
+            "ChameleonForConditionalGeneration",
             "ChameleonModel",
             "ChameleonPreTrainedModel",
             "ChameleonProcessor",
@@ -4730,6 +4734,7 @@ if TYPE_CHECKING:
         ToolCollection,
         launch_gradio_demo,
         load_tool,
+        stream_to_gradio,
     )
     from .configuration_utils import PretrainedConfig
 
@@ -4762,6 +4767,7 @@ if TYPE_CHECKING:
         DataCollatorForSOP,
         DataCollatorForTokenClassification,
         DataCollatorForWholeWordMask,
+        DataCollatorWithFlattening,
         DataCollatorWithPadding,
         DefaultDataCollator,
         default_data_collator,
@@ -5665,6 +5671,7 @@ if TYPE_CHECKING:
         AwqConfig,
         BitsAndBytesConfig,
         EetqConfig,
+        FbgemmFp8Config,
         GPTQConfig,
         HqqConfig,
         QuantoConfig,
@@ -6008,6 +6015,7 @@ if TYPE_CHECKING:
             WatermarkLogitsProcessor,
             WhisperTimeStampLogitsProcessor,
         )
+        from .modeling_rope_utils import ROPE_INIT_FUNCTIONS
         from .modeling_utils import PreTrainedModel
         from .models.albert import (
             AlbertForMaskedLM,
@@ -6276,7 +6284,7 @@ if TYPE_CHECKING:
             load_tf_weights_in_canine,
         )
         from .models.chameleon import (
-            ChameleonForCausalLM,
+            ChameleonForConditionalGeneration,
             ChameleonModel,
             ChameleonPreTrainedModel,
             ChameleonProcessor,

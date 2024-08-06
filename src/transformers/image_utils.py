@@ -64,7 +64,6 @@ if is_vision_available():
             PILImageResampling.HAMMING: InterpolationMode.HAMMING,
             PILImageResampling.BICUBIC: InterpolationMode.BICUBIC,
             PILImageResampling.LANCZOS: InterpolationMode.LANCZOS,
-            PILImageResampling.NEAREST: InterpolationMode.NEAREST,
         }
 
 
@@ -378,7 +377,7 @@ def load_image(image: Union[str, "PIL.Image.Image"], timeout: Optional[float] = 
     elif isinstance(image, PIL.Image.Image):
         image = image
     else:
-        raise ValueError(
+        raise TypeError(
             "Incorrect format used for image. Should be an url linking to an image, a base64 string, a local path, or a PIL image."
         )
     image = PIL.ImageOps.exif_transpose(image)

@@ -770,7 +770,7 @@ class TrainingArguments:
             If not `None`, this will activate NEFTune noise embeddings. This can drastically improve model performance
             for instruction fine-tuning. Check out the [original paper](https://arxiv.org/abs/2310.05914) and the
             [original code](https://github.com/neelsjain/NEFTune). Support transformers `PreTrainedModel` and also
-            `PeftModel` from peft.
+            `PeftModel` from peft. The original paper used values in the range [5.0, 15.0].
         optim_target_modules (`Union[str, List[str]]`, *optional*):
             The target modules to optimize, i.e. the module names that you would like to train, right now this is used only for GaLore algorithm
             https://arxiv.org/abs/2403.03507
@@ -1816,8 +1816,8 @@ class TrainingArguments:
                 " during training"
             )
 
-        if not isinstance(self.warmup_steps, int) or self.warmup_steps < 0 or 0 < self.warmup_steps <= 1:
-            raise ValueError("warmup_steps must be either 0 or > 1")
+        if not isinstance(self.warmup_steps, int) or self.warmup_steps < 0:
+            raise ValueError("warmup_steps must be of type int and must be 0 or a positive integer.")
 
         if isinstance(self.fsdp, bool):
             self.fsdp = [FSDPOption.FULL_SHARD] if self.fsdp else ""
