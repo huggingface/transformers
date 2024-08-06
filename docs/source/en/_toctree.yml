@@ -820,6 +820,8 @@
         title: IDEFICS
       - local: model_doc/idefics2
         title: Idefics2
+      - local: model_doc/idefics3
+        title: Idefics3
       - local: model_doc/instructblip
         title: InstructBLIP
       - local: model_doc/instructblipvideo
