@@ -223,7 +223,6 @@ if is_accelerate_available():
         DistributedDataParallelKwargs,
         DistributedType,
         GradientAccumulationPlugin,
-        is_mlu_available,
         is_mps_available,
         is_npu_available,
         is_torch_version,
@@ -3334,7 +3333,7 @@ class Trainer:
         ):
             if is_xpu_available():
                 torch.xpu.empty_cache()
-            elif is_mlu_available():
+            elif is_torch_mlu_available():
                 torch.mlu.empty_cache()
             elif is_npu_available():
                 torch.npu.empty_cache()
