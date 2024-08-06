@@ -17,7 +17,7 @@ class CompressedTensorsTest(unittest.TestCase):
 
     prompt = "Paris is the capital of which country?"
 
-    def tear_down(self):
+    def tearDown(self):
         gc.collect()
         torch.cuda.empty_cache()
         gc.collect()
@@ -50,4 +50,3 @@ class CompressedTensorsTest(unittest.TestCase):
         outputs = self.tokenizer.batch_decode(generated_ids)
 
         self.assertIsNotNone(outputs)
-        self.tear_down()

@@ -49,7 +49,7 @@ AUTO_QUANTIZER_MAPPING = {
     "quanto": QuantoHfQuantizer,
     "eetq": EetqHfQuantizer,
     "hqq": HqqHfQuantizer,
-    "compressed-tensors": CompressedTensorsHfQuantizer,
+    "compressed_tensors": CompressedTensorsHfQuantizer,
     "fbgemm_fp8": FbgemmFp8HfQuantizer,
 }
 
@@ -62,7 +62,7 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
     "aqlm": AqlmConfig,
     "quanto": QuantoConfig,
     "hqq": HqqConfig,
-    "compressed-tensors": CompressedTensorsConfig,
+    "compressed_tensors": CompressedTensorsConfig,
     "fbgemm_fp8": FbgemmFp8Config,
 }
 
