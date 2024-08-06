@@ -933,8 +933,6 @@ def _load_state_dict_into_meta_model(
                 )
             )
         ):
-            if is_fsdp_enabled():
-                param_device = "cpu" if is_local_dist_rank_0() else "meta"
             # For backward compatibility with older versions of `accelerate` and for non-quantized params
             set_module_tensor_to_device(model, param_name, param_device, **set_module_kwargs)
         else:
@@ -945,10 +943,7 @@ def _load_state_dict_into_meta_model(
             if is_fsdp_enabled() or is_deepspeed_zero3_enabled():
                 module, tensor_name = get_module_from_name(model, param_name)
                 value = getattr(module, tensor_name)
-                param_to = "cpu"
-                if is_fsdp_enabled() and not is_local_dist_rank_0():
-                    param_to = "meta"
-                value = type(value)(value.data.to(param_to), **value.__dict__)
+                value = type(value)(value.data.to("cpu"), **value.__dict__)
                 setattr(module, tensor_name, value)
             # TODO: consider removing used param_parts from state_dict before return
 
