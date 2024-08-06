@@ -976,7 +976,7 @@ class MistralForCausalLM(MistralPreTrainedModel):
         # Create buffer init callbacks by extending the one from `LlamaModel`,
         # i.e. appending a prefix to all buffer FQNs.
         for key, val in self.model.buf_init_callbacks.items():
-            new_key = ".".join(["model", key])
+            new_key = ".".join(["pattern", key])
             self.buf_init_callbacks[new_key] = val
 
     def get_input_embeddings(self):
