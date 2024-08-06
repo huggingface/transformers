@@ -21,7 +21,7 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
-from ...cache_utils import Cache
+from ...cache_utils import Cache, StaticCache
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     ModelOutput,
@@ -293,25 +293,34 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
         return model_embeds
 
     def _update_causal_mask(
-        self, attention_mask, token_type_ids, inputs_embeds, cache_position, is_training: bool = False
+        self, attention_mask, token_type_ids, inputs_embeds, past_key_values, cache_position, is_training: bool = False
     ):
+        using_static_cache = isinstance(past_key_values, StaticCache)
         dtype, device = inputs_embeds.dtype, inputs_embeds.device
         min_dtype = torch.finfo(dtype).min
         sequence_length = inputs_embeds.shape[1]
+        if using_static_cache:
+            target_length = past_key_values.get_max_length()
+        else:
+            target_length = (
+                attention_mask.shape[-1]
+                if isinstance(attention_mask, torch.Tensor)
+                else cache_position[0] + sequence_length + 1
+            )
 
-        if cache_position is None:
-            cache_position = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device)
-
-        target_length = cache_position[-1] + 1
-        causal_mask = torch.full((sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device)
-
-        # do causal diagonal mask only if training, otherwise attend to the whole prefix
-        # training-specific attn for prefix is handled below
-        if sequence_length != 1:
-            if is_training:
-                causal_mask = torch.triu(causal_mask, diagonal=1)
-            else:
-                causal_mask = torch.zeros_like(causal_mask)
+        if attention_mask is not None and attention_mask.dim() == 4:
+            # In this case we assume that the mask comes already in inverted form and requires no inversion or slicing.
+            causal_mask = attention_mask
+        else:
+            causal_mask = torch.full(
+                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device
+            )
+            # Causal diagonal mask only if training, otherwise attend to the whole prefix. Training-specific attn for prefix is handled below
+            if sequence_length != 1:
+                if is_training:
+                    causal_mask = torch.triu(causal_mask, diagonal=1)
+                else:
+                    causal_mask = torch.zeros_like(causal_mask)
 
         causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
         causal_mask = causal_mask[None, None, :, :].expand(inputs_embeds.shape[0], 1, -1, -1)
@@ -400,6 +409,15 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
+        if cache_position is None:
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            cache_position = torch.arange(
+                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
+            )
+
+        if position_ids is None:
+            position_ids = cache_position.unsqueeze(0) + 1  # Paligemma positions are 1-indexed
+
         # Merge text and images
         if pixel_values is not None:
             image_outputs = self.vision_tower(pixel_values.to(inputs_embeds.dtype))
@@ -419,7 +437,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
         causal_mask = self._update_causal_mask(
-            attention_mask, token_type_ids, inputs_embeds, cache_position, is_training
+            attention_mask, token_type_ids, inputs_embeds, past_key_values, cache_position, is_training
         )
 
         outputs = self.language_model(
@@ -488,14 +506,15 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
             **kwargs,
         )
 
-        if input_ids.shape[1] != 1:  # for BC with the current implementation, position ids in pre-fill is 1-indexed
-            model_inputs["position_ids"] += 1
-
         model_inputs["token_type_ids"] = token_type_ids
 
+        # position_ids in Paligemma are 1-indexed
+        if model_inputs.get("position_ids") is not None:
+            model_inputs["position_ids"] += 1
+
         # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
-        # Otherwise we need pixel values to be passed to model
-        if past_key_values is None:
+        # Otherwise we need pixel values to be passed to model. NOTE: use_cache=False needs pixel_values always
+        if cache_position[0] == 0:
             model_inputs["pixel_values"] = pixel_values
 
         return model_inputs

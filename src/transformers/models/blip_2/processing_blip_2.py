@@ -16,7 +16,6 @@
 Processor class for BLIP-2.
 """
 
-from operator import concat
 from typing import List, Optional, Union
 
 from ...image_utils import ImageInput
@@ -153,7 +152,10 @@ class Blip2Processor(ProcessorMixin):
                 image_tokens = self.image_token.content * self.num_query_tokens
                 image_token_encoding = self.tokenizer([image_tokens], add_special_tokens=False, return_tensors=None)
                 for k in _text_encoding:
-                    text_encoding[k] = list(map(concat, image_token_encoding[k], _text_encoding[k]))
+                    text_encoding[k] = [
+                        img_encoding + txt_encoding
+                        for img_encoding, txt_encoding in zip(image_token_encoding[k], _text_encoding[k])
+                    ]
             else:
                 text_encoding = _text_encoding
                 logger.warning_once(
