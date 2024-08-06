@@ -77,8 +77,8 @@
         title: (번역중) Image-to-Image
       - local: in_translation
         title: (번역중) Image Feature Extraction
-      - local: in_translation
-        title: (번역중) Mask Generation
+      - local: tasks/mask_generation
+        title: 마스크 생성
       - local: in_translation
         title: (번역중) Knowledge Distillation for Computer Vision
     title: 컴퓨터 비전
