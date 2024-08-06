@@ -867,7 +867,7 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel):
             pixels_present = input_ids.shape[-1] == 1 and pixel_values is not None and pixel_values_videos is not None
             legacy_processing = inputs_expanded or pixels_present
 
-        image_features = None
+        image_features = feature_lens = None
         if pixel_values is not None and pixel_values.size(0) > 0:
             image_features = self._get_image_features(pixel_values, image_sizes)
             image_features, feature_lens = self.pack_image_features(
@@ -876,7 +876,7 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel):
                 image_newline=self.image_newline,
             )
 
-        video_features = None
+        video_features = video_feature_lens = None
         if pixel_values_videos is not None and pixel_values_videos.size(0) > 0:
             video_features = self._get_video_features(pixel_values_videos)
             video_features = [feature.flatten(0, 1) for feature in video_features]
@@ -892,41 +892,28 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel):
                     "Using processors without these attributes in the config is deprecated and will throw an error in v4.44."
                 )
                 if input_ids.shape[1] != 1:
-                    if image_features is not None:
-                        inputs_embeds = inputs_embeds.to(image_features.dtype)
-                        (
-                            inputs_embeds,
-                            attention_mask,
-                            position_ids,
-                            labels,
-                            input_ids,
-                        ) = self._merge_input_ids_with_image_features(
-                            image_features,
-                            feature_lens,
-                            inputs_embeds,
-                            input_ids,
-                            attention_mask,
-                            position_ids,
-                            labels=labels,
-                            image_token_index=self.config.image_token_index,
-                        )
-                    if video_features is not None:
-                        (
-                            inputs_embeds,
-                            attention_mask,
-                            position_ids,
-                            labels,
-                            input_ids,
-                        ) = self._merge_input_ids_with_image_features(
-                            video_features,
-                            video_feature_lens,
-                            inputs_embeds,
-                            input_ids,
-                            attention_mask,
-                            position_ids,
-                            labels=labels,
-                            image_token_index=self.config.video_token_index,
-                        )
+                    iterator = (
+                        (image_features, feature_lens, self.config.image_token_index),
+                        (video_features, video_feature_lens, self.config.video_token_index),
+                    )
+                    for features, lens, special_token in iterator:
+                        if features is not None:
+                            (
+                                inputs_embeds,
+                                attention_mask,
+                                labels,
+                                position_ids,
+                                input_ids,
+                            ) = self._merge_input_ids_with_image_features(
+                                features,
+                                lens,
+                                inputs_embeds,
+                                input_ids,
+                                attention_mask,
+                                position_ids,
+                                labels=labels,
+                                image_token_index=special_token,
+                            )
                 else:
                     # Retrieve the first layer to inspect the logits and mask out the hidden states that are set to 0
                     first_layer_past_key_value = past_key_values[0][0][:, :, :, 0]

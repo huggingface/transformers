@@ -541,6 +541,7 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
                 vision_feature_select_strategy=vision_feature_select_strategy,
             )
 
+            image_features = video_features = None
             if image_outputs is not None:
                 image_features = self.multi_modal_projector(image_outputs)
             if video_outputs is not None:
@@ -554,31 +555,22 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
                     "Using processors without these attributes in the config is deprecated and will throw an error in v4.44."
                 )
                 if input_ids.shape[1] != 1:
-                    if image_outputs is not None:
-                        (
-                            inputs_embeds,
-                            attention_mask,
-                            labels,
-                            position_ids,
-                            input_ids,
-                        ) = self._merge_input_ids_with_visual_features(
-                            image_features, inputs_embeds, input_ids, attention_mask, labels
-                        )
-                    if video_outputs is not None:
-                        (
-                            inputs_embeds,
-                            attention_mask,
-                            labels,
-                            position_ids,
-                            _,
-                        ) = self._merge_input_ids_with_visual_features(
-                            video_features,
-                            inputs_embeds,
-                            input_ids,
-                            attention_mask,
-                            labels,
-                            num_frames=num_frames,
-                        )
+                    for features, frames in ((image_features, 1), (video_features, num_frames)):
+                        if features is not None:
+                            (
+                                inputs_embeds,
+                                attention_mask,
+                                labels,
+                                position_ids,
+                                input_ids,
+                            ) = self._merge_input_ids_with_visual_features(
+                                features,
+                                inputs_embeds,
+                                input_ids,
+                                attention_mask,
+                                labels,
+                                num_frames=num_frames,
+                            )
                 else:
                     # Retrieve the first layer to inspect the logits and mask out the hidden states
                     # that are set to 0
@@ -689,22 +681,21 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position if not legacy_processing else None,
+            cache_position=cache_position,
             **kwargs,
         )
 
         if legacy_processing:
             # legacy specific code copied from prev version, we assume that we always have one more new token (assisted decoding doesn't work for VLMs)
-            if past_key_values is not None:
-                model_inputs["input_ids"] = model_inputs["input_ids"][:, -1:]
-                if "position_ids" in model_inputs:
-                    model_inputs["position_ids"] = model_inputs["position_ids"][:, -1:]
+            # if cache_position[0] != 0:
+            #     model_inputs["input_ids"] = model_inputs["input_ids"][:, -1:]
+            #     if "position_ids" in model_inputs:
+            #         model_inputs["position_ids"] = model_inputs["position_ids"][:, -1:]
 
             model_inputs["pixel_values_images"] = pixel_values_images
             model_inputs["pixel_values_videos"] = pixel_values_videos
-            model_inputs["cache_position"] = None
 
-        elif past_key_values is None:
+        elif cache_position[0] == 0:
             # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
             # Otherwise we need pixel values to be passed to model
             model_inputs["pixel_values_images"] = pixel_values_images
