@@ -628,7 +628,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                     f"{image_to_overwrite.sum()=} != {num_image_features=} The input provided to the model are wrong. "
                     f"The number of image tokens is {torch.sum(special_image_token_mask)} while"
                     f" the number of image given to the model is {num_images}. "
-                    f"This prevents correct indexing and breaks batch generation."
+                    f"This prevents correct indexing and breaks batch generation. "
                     f"Potentially model.padding_side != processor.tokenizer.padding_side?"
                 )
         final_embedding[image_to_overwrite] = image_features.contiguous().reshape(-1, embed_dim).to(target_device)
