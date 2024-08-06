@@ -19,6 +19,7 @@ import math
 import os
 import warnings
 from functools import partial
+from pathlib import Path
 from threading import Thread
 from typing import List, Optional, OrderedDict, Tuple, Type, Union
 
@@ -45,6 +46,29 @@ _CHECKPOINT_FOR_DOC = "hkhedr93/sam2_hiera_base_plus"
 
 # a large negative value as a placeholder score for missing objects
 NO_OBJ_SCORE = -1024.0
+CUDA_KERNELS = None
+
+
+def load_cuda_kernels():
+    from torch.utils.cpp_extension import load
+
+    global CUDA_KERNELS
+
+    root = Path(__file__).resolve().parent.parent.parent / "kernels" / "sam2"
+    src_files = [root / "connected_components.cu"]
+
+    CUDA_KERNELS = load(
+        "CUDA_KERNELS",
+        src_files,
+        with_cuda=True,
+        extra_include_paths=[str(root)],
+        extra_cuda_cflags=[
+            "-DCUDA_HAS_FP16=1",
+            "-D__CUDA_NO_HALF_OPERATORS__",
+            "-D__CUDA_NO_HALF_CONVERSIONS__",
+            "-D__CUDA_NO_HALF2_OPERATORS__",
+        ],
+    )
 
 
 def get_sdpa_settings():
@@ -2027,6 +2051,11 @@ class Sam2Model(Sam2PreTrainedModel):
         self.add_all_frames_to_correct_as_cond = config.add_all_frames_to_correct_as_cond
         self.max_cond_frames_in_attn = config.max_cond_frames_in_attn
 
+        if torch.cuda.is_available():
+            try:
+                load_cuda_kernels()
+            except Exception as e:
+                logger.warning(f"Could not load custom CUDA kernels for postprocessing: {e}")
         # Model compilation
         if config.compile_image_encoder:
             # Compile the forward function (not the full module) to allow loading checkpoints.
@@ -2725,24 +2754,34 @@ class SAM2Transforms(nn.Module):
         Perform PostProcessing on output masks.
         """
 
-        masks = masks.float()
-        if self.max_hole_area > 0:
-            # from sam2.utils.misc import get_connected_components
-            # Holes are those connected components in background with area <= self.fill_hole_area
-            # (background regions are those with mask scores <= self.mask_threshold)
-            mask_flat = masks.flatten(0, 1).unsqueeze(1)  # flatten as 1-channel image
-            labels, areas = get_connected_components(mask_flat <= self.mask_threshold)
-            is_hole = (labels > 0) & (areas <= self.max_hole_area)
-            is_hole = is_hole.reshape_as(masks)
-            # We fill holes with a small positive mask score (10.0) to change them to foreground.
-            masks = torch.where(is_hole, self.mask_threshold + 10.0, masks)
+        input_masks = masks
+        mask_flat = masks.flatten(0, 1).unsqueeze(1)  # flatten as 1-channel image
+        try:
+            if self.max_hole_area > 0:
+                # Holes are those connected components in background with area <= self.fill_hole_area
+                # (background regions are those with mask scores <= self.mask_threshold)
+                labels, areas = get_connected_components(mask_flat <= self.mask_threshold)
+                is_hole = (labels > 0) & (areas <= self.max_hole_area)
+                is_hole = is_hole.reshape_as(masks)
+                # We fill holes with a small positive mask score (10.0) to change them to foreground.
+                masks = torch.where(is_hole, self.mask_threshold + 10.0, masks)
 
-        if self.max_sprinkle_area > 0:
-            labels, areas = get_connected_components(mask_flat > self.mask_threshold)
-            is_hole = (labels > 0) & (areas <= self.max_sprinkle_area)
-            is_hole = is_hole.reshape_as(masks)
-            # We fill holes with negative mask score (-10.0) to change them to background.
-            masks = torch.where(is_hole, self.mask_threshold - 10.0, masks)
+            if self.max_sprinkle_area > 0:
+                labels, areas = get_connected_components(mask_flat > self.mask_threshold)
+                is_hole = (labels > 0) & (areas <= self.max_sprinkle_area)
+                is_hole = is_hole.reshape_as(masks)
+                # We fill holes with negative mask score (-10.0) to change them to background.
+                masks = torch.where(is_hole, self.mask_threshold - 10.0, masks)
+        except Exception as e:
+            # Skip the post-processing step if the CUDA kernel fails
+            warnings.warn(
+                f"{e}\n\nSkipping the post-processing step due to the error above. "
+                "Consider building SAM 2 with CUDA extension to enable post-processing (see "
+                "https://github.com/facebookresearch/segment-anything-2/blob/main/INSTALL.md).",
+                category=UserWarning,
+                stacklevel=2,
+            )
+            masks = input_masks
 
         masks = F.interpolate(masks, orig_hw, mode="bilinear", align_corners=False)
         return masks
@@ -2753,6 +2792,12 @@ class Sam2ImagePredictor:
     def from_pretrained(cls, model_id: str, **kwargs):
         sam2_model = Sam2Model.from_pretrained(model_id)
         return cls(sam2_model, **kwargs)
+
+    def cuda(self):
+        self.model.cuda()
+
+    def to(self, device):
+        self.model.to(device)
 
     def __init__(
         self,
@@ -2793,7 +2838,7 @@ class Sam2ImagePredictor:
     @torch.no_grad()
     def set_image(
         self,
-        image: Union[np.ndarray, Image],
+        image: Union[np.ndarray, Image.Image],
     ) -> None:
         """
         Calculates the image embeddings for the provided image, allowing
@@ -3184,9 +3229,8 @@ def get_connected_components(mask):
     - counts: A tensor of shape (N, 1, H, W) containing the area of the connected
               components for foreground pixels and 0 for background pixels.
     """
-    from sam2 import _C
 
-    return _C.get_connected_componnets(mask.to(torch.uint8).contiguous())
+    return CUDA_KERNELS.get_connected_components(mask.to(torch.uint8).contiguous())
 
 
 def mask_to_box(masks: torch.Tensor):
