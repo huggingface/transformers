@@ -53,7 +53,7 @@ pip install -q transformers
 >>> mask_generator = pipeline(model=checkpoint, task="mask-generation")
 ```
 
-한 이미지를 예시로 볼까요?
+이미지를 예시로 봅시다.
 
 ```python
 from PIL import Image
