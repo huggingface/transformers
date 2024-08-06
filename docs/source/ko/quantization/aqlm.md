@@ -44,7 +44,8 @@ tokenizer = AutoTokenizer.from_pretrained("ISTA-DASLab/Mixtral-8x7b-AQLM-2Bit-1x
 ```
 
 ## PEFT [[peft]]
-AQLM은 `aqlm 1.0.2` 버전부터 [PEFT](https://huggingface.co/blog/peft) 라이브러리에 통합된 [LoRA](https://huggingface.co/docs/peft/package_reference/lora) 형태의 파라미터 효율적인 미세 조정을 지원합니다.
+AQLM은 `aqlm 1.0.2` 버전부터 [PEFT](https://huggingface.co/blog/peft) 라이브러리에 통합된 [LoRA](https://huggingface.co/docs/peft/package_reference/lora) 형태의 매개변수 효율적인 미세 조정을 지원합니다.
+
 
 ## AQLM 구성 [[aqlm-configurations]]
 
