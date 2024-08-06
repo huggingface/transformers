@@ -1485,8 +1485,8 @@ class ZambaForCausalLM(ZambaPreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, ZambaForCausalLM
 
-        >>> model = ZambaForCausalLM.from_pretrained("zyphra/Zamba-v0.1")
-        >>> tokenizer = AutoTokenizer.from_pretrained("zyphra/Zamba-v0.1")
+        >>> model = ZambaForCausalLM.from_pretrained("Zyphra/Zamba-7B-v1")
+        >>> tokenizer = AutoTokenizer.from_pretrained("Zyphra/Zamba-7B-v1")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
