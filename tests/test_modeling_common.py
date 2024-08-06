@@ -2755,6 +2755,9 @@ class ModelTesterMixin:
 
             inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
 
+            # remove pixel values for VLMs, because we can't pass embeds and pixel values at the same time
+            inputs = {k: v for k, v in inputs.items() if "pixel_values" not in k}
+
             if not self.is_encoder_decoder:
                 input_ids = inputs["input_ids"]
                 del inputs["input_ids"]
@@ -2790,6 +2793,9 @@ class ModelTesterMixin:
 
             inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
             pad_token_id = config.pad_token_id if config.pad_token_id is not None else 1
+
+            # remove pixel values for VLMs, because we can't pass embeds and pixel values at the same time
+            inputs = {k: v for k, v in inputs.items() if "pixel_values" not in k}
 
             wte = model.get_input_embeddings()
             if not self.is_encoder_decoder:
