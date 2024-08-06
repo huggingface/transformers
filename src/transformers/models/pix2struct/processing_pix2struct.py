@@ -16,11 +16,13 @@
 Processor class for Pix2Struct.
 """
 
+import logging
 from typing import List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
+from ...utils.deprecation import deprecate_kwarg
 
 
 class Pix2StructImagesKwargs(ImagesKwargs, total=False):
@@ -48,6 +50,9 @@ class Pix2StructProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+logger = logging.getLogger(__name__)
+
+
 class Pix2StructProcessor(ProcessorMixin):
     r"""
     Constructs a PIX2STRUCT processor which wraps a BERT tokenizer and PIX2STRUCT image processor into a single
@@ -71,6 +76,7 @@ class Pix2StructProcessor(ProcessorMixin):
         tokenizer.return_token_type_ids = False
         super().__init__(image_processor, tokenizer)
 
+    @deprecate_kwarg(old_name="legacy", version="5.0.0")
     def __call__(
         self,
         images=None,
@@ -85,6 +91,14 @@ class Pix2StructProcessor(ProcessorMixin):
 
         Please refer to the docstring of the above two methods for more information.
         """
+        legacy = kwargs.pop("legacy", True)
+        if legacy:
+            logger.warning(
+                "Legacy behavior is being used. The new behavior with legacy=False will be enabled in the future."
+                "If both images and text are provided and image_processor is not a VQA processor, and `add_special_tokens` is unset, "
+                "it will change the default value of `add_special_tokens` to `False` when calling the tokenizer."
+            )
+
         if images is None and text is None:
             raise ValueError("You have to specify either images or text.")
 
@@ -93,8 +107,12 @@ class Pix2StructProcessor(ProcessorMixin):
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
+        add_special_tokens = output_kwargs["text_kwargs"].pop("add_special_tokens", None)
         # Get only text
         if images is None and not self.image_processor.is_vqa:
+            output_kwargs["text_kwargs"]["add_special_tokens"] = (
+                add_special_tokens if add_special_tokens is not None else True
+            )
             self.current_processor = self.tokenizer
             text_encoding = self.tokenizer(text=text, **output_kwargs["text_kwargs"])
             return text_encoding
@@ -108,6 +126,9 @@ class Pix2StructProcessor(ProcessorMixin):
             encoding_image_processor = self.image_processor(images, **output_kwargs["images_kwargs"])
 
         if text is not None and not self.image_processor.is_vqa:
+            output_kwargs["text_kwargs"]["add_special_tokens"] = (
+                add_special_tokens if add_special_tokens is not None else legacy
+            )
             text_encoding = self.tokenizer(text=text, **output_kwargs["text_kwargs"])
 
             if "attention_mask" in text_encoding:
@@ -135,6 +156,20 @@ class Pix2StructProcessor(ProcessorMixin):
         refer to the docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)
+
+    def post_process_image_text_to_text(self, generated_outputs):
+        """
+        Post-process the output of the model to decode the text.
+
+        Args:
+            generated_outputs (`torch.Tensor` or `np.ndarray`):
+                The output of the model `generate` function. The output is expected to be a tensor of shape `(batch_size, sequence_length)`
+                or `(sequence_length,)`.
+
+        Returns:
+            `List[str]`: The decoded text.
+        """
+        return self.tokenizer.batch_decode(generated_outputs, skip_special_tokens=True)
 
     @property
     def model_input_names(self):
