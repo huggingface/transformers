@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # 채팅 모델을 위한 템플릿[[templates-for-chat-models]]
 
-## 소개
+## 소개[[introduction]]
 
 LLM의 점점 더 흔해지는 사용 사례는 채팅입니다. 채팅 맥락에서는 표준 언어 모델과 같이 단일 문자열을 계속하는 대신, 모델이 "user"나 "assistant"와 같은 역할과 메시지 텍스트를 포함한 하나 이상의 메시지로 구성된 대화를 계속합니다.
 
