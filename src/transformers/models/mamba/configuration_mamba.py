@@ -81,8 +81,6 @@ class MambaConfig(PretrainedConfig):
             Whether or not the cache should be used.
         use_mambapy (`bool`, *optional*, defaults to `False`):
             Determines the fallback strategy during training if the CUDA-based official implementation of Mamba is not avaiable. If `True`, the mamba.py implementation is used. If `False`, the naive and slower implementation is used. Consider switching to the naive version if memory is limited.
-
-
     Example:
 
     ```python
@@ -153,5 +151,12 @@ class MambaConfig(PretrainedConfig):
         self.residual_in_fp32 = residual_in_fp32
         self.use_cache = use_cache
         self.use_mambapy = use_mambapy
+        self.ignore_keys_for_inference = ["cache_params"]
 
-        super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, pad_token_id=pad_token_id, **kwargs)
+        super().__init__(
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            pad_token_id=pad_token_id,
+            ignore_keys_for_inference=self.ignore_keys_for_inference,
+            **kwargs,
+        )
