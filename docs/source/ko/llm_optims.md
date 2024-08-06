@@ -275,7 +275,7 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
-### PyTorch 스케일된 점곱 어텐션 [[pytorch-scaled-dot-product-attention]]
+### PyTorch 스케일된 점곱 어텐션(scaled dot product attention) [[pytorch-scaled-dot-product-attention]]
 
 스케일된 점곱 어텐션(SDPA)는 PyTorch 2.0에서 자동으로 활성화되며, FlashAttention, xFormers, PyTorch의 C++ 구현을 지원합니다. SDPA는 CUDA 백엔드를 사용하는 경우 가장 성능이 좋은 어텐션 알고리즘을 선택합니다. 다른 백엔드에서는 SDPA가 PyTorch C++ 구현으로 기본 설정됩니다.
 
