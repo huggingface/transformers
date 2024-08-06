@@ -208,12 +208,12 @@ class IdeficsProcessor(ProcessorMixin):
         truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = "pt",
-        legacy=True,
         prompts: Optional[Union[List[TextInput], List[List[TextInput]]]] = None,
         transform: Callable = None,
         add_eos_token=False,
         add_end_of_utterance_token=None,
         debug=False,
+        **kwargs,
     ) -> BatchEncoding:
         """This method takes batched or non-batched prompts made of text and images and converts them into prompts that
         the model was trained on and prepares the image pixel values for the model to process.
@@ -321,7 +321,7 @@ class IdeficsProcessor(ProcessorMixin):
         In order to help debug prompt generation enable `debug=True` which will show you what's happening.
 
         """
-
+        legacy = kwargs.pop("legacy", True)
         if legacy:
             warnings.warn(
                 "The use of legacy will be deprecated in the future. Please use the new processing behavior by setting legacy=False."

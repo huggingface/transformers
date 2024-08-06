@@ -66,7 +66,6 @@ class Pix2StructProcessor(ProcessorMixin):
         return_length: bool = False,
         verbose: bool = True,
         return_tensors: Optional[Union[str, TensorType]] = None,
-        legacy=True,
         **kwargs,
     ) -> BatchEncoding:
         """
@@ -75,6 +74,8 @@ class Pix2StructProcessor(ProcessorMixin):
 
         Please refer to the docstring of the above two methods for more information.
         """
+        legacy = kwargs.pop("legacy", True)
+        print("legacy: ", legacy)
         if legacy:
             warnings.warn(
                 "The use of legacy will be deprecated in the future. Please use the new processing behavior by setting legacy=False."

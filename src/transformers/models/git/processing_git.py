@@ -44,7 +44,7 @@ class GitProcessor(ProcessorMixin):
         super().__init__(image_processor, tokenizer)
         self.current_processor = self.image_processor
 
-    def __call__(self, text=None, images=None, return_tensors=None, legacy=True, **kwargs):
+    def __call__(self, text=None, images=None, return_tensors=None, **kwargs):
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to BertTokenizerFast's [`~BertTokenizerFast.__call__`] if `text` is not `None` to encode
@@ -78,6 +78,7 @@ class GitProcessor(ProcessorMixin):
               `None`).
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
+        legacy = kwargs.pop("legacy", True)
         if legacy:
             warnings.warn(
                 "The use of legacy will be deprecated in the future. Please use the new processing behavior by setting legacy=False."
