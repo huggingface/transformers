@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 [EETQ](https://github.com/NetEase-FuXi/EETQ) 라이브러리는 NVIDIA GPU에 대해 int8 채널별(per-channel) weight-only quantization을 지원합니다. 고성능 GEMM 및 GEMV 커널은 FasterTransformer 및 TensorRT-LLM에서 가져왔습니다. 캘리브레이션 데이터셋이 필요 없으며, 모델을 사전에 양자화할 필요도 없습니다. 또한, 채널별 양자화(per-channel quantization) 덕분에 정확도 저하가 미미합니다.
 
-[EETQ 릴리스 페이지](https://github.com/NetEase-FuXi/EETQ/releases)에서 EETQ를 설치했는지 확인하십시오.
+[릴리스 페이지](https://github.com/NetEase-FuXi/EETQ/releases)에서 eetq를 설치했는지 확인하세요.
 
 ```
 pip install --no-cache-dir https://github.com/NetEase-FuXi/EETQ/releases/download/v1.0.0/EETQ-1.0.0+cu121+torch2.1.2-cp310-cp310-linux_x86_64.whl
