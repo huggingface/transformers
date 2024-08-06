@@ -1964,7 +1964,7 @@ class GenerationTesterMixin:
         # 1. Its inner sequence length is with respect to the inputs of the latest forward pass, hence the "-1"
         # 2. We ignore models that have unique cache structures (e.g. mamba) or are in need of refatoring to match the
         #    standard cache format (e.g.gptbigcode )
-        models_without_standard_cache = ("ctrl", "fsmt", "gptbigcode", "mega", "reformer", "jamba", "mamba", "xlnet")
+        models_without_standard_cache = ("ctrl", "fsmt", "gptbigcode", "mega", "reformer", "jamba", "mamba", "xlnet", "zamba")
         has_standard_cache = not any(
             model_name in config.__class__.__name__.lower() for model_name in models_without_standard_cache
         )

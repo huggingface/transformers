@@ -685,6 +685,8 @@
         title: ViTMSN
       - local: model_doc/yolos
         title: YOLOS
+      - local: model_doc/zamba
+        title: Zamba
       - local: model_doc/zoedepth
         title: ZoeDepth
       title: Vision models
