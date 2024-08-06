@@ -65,7 +65,7 @@ tokenizer.batch_decode(outputs, skip_special_tokens=True)
 ['The theory of special relativity states 1. The speed of light is constant in all inertial reference']
 ```
 
-내부적으로, 'generate'는 동일한 캐시 객체를 재사용하려고 시도하여 각 호출에서 다시 컴파일할 필요가 없도록 합니다. 그러나 배치 크기 또는 최대 출력 길이가 호출 간에 증가하면 캐시를 다시 초기화해야 하므로 새로 컴파일 해야합니다.
+내부적으로, 'generate'는 동일한 캐시 객체를 재사용하려고 시도하여 각 호출에서 다시 컴파일할 필요가 없도록 합니다. 그러나 배치 크기 또는 최대 출력 길이가 호출 간에 증가하면 캐시를 다시 초기화해야 하므로 새로 컴파일해야 합니다.
 
 </hfoption>
 <hfoption id="Static Cache">
