@@ -385,6 +385,21 @@ def is_mamba_ssm_available():
     return False
 
 
+def is_mamba_2_ssm_available():
+    if is_torch_available():
+        import torch
+
+        if not torch.cuda.is_available():
+            return False
+        else:
+            if _is_package_available("mamba_ssm"):
+                import mamba_ssm
+
+                if version.parse(mamba_ssm.__version__) >= version.parse("2.0.4"):
+                    return True
+    return False
+
+
 def is_causal_conv1d_available():
     if is_torch_available():
         import torch
