@@ -23,7 +23,7 @@ import torch
 from PIL import Image
 
 from transformers import (
-    AutoTokenizer,
+    CLIPTokenizer,
     DetrImageProcessor,
     OmDetTurboConfig,
     OmDetTurboForObjectDetection,
@@ -308,9 +308,10 @@ def convert_omdet_turbo_checkpoint(args):
         image_std=IMAGE_STD,
         do_pad=False,
     )
-    tokenizer = AutoTokenizer.from_pretrained("openai/clip-vit-base-patch32")
+    tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-base-patch32")
     processor = OmDetTurboProcessor(image_processor=image_processor, tokenizer=tokenizer)
 
+    print("processor:", processor.tokenizer.init_kwargs)
     # end-to-end consistency test
     run_test(model, processor)
 
