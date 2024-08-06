@@ -64,5 +64,5 @@ model = transformers.AutoModelForCausalLM.from_pretrained(
 ## 최적화된 런타임 [[optimized-runtime]]
 
 HQQ는 순수 Pytorch 및 맞춤형 역양자화(Dequantization) CUDA 커널을 포함한 다양한 백엔드를 지원합니다. 이는 오래된 GPU 및 peft/QLoRA 훈련에 적합합니다. 
-더 빠른 추론을 위해, HQQ는 4비트 융합 커널(TorchAO 및 Marlin)을 지원하여 단일 4090 GPU에서 최대 200 토큰/초의 속도에 달합니다.
+HQQ는 4비트 융합 커널(TorchAO 및 Marlin)을 지원하여 더 빠른 추론이 가능하며, 속도는 한 개의 4090 GPU에서 최대 200 토큰/초에 달합니다. ```
 백엔드 사용에 대한 자세한 내용은 https://github.com/mobiusml/hqq/?tab=readme-ov-file#backend를 참조하세요.
