@@ -46,16 +46,6 @@ from .tools import (
 )
 
 
-DEFAULT_JSON_GRAMMAR = {
-    "type": "regex",
-    "value": 'Thought: .+?\\nAction:\\n\\{\\n\\s{4}"action":\\s"[^"\\n]+",\\n\\s{4}"action_input":\\s"[^"\\n]+"\\n\\}\\n<end_action>',
-}
-DEFAULT_CODE_GRAMMAR = {
-    "type": "regex",
-    "value": "Thought: .+?\\nCode:\\n```(?:py|python)?\\n(?:.|\\s)+?\\n```<end_action>",
-}
-
-
 if is_pygments_available():
     from pygments import highlight
     from pygments.formatters import Terminal256Formatter
@@ -346,7 +336,7 @@ class Agent:
         add_base_tools: bool = False,
         verbose: int = 0,
         memory_verbose: bool = False,
-        grammar=DEFAULT_CODE_GRAMMAR,
+        grammar: Dict[str, str] = None,
     ):
         self.agent_name = self.__class__.__name__
         self.llm_engine = llm_engine
@@ -545,7 +535,7 @@ class CodeAgent(Agent):
         llm_engine: Callable = HfEngine(),
         system_prompt: str = DEFAULT_CODE_SYSTEM_PROMPT,
         tool_description_template: str = DEFAULT_TOOL_DESCRIPTION_TEMPLATE,
-        grammar: str = DEFAULT_CODE_GRAMMAR,
+        grammar: Dict[str, str] = None,
         additional_authorized_imports: Optional[List[str]] = None,
         **kwargs,
     ):
@@ -613,7 +603,9 @@ class CodeAgent(Agent):
         self.prompt = [prompt_message, task_message]
         self.logger.info("====Executing with this prompt====")
         self.logger.info(self.prompt)
-        llm_output = self.llm_engine(self.prompt, stop_sequences=["<end_action>"])
+
+        additional_args = {"grammar": self.grammar} if self.grammar is not None else {}
+        llm_output = self.llm_engine(self.prompt, stop_sequences=["<end_action>"], **additional_args)
 
         if return_generated_code:
             return llm_output
@@ -666,7 +658,7 @@ class ReactAgent(Agent):
         llm_engine: Callable = HfEngine(),
         system_prompt: str = DEFAULT_REACT_CODE_SYSTEM_PROMPT,
         tool_description_template: str = DEFAULT_TOOL_DESCRIPTION_TEMPLATE,
-        grammar: str = DEFAULT_CODE_GRAMMAR,
+        grammar: Dict[str, str] = None,
         plan_type: Literal[tuple(SUPPORTED_PLAN_TYPES)] = SUPPORTED_PLAN_TYPES[0],
         planning_interval: Optional[int] = None,
         **kwargs,
@@ -897,7 +889,7 @@ class ReactJsonAgent(ReactAgent):
         llm_engine: Callable = HfEngine(),
         system_prompt: str = DEFAULT_REACT_JSON_SYSTEM_PROMPT,
         tool_description_template: str = DEFAULT_TOOL_DESCRIPTION_TEMPLATE,
-        grammar: str = DEFAULT_JSON_GRAMMAR,
+        grammar: Dict[str, str] = None,
         planning_interval: Optional[int] = None,
         **kwargs,
     ):
@@ -930,10 +922,9 @@ class ReactJsonAgent(ReactAgent):
         self.logger.info(self.prompt[-1])
 
         try:
+            additional_args = {"grammar": self.grammar} if self.grammar is not None else {}
             llm_output = self.llm_engine(
-                self.prompt,
-                stop_sequences=["<end_action>", "Observation:"],
-                grammar=self.grammar,
+                self.prompt, stop_sequences=["<end_action>", "Observation:"], **additional_args
             )
         except Exception as e:
             raise AgentGenerationError(f"Error in generating llm output: {e}.")
@@ -1004,7 +995,7 @@ class ReactCodeAgent(ReactAgent):
         llm_engine: Callable = HfEngine(),
         system_prompt: str = DEFAULT_REACT_CODE_SYSTEM_PROMPT,
         tool_description_template: str = DEFAULT_TOOL_DESCRIPTION_TEMPLATE,
-        grammar: str = DEFAULT_CODE_GRAMMAR,
+        grammar: Dict[str, str] = None,
         additional_authorized_imports: Optional[List[str]] = None,
         planning_interval: Optional[int] = None,
         **kwargs,
@@ -1052,10 +1043,9 @@ class ReactCodeAgent(ReactAgent):
         self.logger.info(self.prompt[-2:])
 
         try:
+            additional_args = {"grammar": self.grammar} if self.grammar is not None else {}
             llm_output = self.llm_engine(
-                self.prompt,
-                stop_sequences=["<end_action>", "Observation:"],
-                grammar=self.grammar,
+                self.prompt, stop_sequences=["<end_action>", "Observation:"], **additional_args
             )
         except Exception as e:
             raise AgentGenerationError(f"Error in generating llm output: {e}.")

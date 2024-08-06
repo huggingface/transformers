@@ -74,7 +74,7 @@ final_answer(7.2904)
 """
 
 
-def fake_react_code_llm_error(messages, stop_sequences=None, grammar=None) -> str:
+def fake_react_code_llm_error(messages, stop_sequences=None) -> str:
     prompt = str(messages)
     if "special_marker" not in prompt:
         return """
@@ -94,7 +94,7 @@ final_answer("got an error")
 """
 
 
-def fake_react_code_functiondef(messages, stop_sequences=None, grammar=None) -> str:
+def fake_react_code_functiondef(messages, stop_sequences=None) -> str:
     prompt = str(messages)
     if "special_marker" not in prompt:
         return """

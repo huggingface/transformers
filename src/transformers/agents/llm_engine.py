@@ -64,11 +64,19 @@ llama_role_conversions = {
     MessageRole.TOOL_RESPONSE: MessageRole.USER,
 }
 
+from openai import OpenAI
+
+
+client = OpenAI(
+    base_url="https://lki4zbjpelxely5v.us-east-1.aws.endpoints.huggingface.cloud/v1/",
+    api_key="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",
+)
+
 
 class HfEngine:
     def __init__(self, model: str = "meta-llama/Meta-Llama-3-8B-Instruct"):
         self.model = model
-        self.client = InferenceClient(model=self.model, timeout=120)
+        self.client = InferenceClient(self.model, timeout=120)
 
     def __call__(
         self, messages: List[Dict[str, str]], stop_sequences: List[str] = [], grammar: Optional[str] = None
@@ -77,7 +85,11 @@ class HfEngine:
         messages = get_clean_message_list(messages, role_conversions=llama_role_conversions)
 
         # Get LLM output
-        response = self.client.chat_completion(messages, stop=stop_sequences, max_tokens=1500, response_format=grammar)
+        # response = self.client.chat_completion(messages, stop=stop_sequences, max_tokens=1500)
+
+        response = client.chat.completions.create(
+            model="tgi", messages=messages, stop=stop_sequences, max_tokens=1500, response_format=grammar
+        )
         response = response.choices[0].message.content
 
         # Remove stop sequences from LLM output
@@ -85,3 +97,14 @@ class HfEngine:
             if response[-len(stop_seq) :] == stop_seq:
                 response = response[: -len(stop_seq)]
         return response
+
+
+DEFAULT_JSONAGENT_REGEX_GRAMMAR = {
+    "type": "regex",
+    "value": 'Thought: .+?\\nAction:\\n\\{\\n\\s{4}"action":\\s"[^"\\n]+",\\n\\s{4}"action_input":\\s"[^"\\n]+"\\n\\}\\n<end_action>',
+}
+
+DEFAULT_CODEAGENT_REGEX_GRAMMAR = {
+    "type": "regex",
+    "value": "Thought: .+?\\nCode:\\n```(?:py|python)?\\n(?:.|\\s)+?\\n```<end_action>",
+}
