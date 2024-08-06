@@ -112,16 +112,17 @@ login("<YOUR_HUGGINGFACEHUB_API_TOKEN>")
 
 client = InferenceClient(model="meta-llama/Meta-Llama-3-70B-Instruct")
 
-def llm_engine(messages, stop_sequences=["Task"], grammar=None) -> str:
+def llm_engine(messages, stop_sequences=["Task"]) -> str:
     response = client.chat_completion(messages, stop=stop_sequences, max_tokens=1000)
     answer = response.choices[0].message.content
     return answer
 ```
 
 You could use any `llm_engine` method as long as:
-1. it follows the [messages format](./chat_templating.md) for its input (`List[Dict[str, str]]`) and returns a `str`
-2. it stops generating outputs at the sequences passed in the argument `stop`
-3. it accepts a `grammar` argument: this argument will be passed to the calls to llm_engine, with a regex grammar that depends on the type of agent, to allow [constrained generation](https://huggingface.co/docs/text-generation-inference/conceptual/guidance) in order to force properly-formatted agent outputs. You can also just define this keyword argument but leave it unused as was done here.
+1. it follows the [messages format](./chat_templating.md) (`List[Dict[str, str]]`) for its input `messages`, and it returns a `str`.
+2. it stops generating outputs at the sequences passed in the argument `stop_sequences`
+
+Additionally, `llm_engine` can also take a `grammar` argument. In the case where you specify a `grammar` upon agent initialization, this argument will be passed to the calls to llm_engine, with the `grammar` that you defined upon initialization, to allow [constrained generation](https://huggingface.co/docs/text-generation-inference/conceptual/guidance) in order to force properly-formatted agent outputs.
 
 You will also need a `tools` argument which accepts a list of `Tools` - it can be an empty list. You can also add the default toolbox on top of your `tools` list by defining the optional argument `add_base_tools=True`.
 
