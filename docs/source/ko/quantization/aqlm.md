@@ -29,7 +29,8 @@ pip install aqlm[gpu,cpu]
 
 `aqlm` 라이브러리는 GPU 및 CPU 추론 및 훈련을 위한 효율적인 커널을 제공합니다.
 
-모델을 직접 양자화하는 방법과 모든 관련 코드는 해당 GitHub [repository](https://github.com/Vahe1994/AQLM)에서 확인할 수 있습니다. AQLM 모델을 실행하려면 AQLM으로 양자화된 모델을 로드하기만 하면 됩니다:
+모델을 직접 양자화하는 방법과 모든 관련 코드는 해당 GitHub [repository](https://github.com/Vahe1994/AQLM)에서 확인할 수 있습니다. AQLM 모델을 실행하려면 AQLM으로 양자화된 모델을 가져오기만 하면 됩니다:
+
 
 ```python
 from transformers import AutoTokenizer, AutoModelForCausalLM
