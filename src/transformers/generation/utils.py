@@ -1429,7 +1429,9 @@ class GenerationMixin:
         model_kwargs["cache_position"] = cache_position
         return model_kwargs
 
-    def _get_cache(self, cache_implementation: str, max_batch_size: int, max_cache_len: int, model_kwargs) -> Cache:
+    def _get_cache(
+        self, cache_implementation: str, max_batch_size: int, max_cache_len: int, device: torch.device, model_kwargs
+    ) -> Cache:
         """
         Sets a cache for `generate`, that will persist across calls. A new cache will only be initialized a
         new `generate` call requires a larger cache or uses a different batch size.
@@ -1477,7 +1479,7 @@ class GenerationMixin:
                 "config": self.config,
                 "max_batch_size": max_batch_size,
                 "max_cache_len": max_cache_len,
-                "device": self.device,
+                "device": device,
                 "dtype": cache_dtype,
             }
             self._cache = cache_cls(**cache_kwargs)
@@ -1813,12 +1815,11 @@ class GenerationMixin:
                         "issue: https://github.com/huggingface/transformers/issues/28981"
                     )
                 model_kwargs[cache_name] = self._get_cache(
-                    generation_config.cache_implementation,
-                    getattr(generation_config, "num_beams", 1)
-                    * getattr(generation_config, "num_return_sequences", 1)
-                    * batch_size,
-                    generation_config.max_length,
-                    model_kwargs,
+                    cache_implementation=generation_config.cache_implementation,
+                    max_batch_size=generation_config.num_beams * generation_config.num_return_sequences * batch_size,
+                    max_cache_len=generation_config.max_length,
+                    device=device,
+                    model_kwargs=model_kwargs,
                 )
             elif generation_config.cache_implementation == "quantized":
                 if not self._supports_quantized_cache:
