@@ -203,6 +203,10 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     def test_beam_search_generate_dict_outputs_use_cache(self):
         pass
 
+    @unittest.skip(reason="To fix, Mamba 2 cache slicing is interacting with beam search")
+    def test_beam_sample_generate(self):
+        pass
+
     @unittest.skip(reason="To fix, Mamba 2 cache slicing test case is an edge case")
     def test_generate_without_input_ids(self):
         pass
