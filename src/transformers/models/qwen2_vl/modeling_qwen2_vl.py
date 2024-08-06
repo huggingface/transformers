@@ -52,7 +52,6 @@ from .configuration_qwen2_vl import Qwen2VLConfig
 
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
-    from flash_attn.layers.rotary import apply_rotary_emb
 
     from ...modeling_flash_attention_utils import _flash_attention_forward
 
@@ -196,20 +195,15 @@ def apply_multimodal_rotary_pos_emb(q, k, cos, sin, position_ids, mrope_section=
     return q_embed, k_embed
 
 
-def apply_rotary_pos_emb_vision(t: torch.Tensor, freqs: torch.Tensor) -> torch.Tensor:
-    if apply_rotary_emb is None:
-        t_ = t.float()
-        cos = freqs.cos()
-        sin = freqs.sin()
-        cos = cos.unsqueeze(1).repeat(1, 1, 2).unsqueeze(0).float()
-        sin = sin.unsqueeze(1).repeat(1, 1, 2).unsqueeze(0).float()
-        output = (t_ * cos) + (rotate_half(t_) * sin)
-        output = output.type_as(t)
-    else:
-        t_ = t.float()
-        cos = freqs.cos()
-        sin = freqs.sin()
-        output = apply_rotary_emb(t_, cos, sin).type_as(t)
+def apply_rotary_pos_emb_vision(tensor: torch.Tensor, freqs: torch.Tensor) -> torch.Tensor:
+    orig_dtype = tensor.dtype
+    tensor = tensor.float()
+    cos = freqs.cos()
+    sin = freqs.sin()
+    cos = cos.unsqueeze(1).repeat(1, 1, 2).unsqueeze(0).float()
+    sin = sin.unsqueeze(1).repeat(1, 1, 2).unsqueeze(0).float()
+    output = (tensor * cos) + (rotate_half(tensor) * sin)
+    output = output.to(orig_dtype)
     return output
 
 
