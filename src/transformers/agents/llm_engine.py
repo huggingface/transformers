@@ -64,14 +64,6 @@ llama_role_conversions = {
     MessageRole.TOOL_RESPONSE: MessageRole.USER,
 }
 
-from openai import OpenAI
-
-
-client = OpenAI(
-    base_url="https://lki4zbjpelxely5v.us-east-1.aws.endpoints.huggingface.cloud/v1/",
-    api_key="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",
-)
-
 
 class HfEngine:
     def __init__(self, model: str = "meta-llama/Meta-Llama-3-8B-Instruct"):
@@ -85,11 +77,13 @@ class HfEngine:
         messages = get_clean_message_list(messages, role_conversions=llama_role_conversions)
 
         # Get LLM output
-        # response = self.client.chat_completion(messages, stop=stop_sequences, max_tokens=1500)
+        if grammar is not None:
+            response = self.client.chat_completion(
+                messages, stop=stop_sequences, max_tokens=1500, response_format=grammar
+            )
+        else:
+            response = self.client.chat_completion(messages, stop=stop_sequences, max_tokens=1500)
 
-        response = client.chat.completions.create(
-            model="tgi", messages=messages, stop=stop_sequences, max_tokens=1500, response_format=grammar
-        )
         response = response.choices[0].message.content
 
         # Remove stop sequences from LLM output
