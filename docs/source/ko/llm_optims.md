@@ -108,7 +108,7 @@ def decode_one_tokens(model, cur_token, input_pos, cache_position, past_key_valu
 
 2. 정적 kv-cache와 함께 순전파를 컴파일하기 위해 모델에 torch.compile을 호출합니다.
 
-3. [torch.backends.cuda.sdp_kernel](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html) 컨텍스트 관리자에서 `enable_math=True`를 설정하여 네이티브 PyTorch C++ 구현된 스케일된 dot product attention를 활성화하여 추론 속도를 더욱 높입니다.
+3. [torch.backends.cuda.sdp_kernel](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html) 컨텍스트 관리자에서 `enable_math=True`를 설정하여 네이티브 PyTorch C++ 구현된 scaled dot product attention를 활성화하여 추론 속도를 더욱 높입니다.
 
 ```py
 batch_size, seq_length = inputs["input_ids"].shape
