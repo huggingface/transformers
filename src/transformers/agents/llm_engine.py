@@ -66,7 +66,7 @@ llama_role_conversions = {
 
 
 class HfEngine:
-    def __init__(self, model: str = "meta-llama/Meta-Llama-3-8B-Instruct"):
+    def __init__(self, model: str = "meta-llama/Meta-Llama-3.1-8B-Instruct"):
         self.model = model
         self.client = InferenceClient(self.model, timeout=120)
 
