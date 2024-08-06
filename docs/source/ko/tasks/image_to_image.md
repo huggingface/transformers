@@ -78,7 +78,7 @@ model = Swin2SRForImageSuperResolution.from_pretrained("caidas/swin2SR-lightweig
 processor = Swin2SRImageProcessor("caidas/swin2SR-lightweight-x2-64")
 ```
 
-`pipeline` 우리가 직접 수행해야 하는 전처리와 후처리 단계를 추상화하므로, 이미지를 전처리해 보겠습니다. 이미지를 프로세서에 전달한 다음 픽셀 값을 GPU로 이동시키겠습니다. 
+`pipeline` 우리가 직접 수행해야 하는 전처리와 후처리 단계를 추상화하므로, 이미지를 전처리해 보겠습니다. 이미지를 프로세서에 전달한 다음 픽셀값을 GPU로 이동시키겠습니다. 
 
 ```python
 pixel_values = processor(image, return_tensors="pt").pixel_values
@@ -87,7 +87,7 @@ print(pixel_values.shape)
 pixel_values = pixel_values.to(device)
 ```
 
-이제 픽셀 값을 모델에 전달하여 이미지를 추론할 수 있습니다.
+이제 픽셀값을 모델에 전달하여 이미지를 추론할 수 있습니다.
 
 ```python
 import torch
