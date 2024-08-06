@@ -290,7 +290,7 @@ class FlaxDataCollatorForBartDenoisingLM:
     def __post_init__(self):
         if self.tokenizer.mask_token is None or self.tokenizer.eos_token is None:
             raise ValueError(
-                "This tokenizer does not have a mask token or eos token token which is necessary for denoising"
+                "This tokenizer does not have a mask token or eos token which is necessary for denoising"
                 " language modeling. "
             )
 

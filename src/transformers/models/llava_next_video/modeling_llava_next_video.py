@@ -66,12 +66,12 @@ def get_anyres_image_grid_shape(image_size, grid_pinpoints, patch_size):
         tuple: The shape of the image patch grid in the format (width, height).
     """
     if not isinstance(grid_pinpoints, list):
-        raise ValueError("grid_pinpoints should be a list of tuples or lists")
+        raise TypeError("grid_pinpoints should be a list of tuples or lists")
 
     # ! VERY IMPORTANT if image_size is tensor, must convert to into tuple, otherwise it will cause wrong calculate
     if not isinstance(image_size, (list, tuple)):
         if not isinstance(image_size, (torch.Tensor, np.ndarray)):
-            raise ValueError(
+            raise TypeError(
                 f"image_size invalid type: {type(image_size)} not valid, should be either list, tuple, np.ndarray or tensor"
             )
         image_size = image_size.tolist()
@@ -85,7 +85,7 @@ def image_size_to_num_patches(image_size, grid_pinpoints, patch_size: int):
     Calculate the number of patches after the preprocessing for images of any resolution.
 
     Args:
-        image_size (`Union[torch.LongTensor, np.ndarray, Tuple[int, int]):
+        image_size (`torch.LongTensor` or `np.ndarray` or `Tuple[int, int]`):
             The size of the input image in the format (height, width). ?
         grid_pinpoints (`List`):
             A list containing possible resolutions. Each item in the list should be a tuple or list
@@ -97,12 +97,12 @@ def image_size_to_num_patches(image_size, grid_pinpoints, patch_size: int):
         int: the number of patches
     """
     if not isinstance(grid_pinpoints, list):
-        raise ValueError("grid_pinpoints should be a list of tuples or lists")
+        raise TypeError("grid_pinpoints should be a list of tuples or lists")
 
     # ! VERY IMPORTANT if image_size is tensor, must convert to into tuple, otherwise it will cause wrong calculate
     if not isinstance(image_size, (list, tuple)):
         if not isinstance(image_size, (torch.Tensor, np.ndarray)):
-            raise ValueError(f"image_size invalid type {type(image_size)} with value {image_size}")
+            raise TypeError(f"image_size invalid type {type(image_size)} with value {image_size}")
         image_size = image_size.tolist()
 
     best_resolution = select_best_resolution(image_size, grid_pinpoints)
@@ -272,6 +272,7 @@ class LlavaNextVideoPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["LlavaNextVideoVisionAttention"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
+    _supports_cache_class = True
 
     def _init_weights(self, module):
         # important: this ported version of LlavaNextVideo isn't meant for training from scratch - only
@@ -562,8 +563,8 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel):
             _left_padding = torch.any(attention_mask[:, 0] == 0)
             _right_padding = torch.any(attention_mask[:, -1] == 0)
 
-            left_padding = True
-            if batch_size > 1:
+            left_padding = True if not self.training else False
+            if batch_size > 1 and not self.training:
                 if _left_padding and not _right_padding:
                     left_padding = True
                 elif not _left_padding and _right_padding:
@@ -704,7 +705,7 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel):
                 height = width = self.config.vision_config.image_size // self.config.vision_config.patch_size
                 if height * width != base_image_feature.shape[0]:
                     raise ValueError("The number of patches is not consistent with the image size.")
-                num_patch_width, num_patch_height = get_anyres_image_grid_shape(
+                num_patch_height, num_patch_width = get_anyres_image_grid_shape(
                     image_sizes[image_idx],
                     self.config.image_grid_pinpoints,
                     self.config.vision_config.image_size,
@@ -862,17 +863,21 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel):
                     image_newline=self.image_newline,
                 )
                 inputs_embeds = inputs_embeds.to(image_features.dtype)
-                inputs_embeds, attention_mask, position_ids, labels, input_ids = (
-                    self._merge_input_ids_with_image_features(
-                        image_features,
-                        feature_lens,
-                        inputs_embeds,
-                        input_ids,
-                        attention_mask,
-                        position_ids,
-                        labels=labels,
-                        image_token_index=self.config.image_token_index,
-                    )
+                (
+                    inputs_embeds,
+                    attention_mask,
+                    position_ids,
+                    labels,
+                    input_ids,
+                ) = self._merge_input_ids_with_image_features(
+                    image_features,
+                    feature_lens,
+                    inputs_embeds,
+                    input_ids,
+                    attention_mask,
+                    position_ids,
+                    labels=labels,
+                    image_token_index=self.config.image_token_index,
                 )
             # Then merge video tokens if there are any
             if pixel_values_videos is not None and pixel_values_videos.size(0) > 0:
@@ -881,17 +886,21 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel):
                 feature_lens = [feature.size(0) for feature in video_features]
                 video_features = torch.cat(video_features, dim=0)
                 feature_lens = torch.tensor(feature_lens, dtype=torch.long, device=video_features.device)
-                inputs_embeds, attention_mask, position_ids, labels, input_ids = (
-                    self._merge_input_ids_with_image_features(
-                        video_features,
-                        feature_lens,
-                        inputs_embeds,
-                        input_ids,
-                        attention_mask,
-                        position_ids,
-                        labels=labels,
-                        image_token_index=self.config.video_token_index,
-                    )
+                (
+                    inputs_embeds,
+                    attention_mask,
+                    position_ids,
+                    labels,
+                    input_ids,
+                ) = self._merge_input_ids_with_image_features(
+                    video_features,
+                    feature_lens,
+                    inputs_embeds,
+                    input_ids,
+                    attention_mask,
+                    position_ids,
+                    labels=labels,
+                    image_token_index=self.config.video_token_index,
                 )
 
         # pixel_values is not None but is empty ---> text only cases

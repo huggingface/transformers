@@ -225,9 +225,6 @@ class DataTrainingArguments:
             )
         },
     )
-    overwrite_cache: bool = field(
-        default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
-    )
     validation_split_percentage: Optional[int] = field(
         default=5,
         metadata={
