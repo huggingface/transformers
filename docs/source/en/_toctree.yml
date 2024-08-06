@@ -99,6 +99,8 @@
     sections:
     - local: generation_strategies
       title: Customize the generation strategy
+    - local: kv_cache
+      title: Best Practices for Generation with Cache
     title: Generation
   - isExpanded: false
     sections:
