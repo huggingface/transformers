@@ -15,6 +15,9 @@
 
 """Finetuning 🤗 Transformers model for instance segmentation leveraging the Trainer API."""
 
+import os
+os.environ["CUDA_VISIBLE_DEVICES"]="0"
+
 import logging
 import os
 import sys
@@ -34,13 +37,16 @@ from transformers import (
     AutoModelForUniversalSegmentation,
     HfArgumentParser,
     Trainer,
+    OneFormerForUniversalSegmentation,
     TrainingArguments,
+    AutoProcessor,
 )
 from transformers.image_processing_utils import BatchFeature
 from transformers.trainer import EvalPrediction
 from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
+from transformers.models.oneformer import OneFormerProcessor
 
 
 logger = logging.getLogger(__name__)
@@ -109,8 +115,14 @@ def augment_and_transform_batch(
         "class_labels": [],
     }
 
+    if isinstance(image_processor, OneFormerProcessor):
+        batch["text_inputs"] = []
+        batch["task_inputs"] = []
+
     for pil_image, pil_annotation in zip(examples["image"], examples["annotation"]):
         image = np.array(pil_image)
+        # NOTE: in the instance annotation masks,
+        # R(ed) channel encodes category ID, and the G(reen) channel encodes instance ID.
         semantic_and_instance_masks = np.array(pil_annotation)[..., :2]
 
         # Apply augmentations
@@ -120,6 +132,11 @@ def augment_and_transform_batch(
         aug_semantic_and_instance_masks = output["mask"]
         aug_instance_mask = aug_semantic_and_instance_masks[..., 1]
 
+        # NOTE: current image processor limitation
+        # due to the limitation of the current implementation of the image processor,
+        # we need to create a mapping from instance id to semantic id.
+        # and we can only have 255 object instances in the image.
+
         # Create mapping from instance id to semantic id
         unique_semantic_id_instance_id_pairs = np.unique(aug_semantic_and_instance_masks.reshape(-1, 2), axis=0)
         instance_id_to_semantic_id = {
@@ -127,16 +144,28 @@ def augment_and_transform_batch(
         }
 
         # Apply the image processor transformations: resizing, rescaling, normalization
-        model_inputs = image_processor(
-            images=[aug_image],
-            segmentation_maps=[aug_instance_mask],
-            instance_id_to_semantic_id=instance_id_to_semantic_id,
-            return_tensors="pt",
-        )
+        if isinstance(image_processor, OneFormerProcessor):
+            model_inputs = image_processor(
+                images=[aug_image],
+                task_inputs=["panoptic"],
+                segmentation_maps=[aug_instance_mask],
+                instance_id_to_semantic_id=instance_id_to_semantic_id,
+                return_tensors="pt",
+            )
+        else:
+            model_inputs = image_processor(
+                images=[aug_image],
+                segmentation_maps=[aug_instance_mask],
+                instance_id_to_semantic_id=instance_id_to_semantic_id,
+                return_tensors="pt",
+            )
 
         batch["pixel_values"].append(model_inputs.pixel_values[0])
         batch["mask_labels"].append(model_inputs.mask_labels[0])
         batch["class_labels"].append(model_inputs.class_labels[0])
+        if "text_inputs" in model_inputs:
+            batch["text_inputs"].append(model_inputs.text_inputs[0])
+            batch["task_inputs"].append(model_inputs.task_inputs[0])
 
     return batch
 
@@ -146,8 +175,16 @@ def collate_fn(examples):
     batch["pixel_values"] = torch.stack([example["pixel_values"] for example in examples])
     batch["class_labels"] = [example["class_labels"] for example in examples]
     batch["mask_labels"] = [example["mask_labels"] for example in examples]
+
     if "pixel_mask" in examples[0]:
         batch["pixel_mask"] = torch.stack([example["pixel_mask"] for example in examples])
+
+    if "text_inputs" in examples[0]:
+        batch["text_inputs"] = torch.stack([example["text_inputs"] for example in examples])
+
+    if "task_inputs" in examples[0]:
+        batch["task_inputs"] = torch.stack([example["task_inputs"] for example in examples])
+
     return batch
 
 
@@ -398,16 +435,30 @@ def main():
         id2label=id2label,
         ignore_mismatched_sizes=True,
         token=args.token,
+        # NOTE: you need to set is_training = True in order to randomly initialize a text encoder
+        is_training=True,
     )
 
-    image_processor = AutoImageProcessor.from_pretrained(
-        args.model_name_or_path,
-        do_resize=True,
-        size={"height": args.image_height, "width": args.image_width},
-        do_reduce_labels=args.do_reduce_labels,
-        reduce_labels=args.do_reduce_labels,  # TODO: remove when mask2former support `do_reduce_labels`
-        token=args.token,
-    )
+    if isinstance(model, OneFormerForUniversalSegmentation):
+        image_processor = AutoProcessor.from_pretrained(
+            args.model_name_or_path,
+            do_resize=True,
+            size={"height": args.image_height, "width": args.image_width},
+            token=args.token,
+            # NOTE: you need to set is_training = True in order to randomly initialize a text encoder
+            is_training=True,
+        )
+        image_processor.image_processor.num_text = model.config.num_queries - model.config.text_encoder_n_ctx
+    else:
+        image_processor = AutoImageProcessor.from_pretrained(
+            args.model_name_or_path,
+            do_resize=True,
+            size={"height": args.image_height, "width": args.image_width},
+            do_reduce_labels=args.do_reduce_labels,
+            reduce_labels=args.do_reduce_labels,  # TODO: remove when mask2former support `do_reduce_labels`
+            token=args.token,
+            is_training=True,
+        )
 
     # ------------------------------------------------------------------------------------------------
     # Define image augmentations and dataset transforms

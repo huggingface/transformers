@@ -3236,6 +3236,8 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
             )
             loss = self.get_loss(loss_dict)
 
+        loss = loss.squeeze()
+
         output_auxiliary_logits = (
             self.config.output_auxiliary_logits if output_auxiliary_logits is None else output_auxiliary_logits
         )
