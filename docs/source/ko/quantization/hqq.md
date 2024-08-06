@@ -19,8 +19,7 @@ rendered properly in your Markdown viewer.
 
 Half-Quadratic Quantization (HQQ)는 빠르고 견고한 최적화를 통해 실시간으로 양자화를 구현합니다. 이 방법은 교정 데이터가 필요 없으며, 어떤 모델이든 양자화를 적용할 수 있습니다.  
 자세한 내용은 <a href="https://github.com/mobiusml/hqq/">공식 패키지</a>를 참조하세요.
-
-설치를 위해, 최신 버전과 그에 해당하는 CUDA 커널을 빌드하기 위해서 아래와 같은 방법을 사용하는 것을 권장합니다:
+최신 버전을 설치하고 CUDA 커널을 빌드하려면 다음 방법을 사용하는 것을 추천드립니다.
 ```
 pip install hqq
 ```
