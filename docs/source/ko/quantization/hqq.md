@@ -48,7 +48,7 @@ quant_config  = HqqConfig(dynamic_config={
 })
 ```
 
-Mixture-of-Experts (MoEs) 모델을 양자화할 때 두 번째 방법은 특히 흥미로운데, 각각의 Expert가 양자화 설정의 영향을 덜 받기 때문입니다.
+두 번째 방법은 Mixture-of-Experts (MoEs)를 양자화하는 데 유용합니다. 왜냐하면 experts는 낮은 양자화 설정의 영향을 덜 받기 때문입니다.
 
 
 그 후, 다음과 같이 모델을 양자화합니다:
