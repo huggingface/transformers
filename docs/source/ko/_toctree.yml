@@ -100,8 +100,8 @@
     title: 생성
   - isExpanded: false
     sections:
-    - local: in_translation
-      title: (번역중) Image tasks with IDEFICS
+    - local: tasks/idefics
+      title: IDEFICS를 이용한 이미지 작업
     - local: in_translation
       title: (번역중) LLM prompting guide
     title: (번역중) 프롬프팅
