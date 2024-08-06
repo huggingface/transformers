@@ -1042,6 +1042,9 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
 
         image = prepare_img()
         prompt = "Question: which city is this? Answer:"
+
+        # Make sure we will go teh legacy path by setting these args to None
+        processor.num_query_tokens = None
         inputs = processor(images=image, text=prompt, return_tensors="pt").to(torch_device, dtype=torch.float16)
 
         predictions = model.generate(**inputs, do_sample=False, max_new_tokens=15)
