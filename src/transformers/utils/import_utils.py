@@ -692,7 +692,7 @@ def is_torchdynamo_compiling():
         import torch
 
         return torch.compiler.is_compiling()
-    except AttributeError:
+    except Exception:
         try:
             import torch._dynamo as dynamo  # noqa: F401
 
