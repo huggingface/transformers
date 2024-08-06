@@ -159,6 +159,7 @@ from . import (
     musicgen,
     musicgen_melody,
     mvp,
+    nemotron,
     nllb,
     nllb_moe,
     nougat,

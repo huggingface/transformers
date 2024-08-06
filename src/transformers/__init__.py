@@ -592,6 +592,7 @@ _import_structure = {
         "MusicgenMelodyDecoderConfig",
     ],
     "models.mvp": ["MvpConfig", "MvpTokenizer"],
+    "models.nemotron": ["NemotronConfig"],
     "models.nllb": [],
     "models.nllb_moe": ["NllbMoeConfig"],
     "models.nougat": ["NougatProcessor"],
@@ -2740,6 +2741,16 @@ else:
             "MvpForSequenceClassification",
             "MvpModel",
             "MvpPreTrainedModel",
+        ]
+    )
+    _import_structure["models.nemotron"].extend(
+        [
+            "NemotronForCausalLM",
+            "NemotronForQuestionAnswering",
+            "NemotronForSequenceClassification",
+            "NemotronForTokenClassification",
+            "NemotronModel",
+            "NemotronPreTrainedModel",
         ]
     )
     _import_structure["models.nllb_moe"].extend(
@@ -5286,6 +5297,7 @@ if TYPE_CHECKING:
         MusicgenMelodyDecoderConfig,
     )
     from .models.mvp import MvpConfig, MvpTokenizer
+    from .models.nemotron import NemotronConfig
     from .models.nllb_moe import NllbMoeConfig
     from .models.nougat import NougatProcessor
     from .models.nystromformer import (
@@ -7186,6 +7198,14 @@ if TYPE_CHECKING:
             MvpForSequenceClassification,
             MvpModel,
             MvpPreTrainedModel,
+        )
+        from .models.nemotron import (
+            NemotronForCausalLM,
+            NemotronForQuestionAnswering,
+            NemotronForSequenceClassification,
+            NemotronForTokenClassification,
+            NemotronModel,
+            NemotronPreTrainedModel,
         )
         from .models.nllb_moe import (
             NllbMoeForConditionalGeneration,
