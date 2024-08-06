@@ -18,9 +18,9 @@ rendered properly in your Markdown viewer.
 
 ## 소개[[introduction]]
 
-LLM의 점점 더 흔해지는 사용 사례는 채팅입니다. 채팅 맥락에서는 표준 언어 모델과 같이 단일 문자열을 계속하는 대신, 모델이 "user"나 "assistant"와 같은 역할과 메시지 텍스트를 포함한 하나 이상의 메시지로 구성된 대화를 계속합니다.
+요즘 LLM의 가장 흔한 활용 사례 중 하나는 채팅입니다. 채팅은 일반적인 언어 모델처럼 단일 문자열을 이어가는 대신 대화를 이어갑니다. 이 대화에는 "사용자"나 "도우미"와 같은 역할과 메시지 텍스트가 포함됩니다.
 
-토큰화와 마찬가지로, 다양한 모델은 채팅에 대해 매우 다른 입력 형식을 기대합니다. 이것이 우리가 채팅 템플릿을 기능으로 추가한 이유입니다. 채팅 템플릿은 토크나이저의 일부입니다. 채팅 템플릿은 대화 목록을 모델이 기대하는 형식인 '단일 토큰화가 가능한 문자열'로 변환하는 방법을 지정합니다.
+토큰화와 마찬가지로, 다양한 모델은 채팅에 대해 매우 다른 입력 형식을 기대합니다. 이것이 우리가 **채팅 템플릿**을 기능으로 추가한 이유입니다. 채팅 템플릿은 토크나이저의 일부입니다. 채팅 템플릿은 대화 목록을 모델이 기대하는 형식인 '단일 토큰화가 가능한 문자열'로 변환하는 방법을 지정합니다.
 
 `BlenderBot` 모델을 사용한 간단한 예제를 통해 이를 구체적으로 살펴보겠습니다. BlenderBot은 기본적으로 매우 간단한 템플릿을 가지고 있으며, 주로 대화 라운드 사이에 공백을 추가합니다:
 
@@ -38,7 +38,7 @@ LLM의 점점 더 흔해지는 사용 사례는 채팅입니다. 채팅 맥락�
 " Hello, how are you?  I'm doing great. How can I help you today?   I'd like to show off how chat templating works!</s>"
 ```
 
-전체 채팅이 하나의 문자열로 압축된 것을 확인할 수 있습니다. 기본 설정인 `tokenize=True`를 사용하면, 그 문자열도 토큰화됩니다. 더 복잡한 템플릿을 사용하기 위해 필요한 `mistralai/Mistral-7B-Instruct-v0.1` 모델을 사용해 보겠습니다.
+전체 채팅이 하나의 문자열로 압축된 것을 확인할 수 있습니다. 기본 설정인 `tokenize=True`를 사용하면, 그 문자열도 토큰화됩니다. 더 복잡한 템플릿을 사용하기 위해 `mistralai/Mistral-7B-Instruct-v0.1` 모델을 사용해 보겠습니다.
 
 ```python
 >>> from transformers import AutoTokenizer
@@ -111,7 +111,7 @@ Matey, I'm afraid I must inform ye that humans cannot eat helicopters. Helicopte
 
 ## 채팅을 위한 자동화된 파이프라인이 있나요?[[is-there-an-automated-pipeline-for-chat]]
 
-네, 있습니다! 저희의 텍스트 생성 파이프라인은 채팅 입력을 지원하여 채팅 모델을 쉽게 사용할 수 있습니다. 이전에는 "ConversationalPipeline" 클래스를 사용했지만, 이제는 이 기능이 [`TextGenerationPipeline`]에 통합되었습니다. 이번에는 파이프라인을 사용하여 `Zephyr` 예제를 다시 시도해 보겠습니다:
+네, 있습니다! 우리의 텍스트 생성 파이프라인은 채팅 입력을 지원하여 채팅 모델을 쉽게 사용할 수 있습니다. 이전에는 "ConversationalPipeline" 클래스를 사용했지만, 이제는 이 기능이 [`TextGenerationPipeline`]에 통합되었습니다. 이번에는 파이프라인을 사용하여 `Zephyr` 예제를 다시 시도해 보겠습니다:
 
 ```python
 from transformers import pipeline
@@ -131,7 +131,7 @@ print(pipe(messages, max_new_tokens=128)[0]['generated_text'][-1])  # 어시스�
 {'role': 'assistant', 'content': "Matey, I'm afraid I must inform ye that humans cannot eat helicopters. Helicopters are not food, they are flying machines. Food is meant to be eaten, like a hearty plate o' grog, a savory bowl o' stew, or a delicious loaf o' bread. But helicopters, they be for transportin' and movin' around, not for eatin'. So, I'd say none, me hearties. None at all."}
 ```
 
-파이프라인은 토큰화와 `apply_chat_template` 호출의 모든 세부 사항을 처리합니다. 모델이 채팅 템플릿을 가지면, 파이프라인을 초기화하고 메시지 목록을 전달하기만 하면 됩니다!
+파이프라인은 토큰화와 `apply_chat_template` 호출 의 세부 사항을 모두 처리해주기 때문에, 모델에 채팅 템플릿이 있으면 파이프라인을 초기화하고 메시지 목록을 전달하기만 하면 됩니다!
 
 
 ## "생성 프롬프트"란 무엇인가요?[[what-are-generation-prompts]]
@@ -159,7 +159,7 @@ Can I ask a question?<|im_end|>
 """
 ```
 
-생성 프롬프트가 있는 경우는 다음과 같습니다:
+생성 프롬프트가 **있는** 경우는 다음과 같습니다:
 
 ```python
 tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
@@ -210,7 +210,7 @@ Which is bigger, the moon or the sun?</s>
 The sun.</s>
 ```
 
-여기서부터는 표준 언어 모델링 작업과 같이 `formatted_chat` 열을 사용하여 훈련을 계속하면 됩니다.
+여기서부터는 일반적인 언어 모델 작업과 같이 `formatted_chat` 열을 사용하여 훈련을 계속하면 됩니다.
 
 <Tip>
 `apply_chat_template(tokenize=False)`로 텍스트를 형식화한 다음 별도의 단계에서 토큰화하는 경우, `add_special_tokens=False` 인수를 설정해야 합니다. `apply_chat_template(tokenize=True)`를 사용하는 경우에는 이 문제를 걱정할 필요가 없습니다!
@@ -231,16 +231,16 @@ The sun.</s>
 import datetime
 
 def current_time():
-    """Get the current local time as a string."""
+    """현재 현지 시간을 문자열로 가져옵니다."""
     return str(datetime.now())
 
 def multiply(a: float, b: float):
     """
-    A function that multiplies two numbers
+    두 숫자를 곱하는 함수
     
-    Args:
-        a: The first number to multiply
-        b: The second number to multiply
+    인수:
+        a: 곱할 첫 번째 숫자
+        b: 곱할 두 번째 숫자
     """
     return a * b
 
@@ -291,26 +291,26 @@ model = AutoModelForCausalLM.from_pretrained(checkpoint, torch_dtype=torch.bfloa
 ```python
 def get_current_temperature(location: str, unit: str) -> float:
     """
-    Get the current temperature at a location.
+    특정 위치의 현재 온도를 가져옵니다.
     
-    Args:
-        location: The location to get the temperature for, in the format "City, Country"
-        unit: The unit to return the temperature in. (choices: ["celsius", "fahrenheit"])
-    Returns:
-        The current temperature at the specified location in the specified units, as a float.
+    인수:
+        위치: 온도를 가져올 위치, "도시, 국가" 형식
+        단위: 온도 단위 (선택지: ["celsius", "fahrenheit"])
+    반환값:
+        지정된 위치의 현재 온도를 지정된 단위로 반환, float 형식.
     """
-    return 22.  # 실제 함수는 아마 진짜로 온도를 가져와야 할 겁니다!
+    return 22.  # 이 함수는 실제로 온도를 가져와야 할 것입니다!
 
 def get_current_wind_speed(location: str) -> float:
     """
-    Get the current wind speed in km/h at a given location.
+    주어진 위치의 현재 풍속을 km/h 단위로 가져옵니다.
     
-    Args:
-        location: The location to get the temperature for, in the format "City, Country"
-    Returns:
-        The current wind speed at the given location in km/h, as a float.
+    인수:
+        위치(location): 풍속을 가져올 위치, "도시, 국가" 형식
+    반환값:
+        주어진 위치의 현재 풍속을 km/h 단위로 반환, float 형식.
     """
-    return 6.  # 실제 함수는 아마 진짜로 풍속을 가져와야 할 겁니다!
+    return 6.  # 이 함수는 실제로 풍속을 가져와야 할 것입니다!
 
 tools = [get_current_temperature, get_current_wind_speed]
 ```
@@ -352,7 +352,7 @@ messages.append({"role": "assistant", "tool_calls": [{"id": tool_call_id, "type"
 ```
 
 
-이제 도구 호출을 대화에 추가했으므로, 함수를 호출하고 결과를 대화에 추가할 수 있습니다. 이 예제에서는 항상 22.0을 반환하는 더미 함수를 사용하고 있으므로, 결과를 직접 추가할 수 있습니다. 다시 한 번, `tool_call_id`는 도구 호출에 사용했던 ID와 일치해야 합니다.
+이제 도구 호출을 대화에 추가했으므로, 함수를 호출하고 결과를 대화에 추가할 수 있습니다. 이 예제에서는 항상 22.0을 반환하는 더미 함수를 사용하고 있으므로, 결과를 직접 추가하면 됩니다. 다시 한 번, `tool_call_id`는 도구 호출에 사용했던 ID와 일치해야 합니다.
 
 ```python
 messages.append({"role": "tool", "tool_call_id": tool_call_id, "name": "get_current_temperature", "content": "22.0"})
@@ -381,20 +381,20 @@ The current temperature in Paris, France is 22.0 ° Celsius.<|im_end|>
 
 ### 도구 스키마 이해하기[[understanding-tool-schemas]]
 
-`apply_chat_template`의 `tools` 인수에 전달하는 각 함수는 [JSON 스키마](https://json-schema.org/learn/getting-started-step-by-step)로 변환됩니다. 이러한 스키마는 모델 채팅 템플릿에 전달됩니다. 즉, 도구 사용 모델은 함수 자체를 직접 보지 않으며, 함수 내부의 실제 코드를 보지 않습니다. 도구 사용 모델이 관심을 가지는 것은 함수 정의와 인수입니다. 함수가 무엇을 하고 어떻게 사용하는지에 관심이 있을 뿐, 어떻게 작동하는지는 중요하지 않습니다! 모델의 출력을 읽고 모델이 도구 사용을 요청했는지 감지하여, 인수를 도구 함수에 전달하고 채팅에서 응답을 반환하는 것은 여러분의 몫입니다.
+`apply_chat_template`의 `tools` 인수에 전달하는 각 함수는 [JSON 스키마](https://json-schema.org/learn/getting-started-step-by-step)로 변환됩니다. 이러한 스키마는 모델 채팅 템플릿에 전달됩니다. 즉, 도구 사용 모델은 함수 자체를 직접 보지 않으며, 함수 내부의 실제 코드를 보지 않습니다. 도구 사용 모델이 관심을 가지는 것은 함수 **정의**와 **인수**입니다. 함수가 무엇을 하고 어떻게 사용하는지에 관심이 있을 뿐, 어떻게 작동하는지는 중요하지 않습니다! 모델의 출력을 읽고 모델이 도구 사용을 요청했는지 감지하여, 인수를 도구 함수에 전달하고 채팅에서 응답을 반환하는 것은 여러분의 몫입니다.
 
-위의 규격을 따르는 한, 템플릿에 전달할 JSON 스키마를 생성하는 것은 자동으로 이루어지며 눈에 띄지 않아야 합니다. 그러나 문제가 발생하거나 변환을 더 제어하고 싶다면 수동으로 변환을 처리할 수 있습니다. 다음은 수동 스키마 변환 예제입니다.
+위의 규격을 따른다면, 템플릿에 전달할 JSON 스키마 생성을 자동화하고 보이지 않게 처리하는 것이 좋습니다. 그러나 문제가 발생하거나 변환을 더 제어하고 싶다면 수동으로 변환을 처리할 수 있습니다. 다음은 수동 스키마 변환 예제입니다.
 
 ```python
 from transformers.utils import get_json_schema
 
 def multiply(a: float, b: float):
     """
-    A function that multiplies two numbers
+    두 숫자를 곱하는 함수
     
-    Args:
-        a: The first number to multiply
-        b: The second number to multiply
+    인수:
+        a: 곱할 첫 번째 숫자
+        b: 곱할 두 번째 숫자
     """
     return a * b
 
@@ -527,7 +527,7 @@ model_input = tokenizer.apply_chat_template(
 {{- eos_token }}
 ```
 
-만약 Jinja 템플릿을 처음 본다면, 이것은 [Jinja 템플릿](https://jinja.palletsprojects.com/en/3.1.x/templates/)입니다.
+만약 이와 같은 형식을 처음 본다면, 이것은 [Jinja 템플릿](https://jinja.palletsprojects.com/en/3.1.x/templates/)입니다.
 Jinja는 텍스트를 생성하는 간단한 코드를 작성할 수 있는 템플릿 언어입니다. 많은 면에서 코드와 구문이 파이썬과 유사합니다. 순수 파이썬에서는 이 템플릿이 다음과 같이 보일 것입니다:
 
 
@@ -541,7 +541,7 @@ for idx, message in enumerate(messages):
 print(eos_token)
 ```
 
-사실상, 이 템플릿은 세 가지 일을 합니다:
+이 템플릿은 세 가지 일을 합니다:
 1. 각 메시지에 대해, 메시지가 사용자 메시지인 경우 공백을 추가하고, 그렇지 않으면 아무것도 출력하지 않습니다.
 2. 메시지 내용을 추가합니다.
 3. 메시지가 마지막 메시지가 아닌 경우 두 개의 공백을 추가합니다. 마지막 메시지 후에는 EOS 토큰을 출력합니다.
@@ -560,7 +560,7 @@ print(eos_token)
 {%- endfor %}
 ```
 
-이 템플릿이 하는 일을 이해하려면 잠시 시간을 가지고 살펴보면, 각 메시지의 "role"에 따라 특정 토큰을 추가하는 것을 볼 수 있습니다. 이는 누가 메시지를 보냈는지 모델에게 명확하게 알려줍니다. 사용자, 어시스턴트 및 시스템 메시지는 각각 고유한 토큰으로 래핑되어 모델에게 명확하게 구분됩니다.
+이 템플릿을 잠시 살펴보면 무엇을 하는지 이해할 수 있습니다. 먼저, 각 메시지의 "role"에 따라 특정 토큰을 추가하여 누가 메시지를 보냈는지 모델에게 명확하게 알려줍니다. 또한 사용자, 도우미 및 시스템 메시지는 각각 고유한 토큰으로 래핑되어 모델이 명확하게 구분할 수 있습니다.
 
 ## 고급: 채팅 템플릿 추가 및 편집[[advanced-adding-and-editing-chat-templates]]
 
@@ -589,7 +589,7 @@ tokenizer.chat_template = template  # 새 템플릿 설정
 tokenizer.push_to_hub("model_name")  # 새 템플릿을 허브에 업로드!
 ```
 
-채팅 템플릿을 사용하는 [`~PreTrainedTokenizer.apply_chat_template`] 메서드는 [`TextGenerationPipeline`] 클래스에서 호출되므로, 올바른 채팅 템플릿을 설정하면 모델이 자동으로 [`TextGenerationPipeline`]과 호환됩니다.
+채팅 템플릿을 사용하는 [`~PreTrainedTokenizer.apply_chat_template`] 메소드는 [`TextGenerationPipeline`] 클래스에서 호출되므로, 올바른 채팅 템플릿을 설정하면 모델이 자동으로 [`TextGenerationPipeline`]과 호환됩니다.
 
 <Tip>
 모델을 채팅 용도로 미세 조정하는 경우, 채팅 템플릿을 설정하는 것 외에도 새 채팅 제어 토큰을 토크나이저에 특별 토큰으로 추가하는 것이 좋습니다. 특별 토큰은 절대로 분할되지 않으므로, 제어 토큰이 여러 조각으로 토큰화되는 것을 방지합니다. 또한, 템플릿에서 어시스턴트 생성의 끝을 나타내는 토큰으로 토크나이저의 `eos_token` 속성을 설정해야 합니다. 이렇게 하면 텍스트 생성 도구가 텍스트 생성을 언제 중지해야 할지 정확히 알 수 있습니다.
@@ -598,15 +598,15 @@ tokenizer.push_to_hub("model_name")  # 새 템플릿을 허브에 업로드!
 
 ### 왜 일부 모델은 여러 개의 템플릿을 가지고 있나요?[[why-do-some-models-have-multiple-templates]]
 
-일부 모델은 다른 사용 사례에 대해 다른 템플릿을 사용합니다. 예를 들어, 일반 채팅을 위한 템플릿과 도구 사용 또는 검색 증강 생성에 대한 템플릿을 별도로 사용할 수 있습니다. 이러한 경우 `tokenizer.chat_template`는 사전(dictionary)입니다. 이것은 약간의 혼란을 초래할 수 있으며, 가능한 한 모든 사용 사례에 대해 단일 템플릿을 사용하는 것을 권장합니다. `if tools is defined`와 같은 Jinja 문장과 `{% macro %}` 정의를 사용하여 여러 코드 경로를 단일 템플릿에 쉽게 래핑할 수 있습니다.
+일부 모델은 다른 사용 사례에 대해 다른 템플릿을 사용합니다. 예를 들어, 일반 채팅을 위한 템플릿과 도구 사용 또는 검색 증강 생성에 대한 템플릿을 별도로 사용할 수 있습니다. 이러한 경우 `tokenizer.chat_template`는 딕셔너리입니다. 이것은 약간의 혼란을 초래할 수 있으며, 가능한 한 모든 사용 사례에 대해 단일 템플릿을 사용하는 것을 권장합니다. `if tools is defined`와 같은 Jinja 문장과 `{% macro %}` 정의를 사용하여 여러 코드 경로를 단일 템플릿에 쉽게 래핑할 수 있습니다.
 
-토크나이저에 여러 개의 템플릿이 있는 경우, `tokenizer.chat_template`는 템플릿 이름이 키인 사전입니다. `apply_chat_template` 메서드는 특정 템플릿 이름에 대한 특별한 처리를 합니다: 일반적으로 `default`라는 템플릿을 찾고, 찾을 수 없으면 오류를 발생시킵니다. 그러나 사용자가 `tools` 인수를 전달할 때 `tool_use`라는 템플릿이 존재하면 대신 그것을 사용합니다. 다른 이름의 템플릿에 접근하려면 `apply_chat_template()`의 `chat_template` 인수에 원하는 템플릿 이름을 전달하면 됩니다.
+토크나이저에 여러 개의 템플릿이 있는 경우, `tokenizer.chat_template`는 템플릿 이름이 키인 `딕셔너리`입니다. `apply_chat_template` 메소드는 특정 템플릿 이름에 대한 특별한 처리를 합니다: 일반적으로 `default`라는 템플릿을 찾고, 찾을 수 없으면 오류를 발생시킵니다. 그러나 사용자가 `tools` 인수를 전달할 때 `tool_use`라는 템플릿이 존재하면 대신 그것을 사용합니다. 다른 이름의 템플릿에 접근하려면 `apply_chat_template()`의 `chat_template` 인수에 원하는 템플릿 이름을 전달하면 됩니다.
 
 사용자에게 약간의 혼란을 줄 수 있으므로, 템플릿을 직접 작성하는 경우 가능한 한 단일 템플릿에 모든 것을 넣는 것을 권장합니다!
 
 ### "기본" 템플릿이란 무엇인가요?[[what-are-default-templates]]
 
-채팅 템플릿 도입 이전에는 채팅 처리가 모델 클래스 수준에서 하드코딩되었습니다. 하위 호환성을 유지하기 위해 클래스별로 기본 템플릿을 설정하여 이 처리를 유지했습니다. 모델에 채팅 템플릿이 설정되지 않은 경우, 해당 모델 클래스에 기본 템플릿이 있으면 `TextGenerationPipeline` 클래스와 `apply_chat_template` 메서드는 클래스 템플릿을 대신 사용합니다. 토크나이저의 기본 템플릿을 확인하려면 `tokenizer.default_chat_template` 속성을 확인할 수 있습니다.
+채팅 템플릿 도입 이전에는 채팅 처리가 모델 클래스 수준에서 하드코딩되었습니다. 하위 호환성을 유지하기 위해 클래스별로 기본 템플릿을 설정하여 이 처리를 유지했습니다. 모델에 채팅 템플릿이 설정되지 않은 경우, 해당 모델 클래스에 기본 템플릿이 있으면 `TextGenerationPipeline` 클래스와 `apply_chat_template` 메소드는 클래스 템플릿을 대신 사용합니다. 토크나이저의 기본 템플릿을 확인하려면 `tokenizer.default_chat_template` 속성을 확인할 수 있습니다.
 
 이 작업은 기존 워크플로를 깨뜨리지 않기 위한 하위 호환성 유지 목적입니다. 클래스 템플릿이 모델에 적합하더라도, `chat_template` 속성을 명시적으로 설정하여 기본 템플릿을 재정의하는 것을 강력히 권장합니다. 이를 통해 사용자는 모델이 채팅을 위해 올바르게 구성되었음을 명확히 알 수 있기 때문입니다. 
 
@@ -616,7 +616,7 @@ tokenizer.push_to_hub("model_name")  # 새 템플릿을 허브에 업로드!
 
 이미 채팅용으로 훈련된 모델에 템플릿을 설정할 때는 템플릿이 훈련 중 모델이 본 메시지 형식과 정확히 일치하도록 해야 합니다. 그렇지 않으면 성능 저하를 경험할 가능성이 큽니다. 이는 모델을 추가로 훈련할 때도 마찬가지입니다. 채팅 토큰을 일정하게 유지하는 것이 최상의 성능을 얻는 방법입니다. 이는 토큰화와 매우 유사합니다. 훈련 중에 사용된 토큰화를 정확히 일치시킬 때 추론이나 미세 조정에서 최고의 성능을 얻을 수 있습니다.
 
-처음부터 모델을 훈련시키거나 채팅용으로 기본 언어 모델을 미세 조정하는 경우, 적절한 템플릿을 선택할 수 있는 많은 자유가 있습니다. LLM은 다양한 입력 형식을 처리할 만큼 충분히 똑똑합니다. 인기 있는 선택 중 하나는 `ChatML` 형식이며, 이는 많은 사용 사례에 유연하게 사용할 수 있는 좋은 선택입니다. 다음과 같습니다:
+반면에 처음부터 모델을 훈련시키거나 채팅용으로 기본 언어 모델을 미세 조정하는 경우, 적절한 템플릿을 선택할 수 있는 많은 자유가 있습니다. LLM은 다양한 입력 형식을 처리할 만큼 충분히 똑똑합니다. 인기 있는 선택 중 하나는 `ChatML` 형식이며, 이는 많은 사용 사례에 유연하게 사용할 수 있는 좋은 선택입니다. 다음과 같습니다:
 
 ```
 {%- for message in messages %}
@@ -624,7 +624,7 @@ tokenizer.push_to_hub("model_name")  # 새 템플릿을 허브에 업로드!
 {%- endfor %}
 ```
 
-이 템플릿이 마음에 든다면, 코드에 바로 복사하여 사용할 수 있는 한 줄 버전을 제공하겠습니다. 이 한 줄 버전은 [생성 프롬프트](#what-are-generation-prompts)에 대한 편리한 지원도 포함하고 있지만, BOS나 EOS 토큰을 추가하지 않습니다! 모델이 이를 기대하는 경우, `apply_chat_template`에 의해 자동으로 추가되지 않습니다. 즉, 텍스트는 `add_special_tokens=False`에 의해 토큰화됩니다. 이는 템플릿과 `add_special_tokens` 논리 간의 잠재적인 충돌을 피하기 위함입니다. 모델이 특별 토큰을 기대하는 경우, 템플릿에 추가해야 합니다!
+이 템플릿이 마음에 든다면, 코드에 바로 복사하여 사용할 수 있는 한 줄 버전을 제공하겠습니다. 이 한 줄 버전은 [생성 프롬프트](#what-are-generation-prompts)에 대한 편리한 지원도 포함하고 있지만, BOS나 EOS 토큰을 추가하지 않는다는 점에 유의하세요! 모델이 해당 토큰을 기대하더라도, `apply_chat_template`에 의해 자동으로 추가되지 않습니다. 즉, 텍스트는 `add_special_tokens=False`에 의해 토큰화됩니다. 이는 템플릿과 `add_special_tokens` 논리 간의 잠재적인 충돌을 피하기 위함입니다. 모델이 특별 토큰을 기대하는 경우, 템플릿에 직접 추가해야 합니다!
 
 
 ```python
@@ -673,7 +673,7 @@ Jinja에 익숙하지 않은 경우, 채팅 템플릿을 작성하는 가장 쉬
 {%- endfor %}
 ```
 
-이렇게 하지 말고:
+아래와 같이 작성하지 마세요:
 
 ```
 {% for message in messages %}
@@ -719,10 +719,10 @@ Jinja에서 조건문은 다음과 같습니다:
 
 ### 비파이썬 Jinja와의 호환성[[compatibility-with-non-python-jinja]]
 
-Jinja의 여러 구현은 다양한 언어로 제공됩니다. 일반적으로 동일한 구문을 사용하지만, 주요 차이점은 파이썬에서 템플릿을 작성할 때 파이썬 메서드를 사용할 수 있다는 점입니다. 예를 들어, 문자열에 `.lower()`를 사용하거나 딕셔너리에 `.items()`를 사용하는 것입니다. 이는 비파이썬 Jinja 구현에서 템플릿을 사용하려고 할 때 문제가 발생할 수 있습니다. 특히 JS와 Rust가 인기 있는 배포 환경에서는 비파이썬 구현이 흔합니다.
+Jinja의 여러 구현은 다양한 언어로 제공됩니다. 일반적으로 동일한 구문을 사용하지만, 주요 차이점은 파이썬에서 템플릿을 작성할 때 파이썬 메소드를 사용할 수 있다는 점입니다. 예를 들어, 문자열에 `.lower()`를 사용하거나 딕셔너리에 `.items()`를 사용하는 것입니다. 이는 비파이썬 Jinja 구현에서 템플릿을 사용하려고 할 때 문제가 발생할 수 있습니다. 특히 JS와 Rust가 인기 있는 배포 환경에서는 비파이썬 구현이 흔합니다.
 
 하지만 걱정하지 마세요! 모든 Jinja 구현에서 호환성을 보장하기 위해 템플릿을 쉽게 변경할 수 있는 몇 가지 방법이 있습니다:
 
-- 파이썬 메서드를 Jinja 필터로 대체하세요. 일반적으로 같은 이름을 가지며, 예를 들어 `string.lower()`는 `string|lower`로, `dict.items()`는 `dict|items`로 대체할 수 있습니다. 주목할 만한 변경 사항은 `string.strip()`이 `string|trim`으로 바뀌는 것입니다. 더 자세한 내용은 Jinja 문서의 [내장 필터 목록](https://jinja.palletsprojects.com/en/3.1.x/templates/#builtin-filters)을 참조하세요.
+- 파이썬 메소드를 Jinja 필터로 대체하세요. 일반적으로 같은 이름을 가지며, 예를 들어 `string.lower()`는 `string|lower`로, `dict.items()`는 `dict|items`로 대체할 수 있습니다. 주목할 만한 변경 사항은 `string.strip()`이 `string|trim`으로 바뀌는 것입니다. 더 자세한 내용은 Jinja 문서의 [내장 필터 목록](https://jinja.palletsprojects.com/en/3.1.x/templates/#builtin-filters)을 참조하세요.
 - 파이썬에 특화된 `True`, `False`, `None`을 각각 `true`, `false`, `none`으로 대체하세요.
 - 딕셔너리나 리스트를 직접 렌더링할 때 다른 구현에서는 결과가 다를 수 있습니다(예: 문자열 항목이 단일 따옴표에서 이중 따옴표로 변경될 수 있습니다). `tojson` 필터를 추가하면 일관성을 유지하는 데 도움이 됩니다.
