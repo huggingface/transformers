@@ -47,18 +47,8 @@ class LlavaNextVideoConfig(PretrainedConfig):
             The config object or dictionary of the text backbone.
         ignore_index (`int`, *optional*, defaults to -100):
             The ignore index for the loss function.
-        video_token_index (`int`, *optional*, defaults to 32000):
-            The video token index to encode the image prompt.
         image_token_index (`int`, *optional*, defaults to 32001):
            The image token index to encode the image prompt.
-        spatial_pool_mode (`str`, *optional*, defaults to `"average"`):
-            Pooling mode to use for videos. Can be "average", "max" or "conv".
-        spatial_pool_stride (`int`, *optional*, defaults to 2):
-            Stride used in the pooling layer for videos.
-        image_seq_length (`int`, *optional*, defaults to 576):
-            Sequence length of one image embedding.
-        video_seq_length (`int`, *optional*, defaults to 288):
-            Sequence length of one video embedding.
         projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
             The activation function used by the multimodal projector.
         vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
@@ -72,6 +62,16 @@ class LlavaNextVideoConfig(PretrainedConfig):
             of the form `(height, width)`.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether the model's input and output word embeddings should be tied.
+        video_token_index (`int`, *optional*, defaults to 32000):
+            The video token index to encode the image prompt.
+        spatial_pool_mode (`str`, *optional*, defaults to `"average"`):
+            Pooling mode to use for videos. Can be "average", "max" or "conv".
+        spatial_pool_stride (`int`, *optional*, defaults to 2):
+            Stride used in the pooling layer for videos.
+        image_seq_length (`int`, *optional*, defaults to 576):
+            Sequence length of one image embedding.
+        video_seq_length (`int`, *optional*, defaults to 288):
+            Sequence length of one video embedding.
 
     Example:
 
