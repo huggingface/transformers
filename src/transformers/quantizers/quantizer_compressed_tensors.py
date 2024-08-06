@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from ..utils import is_torch_available, logging
+from ..utils import is_compressed_tensors_available, is_torch_available, logging
 from ..utils.quantization_config import QuantizationConfigMixin
 from .base import HfQuantizer
 
@@ -39,12 +39,18 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         self.compressor = ModelCompressor.from_compression_config(quantization_config)
 
     def validate_environment(self, *args, **kwargs):
-        # check torch and compressed_tensors are available, let ImportError raise otherwise
-        import torch  # noqa
-        from compressed_tensors.compressors import ModelCompressor  # noqa
+        if not is_compressed_tensors_available():
+            raise ImportError(
+                "Using `compressed_tensors` quantized models requires the compressed-tensors library: "
+                "`pip install compressed-tensors`"
+            )
+        if not is_torch_available():
+            # torch already should be installed as part of compressed tensors
+            raise ImportError("torch is required for using compressed-tensors quantization")
 
     def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
         if torch_dtype is None:
+            logger.info("Loading model using torch.float16 for compressed-tensors quantization")
             torch_dtype = torch.float16
         elif torch_dtype != torch.float16:
             logger.info(
