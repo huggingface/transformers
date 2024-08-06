@@ -234,9 +234,9 @@ Here, we'll show some of the parameters that control the decoding strategies and
 
 Selecting a given decoding strategy is not the only way you can influence the outcome of `generate()` with your model.
 The decoding strategies act based (mostly) on the logits, the distribution of probabilities for the next token, and
-thus selecting a good logit manipulation can go a long way! In other words, manipulating the logits is another
-dimension you can act upon. Common logit manipulation strategies include `top_p`, `min_p`, and `repetition_penalty` --
-you can check the full list in the [`GenerationConfig`] class.
+thus selecting a good logits manipulation strategy can go a long way! In other words, manipulating the logits is another
+dimension you can act upon, in addition to selecting a decoding strategy. Popular logits manipulation strategies include
+`top_p`, `min_p`, and `repetition_penalty` -- you can check the full list in the [`GenerationConfig`] class.
 
 </Tip>
 
