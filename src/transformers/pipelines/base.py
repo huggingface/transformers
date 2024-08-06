@@ -34,6 +34,7 @@ from ..feature_extraction_utils import PreTrainedFeatureExtractor
 from ..image_processing_utils import BaseImageProcessor
 from ..modelcard import ModelCard
 from ..models.auto.configuration_auto import AutoConfig
+from ..processing_utils import ProcessorMixin
 from ..tokenization_utils import PreTrainedTokenizer
 from ..utils import (
     ModelOutput,
@@ -716,6 +717,7 @@ def build_pipeline_init_args(
     has_tokenizer: bool = False,
     has_feature_extractor: bool = False,
     has_image_processor: bool = False,
+    has_processor: bool = False,
     supports_binary_output: bool = True,
 ) -> str:
     docstring = r"""
@@ -738,6 +740,11 @@ def build_pipeline_init_args(
         image_processor ([`BaseImageProcessor`]):
             The image processor that will be used by the pipeline to encode data for the model. This object inherits from
             [`BaseImageProcessor`]."""
+    if has_processor:
+        docstring += r"""
+        processor ([`ProcessorMixin`]):
+            The processor that will be used by the pipeline to encode data for the model. This object inherits from
+            [`ProcessorMixin`]."""
     docstring += r"""
         modelcard (`str` or [`ModelCard`], *optional*):
             Model card attributed to the model for this pipeline.
@@ -774,7 +781,11 @@ def build_pipeline_init_args(
 
 
 PIPELINE_INIT_ARGS = build_pipeline_init_args(
-    has_tokenizer=True, has_feature_extractor=True, has_image_processor=True, supports_binary_output=True
+    has_tokenizer=True,
+    has_feature_extractor=True,
+    has_image_processor=True,
+    has_processor=True,
+    supports_binary_output=True,
 )
 
 
@@ -813,6 +824,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         tokenizer: Optional[PreTrainedTokenizer] = None,
         feature_extractor: Optional[PreTrainedFeatureExtractor] = None,
         image_processor: Optional[BaseImageProcessor] = None,
+        processor: Optional[ProcessorMixin] = None,
         modelcard: Optional[ModelCard] = None,
         framework: Optional[str] = None,
         task: str = "",
@@ -830,6 +842,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         self.tokenizer = tokenizer
         self.feature_extractor = feature_extractor
         self.image_processor = image_processor
+        self.processor = processor
         self.modelcard = modelcard
         self.framework = framework
 
