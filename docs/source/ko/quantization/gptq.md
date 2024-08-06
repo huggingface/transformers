@@ -18,11 +18,11 @@ rendered properly in your Markdown viewer.
 
 <Tip>
 
-PEFT를 활용한 GPTQ 양자화를 사용해보시려면 이 [노트북]((https://colab.research.google.com/drive/1_TIrmuKOFhuRRiTWN94iLKUFu6ZX4ceb?)을 참고하시고, 자세한 내용은 이 [블로그 게시물](https://huggingface.co/blog/gptq-integration)에서 확인하세요!
+PEFT를 활용한 GPTQ 양자화를 사용해보시려면 이 [노트북](https://colab.research.google.com/drive/1_TIrmuKOFhuRRiTWN94iLKUFu6ZX4ceb) 을 참고하시고, 자세한 내용은 이 [블로그 게시물](https://huggingface.co/blog/gptq-integration) 에서 확인하세요!
 
 </Tip>
 
-[AutoGPTQ](https://github.com/PanQiWei/AutoGPTQ) 라이브러리는 GPTQ 알고리즘을 구현합니다. 이는 각 가중치 행렬의 행을 독립적으로 양자화하여 오차를 최소화하는 가중치 버전을 찾는 훈련 후 양자화 기법입니다. 이러한 가중치는 int4로 양자화되지만 추론 중에는 즉시 fp16으로 복원됩니다. 이는 int4 가중치가 GPU의 전역 메모리 대신 결합된 커널에서 역양자화되기 때문에 메모리 사용량을 4배 절약할 수 있으며, 더 낮은 비트 너비를 사용함으로써 통신 시간이 줄어들어 추론 속도가 빨라질 것으로 기대할 수 있습니다.
+[AutoGPTQ](https://github.com/PanQiWei/AutoGPTQ) 라이브러리는 GPTQ 알고리즘을 구현합니다. 이는 훈련 후 양자화 기법으로, 가중치 행렬의 각 행을 독립적으로 양자화하여 오차를 최소화하는 가중치 버전을 찾습니다. 이 가중치는 int4로 양자화되지만, 추론 중에는 실시간으로 fp16으로 복원됩니다. 이는 int4 가중치가 GPU의 전역 메모리 대신 결합된 커널에서 역양자화되기 때문에 메모리 사용량을 4배 절약할 수 있으며, 더 낮은 비트 너비를 사용함으로써 통신 시간이 줄어들어 추론 속도가 빨라질 것으로 기대할 수 있습니다.
 
 시작하기 전에 다음 라이브러리들이 설치되어 있는지 확인하세요:
 
@@ -54,7 +54,7 @@ gptq_config = GPTQConfig(bits=4, dataset=dataset, tokenizer=tokenizer)
 quantized_model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto", quantization_config=gptq_config)
 ```
 
-데이터셋이 너무 커서 메모리가 부족한 경우, 디스크 오프로드는 지원되지 않습니다. 이럴 때는 `max_memory` 매개변수를 사용하여 디바이스(GPU 및 CPU)에서 사용할 메모리 양을 할당해 보세요:
+데이터셋이 너무 커서 메모리가 부족한 경우를 대비한 디스크 오프로드는 현재 지원하지 않고 있습니다. 이럴 때는 `max_memory` 매개변수를 사용하여 디바이스(GPU 및 CPU)에서 사용할 메모리 양을 할당해 보세요:
 
 ```py
 quantized_model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto", max_memory={0: "30GiB", 1: "46GiB", "cpu": "30GiB"}, quantization_config=gptq_config)
@@ -62,7 +62,7 @@ quantized_model = AutoModelForCausalLM.from_pretrained(model_id, device_map="aut
 
 <Tip warning={true}>
 
-하드웨어에 따라 모델을 처음부터 양자화하는 데 시간이 걸릴 수 있습니다. 예를 들어, 무료 등급의 Google Colab GPU에서는 [facebook/opt-350m](https://huggingface.co/facebook/opt-350m) 모델을 양자화하는 데 약 5분이 걸리지만, NVIDIA A100에서는 175B 매개변수 모델을 양자화하는 데 약 4시간이 걸릴 수 있습니다. 모델을 양자화하기 전에, Hub에서 해당 모델의 GPTQ 양자화 버전이 이미 존재하는지 확인하는 것이 좋습니다.
+하드웨어와 모델 매개변수량에 따라 모델을 처음부터 양자화하는 데 드는 시간이 서로 다를 수 있습니다. 예를 들어, 무료 등급의 Google Colab GPU로 비교적 가벼운 [facebook/opt-350m](https://huggingface.co/facebook/opt-350m) 모델을 양자화하는 데 약 5분이 걸리지만, NVIDIA A100으로 175B에 달하는 매개변수를 가진 모델을 양자화하는 데는 약 4시간에 달하는 시간이 걸릴 수 있습니다. 모델을 양자화하기 전에, Hub에서 해당 모델의 GPTQ 양자화 버전이 이미 존재하는지 확인하는 것이 좋습니다.
 
 </Tip>
 
