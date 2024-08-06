@@ -24,7 +24,7 @@ Image-to-Image 작업은 애플리케이션이 이미지를 입력받아 또 다
 - 초고해상도 작업을 위한 image-to-image 파이프라인 사용,
 - 파이프라인 없이 동일한 작업을 위한 image-to-image 모델 실행
 
-이 가이드가 발표된 시점에서는, `image-to-image` 파이프라인은 초고해상도 작업만 지원합니다.
+이 가이드가 발표된 시점에서는, `image-to-image` 파이프라인은 초고해상도 작업만 지원한다는 점을 유의하세요.
 
 필요한 라이브러리를 설치하는 것부터 시작하겠습니다.
 
@@ -78,7 +78,7 @@ model = Swin2SRForImageSuperResolution.from_pretrained("caidas/swin2SR-lightweig
 processor = Swin2SRImageProcessor("caidas/swin2SR-lightweight-x2-64")
 ```
 
-파이프라인은 우리가 직접 해야 하는 전처리와 후처리 단계를 추상화해 주므로, 이제 이미지를 전처리해 봅시다. 이미지를 프로세서에 전달한 다음, 픽셀 값을 GPU로 이동시킬 것입니다. 
+`pipeline` 우리가 직접 수행해야 하는 전처리와 후처리 단계를 추상화하므로, 이미지를 전처리해 보겠습니다. 이미지를 프로세서에 전달한 다음 픽셀 값을 GPU로 이동시키겠습니다. 
 
 ```python
 pixel_values = processor(image, return_tensors="pt").pixel_values
@@ -114,16 +114,16 @@ outputs.reconstruction.data.shape
 # torch.Size([1, 3, 880, 1072])
 ```
 
-출력 텐서의 차원을 축소하고 0번째 축을 제거한 다음, 값을 클리핑하고 NumPy 부동소수점 배열로 변환해야합니다. 그런 다음 [1072, 880] 모양을 갖도록 축을 재정렬하고 마지막으로 출력을 0과 255 사이의 값을 갖도록 되돌립니다.
+출력 텐서의 차원을 축소하고 0번째 축을 제거한 다음, 값을 클리핑하고 NumPy 부동소수점 배열로 변환해야 합니다. 그런 다음 [1072, 880] 모양을 갖도록 축을 재정렬하고 마지막으로 출력을 0과 255 사이의 값을 갖도록 되돌립니다.
 
 ```python
 import numpy as np
 
-# 크기를 줄이고, CPU로 이동하고, 값을 클리핑합니다.
+# 크기를 줄이고, CPU로 이동하고, 값을 클리핑
 output = outputs.reconstruction.data.squeeze().cpu().clamp_(0, 1).numpy()
-# 축을 재정렬합니다.
+# 축을 재정렬
 output = np.moveaxis(output, source=0, destination=-1)
-# 값을 픽셀값 범위로 되돌립니다.
+# 값을 픽셀값 범위로 되돌리기
 output = (output * 255.0).round().astype(np.uint8)
 Image.fromarray(output)
 ```
