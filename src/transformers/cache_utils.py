@@ -1657,6 +1657,22 @@ class OffloadedStaticCache(StaticCache):
     Static cache class to be used with `torch.compile(model)` that offloads to the CPU or
     another device.
 
+    Args:
+        config (`PretrainedConfig):
+            The configuration file defining the shape-related attributes required to initialize
+            the static cache.
+        max_batch_size (`int`):
+            The maximum batch size with which the model will be used.
+        max_cache_len (`int`):
+            The maximum sequence length with which the model will be used.
+        device (`Union[str, torch.device]`):
+            The device on which the cache should be initialized. Should be the same as the
+            layer device.
+        dtype (`torch.dtype`, *optional*):
+            The default `dtype` to use when initializing the cache.
+        offload_device (`Union[str, torch.device]`, *optional*, defaults to `cpu`):
+            The device to offload to. Defaults to CPU.
+
     Attributes:
         key_cache (`List[torch.Tensor]`):
             Off-loaded key cache tensors. First one will be on device, where-as the others are
@@ -1674,6 +1690,24 @@ class OffloadedStaticCache(StaticCache):
             The device used to offload to.
         dtype (`torch.dtype`):
             The `dtype` used to initializing the cache.
+
+    Example:
+
+        ```python
+        >>> from transformers import AutoTokenizer, AutoModelForCausalLM, OffloadedStaticCache
+
+        >>> model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
+        >>> tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
+
+        >>> inputs = tokenizer(text="My name is GPT2", return_tensors="pt")
+
+        >>> # Prepare a cache class and pass it to model's forward
+        >>> # Leave empty space for 10 new tokens, which can be used when calling forward iteratively 10 times to generate
+        >>> max_generated_length = inputs.input_ids.shape[1] + 10
+        >>> past_key_values = OffloadedStaticCache(config=model.config, max_batch_size=1, max_cache_len=max_generated_length, device=model.device, dtype=model.dtype)
+        >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
+        >>> past_kv_length = outputs.past_key_values # access cache filled with key/values from generation
+        ```
     """
 
     def __init__(
@@ -1685,25 +1719,6 @@ class OffloadedStaticCache(StaticCache):
         dtype: Optional[torch.dtype] = None,
         offload_device: Union[str, torch.device] = torch.device("cpu"),
     ) -> None:
-        """Create offloading static cache.
-
-        Args:
-            config (`PretrainedConfig):
-                The configuration file defining the shape-related attributes required to initialize
-                the static cache.
-            max_batch_size (`int`):
-                The maximum batch size with which the model will be used.
-            max_cache_len (`int`, `optional`):
-                The maximum sequence length with which the model will be used.
-            device (`Union[str, torch.device]`):
-                The device on which the cache should be initialized. Should be the same as the
-                layer device.
-            dtype (`torch.dtype`, `optional`):
-                The default `dtype` to use when initializing the cache.
-            offload_device (`Union[str, torch.device]`, `optional`):
-                The device to offload to. Defaults to CPU.
-        """
-
         self.max_batch_size = max_batch_size
         self.max_cache_len = config.max_position_embeddings if max_cache_len is None else max_cache_len
         self.device = torch.device(device)
@@ -1743,6 +1758,7 @@ class OffloadedStaticCache(StaticCache):
             self._device_value_cache.append(value_cache)
 
         # For backwards compatibility.
+        # TODO(gante): Remove this.
         self._seen_tokens = 0
 
         # Create new CUDA stream for parallel prefetching.
@@ -1766,8 +1782,8 @@ class OffloadedStaticCache(StaticCache):
                 The new value states to cache.
             layer_idx (`int`):
                 The index of the layer to cache the states for.
-            cache_kwargs (`Dict[str, Any]`, `optional`):
-                Additional arguments for the cache subclass. The `StaticCache` needs the
+            cache_kwargs (`Dict[str, Any]`, *optional*):
+                Additional arguments for the cache subclass. The `OffloadedStaticCache` needs the
                 `cache_position` input to know how where to write in the cache.
 
         Return:
@@ -1776,6 +1792,7 @@ class OffloadedStaticCache(StaticCache):
 
         if layer_idx == 0:
             # Update seen tokens.
+            # TODO(gante): Remove this.
             self._seen_tokens += key_states.shape[-2]
 
             # Always there.
@@ -1833,6 +1850,7 @@ class OffloadedStaticCache(StaticCache):
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states that were seen by the model."""
 
+        # TODO(gante): Remove this.
         return self._seen_tokens
 
     def get_max_length(self) -> Optional[int]:
@@ -1844,6 +1862,7 @@ class OffloadedStaticCache(StaticCache):
         """Resets the cache values while preserving the objects."""
 
         # For backwards compatibility.
+        # TODO(gante): Remove this.
         self._seen_tokens = 0
 
         # Zero out cache.
@@ -1855,6 +1874,7 @@ class OffloadedStaticCache(StaticCache):
     @property
     def seen_tokens(self) -> int:
         # For backwards compatibility.
+        # TODO(gante): Remove this.
         return self._seen_tokens
 
     def _create_key_value_cache_tensors(

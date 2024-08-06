@@ -121,7 +121,7 @@ if is_accelerate_available():
 
 NEED_SETUP_CACHE_CLASSES_MAPPING = {
     "static": StaticCache,
-    "offloaded-static": OffloadedStaticCache,
+    "offloaded_static": OffloadedStaticCache,
     "sliding_window": SlidingWindowCache,
     "hybrid": HybridCache,
     "mamba": MambaCache,
