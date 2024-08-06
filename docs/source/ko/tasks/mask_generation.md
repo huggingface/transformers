@@ -67,7 +67,7 @@ image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg" alt="Example Image"/>
 </div>
 
-모든 것을 분할해봅시다. `points-per-batch`는 전체 분할 모드에서 점들의 병렬 추론을 가능하게 합니다. 이를 통해 추론 속도가 빨라지지만, 더 많은 메모리를 소모하게 됩니다. 또한, SAM은 이미지가 아닌 점들에 대해서만 배치 처리를 지원합니다. `pred_iou_thresh`는 IoU 신뢰 임계값으로, 이 임계값을 초과하는 마스크만 반환됩니다.
+전체적으로 분할해봅시다. `points-per-batch`는 전체 분할 모드에서 점들의 병렬 추론을 가능하게 합니다. 이를 통해 추론 속도가 빨라지지만, 더 많은 메모리를 소모하게 됩니다. 또한, SAM은 이미지가 아닌 점들에 대해서만 배치 처리를 지원합니다. `pred_iou_thresh`는 IoU 신뢰 임계값으로, 이 임계값을 초과하는 마스크만 반환됩니다.
 
 ```python
 masks = mask_generator(image, points_per_batch=128, pred_iou_thresh=0.88)
