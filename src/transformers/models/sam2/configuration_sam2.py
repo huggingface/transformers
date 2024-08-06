@@ -143,7 +143,7 @@ class Sam2Config(PretrainedConfig):
         memory_encoder_config (Union[`dict`, `Sam2MemoryEncoderConfig`], *optional*):
             Dictionary of configuration options used to initialize [`Sam2MemoryEncoderConfig`].
 
-        initializer_range (`<fill_type>`, *optional*, defaults to 0.02): <fill_docstring>
+        initializer_range (`float`, *optional*, defaults to 0.02): std for parameter initialization
         kwargs (*optional*):
             Dictionary of keyword arguments.
 
@@ -187,12 +187,20 @@ class Sam2Config(PretrainedConfig):
         **kwargs,
     ):
         super().__init__(**kwargs)
-        image_encoder_config = image_encoder_config if image_encoder_config is not None else {}
-        memory_attention_config = memory_attention_config if memory_attention_config is not None else {}
-        memory_encoder_config = memory_encoder_config if memory_encoder_config is not None else {}
+        image_encoder_config = (
+            image_encoder_config if image_encoder_config is not None else {}
+        )
+        memory_attention_config = (
+            memory_attention_config if memory_attention_config is not None else {}
+        )
+        memory_encoder_config = (
+            memory_encoder_config if memory_encoder_config is not None else {}
+        )
 
         self.image_encoder_config = Sam2ImageEncoderConfig(**image_encoder_config)
-        self.memory_attention_config = Sam2MemoryAttentionConfig(**memory_attention_config)
+        self.memory_attention_config = Sam2MemoryAttentionConfig(
+            **memory_attention_config
+        )
         self.memory_encoder_config = Sam2MemoryEncoderConfig(**memory_encoder_config)
         self.initializer_range = initializer_range
         self.num_maskmem = 7  # default 1 input frame + 6 previous frames
