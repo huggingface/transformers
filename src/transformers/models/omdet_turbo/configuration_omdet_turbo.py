@@ -56,6 +56,8 @@ class OmDetTurboConfig(PretrainedConfig):
             The epsilon value for layer normalization.
         batch_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon value for batch normalization.
+        init_std (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         text_projection_in_dim (`int`, *optional*, defaults to 512):
             The input dimension for the text projection.
         text_projection_out_dim (`int`, *optional*, defaults to 512):
@@ -164,6 +166,7 @@ class OmDetTurboConfig(PretrainedConfig):
         disable_custom_kernels=False,
         layer_norm_eps=1e-5,
         batch_norm_eps=1e-5,
+        init_std=0.02,
         text_projection_in_dim=512,
         text_projection_out_dim=512,
         task_encoder_feedforward_dim=1024,
@@ -250,6 +253,7 @@ class OmDetTurboConfig(PretrainedConfig):
         self.disable_custom_kernels = disable_custom_kernels
         self.layer_norm_eps = layer_norm_eps
         self.batch_norm_eps = batch_norm_eps
+        self.init_std = init_std
         self.text_projection_in_dim = text_projection_in_dim
         self.text_projection_out_dim = text_projection_out_dim
         self.task_encoder_feedforward_dim = task_encoder_feedforward_dim

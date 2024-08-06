@@ -29,7 +29,6 @@ import torch.nn.functional as F
 from torch import Tensor, nn
 from torch.autograd import Function
 from torch.autograd.function import once_differentiable
-from torch.nn.init import xavier_uniform_
 
 from ...activations import ACT2CLS, ACT2FN
 from ...file_utils import (
@@ -1184,13 +1183,33 @@ class OmDetTurboPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
 
     def _init_weights(self, module):
-        if isinstance(module, nn.Linear):
-            xavier_uniform_(module.weight.data)
+        def linear_init_(module_to_init):
+            bound = 1 / math.sqrt(module_to_init.weight.shape[0])
+            nn.init.uniform_(module_to_init.weight, -bound, bound)
+            if hasattr(module_to_init, "bias") and module_to_init.bias is not None:
+                nn.init.uniform_(module_to_init.bias, -bound, bound)
+
+        if isinstance(module, OmDetTurboEncoderLayer):
+            linear_init_(module.fc1)
+            linear_init_(module.fc2)
+        elif isinstance(module, OmDetTurboDecoder):
+            nn.init.constant_(module.encoder_bbox_head.layers[-1].weight, 0.0)
+            nn.init.constant_(module.encoder_bbox_head.layers[-1].bias, 0.0)
+            for mlp in module.decoder_bbox_head:
+                nn.init.constant_(mlp.layers[-1].weight, 0.0)
+                nn.init.constant_(mlp.layers[-1].bias, 0.0)
+            linear_init_(module.encoder_vision_features[0])
+            nn.init.xavier_uniform_(module.encoder_vision_features[0].weight)
+            if module.learn_init_query:
+                nn.init.xavier_uniform_(module.tgt_embed.weight)
+            nn.init.xavier_uniform_(module.query_position_head.layers[0].weight)
+            nn.init.xavier_uniform_(module.query_position_head.layers[1].weight)
+            for layer in module.channel_projection_layers:
+                nn.init.xavier_uniform_(layer[0].weight)
+        elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
+            module.weight.data.normal_(mean=0.0, std=self.config.init_std)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
 
     @staticmethod
     def _get_cache_key_at_index(inputs, index):
