@@ -39,6 +39,9 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "LlavaConfig"
 
+# Base docstring
+_CHECKPOINT_FOR_DOC = "llava-hf/llava-1.5-7b-hf"
+
 
 @dataclass
 # Copied from transformers.models.idefics.modeling_idefics.IdeficsCausalLMOutputWithPast with Idefics->Llava
