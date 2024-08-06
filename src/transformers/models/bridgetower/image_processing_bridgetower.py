@@ -285,7 +285,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
                 The channel dimension format of the input image. If not provided, it will be inferred from the input
                 image.
         """
-        warnings.warn("The do_center_crop method is deprecated and will be removed in two releases time.")
+        warnings.warn("The center_crop method is deprecated and will be removed in two releases time.")
         output_size = size["shortest_edge"]
         return center_crop(
             image,
