@@ -19,7 +19,6 @@
 # limitations under the License.
 """PyTorch Qwen2-VL model."""
 
-import inspect
 import math
 from dataclasses import dataclass
 from functools import partial
@@ -51,14 +50,11 @@ from .configuration_qwen2_vl import Qwen2VLConfig
 
 
 if is_flash_attn_2_available():
-    from flash_attn import flash_attn_func, flash_attn_varlen_func
+    from flash_attn import flash_attn_varlen_func
 
     from ...modeling_flash_attention_utils import _flash_attention_forward
-
-    _flash_supports_window_size = "window_size" in list(inspect.signature(flash_attn_func).parameters)
 else:
     flash_attn_varlen_func = None
-    apply_rotary_emb = None
 
 
 logger = logging.get_logger(__name__)
@@ -682,19 +678,6 @@ class Qwen2VLFlashAttention2(Qwen2VLAttention):
                 query_states, key_states, cos, sin, position_ids
             )
 
-        use_sliding_windows = (
-            _flash_supports_window_size
-            and getattr(self.config, "sliding_window", None) is not None
-            and kv_seq_len > self.config.sliding_window
-            and self.config.use_sliding_window
-        )
-
-        if not _flash_supports_window_size:
-            logger.warning_once(
-                "The current flash attention version does not support sliding window attention, for a more memory efficient implementation"
-                " make sure to upgrade flash-attn library."
-            )
-
         if past_key_value is not None:
             # Activate slicing cache only if the config has a value `sliding_windows` attribute
             cache_has_contents = past_key_value.get_seq_length(self.layer_idx) > 0
@@ -757,6 +740,15 @@ class Qwen2VLFlashAttention2(Qwen2VLAttention):
         key_states = key_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
 
+        if (
+            self.config.use_sliding_window
+            and getattr(self.config, "sliding_window", None) is not None
+            and self.layer_idx >= self.config.max_window_layers
+        ):
+            sliding_window = self.config.sliding_window
+        else:
+            sliding_window = None
+
         attn_output = _flash_attention_forward(
             query_states,
             key_states,
@@ -764,7 +756,7 @@ class Qwen2VLFlashAttention2(Qwen2VLAttention):
             attention_mask,
             q_len,
             dropout=dropout_rate,
-            use_sliding_windows=use_sliding_windows,
+            sliding_window=sliding_window,
             is_causal=self.is_causal,
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
         )
