@@ -42,7 +42,7 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
-두 가지 방법으로 모델을 정적 kv-cache를 사용하도록 설정할 수 있습니다. A100에서 7B 모델의 경우 두 방법 모두 순전파에서 4배 속도 향상이 가능합니다. 속도 향상은 모델 크기(더 큰 모델의 경우 속도 향상이 적음)와 하드웨어에 따라 다를 수 있습니다. [~GenerationMixin.generate] 메서드를 사용하는 경우 속도 향상은 약 3배입니다. 순전파(여전히 4배 속도 향상)는 전체 [~GenerationMixin.generate] 코드의 일부일 뿐입니다.
+두 가지 방법으로 모델을 정적 kv-cache를 사용하도록 설정할 수 있습니다. A100에서 7B 모델의 경우 두 방법 모두 순전파에서 4배 속도 향상이 가능합니다. 속도 향상은 모델 크기(더 큰 모델의 경우 속도 향상이 적음)와 하드웨어에 따라 다를 수 있습니다. [~GenerationMixin.generate] 메서드를 사용하는 경우, 속도는 최대 3배 빨라집니다. 순전파(여전히 4배 속도 향상)는 전체 [~GenerationMixin.generate] 코드의 일부일 뿐입니다.
 
 <hfoptions id="static-kv">
 <hfoption id="generation_config">
