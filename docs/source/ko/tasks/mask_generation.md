@@ -16,20 +16,20 @@ rendered properly in your Markdown viewer.
 
 # 마스크 생성[[mask-generation]]
 
-마스크 생성(mask generation)은 이미지에 대해 의미 있는 마스크를 생성하는 작업입니다. 
-이 작업은 [의미적 분할](semantic_segmentation)과 매우 유사하지만, 많은 차이점이 있습니다. 의미적 분할 모델은 라벨이 달린 데이터셋으로 학습되며, 학습 중에 본 클래스들로만 제한됩니다. 이미지가 주어지면, 의미적 분할 모델은 여러 마스크와 그에 해당하는 클래스를 반환합니다. 
+마스크 생성(Mask generation)은 이미지에 대한 의미 있는 마스크를 생성하는 작업입니다. 
+이 작업은 [이미지 분할](semantic_segmentation)과 매우 유사하지만, 많은 차이점이 있습니다. 이미지 분할 모델은 라벨이 달린 데이터셋으로 학습되며, 학습 중에 본 클래스들로만 제한됩니다. 이미지가 주어지면, 이미지 분할 모델은 여러 마스크와 그에 해당하는 클래스를 반환합니다. 
 
 반면, 마스크 생성 모델은 대량의 데이터로 학습되며 두 가지 모드로 작동합니다.
-- 프롬프트 모드(Prompting mode): 이 모드에서는 모델이 이미지와 프롬프트를 입력받습니다. 프롬프트는 이미지 내 객체의 2D 좌표(XY 좌표)나 객체를 둘러싼 바운딩 박스(bounding box)가 될 수 있습니다. 프롬프트 모드에서는 모델이 프롬프트가 가리키는 객체의 마스크만 반환합니다.
-- 모든 것 분할 모드(Segment Everything mode): 이 모드에서는 주어진 이미지 내 모든 마스크를 생성합니다. 이를 위해 그리드 형태의 점들을 생성하고 이를 이미지에 오버레이하여 추론합니다.
+- 프롬프트 모드(Prompting mode): 이 모드에서는 모델이 이미지와 프롬프트를 입력받습니다. 프롬프트는 이미지 내 객체의 2D 좌표(XY 좌표)나 객체를 둘러싼 바운딩 박스가 될 수 있습니다. 프롬프트 모드에서는 모델이 프롬프트가 가리키는 객체의 마스크만 반환합니다.
+- 전체 분할 모드(Segment Everything mode): 이 모드에서는 주어진 이미지 내에서 모든 마스크를 생성합니다. 이를 위해 그리드 형태의 점들을 생성하고 이를 이미지에 오버레이하여 추론합니다.
 
-마스크 생성 작업은 [Segment Anything Model (SAM)](model_doc/sam)에 의해 지원됩니다. SAM은 Vision Transformer 기반 이미지 인코더, 프롬프트 인코더, 그리고 양방향 트랜스포머 마스크 디코더로 구성된 강력한 모델입니다. 이미지와 프롬프트는 인코딩되고, 디코더는 이러한 임베딩을 받아 유효한 마스크를 생성합니다.
+마스크 생성 작업은 [전체 분할 모드(Segment Anything Model, SAM)](model_doc/sam)에 의해 지원됩니다. SAM은 Vision Transformer 기반 이미지 인코더, 프롬프트 인코더, 그리고 양방향 트랜스포머 마스크 디코더로 구성된 강력한 모델입니다. 이미지와 프롬프트는 인코딩되고, 디코더는 이러한 임베딩을 받아 유효한 마스크를 생성합니다.
 
 <div class="flex justify-center">
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/sam.png" alt="SAM Architecture"/>
 </div>
 
-SAM은 대규모 데이터 커버리지를 가지고 있어 분할(segmentation)의 강력한 기초 모델로 작동합니다. 이 모델은 1백만 개의 이미지와 11억 개의 마스크를 포함한 [SA-1B](https://ai.meta.com/datasets/segment-anything/) 데이터셋으로 학습되었습니다.
+SAM은 대규모 데이터를 다룰 수 있는 강력한 분할 기반 모델입니다. 이 모델은 100만 개의 이미지와 11억 개의 마스크를 포함하는 [SA-1B](https://ai.meta.com/datasets/segment-anything/) 데이터셋으로 학습되었습니다.
 
 이 가이드에서는 다음과 같은 내용을 배우게 됩니다:
 - 배칭과 함께 모든 것 분할 모드에서 추론하는 방법
