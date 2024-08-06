@@ -184,7 +184,7 @@ tokenizer.batch_decode(outputs, skip_special_tokens=True)
 </hfoption>
 <hfoption id="sampling">
 
-추정 샘플링 디코딩을 위해, 보조 모델 외에도 [`~GenerationMixin.generate`] 메서드에 `do_sample` 및 `temperature` 매개변수를 추가하십시오.
+추정 샘플링 디코딩(speculative sampling decoding)을 위해, 보조 모델 외에도 [`~GenerationMixin.generate`] 메서드에 `do_sample` 및 `temperature` 매개변수를 추가하십시오.
 
 ```py
 from transformers import AutoModelForCausalLM, AutoTokenizer
