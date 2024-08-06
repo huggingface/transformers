@@ -284,3 +284,15 @@ class TokenizerUtilsTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdirname:
             bert_tokenizer.save(os.path.join(tmpdirname, "tokenizer.json"))
             PreTrainedTokenizerFast(tokenizer_file=os.path.join(tmpdirname, "tokenizer.json"))
+
+    def test_len_tokenizer(self):
+        for tokenizer_class in [BertTokenizer, BertTokenizerFast]:
+            with self.subTest(f"{tokenizer_class}"):
+                tokenizer = tokenizer_class.from_pretrained("bert-base-uncased")
+                added_tokens_size = len(tokenizer.added_tokens_decoder)
+                self.assertEqual(len(tokenizer), tokenizer.vocab_size)
+
+                tokenizer.add_tokens(["<test_token>"])
+                self.assertEqual(len(tokenizer), tokenizer.vocab_size + 1)
+                self.assertEqual(len(tokenizer.added_tokens_decoder), added_tokens_size + 1)
+                self.assertEqual(len(tokenizer.added_tokens_encoder), added_tokens_size + 1)

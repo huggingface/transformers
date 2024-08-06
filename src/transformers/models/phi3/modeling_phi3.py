@@ -453,12 +453,6 @@ class Phi3Attention(nn.Module):
 
         attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
 
-        if attn_weights.size() != (bsz, self.num_heads, q_len, kv_seq_len):
-            raise ValueError(
-                f"Attention weights should be of size {(bsz, self.num_heads, q_len, kv_seq_len)}, but is"
-                f" {attn_weights.size()}"
-            )
-
         if attention_mask is not None:
             causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
             attn_weights += causal_mask
@@ -542,8 +536,11 @@ class Phi3FlashAttention2(Phi3Attention):
             kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
 
         # Because the input can be padded, the absolute sequence length depends on the max position id.
-        rotary_seq_len = max(kv_seq_len, position_ids[:, -1].max().item()) + 1
-        cos, sin = self.rotary_emb(value_states, position_ids, seq_len=rotary_seq_len)
+        rotary_seq_len = (
+            max(kv_seq_len, position_ids[:, -1].max().item() + 1) if position_ids is not None else kv_seq_len
+        )
+
+        cos, sin = self.rotary_emb(value_states, seq_len=rotary_seq_len)
 
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
