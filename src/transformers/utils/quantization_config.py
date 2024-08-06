@@ -1114,9 +1114,12 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         Serializes this instance to a Python dictionary. Returns:
             `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
         """
+        quantization_config = self.quantization_config.dict() if self.quantization_config is not None else None
+        sparsity_config = self.sparsity_config.dict() if self.sparsity_config is not None else None
+
         return {
-            "quantization_config": self.quantization_config.dict(),
-            "sparsity_config": self.sparsity_config.dict(),
+            "quantization_config": quantization_config,
+            "sparsity_config": sparsity_config,
         }
 
 
