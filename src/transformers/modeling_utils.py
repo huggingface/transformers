@@ -1233,14 +1233,18 @@ class ModuleUtilsMixin:
         """
         if not hasattr(self, "warnings_issued"):
             self.warnings_issued = {}
-        if self.main_input_name in input_dict:
-            return input_dict[self.main_input_name].numel()
+        num_tokens = 0
+        if isinstance(self.main_input_name, str):
+            self.main_input_name = [self.main_input_name]
+            for input_name in self.main_input_name:
+                if input_name in input_dict:
+                    num_tokens += input_dict[input_name].numel() 
         elif "estimate_tokens" not in self.warnings_issued:
             logger.warning(
                 "Could not estimate the number of tokens of the input, floating-point operations will not be computed"
             )
             self.warnings_issued["estimate_tokens"] = True
-        return 0
+        return num_tokens
 
     def floating_point_ops(
         self, input_dict: Dict[str, Union[torch.Tensor, Any]], exclude_embeddings: bool = True
