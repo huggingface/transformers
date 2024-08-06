@@ -29,6 +29,7 @@ Tips:
 
 This version should support all implementations of Mamba 2, and in particular [Mamba-2 codestral](https://huggingface.co/mistralai/Mamba-Codestral-7B-v0.1) from Mistral AI. In particular, mamba 2 codestral was released with a number of `groups` equal to 8, which can be thought intuitively as similar to the number of kv heads in an attention-based model. 
 This model has two different forward passes, `torch_forward` or `cuda_kernels_forward`. The latter uses the original cuda kernels if they are found in your environment, and is slower on the prefill i.e. requires a "warmup run" due to high cpu overhead, see [here](https://github.com/state-spaces/mamba/issues/389#issuecomment-2171755306) and [also here](https://github.com/state-spaces/mamba/issues/355#issuecomment-2147597457). Without compilation, the `torch_forward` implementation is faster by a factor 3 to 4. Further, there are no positional embeddings in this model, but there is an `attention_mask` and a specific logic to mask out hidden states in two places in the case of batched generation, see [here](https://github.com/state-spaces/mamba/issues/66#issuecomment-1863563829) as well. Due to this, in addition to the reimplementation of mamba2 kernels, batched generation and cached generation are expected to have slight discrepancies. Further, the results given by the cuda kernels or the torch forward are expected to be slightly different. The SSM algorithm heavily relies on tensor contractions, which have matmul equivalents but the order of operations is slightly different, making the difference greater at smaller precisions. 
+Another note, shutdown of hidden states corresponding to padding tokens is done in 2 places and mostly has been tested with left-padding. Right-padding will propagate noise down the line and is not guaranteed to yield satisfactory results. `tokenizer.padding_side = "left"` ensures you are using the correct padding side.
 
 This model was contributed by [Molbap](https://huggingface.co/Molbap), with tremendous help from [Anton Vlasjuk](https://github.com/vasqu).
 The original code can be found [here](https://github.com/state-spaces/mamba).
@@ -57,12 +58,17 @@ from transformers import AutoTokenizer, Mamba2ForCausalLM, TrainingArguments
 model_id = 'mistralai/Mamba-Codestral-7B-v0.1'
 tokenizer = AutoTokenizer.from_pretrained(model_id, revision='refs/pr/9', from_slow=True, legacy=False)
 tokenizer.pad_token = tokenizer.eos_token
+tokenizer.padding_side = "left" #enforce padding side left
+
 model = Mamba2ForCausalLM.from_pretrained(model_id, revision='refs/pr/9')
 dataset = load_dataset("Abirate/english_quotes", split="train")
+# Without CUDA kernels, batch size of 2 occupies one 80GB device
+# but precision can be reduced.
+# Experiments and trials welcome!
 training_args = TrainingArguments(
     output_dir="./results",
     num_train_epochs=3,
-    per_device_train_batch_size=4,
+    per_device_train_batch_size=2,
     logging_dir='./logs',
     logging_steps=10,
     learning_rate=2e-3
@@ -82,6 +88,9 @@ trainer = SFTTrainer(
     dataset_text_field="quote",
 )
 trainer.train()
+```
+
+
 ## Mamba2Config
 
 [[autodoc]] Mamba2Config
