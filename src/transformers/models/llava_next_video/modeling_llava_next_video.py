@@ -901,8 +901,8 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel):
                             (
                                 inputs_embeds,
                                 attention_mask,
-                                labels,
                                 position_ids,
+                                labels,
                                 input_ids,
                             ) = self._merge_input_ids_with_image_features(
                                 features,

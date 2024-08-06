@@ -569,7 +569,7 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
                                 input_ids,
                                 attention_mask,
                                 labels,
-                                num_frames=num_frames,
+                                num_frames=frames,
                             )
                 else:
                     # Retrieve the first layer to inspect the logits and mask out the hidden states
