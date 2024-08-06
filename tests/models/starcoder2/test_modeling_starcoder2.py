@@ -528,6 +528,7 @@ class Starcoder2IntegrationTest(unittest.TestCase):
         self.assertEqual(EXPECTED_TEXT, output_text)
 
     @require_flash_attn
+    @pytest.mark.flash_attn_test
     def test_starcoder2_batched_generation_fa2(self):
         EXPECTED_TEXT = [
             "Hello my name is Younes and I am a student at the University of Liverpool. I am currently studying for my MSc in Computer Science. I am interested in the field of Machine Learning and I am currently working on",

@@ -299,6 +299,22 @@ class DynamicCache(Cache):
 
     It stores the Key and Value states as a list of tensors, one for each layer. The expected shape for each tensor is
     `[batch_size, num_heads, seq_len, head_dim]`.
+
+    Example:
+
+        ```python
+        >>> from transformers import AutoTokenizer, AutoModelForCausalLM, DynamicCache
+
+        >>> model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
+        >>> tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
+
+        >>> inputs = tokenizer(text="My name is GPT2", return_tensors="pt")
+
+        >>> # Prepare a cache class and pass it to model's forward
+        >>> past_key_values = DynamicCache()
+        >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
+        >>> past_kv_length = outputs.past_key_values # access cache filled with key/values from generation
+        ```
     """
 
     def __init__(self) -> None:
@@ -657,6 +673,24 @@ class QuantoQuantizedCache(QuantizedCache):
     Parameters:
         cache_config (`QuantizedCacheConfig`):
             A configuration containing all the arguments to be used by the quantizer, including axis, qtype and group size.
+
+    Example:
+
+        ```python
+        >>> # Run pip install quanto first if you don't have it yet
+        >>> from transformers import AutoTokenizer, AutoModelForCausalLM, QuantoQuantizedCache, QuantizedCacheConfig
+
+        >>> model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
+        >>> tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
+
+        >>> inputs = tokenizer(text="My name is GPT2", return_tensors="pt")
+
+        >>> # Prepare a cache class and pass it to model's forward
+        >>> cache_config = QuantizedCacheConfig(nbits=4)
+        >>> past_key_values = QuantoQuantizedCache(cache_config=cache_config)
+        >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
+        >>> past_kv_length = outputs.past_key_values # access cache filled with key/values from generation
+        ```
     """
 
     def __init__(self, cache_config: CacheConfig) -> None:
@@ -698,6 +732,24 @@ class HQQQuantizedCache(QuantizedCache):
     Parameters:
         cache_config (`QuantizedCacheConfig`):
             A configuration containing all the arguments to be used by the quantizer, including axis, qtype and group size.
+
+    Example:
+
+        ```python
+        >>> # Run pip install hqq first if you don't have it yet
+        >>> from transformers import AutoTokenizer, AutoModelForCausalLM, HQQQuantizedCache, QuantizedCacheConfig
+
+        >>> model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
+        >>> tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
+
+        >>> inputs = tokenizer(text="My name is GPT2", return_tensors="pt")
+
+        >>> # Prepare a cache class and pass it to model's forward
+        >>> cache_config = QuantizedCacheConfig(nbits=4, axis_key=1, axis_value=1)
+        >>> past_key_values = HQQQuantizedCache(cache_config=cache_config)
+        >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
+        >>> past_kv_length = outputs.past_key_values # access cache filled with key/values from generation
+        ```
     """
 
     def __init__(self, cache_config: CacheConfig) -> None:
@@ -748,6 +800,22 @@ class SinkCache(Cache):
             The length of the context window.
         num_sink_tokens (`int`):
             The number of sink tokens. See the original paper for more information.
+
+    Example:
+
+        ```python
+        >>> from transformers import AutoTokenizer, AutoModelForCausalLM, SinkCache
+
+        >>> model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
+        >>> tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
+
+        >>> inputs = tokenizer(text="My name is GPT2", return_tensors="pt")
+
+        >>> # Prepare a cache class and pass it to model's forward
+        >>> past_key_values = SinkCache(window_length=256, num_sink_tokens=4)
+        >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
+        >>> past_kv_length = outputs.past_key_values # access cache filled with key/values from generation
+        ```
     """
 
     def __init__(self, window_length: int, num_sink_tokens: int) -> None:
@@ -917,6 +985,24 @@ class StaticCache(Cache):
             The device on which the cache should be initialized. Should be the same as the layer.
         dtype (*optional*, defaults to `torch.float32`):
             The default `dtype` to use when initializing the layer.
+
+    Example:
+
+        ```python
+        >>> from transformers import AutoTokenizer, AutoModelForCausalLM, StaticCache
+
+        >>> model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
+        >>> tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
+
+        >>> inputs = tokenizer(text="My name is GPT2", return_tensors="pt")
+
+        >>> # Prepare a cache class and pass it to model's forward
+        >>> # Leave empty space for 10 new tokens, which can be used when calling forward iteratively 10 times to generate
+        >>> max_generated_length = inputs.input_ids.shape[1] + 10
+        >>> past_key_values = StaticCache(config=model.config, max_batch_size=1, max_cache_len=max_generated_length, device=model.device, dtype=model.dtype)
+        >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
+        >>> past_kv_length = outputs.past_key_values # access cache filled with key/values from generation
+        ```
     """
 
     def __init__(self, config: PretrainedConfig, max_batch_size: int, max_cache_len: int, device, dtype=None) -> None:
@@ -938,19 +1024,22 @@ class StaticCache(Cache):
         # Note: There will be significant perf decrease if switching to use 5D tensors instead.
         cache_shape = (max_batch_size, self.num_key_value_heads, self.max_cache_len, self.head_dim)
         for idx in range(config.num_hidden_layers):
-            # Note: `torch.export()`` requires mutations to be registered as buffers.
-            self.register_buffer(f"key_cache_{idx}", torch.zeros(cache_shape, dtype=dtype, device=device))
-            self.register_buffer(f"value_cache_{idx}", torch.zeros(cache_shape, dtype=dtype, device=device))
-            key_cache = getattr(self, f"key_cache_{idx}")
-            value_cache = getattr(self, f"value_cache_{idx}")
-            # Note: `mark_static_address` is used to tag the cache as an fixed data pointer, preventing cuda graph
-            # breaks when updating the cache. It can't be used if the cache code is being compiled (but in that case
-            # it is not needed anyway)
+            new_layer_key_cache = torch.zeros(cache_shape, dtype=self.dtype, device=device)
+            new_layer_value_cache = torch.zeros(cache_shape, dtype=self.dtype, device=device)
+            # Notes:
+            # 1. `mark_static_address` is used to tag the cache as an fixed data pointer, preventing cuda graph
+            #     breaks when updating the cache. It can't be used if the cache code is being compiled (but in that case
+            #     it is not needed anyway)
+            # 2. `torch.export()` requires mutations to be registered as buffers.
             if not is_torchdynamo_compiling():
-                torch._dynamo.mark_static_address(key_cache)
-                torch._dynamo.mark_static_address(value_cache)
-            self.key_cache.append(key_cache)
-            self.value_cache.append(value_cache)
+                self.register_buffer(f"key_cache_{idx}", torch.zeros(cache_shape, dtype=dtype, device=device))
+                self.register_buffer(f"value_cache_{idx}", torch.zeros(cache_shape, dtype=dtype, device=device))
+                new_layer_key_cache = getattr(self, f"key_cache_{idx}")
+                new_layer_value_cache = getattr(self, f"value_cache_{idx}")
+                torch._dynamo.mark_static_address(new_layer_key_cache)
+                torch._dynamo.mark_static_address(new_layer_value_cache)
+            self.key_cache.append(new_layer_key_cache)
+            self.value_cache.append(new_layer_value_cache)
 
     def update(
         self,
@@ -1047,6 +1136,24 @@ class SlidingWindowCache(StaticCache):
             The device on which the cache should be initialized. Should be the same as the layer.
         dtype (*optional*, defaults to `torch.float32`):
             The default `dtype` to use when initializing the layer.
+
+    Example:
+
+        ```python
+        >>> from transformers import AutoTokenizer, AutoModelForCausalLM, SlidingWindowCache
+
+        >>> model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
+        >>> tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
+
+        >>> inputs = tokenizer(text="My name is GPT2", return_tensors="pt")
+
+        >>> # Prepare a cache class and pass it to model's forward
+        >>> # Leave empty space for 10 new tokens, which can be used when calling forward iteratively 10 times to generate
+        >>> max_generated_length = inputs.input_ids.shape[1] + 10
+        >>> past_key_values = SlidingWindowCache(config=model.config, max_batch_size=1, max_cache_len=max_generated_length, device=model.device, dtype=model.dtype)
+        >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
+        >>> past_kv_length = outputs.past_key_values # access cache filled with key/values from generation
+        ```
     """
 
     def __init__(self, config: PretrainedConfig, max_batch_size: int, max_cache_len: int, device, dtype=None) -> None:
@@ -1125,6 +1232,25 @@ class EncoderDecoderCache(Cache):
     """
     Base, abstract class for all encoder-decoder caches. Can be used to hold combinations of self-attention and
     cross-attention caches.
+
+    Example:
+
+        ```python
+        >>> from transformers import AutoProcessor, AutoModelForCausalLM, DynamicCache, EncoderDecoderCache
+
+        >>> model = AutoModelForCausalLM.from_pretrained("openai/whisper-small")
+        >>> processor = AutoProcessor.from_pretrained("openai/whisper-small")
+
+        >>> inputs = processor(audio=YOUR-AUDIO, return_tensors="pt")
+
+        >>> # Prepare cache classes for encoder and decoder and pass it to model's forward
+        >>> self_attention_cache = DynamicCache()
+        >>> cross_attention_cache = DynamicCache()
+        >>> past_key_values = EncoderDecoderCache(self_attention_cache, cross_attention_cache)
+        >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
+        >>> past_kv_length = outputs.past_key_values # access cache filled with key/values from generation
+        ```
+
     """
 
     def __init__(self, self_attention_cache: Cache, cross_attention_cache: Cache):
@@ -1271,6 +1397,42 @@ class EncoderDecoderCache(Cache):
 
 
 class HybridCache(Cache):
+    """
+    Hybrid Cache class to be used with `torch.compile` for Gemma2 models that alternate between a local sliding window attention
+    and global attention in every other layer. Under the hood, Hybrid Cache leverages ["SlidingWindowCache"] for sliding window attention
+    and ["StaticCache"] for global attention. For more information, see the documentation of each subcomponeent cache class.
+
+    Parameters:
+        config (`PretrainedConfig):
+            The configuration file defining the shape-related attributes required to initialize the static cache.
+        max_batch_size (`int`):
+            The maximum batch size with which the model will be used.
+        max_cache_len (`int`):
+            The maximum sequence length with which the model will be used.
+        device (`torch.device`, *optional*, defaults to `"cpu"`):
+            The device on which the cache should be initialized. Should be the same as the layer.
+        dtype (*optional*, defaults to `torch.float32`):
+            The default `dtype` to use when initializing the layer.
+
+    Example:
+
+        ```python
+        >>> from transformers import AutoTokenizer, AutoModelForCausalLM, HybridCache
+
+        >>> model = AutoModelForCausalLM.from_pretrained("google/gemma-2-9b")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-9b")
+
+        >>> inputs = tokenizer(text="My name is Gemma", return_tensors="pt")
+
+        >>> # Prepare a cache class and pass it to model's forward
+        >>> # Leave empty space for 10 new tokens, which can be used when calling forward iteratively 10 times to generate
+        >>> max_generated_length = inputs.input_ids.shape[1] + 10
+        >>> past_key_values = HybridCache(config=model.config, max_batch_size=1, max_cache_len=max_generated_length, device=model.device, dtype=model.dtype)
+        >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
+        >>> past_kv_length = outputs.past_key_values # access cache filled with key/values from generation
+        ```
+    """
+
     def __init__(self, config: PretrainedConfig, max_batch_size, max_cache_len, device="cpu", dtype=None) -> None:
         super().__init__()
         if not hasattr(config, "sliding_window") or config.sliding_window is None:
@@ -1398,18 +1560,44 @@ class MambaCache:
     Cache for mamba model which does not have attention mechanism and key value states.
 
     Arguments:
-        config: MambaConfig
-        max_batch_size: int
-        dtype: torch.dtype
-        device: torch.device
+        config (`PretrainedConfig):
+            The configuration file defining the shape-related attributes required to initialize the static cache.
+        max_batch_size (`int`):
+            The maximum batch size with which the model will be used.
+        dtype (*optional*, defaults to `torch.float16`):
+            The default `dtype` to use when initializing the layer.
+        device (`torch.device`, *optional*):
+            The device on which the cache should be initialized. Should be the same as the layer.
 
     Attributes:
-        dtype: torch.dtype
-        intermediate_size: int
-        ssm_state_size: int
-        conv_kernel_size: int
-        conv_states: torch.Tensor [layer_idx, batch_size, intermediate_size, conv_kernel_size]
-        ssm_states: torch.Tensor [layer_idx, batch_size, intermediate_size, ssm_state_size]
+        dtype: (`torch.dtype`):
+            The default `dtype` used to initializing the cache.
+        intermediate_size: (`int`):
+            Model's intermediate_size taken from config.
+        ssm_state_size: (`int`):
+            Model's state_size taken from config.
+        conv_kernel_size: (`int`):
+            Model's convolution kernel size taken from config
+        conv_states: (`torch.Tensor`):
+            A tensor of shape `[layer_idx, batch_size, intermediate_size, conv_kernel_size]` that holds convolutional states.
+        ssm_states: (`torch.Tensor`):
+            A tensor of shape `[layer_idx, batch_size, intermediate_size, ssm_state_size]` that holds ssm states
+
+    Example:
+
+        ```python
+        >>> from transformers import AutoTokenizer, MambaForCausalLM, MambaCache
+
+        >>> model = MambaForCausalLM.from_pretrained("state-spaces/mamba-130m-hf")
+        >>> tokenizer = AutoTokenizer.from_pretrained("state-spaces/mamba-130m-hf")
+
+        >>> inputs = tokenizer(text="My name is Mamba", return_tensors="pt")
+
+        >>> # Prepare a cache class and pass it to model's forward
+        >>> past_key_values = MambaCache(config=model.config, max_batch_size=1, device=model.device, dtype=model.dtype)
+        >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
+        >>> past_kv = outputs.past_key_values
+        ```
     """
 
     def __init__(
