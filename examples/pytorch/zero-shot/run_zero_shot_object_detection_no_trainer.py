@@ -19,9 +19,10 @@ import json
 import logging
 import math
 import os
+import random
 from functools import partial
 from pathlib import Path
-from typing import Any, List, Mapping, Tuple, Union
+from typing import Dict, Any, List, Mapping, Tuple, Union
 
 import albumentations as A
 import datasets
@@ -167,19 +168,59 @@ def augment_and_transform_batch(
     examples: Mapping[str, Any],
     transform: A.Compose,
     processor: AutoProcessor,
-    prompt: str,
+    id2label: Dict[int, str],
+    label2id: Dict[str, int],
+    random_text_prompt: bool = False,
     return_pixel_mask: bool = False,
 ) -> BatchFeature:
-    """Apply augmentations and format annotations in COCO format for object detection task"""
+    """
+    Apply augmentations and format annotations in COCO format for object detection task.
+    Generates the text prompt used. If `random_text_prompt` is False
+        then the prompt will follow the same ordering in `id2label` if set to
+        True a new ordering will be created and the prompt will be build accordingly
+        and labels will be updated as well.
+
+        Example:
+            `id2label` -> {'0': 'fish', '1': 'jellyfish', '2': 'penguins', '3':
+                        'sharks', '4': 'puffins', '5': 'stingrays', '6': 'starfish'}
+
+            If `random_text_prompt` -> False
+                `text` -> "fish. jellyfish. penguins. sharks. puffins. stingrays. starfish."
+
+            If `random_text_prompt` -> True
+                `id2label` gets shuffled e.g. {0: 'fish', 1: 'penguins', 2: 'stingrays', 3:
+                                            'jellyfish', 4: 'sharks', 5: 'starfish', 6: 'puffins'}
+                `text` -> "fish. penguins. stingrays. jellyfish. sharks. starfish. puffins."
+    """
 
     images = []
     annotations = []
     text = []
+
+    to_label_list = lambda x: list(x.values())
+    concat_func = lambda x: ". ".join(to_label_list(x)) + "."
+
     for image_id, image, objects in zip(examples["image_id"], examples["image"], examples["objects"]):
         image = np.array(image.convert("RGB"))
 
+        if random_text_prompt:
+            # Original ordering label list
+            label_list = to_label_list(id2label)
+            # Shuffle label list
+            random.shuffle(label_list)
+            # Create shuffled id2label
+            shuffled_id2label = {idx: label for idx, label in enumerate(label_list)}
+
+            # Mapping of original to shuffled id to update annotations
+            old2new = {label2id[label]: new_id for new_id, label in shuffled_id2label.items()}
+            prompt = concat_func(shuffled_id2label)
+            category = [old2new[category] for category in objects["category"]]
+        else:
+            prompt = concat_func(id2label)
+            category = objects["category"]
+
         # apply augmentations
-        output = transform(image=image, bboxes=objects["bbox"], category=objects["category"])
+        output = transform(image=image, bboxes=objects["bbox"], category=category)
         images.append(output["image"])
 
         # format annotations in COCO format
@@ -524,7 +565,7 @@ def main():
         "trust_remote_code": args.trust_remote_code,
     }
     config = AutoConfig.from_pretrained(
-        args.model_name_or_path, label2id=label2id, id2label=id2label, **common_pretrained_args
+        args.model_name_or_path, auxiliary_loss=True, label2id=label2id, id2label=id2label, **common_pretrained_args
     )
     model = AutoModelForZeroShotObjectDetection.from_pretrained(
         args.model_name_or_path,
@@ -573,15 +614,15 @@ def main():
     prompt = ". ".join(id2label.values()) + "."
 
     train_transform_batch = partial(
-        augment_and_transform_batch, transform=train_augment_and_transform, processor=processor, prompt=prompt,
+        augment_and_transform_batch, transform=train_augment_and_transform, processor=processor, id2label=id2label, label2id=label2id, random_text_prompt=False
     )
     validation_transform_batch = partial(
-        augment_and_transform_batch, transform=validation_transform, processor=processor, prompt=prompt,
+        augment_and_transform_batch, transform=validation_transform, processor=processor, id2label=id2label, label2id=label2id, random_text_prompt=True
     )
 
     with accelerator.main_process_first():
-        train_dataset = dataset["train"].with_transform(train_transform_batch)
-        valid_dataset = dataset["validation"].with_transform(validation_transform_batch)
+        train_dataset = dataset["test"].with_transform(train_transform_batch)
+        valid_dataset = dataset["test"].with_transform(validation_transform_batch)
         test_dataset = dataset["test"].with_transform(validation_transform_batch)
 
     dataloader_common_args = {
