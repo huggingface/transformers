@@ -27,8 +27,8 @@ rendered properly in your Markdown viewer.
 
 - 가중치 양자화 (`float8`,`int8`,`int4`,`int2`)
 - 활성화 양자화 (`float8`,`int8`)
-- 모달리티 독립성 (e.g CV,LLM)
-- 장치 독립성 (e.g CUDA,MPS,CPU)
+- 모달리티에 구애받지 않음 (e.g CV,LLM)
+- 장치에 구애받지 않음 (e.g CUDA,MPS,CPU)
 - `torch.compile` 호환성
 - 특정 장치에 대한 사용자 정의 커널의 쉬운 추가
 - QAT(양자화를 고려한 학습) 지원
