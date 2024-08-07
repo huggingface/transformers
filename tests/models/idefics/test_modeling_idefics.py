@@ -594,27 +594,15 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
                 model_sdpa = model_class.from_pretrained(tmpdirname, torch_dtype=torch_dtype)
                 model_sdpa = model_sdpa.eval().to(torch_device)
 
-                # see https://github.com/huggingface/transformers/pull/32238
-                # TL:DR; each sub-config will dispatch its own attn depending on whether it's supported or not
-                # In this case we get SDPA by default if it `_supports_sdpa` else fallback to "eager"
-                # and we know that Idefics's perceiver and vision models are simple nn.Modules wo SDPA
-                perceiver_attn = "eager"
-                vision_attn = "eager"
-
-                self.assertTrue(model_sdpa.config.perceiver_config._attn_implementation == perceiver_attn)
-                self.assertTrue(model_sdpa.config.vision_config._attn_implementation == vision_attn)
+                self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
 
                 # Also test that nothing break if we request SDPA explicitly
-                # Of the model supports sdpa (i.e. one of sub-models supports it) we'll dispatch safely whenever possible
-                # Otherwise we should raise error that SDPA is not supported, as none of the sub-models support SDPA
-                # Checking error is out-of-scope of this test
                 model_sdpa_explicit = model_class.from_pretrained(
                     tmpdirname, torch_dtype=torch_dtype, attn_implementation="sdpa"
                 )
                 model_sdpa_explicit = model_sdpa_explicit.eval().to(torch_device)
 
-                self.assertTrue(model_sdpa_explicit.config.perceiver_config._attn_implementation == perceiver_attn)
-                self.assertTrue(model_sdpa_explicit.config.vision_config._attn_implementation == vision_attn)
+                self.assertTrue(model_sdpa_explicit.config._attn_implementation == "sdpa")
 
                 model_eager = model_class.from_pretrained(
                     tmpdirname,
@@ -623,8 +611,7 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
                 )
                 model_eager = model_eager.eval().to(torch_device)
 
-                self.assertTrue(model_eager.config.perceiver_config._attn_implementation == "eager")
-                self.assertTrue(model_eager.config.vision_config._attn_implementation == "eager")
+                self.assertTrue(model_eager.config._attn_implementation == "eager")
 
                 for name, submodule in model_eager.named_modules():
                     class_name = submodule.__class__.__name__
