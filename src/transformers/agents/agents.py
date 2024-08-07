@@ -311,10 +311,26 @@ class AgentGenerationError(AgentError):
 def format_prompt_with_tools(toolbox: Toolbox, prompt_template: str, tool_description_template: str) -> str:
     tool_descriptions = toolbox.show_tool_descriptions(tool_description_template)
     prompt = prompt_template.replace("<<tool_descriptions>>", tool_descriptions)
+
     if "<<tool_names>>" in prompt:
         tool_names = [f"'{tool_name}'" for tool_name in toolbox.tools.keys()]
         prompt = prompt.replace("<<tool_names>>", ", ".join(tool_names))
+
     return prompt
+
+
+def format_prompt_with_managed_agents_descriptions(prompt_template, managed_agents = None) -> str:
+    if managed_agents is not None:
+        managed_agents_descriptions = """You can also give requests to team members.
+    Calling a team member works the same as for calling a tool: simply, the only argument you can give in the call is a string request.
+    Given that this team member is a real human, you should then be very verbose in your request.
+    Here is a list of the team members that you can call:
+    """
+        for _, agent in managed_agents.values():
+            managed_agents_descriptions += f"\n- Team member {agent.name}: {agent.description}"
+        return prompt_template.replace("<<managed_agents_descriptions>>", managed_agents_descriptions)
+    else:
+        return prompt_template.replace("<<managed_agents_descriptions>>", "")
 
 
 def format_prompt_with_imports(prompt_template: str, authorized_imports: List[str]) -> str:
@@ -337,6 +353,7 @@ class Agent:
         verbose: int = 0,
         memory_verbose: bool = False,
         grammar: Dict[str, str] = None,
+        managed_agents: List = None,
     ):
         self.agent_name = self.__class__.__name__
         self.llm_engine = llm_engine
@@ -349,6 +366,7 @@ class Agent:
         self.logger = logger
         self.tool_parser = tool_parser
         self.grammar = grammar
+        self.managed_agents = {agent.name: agent for agent in managed_agents}
 
         if isinstance(tools, Toolbox):
             self._toolbox = tools
@@ -364,6 +382,7 @@ class Agent:
         self.system_prompt = format_prompt_with_tools(
             self._toolbox, self.system_prompt_template, self.tool_description_template
         )
+        self.system_prompt = format_prompt_with_managed_agents_descriptions(self.system_prompt, self.managed_agents)
         self.prompt = None
         self.logs = []
         self.task = None
@@ -488,26 +507,33 @@ class Agent:
             tool_name (`str`): Name of the Tool to execute (should be one from self.toolbox).
             arguments (Dict[str, str]): Arguments passed to the Tool.
         """
-        if tool_name not in self.toolbox.tools:
-            error_msg = f"Error: unknown tool {tool_name}, should be instead one of {list(self.toolbox.tools.keys())}."
+        available_tools = {**self.toolbox.tools, **self.managed_agents}
+        if tool_name not in available_tools:
+            error_msg = f"Error: unknown tool {tool_name}, should be instead one of {list(available_tools.keys())}."
             self.logger.error(error_msg, exc_info=1)
             raise AgentExecutionError(error_msg)
 
         try:
             if isinstance(arguments, str):
-                observation = self.toolbox.tools[tool_name](arguments)
+                observation = available_tools[tool_name](arguments)
             else:
                 for key, value in arguments.items():
                     # if the value is the name of a state variable like "image.png", replace it with the actual value
                     if isinstance(value, str) and value in self.state:
                         arguments[key] = self.state[value]
-                observation = self.toolbox.tools[tool_name](**arguments)
+                observation = available_tools[tool_name](**arguments)
             return observation
         except Exception as e:
-            raise AgentExecutionError(
-                f"Error in tool call execution: {e}\nYou should only use this tool with a correct input.\n"
-                f"As a reminder, this tool's description is the following:\n{get_tool_description_with_args(self.toolbox.tools[tool_name])}"
-            )
+            if tool_name in self.toolbox.tools:
+                raise AgentExecutionError(
+                    f"Error in tool call execution: {e}\nYou should only use this tool with a correct input.\n"
+                    f"As a reminder, this tool's description is the following:\n{get_tool_description_with_args(available_tools[tool_name])}"
+                )
+            elif tool_name in self.managed_agents:
+                raise AgentExecutionError(
+                    f"Error in calling team member: {e}\nYou should only ask this team member with a correct request.\n"
+                    f"As a reminder, this team member's description is the following:\n{available_tools[tool_name]}"
+                )
 
     def log_code_action(self, code_action: str) -> None:
         self.logger.warning("==== Agent is executing the code below:")
@@ -630,6 +656,8 @@ class CodeAgent(Agent):
         self.log_code_action(code_action)
         try:
             available_tools = {**BASE_PYTHON_TOOLS.copy(), **self.toolbox.tools}
+            if self.managed_agents is not None:
+                available_tools = {**available_tools, **self.managed_agents}
             output = self.python_evaluator(
                 code_action,
                 static_tools=available_tools,
@@ -1099,3 +1127,31 @@ class ReactCodeAgent(ReactAgent):
                 self.logger.log(32, result)
                 current_step_logs["final_answer"] = result
         return current_step_logs
+
+
+class ManagedAgent():
+    def __init__(self, agent, name, description, additional_prompting = None):
+        self.agent = agent
+        self.name = name
+        self.description = description
+        self.additional_prompting = additional_prompting
+
+    def __call__(self, task):
+        full_task = f"""You're a helpful agent named '{self.name}'.
+You have been submitted this task by your manager: '{task}'
+
+You're helping your manager solve a wider task: so make sure to not provide a one-line answer, but give as much information as possible so that they have a clear understanding of the answer.
+
+Your final_answer WILL HAVE to contain these parts:
+### 1. Task outcome (short version):
+### 2. Task outcome (extremely detailed version):
+### 3. Additional context:
+
+Put all these in your final_answer, everything that you do not pass as an argument to final_answer will be lost.
+And even if your task resolution is not successful, please return as much context as possible, so that your manager can act upon this feedback.
+<<additional_prompting>>"""
+        if self.additional_prompting:
+            full_task = full_task.replace("\n<<additional_prompting>>", self.additional_prompting)
+        else:
+            full_task = full_task.replace("\n<<additional_prompting>>", "")
+        return self.agent.run(full_task)
