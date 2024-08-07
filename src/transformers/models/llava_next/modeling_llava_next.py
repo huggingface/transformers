@@ -517,7 +517,11 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                 "If that's intended, ignore this warning"
             )
         if not self.training and self.padding_side == "right":
-            warnings.warn("padding is right even though in inference mode. If that's intended, ignore this warning")
+            logger.warning_once(
+                "Padding side is set to 'right' but the model is in inference mode. For correct "
+                "generation results, please set `model.padding_side='left'` and `processor.tokenizer.padding_side='left'`. "
+                "If that's intended, ignore this warning"
+            )
 
         with torch.no_grad():
             # ! in llava 1.6, number of patches is variable
