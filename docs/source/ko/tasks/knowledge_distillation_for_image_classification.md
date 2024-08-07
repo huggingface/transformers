@@ -189,4 +189,4 @@ trainer.evaluate(processed_datasets["test"])
 ```
 
 
-테스트 세트에서 우리 모델은 72%의 정확도에 도달했습니다. 증류의 효율성을 검증하기 위해 동일한 하이퍼파라미터로 beans 데이터셋에서 MobileNet을 처음부터 훈련했을 때 테스트 세트에서 63%의 정확도를 관찰했습니다. 독자들이 다양한 사전 훈련된 교사 모델, 학생 구조, 증류 매개변수를 시도하고 그 결과를 보고하도록 권장합니다. 증류된 모델의 훈련 로그와 체크포인트는 [이 저장소](https://huggingface.co/merve/vit-mobilenet-beans-224)에서 찾을 수 있으며, 처음부터 훈련된 MobileNetV2는 이 [저장소](https://huggingface.co/merve/resnet-mobilenet-beans-5)에서 찾을 수 있습니다.
+테스트 세트에서 모델의 정확도는 72%에 도달했습니다. 증류의 효율성을 검증하기 위해 동일한 하이퍼파라미터로 beans 데이터셋에서 MobileNet을 처음부터 훈련하였고, 테스트 세트에서의 정확도는 63% 였습니다. 다양한 사전 훈련된 교사 모델, 학생 구조, 증류 매개변수를 시도해보시고 결과를 보고하기를 권장합니다. 증류된 모델의 훈련 로그와 체크포인트는 [이 저장소](https://huggingface.co/merve/vit-mobilenet-beans-224)에서 찾을 수 있으며, 처음부터 훈련된 MobileNetV2는 이 [저장소](https://huggingface.co/merve/resnet-mobilenet-beans-5)에서 찾을 수 있습니다.
