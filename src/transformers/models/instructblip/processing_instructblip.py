@@ -17,13 +17,12 @@ Processor class for InstructBLIP. Largely copy of Blip2Processor with addition o
 """
 
 import os
-from typing import List, Optional, Union
+from typing import List, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
-from ...utils import TensorType
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ..auto import AutoTokenizer
 
 
@@ -84,21 +83,9 @@ class InstructBlipProcessor(ProcessorMixin):
         self,
         images: ImageInput = None,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
-        add_special_tokens: bool = True,
-        padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = None,
-        max_length: Optional[int] = None,
-        stride: int = 0,
-        pad_to_multiple_of: Optional[int] = None,
-        return_attention_mask: Optional[bool] = None,
-        return_overflowing_tokens: bool = False,
-        return_special_tokens_mask: bool = False,
-        return_offsets_mapping: bool = False,
-        return_token_type_ids: bool = False,
-        return_length: bool = False,
-        verbose: bool = True,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        **kwargs,
+        audio=None,
+        videos=None,
+        **kwargs: Unpack[InstructBlipProcessorKwargs],
     ) -> BatchFeature:
         """
         This method uses [`BlipImageProcessor.__call__`] method to prepare image(s) for the model, and
@@ -116,7 +103,6 @@ class InstructBlipProcessor(ProcessorMixin):
         """
         if images is None and text is None:
             raise ValueError("You have to specify at least images or text.")
-
         output_kwargs = self._merge_kwargs(
             InstructBlipProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
