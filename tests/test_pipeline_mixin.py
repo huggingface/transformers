@@ -38,6 +38,9 @@ from transformers.testing_utils import (
     require_vision,
 )
 from transformers.utils import direct_transformers_import, logging
+from transformers.processing_utils import ProcessorMixin
+from transformers.image_processing_utils import BaseImageProcessor
+from transformers.feature_extraction_utils import FeatureExtractionMixin
 
 from .pipelines.test_pipelines_audio_classification import AudioClassificationPipelineTests
 from .pipelines.test_pipelines_automatic_speech_recognition import AutomaticSpeechRecognitionPipelineTests
@@ -270,12 +273,20 @@ class PipelineTesterMixin:
             tokenizer_class = getattr(transformers_module, tokenizer_name)
             tokenizer = tokenizer_class.from_pretrained(repo_id, revision=commit)
 
-        processor = None
+        processors = {}
         if processor_name is not None:
             processor_class = getattr(transformers_module, processor_name)
             # If the required packages (like `Pillow` or `torchaudio`) are not installed, this will fail.
             try:
                 processor = processor_class.from_pretrained(repo_id, revision=commit)
+                if isinstance(processor, ProcessorMixin):
+                    processors["processor"] = processor
+                elif isinstance(processor, BaseImageProcessor):
+                    processors["image_processor"] = processor
+                elif isinstance(processor, FeatureExtractionMixin):
+                    processors["feature_extractor"] = processor
+                else:
+                    raise ValueError(f"Unknown processor class: {processor_name}")
             except Exception:
                 logger.warning(
                     f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')}_{torch_dtype} is skipped: Could not load the "
@@ -322,7 +333,7 @@ class PipelineTesterMixin:
         # `run_pipeline_test`.
         task_test = pipeline_test_mapping[task]["test"]()
 
-        pipeline, examples = task_test.get_test_pipeline(model, tokenizer, processor, torch_dtype=torch_dtype)
+        pipeline, examples = task_test.get_test_pipeline(model, tokenizer, **processors, torch_dtype=torch_dtype)
         if pipeline is None:
             # The test can disable itself, but it should be very marginal
             # Concerns: Wav2Vec2ForCTC without tokenizer test (FastTokenizer don't exist)
