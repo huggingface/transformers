@@ -297,6 +297,10 @@ def is_torch_available():
     return _torch_available
 
 
+def is_accelerate_available(min_version: str = ACCELERATE_MIN_VERSION):
+    return _accelerate_available and version.parse(_accelerate_version) >= version.parse(min_version)
+
+
 def is_torch_deterministic():
     """
     Check whether pytorch uses deterministic algorithms by looking if torch.set_deterministic_debug_mode() is set to 1 or 2"
@@ -692,7 +696,7 @@ def is_torchdynamo_compiling():
         import torch
 
         return torch.compiler.is_compiling()
-    except AttributeError:
+    except Exception:
         try:
             import torch._dynamo as dynamo  # noqa: F401
 
@@ -883,10 +887,6 @@ def is_protobuf_available():
     if importlib.util.find_spec("google") is None:
         return False
     return importlib.util.find_spec("google.protobuf") is not None
-
-
-def is_accelerate_available(min_version: str = ACCELERATE_MIN_VERSION):
-    return _accelerate_available and version.parse(_accelerate_version) >= version.parse(min_version)
 
 
 def is_fsdp_available(min_version: str = FSDP_MIN_VERSION):
