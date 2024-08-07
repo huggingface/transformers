@@ -71,14 +71,14 @@ def make_batched_videos(videos) -> List[VideoInput]:
 
 # Copy from models.imagebind.feature_extraction_imagebind.uniform_chunk_sampling
 def uniform_chunk_sampling(
-    total_duration: float, chunk_duration: int, num_chunks: int
+    total_duration: float, chunk_duration: float, num_chunks: int
 ) -> List[Tuple[Fraction, Fraction]]:
     """
     Uniformly sample `num_chunks` chunks of duration `chunk_duration` from an audio/video of total duration `total_duration`.
 
     Args:
         total_duration (float): Total duration of the audio/video.
-        chunk_duration (int): Duration of each chunk(clip duration).
+        chunk_duration (float): Duration of each chunk(clip duration).
         num_chunks (int): Number of chunks to sample(number of clips per video).
 
     Returns:
@@ -181,7 +181,7 @@ class ImageBindImageProcessor(BaseImageProcessor):
             Whether to convert the image to RGB.
         do_chunk (`bool`, *optional*, defaults to `False`):
             Whether to chunk the video into multiple clips.
-        chunk_duration (`int`, *optional*, defaults to 2):
+        chunk_duration (`float`, *optional*, defaults to 2.0):
             Duration of each chunk in seconds(clip duration).
         num_chunks (`int`, *optional*, defaults to 5):
             Number of chunks to sample(number of clips per video).
@@ -209,7 +209,7 @@ class ImageBindImageProcessor(BaseImageProcessor):
         image_std: Optional[Union[float, List[float]]] = None,
         do_convert_rgb: bool = True,
         do_chunk: bool = False,
-        chunk_duration: int = 2,
+        chunk_duration: float = 2.0,
         num_chunks: int = 5,
         num_frames_per_chunk: int = 2,
         fps: List[int] = [30],
@@ -457,7 +457,7 @@ class ImageBindImageProcessor(BaseImageProcessor):
         video: VideoInput,
         fps: int,
         duration: float,
-        chunk_duration: int,
+        chunk_duration: float,
         num_chunks: int,
         num_frames_per_chunk: int,
     ) -> List[VideoInput]:
@@ -471,12 +471,12 @@ class ImageBindImageProcessor(BaseImageProcessor):
                 Frame rate of the video
             duration('float', *optional*, defaults to 10.0):
                 Durations of videos
-            chunk_duration (`int`):
+            chunk_duration (`float`):
                 Duration of each chunk(clip duration).
             num_chunks (`int`):
                 Number of chunks to sample(number of clips per video).
             num_frames_per_chunk (`int`):
-                Number of frames to sample per chunk.######(WHY IS IT DEFINED WHEN chunk_duration can fulfill its purpose?)######
+                Number of frames to sample per chunk.
         """
         fps = float(fps)
         video_duration = duration
@@ -500,7 +500,7 @@ class ImageBindImageProcessor(BaseImageProcessor):
             video_clip = video[:, frame_idxs, :, :]
             if video_clip is None:
                 raise ValueError("No clip found")
-            video_clip = uniform_temporal_subsample(video_clip.numpy(), num_samples=chunk_duration)
+            video_clip = uniform_temporal_subsample(video_clip.numpy(), num_samples=num_frames_per_chunk)
             video_clip = video_clip / 255.0  # since this is float, need 0-1
             all_clips.append(video_clip)
 
@@ -594,7 +594,7 @@ class ImageBindImageProcessor(BaseImageProcessor):
         image_std: Optional[Union[float, List[float]]] = None,
         do_convert_rgb: bool = None,
         do_chunk: bool = None,
-        chunk_duration: int = None,
+        chunk_duration: float = None,
         num_chunks: int = None,
         num_frames_per_chunk: int = None,
         fps: List[int] = None,
