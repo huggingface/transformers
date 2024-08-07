@@ -17,10 +17,11 @@
 
 import logging
 import os
+import random
 import sys
 from dataclasses import dataclass, field
 from functools import partial
-from typing import Any, List, Mapping, Optional, Tuple, Union
+from typing import Any, Dict, List, Mapping, Optional, Tuple, Union
 
 import albumentations as A
 import numpy as np
@@ -31,8 +32,8 @@ from torchmetrics.detection.mean_ap import MeanAveragePrecision
 import transformers
 from transformers import (
     AutoConfig,
-    AutoProcessor,
     AutoModelForZeroShotObjectDetection,
+    AutoProcessor,
     HfArgumentParser,
     Trainer,
     TrainingArguments,
@@ -116,21 +117,68 @@ def convert_bbox_yolo_to_pascal(boxes: torch.Tensor, image_size: Tuple[int, int]
     return boxes
 
 
+def to_label_list(id2label):
+    return list(id2label.values())
+
+
+def concat_func(id2label):
+    return ". ".join(to_label_list(id2label)) + "."
+
+
 def augment_and_transform_batch(
     examples: Mapping[str, Any],
     transform: A.Compose,
-    image_processor: AutoImageProcessor,
+    processor: AutoProcessor,
+    id2label: Dict[int, str],
+    label2id: Dict[str, int],
+    random_text_prompt: bool = False,
     return_pixel_mask: bool = False,
 ) -> BatchFeature:
-    """Apply augmentations and format annotations in COCO format for object detection task"""
+    """
+    Apply augmentations and format annotations in COCO format for object detection task.
+    Generates the text prompt used. If `random_text_prompt` is False
+        then the prompt will follow the same ordering in `id2label` if set to
+        True a new ordering will be created and the prompt will be build accordingly
+        and labels will be updated as well.
+
+        Example:
+            `id2label` -> {'0': 'fish', '1': 'jellyfish', '2': 'penguins', '3':
+                        'sharks', '4': 'puffins', '5': 'stingrays', '6': 'starfish'}
+
+            If `random_text_prompt` -> False
+                `text` -> "fish. jellyfish. penguins. sharks. puffins. stingrays. starfish."
+
+            If `random_text_prompt` -> True
+                `id2label` gets shuffled e.g. {0: 'fish', 1: 'penguins', 2: 'stingrays', 3:
+                                            'jellyfish', 4: 'sharks', 5: 'starfish', 6: 'puffins'}
+                `text` -> "fish. penguins. stingrays. jellyfish. sharks. starfish. puffins."
+    """
 
     images = []
     annotations = []
+    text = []
+
     for image_id, image, objects in zip(examples["image_id"], examples["image"], examples["objects"]):
         image = np.array(image.convert("RGB"))
 
+        if random_text_prompt:
+            # Original ordering label list
+            label_list = to_label_list(id2label)
+            # Shuffle label list
+            random.shuffle(label_list)
+            # Create shuffled id2label
+            shuffled_id2label = dict(enumerate(label_list))
+
+            # Mapping of original to shuffled id to update annotations
+            old2new = {label2id[label]: new_id for new_id, label in shuffled_id2label.items()}
+            prompt = concat_func(shuffled_id2label)
+            category = [old2new[category] for category in objects["category"]]
+        else:
+            prompt = concat_func(id2label)
+            category = objects["category"]
+
         # apply augmentations
-        output = transform(image=image, bboxes=objects["bbox"], category=objects["category"])
+        output = transform(image=image, bboxes=objects["bbox"], category=category)
         images.append(output["image"])
 
         # format annotations in COCO format
@@ -138,9 +186,10 @@ def augment_and_transform_batch(
             image_id, output["category"], objects["area"], output["bboxes"]
         )
         annotations.append(formatted_annotations)
+        text.append(prompt)
 
     # Apply the image processor transformations: resizing, rescaling, normalization
-    result = image_processor(images=images, annotations=annotations, return_tensors="pt")
+    result = processor(images=images, text=text, annotations=annotations, return_tensors="pt")
 
     if not return_pixel_mask:
         result.pop("pixel_mask", None)
@@ -151,16 +200,20 @@ def augment_and_transform_batch(
 def collate_fn(batch: List[BatchFeature]) -> Mapping[str, Union[torch.Tensor, List[Any]]]:
     data = {}
     data["pixel_values"] = torch.stack([x["pixel_values"] for x in batch])
+    data["input_ids"] = torch.stack([x["input_ids"] for x in batch])
+    data["token_type_ids"] = torch.stack([x["token_type_ids"] for x in batch])
     data["labels"] = [x["labels"] for x in batch]
     if "pixel_mask" in batch[0]:
         data["pixel_mask"] = torch.stack([x["pixel_mask"] for x in batch])
+    if "attention_mask" in batch[0]:
+        data["attention_mask"] = torch.stack([x["attention_mask"] for x in batch])
     return data
 
 
 @torch.no_grad()
 def compute_metrics(
     evaluation_results: EvalPrediction,
-    image_processor: AutoImageProcessor,
+    image_processor: AutoProcessor,
     threshold: float = 0.0,
     id2label: Optional[Mapping[int, str]] = None,
 ) -> Mapping[str, float]:
@@ -474,9 +527,7 @@ def main():
     # Model training and evaluation with Trainer API
     # ------------------------------------------------------------------------------------------------
 
-    eval_compute_metrics_fn = partial(
-        compute_metrics, image_processor=processor, id2label=id2label, threshold=0.0
-    )
+    eval_compute_metrics_fn = partial(compute_metrics, image_processor=processor, id2label=id2label, threshold=0.0)
 
     trainer = Trainer(
         model=model,

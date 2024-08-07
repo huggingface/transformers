@@ -22,7 +22,7 @@ import os
 import random
 from functools import partial
 from pathlib import Path
-from typing import Dict, Any, List, Mapping, Tuple, Union
+from typing import Any, Dict, List, Mapping, Tuple, Union
 
 import albumentations as A
 import datasets
@@ -40,8 +40,8 @@ from tqdm.auto import tqdm
 import transformers
 from transformers import (
     AutoConfig,
-    AutoProcessor,
     AutoModelForZeroShotObjectDetection,
+    AutoProcessor,
     SchedulerType,
     get_scheduler,
 )
@@ -125,45 +125,39 @@ def convert_zero_shot_to_coco_format(predictions, label2id):
 
     Args:
         predictions (Dict): Output of zero-shot object detection
-            e.g. 
-                {
-                    'scores': tensor([0.4786, 0.4379, 0.4760], device='cuda:0'), 
-                    'labels': ['a cat', 'a cat', 'a remote control'], 
-                    'boxes': tensor([[344.6973,  23.1085, 637.1817, 374.2748],
-                                    [ 12.2690,  51.9104, 316.8564, 472.4341],
-                                    [ 38.5870,  70.0092, 176.7755, 118.1748]], device='cuda:0')
-                }
+            e.g. {'scores': tensor([0.4786, 0.4379, 0.4760], device='cuda:0'), 'labels': ['a cat', 'a cat', 'a remote control'], 'boxes': tensor([[344.6973,  23.1085, 637.1817, 374.2748],[ 12.2690,  51.9104, 316.8564, 472.4341],[ 38.5870,  70.0092, 176.7755, 118.1748]], device='cuda:0')}
         label2id (Dict): Dictionary of label to id mapping
 
     Returns:
         Dict: Output of zero-shot object detection
-            e.g. 
-                {
-                    'scores': tensor([0.4786, 0.4379, 0.4760], device='cuda:0'), 
-                    'labels': tensor([1, 1, 2], device='cuda:0'), 
-                    'boxes': tensor([[344.6973,  23.1085, 637.1817, 374.2748],
-                                    [ 12.2690,  51.9104, 316.8564, 472.4341],
-                                    [ 38.5870,  70.0092, 176.7755, 118.1748]], device='cuda:0')
-                }
+            e.g. {'scores': tensor([0.4786, 0.4379, 0.4760], device='cuda:0'), 'labels': [1, 1, 2], 'boxes': tensor([[344.6973,  23.1085, 637.1817, 374.2748],[ 12.2690,  51.9104, 316.8564, 472.4341],[ 38.5870,  70.0092, 176.7755, 118.1748]], device='cuda:0')}
+
     """
     # convert center to corners format
     torch_label = []
     for prediction in predictions:
-        scores = prediction['scores']
+        scores = prediction["scores"]
         device = scores.device
-        labels = prediction['labels']
+        labels = prediction["labels"]
         for label in labels:
             if label in label2id:
                 torch_label.append(label)
             else:
                 # Give background class
                 torch_label.append(0)
-        prediction['labels'] = torch.Tensor(torch_label).to(device)
+        prediction["labels"] = torch.Tensor(torch_label).to(device)
 
     return predictions
 
 
-# Copied from examples/pytorch/object-detection/run_object_detection.augment_and_transform_batch
+def to_label_list(id2label):
+    return list(id2label.values())
+
+
+def concat_func(id2label):
+    return ". ".join(to_label_list(id2label)) + "."
+
+
 def augment_and_transform_batch(
     examples: Mapping[str, Any],
     transform: A.Compose,
@@ -197,9 +191,6 @@ def augment_and_transform_batch(
     annotations = []
     text = []
 
-    to_label_list = lambda x: list(x.values())
-    concat_func = lambda x: ". ".join(to_label_list(x)) + "."
-
     for image_id, image, objects in zip(examples["image_id"], examples["image"], examples["objects"]):
         image = np.array(image.convert("RGB"))
 
@@ -209,7 +200,7 @@ def augment_and_transform_batch(
             # Shuffle label list
             random.shuffle(label_list)
             # Create shuffled id2label
-            shuffled_id2label = {idx: label for idx, label in enumerate(label_list)}
+            shuffled_id2label = dict(enumerate(label_list))
 
             # Mapping of original to shuffled id to update annotations
             old2new = {label2id[label]: new_id for new_id, label in shuffled_id2label.items()}
@@ -239,7 +230,6 @@ def augment_and_transform_batch(
     return result
 
 
-# Copied from examples/pytorch/object-detection/run_object_detection.collate_fn
 def collate_fn(batch: List[BatchFeature]) -> Mapping[str, Union[torch.Tensor, List[Any]]]:
     data = {}
     data["pixel_values"] = torch.stack([x["pixel_values"] for x in batch])
@@ -287,8 +277,10 @@ def evaluation_loop(
         # processor convert boxes from YOLO format to Pascal VOC format
         # ([x_min, y_min, x_max, y_max] in absolute coordinates)
         image_size = torch.stack([example["orig_size"] for example in batch["labels"]], dim=0)
-        input_ids = torch.stack([input_ids for input_ids in batch["input_ids"]], dim=0)
-        predictions = processor.post_process_grounded_object_detection(outputs, input_ids, box_threshold=0.0, text_threshold=0.0, target_sizes=image_size)
+        input_ids = torch.stack(batch["input_ids"], dim=0)
+        predictions = processor.post_process_grounded_object_detection(
+            outputs, input_ids, box_threshold=0.0, text_threshold=0.0, target_sizes=image_size
+        )
         predictions = nested_to_cpu(predictions)
         predictions = convert_zero_shot_to_coco_format(predictions, label2id)
 
@@ -471,6 +463,18 @@ def parse_args():
             "Only applicable when `--with_tracking` is passed."
         ),
     )
+    parser.add_argument(
+        "--freeze_backbone",
+        required=False,
+        action="store_true",
+        help="Whether to freeze the image encoder while training.",
+    )
+    parser.add_argument(
+        "--freeze_text_backbone",
+        required=False,
+        action="store_true",
+        help="Whether to freeze the text encoder while training.",
+    )
     args = parser.parse_args()
 
     # Sanity checks
@@ -577,6 +581,13 @@ def main():
         args.model_name_or_path,
     )
 
+    # Freeze both text_backbone
+    if args.freeze_backbone:
+        model.model.freeze_backbone()
+    if args.freeze_text_backbone:
+        for name, param in model.model.text_backbone.named_parameters():
+            param.requires_grad_(False)
+
     # ------------------------------------------------------------------------------------------------
     # Define image augmentations and dataset transforms
     # ------------------------------------------------------------------------------------------------
@@ -611,18 +622,26 @@ def main():
     )
 
     # Make transform functions for batch and apply for dataset splits
-    prompt = ". ".join(id2label.values()) + "."
-
     train_transform_batch = partial(
-        augment_and_transform_batch, transform=train_augment_and_transform, processor=processor, id2label=id2label, label2id=label2id, random_text_prompt=False
+        augment_and_transform_batch,
+        transform=train_augment_and_transform,
+        processor=processor,
+        id2label=id2label,
+        label2id=label2id,
+        random_text_prompt=False,
     )
     validation_transform_batch = partial(
-        augment_and_transform_batch, transform=validation_transform, processor=processor, id2label=id2label, label2id=label2id, random_text_prompt=True
+        augment_and_transform_batch,
+        transform=validation_transform,
+        processor=processor,
+        id2label=id2label,
+        label2id=label2id,
+        random_text_prompt=True,
     )
 
     with accelerator.main_process_first():
-        train_dataset = dataset["test"].with_transform(train_transform_batch)
-        valid_dataset = dataset["test"].with_transform(validation_transform_batch)
+        train_dataset = dataset["train"].with_transform(train_transform_batch)
+        valid_dataset = dataset["validation"].with_transform(validation_transform_batch)
         test_dataset = dataset["test"].with_transform(validation_transform_batch)
 
     dataloader_common_args = {

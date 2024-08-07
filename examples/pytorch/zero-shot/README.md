@@ -113,7 +113,9 @@ accelerate launch run_zero_shot_object_detection_no_trainer.py \
     --learning_rate 5e-5 \
     --ignore_mismatched_sizes \
     --with_tracking \
-    --push_to_hub
+    --push_to_hub \
+    --freeze_backbone \
+    --freeze_text_backbone
 ```
 
 and boom, you're training, possibly on multiple GPUs, logging everything to all trackers found in your environment (like Weights and Biases, Tensorboard) and regularly pushing your model to the hub (with the repo name being equal to `args.output_dir` at your HF username) 🤗
