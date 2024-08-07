@@ -62,11 +62,12 @@ class TorchAoHfQuantizer(HfQuantizer):
             raise ImportError("Loading an torchao quantized model requires torchao library (`pip install torchao`)")
 
     def update_torch_dtype(self, torch_dtype):
-        if self.quantization_config.quant_method == "int4_weight_only":
+        if self.quantization_config.quant_type == "int4_weight_only":
             if torch_dtype is not None and torch_dtype != torch.bfloat16:
                 logger.warn(
-                    f"Setting torch_dtype to {torch_dtype} for int4_weight_only quantization, but only bfloat16 is supported right now."
+                    f"Setting torch_dtype to {torch_dtype} for int4_weight_only quantization, but only bfloat16 is supported right now. Setting torch_dtype to torch.bfloat16."
                 )
+                torch_dtype = torch.bfloat16
         return torch_dtype
 
     def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
