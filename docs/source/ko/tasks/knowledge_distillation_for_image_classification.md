@@ -52,7 +52,7 @@ def process(examples):
 processed_datasets = dataset.map(process, batched=True)
 ```
 
-본질적으로, 우리는 학생 모델(무작위로 초기화된 MobileNet)이 교사 모델(파인 튜닝된 비전 트랜스포머)을 모방하도록 만들고자 합니다. 이를 달성하기 위해 먼저 교사와 학생 모델의 로짓 출력값을 구합니다. 그런 다음 각 출력을 매개변수 `temperature`로 나누는데, 이는 각 소프트 타겟의 중요성을 조절합니다. `lambda`라는 매개변수는 증류 손실의 중요성에 가중치를 줍니다. 이 예제에서는 `temperature=5`와 `lambda=0.5`를 사용할 것입니다. 우리는 학생과 교사 간의 발산을 계산하기 위해 Kullback-Leibler Divergence 손실을 사용할 것입니다. 두 데이터 P와 Q가 주어졌을 때, KL Divergence는 Q를 사용하여 P를 표현하는 데 얼만큼의 추가 정보가 필요한지를 설명합니다. 두 데이터가 동일하다면, KL Divergence는 0이며, Q로 P를 설명하는 데 추가 정보가 필요하지 않음을 의미합니다. 따라서 지식 증류의 맥락에서 KL Divergence는 유용합니다.
+학생 모델(무작위로 초기화된 MobileNet)이 교사 모델(파인 튜닝된 비전 트랜스포머)을 모방하도록 할 것 입니다. 이를 위해 먼저 교사와 학생 모델의 로짓 출력값을 구합니다. 그런 다음 각 출력값을 매개변수 `temperature` 값으로 나누는데, 이 매개변수는 각 소프트 타겟의 중요도를 조절하는 역할을 합니다. 매개변수 `lambda` 는 증류 손실의 중요도에 가중치를 줍니다. 이 예제에서는 `temperature=5`와 `lambda=0.5`를 사용할 것입니다. 학생과 교사 간의 발산을 계산하기 위해 Kullback-Leibler Divergence 손실을 사용합니다. 두 데이터 P와 Q가 주어졌을 때, KL Divergence는 Q를 사용하여 P를 표현하는 데 얼만큼의 추가 정보가 필요한지를 말해줍니다. 두 데이터가 동일하다면, KL Divergence는 0이며, Q로 P를 설명하는 데 추가 정보가 필요하지 않음을 의미합니다. 따라서 지식 증류의 맥락에서 KL Divergence는 유용합니다.
 
 
 ```python
