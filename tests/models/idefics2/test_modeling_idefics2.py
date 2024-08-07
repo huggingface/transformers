@@ -350,28 +350,18 @@ class Idefics2ModelTest(ModelTesterMixin, unittest.TestCase):
                 model_sdpa = model_sdpa.eval().to(torch_device)
 
                 # see https://github.com/huggingface/transformers/pull/32238
-                # TL:DR; each sub-config will dispatch its own attn depending on whether it's supported or not
-                # In this case we know that Idefics2 has 'eager' for all perceiver/vision models and that
-                # they are not PretrainedModel so we cannot check `_supports_sdpa` cls attr but only set it here
-                perceiver_attn = "eager"
-                vision_attn = "eager"
+                perceiver_attn = "sdpa" if model.connector.perceiver_resampler._supports_sdpa else "eager"
+                vision_attn = "sdpa" if model.vision_model._supports_sdpa else "eager"
 
                 self.assertTrue(model_sdpa.config.text_config._attn_implementation == "sdpa")
                 self.assertTrue(model_sdpa.config.perceiver_config._attn_implementation == perceiver_attn)
                 self.assertTrue(model_sdpa.config.vision_config._attn_implementation == vision_attn)
 
                 # Also test that nothing break if we request SDPA explicitly
-                # Of the model supports sdpa (i.e. one of sub-models supports it) we'll dispatch safely whenever possible
-                # Otherwise we should raise error that SDPA is not supported, as none of the sub-models support SDPA
-                # Checking error is out-of-scope of this test
-                model_sdpa_explicit = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch_dtype, attn_implementation="sdpa"
-                )
-                model_sdpa_explicit = model_sdpa_explicit.eval().to(torch_device)
-
-                self.assertTrue(model_sdpa_explicit.config.text_config._attn_implementation == "sdpa")
-                self.assertTrue(model_sdpa.config.perceiver_config._attn_implementation == perceiver_attn)
-                self.assertTrue(model_sdpa.config.vision_config._attn_implementation == vision_attn)
+                # If the model supports sdpa (i.e. one of sub-models supports it) we'll raise error because we
+                # explicitly asked for SDPA, in comparison to above when SDPA dispatches by default is it is available.
+                with self.assertRaises(ValueError):
+                    _ = model_class.from_pretrained(tmpdirname, torch_dtype=torch_dtype, attn_implementation="sdpa")
 
                 model_eager = model_class.from_pretrained(
                     tmpdirname,
@@ -389,7 +379,6 @@ class Idefics2ModelTest(ModelTesterMixin, unittest.TestCase):
                     if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
                         raise ValueError("The eager model should not have SDPA attention layers")
 
-                print(model_sdpa)
                 has_sdpa = False
                 for name, submodule in model_sdpa.named_modules():
                     class_name = submodule.__class__.__name__

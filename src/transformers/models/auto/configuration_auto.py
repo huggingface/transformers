@@ -129,6 +129,8 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("ibert", "IBertConfig"),
         ("idefics", "IdeficsConfig"),
         ("idefics2", "Idefics2Config"),
+        ("idefics2_perceiver_model", "Idefics2PerceiverConfig"),
+        ("idefics2_vision_model", "Idefics2VisionConfig"),
         ("imagegpt", "ImageGPTConfig"),
         ("informer", "InformerConfig"),
         ("instructblip", "InstructBlipConfig"),
@@ -416,6 +418,8 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("ibert", "I-BERT"),
         ("idefics", "IDEFICS"),
         ("idefics2", "Idefics2"),
+        ("idefics2_perceiver_model", "Idefics2PerceiverResampler"),
+        ("idefics2_vision_model", "Idefics2VisionTransformer"),
         ("imagegpt", "ImageGPT"),
         ("informer", "Informer"),
         ("instructblip", "InstructBLIP"),
@@ -653,6 +657,8 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
         ("siglip_vision_model", "siglip"),
         ("chinese_clip_vision_model", "chinese_clip"),
         ("rt_detr_resnet", "rt_detr"),
+        ("idefics2_vision_model", "idefics2"),
+        ("idefics2_perceiver_model", "idefics2"),
     ]
 )
 

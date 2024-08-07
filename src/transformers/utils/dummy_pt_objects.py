@@ -4775,6 +4775,13 @@ class Idefics2Model(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class Idefics2PerceiverResampler(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class Idefics2PreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -4783,6 +4790,13 @@ class Idefics2PreTrainedModel(metaclass=DummyObject):
 
 
 class Idefics2Processor(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class Idefics2VisionTransformer(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
