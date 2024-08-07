@@ -757,6 +757,7 @@ MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES = OrderedDict(
     [
         ("blip", "BlipForConditionalGeneration"),
         ("blip-2", "Blip2ForConditionalGeneration"),
+        ("chameleon", "ChameleonForConditionalGeneration"),
         ("fuyu", "FuyuForCausalLM"),
         ("git", "GitForCausalLM"),
         ("idefics", "IdeficsForVisionText2Text"),

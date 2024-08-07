@@ -105,7 +105,6 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("video_llava", "VideoLlavaProcessor"),
         ("vilt", "ViltProcessor"),
         ("vipllava", "LlavaProcessor"),
-        ("vision-encoder-decoder", "DonutProcessor"),
         ("vision-text-dual-encoder", "VisionTextDualEncoderProcessor"),
         ("wav2vec2", "Wav2Vec2Processor"),
         ("wav2vec2-bert", "Wav2Vec2Processor"),
