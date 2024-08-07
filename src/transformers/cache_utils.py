@@ -1016,7 +1016,9 @@ class StaticCache(Cache):
 
         self.dtype = dtype if dtype is not None else torch.float32
         self.num_key_value_heads = (
-            config.num_attention_heads if config.num_key_value_heads is None else config.num_key_value_heads
+            config.num_attention_heads
+            if getattr(config, "num_key_value_heads", None) is None
+            else config.num_key_value_heads
         )
 
         self.key_cache: List[torch.Tensor] = []
