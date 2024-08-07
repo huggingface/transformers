@@ -65,10 +65,7 @@ class Blip2ProcessorKwargs(ProcessingKwargs, total=False):
         "text_kwargs": {
             "add_special_tokens": True,
             "padding": False,
-            "truncation": None,
-            "max_length": None,
             "stride": 0,
-            "pad_to_multiple_of": None,
             "return_attention_mask": True,
             "return_overflowing_tokens": False,
             "return_special_tokens_mask": False,
@@ -76,7 +73,6 @@ class Blip2ProcessorKwargs(ProcessingKwargs, total=False):
             "return_token_type_ids": False,
             "return_length": False,
             "verbose": True,
-            "return_tensors": None,
         },
         "images_kwargs": {},
     }

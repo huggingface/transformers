@@ -27,6 +27,31 @@ from ...utils import TensorType
 from ..auto import AutoTokenizer
 
 
+try:
+    from typing import Unpack
+except ImportError:
+    pass
+
+from ...processing_utils import ProcessingKwargs
+
+
+class InstructBlipProcessorKwargs(ProcessingKwargs, total=False):
+    _defaults = {
+        "text_kwargs": {
+            "add_special_tokens": True,
+            "padding": False,
+            "stride": 0,
+            "return_overflowing_tokens": False,
+            "return_special_tokens_mask": False,
+            "return_offsets_mapping": False,
+            "return_token_type_ids": False,
+            "return_length": False,
+            "verbose": True,
+        },
+        "images_kwargs": {},
+    }
+
+
 class InstructBlipProcessor(ProcessorMixin):
     r"""
     Constructs an InstructBLIP processor which wraps a BLIP image processor and a LLaMa/T5 tokenizer into a single
@@ -80,55 +105,35 @@ class InstructBlipProcessor(ProcessorMixin):
         [`BertTokenizerFast.__call__`] to prepare text for the model.
 
         Please refer to the docstring of the above two methods for more information.
+        Args:
+            images (`ImageInput`):
+                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
+                tensor. Both channels-first and channels-last formats are supported.
+            text (`TextInput`, `PreTokenizedInput`, `List[TextInput]`, `List[PreTokenizedInput]`):
+                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
+                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
+                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
         """
         if images is None and text is None:
             raise ValueError("You have to specify at least images or text.")
 
+        output_kwargs = self._merge_kwargs(
+            InstructBlipProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
+
         encoding = BatchFeature()
 
         if text is not None:
-            text_encoding = self.tokenizer(
-                text=text,
-                add_special_tokens=add_special_tokens,
-                padding=padding,
-                truncation=truncation,
-                max_length=max_length,
-                stride=stride,
-                pad_to_multiple_of=pad_to_multiple_of,
-                return_attention_mask=return_attention_mask,
-                return_overflowing_tokens=return_overflowing_tokens,
-                return_special_tokens_mask=return_special_tokens_mask,
-                return_offsets_mapping=return_offsets_mapping,
-                return_token_type_ids=return_token_type_ids,
-                return_length=return_length,
-                verbose=verbose,
-                return_tensors=return_tensors,
-                **kwargs,
-            )
+            text_encoding = self.tokenizer(text, **output_kwargs["text_kwargs"])
             encoding.update(text_encoding)
-            qformer_text_encoding = self.qformer_tokenizer(
-                text=text,
-                add_special_tokens=add_special_tokens,
-                padding=padding,
-                truncation=truncation,
-                max_length=max_length,
-                stride=stride,
-                pad_to_multiple_of=pad_to_multiple_of,
-                return_attention_mask=return_attention_mask,
-                return_overflowing_tokens=return_overflowing_tokens,
-                return_special_tokens_mask=return_special_tokens_mask,
-                return_offsets_mapping=return_offsets_mapping,
-                return_token_type_ids=return_token_type_ids,
-                return_length=return_length,
-                verbose=verbose,
-                return_tensors=return_tensors,
-                **kwargs,
-            )
+            qformer_text_encoding = self.qformer_tokenizer(text, **output_kwargs["text_kwargs"])
             encoding["qformer_input_ids"] = qformer_text_encoding.pop("input_ids")
             encoding["qformer_attention_mask"] = qformer_text_encoding.pop("attention_mask")
 
         if images is not None:
-            image_encoding = self.image_processor(images, return_tensors=return_tensors)
+            image_encoding = self.image_processor(images, **output_kwargs["images_kwargs"])
             encoding.update(image_encoding)
 
         return encoding
