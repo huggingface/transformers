@@ -16,15 +16,15 @@ rendered properly in your Markdown viewer.
 
 # DeepSpeed[[deepspeed]]
 
-[DeepSpeed](https://www.deepspeed.ai/)는 분산 학습 메모리를 효율적이고 빠르게 만드는 PyTorch 최적화 라이브러리입니다. 그 핵심은 대규모 모델을 대규모로 훈련할 수 있는 [Zero Redundancy Optimizer(ZeRO)](https://hf.co/papers/1910.02054)입니다. ZeRO는 여러 단계로 작동합니다:
+[DeepSpeed](https://www.deepspeed.ai/)는 분산 학습 메모리를 효율적이고 빠르게 만드는 PyTorch 최적화 라이브러리입니다. 그 핵심은 대규모 모델을 규모에 맞게 훈련할 수 있는 [Zero Redundancy Optimizer(ZeRO)](https://hf.co/papers/1910.02054)입니다. ZeRO는 여러 단계로 작동합니다:
 
-* ZeRO-1, GPU 간 최적화 상태 파티셔닝
-* ZeRO-2, GPU 간 그레이디언트 파티셔닝
-* ZeRO-3, GPU 간 매개변수 파티셔닝
+* ZeRO-1, GPU 간 최적화 상태 분할
+* ZeRO-2, GPU 간 그레이디언트 분할
+* ZeRO-3, GPU 간 매개변수 분할
 
-GPU가 제한된 환경에서 ZeRO는 최적화 메모리와 계산을 GPU에서 CPU로 오프로드하여 단일 GPU에 매우 큰 모델을 장착하고 훈련할 수 있습니다. DeepSpeed는 모든 ZeRO 단계 및 오프로딩을 위해 트랜스포머 [`Trainer`] 클래스와 통합되어 있습니다. 구성 파일을 제공하거나 제공된 템플릿을 사용하기만 하면 됩니다. 추론의 경우, Transformers는 대용량 모델을 로드할 수 있으므로 ZeRO-3 및 오프로딩을 지원합니다.
+GPU가 제한된 환경에서 ZeRO는 최적화 메모리와 계산을 GPU에서 CPU로 오프로드하여 단일 GPU에 대규모 모델을 장착하고 훈련할 수 있습니다. DeepSpeed는 모든 ZeRO 단계 및 오프로딩을 위해 Transformers [`Trainer`] 클래스와 통합되어 있습니다. 구성 파일을 제공하거나 제공된 템플릿을 사용하기만 하면 됩니다. 추론의 경우, Transformers는 대용량 모델을 가져올 수 있으므로 ZeRO-3 및 오프로딩을 지원합니다.
 
-이 가이드에서는 딥스피드 트레이닝을 배포하는 방법, 활성화할 수 있는 기능, 다양한 ZeRO 단계에 대한 구성 파일 설정 방법, 오프로딩, 추론 및 [`Trainer`] 없이 딥스피드를 사용하는 방법을 안내해 드립니다.
+이 가이드에서는 DeepSpeed 트레이닝을 배포하는 방법, 활성화할 수 있는 기능, 다양한 ZeRO 단계에 대한 구성 파일 설정 방법, 오프로딩, 추론 및 [`Trainer`] 없이 DeepSpeed를 사용하는 방법을 안내해 드립니다.
 
 ## 설치[[installation]]
 
@@ -32,7 +32,7 @@ DeepSpeed는 PyPI 또는 Transformers에서 설치할 수 있습니다(자세한
 
 <Tip>
 
-DeepSpeed를 설치하는 데 문제가 있는 경우 [DeepSpeed CUDA 설치](../debugging#deepspeed-cuda-installation) 가이드를 확인하세요. DeepSpeed에는 PyPI 패키지로 설치할 수 있지만, 하드웨어에 가장 잘 맞고 PyPI 배포판에서는 제공되지 않는 1비트 Adam과 같은 특정 기능을 지원하려면 [직접 설치](https://www.deepspeed.ai/tutorials/advanced-install/#install-deepspeed-from-source)하는 것을 적극 권장합니다.
+DeepSpeed를 설치하는 데 문제가 있는 경우 [DeepSpeed CUDA 설치](../debugging#deepspeed-cuda-installation) 가이드를 확인하세요. DeepSpeed에는 pip 설치 가능한 PyPI 패키지로 설치할 수 있지만, 하드웨어에 가장 잘 맞고 PyPI 배포판에서는 제공되지 않는 1비트 Adam과 같은 특정 기능을 지원하려면 [소스에서 설치하기](https://www.deepspeed.ai/tutorials/advanced-install/#install-deepspeed-from-source)를 적극 권장합니다.
 
 </Tip>
 
@@ -75,13 +75,13 @@ SW: Model with 2783M total params, 65M largest layer params.
    15.56GB |  46.91GB | offload_param=none, offload_optimizer=none, zero_init=0
 ```
 
-즉, CPU 오프로드가 없는 단일 80GB GPU 또는 오프로드할 8GB GPU와 최대 60GB CPU가 필요합니다(이는 매개변수, 최적화 상태 및 그레이디언트에 대한 메모리 요구 사항일 뿐이며 CUDA 커널 및 활성화에는 조금 더 필요합니다). 또한 더 작은 GPU를 대여하거나 구입하는 것이 더 저렴하지만 모델을 훈련하는 데 시간이 더 오래 걸리므로 비용과 속도 간의 균형을 고려해야 합니다.
+즉, CPU 오프로드가 없는 단일 80GB GPU 또는 오프로드 할 8GB GPU와 최대 60GB CPU가 필요합니다 (이는 매개변수, 최적화 상태 및 그레이디언트에 대한 메모리 요구 사항일 뿐이며 CUDA 커널 및 활성화에는 조금 더 필요합니다). 또한 더 작은 GPU를 대여하거나 구입하는 것이 더 저렴하지만 모델을 훈련하는 데 시간이 더 오래 걸리므로 비용과 속도 간의 균형을 고려해야 합니다.
 
 GPU 메모리가 충분하다면 CPU/NVMe 오프로드를 비활성화하여 모든 작업을 더 빠르게 처리하세요.
 
 ## ZeRO 단계 설정하기[[select-a-zero-stage]]
 
-DeepSpeed를 설치하고 메모리 요구 사항을 더 잘 파악했다면 다음 단계는 사용할 ZeRO 스테이지를 선택하는 것입니다. 가장 빠르고 메모리 효율이 높은 순서대로 선택합니다:
+DeepSpeed를 설치하고 메모리 요구 사항을 더 잘 파악했다면 다음 단계는 사용할 ZeRO 스테이지를 선택하는 것입니다. 가장 빠르고 메모리 효율이 높은 순서대로 정렬하면 다음과 같습니다:
 
 | 속도              | 메모리 효율         |
 |------------------|------------------|
@@ -91,7 +91,7 @@ DeepSpeed를 설치하고 메모리 요구 사항을 더 잘 파악했다면 다
 | ZeRO-3           | ZeRO-2           |
 | ZeRO-3 + offload | ZeRO-1           |
 
-자신에게 가장 적합한 방법을 찾으려면 가장 빠른 방법부터 시작하고 메모리가 부족하면 더 느리지만 메모리 효율이 높은 다음 단계를 시도하세요. 속도와 메모리 사용량 사이의 적절한 균형을 찾기 위해 가장 메모리 효율적이거나 가장 빠른 것부터 시작하여 원하는 방향으로 자유롭게 작업하세요.
+자신에게 가장 적합한 방법을 찾으려면 가장 빠른 방법부터 시작하고 메모리가 부족하면 더 느리지만 메모리 효율이 높은 다음 단계를 시도하세요. 속도와 메모리 사용량 사이의 적절한 균형을 찾기 위해 (가장 메모리 효율적이거나 가장 빠른 것부터 시작하여) 원하는 방향으로 자유롭게 작업하세요.
 
 일반적으로 사용할 수 있는 프로세스는 다음과 같습니다(배치 크기 1로 시작):
 
@@ -197,7 +197,6 @@ ZeRO-2는 GPU에서 옵티마이저와 그레이디언트를 분할합니다. �
 * `true`로 설정된 경우 `overlap_comm`은 GPU 메모리 사용량 증가를 상쇄하여 지연 시간을 줄입니다. 이 기능은 4.5배의 `allgather_bucket_size` 및 `reduce_bucket_size`값을 사용합니다. 이 예에서는 `5e8`로 설정되어 있으므로 9GB의 GPU 메모리가 필요합니다. GPU 메모리가 8GB 이하인 경우, 메모리 요구량을 낮추고 메모리 부족(OOM) 오류를 방지하기 위해 `overlap_comm`을 줄여야 합니다.
 * `allgather_bucket_size`와 `reduce_bucket_size`는 사용 가능한 GPU 메모리와 통신 속도를 절충합니다. 값이 작을수록 통신 속도가 느려지고 더 많은 GPU 메모리를 사용할 수 있습니다. 예를 들어, 배치 크기가 큰 것이 약간 느린 훈련 시간보다 더 중요한지 균형을 맞출 수 있습니다.
 * DeepSpeed 0.4.4에서는 CPU 오프로딩을 위해 `round_robin_gradients`를 사용할 수 있습니다. 이 기능은 세분화된 그레이디언트 파티셔닝을 통해 등급 간 그레이디언트 복사를 CPU 메모리로 병렬화합니다. 성능 이점은 그레이디언트 누적 단계(최적화 단계 간 복사 횟수 증가) 또는 GPU 수(병렬 처리 증가)에 따라 증가합니다.
-
 
 ```yml
 {
