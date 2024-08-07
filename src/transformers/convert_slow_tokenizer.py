@@ -21,6 +21,7 @@ allow to make our dependency on SentencePiece optional.
 
 import warnings
 from typing import Dict, List, Tuple
+
 from packaging import version
 
 from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
