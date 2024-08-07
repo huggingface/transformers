@@ -8,7 +8,7 @@ RUN pip install uv && uv venv && uv pip install --no-cache-dir -U pip setuptools
 RUN uv pip install --no-cache-dir --upgrade 'torch' --index-url https://download.pytorch.org/whl/cpu
 # tensorflow pin matching setup.py
 RUN uv pip install --no-cache-dir "tensorflow-cpu<2.16" "tf-keras<2.16"
-RUN uv pip install --no-cache-dir "git+https://github.com/huggingface/transformers.git@${REF}#egg=transformers[flax,quality,vision,testing]"
+RUN uv pip install --no-cache-dir "git+https://github.com/huggingface/transformers.git@${REF}#egg=transformers[flax,quality,torch-speech,vision,testing]"
 RUN git lfs install
 
 RUN pip uninstall -y transformers
