@@ -27,7 +27,7 @@ import albumentations as A
 import datasets
 import numpy as np
 import torch
-from accelerate import Accelerator
+from accelerate import Accelerator, DistributedDataParallelKwargs
 from accelerate.logging import get_logger
 from accelerate.utils import set_seed
 from datasets import load_dataset
@@ -118,6 +118,50 @@ def convert_bbox_yolo_to_pascal(boxes: torch.Tensor, image_size: Tuple[int, int]
     return boxes
 
 
+def convert_zero_shot_to_coco_format(predictions, label2id):
+    """
+    Convert zershot format output to typical object detection format in order to calculate mAP.
+
+    Args:
+        predictions (Dict): Output of zero-shot object detection
+            e.g. 
+                {
+                    'scores': tensor([0.4786, 0.4379, 0.4760], device='cuda:0'), 
+                    'labels': ['a cat', 'a cat', 'a remote control'], 
+                    'boxes': tensor([[344.6973,  23.1085, 637.1817, 374.2748],
+                                    [ 12.2690,  51.9104, 316.8564, 472.4341],
+                                    [ 38.5870,  70.0092, 176.7755, 118.1748]], device='cuda:0')
+                }
+        label2id (Dict): Dictionary of label to id mapping
+
+    Returns:
+        Dict: Output of zero-shot object detection
+            e.g. 
+                {
+                    'scores': tensor([0.4786, 0.4379, 0.4760], device='cuda:0'), 
+                    'labels': tensor([1, 1, 2], device='cuda:0'), 
+                    'boxes': tensor([[344.6973,  23.1085, 637.1817, 374.2748],
+                                    [ 12.2690,  51.9104, 316.8564, 472.4341],
+                                    [ 38.5870,  70.0092, 176.7755, 118.1748]], device='cuda:0')
+                }
+    """
+    # convert center to corners format
+    torch_label = []
+    for prediction in predictions:
+        scores = prediction['scores']
+        device = scores.device
+        labels = prediction['labels']
+        for label in labels:
+            if label in label2id:
+                torch_label.append(label)
+            else:
+                # Give background class
+                torch_label.append(0)
+        prediction['labels'] = torch.Tensor(torch_label).to(device)
+
+    return predictions
+
+
 # Copied from examples/pytorch/object-detection/run_object_detection.augment_and_transform_batch
 def augment_and_transform_batch(
     examples: Mapping[str, Any],
@@ -187,6 +231,7 @@ def evaluation_loop(
     accelerator: Accelerator,
     dataloader: DataLoader,
     id2label: Mapping[int, str],
+    label2id: Mapping[str, int],
 ) -> dict:
     model.eval()
     metric = MeanAveragePrecision(box_format="xyxy", class_metrics=True)
@@ -201,8 +246,10 @@ def evaluation_loop(
         # processor convert boxes from YOLO format to Pascal VOC format
         # ([x_min, y_min, x_max, y_max] in absolute coordinates)
         image_size = torch.stack([example["orig_size"] for example in batch["labels"]], dim=0)
-        predictions = processor.post_process_grounded_object_detection(outputs, threshold=0.0, target_sizes=image_size)
+        input_ids = torch.stack([input_ids for input_ids in batch["input_ids"]], dim=0)
+        predictions = processor.post_process_grounded_object_detection(outputs, input_ids, box_threshold=0.0, text_threshold=0.0, target_sizes=image_size)
         predictions = nested_to_cpu(predictions)
+        predictions = convert_zero_shot_to_coco_format(predictions, label2id)
 
         # 2. Collect ground truth boxes in the same format for metric computation
         # Do the same, convert YOLO boxes to Pascal VOC format
@@ -215,19 +262,20 @@ def evaluation_loop(
 
         metric.update(predictions, target)
 
-    metrics = metric.compute()
+    # metrics = metric.compute()
 
-    # Replace list of per class metrics with separate metric for each class
-    classes = metrics.pop("classes")
-    map_per_class = metrics.pop("map_per_class")
-    mar_100_per_class = metrics.pop("mar_100_per_class")
-    for class_id, class_map, class_mar in zip(classes, map_per_class, mar_100_per_class):
-        class_name = id2label[class_id.item()]
-        metrics[f"map_{class_name}"] = class_map
-        metrics[f"mar_100_{class_name}"] = class_mar
+    # # Replace list of per class metrics with separate metric for each class
+    # classes = metrics.pop("classes")
+    # map_per_class = metrics.pop("map_per_class")
+    # mar_100_per_class = metrics.pop("mar_100_per_class")
+    # for class_id, class_map, class_mar in zip(classes, map_per_class, mar_100_per_class):
+    #     class_name = id2label[class_id.item()]
+    #     metrics[f"map_{class_name}"] = class_map
+    #     metrics[f"mar_100_{class_name}"] = class_mar
 
-    # Convert metrics to float
-    metrics = {k: round(v.item(), 4) for k, v in metrics.items()}
+    # # Convert metrics to float
+    # metrics = {k: round(v.item(), 4) for k, v in metrics.items()}
+    metrics = {}
 
     return metrics
 
@@ -412,6 +460,7 @@ def main():
     if args.with_tracking:
         accelerator_log_kwargs["log_with"] = args.report_to
         accelerator_log_kwargs["project_dir"] = args.output_dir
+        accelerator_log_kwargs["kwargs_handlers"] = [DistributedDataParallelKwargs(find_unused_parameters=True)]
 
     accelerator = Accelerator(gradient_accumulation_steps=args.gradient_accumulation_steps, **accelerator_log_kwargs)
 
@@ -463,7 +512,6 @@ def main():
     # Get dataset categories and prepare mappings for label_name <-> label_id
     categories = dataset["train"].features["objects"].feature["category"].names
     id2label = dict(enumerate(categories))
-    prompt = ". ".join(id2label.values()) + "."
     label2id = {v: k for k, v in id2label.items()}
 
     # ------------------------------------------------------------------------------------------------
@@ -522,11 +570,13 @@ def main():
     )
 
     # Make transform functions for batch and apply for dataset splits
+    prompt = ". ".join(id2label.values()) + "."
+
     train_transform_batch = partial(
-        augment_and_transform_batch, transform=train_augment_and_transform, processor=processor, prompt=prompt
+        augment_and_transform_batch, transform=train_augment_and_transform, processor=processor, prompt=prompt,
     )
     validation_transform_batch = partial(
-        augment_and_transform_batch, transform=validation_transform, processor=processor, prompt=prompt
+        augment_and_transform_batch, transform=validation_transform, processor=processor, prompt=prompt,
     )
 
     with accelerator.main_process_first():
@@ -708,7 +758,7 @@ def main():
                 break
 
         logger.info("***** Running evaluation *****")
-        metrics = evaluation_loop(model, processor, accelerator, valid_dataloader, id2label)
+        metrics = evaluation_loop(model, processor, accelerator, valid_dataloader, id2label, label2id)
 
         logger.info(f"epoch {epoch}: {metrics}")
 
@@ -750,7 +800,7 @@ def main():
     # ------------------------------------------------------------------------------------------------
 
     logger.info("***** Running evaluation on test dataset *****")
-    metrics = evaluation_loop(model, processor, accelerator, test_dataloader, id2label)
+    metrics = evaluation_loop(model, processor, accelerator, test_dataloader, id2label, label2id)
     metrics = {f"test_{k}": v for k, v in metrics.items()}
 
     logger.info(f"Test metrics: {metrics}")
