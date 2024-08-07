@@ -154,7 +154,7 @@ class ImageBindImageProcessor(BaseImageProcessor):
             Size of the image after resizing. The shortest edge of the image is resized to size["shortest_edge"], with
             the longest edge resized to keep the input aspect ratio. Can be overridden by `size` in the `preprocess`
             method.
-        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
+        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
             Resampling filter to use if resizing the image. Can be overridden by `resample` in the `preprocess` method.
         do_center_crop (`bool`, *optional*, defaults to `True`):
             Whether to center crop the image to the specified `crop_size`. Can be overridden by `do_center_crop` in the
@@ -187,10 +187,10 @@ class ImageBindImageProcessor(BaseImageProcessor):
             Number of chunks to sample(number of clips per video).
         num_frames_per_chunk (`int`, *optional*, defaults to 2):
             Number of frames to sample per chunk.
-        fps (`List[int]`, *optional*, defaults to [30]):
+        fps (`List[int]`, *optional*, defaults to `[30]`):
             Frame rate of the video. It's assumed that all videos have the same frame rate.
-        duration('List[float]', *optional*, defaults to [10.0]):
             Durations of videos
+        duration (`List`, *optional*, defaults to `[10.0]`): <fill_docstring>
     """
 
     model_input_names = ["pixel_values"]
