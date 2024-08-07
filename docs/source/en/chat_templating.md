@@ -371,7 +371,7 @@ messages = [
 Now, let's apply the chat template and generate a response:
 
 ```python
-inputs = tokenizer.apply_chat_template(messages, chat_template="tool_use", tools=tools, add_generation_prompt=True, return_dict=True, return_tensors="pt")
+inputs = tokenizer.apply_chat_template(messages, tools=tools, add_generation_prompt=True, return_dict=True, return_tensors="pt")
 inputs = {k: v.to(model.device) for k, v in inputs.items()}
 out = model.generate(**inputs, max_new_tokens=128)
 print(tokenizer.decode(out[0][len(inputs["input_ids"][0]):]))
@@ -389,29 +389,35 @@ The model has called the function with valid arguments, in the format requested 
 inferred that we're most likely referring to the Paris in France, and it remembered that, as the home of SI units,
 the temperature in France should certainly be displayed in Celsius.
 
-Let's append the model's tool call to the conversation. Note that we generate a random `tool_call_id` here. These IDs
-are not used by all models, but they allow models to issue multiple tool calls at once and keep track of which response
-corresponds to which call. You can generate them any way you like, but they should be unique within each chat.
+Next, let's append the model's tool call to the conversation.
+
+<Tip>
+
+Some model architectures, notably Mistral/Mixtral, also require a `tool_call_id` here, which should be
+9 randomly-generated alphanumeric characters, and assigned to the `tool_call_id` key of the tool call
+dictionary. The same key should also be assigned to the `id` key of the tool response dictionary below, so 
+that tool calls can be matched to tool responses.
+
+</Tip>
 
 ```python
-tool_call_id = "vAHdf3"  # Random ID, should be unique for each tool call
 tool_call = {"name": "get_current_temperature", "arguments": {"location": "Paris, France", "unit": "celsius"}}
-messages.append({"role": "assistant", "tool_calls": [{"id": tool_call_id, "type": "function", "function": tool_call}]})
+messages.append({"role": "assistant", "tool_calls": [{"type": "function", "function": tool_call}]})
 ```
 
 
 Now that we've added the tool call to the conversation, we can call the function and append the result to the
 conversation. Since we're just using a dummy function for this example that always returns 22.0, we can just append 
-that result directly. Again, note the `tool_call_id` - this should match the ID used in the tool call above.
+that result directly.
 
 ```python
-messages.append({"role": "tool", "tool_call_id": tool_call_id, "name": "get_current_temperature", "content": "22.0"})
+messages.append({"role": "tool", "name": "get_current_temperature", "content": "22.0"})
 ```
 
 Finally, let's let the assistant read the function outputs and continue chatting with the user:
 
 ```python
-inputs = tokenizer.apply_chat_template(messages, chat_template="tool_use", tools=tools, add_generation_prompt=True, return_dict=True, return_tensors="pt")
+inputs = tokenizer.apply_chat_template(messages, tools=tools, add_generation_prompt=True, return_dict=True, return_tensors="pt")
 inputs = {k: v.to(model.device) for k, v in inputs.items()}
 out = model.generate(**inputs, max_new_tokens=128)
 print(tokenizer.decode(out[0][len(inputs["input_ids"][0]):]))
@@ -426,14 +432,6 @@ The current temperature in Paris, France is 22.0 ° Celsius.<|im_end|>
 Although this was a simple demo with dummy tools and a single call, the same technique works with 
 multiple real tools and longer conversations. This can be a powerful way to extend the capabilities of conversational
 agents with real-time information, computational tools like calculators, or access to large databases.
-
-<Tip>
-Not all of the tool-calling features shown above are used by all models. Some use tool call IDs, others simply use the function name and
-match tool calls to results using the ordering, and there are several models that use neither and only issue one tool 
-call at a time to avoid confusion. If you want your code to be compatible across as many models as possible, we 
-recommend structuring your tools calls like we've shown here, and returning tool results in the order that
-they were issued by the model. The chat templates on each model should handle the rest.
-</Tip>
 
 ### Understanding tool schemas
 
