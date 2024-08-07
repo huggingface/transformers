@@ -149,24 +149,24 @@ trainer = Trainer(model, args, ...)
 
 ### DeepSpeed와 Trainer 매개변수[[deepspeed-and-trainer-parameters]]
 
-설정 매개변수에는 세 가지 유형이 있습니다:
+구성 매개변수에는 세 가지 유형이 있습니다:
 
-1. 일부 설정 매개변수는 [`Trainer`]와 DeepSpeed가 공유하며, 정의가 충돌하는 경우 오류를 식별하기 어려울 수 있습니다. 이러한 공유 설정 매개변수는 [`Trainer`] 명령줄 인수에서 쉽게 구성할 수 있습니다.
+1. 일부 구성 매개변수는 [`Trainer`]와 DeepSpeed가 공유하며, 정의가 충돌하는 경우 오류를 식별하기 어려울 수 있습니다. 이러한 공유 구성 매개변수는 [`Trainer`] 명령줄 인수에서 쉽게 설정할 수 있습니다.
 
 2. 모델 설정에서 자동으로 도출되는 일부 설정 매개변수는 수동으로 값을 조정할 필요가 없습니다. [`Trainer`]는 구성 값 `auto`를 사용하여 가장 정확하거나 효율적인 값을 설정합니다. 직접 구성 매개변수를 명시적으로 설정할 수도 있지만, [`Trainer`] 인수와 DeepSpeed 설정 매개변수가 일치하도록 주의해야 합니다. 일치하지 않으면 감지하기 매우 어려운 방식으로 훈련이 실패할 수 있습니다!
 
 3. 교육 요구 사항에 따라 수동으로 설정해야 하는 일부 설정 매개변수는 DeepSpeed에만 해당됩니다.
 
-DeepSpeed 설정을 수정하고 [`TrainingArguments`]를 편집할 수도 있습니다:
+DeepSpeed 구성을 수정하고 [`TrainingArguments`]를 편집할 수도 있습니다:
 
-1. 기본 설정값으로 사용할 DeepSpeed 설정 파일을 생성하거나 로드합니다.
-2. 다음 DeepSpeed 설정값을 기반으로 [`TrainingArguments`] 객체를 생성합니다.
+1. 기본 구성으로 사용할 DeepSpeed 구성 파일을 생성하거나 로드합니다.
+2. 다음 DeepSpeed 구성을 기반으로 [`TrainingArguments`] 객체를 생성합니다.
 
 `scheduler.params.total_num_steps`와 같은 일부 값은 트레이닝 중 [`Trainer`]에 의해 계산됩니다.
 
-### ZeRO 설정[[zero-configuration]]
+### ZeRO 구성[[zero-configuration]]
 
-세 가지 구성이 있으며, 각 구성은 서로 다른 ZeRO 단계에 해당합니다. 1단계는 확장성 측면에서 그다지 눈여겨볼만하지 않으므로 이 가이드에서는 2단계와 3단계에 중점을 둡니다. `zero_optimization` 구성에는 활성화할 항목과 구성 방법에 대한 모든 옵션이 포함되어 있습니다. 각 매개변수에 대한 자세한 설명은 [DeepSpeed Configuration JSON](https://www.deepspeed.ai/docs/config-json/) 참조를 참조하세요.
+세 가지 구성이 있으며, 각 구성은 서로 다른 ZeRO 단계에 해당합니다. 1단계는 확장성 측면에서 그다지 눈여겨볼만하지 않으므로 이 가이드에서는 2단계와 3단계에 중점을 둡니다. `zero_optimization` 구성에는 활성화할 항목과 구성 방법에 대한 모든 옵션이 포함되어 있습니다. 각 매개변수에 대한 자세한 설명은 [DeepSpeed 구성 JSON](https://www.deepspeed.ai/docs/config-json/) 참조를 참조하세요.
 
 <Tip warning={true}>
 DeepSpeed는 매개변수 이름의 유효성을 검사하지 않으며 오타가 있으면 매개변수의 기본 설정으로 대체합니다. DeepSpeed 엔진 시작 로그 메시지를 보고 어떤 값을 사용할지 확인할 수 있습니다.
