@@ -17,7 +17,7 @@
 import json
 import logging
 import re
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Union
 
 from .. import is_torch_available
 from ..utils import logging as transformers_logging
@@ -30,13 +30,12 @@ from .prompts import (
     DEFAULT_REACT_CODE_SYSTEM_PROMPT,
     DEFAULT_REACT_JSON_SYSTEM_PROMPT,
     PLAN_UPDATE_FINAL_PLAN_REDACTION,
+    PROMPTS_FOR_INITIAL_PLAN,
+    PROMPTS_FOR_PLAN_UPDATE,
+    SUPPORTED_PLAN_TYPES,
     SYSTEM_PROMPT_FACTS,
     SYSTEM_PROMPT_FACTS_UPDATE,
-    SYSTEM_PROMPT_PLAN,
-    SYSTEM_PROMPT_PLAN_UPDATE,
     USER_PROMPT_FACTS_UPDATE,
-    USER_PROMPT_PLAN,
-    USER_PROMPT_PLAN_UPDATE,
 )
 from .python_interpreter import LIST_SAFE_MODULES, evaluate_python_code
 from .tools import (
@@ -329,7 +328,7 @@ class Agent:
         self,
         tools: Union[List[Tool], Toolbox],
         llm_engine: Callable = HfEngine(),
-        system_prompt=DEFAULT_REACT_JSON_SYSTEM_PROMPT,
+        system_prompt=DEFAULT_REACT_CODE_SYSTEM_PROMPT,
         tool_description_template=None,
         additional_args={},
         max_iterations: int = 6,
@@ -337,6 +336,7 @@ class Agent:
         add_base_tools: bool = False,
         verbose: int = 0,
         memory_verbose: bool = False,
+        grammar: Dict[str, str] = None,
     ):
         self.agent_name = self.__class__.__name__
         self.llm_engine = llm_engine
@@ -348,6 +348,7 @@ class Agent:
         self.max_iterations = max_iterations
         self.logger = logger
         self.tool_parser = tool_parser
+        self.grammar = grammar
 
         if isinstance(tools, Toolbox):
             self._toolbox = tools
@@ -534,6 +535,7 @@ class CodeAgent(Agent):
         llm_engine: Callable = HfEngine(),
         system_prompt: str = DEFAULT_CODE_SYSTEM_PROMPT,
         tool_description_template: str = DEFAULT_TOOL_DESCRIPTION_TEMPLATE,
+        grammar: Dict[str, str] = None,
         additional_authorized_imports: Optional[List[str]] = None,
         **kwargs,
     ):
@@ -542,6 +544,7 @@ class CodeAgent(Agent):
             llm_engine=llm_engine,
             system_prompt=system_prompt,
             tool_description_template=tool_description_template,
+            grammar=grammar,
             **kwargs,
         )
 
@@ -600,7 +603,9 @@ class CodeAgent(Agent):
         self.prompt = [prompt_message, task_message]
         self.logger.info("====Executing with this prompt====")
         self.logger.info(self.prompt)
-        llm_output = self.llm_engine(self.prompt, stop_sequences=["<end_action>"])
+
+        additional_args = {"grammar": self.grammar} if self.grammar is not None else {}
+        llm_output = self.llm_engine(self.prompt, stop_sequences=["<end_action>"], **additional_args)
 
         if return_generated_code:
             return llm_output
@@ -653,17 +658,22 @@ class ReactAgent(Agent):
         llm_engine: Callable = HfEngine(),
         system_prompt: str = DEFAULT_REACT_CODE_SYSTEM_PROMPT,
         tool_description_template: str = DEFAULT_TOOL_DESCRIPTION_TEMPLATE,
+        grammar: Dict[str, str] = None,
+        plan_type: Literal[tuple(SUPPORTED_PLAN_TYPES)] = SUPPORTED_PLAN_TYPES[0],
         planning_interval: Optional[int] = None,
         **kwargs,
     ):
+        assert plan_type in SUPPORTED_PLAN_TYPES, f"plan type {plan_type} is not supported"
         super().__init__(
             tools=tools,
             llm_engine=llm_engine,
             system_prompt=system_prompt,
             tool_description_template=tool_description_template,
+            grammar=grammar,
             **kwargs,
         )
         self.planning_interval = planning_interval
+        self.plan_type = plan_type
 
     def provide_final_answer(self, task) -> str:
         """
@@ -794,10 +804,13 @@ Now begin!""",
 
             answer_facts = self.llm_engine([message_prompt_facts, message_prompt_task])
 
-            message_system_prompt_plan = {"role": MessageRole.SYSTEM, "content": SYSTEM_PROMPT_PLAN}
+            message_system_prompt_plan = {
+                "role": MessageRole.SYSTEM,
+                "content": PROMPTS_FOR_INITIAL_PLAN[self.plan_type]["system"],
+            }
             message_user_prompt_plan = {
                 "role": MessageRole.USER,
-                "content": USER_PROMPT_PLAN.format(
+                "content": PROMPTS_FOR_INITIAL_PLAN[self.plan_type]["user"].format(
                     task=task,
                     tool_descriptions=self._toolbox.show_tool_descriptions(self.tool_description_template),
                     answer_facts=answer_facts,
@@ -837,11 +850,11 @@ Now begin!""",
             # Redact updated plan
             plan_update_message = {
                 "role": MessageRole.SYSTEM,
-                "content": SYSTEM_PROMPT_PLAN_UPDATE.format(task=task),
+                "content": PROMPTS_FOR_PLAN_UPDATE[self.plan_type]["system"].format(task=task),
             }
             plan_update_message_user = {
                 "role": MessageRole.USER,
-                "content": USER_PROMPT_PLAN_UPDATE.format(
+                "content": PROMPTS_FOR_PLAN_UPDATE[self.plan_type]["user"].format(
                     task=task,
                     tool_descriptions=self._toolbox.show_tool_descriptions(self.tool_description_template),
                     facts_update=facts_update,
@@ -876,6 +889,7 @@ class ReactJsonAgent(ReactAgent):
         llm_engine: Callable = HfEngine(),
         system_prompt: str = DEFAULT_REACT_JSON_SYSTEM_PROMPT,
         tool_description_template: str = DEFAULT_TOOL_DESCRIPTION_TEMPLATE,
+        grammar: Dict[str, str] = None,
         planning_interval: Optional[int] = None,
         **kwargs,
     ):
@@ -884,6 +898,7 @@ class ReactJsonAgent(ReactAgent):
             llm_engine=llm_engine,
             system_prompt=system_prompt,
             tool_description_template=tool_description_template,
+            grammar=grammar,
             planning_interval=planning_interval,
             **kwargs,
         )
@@ -907,7 +922,10 @@ class ReactJsonAgent(ReactAgent):
         self.logger.info(self.prompt[-1])
 
         try:
-            llm_output = self.llm_engine(self.prompt, stop_sequences=["<end_action>", "Observation:"])
+            additional_args = {"grammar": self.grammar} if self.grammar is not None else {}
+            llm_output = self.llm_engine(
+                self.prompt, stop_sequences=["<end_action>", "Observation:"], **additional_args
+            )
         except Exception as e:
             raise AgentGenerationError(f"Error in generating llm output: {e}.")
         self.logger.debug("===== Output message of the LLM: =====")
@@ -977,6 +995,7 @@ class ReactCodeAgent(ReactAgent):
         llm_engine: Callable = HfEngine(),
         system_prompt: str = DEFAULT_REACT_CODE_SYSTEM_PROMPT,
         tool_description_template: str = DEFAULT_TOOL_DESCRIPTION_TEMPLATE,
+        grammar: Dict[str, str] = None,
         additional_authorized_imports: Optional[List[str]] = None,
         planning_interval: Optional[int] = None,
         **kwargs,
@@ -986,6 +1005,7 @@ class ReactCodeAgent(ReactAgent):
             llm_engine=llm_engine,
             system_prompt=system_prompt,
             tool_description_template=tool_description_template,
+            grammar=grammar,
             planning_interval=planning_interval,
             **kwargs,
         )
@@ -1023,7 +1043,10 @@ class ReactCodeAgent(ReactAgent):
         self.logger.info(self.prompt[-2:])
 
         try:
-            llm_output = self.llm_engine(self.prompt, stop_sequences=["<end_action>", "Observation:"])
+            additional_args = {"grammar": self.grammar} if self.grammar is not None else {}
+            llm_output = self.llm_engine(
+                self.prompt, stop_sequences=["<end_action>", "Observation:"], **additional_args
+            )
         except Exception as e:
             raise AgentGenerationError(f"Error in generating llm output: {e}.")
 

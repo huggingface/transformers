@@ -73,12 +73,12 @@
         title: 제로샷(zero-shot) 이미지 분류
       - local: tasks/monocular_depth_estimation
         title: 단일 영상 기반 깊이 추정
-      - local: in_translation
-        title: (번역중) Image-to-Image
+      - local: tasks/image_to_image
+        title: Image-to-Image
       - local: in_translation
         title: (번역중) Image Feature Extraction
-      - local: in_translation
-        title: (번역중) Mask Generation
+      - local: tasks/mask_generation
+        title: 마스크 생성
       - local: in_translation
         title: (번역중) Knowledge Distillation for Computer Vision
     title: 컴퓨터 비전
@@ -100,8 +100,8 @@
     title: 생성
   - isExpanded: false
     sections:
-    - local: in_translation
-      title: (번역중) Image tasks with IDEFICS
+    - local: tasks/idefics
+      title: IDEFICS를 이용한 이미지 작업
     - local: in_translation
       title: (번역중) LLM prompting guide
     title: (번역중) 프롬프팅
