@@ -264,7 +264,7 @@ class Kosmos2_5Config(PretrainedConfig):
             The number of latent query tokens that represent the image features used in the text decoder component.
         kwargs (*optional*):
             Dictionary of keyword arguments.
-    ```"""
+    """
 
     model_type = "kosmos-2.5"
     is_composition = True
