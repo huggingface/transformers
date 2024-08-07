@@ -145,7 +145,7 @@ def convert_zero_shot_to_coco_format(predictions, label2id):
             else:
                 # Give background class
                 torch_label.append(0)
-        prediction["labels"] = torch.Tensor(torch_label).to(device)
+        prediction["labels"] = torch.Tensor(torch_label).to(dtype=torch.int32).to(device)
 
     return predictions
 
@@ -277,9 +277,9 @@ def evaluation_loop(
         # processor convert boxes from YOLO format to Pascal VOC format
         # ([x_min, y_min, x_max, y_max] in absolute coordinates)
         image_size = torch.stack([example["orig_size"] for example in batch["labels"]], dim=0)
-        input_ids = torch.stack(batch["input_ids"], dim=0)
+        input_ids = batch["input_ids"]
         predictions = processor.post_process_grounded_object_detection(
-            outputs, input_ids, box_threshold=0.0, text_threshold=0.0, target_sizes=image_size
+            outputs, input_ids, box_threshold=0.15, text_threshold=0.1, target_sizes=image_size
         )
         predictions = nested_to_cpu(predictions)
         predictions = convert_zero_shot_to_coco_format(predictions, label2id)
@@ -295,20 +295,19 @@ def evaluation_loop(
 
         metric.update(predictions, target)
 
-    # metrics = metric.compute()
+    metrics = metric.compute()
 
-    # # Replace list of per class metrics with separate metric for each class
-    # classes = metrics.pop("classes")
-    # map_per_class = metrics.pop("map_per_class")
-    # mar_100_per_class = metrics.pop("mar_100_per_class")
-    # for class_id, class_map, class_mar in zip(classes, map_per_class, mar_100_per_class):
-    #     class_name = id2label[class_id.item()]
-    #     metrics[f"map_{class_name}"] = class_map
-    #     metrics[f"mar_100_{class_name}"] = class_mar
+    # Replace list of per class metrics with separate metric for each class
+    classes = metrics.pop("classes")
+    map_per_class = metrics.pop("map_per_class")
+    mar_100_per_class = metrics.pop("mar_100_per_class")
+    for class_id, class_map, class_mar in zip(classes, map_per_class, mar_100_per_class):
+        class_name = id2label[class_id.item()]
+        metrics[f"map_{class_name}"] = class_map
+        metrics[f"mar_100_{class_name}"] = class_mar
 
-    # # Convert metrics to float
-    # metrics = {k: round(v.item(), 4) for k, v in metrics.items()}
-    metrics = {}
+    # Convert metrics to float
+    metrics = {k: round(v.item(), 4) for k, v in metrics.items()}
 
     return metrics
 

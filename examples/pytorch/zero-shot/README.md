@@ -77,6 +77,8 @@ The resulting model can be seen here: https://huggingface.co/danelcsb/grounding-
 Note that you can replace the model and dataset by simply setting the `model_name_or_path` and `dataset_name` arguments respectively, with model or dataset from the [hub](https://huggingface.co/). 
 For dataset, make sure it provides labels in the same format as [CPPE-5](https://huggingface.co/datasets/cppe-5) dataset and boxes are provided in [COCO format](https://albumentations.ai/docs/getting_started/bounding_boxes_augmentation/#coco).
 
+Note that zero-shot inference output is not the same output format as object-detection output. In order to compute the evaluation metric performance, we have to modify the output little bit.
+
 ![W&B report](https://i.imgur.com/ASNjamQ.png)
 
 
