@@ -245,10 +245,10 @@ def _tokenize_prompts_with_image_and_batch(
         bos_token = tokenizer.vocab["|ENDOFTEXT|"]
     prompts_tokens = [[[bos_token] + x for x in prompt_seq] for prompt_seq in prompts_tokens]
     if add_beginning_of_answer_token:
-        boa = tokenizer.vocab[BEGINNING_OF_ANSWER_STRING]
+        beginning_of_answer = tokenizer.vocab[BEGINNING_OF_ANSWER_STRING]
         # Only add bbox open token to the last subsequence since that is what will be completed
         for token_seq in prompts_tokens:
-            token_seq[-1].append(boa)
+            token_seq[-1].append(beginning_of_answer)
 
     # Now we have a list of list of tokens which each list has a different
     # size. We want to extend this list to:
@@ -693,10 +693,12 @@ class FuyuProcessor(ProcessorMixin):
         Returns:
             `List[str]`: The decoded text output.
         """
-        boa = self.tokenizer.vocab[BEGINNING_OF_ANSWER_STRING]
+        beginning_of_answer = self.tokenizer.vocab[BEGINNING_OF_ANSWER_STRING]
         # get boa index for each outputted sequence tensor
         # start all generated sequences from the beginning of the answer token, pad to have consistent length
-        unpadded_output_sequences = [seq[(seq == boa).nonzero(as_tuple=True)[0] + 1 :] for seq in generated_outputs]
+        unpadded_output_sequences = [
+            seq[(seq == beginning_of_answer).nonzero(as_tuple=True)[0] + 1 :] for seq in generated_outputs
+        ]
         max_len = max(len(seq) for seq in unpadded_output_sequences)
         # convert to torch and pad sequences
         padded_output_sequences = torch.full((len(unpadded_output_sequences), max_len), self.pad_token_id)

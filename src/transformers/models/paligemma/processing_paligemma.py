@@ -73,7 +73,8 @@ def build_string_from_input(prompt, bos_token, image_seq_len, image_token):
     """
     if image_token in prompt:
         warnings.warn(
-            f"The image token {image_token} is already present in the prompt. This may lead to unexpected behavior."
+            f"The image token {image_token} is already present in the prompt. No need to manually add {image_token} in the prompt for this model."
+            f"\n removing all {image_token} and adding {image_token * image_seq_len}{bos_token} before the prompt."
         )
         prompt = prompt.replace(image_token, "")
     return f"{image_token * image_seq_len}{bos_token}{prompt}\n"
