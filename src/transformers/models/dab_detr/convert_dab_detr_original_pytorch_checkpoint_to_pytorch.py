@@ -28,6 +28,7 @@ from transformers import (
     DABDETRConfig,
     DABDETRForObjectDetection,
     DABDETRImageProcessor,
+    DABDETRModel
 )
 from transformers.utils import logging
 
@@ -302,7 +303,9 @@ def convert_dab_detr_checkpoint(model_name, pretrained_model_weights_path, pytor
     # model.push_to_hub(repo_id=model_name, organization="davidhajdu", commit_message="Add model")
     model.eval()
     # verify our conversion
-    outputs = model(**encoding)
+    z = {'output_hidden_states': True}
+    outputs = model(**encoding, **z)
+    outputs2 = model(**encoding, **z, return_dict=False)
     assert torch.allclose(outputs.logits[0, :3, :3], expected_slice_logits, atol=3e-4)
     assert torch.allclose(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, atol=1e-4)
 
@@ -313,23 +316,252 @@ def convert_dab_detr_checkpoint(model_name, pretrained_model_weights_path, pytor
     image_processor.save_pretrained(pytorch_dump_folder_path)
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
+from typing import Dict, List, Tuple
+from transformers import DABDETRConfig, ResNetConfig
+import math
+import random
+import copy
 
-    parser.add_argument(
-        "--model_name",
-        default="dab_detr_resnet50",
-        type=str,
-        help="Name of the DAB_DETR model you'd like to convert.",
-    )
-    parser.add_argument(
-        "--pretrained_model_weights_path",
-        default="/Users/davidhajdu/Desktop/dab_detr_r50.pth",
-        type=str,
-        help="The path of the original model weights like: Users/username/Desktop/dab_detr_r50.pth",
-    )
-    parser.add_argument(
-        "--pytorch_dump_folder_path", default="DAB_DETR", type=str, help="Path to the folder to output PyTorch model."
-    )
-    args = parser.parse_args()
-    convert_dab_detr_checkpoint(args.model_name, args.pretrained_model_weights_path, args.pytorch_dump_folder_path)
+torch_device = torch.device('cpu')
+
+global_rng = random.Random()
+def floats_tensor(shape, scale=1.0, rng=None, name=None):
+    """Creates a random float32 tensor"""
+    if rng is None:
+        rng = global_rng
+
+    total_dims = 1
+    for dim in shape:
+        total_dims *= dim
+
+    values = []
+    for _ in range(total_dims):
+        values.append(rng.random() * scale)
+
+    return torch.tensor(data=values, dtype=torch.float, device=torch_device).view(shape).contiguous()
+
+class DABDETRModelTester:
+    def __init__(
+        self,
+        batch_size=8,
+        is_training=True,
+        use_labels=True,
+        hidden_size=32,
+        num_hidden_layers=2,
+        num_attention_heads=8,
+        intermediate_size=4,
+        hidden_act="gelu",
+        hidden_dropout_prob=0.1,
+        attention_probs_dropout_prob=0.1,
+        num_queries=12,
+        num_channels=3,
+        min_size=200,
+        max_size=200,
+        n_targets=8,
+        num_labels=91,
+    ):
+        self.batch_size = batch_size
+        self.is_training = is_training
+        self.use_labels = use_labels
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.intermediate_size = intermediate_size
+        self.hidden_act = hidden_act
+        self.hidden_dropout_prob = hidden_dropout_prob
+        self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.num_queries = num_queries
+        self.num_channels = num_channels
+        self.min_size = min_size
+        self.max_size = max_size
+        self.n_targets = n_targets
+        self.num_labels = num_labels
+
+        # we also set the expected seq length for both encoder and decoder
+        self.encoder_seq_length = math.ceil(self.min_size / 32) * math.ceil(self.max_size / 32)
+        self.decoder_seq_length = self.num_queries
+
+    def prepare_config_and_inputs(self):
+        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.min_size, self.max_size])
+
+        pixel_mask = torch.ones([self.batch_size, self.min_size, self.max_size], device=torch_device)
+
+        labels = None
+        if self.use_labels:
+            # labels is a list of Dict (each Dict being the labels for a given example in the batch)
+            labels = []
+            for i in range(self.batch_size):
+                target = {}
+                target["class_labels"] = torch.randint(
+                    high=self.num_labels, size=(self.n_targets,), device=torch_device
+                )
+                target["boxes"] = torch.rand(self.n_targets, 4, device=torch_device)
+                target["masks"] = torch.rand(self.n_targets, self.min_size, self.max_size, device=torch_device)
+                labels.append(target)
+
+        config = self.get_config()
+        return config, pixel_values, pixel_mask, labels
+
+    def get_config(self):
+        resnet_config = ResNetConfig(
+            num_channels=3,
+            embeddings_size=10,
+            hidden_sizes=[10, 20, 30, 40],
+            depths=[1, 1, 2, 1],
+            hidden_act="relu",
+            num_labels=3,
+            out_features=["stage2", "stage3", "stage4"],
+            out_indices=[2, 3, 4],
+        )
+        return DABDETRConfig(
+            d_model=self.hidden_size,
+            encoder_layers=self.num_hidden_layers,
+            decoder_layers=self.num_hidden_layers,
+            encoder_attention_heads=self.num_attention_heads,
+            decoder_attention_heads=self.num_attention_heads,
+            encoder_ffn_dim=self.intermediate_size,
+            decoder_ffn_dim=self.intermediate_size,
+            dropout=self.hidden_dropout_prob,
+            attention_dropout=self.attention_probs_dropout_prob,
+            num_queries=self.num_queries,
+            num_labels=self.num_labels,
+            use_timm_backbone=False,
+            backbone_config=resnet_config,
+            backbone=None,
+            use_pretrained_backbone=False,
+        )
+    
+    def prepare_config_and_inputs_for_common(self):
+        config, pixel_values, pixel_mask, labels = self.prepare_config_and_inputs()
+        inputs_dict = {"pixel_values": pixel_values, "pixel_mask": pixel_mask}
+        return config, inputs_dict
+
+    
+def _prepare_for_class_(inputs_dict):
+        inputs_dict = copy.deepcopy(inputs_dict)
+
+        return inputs_dict
+
+# special case for head models
+def _prepare_for_class(model_tester, inputs_dict, model_class, return_labels=False):
+    inputs_dict = _prepare_for_class_(inputs_dict)
+
+    if return_labels:
+        if model_class.__name__ in ["DABDETRForObjectDetection"]:
+            labels = []
+            for i in range(model_tester.batch_size):
+                target = {}
+                target["class_labels"] = torch.ones(
+                    size=(model_tester.n_targets,), device=torch_device, dtype=torch.long
+                )
+                target["boxes"] = torch.ones(
+                    model_tester.n_targets, 4, device=torch_device, dtype=torch.float
+                )
+                target["masks"] = torch.ones(
+                    model_tester.n_targets,
+                    model_tester.min_size,
+                    model_tester.max_size,
+                    device=torch_device,
+                    dtype=torch.float,
+                )
+                labels.append(target)
+            inputs_dict["labels"] = labels
+
+    return inputs_dict
+
+def _mock_init_weights(self, module):
+    for name, param in module.named_parameters(recurse=False):
+        # Use the first letter of the name to get a value and go from a <> -13 to z <> 12
+        value = ord(name[0].lower()) - 110
+        param.data.fill_(value)
+import os
+import tempfile
+def _mock_all_init_weights(self):
+
+    import transformers.modeling_utils
+
+    if transformers.modeling_utils._init_weights:
+        for module in self.modules():
+            module._is_hf_initialized = False
+        # Initialize weights
+        self.apply(self._initialize_weights)
+
+        # Tie weights should be skipped when not initializing all weights
+        # since from_pretrained(...) calls tie weights anyways
+        self.tie_weights()
+
+def test_save_load_fast_init_to_base(model_tester):
+        config, inputs_dict = model_tester.prepare_config_and_inputs_for_common()
+        
+        # make a copy of model class to not break future tests
+        # from https://stackoverflow.com/questions/9541025/how-to-copy-a-python-class
+
+        class CopyClass(DABDETRModel):
+            pass
+
+        base_class_copy = CopyClass
+
+        # make sure that all keys are expected for test
+        base_class_copy._keys_to_ignore_on_load_missing = []
+
+        # make init deterministic, but make sure that
+        # non-initialized weights throw errors nevertheless
+        base_class_copy._init_weights = _mock_init_weights
+        base_class_copy.init_weights = _mock_all_init_weights
+
+        model = DABDETRModel(config)
+        state_dict = model.state_dict()
+
+        # this will often delete a single weight of a multi-weight module
+        # to test an edge case
+        random_key_to_del = random.choice(list(state_dict.keys()))
+        del state_dict[random_key_to_del]
+
+        # check that certain keys didn't get saved with the model
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.config.save_pretrained(tmpdirname)
+            torch.save(state_dict, os.path.join(tmpdirname, "pytorch_model.bin"))
+
+            model_fast_init = base_class_copy.from_pretrained(tmpdirname)
+            model_slow_init = base_class_copy.from_pretrained(tmpdirname, _fast_init=False)
+
+            for key in model_fast_init.state_dict().keys():
+                if isinstance(model_slow_init.state_dict()[key], torch.BoolTensor):
+                    max_diff = torch.max(
+                        model_slow_init.state_dict()[key] ^ model_fast_init.state_dict()[key]
+                    ).item()
+                else:
+                    max_diff = torch.max(
+                        torch.abs(model_slow_init.state_dict()[key] - model_fast_init.state_dict()[key])
+                    ).item()
+                # assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
+
+
+if __name__ == "__main__":
+    # parser = argparse.ArgumentParser()
+
+    # parser.add_argument(
+    #     "--model_name",
+    #     default="dab-detr-resnet-50",
+    #     type=str,
+    #     help="Name of the DAB_DETR model you'd like to convert.",
+    # )
+    # parser.add_argument(
+    #     "--pretrained_model_weights_path",
+    #     default="/Users/davidhajdu/Desktop/dab_detr_r50.pth",
+    #     type=str,
+    #     help="The path of the original model weights like: Users/username/Desktop/dab_detr_r50.pth",
+    # )
+    # parser.add_argument(
+    #     "--pytorch_dump_folder_path", default="DAB_DETR", type=str, help="Path to the folder to output PyTorch model."
+    # )
+    # args = parser.parse_args()
+    # convert_dab_detr_checkpoint(args.model_name, args.pretrained_model_weights_path, args.pytorch_dump_folder_path)
+
+    model_tester = DABDETRModelTester()
+    test_save_load_fast_init_to_base(model_tester)
+    # m = {'Z':10, 'a':2, 'D':5}
+
+    # v = tuple(k for k in m.keys())
+
+    # print('zzzz')

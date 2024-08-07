@@ -23,7 +23,7 @@ from ...utils.backbone_utils import verify_backbone_config_arguments
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
-# from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING
 
 
 logger = logging.get_logger(__name__)
@@ -177,7 +177,7 @@ class DABDETRConfig(PretrainedConfig):
         self,
         use_timm_backbone=True,
         backbone_config=None,
-        backbone="resnet50",
+        backbone='resnet50',
         use_pretrained_backbone=True,
         backbone_kwargs=None,
         num_channels=3,
@@ -223,6 +223,7 @@ class DABDETRConfig(PretrainedConfig):
         normalize_before=False,
         sine_position_embedding_normalize=True,
         sine_position_embedding_scale=None,
+        initializer_bias_prior_prob=None,
         **kwargs,
     ):
         if not use_timm_backbone and use_pretrained_backbone:
@@ -237,12 +238,12 @@ class DABDETRConfig(PretrainedConfig):
 
         # We default to values which were previously hard-coded in the model. This enables configurability of the config
         # while keeping the default behavior the same.
-        # if use_timm_backbone and backbone_kwargs is None:
-        #     backbone_kwargs = {}
-        #     if dilation:
-        #         backbone_kwargs["output_stride"] = 16
-        #     backbone_kwargs["out_indices"] = [1, 2, 3, 4]
-        #     backbone_kwargs["in_chans"] = num_channels
+        if use_timm_backbone and backbone_kwargs is None:
+            backbone_kwargs = {}
+            if dilation:
+                backbone_kwargs["output_stride"] = 16
+            backbone_kwargs["out_indices"] = [1, 2, 3, 4]
+            backbone_kwargs["in_chans"] = num_channels
         # Backwards compatibility
         # if backbone in (None, "resnet50"):
         #     if backbone_config is None:
@@ -311,6 +312,7 @@ class DABDETRConfig(PretrainedConfig):
         self.temperature_height = temperature_height
         self.sine_position_embedding_normalize = sine_position_embedding_normalize
         self.sine_position_embedding_scale = sine_position_embedding_scale
+        self.initializer_bias_prior_prob = initializer_bias_prior_prob
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
     @property

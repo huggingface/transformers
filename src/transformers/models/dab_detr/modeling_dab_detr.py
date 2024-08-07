@@ -486,7 +486,7 @@ class DetrAttention(nn.Module):
         object_queries: Optional[torch.Tensor] = None,
         key_value_states: Optional[torch.Tensor] = None,
         spatial_position_embeddings: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
+        output_attentions: bool = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
         # if key_value_states are provided this layer is used as a cross-attention layer
@@ -615,7 +615,7 @@ class DABDETRAttention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         key_states: Optional[torch.Tensor] = None,
         value_states: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
+        output_attentions: Optional[bool] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
@@ -704,7 +704,7 @@ class DABDETREncoderLayer(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
         object_queries: torch.Tensor,
-        output_attentions: Optional[bool] = False,
+        output_attentions: Optional[bool] = None,
     ):
         """
         Args:
@@ -805,7 +805,7 @@ class DABDETRDecoderLayer(nn.Module):
         query_sine_embed: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
+        output_attentions: Optional[bool] = None,
     ):
         """
         Args:
@@ -980,6 +980,19 @@ class DABDETRPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, DABDETRForObjectDetection):
+            if self.config.bbox_embed_diff_each_layer:
+                for bbox_predictor in module.bbox_predictor:
+                    nn.init.constant_(bbox_predictor.layers[-1].weight.data, 0)
+                    nn.init.constant_(bbox_predictor.layers[-1].bias.data, 0)
+            else:
+                nn.init.constant_(module.bbox_predictor.layers[-1].weight.data, 0)
+                nn.init.constant_(module.bbox_predictor.layers[-1].bias.data, 0)
+
+            # init prior_prob setting for focal loss
+            prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
+            bias_value = -math.log((1 - prior_prob) / prior_prob)
+            module.class_embed.bias.data = torch.ones(self.config.num_labels) * bias_value
 
 
 DAB_DETR_START_DOCSTRING = r"""
@@ -1070,9 +1083,9 @@ class DABDETREncoder(DABDETRPreTrainedModel):
         inputs_embeds,
         attention_mask,
         object_queries,
-        output_attentions: Optional[bool] = False,
-        output_hidden_states: Optional[bool] = False,
-        return_dict: Optional[bool] = False,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
     ):
         r"""
         Args:
@@ -1099,11 +1112,11 @@ class DABDETREncoder(DABDETRPreTrainedModel):
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
-        output_attentions = output_attentions if output_attentions else self.config.output_attentions
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
-            output_hidden_states if output_hidden_states else self.config.output_hidden_states
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         hidden_states = inputs_embeds
 
@@ -1144,7 +1157,7 @@ class DABDETREncoder(DABDETRPreTrainedModel):
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[1],)
 
-        if self.norm is not None:
+        if self.norm:
             hidden_states = self.norm(hidden_states)
 
         if output_hidden_states:
@@ -1217,9 +1230,9 @@ class DABDETRDecoder(DABDETRPreTrainedModel):
         memory_key_padding_mask,
         object_queries,
         query_position_embeddings,
-        output_attentions: Optional[bool] = False,
-        output_hidden_states: Optional[bool] = False,
-        return_dict: Optional[bool] = False,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
     ):
         r"""
         Args:
@@ -1244,11 +1257,11 @@ class DABDETRDecoder(DABDETRPreTrainedModel):
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
-        output_attentions = output_attentions if output_attentions else self.config.output_attentions
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
-            output_hidden_states if output_hidden_states else self.config.output_hidden_states
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if inputs_embeds is not None:
             hidden_states = inputs_embeds
@@ -1448,9 +1461,9 @@ class DABDETRModel(DABDETRPreTrainedModel):
         encoder_outputs: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = False,
-        output_hidden_states: Optional[bool] = False,
-        return_dict: Optional[bool] = False,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.FloatTensor], DABDETRModelOutput]:
         r"""
         Returns:
@@ -1480,11 +1493,11 @@ class DABDETRModel(DABDETRPreTrainedModel):
         >>> list(last_hidden_states.shape)
         [1, 300, 256]
         ```"""
-        output_attentions = output_attentions if output_attentions else self.config.output_attentions
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
-            output_hidden_states if output_hidden_states else self.config.output_hidden_states
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         batch_size, _, height, width = pixel_values.shape
         device = pixel_values.device
@@ -1511,7 +1524,7 @@ class DABDETRModel(DABDETRPreTrainedModel):
         # Third, flatten the feature map + object_queries of shape NxCxHxW to HWxNxC, and permute it to NxHWxC
         # In other words, turn their shape into ( sequence_length, batch_size, hidden_size)
         flattened_features = projected_feature_map.flatten(2).permute(0, 2, 1)
-        object_queries = object_queries_list[-1].flatten(2).permute(0, 2, 1)  # pos embed
+        object_queries = object_queries_list[-1].flatten(2).permute(0, 2, 1)
         reference_position_embeddings = self.query_refpoint_embeddings.weight.unsqueeze(0).repeat(batch_size, 1, 1)
 
         # Fourth, sent flattened_features + flattened_mask + object_queries through encoder
@@ -1559,14 +1572,20 @@ class DABDETRModel(DABDETRPreTrainedModel):
         )
 
         if not return_dict:
-            output = ()
+            # last_hidden_state
+            output = (decoder_outputs[0],)
             reference_points = decoder_outputs[-1]
             intermediate_hidden_states = decoder_outputs[-2]
 
-            if output_hidden_states:
-                output += (encoder_outputs[1], decoder_outputs[1])
-            if output_attentions:
-                output += (encoder_outputs[2], decoder_outputs[2], decoder_outputs[3])
+            # it has to follow the order of DABDETRModelOutput that is based on ModelOutput
+            if output_hidden_states and output_attentions:
+                output += (decoder_outputs[1], decoder_outputs[2], decoder_outputs[3], encoder_outputs[0], encoder_outputs[1], encoder_outputs[2],)
+            elif output_hidden_states:
+                # decoder_hidden_states, encoder_last_hidden_state, encoder_hidden_states
+                output += (decoder_outputs[1], encoder_outputs[0], encoder_outputs[1],)
+            elif output_attentions:
+                # decoder_self_attention, decoder_cross_attention, encoder_attentions
+                output += (decoder_outputs[1], decoder_outputs[2], encoder_outputs[1],)
 
             output += (intermediate_hidden_states, reference_points)
 
@@ -1612,32 +1631,19 @@ class DABDETRForObjectDetection(DABDETRPreTrainedModel):
         self.model = DABDETRModel(config)
 
         _bbox_embed = MLP(config.d_model, config.d_model, 4, 3)
+        # Object detection heads
+        self.class_embed = nn.Linear(config.d_model, config.num_labels)
 
         self.bbox_embed_diff_each_layer = config.bbox_embed_diff_each_layer
         if config.bbox_embed_diff_each_layer:
             self.bbox_predictor = nn.ModuleList([_bbox_embed for i in range(config.decoder_layers)])
-
-            for bbox_predictor in self.bbox_predictor:
-                nn.init.constant_(bbox_predictor.layers[-1].weight.data, 0)
-                nn.init.constant_(bbox_predictor.layers[-1].bias.data, 0)
         else:
             self.bbox_predictor = _bbox_embed
-
-            nn.init.constant_(self.bbox_predictor.layers[-1].weight.data, 0)
-            nn.init.constant_(self.bbox_predictor.layers[-1].bias.data, 0)
 
         if config.iter_update:
             self.model.decoder.bbox_embed = self.bbox_predictor
         else:
             self.model.decoder.bbox_embed = None
-
-        # Object detection heads
-        self.class_embed = nn.Linear(config.d_model, config.num_labels)
-
-        # init prior_prob setting for focal loss
-        prior_prob = 0.01
-        bias_value = -math.log((1 - prior_prob) / prior_prob)
-        self.class_embed.bias.data = torch.ones(config.num_labels) * bias_value
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1661,9 +1667,9 @@ class DABDETRForObjectDetection(DABDETRPreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[List[dict]] = None,
-        output_attentions: Optional[bool] = False,
-        output_hidden_states: Optional[bool] = False,
-        return_dict: Optional[bool] = False,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.FloatTensor], DABDETRObjectDetectionOutput]:
         r"""
         labels (`List[Dict]` of len `(batch_size,)`, *optional*):
@@ -1708,11 +1714,11 @@ class DABDETRForObjectDetection(DABDETRPreTrainedModel):
         Detected remote with confidence 0.683 at location [334.48, 73.49, 366.37, 190.01]
         Detected couch with confidence 0.535 at location [0.52, 1.19, 640.35, 475.1]
         ```"""
-        output_attentions = output_attentions if output_attentions else self.config.output_attentions
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
-            output_hidden_states if output_hidden_states else self.config.output_hidden_states
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # First, sent images through DAB_DETR base model to obtain encoder + decoder outputs
         model_outputs = self.model(
@@ -1727,8 +1733,8 @@ class DABDETRForObjectDetection(DABDETRPreTrainedModel):
             return_dict=return_dict,
         )
 
-        reference_points = model_outputs.reference_points if not return_dict else model_outputs[-1]
-        intermediate_hidden_states = model_outputs[-2] if not return_dict else model_outputs.intermediate_hidden_states
+        reference_points = model_outputs.reference_points if return_dict else model_outputs[-1]
+        intermediate_hidden_states = model_outputs.intermediate_hidden_states if return_dict else model_outputs[-2]
 
         # class logits + predicted bounding boxes
         logits = self.class_embed(intermediate_hidden_states[-1])
@@ -1748,7 +1754,6 @@ class DABDETRForObjectDetection(DABDETRPreTrainedModel):
                 outputs_coords.append(outputs_coord)
             outputs_coord = torch.stack(outputs_coords)
 
-        
         loss, loss_dict, auxiliary_outputs = None, None, None
         pred_boxes = outputs_coord[-1]
 
@@ -1793,7 +1798,8 @@ class DABDETRForObjectDetection(DABDETRPreTrainedModel):
                 output = (logits, pred_boxes) + auxiliary_outputs + model_outputs
             else:
                 output = (logits, pred_boxes) + model_outputs
-            return ((loss, loss_dict) + output) if loss is not None else output
+            # Since DABDETRObjectDetectionOutput doesn't have reference points + intermedieate_hidden_states we cut down.
+            return ((loss, loss_dict) + output) if loss is not None else output[:-2]
 
         return DABDETRObjectDetectionOutput(
             loss=loss,
