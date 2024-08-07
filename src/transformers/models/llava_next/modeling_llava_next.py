@@ -511,8 +511,11 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
         ignore_index = ignore_index if ignore_index is not None else self.config.ignore_index
 
         if self.training and self.padding_side == "left":
-            warnings.warn("padding is left even though in training mode. If that's intended, ignore this warning")
-
+            logger.warning_once(
+                "Padding side is set to 'left' but the model is in training mode. For training "
+                "it is recommended to set `model.padding_side='right' and `processor.tokenizer.padding_side='right'`. "
+                "If that's intended, ignore this warning"
+            )
         if not self.training and self.padding_side == "right":
             warnings.warn("padding is right even though in inference mode. If that's intended, ignore this warning")
 
