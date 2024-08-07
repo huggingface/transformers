@@ -225,12 +225,7 @@ class DABDETRConfig(PretrainedConfig):
         sine_position_embedding_scale=None,
         initializer_bias_prior_prob=None,
         **kwargs,
-    ):
-        if not use_timm_backbone and use_pretrained_backbone:
-            raise ValueError(
-                "Loading pretrained backbone weights from the transformers library is not supported yet. `use_timm_backbone` must be set to `True` when `use_pretrained_backbone=True`"
-            )
-               
+    ):       
         if query_dim != 4:
             raise ValueError(
                 "The query dimensions has to be 4."
@@ -245,14 +240,17 @@ class DABDETRConfig(PretrainedConfig):
             backbone_kwargs["out_indices"] = [1, 2, 3, 4]
             backbone_kwargs["in_chans"] = num_channels
         # Backwards compatibility
-        # if backbone in (None, "resnet50"):
-        #     if backbone_config is None:
-        #         logger.info("`backbone_config` is `None`. Initializing the config with the default `ResNet` backbone.")
-        #         backbone_config = CONFIG_MAPPING["resnet"](out_features=["stage4"])
-        #     elif isinstance(backbone_config, dict):
-        #         backbone_model_type = backbone_config.get("model_type")
-        #         config_class = CONFIG_MAPPING[backbone_model_type]
-        #         backbone_config = config_class.from_dict(backbone_config)
+        elif not use_timm_backbone and backbone in (None, "resnet50"):
+            if backbone_config is None:
+                logger.info("`backbone_config` is `None`. Initializing the config with the default `ResNet` backbone.")
+                backbone_config = CONFIG_MAPPING["resnet"](out_features=["stage4"])
+            elif isinstance(backbone_config, dict):
+                backbone_model_type = backbone_config.get("model_type")
+                config_class = CONFIG_MAPPING[backbone_model_type]
+                backbone_config = config_class.from_dict(backbone_config)
+            backbone = None
+            # set timm attributes to None
+            dilation = None
 
         verify_backbone_config_arguments(
             use_timm_backbone=use_timm_backbone,

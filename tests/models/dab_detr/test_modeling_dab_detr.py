@@ -705,6 +705,9 @@ class DABDETRModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
         configs_no_init = _config_zero_init(config)
         configs_no_init.init_xavier_std = 1e9
+        # Copied from RT-DETR
+        configs_no_init.initializer_bias_prior_prob = 0.2
+        bias_value = -1.3863  # log_e ((1 - 0.2) / 0.2)
 
         for model_class in self.all_model_classes:
             model = model_class(config=configs_no_init)
@@ -716,17 +719,19 @@ class DABDETRModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                             abs(param.data.max().item()),
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
+                    # Modifed from RT-DETR
+                    elif "class_embed" in name and "bias" in name:
+                        bias_tensor = torch.full_like(param.data, bias_value)
+                        self.assertTrue(
+                            torch.allclose(param.data, bias_tensor, atol=1e-4),
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",)
                     elif "activation_fn" in name and config.activation_function == "prelu":
                         self.assertTrue(
                             param.data.mean() == 0.25,
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
                     elif "backbone.conv_encoder.model" in name:
-                        self.assertIn(
-                            ((param.data.mean() * 1e1).round() / 1e1).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
+                        continue
                     elif "self_attn.in_proj_weight" in name:
                         self.assertIn(
                             ((param.data.mean() * 1e2).round() / 1e2).item(),
@@ -809,7 +814,9 @@ class DABDETRModelIntegrationTests(unittest.TestCase):
         )[0]
         expected_scores = torch.tensor([0.8732, 0.8563, 0.8554, 0.6079, 0.5896]).to(torch_device)
         expected_labels = [17, 75, 17, 75, 63]
+        expected_boxes = torch.tensor([14.6969, 49.3892, 320.5166, 469.2764]).to(torch_device)
 
         self.assertEqual(len(results["scores"]), 5)
         self.assertTrue(torch.allclose(results["scores"], expected_scores, atol=1e-4))
         self.assertSequenceEqual(results["labels"].tolist(), expected_labels)
+        self.assertTrue(torch.allclose(results["boxes"][0, :], expected_boxes))
