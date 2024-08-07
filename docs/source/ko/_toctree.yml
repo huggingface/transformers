@@ -75,8 +75,8 @@
         title: 단일 영상 기반 깊이 추정
       - local: tasks/image_to_image
         title: Image-to-Image
-      - local: in_translation
-        title: (번역중) Image Feature Extraction
+      - local: tasks/image_feature_extraction
+        title: 이미지 특징 추출
       - local: tasks/mask_generation
         title: 마스크 생성
       - local: in_translation
