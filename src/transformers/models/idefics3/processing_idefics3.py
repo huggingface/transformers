@@ -214,7 +214,18 @@ class Idefics3Processor(ProcessorMixin):
             n_images_in_images = [len(sample) for sample in images]
 
             # Load images if they are URLs
-            images = [[load_image(im) for im in sample] for sample in images]
+            new_images = []
+            for sample in images:
+                new_images.append([])
+                for im in sample:
+                    if is_valid_image(im):
+                        new_images[-1].append(im) # already loaded
+                    elif isinstance(im, str):
+                        new_images[-1].append(load_image(im))
+
+            images = new_images
+            del new_images
+
             image_inputs = self.image_processor(images, return_tensors=return_tensors, return_row_col_info=True)
             inputs.update(image_inputs)
 

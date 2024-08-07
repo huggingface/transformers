@@ -19,7 +19,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
-from ...image_transforms import PaddingMode, pad, resize, to_channel_dimension_format
+from ...image_transforms import PaddingMode, pad, rescale, resize, to_channel_dimension_format
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -74,9 +74,13 @@ def _resize_output_size_rescale_to_max_len(
     if width >= height:
         width = max_len
         height = int(width / aspect_ratio)
+        if height % 2 != 0:
+            height += 1
     elif height > width:
         height = max_len
         width = int(height * aspect_ratio)
+        if width % 2 != 0:
+            width += 1
 
     # Avoid resizing to a size smaller than min_len
     height = max(height, min_len)
@@ -148,7 +152,10 @@ def get_resize_output_image_size(
     if resolution_max_side > max_image_size:
         raise ValueError("`resolution_max_side` cannot be larger than `max_image_size`")
 
-    height, width = get_image_size(image, channel_dim=input_data_format)
+    if isinstance(image, Image.Image):
+        width, height = image.size
+    else:
+        height, width = get_image_size(image, channel_dim=input_data_format)
 
     # Find the output size, when rescaling the longest edge to max_len and preserving the aspect ratio
     height, width = _resize_output_size_rescale_to_max_len(
@@ -176,7 +183,10 @@ def split_image(
     `width`).
     3) Returns the list of the crops and the original image, in addition to the number of splits for the height and the width.
     """
-    height, width = get_image_size(image, channel_dim=input_data_format)
+    if isinstance(image, Image.Image):
+        width, height = image.size
+    else:
+        height, width = get_image_size(image, channel_dim=input_data_format)
     max_height = max_width = max_image_size["longest_edge"]
 
     frames = []
@@ -200,24 +210,30 @@ def split_image(
                 end_y = min(start_y + optimal_height, height)
 
                 # Crop the image
-                cropped_image = _crop(
-                    image, start_x, start_y, end_x, end_y, input_data_format=input_data_format, data_format=data_format
-                )
+                if isinstance(image, Image.Image):
+                    cropped_image = image.crop((start_x, start_y, end_x, end_y))
+                else:
+                    cropped_image = _crop(
+                        image, start_x, start_y, end_x, end_y, input_data_format=input_data_format, data_format=data_format
+                    )
                 frames.append(cropped_image)
 
         # For the global image at the end, we resize it to match the max_image_size, for cpu memory efficiency
         global_image_height, global_image_width = max_height, max_width
         if height != global_image_height or width != global_image_width:
-            image = resize(
-                image,
-                (global_image_height, global_image_width),
-                resample=resample,
-                input_data_format=input_data_format,
-            )
+            if isinstance(image, Image.Image):
+                image = image.resize((global_image_width, global_image_height), resample=resample)
+            else:
+                image = resize(
+                    image,
+                    (global_image_height, global_image_width),
+                    resample=resample,
+                    input_data_format=input_data_format,
+                )
     else:
         num_splits_h, num_splits_w = 0, 0
 
-    if data_format is not None:
+    if data_format is not None and not isinstance(image, Image.Image):
         image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
 
     frames.append(image)
@@ -419,7 +435,7 @@ class Idefics3ImageProcessor(BaseImageProcessor):
         super().__init__(**kwargs)
         self.do_convert_rgb = do_convert_rgb
         self.do_resize = do_resize
-        self.size = size if size is not None else {"longest_edge": 5*364}
+        self.size = size if size is not None else {"longest_edge": 4*364}
         self.resample = resample
         self.do_image_splitting = do_image_splitting
         self.max_image_size = max_image_size if max_image_size is not None else {"longest_edge": 364}
@@ -464,6 +480,8 @@ class Idefics3ImageProcessor(BaseImageProcessor):
             size = (size["height"], size["width"])
         else:
             raise ValueError("size must be a dictionary with key 'longest_edge' or 'height' and 'width'.")
+        if isinstance(image, Image.Image):
+            return image.resize((size[1], size[0]), resample=resample)
         return resize(
             image, size, resample=resample, data_format=data_format, input_data_format=input_data_format, **kwargs
         )
@@ -701,21 +719,8 @@ class Idefics3ImageProcessor(BaseImageProcessor):
             resample=resample,
         )
 
-        if do_convert_rgb:
-            images_list = [[convert_to_rgb(image) for image in images] for images in images_list]
-
-        # All transformations expect numpy arrays.
-        images_list = [[to_numpy_array(image) for image in images] for images in images_list]
-
-        if is_scaled_image(images_list[0][0]) and do_rescale:
-            logger.warning_once(
-                "It looks like you are trying to rescale already rescaled images. If the input"
-                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
-            )
-
-        if input_data_format is None:
-            # We assume that all images have the same channel dimension format.
-            input_data_format = infer_channel_dimension_format(images_list[0][0])
+        # # All transformations expect numpy arrays.
+        # images_list = [[to_numpy_array(image) for image in images] for images in images_list]
 
         if do_resize:
             images_list = [
@@ -733,10 +738,21 @@ class Idefics3ImageProcessor(BaseImageProcessor):
         for images in images_list:
             new_images = []
             for img in images:
-                height, width, _ = img.shape
-                new_size = {"height": math.ceil(height / self.vision_encoder_max_size) * self.vision_encoder_max_size,
-                            "width": math.ceil(width/ self.vision_encoder_max_size) * self.vision_encoder_max_size}
-                new_images.append(self.resize(img, size=new_size, resample=resample, input_data_format=input_data_format))
+                if isinstance(img, Image.Image):
+                    width, height = img.size
+                else:
+                    height, width, _ = img.shape
+                aspect_ratio = width / height
+                if width >= height:
+                    width = math.ceil(width / self.vision_encoder_max_size) * self.vision_encoder_max_size
+                    height = int(width / aspect_ratio)
+                    height = math.ceil(height / self.vision_encoder_max_size) * self.vision_encoder_max_size
+                elif height > width:
+                    height = math.ceil(height / self.vision_encoder_max_size) * self.vision_encoder_max_size
+                    width = int(height * aspect_ratio)
+                    width = math.ceil(width / self.vision_encoder_max_size) * self.vision_encoder_max_size
+                new_size = {"height": height, "width": width}
+                new_images.append(self.resize(img, size=new_size, resample=resample))
             new_images_list.append(new_images)
         images_list = new_images_list
         del new_images_list
@@ -766,14 +782,26 @@ class Idefics3ImageProcessor(BaseImageProcessor):
             images_list_rows = [[0] * len(images) for images in images_list]
             images_list_cols = [[0] * len(images) for images in images_list]
 
+        if do_convert_rgb:
+            images_list = [[convert_to_rgb(image) for image in images] for images in images_list]
+
+        # All transformations expect numpy arrays.
+        images_list = [[to_numpy_array(image) for image in images] for images in images_list]
+
+        if is_scaled_image(images_list[0][0]) and do_rescale:
+            logger.warning_once(
+                "It looks like you are trying to rescale already rescaled images. If the input"
+                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
+            )
         if do_rescale:
-            images_list = [
-                [
-                    self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
-                    for image in images
-                ]
-                for images in images_list
-            ]
+            rescaled_images_array = []
+            for image in images_list:
+                rescaled_images_array.append([rescale(img, rescale_factor) for img in image])
+            images_list = rescaled_images_array
+
+        if input_data_format is None:
+            # We assume that all images have the same channel dimension format.
+            input_data_format = infer_channel_dimension_format(images_list[0][0])
 
         if do_normalize:
             images_list = [
