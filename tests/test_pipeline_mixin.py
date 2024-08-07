@@ -295,7 +295,7 @@ class PipelineTesterMixin:
                 self.skipTest(f"Could not load the processor from {repo_id} with {processor_name}.")
 
         # TODO: Maybe not upload such problematic tiny models to Hub.
-        if tokenizer is None and processor is None:
+        if tokenizer is None and not processors:
             logger.warning(
                 f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')}_{torch_dtype} is skipped: Could not find or load "
                 f"any tokenizer / processor from `{repo_id}`."
@@ -313,7 +313,7 @@ class PipelineTesterMixin:
             self.skipTest(f"Could not find or load the model from {repo_id} with {model_architecture}.")
 
         pipeline_test_class_name = pipeline_test_mapping[task]["test"].__name__
-        if self.is_pipeline_test_to_skip_more(pipeline_test_class_name, model.config, model, tokenizer, processor):
+        if self.is_pipeline_test_to_skip_more(pipeline_test_class_name, model.config, model, tokenizer, **processors):
             logger.warning(
                 f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')}_{torch_dtype} is skipped: test is "
                 f"currently known to fail for: model `{model_architecture.__name__}` | tokenizer "
@@ -324,7 +324,7 @@ class PipelineTesterMixin:
             )
 
         # validate
-        validate_test_components(self, task, model, tokenizer, processor)
+        validate_test_components(model, tokenizer)
 
         if hasattr(model, "eval"):
             model = model.eval()
@@ -677,11 +677,20 @@ class PipelineTesterMixin:
 
         return False
 
-    def is_pipeline_test_to_skip_more(self, pipeline_test_casse_name, config, model, tokenizer, processor):  # noqa
+    def is_pipeline_test_to_skip_more(
+        self,
+        pipeline_test_case_name,
+        config,
+        model,
+        tokenizer,
+        image_processor=None,
+        feature_extractor=None,
+        processor=None,
+    ):  # noqa
         """Skip some more tests based on the information from the instantiated objects."""
         # No fix is required for this case.
         if (
-            pipeline_test_casse_name == "QAPipelineTests"
+            pipeline_test_case_name == "QAPipelineTests"
             and tokenizer is not None
             and getattr(tokenizer, "pad_token", None) is None
             and not tokenizer.__class__.__name__.endswith("Fast")
@@ -692,7 +701,7 @@ class PipelineTesterMixin:
         return False
 
 
-def validate_test_components(test_case, task, model, tokenizer, processor):
+def validate_test_components(model, tokenizer):
     # TODO: Move this to tiny model creation script
     # head-specific (within a model type) necessary changes to the config
     # 1. for `BlenderbotForCausalLM`
