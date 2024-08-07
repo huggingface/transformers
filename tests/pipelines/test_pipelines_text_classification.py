@@ -179,7 +179,15 @@ class TextClassificationPipelineTests(unittest.TestCase):
         outputs = text_classifier("Birds are a type of animal")
         self.assertEqual(nested_simplify(outputs), [{"label": "POSITIVE", "score": 0.988}])
 
-    def get_test_pipeline(self, model, tokenizer=None, image_processor=None, feature_extractor=None, processor=None, torch_dtype="float32"):
+    def get_test_pipeline(
+        self,
+        model,
+        tokenizer=None,
+        image_processor=None,
+        feature_extractor=None,
+        processor=None,
+        torch_dtype="float32",
+    ):
         text_classifier = TextClassificationPipeline(model=model, tokenizer=tokenizer, torch_dtype=torch_dtype)
         return text_classifier, ["HuggingFace is in", "This is another test"]
 

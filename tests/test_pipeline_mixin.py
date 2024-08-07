@@ -28,6 +28,9 @@ from typing import get_args
 from huggingface_hub import AudioClassificationInput
 
 from transformers.pipelines import AudioClassificationPipeline
+from transformers.feature_extraction_utils import FeatureExtractionMixin
+from transformers.image_processing_utils import BaseImageProcessor
+from transformers.processing_utils import ProcessorMixin
 from transformers.testing_utils import (
     is_pipeline_test,
     require_decord,
@@ -38,9 +41,6 @@ from transformers.testing_utils import (
     require_vision,
 )
 from transformers.utils import direct_transformers_import, logging
-from transformers.processing_utils import ProcessorMixin
-from transformers.image_processing_utils import BaseImageProcessor
-from transformers.feature_extraction_utils import FeatureExtractionMixin
 
 from .pipelines.test_pipelines_audio_classification import AudioClassificationPipelineTests
 from .pipelines.test_pipelines_automatic_speech_recognition import AutomaticSpeechRecognitionPipelineTests

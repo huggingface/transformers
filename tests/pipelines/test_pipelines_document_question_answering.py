@@ -61,7 +61,15 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase):
 
     @require_pytesseract
     @require_vision
-    def get_test_pipeline(self, model, tokenizer=None, image_processor=None, feature_extractor=None, processor=None, torch_dtype="float32"):
+    def get_test_pipeline(
+        self,
+        model,
+        tokenizer=None,
+        image_processor=None,
+        feature_extractor=None,
+        processor=None,
+        torch_dtype="float32",
+    ):
         dqa_pipeline = pipeline(
             "document-question-answering",
             model=model,
