@@ -28,6 +28,7 @@ from ..utils import (
     is_accelerate_available,
     is_bitsandbytes_available,
     is_torch_available,
+    is_torch_xpu_available,
     logging,
 )
 
@@ -259,11 +260,16 @@ class Bnb4BitHfQuantizer(HfQuantizer):
 
     # Copied from transformers.quantizers.quantizer_bnb_8bit.Bnb8BitHfQuantizer.update_device_map
     def update_device_map(self, device_map):
-        if device_map is None and torch.cuda.is_available():
-            device_map = {"": torch.cuda.current_device()}
+        if device_map is None:
+            if torch.cuda.is_available():
+                device_map = {"": torch.cuda.current_device()}
+            elif is_torch_xpu_available():
+                device_map = {"": f"xpu:{torch.xpu.current_device()}"}
+            else:
+                device_map = {"": "cpu"}
             logger.info(
                 "The device_map was not initialized. "
-                "Setting device_map to {'':torch.cuda.current_device()}. "
+                f"Setting device_map to {device_map}. "
                 "If you want to use the model for inference, please set device_map ='auto' "
             )
         return device_map
