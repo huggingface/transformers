@@ -1035,6 +1035,9 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         if self.image_processor is not None:
             self.image_processor.save_pretrained(save_directory, **kwargs)
 
+        if self.processor is not None:
+            self.processor.save_pretrained(save_directory, **kwargs)
+
         if self.modelcard is not None:
             self.modelcard.save_pretrained(save_directory)
 
