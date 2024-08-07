@@ -28,7 +28,7 @@ rendered properly in your Markdown viewer.
 pip install transformers datasets accelerate tensorboard evaluate --upgrade
 ```
 
-이 예제에서는 `merve/beans-vit-224` 모델을 교사 모델로 사용하고 있습니다. 이 모델은 `google/vit-base-patch16-224-in21k`를 기반으로 하여 beans 데이터셋에 대해 파인 튜닝된 이미지 분류 모델입니다. 우리는 이 모델을 무작위로 초기화된 MobileNetV2로 증류해볼 것입니다.
+이 예제에서는 `merve/beans-vit-224` 모델을 교사 모델로 사용하고 있습니다. 이 모델은 beans 데이터셋에서 파인 튜닝된 `google/vit-base-patch16-224-in21k` 기반의 이미지 분류 모델입니다. 이 모델을 무작위로 초기화된 MobileNetV2로 증류해볼 것입니다.
 
 이제 데이터셋을 로드하겠습니다.
 
