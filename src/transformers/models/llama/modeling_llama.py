@@ -340,17 +340,17 @@ class LlamaAttention(nn.Module):
         self.attention_dropout = config.attention_dropout
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
-        if config.kv_channels is None:
+        if config.head_dim is None:
             self.head_dim = self.hidden_size // self.num_heads
         else:
-            self.head_dim = config.kv_channels
+            self.head_dim = config.head_dim
         self.num_key_value_heads = config.num_key_value_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.max_position_embeddings = config.max_position_embeddings
         self.rope_theta = config.rope_theta
         self.is_causal = True
 
-        if config.kv_channels is None:
+        if config.head_dim is None:
             if (self.head_dim * self.num_heads) != self.hidden_size:
                 raise ValueError(
                     f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.hidden_size}"
@@ -360,13 +360,7 @@ class LlamaAttention(nn.Module):
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=config.attention_bias)
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
-
-        # If kv_channels is None, the output projection is hidden_size -> hidden_size
-        # Otherwise it is done num_heads * head_dim (= kv_channels) -> hidden_size
-        if config.kv_channels is None:
-            self.o_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=config.attention_bias)
-        else:
-            self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=config.attention_bias)
+        self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=config.attention_bias)
 
         # TODO (joao): remove in v4.45 (RoPE is computed in the model, not in the decoder layers)
         self.rotary_emb = LlamaRotaryEmbedding(config=self.config)
