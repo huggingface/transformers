@@ -93,7 +93,10 @@ from transformers import VitsTokenizer
 tokenizer = VitsTokenizer.from_pretrained("facebook/mms-tts-eng")
 print(tokenizer.is_uroman)
 ```
-If the is_uroman attribute is True, the tokenizer will automatically apply the uroman package to your text inputs. 
+If the is_uroman attribute is True, the tokenizer will automatically apply the `uroman` package to your text inputs, but you need to install uroman if not already installed using:  
+```
+pip install --upgrade uroman
+``` 
 You can use the tokenizer as usual without any additional preprocessing steps:
 ```python
 import torch
