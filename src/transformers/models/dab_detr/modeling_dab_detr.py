@@ -30,7 +30,6 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     is_accelerate_available,
     is_scipy_available,
-    is_timm_available,
     is_vision_available,
     logging,
     replace_return_docstrings,
@@ -61,7 +60,7 @@ _CHECKPOINT_FOR_DOC = "IDEA/dab_detr-base"
 
 
 @dataclass
-# Copied from transformers.models.conditional_detr.modeling_conditional_detr.ConditionalDetrDecoderOutput with ConditionalDetr->DABDETR,Conditional DETR->DAB-DETR
+# Copied from transformers.models.conditional_detr.modeling_conditional_detr.ConditionalDetrDecoderOutput with ConditionalDetr->DABDETR,Conditional DETR->DAB-DETR,2 (anchor points)->4 (anchor points)
 class DABDETRDecoderOutput(BaseModelOutputWithCrossAttentions):
     """
     Base class for outputs of the Conditional DETR decoder. This class adds one attribute to
@@ -87,7 +86,7 @@ class DABDETRDecoderOutput(BaseModelOutputWithCrossAttentions):
         intermediate_hidden_states (`torch.FloatTensor` of shape `(config.decoder_layers, batch_size, num_queries, hidden_size)`, *optional*, returned when `config.auxiliary_loss=True`):
             Intermediate decoder activations, i.e. the output of each decoder layer, each of them gone through a
             layernorm.
-        reference_points (`torch.FloatTensor` of shape `(config.decoder_layers, batch_size, num_queries, 2 (anchor points)->4 (anchor points))`):
+        reference_points (`torch.FloatTensor` of shape `(config.decoder_layers, batch_size, num_queries, 2 (anchor points))`):
             Reference points (reference points of each layer of the decoder).
     """
 
@@ -96,7 +95,7 @@ class DABDETRDecoderOutput(BaseModelOutputWithCrossAttentions):
 
 
 @dataclass
-# Copied from transformers.models.conditional_detr.modeling_conditional_detr.ConditionalDetrModelOutput with ConditionalDetr->DABDETR,Conditional DETR->DAB-DETR
+# Copied from transformers.models.conditional_detr.modeling_conditional_detr.ConditionalDetrModelOutput with ConditionalDetr->DABDETR,Conditional DETR->DAB-DETR,2 (anchor points)->4 (anchor points)
 class DABDETRModelOutput(Seq2SeqModelOutput):
     """
     Base class for outputs of the Conditional DETR encoder-decoder model. This class adds one attribute to
@@ -132,7 +131,7 @@ class DABDETRModelOutput(Seq2SeqModelOutput):
         intermediate_hidden_states (`torch.FloatTensor` of shape `(config.decoder_layers, batch_size, sequence_length, hidden_size)`, *optional*, returned when `config.auxiliary_loss=True`):
             Intermediate decoder activations, i.e. the output of each decoder layer, each of them gone through a
             layernorm.
-        reference_points (`torch.FloatTensor` of shape `(config.decoder_layers, batch_size, num_queries, 2 (anchor points)->4 (anchor points))`:
+        reference_points (`torch.FloatTensor` of shape `(config.decoder_layers, batch_size, num_queries, 2 (anchor points))`):
             Reference points (reference points of each layer of the decoder).
     """
 
@@ -282,6 +281,8 @@ class DABDETRConvEncoder(nn.Module):
         super().__init__()
 
         self.config = config
+        dilation = config.dilation
+        num_channels = config.num_channels
         backbone = load_backbone(config)
 
         # replace batch norm by frozen batch norm
@@ -486,7 +487,7 @@ class DetrAttention(nn.Module):
         object_queries: Optional[torch.Tensor] = None,
         key_value_states: Optional[torch.Tensor] = None,
         spatial_position_embeddings: Optional[torch.Tensor] = None,
-        output_attentions: bool = None,
+        output_attentions: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
         # if key_value_states are provided this layer is used as a cross-attention layer
@@ -1356,12 +1357,8 @@ class DABDETRDecoder(DABDETRPreTrainedModel):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
-        if self.bbox_embed is not None:
-            output_intermediate_hidden_states = torch.stack(intermediate)
-            output_reference_points = torch.stack(ref_points)
-        else:
-            output_intermediate_hidden_states = (torch.stack(intermediate).transpose(0, 1),)
-            output_reference_points = reference_points.unsqueeze(0).transpose(0, 1)
+        output_intermediate_hidden_states = torch.stack(intermediate)
+        output_reference_points = torch.stack(ref_points)
 
         if not return_dict:
             return tuple(
@@ -1552,12 +1549,8 @@ class DABDETRModel(DABDETRPreTrainedModel):
         if self.num_patterns == 0:
             queries = torch.zeros(batch_size, num_queries, self.d_model, device=device)
         else:
-            queries = (
-                self.patterns.weight[:, None, None, :].repeat(1, self.num_queries, batch_size, 1).flatten(0, 1)
-            )  # n_q*n_pat, bs, d_model
-            reference_position_embeddings = reference_position_embeddings.repeat(
-                self.num_patterns, 1, 1
-            )  # n_q*n_pat, bs, d_model
+            queries = (self.patterns.weight[:, None, None, :].repeat(1, self.num_queries, batch_size, 1).flatten(0, 1).permute(1, 0, 2))  # bs, n_q*n_pat, d_model
+            reference_position_embeddings = reference_position_embeddings.repeat(1, self.num_patterns, 1)  # bs, n_q*n_pat,  d_model
 
         # decoder outputs consists of (dec_features, dec_hidden, dec_attn)
         decoder_outputs = self.decoder(

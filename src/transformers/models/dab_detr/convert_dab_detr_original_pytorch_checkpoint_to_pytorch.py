@@ -28,7 +28,6 @@ from transformers import (
     DABDETRConfig,
     DABDETRForObjectDetection,
     DABDETRImageProcessor,
-    DABDETRModel
 )
 from transformers.utils import logging
 
@@ -274,7 +273,7 @@ def convert_dab_detr_checkpoint(model_name, pretrained_model_weights_path, pytor
 
     # prepare image
     img = prepare_img()
-    encoding = image_processor(images=[img], return_tensors="pt")
+    encoding = image_processor(images=[img, img], return_tensors="pt")
 
     logger.info(f"Converting model {model_name}...")
 
@@ -300,10 +299,9 @@ def convert_dab_detr_checkpoint(model_name, pretrained_model_weights_path, pytor
     # finally, create HuggingFace model and load state dict
     model = DABDETRForObjectDetection(config)
     model.load_state_dict(state_dict)
-    model.push_to_hub(repo_id=model_name, organization="davidhajdu", commit_message="Add model")
+    model.push_to_hub(repo_id=model_name, commit_message="Add new model")
     model.eval()
     # verify our conversion
-
     outputs = model(**encoding)
     assert torch.allclose(outputs.logits[0, :3, :3], expected_slice_logits, atol=3e-4)
     assert torch.allclose(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, atol=1e-4)

@@ -19,10 +19,10 @@ from typing import Mapping
 
 from packaging import version
 
-from ...utils.backbone_utils import verify_backbone_config_arguments
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
+from ...utils.backbone_utils import verify_backbone_config_arguments
 from ..auto import CONFIG_MAPPING
 
 
@@ -46,6 +46,15 @@ class DABDETRConfig(PretrainedConfig):
         backbone_config (`PretrainedConfig` or `dict`, *optional*):
             The configuration of the backbone model. Only used in case `use_timm_backbone` is set to `False` in which
             case it will default to `ResNetConfig()`.
+        backbone (`str`, *optional*, defaults to `"resnet50"`):
+            Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
+            will load the corresponding pretrained weights from the timm or transformers library. If `use_pretrained_backbone`
+            is `False`, this loads the backbone's config and uses that to initialize the backbone with random weights.
+        use_pretrained_backbone (`bool`, *optional*, defaults to `True`):
+            Whether to use pretrained weights for the backbone.
+        backbone_kwargs (`dict`, *optional*):
+            Keyword arguments to be passed to AutoBackbone when loading from a checkpoint
+            e.g. `{'out_indices': (0, 1, 2, 3)}`. Cannot be specified if `backbone_config` is set.
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
         num_queries (`int`, *optional*, defaults to 300):
@@ -90,15 +99,6 @@ class DABDETRConfig(PretrainedConfig):
             Whether auxiliary decoding losses (loss at each decoder layer) are to be used.
         position_embedding_type (`str`, *optional*, defaults to `"sine"`):
             Type of position embeddings to be used on top of the image features. One of `"sine"` or `"learned"`.
-        backbone (`str`, *optional*, defaults to `"resnet50"`):
-            Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
-            will load the corresponding pretrained weights from the timm or transformers library. If `use_pretrained_backbone`
-            is `False`, this loads the backbone's config and uses that to initialize the backbone with random weights.
-        use_pretrained_backbone (`bool`, *optional*, defaults to `True`):
-            Whether to use pretrained weights for the backbone.
-        backbone_kwargs (`dict`, *optional*):
-            Keyword arguments to be passed to AutoBackbone when loading from a checkpoint
-            e.g. `{'out_indices': (0, 1, 2, 3)}`. Cannot be specified if `backbone_config` is set.
         dilation (`bool`, *optional*, defaults to `False`):
             Whether to replace stride with dilation in the last convolutional block (DC5). Only supported when
             `use_timm_backbone` = `True`.
@@ -149,6 +149,9 @@ class DABDETRConfig(PretrainedConfig):
             Whether the positional embeddings are normalized and scaled by sine_position_embedding_scale value.
         sine_position_embedding_scale (`float`, *optional*, defaults to 'None'):
             Scaling factor applied to the normalized positional encodings.
+        initializer_bias_prior_prob (`float`, *optional*):
+            The prior probability used by the bias initializer to initialize biases for `enc_score_head` and `class_embed`.
+            If `None`, `prior_prob` computed as `prior_prob = 1 / (num_labels + 1)` while initializing model weights.
 
 
     Examples:
@@ -225,7 +228,7 @@ class DABDETRConfig(PretrainedConfig):
         sine_position_embedding_scale=None,
         initializer_bias_prior_prob=None,
         **kwargs,
-    ):       
+    ):
         if query_dim != 4:
             raise ValueError(
                 "The query dimensions has to be 4."
