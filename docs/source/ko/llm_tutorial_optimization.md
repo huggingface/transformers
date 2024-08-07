@@ -8,7 +8,7 @@ specific language governing permissions and limitations under the License.
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 -->
-# LLM의 속도 및 메모리 최적화 [[optimizing-llms-for-speed-and-memory]]
+# 대규모 언어 모델의 속도 및 메모리 최적화 [[optimizing-llms-for-speed-and-memory]]
 
 [[open-in-colab]]
 
