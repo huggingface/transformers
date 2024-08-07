@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 <Tip>
 
-PEFT를 활용한 GPTQ 양자화를 사용해보시려면 이 [노트북](https://colab.research.google.com/drive/1_TIrmuKOFhuRRiTWN94iLKUFu6ZX4ceb) 을 참고하시고, 자세한 내용은 이 [블로그 게시물](https://huggingface.co/blog/gptq-integration) 에서 확인하세요!
+PEFT를 활용한 GPTQ 양자화를 사용해보시려면 이 [노트북](https://colab.research.google.com/drive/1_TIrmuKOFhuRRiTWN94iLKUFu6ZX4ceb)을 참고하시고, 자세한 내용은 이 [블로그 게시물](https://huggingface.co/blog/gptq-integration)에서 확인하세요!
 
 </Tip>
 
@@ -48,7 +48,7 @@ dataset = ["auto-gptq is an easy-to-use model quantization library with user-fri
 gptq_config = GPTQConfig(bits=4, dataset=dataset, tokenizer=tokenizer)
 ```
 
-양자화할 모델을 로드하고 `gptq_config`을 ['~AutoModelForCausalLM.from_pretrained'] 메소드에 전달하세요. 모델을 메모리에 맞추기 위해 `device_map="auto"`를 설정하여 모델을 자동으로 CPU로 오프로드하고, 양자화를 위해 모델 모듈이 CPU와 GPU 간에 이동할 수 있도록 합니다.
+양자화할 모델을 로드하고 `gptq_config`을 [`~AutoModelForCausalLM.from_pretrained`] 메소드에 전달하세요. 모델을 메모리에 맞추기 위해 `device_map="auto"`를 설정하여 모델을 자동으로 CPU로 오프로드하고, 양자화를 위해 모델 모듈이 CPU와 GPU 간에 이동할 수 있도록 합니다.
 
 ```py
 quantized_model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto", quantization_config=gptq_config)
@@ -66,14 +66,14 @@ quantized_model = AutoModelForCausalLM.from_pretrained(model_id, device_map="aut
 
 </Tip>
 
-모델이 양자화되면, 모델과 토크나이저를 Hub에 푸시하여 쉽게 공유하고 접근할 수 있습니다. ['GPTQConfig']를 저장하기 위해 ['~PreTrainedModel.push_to_hub'] 메소드를 사용하세요:
+모델이 양자화되면, 모델과 토크나이저를 Hub에 푸시하여 쉽게 공유하고 접근할 수 있습니다. [`GPTQConfig`]를 저장하기 위해 [`~PreTrainedModel.push_to_hub`] 메소드를 사용하세요:
 
 ```py
 quantized_model.push_to_hub("opt-125m-gptq")
 tokenizer.push_to_hub("opt-125m-gptq")
 ```
 
-양자화된 모델을 로컬에 저장하려면 ['~PreTrainedModel.save_pretrained'] 메소드를 사용할 수 있습니다. 모델이 `device_map` 매개변수로 양자화되었을 경우, 저장하기 전에 전체 모델을 GPU나 CPU로 이동해야 합니다. 예를 들어, 모델을 CPU에 저장하려면 다음과 같이 합니다:
+양자화된 모델을 로컬에 저장하려면 [`~PreTrainedModel.save_pretrained`] 메소드를 사용할 수 있습니다. 모델이 `device_map` 매개변수로 양자화되었을 경우, 저장하기 전에 전체 모델을 GPU나 CPU로 이동해야 합니다. 예를 들어, 모델을 CPU에 저장하려면 다음과 같이 합니다:
 
 ```py
 quantized_model.save_pretrained("opt-125m-gptq")
@@ -84,7 +84,7 @@ quantized_model.to("cpu")
 quantized_model.save_pretrained("opt-125m-gptq")
 ```
 
-양자화된 모델을 다시 로드하려면 ['~PreTrainedModel.from_pretrained'] 메소드를 사용하고, `device_map="auto"`를 설정하여 모든 사용 가능한 GPU에 모델을 자동으로 분산시켜 더 많은 메모리를 사용하지 않으면서 모델을 더 빠르게 로드할 수 있습니다.
+양자화된 모델을 다시 로드하려면 [`~PreTrainedModel.from_pretrained`] 메소드를 사용하고, `device_map="auto"`를 설정하여 모든 사용 가능한 GPU에 모델을 자동으로 분산시켜 더 많은 메모리를 사용하지 않으면서 모델을 더 빠르게 로드할 수 있습니다.
 
 ```py
 from transformers import AutoModelForCausalLM
