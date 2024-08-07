@@ -135,7 +135,7 @@ teacher_model = AutoModelForImageClassification.from_pretrained(
     ignore_mismatched_sizes=True
 )
 
-# training MobileNetV2 from scratch
+# MobileNetV2 밑바닥부터 학습
 student_config = MobileNetV2Config()
 student_config.num_labels = num_labels
 student_model = MobileNetV2ForImageClassification(student_config)
