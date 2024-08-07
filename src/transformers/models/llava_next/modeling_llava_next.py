@@ -15,7 +15,6 @@
 """PyTorch Llava-NeXT model."""
 
 import math
-import warnings
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
