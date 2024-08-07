@@ -243,6 +243,7 @@ For now, Transformers supports SDPA inference and training for the following arc
 * [UniSpeech](https://huggingface.co/docs/transformers/v4.39.3/en/model_doc/unispeech#transformers.UniSpeechModel)
 * [unispeech_sat](https://huggingface.co/docs/transformers/v4.39.3/en/model_doc/unispeech-sat#transformers.UniSpeechSatModel)
 * [YOLOS](https://huggingface.co/docs/transformers/model_doc/yolos#transformers.YolosModel)
+* [Roberta](https://huggingface.co/docs/transformers/model_doc/roberta#transformers.RobertaModel)
 
 
 <Tip>
