@@ -128,7 +128,7 @@ training_args = TrainingArguments(
 
 num_labels = len(processed_datasets["train"].features["labels"].names)
 
-# initialize models
+# 모델 초기화
 teacher_model = AutoModelForImageClassification.from_pretrained(
     "merve/beans-vit-224",
     num_labels=num_labels,
