@@ -976,7 +976,7 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel):
 
         if isinstance(past_key_values, StaticCache) and attention_mask.ndim == 2:
             if inputs_embeds is not None:
-                batch_size, sequence_length = inputs_embeds.shape
+                batch_size, sequence_length, _ = inputs_embeds.shape
                 device = inputs_embeds.device
             else:
                 batch_size, sequence_length = input_ids.shape
