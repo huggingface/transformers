@@ -508,7 +508,7 @@ model_input = tokenizer.apply_chat_template(
 >>> from transformers import AutoTokenizer
 >>> tokenizer = AutoTokenizer.from_pretrained("facebook/blenderbot-400M-distill")
 
->>> tokenizer.default_chat_template
+>>> tokenizer.chat_template
 "{% for message in messages %}{% if message['role'] == 'user' %}{{ ' ' }}{% endif %}{{ message['content'] }}{% if not loop.last %}{{ '  ' }}{% endif %}{% endfor %}{{ eos_token }}"
 ```
 
@@ -603,14 +603,6 @@ tokenizer.push_to_hub("model_name")  # 새 템플릿을 허브에 업로드!
 토크나이저에 여러 개의 템플릿이 있는 경우, `tokenizer.chat_template`는 템플릿 이름이 키인 `딕셔너리`입니다. `apply_chat_template` 메소드는 특정 템플릿 이름에 대한 특별한 처리를 합니다: 일반적으로 `default`라는 템플릿을 찾고, 찾을 수 없으면 오류를 발생시킵니다. 그러나 사용자가 `tools` 인수를 전달할 때 `tool_use`라는 템플릿이 존재하면 대신 그것을 사용합니다. 다른 이름의 템플릿에 접근하려면 `apply_chat_template()`의 `chat_template` 인수에 원하는 템플릿 이름을 전달하면 됩니다.
 
 사용자에게 약간의 혼란을 줄 수 있으므로, 템플릿을 직접 작성하는 경우 가능한 한 단일 템플릿에 모든 것을 넣는 것을 권장합니다!
-
-### "기본" 템플릿이란 무엇인가요?[[what-are-default-templates]]
-
-채팅 템플릿 도입 이전에는 채팅 처리가 모델 클래스 수준에서 하드코딩되었습니다. 하위 호환성을 유지하기 위해 클래스별로 기본 템플릿을 설정하여 이 처리를 유지했습니다. 모델에 채팅 템플릿이 설정되지 않은 경우, 해당 모델 클래스에 기본 템플릿이 있으면 `TextGenerationPipeline` 클래스와 `apply_chat_template` 메소드는 클래스 템플릿을 대신 사용합니다. 토크나이저의 기본 템플릿을 확인하려면 `tokenizer.default_chat_template` 속성을 확인할 수 있습니다.
-
-이 작업은 기존 워크플로를 깨뜨리지 않기 위한 하위 호환성 유지 목적입니다. 클래스 템플릿이 모델에 적합하더라도, `chat_template` 속성을 명시적으로 설정하여 기본 템플릿을 재정의하는 것을 강력히 권장합니다. 이를 통해 사용자는 모델이 채팅을 위해 올바르게 구성되었음을 명확히 알 수 있기 때문입니다. 
-
-이제 실제 채팅 템플릿이 널리 채택됨에 따라 기본 템플릿은 더 이상 사용되지 않으며, 향후 릴리스에서 제거될 예정입니다. 여전히 기본 템플릿에 의존하는 모든 토크나이저에 대해 `chat_template` 속성을 설정하는 것을 강력히 권장합니다!
 
 ### 어떤 템플릿을 사용해야 하나요?[[what-template-should-i-use]]
 
