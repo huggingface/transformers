@@ -2054,6 +2054,7 @@ class Sam2Model(Sam2PreTrainedModel):
 
         if torch.cuda.is_available():
             try:
+                logger.info("Building CUDA kernel, this might take some time...")
                 load_cuda_kernels()
             except Exception as e:
                 logger.warning(f"Could not load custom CUDA kernels for postprocessing: {e}")
