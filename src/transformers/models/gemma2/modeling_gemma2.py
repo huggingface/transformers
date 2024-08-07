@@ -807,7 +807,26 @@ class Gemma2Model(Gemma2PreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         if cache_position is None:
-            cache_position = torch.arange(0, inputs_embeds.shape[1], device=inputs_embeds.device)
+            if past_key_values is None:
+                cache_position = torch.arange(0, inputs_embeds.shape[1], device=inputs_embeds.device)
+            else:
+                raise ValueError("When `past_key_values` is passed, `cache_position` must be too")
+
+        # Probably a forward call with caching, so we set up cache for one call only
+        if use_cache and past_key_values is None and not self.training:
+            logger.warning_once(
+                "You are calling the model with `use_cache=True` but didn't pass `past_key_values` while not training. ",
+                "If you want to compute with cache, make sure to pass an instance of `HybridCache`. An empty `HybridCache` instance "
+                "will be created for this call. See for more: (https://huggingface.co/docs/transformers/main/en/internal/generation_utils#transformers.HybridCache)",
+            )
+            batch_size, seq_len, _ = inputs_embeds.shape
+            past_key_values = HybridCache(
+                self.config,
+                max_batch_size=batch_size,
+                max_cache_len=seq_len,
+                device=self.device,
+                dtype=inputs_embeds.dtype,
+            )
 
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
