@@ -17,7 +17,7 @@ Processor class for InstructBLIP. Largely copy of Blip2Processor with addition o
 """
 
 import os
-from typing import List, Optional, Union
+from typing import List, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
@@ -25,12 +25,10 @@ from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import (
     AddedToken,
     BatchEncoding,
-    PaddingStrategy,
     PreTokenizedInput,
     TextInput,
-    TruncationStrategy,
 )
-from ...utils import TensorType, logging
+from ...utils import logging
 from ..auto import AutoTokenizer
 
 
@@ -97,21 +95,9 @@ class InstructBlipProcessor(ProcessorMixin):
         self,
         images: ImageInput = None,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
-        add_special_tokens: bool = True,
-        padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = None,
-        max_length: Optional[int] = None,
-        stride: int = 0,
-        pad_to_multiple_of: Optional[int] = None,
-        return_attention_mask: Optional[bool] = None,
-        return_overflowing_tokens: bool = False,
-        return_special_tokens_mask: bool = False,
-        return_offsets_mapping: bool = False,
-        return_token_type_ids: bool = False,
-        return_length: bool = False,
-        verbose: bool = True,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        **kwargs,
+        audio=None,
+        videos=None,
+        **kwargs: Unpack[InstructBlipProcessorKwargs],
     ) -> BatchFeature:
         """
         This method uses [`BlipImageProcessor.__call__`] method to prepare image(s) for the model, and
@@ -129,7 +115,6 @@ class InstructBlipProcessor(ProcessorMixin):
         """
         if images is None and text is None:
             raise ValueError("You have to specify at least images or text.")
-
         output_kwargs = self._merge_kwargs(
             InstructBlipProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
@@ -167,7 +152,9 @@ class InstructBlipProcessor(ProcessorMixin):
                     )
 
             # cast to desired return tensors type after concatenating
-            text_encoding = BatchEncoding(text_encoding, tensor_type=return_tensors)
+            text_encoding = BatchEncoding(
+                text_encoding, tensor_type=output_kwargs["common_kwargs"].get("return_tensors")
+            )
 
             encoding.update(text_encoding)
             qformer_text_encoding = self.qformer_tokenizer(text, **output_kwargs["text_kwargs"])
