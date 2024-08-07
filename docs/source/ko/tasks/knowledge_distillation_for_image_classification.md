@@ -104,7 +104,7 @@ from huggingface_hub import notebook_login
 notebook_login()
 ```
 
-이제 `TrainingArguments`, 교사 모델과 학생 모델을 설정해봅시다.
+이제 `TrainingArguments`, 교사 모델과 학생 모델을 설정하겠습니다.
 
 
 ```python
