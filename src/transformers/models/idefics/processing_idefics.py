@@ -321,6 +321,7 @@ class IdeficsProcessor(ProcessorMixin):
         In order to help debug prompt generation enable `debug=True` which will show you what's happening.
 
         """
+        warnings.warn("The order of the arguments in the __call__ function have been changed from previous versions.")
         legacy = kwargs.pop("legacy", True)
         if legacy:
             warnings.warn(
@@ -337,8 +338,6 @@ class IdeficsProcessor(ProcessorMixin):
             if not isinstance(text, (list, tuple)):
                 text = [text] * len(images)
             # Check if batched text is provided
-            print("images: ", images)
-            print("text: ", text)
             if isinstance(text, (list, tuple)) and len(text) != len(images):
                 raise ValueError(
                     "When using the image-text-to-text behavior, the number of prompts should be the same as the number of images."
