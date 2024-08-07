@@ -951,7 +951,9 @@ class WhisperGenerationMixin:
 
         seek_outputs["sequences"] = seek_outputs["sequences"][:, start_idx:]
 
-        def split_by_batch_index(values, key, batch_idx, is_shortform):
+        def split_by_batch_index(values, key, batch_idx, is_shortform, beam_indices=None):
+            if beam_indices is not None and key == "scores":
+                return [v[beam_idx].cpu() for (v, beam_idx) in zip(values, beam_indices[batch_idx][: len(values)])]
             if key in ["scores", "encoder_attentions", "encoder_hidden_states", "logits"]:
                 return [v[batch_idx].cpu() for v in values]
             if key in ["decoder_attentions", "decoder_hidden_states", "cross_attentions"]:
@@ -982,7 +984,10 @@ class WhisperGenerationMixin:
 
         sequence_tokens = seek_outputs["sequences"]
         seek_outputs = [
-            {k: split_by_batch_index(v, k, i, is_shortform) for k, v in seek_outputs.items()}
+            {
+                k: split_by_batch_index(v, k, i, is_shortform, beam_indices=seek_outputs.get("beam_indices"))
+                for k, v in seek_outputs.items()
+            }
             for i in range(sequence_tokens.shape[0])
         ]
 
