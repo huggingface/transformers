@@ -13,14 +13,12 @@
 # limitations under the License.
 """Image processor class for ImageBind."""
 
-from fractions import Fraction
 import math
-import torch
-import torch.nn as nn
-from torchvision import transforms
+from fractions import Fraction
 from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
+import torch
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import (
@@ -52,6 +50,7 @@ logger = logging.get_logger(__name__)
 
 if is_vision_available():
     import PIL
+
 
 # Copy from models.video_llava.image_processing_video_llava.make_batched_videos
 def make_batched_videos(videos) -> List[VideoInput]:
@@ -88,9 +87,11 @@ def uniform_chunk_sampling(
     _current_clip_index = 0
     _current_aug_index = 0
     _augs_per_clip: int = 1
-    
+
     chunk_duration_fraction = Fraction(chunk_duration)
-    max_possible_clip_start = Fraction(max(total_duration - chunk_duration_fraction, 0)) # Previously chunk_duration was used instead of chunk_duration_fraction so that could be the reason for pixel values not matching
+    max_possible_clip_start = Fraction(
+        max(total_duration - chunk_duration_fraction, 0)
+    )  # Previously chunk_duration was used instead of chunk_duration_fraction so that could be the reason for pixel values not matching
     uniform_clip = Fraction(max_possible_clip_start / max(num_chunks - 1, 1))
 
     result = []
@@ -101,13 +102,10 @@ def uniform_chunk_sampling(
         if _current_aug_index >= _augs_per_clip:
             _current_clip_index += 1
             _current_aug_index = 0
-        
+
         # Last clip is True if sampled self._clips_per_video or if end of video is reached.
         is_last_clip = False
-        if (
-            _current_clip_index >= num_chunks
-            or uniform_clip * _current_clip_index > max_possible_clip_start
-        ):
+        if _current_clip_index >= num_chunks or uniform_clip * _current_clip_index > max_possible_clip_start:
             _current_clip_index = 0
             is_last_clip = True
 
@@ -118,7 +116,7 @@ def uniform_chunk_sampling(
 
         clip_end_sec = clip_start_sec + chunk_duration_fraction
         result.append((clip_start_sec, clip_end_sec))
-    
+
     return result
 
 
@@ -135,13 +133,13 @@ def uniform_temporal_subsample(video: VideoInput, num_samples: int) -> VideoInpu
         num_samples (`int`):
             Number of frames to sample.
     """
-    num_frames = video.shape[-3]#len(video) gives first element of size tensor which is channels instead of frames
+    num_frames = video.shape[-3]  # len(video) gives first element of size tensor which is channels instead of frames
     assert num_samples > 0 and num_frames > 0
     # Sample by nearest neighbor interpolation if num_samples > t.
     indices = np.linspace(0, num_frames - 1, num_samples)
     indices = np.clip(indices, 0, num_frames - 1).astype(int)
 
-    return video[:, indices, :, :]#second index has frames(slicing instead of looping)
+    return video[:, indices, :, :]  # second index has frames(slicing instead of looping)
 
 
 class ImageBindImageProcessor(BaseImageProcessor):
@@ -192,7 +190,7 @@ class ImageBindImageProcessor(BaseImageProcessor):
         fps (`List[int]`, *optional*, defaults to [30]):
             Frame rate of the video. It's assumed that all videos have the same frame rate.
         duration('List[float]', *optional*, defaults to [10.0]):
-            Durations of videos 
+            Durations of videos
     """
 
     model_input_names = ["pixel_values"]
@@ -322,7 +320,7 @@ class ImageBindImageProcessor(BaseImageProcessor):
             **kwargs,
         )
 
-    #Adapted from https://github.com/facebookresearch/pytorchvideo/blob/1fadaef40dd393ca09680f55582399f4679fc9b7/pytorchvideo/transforms/functional.py#L92
+    # Adapted from https://github.com/facebookresearch/pytorchvideo/blob/1fadaef40dd393ca09680f55582399f4679fc9b7/pytorchvideo/transforms/functional.py#L92
     def short_side_scale(
         self,
         image: np.ndarray,
@@ -356,15 +354,18 @@ class ImageBindImageProcessor(BaseImageProcessor):
         else:
             new_h = size
             new_w = int(math.floor((float(w) / h) * size))
-        
+
         data_format = input_data_format if data_format is None else data_format
-        resized_image =  torch.nn.functional.interpolate(
+        resized_image = torch.nn.functional.interpolate(
             torch.tensor(image).contiguous(), size=(new_h, new_w), mode=resample, align_corners=False
         ).numpy()
-        #input image in always in FIRST channel dim
-        resized_image = np.array([to_channel_dimension_format(
-            img, data_format, input_channel_dim=ChannelDimension.FIRST
-        ) for img in resized_image])
+        # input image in always in FIRST channel dim
+        resized_image = np.array(
+            [
+                to_channel_dimension_format(img, data_format, input_channel_dim=ChannelDimension.FIRST)
+                for img in resized_image
+            ]
+        )
         return resized_image
 
     def uniform_crop(
@@ -439,17 +440,26 @@ class ImageBindImageProcessor(BaseImageProcessor):
             cropped = images[:, :, y_offset : y_offset + crop_size, x_offset : x_offset + crop_size]
             if ndim == 3:
                 cropped = cropped.squeeze(0)
-            #input image in always in FIRST channel dim
-            cropped = np.array([to_channel_dimension_format(
-                img, data_format, input_channel_dim=ChannelDimension.FIRST
-            ) for img in cropped])
+            # input image in always in FIRST channel dim
+            cropped = np.array(
+                [
+                    to_channel_dimension_format(img, data_format, input_channel_dim=ChannelDimension.FIRST)
+                    for img in cropped
+                ]
+            )
 
             uniform_cropped.append(cropped)
 
         return uniform_cropped
 
     def chunk(
-        self, video: VideoInput, fps: int, duration: float, chunk_duration: int, num_chunks: int, num_frames_per_chunk: int
+        self,
+        video: VideoInput,
+        fps: int,
+        duration: float,
+        chunk_duration: int,
+        num_chunks: int,
+        num_frames_per_chunk: int,
     ) -> List[VideoInput]:
         """
         Uniformly sample `num_chunks` chunks of duration `chunk_duration` from a video.
@@ -460,7 +470,7 @@ class ImageBindImageProcessor(BaseImageProcessor):
             fps (`int`):
                 Frame rate of the video
             duration('float', *optional*, defaults to 10.0):
-                Durations of videos 
+                Durations of videos
             chunk_duration (`int`):
                 Duration of each chunk(clip duration).
             num_chunks (`int`):
@@ -480,11 +490,11 @@ class ImageBindImageProcessor(BaseImageProcessor):
 
         all_clips = []
         for clip_timepoints in all_clips_timepoints:
-            #shape of video tensor is (Channel X Frames X Height X Width) so frames dim is accessed at 1 index
-            
+            # shape of video tensor is (Channel X Frames X Height X Width) so frames dim is accessed at 1 index
+
             start_idx = math.ceil(fps * clip_timepoints[0])
             end_idx = math.ceil(fps * clip_timepoints[1])
-            end_idx = min(end_idx, int(duration*fps))
+            end_idx = min(end_idx, int(duration * fps))
             frame_idxs = list(range(start_idx, end_idx))
             frame_idxs = torch.tensor(frame_idxs).contiguous()
             video_clip = video[:, frame_idxs, :, :]
@@ -542,14 +552,16 @@ class ImageBindImageProcessor(BaseImageProcessor):
             # We assume that all images have the same channel dimension format.
             input_data_format = infer_channel_dimension_format(images[0])
         if do_resize:
-            images  = self.short_side_scale(image = np.array(images), input_data_format=input_data_format)
+            images = self.short_side_scale(image=np.array(images), input_data_format=input_data_format)
 
         if do_rescale:
             images = [
                 self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
                 for image in images
             ]
-        images = torch.tensor(images).permute(1,0,2,3).numpy()#to interchange channel and frame dim for normalize func as mean and std have shape 3
+        images = (
+            torch.tensor(images).permute(1, 0, 2, 3).numpy()
+        )  # to interchange channel and frame dim for normalize func as mean and std have shape 3
         if do_normalize:
             images = [
                 self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
@@ -557,7 +569,7 @@ class ImageBindImageProcessor(BaseImageProcessor):
             ]
 
         if do_center_crop:
-            images = self.uniform_crop(np.array(images), crop_size, num_crops =3,input_data_format=input_data_format)
+            images = self.uniform_crop(np.array(images), crop_size, num_crops=3, input_data_format=input_data_format)
 
         images = [
             to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
@@ -640,7 +652,7 @@ class ImageBindImageProcessor(BaseImageProcessor):
             fps (`List[int]`, *optional*, defaults to `self.fps`):
                 Frame rate of the video. It's assumed that all videos have the same frame rate.
             duration('List[float]', *optional*, defaults to [10.0]):
-                Durations of videos 
+                Durations of videos
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                 - Unset: Return a list of `np.ndarray`.
@@ -704,7 +716,7 @@ class ImageBindImageProcessor(BaseImageProcessor):
         if images is not None:
             pixel_values = self._preprocess_image(
                 images=images,
-                is_video = is_video,
+                is_video=is_video,
                 do_resize=do_resize,
                 size=size,
                 resample=resample,
@@ -721,13 +733,13 @@ class ImageBindImageProcessor(BaseImageProcessor):
             )
         else:
             pixel_values = []
-                              
-            for idx,video in enumerate(videos):
+
+            for idx, video in enumerate(videos):
                 if do_chunk:
                     clips = self.chunk(
                         video=video[0],
                         fps=fps[idx],
-                        duration= duration[idx],
+                        duration=duration[idx],
                         chunk_duration=chunk_duration,
                         num_chunks=num_chunks,
                         num_frames_per_chunk=num_frames_per_chunk,
@@ -736,7 +748,7 @@ class ImageBindImageProcessor(BaseImageProcessor):
                     _pixel_values = [
                         self._preprocess_image(
                             images=clip,
-                            is_video = is_video,
+                            is_video=is_video,
                             do_resize=do_resize,
                             size=size,
                             resample=PILImageResampling.BILINEAR,
@@ -757,7 +769,7 @@ class ImageBindImageProcessor(BaseImageProcessor):
                     _pixel_values = [
                         self._preprocess_image(
                             images=video,
-                            is_video = is_video,
+                            is_video=is_video,
                             do_resize=do_resize,
                             size=size,
                             resample=resample,
@@ -774,15 +786,16 @@ class ImageBindImageProcessor(BaseImageProcessor):
                         )
                     ]
                 _pixel_values = np.stack(np.array(_pixel_values))
-                #Exchange frames and channels dim
+                # Exchange frames and channels dim
                 _pixel_values = np.swapaxes(_pixel_values, 2, 3)
                 pixel_values.append(_pixel_values)
             pixel_values = np.stack(pixel_values)
             # Combine the second and third dimensions for merging num_crops in one dim
             pixel_values_shape = pixel_values.shape
-            pixel_values_shape = (pixel_values_shape[0], pixel_values_shape[1] * pixel_values_shape[2], *pixel_values_shape[3:])
+            pixel_values_shape = (
+                pixel_values_shape[0],
+                pixel_values_shape[1] * pixel_values_shape[2],
+                *pixel_values_shape[3:],
+            )
             pixel_values = pixel_values.reshape(pixel_values_shape)
         return BatchFeature(data={"pixel_values": pixel_values}, tensor_type=return_tensors)
-
-
-    
