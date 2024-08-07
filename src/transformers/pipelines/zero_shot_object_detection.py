@@ -1,6 +1,7 @@
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Optional, Union
 
 from ..utils import add_end_docstrings, is_torch_available, is_vision_available, logging, requires_backends
+from ..utils.deprecation import deprecate_kwarg
 from .base import Pipeline, build_pipeline_init_args
 
 
@@ -64,6 +65,9 @@ class ZeroShotObjectDetectionPipeline(Pipeline):
         self,
         image: Union[str, "Image.Image", List[Dict[str, Any]]],
         candidate_labels: Union[str, List[str]] = None,
+        threshold: float = 0.1,
+        top_k: Optional[int] = None,
+        timeout: Optional[float] = None,
         **kwargs,
     ):
         """
@@ -123,14 +127,11 @@ class ZeroShotObjectDetectionPipeline(Pipeline):
             - **box** (`Dict[str,int]`) -- Bounding box of the detected object in image's original size. It is a
               dictionary with `x_min`, `x_max`, `y_min`, `y_max` keys.
         """
-        if "text_queries" in kwargs:
-            candidate_labels = kwargs.pop("text_queries")
-
         if isinstance(image, (str, Image.Image)):
             inputs = {"image": image, "candidate_labels": candidate_labels}
         else:
             inputs = image
-        results = super().__call__(inputs, **kwargs)
+        results = super().__call__(inputs, timeout=timeout, threshold=threshold, top_k=top_k, **kwargs)
         return results
 
     def _sanitize_parameters(self, **kwargs):
@@ -144,17 +145,30 @@ class ZeroShotObjectDetectionPipeline(Pipeline):
             postprocess_params["top_k"] = kwargs["top_k"]
         return preprocess_params, {}, postprocess_params
 
-    def preprocess(self, inputs, timeout=None):
-        # processor expects "images" and "text" keys
-        inputs["images"] = load_image(inputs.pop("image"), timeout=timeout)
-        inputs["text"] = inputs.pop("candidate_labels")
+    @deprecate_kwarg("images", new_name="image", version="4.48.0")
+    @deprecate_kwarg("text", new_name="candidate_labels", version="4.48.0")
+    @deprecate_kwarg("text_queries", new_name="candidate_labels", version="4.48.0")
+    def _preprocess_input_keys(self, image, candidate_labels):
+        """
+        The method is used to convert input keys to pipline specific keys, taking into consideration
+        backward compatibility for deprecated ones.
+        """
+        return {"image": image, "candidate_labels": candidate_labels}
 
-        model_inputs = self.processor(**inputs, return_tensors=self.framework)
+    def preprocess(self, inputs, timeout=None):
+        # convert some old keys to unified format: image + candidate_labels
+        inputs = self._preprocess_input_keys(**inputs)
+
+        image = load_image(inputs["image"], timeout=timeout)
+        candidate_labels = inputs["candidate_labels"]
+
+        # preprocess the inputs
+        model_inputs = self.processor(images=image, text=candidate_labels, return_tensors=self.framework)
 
         # save extra data for post processing
-        width, height = inputs["images"].size
+        width, height = image.size
         model_inputs["_target_size"] = [height, width]
-        model_inputs["_candidate_labels"] = inputs["text"]
+        model_inputs["_candidate_labels"] = candidate_labels
 
         return model_inputs
 
