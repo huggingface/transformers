@@ -13,7 +13,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import copy
 import inspect
 import warnings
@@ -33,6 +32,7 @@ from ..cache_utils import (
     HQQQuantizedCache,
     HybridCache,
     MambaCache,
+    OffloadedCache,
     QuantizedCacheConfig,
     QuantoQuantizedCache,
     SlidingWindowCache,
@@ -47,6 +47,7 @@ from ..models.auto import (
     MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
     MODEL_FOR_VISION_2_SEQ_MAPPING,
 )
+from ..pytorch_utils import is_torch_greater_or_equal_than_2_4
 from ..tokenization_utils import ExtensionsTrie
 from ..utils import (
     ModelOutput,
@@ -488,10 +489,10 @@ class GenerationMixin:
             return default_attention_mask
 
         # Otherwise we have may have information -> try to infer the attention mask
-        if inputs.device.type == "mps":
-            # mps does not support torch.isin (https://github.com/pytorch/pytorch/issues/77764)
+        if inputs.device.type == "mps" and not is_torch_greater_or_equal_than_2_4:
+            # mps does not support torch.isin for torch<2.4 (https://github.com/pytorch/pytorch/issues/77764)
             raise ValueError(
-                "Can't infer missing attention mask on `mps` device. Please provide an `attention_mask` or use a different device."
+                "Can't infer missing attention mask on `mps` device for torch<2.4. Please provide an `attention_mask` or upgrade to torch>=2.4"
             )
 
         is_pad_token_in_inputs = (pad_token_id is not None) and (
@@ -1428,7 +1429,9 @@ class GenerationMixin:
         model_kwargs["cache_position"] = cache_position
         return model_kwargs
 
-    def _get_cache(self, cache_implementation: str, max_batch_size: int, max_cache_len: int, model_kwargs) -> Cache:
+    def _get_cache(
+        self, cache_implementation: str, max_batch_size: int, max_cache_len: int, device: torch.device, model_kwargs
+    ) -> Cache:
         """
         Sets a cache for `generate`, that will persist across calls. A new cache will only be initialized a
         new `generate` call requires a larger cache or uses a different batch size.
@@ -1476,7 +1479,7 @@ class GenerationMixin:
                 "config": self.config,
                 "max_batch_size": max_batch_size,
                 "max_cache_len": max_cache_len,
-                "device": self.device,
+                "device": device,
                 "dtype": cache_dtype,
             }
             self._cache = cache_cls(**cache_kwargs)
@@ -1779,6 +1782,20 @@ class GenerationMixin:
             cache_name = "cache_params"
         else:
             cache_name = "past_key_values"
+
+        # TODO(joao): support static caches in assisted generation. assisted generation needs to roll back caches,
+        # which is only supported in dynamic caches atm
+        if (
+            assistant_model is not None
+            and generation_config.cache_implementation is not None
+            and self._supports_default_dynamic_cache()
+        ):
+            logger.warning_once(
+                "An assistant model is provided, using a dynamic cache instead of a cache of type="
+                f"'{generation_config.cache_implementation}'."
+            )
+            generation_config.cache_implementation = None
+
         if (model_kwargs.get(cache_name) is not None) and is_torchdynamo_compiling():
             raise ValueError(
                 "Passing `past_key_values` is not supported when compiling `model.generate` with torch.compile -- you "
@@ -1798,10 +1815,11 @@ class GenerationMixin:
                         "issue: https://github.com/huggingface/transformers/issues/28981"
                     )
                 model_kwargs[cache_name] = self._get_cache(
-                    generation_config.cache_implementation,
-                    getattr(generation_config, "num_beams", 1) * batch_size,
-                    generation_config.max_length,
-                    model_kwargs,
+                    cache_implementation=generation_config.cache_implementation,
+                    max_batch_size=generation_config.num_beams * generation_config.num_return_sequences * batch_size,
+                    max_cache_len=generation_config.max_length,
+                    device=device,
+                    model_kwargs=model_kwargs,
                 )
             elif generation_config.cache_implementation == "quantized":
                 if not self._supports_quantized_cache:
@@ -1829,6 +1847,8 @@ class GenerationMixin:
                     )
 
                 model_kwargs[cache_name] = cache_class(cache_config)
+            elif generation_config.cache_implementation == "offloaded":
+                model_kwargs[cache_name] = OffloadedCache()
         # Use DynamicCache() instance by default. This will avoid back and forth from legacy format that
         # keeps copying the cache thus using much more memory
         elif generation_config.cache_implementation is None and self._supports_default_dynamic_cache():

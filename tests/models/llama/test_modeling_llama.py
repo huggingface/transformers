@@ -22,7 +22,7 @@ import pytest
 from packaging import version
 from parameterized import parameterized
 
-from transformers import LlamaConfig, StaticCache, is_torch_available, set_seed
+from transformers import AutoTokenizer, LlamaConfig, StaticCache, is_torch_available, set_seed
 from transformers.testing_utils import (
     require_bitsandbytes,
     require_flash_attn,
@@ -620,6 +620,7 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     @require_flash_attn
     @require_torch_gpu
     @slow
+    @pytest.mark.flash_attn_test
     def test_use_flash_attention_2_true(self):
         """
         NOTE: this is the only test testing that the legacy `use_flash_attention=2` argument still works as intended.
@@ -717,6 +718,34 @@ class LlamaIntegrationTest(unittest.TestCase):
         if is_torch_available() and torch.cuda.is_available():
             # 8 is for A100 / A10 and 7 for T4
             cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
+
+    @slow
+    @require_read_token
+    def test_llama_3_1_hard(self):
+        """
+        An integration test for llama 3.1. It tests against a long output to ensure the subtle numerical differences
+        from llama 3.1.'s RoPE can be detected
+        """
+        EXPECTED_TEXT = (
+            "Tell me about the french revolution. The french revolution was a period of radical social and political "
+            "upheaval in France that lasted from 1789 until 1799. It was a time of great change and upheaval, marked "
+            "by the overthrow of the monarchy, the rise of the middle class, and the eventual establishment of the "
+            "First French Republic.\nThe revolution began in 1789 with the Estates-General, a representative "
+            "assembly that had not met since 1614. The Third Estate, which represented the common people, "
+            "demanded greater representation and eventually broke away to form the National Assembly. This marked "
+            "the beginning of the end of the absolute monarchy and the rise of the middle class.\n"
+        )
+
+        tokenizer = AutoTokenizer.from_pretrained("meta-llama/Meta-Llama-3.1-8B-Instruct")
+        model = LlamaForCausalLM.from_pretrained(
+            "meta-llama/Meta-Llama-3.1-8B-Instruct", device_map="auto", torch_dtype=torch.bfloat16
+        )
+        input_text = ["Tell me about the french revolution."]
+        model_inputs = tokenizer(input_text, return_tensors="pt").to(model.device)
+
+        generated_ids = model.generate(**model_inputs, max_new_tokens=128, do_sample=False)
+        generated_text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+        self.assertEqual(generated_text, EXPECTED_TEXT)
 
     @slow
     @require_read_token
