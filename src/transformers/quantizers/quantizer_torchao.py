@@ -56,7 +56,6 @@ class TorchAoHfQuantizer(HfQuantizer):
 
     def __init__(self, quantization_config, **kwargs):
         super().__init__(quantization_config, **kwargs)
-        self.torch_dtype = None
 
     def validate_environment(self, device_map, **kwargs):
         if not is_torchao_available():
@@ -68,9 +67,16 @@ class TorchAoHfQuantizer(HfQuantizer):
                 logger.warn(
                     f"Setting torch_dtype to {torch_dtype} for int4_weight_only quantization, but only bfloat16 is supported right now."
                 )
-
-        self.torch_dtype = torch_dtype
         return torch_dtype
+
+    def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
+        from ..integrations import get_keys_to_not_convert
+        self.modules_to_not_convert = get_keys_to_not_convert(model)
+
+        if self.quantization_config.modules_to_not_convert is not None:
+            self.modules_to_not_convert.extend(self.quantization_config.modules_to_not_convert)
+
+        return
 
     def check_quantized_param(
         self,
@@ -80,8 +86,13 @@ class TorchAoHfQuantizer(HfQuantizer):
         state_dict: Dict[str, Any],
         **kwargs,
     ) -> bool:
-        module, tensor_name = get_module_from_name(model, param_name)
-        return isinstance(module, torch.nn.Linear) and (tensor_name == "weight")
+        # check if the param_name is not in self.modules_to_not_convert
+        if any((key + "." in param_name) or (key == param_name) for key in self.modules_to_not_convert):
+            return False
+        else:
+            # we only quantize the weight of nn.Linear
+            module, tensor_name = get_module_from_name(model, param_name)
+            return isinstance(module, torch.nn.Linear) and (tensor_name == "weight")
 
     def create_quantized_param(
         self,
@@ -93,32 +104,12 @@ class TorchAoHfQuantizer(HfQuantizer):
         unexpected_keys: List[str],
     ):
         """
-        Each nn.Linear layer is processsed here.
-        We first check if the corresponding module state_dict contains already torchao quantized parameters.
-        If not, we create a temp linear layer with the module state_dict params and use it for quantization
+        Each nn.Linear layer that needs to be quantized is processsed here.
+        First, we set the value the weight tensor, then we move it to the target device. Finally, we quantize the module.
         """
         module, tensor_name = get_module_from_name(model, param_name)
-
-        layer_name = param_name.replace(".weight", "").replace(".bias", "")
-        parent_module = find_parent(model, layer_name)
-        node = layer_name.split(".")[-1]
-
-        # Step 0: set module state_dict
-        module_state_dict = {key.split(".")[-1]: state_dict[key] for key in state_dict if layer_name in key}
-
-        # Step 1: populate module with weight/bias from module state dict
-        for key in module_state_dict:
-            setattr(module, key, torch.nn.Parameter(module_state_dict[key]))
-
-        # Step 2: Update the module using the `quantize_` API from TorchAO
-
-        module = module.to(dtype=self.torch_dtype, device=target_device)
+        module._parameters[tensor_name] = torch.nn.Parameter(param_value).to(device=target_device)
         quantize_(module, self.quantization_config.get_apply_tensor_subclass())
-        setattr(parent_module, node, module)
-
-    def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        """No process required for torchao quantized model"""
-        return
 
     def _process_model_after_weight_loading(self, model):
         """No process required for torchao quantized model"""

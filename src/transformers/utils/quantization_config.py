@@ -1089,6 +1089,9 @@ class TorchAoConfig(QuantizationConfigMixin):
     Args:
         quant_type (`str`):
             The type of quantization we want to use, currently supporting: `int4_weight_only`, `int8_weight_only` and `int8_dynamic_activation_int8_weight`.
+        modules_to_not_convert (`list`, *optional*, default to `None`):
+            The list of modules to not quantize, useful for quantizing models that explicitly require to have
+            some modules left in their original precision.
         kwargs (`Dict[str, Any]`, *optional*):
             The keyword arguments for the chosen type of quantization, for example, int4_weight_only quantization supports two keyword arguments
             `group_size` and `inner_k_tiles` currently. More API examples and documentation of arguments can be found in
@@ -1103,9 +1106,10 @@ class TorchAoConfig(QuantizationConfigMixin):
     ```
     """
 
-    def __init__(self, quant_type: str, **kwargs):
+    def __init__(self, quant_type: str, modules_to_not_convert: Optional[List] = None, **kwargs):
         self.quant_method = QuantizationMethod.TORCHAO
         self.quant_type = quant_type
+        self.modules_to_not_convert = modules_to_not_convert
         self.kwargs = kwargs
         self._STR_TO_METHOD = {}
         if is_torchao_available():
