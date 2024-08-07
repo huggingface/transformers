@@ -65,6 +65,7 @@ if is_torch_available():
         BeamSampleEncoderDecoderOutput,
         BeamSearchDecoderOnlyOutput,
         BeamSearchEncoderDecoderOutput,
+        BeamSearchScorer,
         DisjunctiveConstraint,
         GenerateBeamDecoderOnlyOutput,
         GenerateBeamEncoderDecoderOutput,
@@ -580,6 +581,65 @@ class GenerationTesterMixin:
                 self.assertTrue(output_generate.shape[-1] == self.max_new_tokens + 1)
             else:
                 self.assertTrue(output_generate.shape[-1] == self.max_new_tokens + input_ids.shape[-1])
+
+    def test_custom_beam_search_scorer_generate(self):
+        class CustomBeamSearchScorer(BeamSearchScorer):
+            finalize_called = False
+            process_called = False
+
+            def __init__(inside_self, test_args, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                inside_self.test_args = test_args
+                self.assertTrue(
+                    inside_self.test_args,
+                    "The argument `test_args` should " "have been passed to the beam search scorer init function",
+                )
+
+            def process(self, *args, **kwargs):
+                results = super().process(*args, **kwargs)
+                CustomBeamSearchScorer.process_called = True
+                return results
+
+            def finalize(self, *args, **kwargs):
+                results = super().finalize(*args, **kwargs)
+                CustomBeamSearchScorer.finalize_called = True
+                return results
+
+        for model_class in self.all_generative_model_classes:
+            CustomBeamSearchScorer.process_called = False
+            CustomBeamSearchScorer.finalize_called = False
+
+            config, input_ids, attention_mask = self._get_input_ids_and_config()
+
+            model = model_class(config).to(torch_device).eval()
+
+            logits_process_kwargs, _ = self._get_logits_processor_and_warper_kwargs(
+                input_ids.shape[-1],
+                config.forced_bos_token_id,
+                config.forced_eos_token_id,
+            )
+            beam_kwargs = self._get_beam_kwargs()
+
+            model_kwargs = {"attention_mask": attention_mask}
+            output_generate = model.generate(
+                input_ids,
+                do_sample=False,
+                max_new_tokens=self.max_new_tokens,
+                beam_search_scorer_class=CustomBeamSearchScorer,
+                beam_search_scorer_args={"test_args": True},
+                output_scores=False,
+                output_logits=False,
+                output_attentions=False,
+                output_hidden_states=False,
+                return_dict_in_generate=False,
+                **beam_kwargs,
+                **logits_process_kwargs,
+                **model_kwargs,
+            )
+
+            self.assertIsNotNone(output_generate)
+            self.assertTrue(CustomBeamSearchScorer.process_called)
+            self.assertTrue(CustomBeamSearchScorer.finalize_called)
 
     def test_beam_search_generate_dict_output(self):
         for model_class in self.all_generative_model_classes:
@@ -2403,6 +2463,66 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         outputs = tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
         self.assertListEqual(outputs, ["Wie alt bist du?"])
+
+    @slow
+    def test_beam_search_custom_scorer(self):
+        tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-base")
+        model = AutoModelForSeq2SeqLM.from_pretrained("google-t5/t5-base")
+
+        encoder_input_str = "translate English to German: How old are you?"
+        encoder_input_ids = tokenizer(encoder_input_str, return_tensors="pt").input_ids
+
+        class CustomBeamSearchScorer(BeamSearchScorer):
+            finalize_called = False
+            process_called = False
+
+            def __init__(inside_self, test_args, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                inside_self.test_args = test_args
+                self.assertTrue(
+                    inside_self.test_args,
+                    ("The argument `test_args` should " "have been passed to the beam search scorer init function"),
+                )
+
+            def process(self, *args, **kwargs):
+                results = super().process(*args, **kwargs)
+                CustomBeamSearchScorer.process_called = True
+                return results
+
+            def finalize(self, *args, **kwargs):
+                results = super().finalize(*args, **kwargs)
+                CustomBeamSearchScorer.finalize_called = True
+                return results
+
+        # lets run beam search using 3 beams
+        num_beams = 3
+        # define decoder start token ids
+        input_ids = torch.ones((1, 1), device=model.device, dtype=torch.long)
+        input_ids = input_ids * model.config.decoder_start_token_id
+
+        # add encoder_outputs to model keyword arguments
+        model_kwargs = {"encoder_outputs": model.get_encoder()(encoder_input_ids, return_dict=True)}
+
+        outputs = model.generate(
+            input_ids,
+            num_beams=num_beams,
+            min_length=5,
+            eos_token_id=model.config.eos_token_id,
+            beam_search_scorer_class=CustomBeamSearchScorer,
+            beam_search_scorer_args={"test_args": True},
+            **model_kwargs,
+        )
+        outputs = tokenizer.batch_decode(outputs, skip_special_tokens=True)
+
+        self.assertListEqual(outputs, ["Wie alt bist du?"])
+        self.assertTrue(
+            CustomBeamSearchScorer.process_called,
+            "The `process` function of the custom beam search scorer was not called",
+        )
+        self.assertTrue(
+            CustomBeamSearchScorer.finalize_called,
+            "The `finalize` function of the custom beam search scorer was not called",
+        )
 
     @slow
     def test_constrained_beam_search(self):
