@@ -75,8 +75,8 @@
         title: 단일 영상 기반 깊이 추정
       - local: tasks/image_to_image
         title: Image-to-Image
-      - local: in_translation
-        title: (번역중) Image Feature Extraction
+      - local: tasks/image_feature_extraction
+        title: 이미지 특징 추출
       - local: tasks/mask_generation
         title: 마스크 생성
       - local: in_translation
@@ -102,9 +102,9 @@
     sections:
     - local: tasks/idefics
       title: IDEFICS를 이용한 이미지 작업
-    - local: in_translation
-      title: (번역중) LLM prompting guide
-    title: (번역중) 프롬프팅
+    - local: tasks/prompting
+      title: 대규모 언어 모델 프롬프팅 가이드
+    title: 프롬프팅
   title: 태스크 가이드
 - sections:
   - local: fast_tokenizers
@@ -115,8 +115,8 @@
     title: 모델별 API 사용하기
   - local: custom_models
     title: 사용자 정의 모델 공유하기
-  - local: in_translation
-    title: (번역중) Templates for chat models
+  - local: chat_templating
+    title: 챗봇 템플릿 익히기
   - local: in_translation
     title: (번역중) Trainer
   - local: sagemaker
@@ -143,14 +143,14 @@
     title: (번역중) Getting started
   - local: in_translation
     title: (번역중) bitsandbytes
-  - local: in_translation
-    title: (번역중) GPTQ
+  - local: quantization/gptq
+    title: GPTQ
   - local: in_translation
     title: (번역중) AWQ
   - local: in_translation
     title: (번역중) AQLM
-  - local: in_translation
-    title: (번역중) Quanto
+  - local: quantization/quanto
+    title: Quanto
   - local: in_translation
     title: (번역중) EETQ
   - local: in_translation
