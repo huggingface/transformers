@@ -18,7 +18,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.44.0.dev0"
+__version__ = "4.45.0.dev0"
 
 from typing import TYPE_CHECKING
 
@@ -544,6 +544,7 @@ _import_structure = {
     ],
     "models.m2m_100": ["M2M100Config"],
     "models.mamba": ["MambaConfig"],
+    "models.mamba2": ["Mamba2Config"],
     "models.marian": ["MarianConfig"],
     "models.markuplm": [
         "MarkupLMConfig",
@@ -593,6 +594,7 @@ _import_structure = {
     ],
     "models.mvp": ["MvpConfig", "MvpTokenizer"],
     "models.myt5": ["MyT5Tokenizer"],
+    "models.nemotron": ["NemotronConfig"],
     "models.nllb": [],
     "models.nllb_moe": ["NllbMoeConfig"],
     "models.nougat": ["NougatProcessor"],
@@ -1227,10 +1229,14 @@ else:
         "DynamicCache",
         "EncoderDecoderCache",
         "HQQQuantizedCache",
+        "HybridCache",
+        "MambaCache",
+        "OffloadedCache",
         "QuantizedCache",
         "QuantizedCacheConfig",
         "QuantoQuantizedCache",
         "SinkCache",
+        "SlidingWindowCache",
         "StaticCache",
     ]
     _import_structure["data.datasets"] = [
@@ -2546,6 +2552,13 @@ else:
             "MambaPreTrainedModel",
         ]
     )
+    _import_structure["models.mamba2"].extend(
+        [
+            "Mamba2ForCausalLM",
+            "Mamba2Model",
+            "Mamba2PreTrainedModel",
+        ]
+    )
     _import_structure["models.marian"].extend(["MarianForCausalLM", "MarianModel", "MarianMTModel"])
     _import_structure["models.markuplm"].extend(
         [
@@ -2737,6 +2750,16 @@ else:
             "MvpForSequenceClassification",
             "MvpModel",
             "MvpPreTrainedModel",
+        ]
+    )
+    _import_structure["models.nemotron"].extend(
+        [
+            "NemotronForCausalLM",
+            "NemotronForQuestionAnswering",
+            "NemotronForSequenceClassification",
+            "NemotronForTokenClassification",
+            "NemotronModel",
+            "NemotronPreTrainedModel",
         ]
     )
     _import_structure["models.nllb_moe"].extend(
@@ -5226,6 +5249,7 @@ if TYPE_CHECKING:
     )
     from .models.m2m_100 import M2M100Config
     from .models.mamba import MambaConfig
+    from .models.mamba2 import Mamba2Config
     from .models.marian import MarianConfig
     from .models.markuplm import (
         MarkupLMConfig,
@@ -5284,6 +5308,7 @@ if TYPE_CHECKING:
     )
     from .models.mvp import MvpConfig, MvpTokenizer
     from .models.myt5 import MyT5Tokenizer
+    from .models.nemotron import NemotronConfig
     from .models.nllb_moe import NllbMoeConfig
     from .models.nougat import NougatProcessor
     from .models.nystromformer import (
@@ -5950,10 +5975,14 @@ if TYPE_CHECKING:
             DynamicCache,
             EncoderDecoderCache,
             HQQQuantizedCache,
+            HybridCache,
+            MambaCache,
+            OffloadedCache,
             QuantizedCache,
             QuantizedCacheConfig,
             QuantoQuantizedCache,
             SinkCache,
+            SlidingWindowCache,
             StaticCache,
         )
         from .data.datasets import (
@@ -7028,6 +7057,11 @@ if TYPE_CHECKING:
             MambaModel,
             MambaPreTrainedModel,
         )
+        from .models.mamba2 import (
+            Mamba2ForCausalLM,
+            Mamba2Model,
+            Mamba2PreTrainedModel,
+        )
         from .models.marian import MarianForCausalLM, MarianModel, MarianMTModel
         from .models.markuplm import (
             MarkupLMForQuestionAnswering,
@@ -7180,6 +7214,14 @@ if TYPE_CHECKING:
             MvpForSequenceClassification,
             MvpModel,
             MvpPreTrainedModel,
+        )
+        from .models.nemotron import (
+            NemotronForCausalLM,
+            NemotronForQuestionAnswering,
+            NemotronForSequenceClassification,
+            NemotronForTokenClassification,
+            NemotronModel,
+            NemotronPreTrainedModel,
         )
         from .models.nllb_moe import (
             NllbMoeForConditionalGeneration,

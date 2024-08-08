@@ -59,7 +59,7 @@ if is_torch_available():
         ImageGPTForCausalImageModeling,
         SpeechEncoderDecoderModel,
     )
-    from transformers.cache_utils import DynamicCache, EncoderDecoderCache, QuantoQuantizedCache
+    from transformers.cache_utils import DynamicCache, EncoderDecoderCache, QuantoQuantizedCache, StaticCache
     from transformers.generation import (
         BeamSampleDecoderOnlyOutput,
         BeamSampleEncoderDecoderOutput,
@@ -1768,6 +1768,53 @@ class GenerationTesterMixin:
                             legacy_cache_converted[layer_idx][kv_idx],
                         )
                     )
+
+    def test_generate_with_static_cache(self):
+        """
+        Tests if StaticCache works if we set attn_implementation=static when generation.
+        This doesn't test if generation quality is good, but tests that models with
+        self._supports_static_cache don't throw an error when generating and return
+        a StaticCache object at the end.
+        """
+        for model_class in self.all_generative_model_classes:
+            if not model_class._supports_static_cache:
+                self.skipTest(reason="This model does not support the static cache format")
+
+            config, input_ids, attention_mask = self._get_input_ids_and_config()
+            if config.is_encoder_decoder:
+                self.skipTest(reason="This model is encoder-decoder and has Encoder-Decoder Cache")
+
+            config.use_cache = True
+            config.is_decoder = True
+            batch_size, seq_length = input_ids.shape
+            max_new_tokens = 20
+
+            model = model_class(config).to(torch_device).eval()
+            generation_kwargs = {
+                "max_length": None,
+                "max_new_tokens": max_new_tokens,
+                "cache_implementation": "static",
+                "return_dict_in_generate": True,  # Required to return `past_key_values`
+            }
+
+            max_cache_len = seq_length + max_new_tokens
+            head_dim = (
+                model.config.head_dim
+                if hasattr(model.config, "head_dim")
+                else model.config.hidden_size // model.config.num_attention_heads
+            )
+            num_key_value_heads = (
+                model.config.num_attention_heads
+                if getattr(config, "num_key_value_heads", None) is None
+                else model.config.num_key_value_heads
+            )
+            num_hidden_layers = config.num_hidden_layers
+            results = model.generate(input_ids, attention_mask=attention_mask, **generation_kwargs)
+
+            cache_shape = (batch_size, num_key_value_heads, max_cache_len, head_dim)
+            self.assertTrue(isinstance(results.past_key_values, StaticCache))
+            self.assertTrue(len(results.past_key_values.key_cache) == num_hidden_layers)
+            self.assertTrue(results.past_key_values.key_cache[0].shape == cache_shape)
 
     @require_quanto
     def test_generate_with_quant_cache(self):
