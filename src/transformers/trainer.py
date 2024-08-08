@@ -256,6 +256,23 @@ def _is_peft_model(model):
     return False
 
 
+def _has_peft_submodule(model):
+    if _is_peft_model(model):
+        return True
+    elif is_peft_available():
+        classes_to_check = (PeftModel,) if is_peft_available() else ()
+        # Here we also check if the model is an instance of `PeftMixedModel` introduced in peft>=0.7.0: https://github.com/huggingface/transformers/pull/28321
+        if version.parse(importlib.metadata.version("peft")) >= version.parse("0.7.0"):
+            from peft import PeftMixedModel
+
+            classes_to_check = (*classes_to_check, PeftMixedModel)
+
+        for submodule in model.modules():
+            if isinstance(submodule, classes_to_check):
+                return True
+    return False
+
+
 def _get_fsdp_ckpt_kwargs():
     # TODO: @AjayP13, @younesbelkada replace this check with version check at the next `accelerate` release
     if is_accelerate_available() and "adapter_only" in list(inspect.signature(save_fsdp_model).parameters):
@@ -485,7 +502,7 @@ class Trainer:
             )
 
         # At this stage the model is already loaded
-        if _is_quantized_and_base_model and not _is_peft_model(model):
+        if _is_quantized_and_base_model and not _has_peft_submodule(model):
             raise ValueError(
                 "You cannot perform fine-tuning on purely quantized models. Please attach trainable adapters on top of"
                 " the quantized model to correctly perform fine-tuning. Please see: https://huggingface.co/docs/transformers/peft"
