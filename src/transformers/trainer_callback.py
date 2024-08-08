@@ -18,13 +18,15 @@ Callbacks to use with the Trainer class and customize the training loop.
 
 import dataclasses
 import json
+import math
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Union
 
 import numpy as np
+import torch
 from tqdm.auto import tqdm
 
-from .trainer_utils import IntervalStrategy, has_length
+from .trainer_utils import IntervalStrategy, has_length, neftune_post_forward_hook
 from .training_args import TrainingArguments
 from .utils import logging
 
@@ -135,6 +137,18 @@ class TrainerState:
                 else:
                     stateful_callbacks[name] = callback.state()
             self.stateful_callbacks = stateful_callbacks
+
+    def populate_initial_step_values(self, args, max_steps):
+        """
+        Properly setups up values in `self` based on `args` and `max_steps`
+        by computing the absolute value, and save if given as a ratio
+        """
+        for attribute in ["logging_steps", "eval_steps", "save_steps"]:
+            value = getattr(args, attribute, None)
+            if value is not None:
+                if value < 1:
+                    value = math.ceil(value * max_steps)
+                setattr(self, attribute, value)
 
     def save_to_json(self, json_path: str):
         """Save the content of this instance in JSON format inside `json_path`."""
@@ -281,6 +295,8 @@ class TrainerCallback:
             The current dataloader used for training.
         eval_dataloader (`torch.utils.data.DataLoader`, *optional*):
             The current dataloader used for evaluation.
+        accelerator (`accelerate.Accelerator`, *optional*):
+            The current `Accelerator()` instance.
         metrics (`Dict[str, float]`):
             The metrics computed by the last evaluation phase.
 
@@ -397,7 +413,7 @@ class TrainerCallback:
 class CallbackHandler(TrainerCallback):
     """Internal class that just calls the list of callbacks in order."""
 
-    def __init__(self, callbacks, model, tokenizer, optimizer, lr_scheduler):
+    def __init__(self, callbacks, model, tokenizer, optimizer, lr_scheduler, accelerator):
         self.callbacks = []
         for cb in callbacks:
             self.add_callback(cb)
@@ -407,6 +423,7 @@ class CallbackHandler(TrainerCallback):
         self.lr_scheduler = lr_scheduler
         self.train_dataloader = None
         self.eval_dataloader = None
+        self.accelerator = accelerator
 
         if not any(isinstance(cb, DefaultFlowCallback) for cb in self.callbacks):
             logger.warning(
@@ -426,6 +443,8 @@ class CallbackHandler(TrainerCallback):
                 + self.callback_list
             )
         self.callbacks.append(cb)
+        # Some callbacks store useful items to use later during `_inner_training_loop`
+        return cb
 
     def pop_callback(self, callback):
         if isinstance(callback, type):
@@ -714,3 +733,80 @@ class EarlyStoppingCallback(TrainerCallback, ExportableState):
                 "early_stopping_patience_counter": self.early_stopping_patience_counter,
             },
         }
+
+
+class InputTokenTrackingCallback(TrainerCallback, ExportableState):
+    """
+    A Callback which tracks the number of tokens seen when training
+    """
+
+    def on_init_end(self, args, state, control, metrics, **kwargs):
+        self.main_input_name = getattr(self.model, "main_input_name", "input_ids")
+        self.num_input_tokens_seen = 0
+
+    def on_substep_end(self, args, state, control, metrics, inputs):
+        if self.main_input_name not in inputs:
+            logger.warning(
+                "Tried to track the number of tokens seen, however the current model is "
+                "not configured properly to know what item is the input. To fix this, add "
+                "a `main_input_name` attribute to the model class you are using."
+            )
+        self.add_inputs(inputs, args.device)
+
+    def on_step_end(self, args, state, control, metrics, inputs):
+        if self.main_input_name not in inputs:
+            logger.warning(
+                "Tried to track the number of tokens seen, however the current model is "
+                "not configured properly to know what item is the input. To fix this, add "
+                "a `main_input_name` attribute to the model class you are using."
+            )
+        self.add_inputs(inputs, args.device)
+
+    def add_inputs(self, inputs, device):
+        self.num_input_tokens_seen += (
+            torch.sum(
+                self.accelerator.gather(
+                    torch.tensor(inputs[self.main_input_name].numel(), device=device, dtype=torch.int64)
+                )
+            )
+            .cpu()
+            .item()
+        )
+
+    def state(self) -> dict:
+        return {
+            "args": {},
+            "attributes": {
+                "num_input_tokens_seen": self.num_input_tokens_seen,
+            },
+        }
+
+
+class NefttuneCallback(TrainerCallback):
+    def __init__(self, neftune_noise_alpha: float):
+        self.neftune_noise_alpha = neftune_noise_alpha
+
+    def on_init_end(self, args, state, control, metrics):
+        embeddings = self.get_embeddings_from_model()
+        embeddings.neftune_noise_alpha = self.neftune_noise_alpha
+        hook_handle = embeddings.register_forward_hook(neftune_post_forward_hook)
+        self.netftune_hook_handle = hook_handle
+
+    def on_train_end(self, args, state, control, metrics):
+        # After training we make sure to retrieve back the original forward pass method
+        # for the embedding layer by removing the forward post hook.
+        embeddings = self.get_embeddings_from_model()
+        self.netftune_hook_handle.remove()
+        del embeddings
+
+    def get_embeddings_from_model(self):
+        unwrapped_model = self.accelerator.unwrap_model(self.model)
+
+        from .modeling_utils import is_peft_model
+
+        if is_peft_model(unwrapped_model):
+            embeddings = unwrapped_model.base_model.model.get_input_embeddings()
+        else:
+            embeddings = unwrapped_model.get_input_embeddings()
+        del unwrapped_model
+        return embeddings

@@ -5226,3 +5226,72 @@ def verify_quantization_training_support(model):
             " but that quantization method do not support training. Please open an issue on GitHub: https://github.com/huggingface/transformers"
             f" to request the support for training support for {model.hf_quantizer.quantization_config.quant_method}"
         )
+
+
+def load_sagemaker_model(
+    resume_from_checkpoint,
+    model,
+    safe_weights_file=None,
+    weights_file=None,
+    use_fp16=False,
+    weights_only_kwarg: dict = {},
+    use_safetensors=False,
+):
+    if os.path.isfile(os.path.join(resume_from_checkpoint, "user_content.pt")):
+        # If the 'user_content.pt' file exists, load with the new smp api.
+        # Checkpoint must have been saved with the new smp api.
+        smp.resume_from_checkpoint(path=resume_from_checkpoint, tag=WEIGHTS_NAME, partial=False, load_optimizer=False)
+    else:
+        # If the 'user_content.pt' file does NOT exist, load with the old smp api.
+        # Checkpoint must have been saved with the old smp api.
+        if use_fp16:
+            logger.warning("Enabling FP16 and loading from smp < 1.10 checkpoint together is not suppported.")
+        if use_safetensors and os.path.isfile(weights_file):
+            state_dict = safe_load_file(weights_file, device="cpu")
+        else:
+            state_dict = torch.load(
+                weights_file,
+                map_location="cpu",
+                **weights_only_kwarg,
+            )
+        # Required for smp to not auto-translate state_dict from hf to smp (is already smp).
+        state_dict["_smp_is_partial"] = False
+        load_result = model.load_state_dict(state_dict, strict=True)
+        # release memory
+        del state_dict
+        return load_result
+
+
+def load_peft_adapters(resume_from_checkpoint, model, adapter_subdirs):
+    # If train a model using PEFT & LoRA, assume that adapter have been saved properly.
+    # TODO: in the future support only specific min PEFT versions
+    if not (
+        (hasattr(model, "active_adapter") or hasattr(model, "active_adapters")) and hasattr(model, "load_adapter")
+    ):
+        logger.warning("Could not load adapter model, make sure to have `peft>=0.3.0` installed")
+        return False
+
+    if not os.path.exists(resume_from_checkpoint):
+        logger.warning(
+            "The intermediate checkpoints of PEFT may not be saved correctly, "
+            f"consider using a custom callback to save {ADAPTER_WEIGHTS_NAME} in corresponding saving folders. "
+            "Check some examples here: https://github.com/huggingface/peft/issues/96"
+        )
+        return False
+    active_adapter = (
+        model.active_adapters[0]
+        if hasattr(model, "active_adapters") and model.active_adapters
+        else model.active_adapter
+    )
+    if hasattr(model, "active_adapters") and len(model.active_adapters) > 1:
+        logger.warning("Multiple active adapters detected will only consider the first adapter")
+
+    if not adapter_subdirs:
+        model.load_adapter(resume_from_checkpoint, active_adapter, is_trainable=True)
+        return True
+
+    for subdir_name in adapter_subdirs:
+        peft_id = os.path.join(resume_from_checkpoint, subdir_name)
+        model.load_adapter(peft_id, subdir_name, is_trainable=(subdir_name == active_adapter))
+    model.set_adapter(active_adapter)
+    return True

@@ -18,6 +18,7 @@ Torch utilities for the Trainer class.
 
 import copy
 import datetime
+import functools
 import io
 import json
 import math
@@ -34,6 +35,7 @@ from typing import Any, Dict, Iterator, List, Optional, Union
 import numpy as np
 import torch
 import torch.distributed as dist
+from packaging import version
 from torch import nn
 from torch.utils.data import Dataset, IterableDataset, RandomSampler, Sampler
 from torch.utils.data.distributed import DistributedSampler
@@ -46,11 +48,14 @@ from .models.auto.modeling_auto import (
 from .pytorch_utils import ALL_LAYERNORM_LAYERS
 from .tokenization_utils_base import BatchEncoding
 from .utils import (
+    XLA_FSDPV2_MIN_VERSION,
+    is_accelerate_available,
+    is_apex_available,
+    is_ipex_available,
     is_sagemaker_mp_enabled,
     is_torch_available,
     is_torch_xla_available,
     is_training_run_on_sagemaker,
-    is_ipex_available,
     logging,
 )
 
@@ -59,7 +64,13 @@ if is_training_run_on_sagemaker():
     logging.add_handler(StreamHandler(sys.stdout))
 
 if is_torch_xla_available():
+    from torch_xla import __version__ as XLA_VERSION
+
+    IS_XLA_FSDPV2_POST_2_2 = version.parse(XLA_VERSION) >= version.parse(XLA_FSDPV2_MIN_VERSION)
+    if IS_XLA_FSDPV2_POST_2_2:
+        import torch_xla.distributed.spmd as xs
     import torch_xla.core.xla_model as xm
+
 
 if is_torch_available():
     from .pytorch_utils import is_torch_greater_or_equal_than_2_0
@@ -68,6 +79,12 @@ if is_torch_available():
         from torch.optim.lr_scheduler import LRScheduler
     else:
         from torch.optim.lr_scheduler import _LRScheduler as LRScheduler
+
+if is_accelerate_available():
+    from accelerate.utils import wait_for_everyone
+
+if is_apex_available():
+    from apex import amp
 
 
 logger = logging.get_logger(__name__)
@@ -1403,7 +1420,6 @@ class LayerWiseDummyScheduler(LRScheduler):
         return self.base_lrs
 
 
-
 def model_sanity_checks(model):
     """
     Performs a variety of sanity checks on the model:
@@ -1426,6 +1442,7 @@ def model_sanity_checks(model):
         )
 
     verify_quantization_training_support(model)
+
 
 def optimizer_sanity_checks(model, optimizer, lr_scheduler, using_model_orchestration):
     """
@@ -1453,6 +1470,7 @@ def optimizer_sanity_checks(model, optimizer, lr_scheduler, using_model_orchestr
                 " `model.to(xm.xla_device())` is performed before the optimizer creation in your script."
             )
 
+
 def get_decay_parameter_names(model) -> List[str]:
     """
     This function returns the decay parameter names for the model.
@@ -1466,3 +1484,181 @@ def get_decay_parameter_names(model) -> List[str]:
     decay_parameters = get_parameter_names(model, ALL_LAYERNORM_LAYERS)
     decay_parameters = [name for name in decay_parameters if "bias" not in name]
     return decay_parameters
+
+
+# Below are operations where a single op can't fully be covered by Accelerate, so
+# we delegate here
+
+
+def apply_ipex_optimization(model, optimizer, training=False, dtype=torch.float32, is_in_train=False):
+    """
+    Applies IPEX optimizations onto the model and optimizer
+    """
+    if not is_ipex_available():
+        raise ImportError(
+            "Using IPEX but IPEX is not installed or IPEX's version does not match current PyTorch, please refer"
+            " to https://github.com/intel/intel-extension-for-pytorch."
+        )
+
+    import intel_extension_for_pytorch as ipex
+
+    if not training:
+        model.eval()
+        # conv_bn_folding is disabled as it fails in symbolic tracing, resulting in ipex warnings
+        model = ipex.optimize(model, dtype=dtype, level="O1", conv_bn_folding=False, inplace=not is_in_train)
+    else:
+        if not model.training:
+            model.train()
+        model, optimizer = ipex.optimize(model, dtype=dtype, optimizer=optimizer, inplace=True, level="O1")
+
+    return model, optimizer
+
+
+def apply_fsdp_xla_optimization(model, optimizer, fsdp_config, xla_fsdp_config, fsdp_v2_enabled=False):
+    """
+    Applies FSDP with XLA optimizations to `model`
+    """
+    try:
+        from torch_xla.distributed.fsdp import XlaFullyShardedDataParallel as FSDP
+        from torch_xla.distributed.fsdp import checkpoint_module
+        from torch_xla.distributed.fsdp.wrap import (
+            size_based_auto_wrap_policy,
+            transformer_auto_wrap_policy,
+        )
+
+        if fsdp_v2_enabled:
+            from torch_xla.experimental.spmd_fully_sharded_data_parallel import (
+                SpmdFullyShardedDataParallel as FSDPv2,
+            )
+    except ImportError:
+        raise ImportError("Missing XLA FSDP related module; please make sure to use torch-xla >= 2.0.")
+
+    auto_wrap_policy = None
+    auto_wrapper_callable = None
+    default_transformer_cls_names_to_wrap = getattr(model, "_no_split_modules", None)
+    fsdp_transformer_layer_cls_to_wrap = fsdp_config.get(
+        "transformer_layer_cls_to_wrap", default_transformer_cls_names_to_wrap
+    )
+
+    if fsdp_config["min_num_params"] > 0:
+        auto_wrap_policy = functools.partial(size_based_auto_wrap_policy, min_num_params=fsdp_config["min_num_params"])
+    elif fsdp_transformer_layer_cls_to_wrap is not None:
+        transformer_cls_to_wrap = set()
+        for layer_class in fsdp_transformer_layer_cls_to_wrap:
+            transformer_cls = get_module_class_from_name(model, layer_class)
+            if transformer_cls is None:
+                raise Exception("Could not find the transformer layer class to wrap in the model.")
+            else:
+                transformer_cls_to_wrap.add(transformer_cls)
+
+        auto_wrap_policy = functools.partial(
+            transformer_auto_wrap_policy,
+            # Transformer layer class to wrap
+            transformer_layer_cls=transformer_cls_to_wrap,
+        )
+    if fsdp_config["xla_fsdp_grad_ckpt"]:
+        if model.config.use_cache:
+            logger.warning_once(
+                "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
+            )
+            model.config.use_cache = False
+
+        # Apply gradient checkpointing to auto-wrapped sub-modules if specified
+        def auto_wrapper_callable(m, *args, **kwargs):
+            target_cls = FSDP if not fsdp_v2_enabled else FSDPv2
+            return target_cls(checkpoint_module(m), *args, **kwargs)
+
+    # Wrap the base model with an outer FSDP wrapper
+    if not fsdp_v2_enabled:
+        model = FSDP(
+            model,
+            auto_wrap_policy=auto_wrap_policy,
+            auto_wrapper_callable=auto_wrapper_callable,
+            **xla_fsdp_config,
+        )
+    else:
+
+        def shard_output(output, mesh):
+            from .modeling_outputs import CausalLMOutputWithPast
+
+            real_output = None
+            if isinstance(output, torch.Tensor):
+                real_output = output
+            elif isinstance(output, tuple):
+                real_output = output[0]
+            elif isinstance(output, CausalLMOutputWithPast):
+                real_output = output.logits
+
+            if real_output is None:
+                raise ValueError("Something went wrong, the output of the model shouldn't be `None`")
+            xs.mark_sharding(real_output, mesh, ("fsdp", None, None))
+
+        model = FSDPv2(
+            model,
+            shard_output=shard_output,
+            auto_wrap_policy=auto_wrap_policy,
+            auto_wrapper_callable=auto_wrapper_callable,
+        )
+
+        return model
+
+
+def clip_grad_norm_(args, model, optimizer, accelerator):
+    if is_sagemaker_mp_enabled() and args.use_fp16:
+        return optimizer.clip_master_grads(args.max_norm)
+    elif args.half_precision_backend == "apex":
+        return nn.utils.clip_grad_norm_(amp.master_params(optimizer), args.max_norm)
+    return accelerator.clip_grad_norm_(model.parameters(), args.max_grad_norm)
+
+
+def wait_for_everyone():
+    if is_sagemaker_mp_enabled():
+        smp.barrier()
+    else:
+        wait_for_everyone()
+
+
+def create_accelerator(args):
+    "Creates an accelerator based on `args`"
+    from accelerate import Accelerator
+    from accelerate.utils import GradientAccumulationPlugin
+
+    if is_accelerate_available("0.28.0"):
+        from accelerate.utils import DataLoaderConfiguration
+    grad_acc_kwargs = args.accelerator_config.pop("gradient_accumulation_kwargs", {})
+    grad_acc_kwargs["sync_with_dataloader"] = False
+    if "num_steps" not in grad_acc_kwargs:
+        # take the gradient_accumulation_steps setting from TrainingArguments.
+        grad_acc_kwargs["num_steps"] = args.gradient_accumulation_steps
+    gradient_accumulation_plugin = GradientAccumulationPlugin(**grad_acc_kwargs)
+
+    config = args.accelerator_config.to_dict()
+    if is_accelerate_available("0.28.0"):
+        dataloader_config = DataLoaderConfiguration(
+            split_batches=config.pop("split_batches"),
+            dispatch_batches=config.pop("dispatch_batches"),
+            even_batches=config.pop("even_batches"),
+            use_seedable_sampler=config.pop("use_seedable_sampler"),
+        )
+
+    non_blocking = config.pop("non_blocking")
+    if not is_accelerate_available("0.30.0") and non_blocking:
+        raise ImportError(
+            "`non_blocking` is only supported in accelerate v0.30.0 and above. Please upgrade accelerate to use this feature."
+        )
+    else:
+        if non_blocking and not args.dataloader_pin_memory:
+            logger.warning(
+                "`non_blocking` is enabled but `dataloader_pin_memory` is not. For the best performance, it's recommended to enable both."
+            )
+        dataloader_config.non_blocking = non_blocking
+    init_args = {
+        "deepspeed_plugin": args.deepspeed_plugin,
+        "gradient_accumulation_plugin": gradient_accumulation_plugin,
+    }
+    if is_accelerate_available("0.28.0"):
+        init_args["dataloader_config"] = dataloader_config
+    else:
+        init_args.update(config)
+
+    return Accelerator(**init_args)

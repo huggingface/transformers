@@ -29,10 +29,8 @@ from typing import Any, Dict, List, NamedTuple, Optional, Tuple, Union
 
 import numpy as np
 
-from .training_args import TrainingArguments
 from .utils import (
     ExplicitEnum,
-    is_accelerate_available,
     is_psutil_available,
     is_tf_available,
     is_torch_available,
@@ -856,48 +854,3 @@ def check_target_module_exists(optim_target_modules, key: str, return_is_regex: 
         return target_module_found, is_regex
 
     return target_module_found
-
-def create_accelerator(args:TrainingArguments):
-    "Creates an accelerator based on `args`"
-    from accelerate import Accelerator
-    from accelerate.utils import GradientAccumulationPlugin
-    if is_accelerate_available("0.28.0"):
-        from accelerate.utils import DataLoaderConfiguration
-    grad_acc_kwargs = args.accelerator_config.pop("gradient_accumulation_kwargs", {})
-    grad_acc_kwargs["sync_with_dataloader"] = False
-    if "num_steps" not in grad_acc_kwargs:
-        # take the gradient_accumulation_steps setting from TrainingArguments.
-        grad_acc_kwargs["num_steps"] = args.gradient_accumulation_steps
-    gradient_accumulation_plugin = GradientAccumulationPlugin(**grad_acc_kwargs)
-
-    config = args.accelerator_config.to_dict()
-    if is_accelerate_available("0.28.0"):
-        dataloader_config = DataLoaderConfiguration(
-            split_batches=config.pop("split_batches"),
-            dispatch_batches=config.pop("dispatch_batches"),
-            even_batches=config.pop("even_batches"),
-            use_seedable_sampler=config.pop("use_seedable_sampler"),
-        )
-
-    non_blocking = config.pop("non_blocking")
-    if not is_accelerate_available("0.30.0") and non_blocking:
-        raise ImportError(
-            "`non_blocking` is only supported in accelerate v0.30.0 and above. Please upgrade accelerate to use this feature."
-        )
-    else:
-        if non_blocking and not args.dataloader_pin_memory:
-            logger.warning(
-                "`non_blocking` is enabled but `dataloader_pin_memory` is not. For the best performance, it's recommended to enable both."
-            )
-        dataloader_config.non_blocking = non_blocking
-    init_args = {
-            "deepspeed_plugin": args.deepspeed_plugin,
-            "gradient_accumulation_plugin": gradient_accumulation_plugin,
-        }
-    if is_accelerate_available("0.28.0"):
-        init_args["dataloader_config"] = dataloader_config
-    else:
-        init_args.update(config)
-
-    return Accelerator(**init_args)
-
