@@ -150,8 +150,6 @@ class Idefics3Config(PretrainedConfig):
             Custom text config or dict for the text model
         scale_factor (`int`, *optional*, defaults to 2):
             The scale factor for the image encoder.
-        vocab_size (`int`, *optional*, defaults to 100000):
-            The size of the vocabulary.
         hidden_size (`int`, *optional*, defaults to 4096):
             Dimensionality of the encoder layers and the pooler layer.
         pad_token_id (`int`, *optional*, defaults to 128002):
@@ -181,7 +179,6 @@ class Idefics3Config(PretrainedConfig):
         vision_config=None,
         text_config=None,
         scale_factor=2,
-        vocab_size=100000,
         hidden_size=4096,
         pad_token_id=128_002,
         max_position_embeddings=131_072,
@@ -190,7 +187,6 @@ class Idefics3Config(PretrainedConfig):
         self.image_token_id = image_token_id
         self.use_cache = use_cache
         self.tie_word_embeddings = tie_word_embeddings
-        self.vocab_size = vocab_size
 
         if vision_config is None:
             self.vision_config = Idefics3VisionConfig()
@@ -201,20 +197,17 @@ class Idefics3Config(PretrainedConfig):
             self.vision_config = vision_config
 
         if isinstance(text_config, dict):
-            text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "llama3"
-            text_config["vocab_size"] = vocab_size
+            text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "llama"
             text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
         elif text_config is None:
             logger.info("text_config is None, using default text config")
-            text_config = CONFIG_MAPPING["llama3"](
-                vocab_size=vocab_size,
+            text_config = CONFIG_MAPPING["llama"](
                 max_position_embeddings=max_position_embeddings,
                 rms_norm_eps=1e-5,
                 pad_token_id=pad_token_id,
                 tie_word_embeddings=False,
             )
 
-        text_config.vocab_size = vocab_size
         self.text_config = text_config
         self.scale_factor = scale_factor
         self.hidden_size = hidden_size
