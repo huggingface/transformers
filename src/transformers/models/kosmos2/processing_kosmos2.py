@@ -161,6 +161,8 @@ class Kosmos2Processor(ProcessorMixin):
         num_image_tokens = kwargs.pop("num_image_tokens", 64)
         first_image_token_id = kwargs.pop("first_image_token_id", None)
         add_eos_token = kwargs.pop("add_eos_token", False)
+        # Temporary fix for "paddding_side" in init_kwargs
+        _ = self.tokenizer.init_kwargs.pop("padding_side", None)
 
         output_kwargs = self._merge_kwargs(
             Kosmos2ProcessorKwargs,
