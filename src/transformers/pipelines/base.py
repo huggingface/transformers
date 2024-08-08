@@ -816,6 +816,18 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
     constructor argument. If set to `True`, the output will be stored in the pickle format.
     """
 
+    # Previously, pipelines support only `tokenizer`, `feature_extractor`, and `image_processor`.
+    # As we start adding `processor`, we want to avoid loading processor for some pipelines, that don't required it,
+    # because, for example, use `image_processor` and `tokenizer` separately.
+    # However, we want to enable it for new pipelines. Moreover, this allow us to granularly control loading components
+    # and avoid loading tokenizer/image_processor/feature_extractor twice: once as a separate object
+    # and once in the processor. The following flags a set this way for backward compatibility ans might be overridden
+    # in specific Pipeline class.
+    _load_processor = False
+    _load_image_processor = True
+    _load_feature_extractor = True
+    _load_tokenizer = True
+
     default_input_names = None
 
     def __init__(
