@@ -21,18 +21,16 @@
 Processor class for Qwen2-VL.
 """
 
-from typing import Dict, List, Optional, Union
+from typing import List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, VideoInput
 from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import (
-    PaddingStrategy,
-    PreTokenizedInput,
-    TextInput,
-    TruncationStrategy,
-)
-from ...utils import TensorType
+from ...tokenization_utils_base import PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
+from ...utils import TensorType, logging
+
+
+logger = logging.get_logger(__name__)
 
 
 class Qwen2VLProcessor(ProcessorMixin):
@@ -52,6 +50,7 @@ class Qwen2VLProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
+    valid_kwargs = ["chat_template"]
     image_processor_class = "Qwen2VLImageProcessor"
     tokenizer_class = ("Qwen2Tokenizer", "Qwen2TokenizerFast")
 
@@ -79,8 +78,12 @@ class Qwen2VLProcessor(ProcessorMixin):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            vision_infos (`List[Dict]`):
-                The list of vision info dict. Each vision info dict has the path of the image or the video. support url, local path, base64.
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
+                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
+                tensor. Both channels-first and channels-last formats are supported.
+            videos (`np.ndarray`, `torch.Tensor`, `List[np.ndarray]`, `List[torch.Tensor]`):
+                The image or batch of videos to be prepared. Each video can be a 4D NumPy array or PyTorch
+                tensor, or a nested list of 3D frames. Both channels-first and channels-last formats are supported.
             padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
                 Select a strategy to pad the returned sequences (according to the model's padding side and padding
                 index) among:
@@ -92,6 +95,8 @@ class Qwen2VLProcessor(ProcessorMixin):
                   lengths).
             max_length (`int`, *optional*):
                 Maximum length of the returned list and optionally padding length (see above).
+            truncation (`bool`, *optional*):
+                Activates truncation to cut input sequences longer than `max_length` to `max_length`.
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
 
@@ -107,8 +112,10 @@ class Qwen2VLProcessor(ProcessorMixin):
             - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
               `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
               `None`).
-            - **pixel_values** -- Pixel values to be fed to a model. Returned when `vision_infos` is not `None`.
-            - **vision_grid_thw** -- List of 3D temporal grid in vision encoder. Returned when `imagvision_infoses` is not `None`.
+            - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
+            - **pixel_values_videos** -- Pixel values of videos to be fed to a model. Returned when `videos` is not `None`.
+            - **image_grid_thw** -- List of image 3D grid in LLM. Returned when `images` is not `None`.
+            - **video_grid_thw** -- List of video 3D grid in LLM. Returned when `videos` is not `None`.
         """
         if images is not None:
             image_inputs = self.image_processor(images, return_tensors=return_tensors)
@@ -170,108 +177,3 @@ class Qwen2VLProcessor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
-
-    def apply_chat_template(
-        self,
-        conversation: List[Dict[str, Union[str, List]]],
-        chat_template: Optional[str] = None,
-        tokenize: bool = False,
-        **kwargs,
-    ) -> tuple[str, List]:
-        """
-        Similar to the `apply_chat_template` method on tokenizers, this method applies a Jinja template to input
-        conversations to turn them into a single tokenizable string.
-
-        Args:
-            conversation (`List[Dict, str, str]`):
-                The conversation to format.
-            chat_template (`Optional[str]`, *optional*):
-                The Jinja template to use for formatting the conversation. If not provided, the default chat template
-                is used.
-            tokenize (`bool`, *optional*, defaults to `False`):
-                Whether to tokenize the output or not.
-            **kwargs:
-                Additional keyword arguments
-        """
-
-        if chat_template is None:
-            if self.chat_template is not None:
-                chat_template = self.chat_template
-            elif getattr(self, "default_chat_template", None) is not None:
-                chat_template = self.default_chat_template
-            else:
-                raise ValueError(
-                    "No chat template is set for this processor. Please either set the `chat_template` attribute, "
-                    "or provide a chat template as an argument. See "
-                    "https://huggingface.co/docs/transformers/main/en/chat_templating for more information."
-                )
-        return self.tokenizer.apply_chat_template(
-            conversation, chat_template=chat_template, tokenize=tokenize, **kwargs
-        )
-
-    @property
-    def default_chat_template(self):
-        """
-        This default vicuna template formats inputs in the form of a chat history. For each message in the chat history:
-        * the template will output the role of the speaker followed by the content of the message.
-        * content is a list of strings and images.
-        * If the content element is an image, the template will output a sequence of <image> or <video> tokens
-
-        Example:
-
-        ```python
-        messages = [
-            {"role": "user", "content": "Hello, how are you?"},
-            {"role": "assistant", "content": [{"type": "image", "image_url": "https://example.com/image2.jpg"},{"text":"I'm doing well, thank you for asking. How can I assist you today?"}]},
-            {"role": "user", "content": [
-                {"type": "text", "text": "Can you describe these images and video?"},
-                {"type": "image", "image_url": "https://example.com/image1.jpg"},
-                {"type": "image", "image_url": "https://example.com/image2.jpg"},
-                {"type": "video", "video_url": "https://example.com/video1.mp4"},
-                {"type": "text", "text": "These are from my vacation."}
-            ]},
-            {"role": "assistant", "content": "I'd be happy to describe the images and video for you. Could you please provide more context about your vacation?"},
-            {"role": "user", "content": "It was a trip to the mountains. Can you see the details in the images and video?"},
-        ]
-
-        result_with_id = template.render(messages=messages, add_generation_prompt=True, add_vision_id=True)
-        result_without_id = template.render(messages=messages, add_generation_prompt=True, add_vision_id=False)
-        ```
-        """
-        # fmt: off
-        return (
-            "{% set image_count = namespace(value=0) %}"
-            "{% set video_count = namespace(value=0) %}"
-            "{% for message in messages %}"
-                "{% if loop.first and message['role'] != 'system' %}"
-                    "<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n"
-                "{% endif %}"
-                "<|im_start|>{{ message['role'] }}\n"
-                "{% if message['content'] is string %}"
-                    "{{ message['content'] }}<|im_end|>\n"
-                "{% else %}"
-                    "{% for content in message['content'] %}"
-                        "{% if 'image' in content or 'image_url' in content %}"
-                            "{% set image_count.value = image_count.value + 1 %}"
-                            "{% if add_vision_id %}"
-                                "Picture {{ image_count.value }}: "
-                            "{% endif %}"
-                            "<|vision_start|><|image_pad|><|vision_end|>"
-                        "{% elif 'video' in content %}"
-                            "{% set video_count.value = video_count.value + 1 %}"
-                            "{% if add_vision_id %}"
-                                "Video {{ video_count.value }}: "
-                            "{% endif %}"
-                            "<|vision_start|><|video_pad|><|vision_end|>"
-                        "{% elif 'text' in content %}"
-                            "{{ content['text'] }}"
-                        "{% endif %}"
-                    "{% endfor %}"
-                    "<|im_end|>\n"
-                "{% endif %}"
-            "{% endfor %}"
-            "{% if add_generation_prompt %}"
-                "<|im_start|>assistant\n"
-            "{% endif %}"
-        )
-        # fmt: on
