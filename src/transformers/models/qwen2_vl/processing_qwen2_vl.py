@@ -21,13 +21,10 @@
 Processor class for Qwen2-VL.
 """
 
-import base64
-from io import BytesIO
 from typing import Dict, List, Optional, Union
 
-import requests
-
 from ...feature_extraction_utils import BatchFeature
+from ...image_utils import ImageInput, VideoInput
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import (
     PaddingStrategy,
@@ -35,19 +32,7 @@ from ...tokenization_utils_base import (
     TextInput,
     TruncationStrategy,
 )
-from ...utils import TensorType, is_torch_available, is_torchvision_available, is_vision_available
-
-
-if is_vision_available():
-    from PIL import Image
-
-
-if is_torch_available():
-    import torch
-
-
-if is_torchvision_available():
-    from torchvision import io
+from ...utils import TensorType
 
 
 class Qwen2VLProcessor(ProcessorMixin):
@@ -72,12 +57,12 @@ class Qwen2VLProcessor(ProcessorMixin):
 
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None):
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
-        self.vision_token_id = self.tokenizer("<|vision_pad|>")["input_ids"][0]
 
     def __call__(
         self,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]],
-        vision_infos: List[Dict] = None,
+        images: ImageInput = None,
+        videos: VideoInput = None,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: int = None,
@@ -125,102 +110,46 @@ class Qwen2VLProcessor(ProcessorMixin):
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `vision_infos` is not `None`.
             - **vision_grid_thw** -- List of 3D temporal grid in vision encoder. Returned when `imagvision_infoses` is not `None`.
         """
-        if len(vision_infos) > 0:
-            merge_vision_infos = []
-            if isinstance(vision_infos[0], list):
-                for vision_info in vision_infos:
-                    merge_vision_infos.extend(vision_info)
-            else:
-                merge_vision_infos = vision_infos
-            vision_infos = merge_vision_infos
+        if images is not None:
+            image_inputs = self.image_processor(images, return_tensors=return_tensors)
+            image_grid_thw = image_inputs["image_grid_thw"]
+        else:
+            image_inputs = {}
+            image_grid_thw = None
 
-        ## Read images or videos
-        vision_pixel_inputs = []
-        for vision_info in vision_infos:
-            if "image" in vision_info or "image_url" in vision_info:
-                images = [self.fetch_image(vision_info)]
-            elif "video" in vision_info:
-                images = self.fetch_video(vision_info, nframe_factor=self.image_processor.temporal_patch_size)
-            else:
-                raise ValueError("image, image_url or video should in content.")
-            vision_pixel_inputs.append(images)
+        if videos is not None:
+            videos_inputs = self.image_processor(videos, is_video=True, return_tensors=return_tensors)
+            video_grid_thw = videos_inputs["video_grid_thw"]
+        else:
+            videos_inputs = {}
+            video_grid_thw = None
+
+        if not isinstance(text, list):
+            text = [text]
+
+        if image_grid_thw is not None:
+            merge_length = self.image_processor.merge_size**2
+            for i in range(len(text)):
+                for grid_thw in image_grid_thw:
+                    text[i] = text[i].replace(
+                        "<|image_pad|>", "<|placeholder|>" * (grid_thw.prod() // merge_length), 1
+                    )
+                text[i] = text[i].replace("<|placeholder|>", "<|image_pad|>")
+
+        if video_grid_thw is not None:
+            merge_length = self.image_processor.merge_size**2
+            for i in range(len(text)):
+                for grid_thw in video_grid_thw:
+                    text[i] = text[i].replace(
+                        "<|video_pad|>", "<|placeholder|>" * (grid_thw.prod() // merge_length), 1
+                    )
+                text[i] = text[i].replace("<|placeholder|>", "<|video_pad|>")
 
         text_inputs = self.tokenizer(
             text, return_tensors=return_tensors, padding=padding, truncation=truncation, max_length=max_length
         )
 
-        if len(vision_infos) > 0:
-            vision_inputs = self.image_processor(
-                vision_pixel_inputs, vision_infos=vision_infos, return_tensors=return_tensors
-            )
-        else:
-            vision_inputs = {}
-
-        return BatchFeature(data={**text_inputs, **vision_inputs})
-
-    def fetch_image(self, ele: Dict):
-        if "image" in ele:
-            image = ele["image"]
-        elif "image_url" in ele:
-            image = ele["image_url"]
-        image_obj = None
-        if isinstance(image, Image.Image):
-            image_obj = image
-        if image.startswith("http://") or image.startswith("https://"):
-            image_obj = Image.open(requests.get(image, stream=True).raw)
-        elif image.startswith("file://"):
-            image_obj = Image.open(image[7:])
-        elif image.startswith("data:image"):
-            data = image.split(";", 1)[1]
-            if data.startswith("base64,"):
-                data = base64.b64decode(data[7:])
-                image_obj = Image.open(BytesIO(data))
-        if image_obj is None:
-            raise ValueError(
-                "Unrecognized image input, support local path, http url, base64 and " "PIL.Image, got {image}"
-            )
-        image_obj = image_obj.convert("RGB")
-        return image_obj
-
-    def fetch_video(self, ele: Dict, nframe_factor=2):
-        if isinstance(ele["video"], str):
-            # TODO: support http url
-            def round_by_factor(number: int, factor: int) -> int:
-                return round(number / factor) * factor
-
-            video = ele["video"]
-            if video.startswith("file://"):
-                video = video[7:]
-
-            video, _, info = io.read_video(
-                video,
-                start_pts=ele.get("video_start", 0.0),
-                end_pts=ele.get("video_end", None),
-                pts_unit="sec",
-                output_format="TCHW",
-            )
-            assert not ("fps" in ele and "nframes" in ele), "Only accept either `fps` or `nframes`"
-            if "nframes" in ele:
-                nframes = round_by_factor(ele["nframes"], nframe_factor)
-            else:
-                fps = ele.get("fps", 1.0)
-                nframes = round_by_factor(video.size(0) / info["video_fps"] * fps, nframe_factor)
-            idx = torch.linspace(0, video.size(0) - 1, nframes, dtype=torch.int64)
-            return video[idx]
-        else:
-            assert isinstance(ele["video"], (list, tuple))
-            assert len(ele["video"]) % nframe_factor == 0
-            images = [self.fetch_image({"image": ele}) for ele in ele["video"]]
-            return images
-
-    def extract_vision_info(self, conversation):
-        vision_infos = []
-        for message in conversation:
-            if isinstance(message["content"], list):
-                for ele in message["content"]:
-                    if ele["type"] in ("image", "image_url", "video"):
-                        vision_infos.append(ele)
-        return vision_infos
+        return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs})
 
     def batch_decode(self, *args, **kwargs):
         """
@@ -278,7 +207,7 @@ class Qwen2VLProcessor(ProcessorMixin):
                 )
         return self.tokenizer.apply_chat_template(
             conversation, chat_template=chat_template, tokenize=tokenize, **kwargs
-        ), self.extract_vision_info(conversation)
+        )
 
     @property
     def default_chat_template(self):
@@ -327,13 +256,13 @@ class Qwen2VLProcessor(ProcessorMixin):
                             "{% if add_vision_id %}"
                                 "Picture {{ image_count.value }}: "
                             "{% endif %}"
-                            "<|vision_start|><|vision_pad|><|vision_end|>"
+                            "<|vision_start|><|image_pad|><|vision_end|>"
                         "{% elif 'video' in content %}"
                             "{% set video_count.value = video_count.value + 1 %}"
                             "{% if add_vision_id %}"
                                 "Video {{ video_count.value }}: "
                             "{% endif %}"
-                            "<|vision_start|><|vision_pad|><|vision_end|>"
+                            "<|vision_start|><|video_pad|><|vision_end|>"
                         "{% elif 'text' in content %}"
                             "{{ content['text'] }}"
                         "{% endif %}"

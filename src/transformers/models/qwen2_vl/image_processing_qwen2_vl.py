@@ -43,6 +43,7 @@ from ...image_utils import (
     is_valid_image,
     make_list_of_images,
     to_numpy_array,
+    valid_images,
     validate_preprocess_arguments,
 )
 from ...utils import TensorType, is_vision_available, logging
@@ -53,6 +54,45 @@ logger = logging.get_logger(__name__)
 
 if is_vision_available():
     from PIL import Image
+
+
+def make_batched_images(images) -> List[List[ImageInput]]:
+    """
+    Accepts images in list or nested list format, and makes a list of images for preprocessing.
+
+    Args:
+        images (`Union[List[List[ImageInput]], List[ImageInput], ImageInput]`):
+            The input image.
+
+    Returns:
+        list: A list of images.
+    """
+    if isinstance(images, (list, tuple)) and isinstance(images[0], (list, tuple)) and is_valid_image(images[0][0]):
+        return [img for img_list in images for img in img_list]
+
+    elif isinstance(images, (list, tuple)) and is_valid_image(images[0]):
+        return images
+
+    elif is_valid_image(images):
+        return [images]
+
+    raise ValueError(f"Could not make batched video from {images}")
+
+
+def make_batched_videos(videos) -> List[VideoInput]:
+    if isinstance(videos, (list, tuple)) and isinstance(videos[0], (list, tuple)) and is_valid_image(videos[0][0]):
+        return videos
+
+    elif isinstance(videos, (list, tuple)) and is_valid_image(videos[0]):
+        if isinstance(videos[0], Image.Image):
+            return [videos]
+        elif len(videos[0].shape) == 4:
+            return [list(video) for video in videos]
+
+    elif is_valid_image(videos) and len(videos.shape) == 4:
+        return [list(videos)]
+
+    raise ValueError(f"Could not make batched video from {videos}")
 
 
 def round_by_factor(number: int, factor: int) -> int:
@@ -101,23 +141,6 @@ def smart_resize(
     return h_bar, w_bar
 
 
-def make_batched_thw_vision(videos) -> List[VideoInput]:
-    if isinstance(videos, (list, tuple)) and isinstance(videos[0], (list, tuple)) and is_valid_image(videos[0][0]):
-        return videos
-
-    elif isinstance(videos, (list, tuple)) and is_valid_image(videos[0]):
-        if isinstance(videos[0], Image.Image) or len(videos[0].shape) == 3:
-            return [videos]
-        elif len(videos[0].shape) == 4:
-            return [list(video) for video in videos]
-
-    elif is_valid_image(videos) and (not isinstance(videos, Image.Image)) and len(videos.shape) == 4:
-        return [list(videos)]
-    elif is_valid_image(videos) and (isinstance(videos, Image.Image) or len(videos.shape) == 3):
-        return [[videos]]
-    raise ValueError(f"Could not make batched video from {videos}")
-
-
 class Qwen2VLImageProcessor(BaseImageProcessor):
     r"""
     Constructs a Qwen2-VL image processor that dynamically resizes images based on the original images.
@@ -151,7 +174,7 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
             The merge size of the vision encoder to llm encoder.
     """
 
-    model_input_names = ["pixel_values", "vision_grid_thw"]
+    model_input_names = ["pixel_values", "image_grid_thw", "pixel_values_videos", "video_grid_thw"]
 
     def __init__(
         self,
@@ -188,8 +211,7 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
 
     def _preprocess(
         self,
-        images: ImageInput,
-        vision_info: List[Dict] = None,
+        images: Union[ImageInput, VideoInput],
         do_resize: bool = None,
         resample: PILImageResampling = None,
         do_rescale: bool = None,
@@ -256,32 +278,13 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
         height, width = get_image_size(images[0], channel_dim=input_data_format)
         resized_height, resized_width = height, width
         if do_resize:
-            if vision_info is not None:
-                min_pixels = vision_info.get("min_pixels", self.min_pixels)
-                max_pixels = vision_info.get("max_pixels", self.max_pixels)
-                if "resized_height" in vision_info and "resized_width" in vision_info:
-                    resized_height, resized_width = smart_resize(
-                        vision_info["resized_height"],
-                        vision_info["resized_width"],
-                        factor=self.patch_size * self.merge_size,
-                    )
-                else:
-                    resized_height, resized_width = smart_resize(
-                        height,
-                        width,
-                        factor=self.patch_size * self.merge_size,
-                        min_pixels=min_pixels,
-                        max_pixels=max_pixels,
-                    )
-            else:
-                resized_height, resized_width = smart_resize(
-                    height,
-                    width,
-                    factor=self.patch_size * self.merge_size,
-                    min_pixels=self.min_pixels,
-                    max_pixels=self.max_pixels,
-                )
-
+            resized_height, resized_width = smart_resize(
+                height,
+                width,
+                factor=self.patch_size * self.merge_size,
+                min_pixels=self.min_pixels,
+                max_pixels=self.max_pixels,
+            )
             images = [
                 resize(
                     image=image,
@@ -334,8 +337,8 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
 
     def preprocess(
         self,
-        images: Optional[Union[VideoInput, ImageInput]],
-        vision_infos: List[Dict] = None,
+        images: Union[ImageInput, VideoInput],
+        is_video: bool = False,
         do_resize: bool = None,
         size: Dict[str, int] = None,
         resample: PILImageResampling = None,
@@ -359,9 +362,6 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
             size (`Dict[str, int]`, *optional*, defaults to `self.size`):
                 Size of the image after resizing. Shortest edge of the image is resized to size["shortest_edge"], with
                 the longest edge resized to keep the input aspect ratio.
-            image_grid_pinpoints (`List` *optional*, defaults to `self.image_grid_pinpoints`):
-                A list of possible resolutions to use for processing high resolution images. The best resolution is
-                selected based on the original size of the image.
             resample (`int`, *optional*, defaults to `self.resample`):
                 Resampling filter to use if resizing the image. This can be one of the enum `PILImageResampling`. Only
                 has an effect if `do_resize` is set to `True`.
@@ -408,7 +408,13 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
         image_std = image_std if image_std is not None else self.image_std
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
 
-        images = make_batched_thw_vision(images)
+        images = make_batched_videos(images) if is_video else make_batched_images(images)
+
+        if not is_video and not valid_images(images):
+            raise ValueError(
+                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
+                "torch.Tensor, tf.Tensor or jax.ndarray."
+            )
 
         validate_preprocess_arguments(
             rescale_factor=rescale_factor,
@@ -421,11 +427,9 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
         )
 
         pixel_values, vision_grid_thws = [], []
-        for i, image in enumerate(images):
-            vision_info = vision_infos[i] if vision_infos is not None else None
-            patches, vision_grid_thw = self._preprocess(
+        for image in images:
+            patches, image_grid_thw = self._preprocess(
                 image,
-                vision_info=vision_info,
                 do_resize=do_resize,
                 resample=resample,
                 do_rescale=do_rescale,
@@ -438,11 +442,13 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
                 input_data_format=input_data_format,
             )
             pixel_values.extend(patches)
-            vision_grid_thws.append(vision_grid_thw)
+            vision_grid_thws.append(image_grid_thw)
         pixel_values = np.array(pixel_values)
         vision_grid_thws = np.array(vision_grid_thws)
 
-        return BatchFeature(
-            data={"pixel_values": pixel_values, "vision_grid_thw": vision_grid_thws},
-            tensor_type=return_tensors,
-        )
+        if is_video:
+            data = {"pixel_values_videos": pixel_values, "video_grid_thw": vision_grid_thws}
+        else:
+            data = {"pixel_values": pixel_values, "image_grid_thw": vision_grid_thws}
+
+        return BatchFeature(data=data, tensor_type=return_tensors)

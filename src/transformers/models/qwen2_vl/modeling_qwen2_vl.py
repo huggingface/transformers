@@ -101,7 +101,6 @@ class Qwen2VLCausalLMOutputWithPast(ModelOutput):
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
     state: Optional[torch.FloatTensor] = None
-    vision_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     rope_deltas: Optional[torch.LongTensor] = None
 
 
@@ -340,7 +339,6 @@ class Qwen2VLVisionBlock(nn.Module):
 class Qwen2VisionTransformer(nn.Module):
     def __init__(
         self,
-        img_size: int = 378,
         patch_size: int = 14,
         temporal_patch_size: int = 2,
         spatial_merge_size: int = 2,
@@ -433,14 +431,6 @@ class Qwen2VisionTransformer(nn.Module):
             x = blk(x, cu_seqlens=cu_seqlens, rotary_pos_emb=rotary_pos_emb)
 
         return self.merger(x)
-
-
-def _get_unpad_data(attention_mask):
-    seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
-    indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
-    max_seqlen_in_batch = seqlens_in_batch.max().item()
-    cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.int32), (1, 0))
-    return (indices, cu_seqlens, max_seqlen_in_batch)
 
 
 # Copied from transformers.models.qwen2.modeling_qwen2.Qwen2RMSNorm
@@ -1255,29 +1245,61 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel):
     def get_rope_index(
         self,
         input_ids: torch.Tensor,
-        vision_grid_thw: List[List[int]] = None,
+        image_grid_thw: List[List[int]] = None,
+        video_grid_thw: List[List[int]] = None,
         attention_mask: Optional[torch.Tensor] = None,
-    ):
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         spatial_merge_size = self.config.vision_config["spatial_merge_size"]
-        vision_token_id = self.config.vision_token_id
+        image_token_id = self.config.image_token_id
+        video_token_id = self.config.video_token_id
+        vision_start_token_id = self.config.vision_start_token_id
         mrope_position_deltas = []
-        if vision_grid_thw is not None:
+        if image_grid_thw is not None or video_grid_thw is not None:
             total_input_ids = input_ids
-            total_llm_positions = []
-            v_index = 0
+            position_ids = torch.ones(
+                3, input_ids.shape[0], input_ids.shape[1], dtype=input_ids.dtype, device=input_ids.device
+            )
+            image_index, video_index = 0, 0
             for i, input_ids in enumerate(total_input_ids):
                 if attention_mask is not None:
                     input_ids = input_ids[attention_mask[i] == 1]
-                img_num = (input_ids == vision_token_id).sum()
+                image_nums, video_nums = 0, 0
+                vision_start_indices = torch.argwhere(input_ids == vision_start_token_id).squeeze(1)
+                vision_tokens = input_ids[vision_start_indices + 1]
+                image_nums = (vision_tokens == image_token_id).sum()
+                video_nums = (vision_tokens == video_token_id).sum()
                 input_tokens = input_ids.tolist()
                 llm_pos_ids_list: list = []
                 st = 0
-                for _ in range(img_num):
-                    t, h, w = vision_grid_thw[v_index][0], vision_grid_thw[v_index][1], vision_grid_thw[v_index][2]
-                    ed = input_tokens.index(vision_token_id, st)
-                    llm_grid_t = t
-                    llm_grid_h = h // spatial_merge_size
-                    llm_grid_w = w // spatial_merge_size
+                remain_images, remain_videos = image_nums, video_nums
+                for _ in range(image_nums + video_nums):
+                    if image_token_id in input_tokens and remain_images > 0:
+                        ed_image = input_tokens.index(image_token_id, st)
+                    else:
+                        ed_image = len(input_tokens) + 1
+                    if video_token_id in input_tokens and remain_videos > 0:
+                        ed_video = input_tokens.index(video_token_id, st)
+                    else:
+                        ed_video = len(input_tokens) + 1
+                    if ed_image < ed_video:
+                        t, h, w = (
+                            image_grid_thw[image_index][0],
+                            image_grid_thw[image_index][1],
+                            image_grid_thw[image_index][2],
+                        )
+                        image_index += 1
+                        remain_images -= 1
+                        ed = ed_image
+                    else:
+                        t, h, w = (
+                            video_grid_thw[video_index][0],
+                            video_grid_thw[video_index][1],
+                            video_grid_thw[video_index][2],
+                        )
+                        video_index += 1
+                        remain_videos -= 1
+                        ed = ed_video
+                    llm_grid_t, llm_grid_h, llm_grid_w = t, h // spatial_merge_size, w // spatial_merge_size
                     text_len = ed - st
 
                     st_idx = llm_pos_ids_list[-1].max() + 1 if len(llm_pos_ids_list) > 0 else 0
@@ -1287,8 +1309,7 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel):
                     h_index = torch.arange(llm_grid_h).view(1, -1, 1).expand(llm_grid_t, -1, llm_grid_w).flatten()
                     w_index = torch.arange(llm_grid_w).view(1, 1, -1).expand(llm_grid_t, llm_grid_h, -1).flatten()
                     llm_pos_ids_list.append(torch.stack([t_index, h_index, w_index]) + text_len + st_idx)
-                    st = ed + 1
-                    v_index += 1
+                    st = ed + llm_grid_t * llm_grid_h * llm_grid_w
 
                 if st < len(input_tokens):
                     st_idx = llm_pos_ids_list[-1].max() + 1 if len(llm_pos_ids_list) > 0 else 0
@@ -1296,11 +1317,10 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel):
                     llm_pos_ids_list.append(torch.arange(text_len).view(1, -1).expand(3, -1) + st_idx)
 
                 llm_positions = torch.cat(llm_pos_ids_list, dim=1).reshape(3, -1)
-                total_llm_positions.append(llm_positions)
+                position_ids[..., i, attention_mask[i] == 1] = llm_positions.to(position_ids.device)
                 mrope_position_deltas.append(llm_positions.max() + 1 - len(total_input_ids[i]))
             mrope_position_deltas = torch.tensor(mrope_position_deltas, device=input_ids.device).unsqueeze(1)
-            total_llm_positions = torch.cat(total_llm_positions, dim=1).to(input_ids.device)
-            return total_llm_positions, mrope_position_deltas
+            return position_ids, mrope_position_deltas
         else:
             if attention_mask is not None:
                 position_ids = attention_mask.long().cumsum(-1) - 1
@@ -1321,241 +1341,6 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel):
                 )
 
             return position_ids, mrope_position_deltas
-
-    def _merge_input_ids_with_image_features(
-        self,
-        image_features: torch.Tensor,
-        feature_lens: torch.Tensor,
-        inputs_embeds: torch.Tensor,
-        input_ids: torch.LongTensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        image_token_index: int = None,
-        ignore_index: int = -100,
-    ):
-        """
-        Merge input_ids with with image features into final embeddings
-
-        Args:
-            image_features (`torch.Tensor` of shape `(all_feature_lens, embed_dim)`):
-                All vision vectors of all images in the batch
-            feature_lens (`torch.LongTensor` of shape `(num_images)`):
-                The length of visual embeddings of each image as stacked in `image_features`
-            inputs_embeds (`torch.Tensor` of shape `(batch_size, sequence_length, embed_dim)`):
-                Token embeddings before merging with visual embeddings
-            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-                Input_ids of tokens, possibly filled with image token
-            attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-                Mask to avoid performing attention on padding token indices.
-            position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-                Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-                config.n_positions - 1]`.
-            labels (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*)
-                :abels need to be recalculated to support training (if provided)
-            image_token_index (`int`, *optional*)
-                Token id used to indicate the special "image" token. Defaults to `config.image_token_index`
-            ignore_index (`int`, *optional*)
-                Value that is used to pad `labels` and will be ignored when calculated loss. Default: -100.
-        Returns:
-            final_embedding, final_attention_mask, position_ids, final_labels
-
-        Explanation:
-            each image has variable length embeddings, with length specified by feature_lens
-            image_features is concatenation of all visual embed vectors
-            task: fill each <image> with the correct number of visual embeddings
-            Example:
-                X (5 patches), Y (3 patches), Z (8)
-                X, Y are in the same sequence (in-context learning)
-            if right padding
-                input_ids: [
-                    a b c d e f X g h i j k Y l m
-                    o p q r Z s t u v _ _ _ _ _ _
-                ]
-                input_ids should be: [
-                    a b c d e f X X X X X g h i j k Y Y Y l m
-                    o p q r Z Z Z Z Z Z Z Z s t u v _ _ _ _ _
-                ]
-                labels should be: [
-                    a b c d e f _ _ _ _ _ g h i j k _ _ _ l m
-                    o p q r _ _ _ _ _ _ _ _ s t u v _ _ _ _ _
-                ]
-            elif left padding
-                input_ids: [
-                    a b c d e f X g h i j k Y l m
-                    _ _ _ _ _ _ o p q r Z s t u v
-                ]
-                input_ids should be: [
-                    a b c d e f X X X X X g h i j k Y Y Y l m
-                    _ _ _ _ _ o p q r Z Z Z Z Z Z Z Z s t u v
-                ]
-                labels should be: [
-                    a b c d e f _ _ _ _ _ g h i j k _ _ _ l m
-                    _ _ _ _ _ o p q r _ _ _ _ _ _ _ _ s t u v
-                ]
-            Edge cases:
-                * If tokens are same but image token sizes are different, then cannot infer left or right padding
-                ```python
-                cat_img = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
-                chart_img = Image.open(requests.get("https://github.com/haotian-liu/LLaVA/blob/1a91fc274d7c35a9b50b3cb29c4247ae5837ce39/images/llava_v1_5_radar.jpg?raw=true", stream=True).raw)
-                prompts = [
-                    "[INST] <image>\nWhat is shown in this image? [/INST]",
-                    "[INST] <image>\nWhat is shown in this image? [/INST]",
-                ]
-                inputs = processor(prompts, [chart_img, cat_img], return_tensors='pt', padding=True).to("cuda")
-                    chart_img has 2634 tokens, while cat_img has 2340 tokens
-                ```
-
-                input_ids: [
-                    a b c d X g h
-                    i j Y k l m n
-                ]
-                where X is 3 tokens while Y is 5, this mean after merge
-                if left-padding (batched generation)
-                    input_ids should be: [
-                        _ _ a b c d X X X g h
-                        i j Y Y Y Y Y k l m n
-                    ]
-                elif (right padding) (training)
-                    input_ids should be: [
-                        a b c d X X X g h _ _
-                        i j Y Y Y Y Y k l m n
-                    ]
-        """
-        image_features = image_features.to(inputs_embeds.device)
-        feature_lens = feature_lens.to(inputs_embeds.device)
-        position_ids = position_ids.to(inputs_embeds.device)
-        image_token_index = image_token_index if image_token_index is not None else self.config.vision_token_id
-        ignore_index = ignore_index if ignore_index is not None else self.config.ignore_index
-
-        with torch.no_grad():
-            num_images = feature_lens.size(0)
-            num_image_features, embed_dim = image_features.shape
-            if feature_lens.sum() != num_image_features:
-                raise ValueError(f"{feature_lens=} / {feature_lens.sum()} != {image_features.shape=}")
-            batch_size = input_ids.shape[0]
-            _left_padding = torch.any(attention_mask[:, 0] == 0)
-            _right_padding = torch.any(attention_mask[:, -1] == 0)
-
-            left_padding = True
-            if batch_size > 1:
-                if _left_padding and not _right_padding:
-                    left_padding = True
-                elif not _left_padding and _right_padding:
-                    left_padding = False
-                elif not _left_padding and not _right_padding:
-                    # both side is 1, so cannot tell
-                    left_padding = self.padding_side == "left"
-                else:
-                    # invalid attention_mask
-                    raise ValueError(f"both side of attention_mask has zero, invalid. {attention_mask}")
-
-            # Whether to turn off right padding
-            # 1. Create a mask to know where special image tokens are
-            special_image_token_mask = input_ids == image_token_index
-            # special_image_token_mask: [bsz, seqlen]
-            num_special_image_tokens = torch.sum(special_image_token_mask, dim=-1)
-            # num_special_image_tokens: [bsz]
-            # Reserve for padding of num_images
-            total_num_special_image_tokens = torch.sum(special_image_token_mask)
-            if total_num_special_image_tokens != num_images:
-                raise ValueError(
-                    f"Number of image tokens in input_ids ({total_num_special_image_tokens}) different from num_images ({num_images})."
-                )
-            # Compute the maximum embed dimension
-            # max_image_feature_lens is max_feature_lens per batch
-            feature_lens = feature_lens.to(input_ids.device)
-            feature_lens_batch = feature_lens.split(num_special_image_tokens.tolist(), dim=0)
-            feature_lens_batch_sum = torch.tensor([x.sum() for x in feature_lens_batch], device=input_ids.device)
-            embed_sequence_lengths = (
-                (attention_mask == 1).long().sum(-1) - num_special_image_tokens + feature_lens_batch_sum
-            )
-            max_embed_dim = embed_sequence_lengths.max()
-
-            batch_indices, non_image_indices = torch.where((input_ids != image_token_index) & (attention_mask == 1))
-            # 2. Compute the positions where text should be written
-            # Calculate new positions for text tokens in merged image-text sequence.
-            # `special_image_token_mask` identifies image tokens. Each image token will be replaced by `nb_text_tokens_per_images` text tokens.
-            # `torch.cumsum` computes how each image token shifts subsequent text token positions.
-            # - 1 to adjust for zero-based indexing, as `cumsum` inherently increases indices by one.
-            # ! instead of special_image_token_mask * (num_image_patches - 1)
-            #   special_image_token_mask * (num_feature_len - 1)
-            special_image_token_mask = special_image_token_mask.long()
-            special_image_token_mask[special_image_token_mask == 1] = feature_lens - 1
-            new_token_positions = torch.cumsum((special_image_token_mask + 1), -1) - 1
-            if left_padding:
-                # shift right token positions so that they are ending at the same number
-                # the below here was incorrect? new_token_positions += new_token_positions[:, -1].max() - new_token_positions[:, -1:]
-                new_token_positions += max_embed_dim - 1 - new_token_positions[:, -1:]
-
-            text_to_overwrite = new_token_positions[batch_indices, non_image_indices]
-
-        # 3. Create the full embedding, already padded to the maximum position
-        final_embedding = torch.zeros(
-            batch_size, max_embed_dim, embed_dim, dtype=inputs_embeds.dtype, device=inputs_embeds.device
-        )
-        final_attention_mask = torch.zeros(
-            batch_size, max_embed_dim, dtype=attention_mask.dtype, device=inputs_embeds.device
-        )
-        final_input_ids = torch.full(
-            (batch_size, max_embed_dim), self.config.eos_token_id, dtype=input_ids.dtype, device=inputs_embeds.device
-        )
-        final_position_ids = torch.full(
-            (3, batch_size, max_embed_dim), 1, dtype=input_ids.dtype, device=inputs_embeds.device
-        )
-        # In case the Vision model or the Language model has been offloaded to CPU, we need to manually
-        # set the corresponding tensors into their correct target device.
-        target_device = inputs_embeds.device
-        batch_indices, non_image_indices, text_to_overwrite = (
-            batch_indices.to(target_device),
-            non_image_indices.to(target_device),
-            text_to_overwrite.to(target_device),
-        )
-        attention_mask = attention_mask.to(target_device)
-        input_ids = input_ids.to(target_device)
-
-        # 4. Fill the embeddings based on the mask. If we have ["hey" "<image>", "how", "are"]
-        # we need to index copy on [0, 577, 578, 579] for the text and [1:576] for the image features
-        final_embedding[batch_indices, text_to_overwrite] = inputs_embeds[batch_indices, non_image_indices]
-        final_attention_mask[batch_indices, text_to_overwrite] = attention_mask[batch_indices, non_image_indices]
-        final_input_ids[batch_indices, text_to_overwrite] = input_ids[batch_indices, non_image_indices]
-        final_labels = None
-        if labels is not None:
-            labels = labels.to(target_device)
-            final_labels = torch.full_like(final_attention_mask, ignore_index).to(torch.long)
-            final_labels[batch_indices, text_to_overwrite] = labels[batch_indices, non_image_indices]
-
-        # 5. Fill the embeddings corresponding to the images. Anything that is not `text_positions` needs filling (#29835)
-        with torch.no_grad():
-            image_to_overwrite = torch.full(
-                (batch_size, max_embed_dim), True, dtype=torch.bool, device=inputs_embeds.device
-            )
-            image_to_overwrite[batch_indices, text_to_overwrite] = False
-            embed_indices = torch.arange(max_embed_dim).unsqueeze(0).to(target_device)
-            embed_indices = embed_indices.expand(batch_size, max_embed_dim)
-            embed_seq_lens = embed_sequence_lengths[:, None].to(target_device)
-
-            if left_padding:
-                # exclude padding on the left
-                max_embed_dim = max_embed_dim.to(target_device)
-                val = (max_embed_dim - embed_indices) <= embed_seq_lens
-            else:
-                # exclude padding on the right
-                val = embed_indices < embed_seq_lens
-            image_to_overwrite &= val
-
-            if image_to_overwrite.sum() != num_image_features:
-                raise ValueError(
-                    f"{image_to_overwrite.sum()=} != {num_image_features=} The input provided to the model are wrong. "
-                    f"The number of image tokens is {torch.sum(special_image_token_mask)} while"
-                    f" the number of image given to the model is {num_images}. "
-                    f"This prevents correct indexing and breaks batch generation."
-                )
-        final_embedding[image_to_overwrite] = image_features.contiguous().reshape(-1, embed_dim)
-        final_attention_mask |= image_to_overwrite
-        final_position_ids[:, final_attention_mask == 1] = position_ids
-
-        return final_embedding, final_attention_mask, final_position_ids, final_labels, final_input_ids
 
     def _update_model_kwargs_for_generation(
         self,
@@ -1590,7 +1375,9 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         pixel_values: Optional[torch.Tensor] = None,
-        vision_grid_thw: Optional[torch.LongTensor] = None,
+        pixel_values_videos: Optional[torch.FloatTensor] = None,
+        image_grid_thw: Optional[torch.LongTensor] = None,
+        video_grid_thw: Optional[torch.LongTensor] = None,
         rope_deltas: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, Qwen2VLCausalLMOutputWithPast]:
         r"""
@@ -1625,10 +1412,12 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        image_embeds = None
         if inputs_embeds is None:
+            inputs_embeds = self.model.embed_tokens(input_ids)
             if cache_position is None or (cache_position is not None and cache_position[0] == 0):
-                position_ids, rope_deltas = self.get_rope_index(input_ids, vision_grid_thw, attention_mask)
+                position_ids, rope_deltas = self.get_rope_index(
+                    input_ids, image_grid_thw, video_grid_thw, attention_mask
+                )
             else:
                 B, L = input_ids.shape
                 delta = (
@@ -1643,23 +1432,17 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel):
                     .expand(3, -1, -1)
                 )
             if pixel_values is not None and input_ids.shape[1] != 1 and pixel_values.size(0) > 0:
-                vision_seqlens = vision_grid_thw.prod(dim=-1) // (self.config.vision_config["spatial_merge_size"] ** 2)
                 pixel_values = pixel_values.type(self.visual.get_dtype())
-                image_embeds = self.visual(pixel_values, grid_thw=vision_grid_thw)
-                inputs_embeds = self.model.embed_tokens(input_ids)
-                inputs_embeds, attention_mask, position_ids, labels, _ = self._merge_input_ids_with_image_features(
-                    image_embeds,
-                    vision_seqlens,
-                    inputs_embeds,
-                    input_ids,
-                    attention_mask,
-                    position_ids,
-                    labels=labels,
-                )
-            else:
-                inputs_embeds = self.model.embed_tokens(input_ids)
-                if attention_mask is not None:
-                    attention_mask = attention_mask.to(inputs_embeds.device)
+                image_embeds = self.visual(pixel_values, grid_thw=image_grid_thw).to(inputs_embeds.device)
+                image_mask = input_ids == self.config.image_token_id
+                inputs_embeds[image_mask] = image_embeds
+            if pixel_values_videos is not None and input_ids.shape[1] != 1 and pixel_values_videos.size(0) > 0:
+                pixel_values_videos = pixel_values_videos.type(self.visual.get_dtype())
+                video_embeds = self.visual(pixel_values_videos, grid_thw=video_grid_thw).to(inputs_embeds.device)
+                video_mask = input_ids == self.config.video_token_id
+                inputs_embeds[video_mask] = video_embeds
+            if attention_mask is not None:
+                attention_mask = attention_mask.to(inputs_embeds.device)
         else:
             B, L = inputs_embeds.shape[:2]
             position_ids = torch.arange(L, device=inputs_embeds.device).view(1, 1, -1).expand(3, B, -1)
@@ -1704,7 +1487,6 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             state=attention_mask,
-            vision_hidden_states=image_embeds,
             rope_deltas=rope_deltas,
         )
 
@@ -1717,7 +1499,9 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel):
         cache_position=None,
         use_cache=True,
         pixel_values=None,
-        vision_grid_thw=None,
+        pixel_values_videos=None,
+        image_grid_thw=None,
+        video_grid_thw=None,
         **kwargs,
     ):
         past_length = 0
@@ -1777,7 +1561,9 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel):
                 "attention_mask": attention_mask,
                 "cache_position": cache_position,
                 "pixel_values": pixel_values,
-                "vision_grid_thw": vision_grid_thw,
+                "pixel_values_videos": pixel_values_videos,
+                "image_grid_thw": image_grid_thw,
+                "video_grid_thw": video_grid_thw,
                 "rope_deltas": rope_deltas,
             }
         )
