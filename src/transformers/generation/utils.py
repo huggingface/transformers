@@ -33,6 +33,7 @@ from ..cache_utils import (
     HybridCache,
     MambaCache,
     OffloadedCache,
+    OffloadedStaticCache,
     QuantizedCacheConfig,
     QuantoQuantizedCache,
     SlidingWindowCache,
@@ -120,6 +121,7 @@ if is_accelerate_available():
 
 NEED_SETUP_CACHE_CLASSES_MAPPING = {
     "static": StaticCache,
+    "offloaded_static": OffloadedStaticCache,
     "sliding_window": SlidingWindowCache,
     "hybrid": HybridCache,
     "mamba": MambaCache,
