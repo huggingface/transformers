@@ -421,7 +421,9 @@ class TextGenerationPipelineTests(unittest.TestCase):
         self.assertEqual(outputs, [{"generated_text": ANY(str)}])
         self.assertNotIn("This is a test", outputs[0]["generated_text"])
 
-        text_generator = pipeline(task="text-generation", model=model, tokenizer=tokenizer, processor=processor, return_full_text=False)
+        text_generator = pipeline(
+            task="text-generation", model=model, tokenizer=tokenizer, processor=processor, return_full_text=False
+        )
         outputs = text_generator("This is a test")
         self.assertEqual(outputs, [{"generated_text": ANY(str)}])
         self.assertNotIn("This is a test", outputs[0]["generated_text"])
