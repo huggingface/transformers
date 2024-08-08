@@ -61,7 +61,7 @@ FSDP는 네트워크의 각 레이어를 래핑하여 적용됩니다. 래핑은
 중간 체크포인트는 `fsdp_state_dict_type: SHARDED_STATE_DICT`로 저장해야 합니다. CPU 오프로드가 활성화된 랭크 0에서 전체 상태 딕셔너리를 저장하는 데 시간이 많이 걸리고, 브로드캐스팅 중 무기한 대기하여 `NCCL Timeout` 오류가 발생할 수 있기 때문입니다. [`~accelerate.Accelerator.load_state`] 메서드를 사용하여 분할된 상태 딕셔너리로 훈련을 재개할 수 있습니다.
 
 ```py
-# directory containing checkpoints
+# 경로가 내재된 체크포인트
 accelerator.load_state("ckpt")
 ```
 
