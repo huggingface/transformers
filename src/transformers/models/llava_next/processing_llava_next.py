@@ -16,6 +16,7 @@
 Processor class for LLaVa-NeXT.
 """
 
+import sys
 from typing import List, Union
 
 from ...feature_extraction_utils import BatchFeature
@@ -26,10 +27,10 @@ from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import logging
 
 
-try:
+if sys.version_info >= (3, 11):
     from typing import Unpack
-except ImportError:
-    pass
+else:
+    from typing_extensions import Unpack
 
 
 logger = logging.get_logger(__name__)

@@ -17,6 +17,7 @@
 import copy
 import math
 import re
+import sys
 from typing import List, Optional, Tuple, Union
 
 from ...image_processing_utils import BatchFeature
@@ -26,10 +27,10 @@ from ...tokenization_utils import AddedToken
 from ...tokenization_utils_base import BatchEncoding, TextInput
 
 
-try:
+if sys.version_info >= (3, 11):
     from typing import Unpack
-except ImportError:
-    pass
+else:
+    from typing_extensions import Unpack
 
 from ...processing_utils import ProcessingKwargs
 
