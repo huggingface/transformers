@@ -1082,6 +1082,7 @@ class T5EncoderOnlyModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
 
         return False
 
+
 def use_task_specific_params(model, task):
     model.config.update(model.config.task_specific_params[task])
 
