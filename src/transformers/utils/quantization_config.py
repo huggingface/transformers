@@ -457,10 +457,10 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
             raise TypeError("bnb_4bit_use_double_quant must be a boolean")
 
         if self.load_in_4bit and not version.parse(importlib.metadata.version("bitsandbytes")) >= version.parse(
-            "0.39.0"
+            "0.43.3"
         ):
             raise ValueError(
-                "4 bit quantization requires bitsandbytes>=0.39.0 - please upgrade your bitsandbytes version"
+                "4 bit quantization requires bitsandbytes>=0.43.3 - please upgrade your bitsandbytes version"
             )
 
     def is_quantizable(self):
