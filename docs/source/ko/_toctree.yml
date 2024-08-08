@@ -172,8 +172,8 @@
       title: 다중 GPU에서 훈련 진행하기
     - local: in_translation
       title: (번역중) Fully Sharded Data Parallel
-    - local: in_translation
-      title: (번역중) DeepSpeed
+    - local: DeepSpeed
+      title: DeepSpeed
     - local: perf_train_cpu
       title: CPU에서 훈련
     - local: perf_train_cpu_many
@@ -280,8 +280,8 @@
       title: (번역중) Tokenizer
     - local: in_translation
       title: (번역중) Trainer
-    - local: in_translation
-      title: (번역중) DeepSpeed
+    - local: DeepSpeed
+      title: DeepSpeed
     - local: in_translation
       title: (번역중) Feature Extractor
     - local: in_translation
