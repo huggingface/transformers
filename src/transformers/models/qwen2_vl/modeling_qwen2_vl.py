@@ -1003,6 +1003,7 @@ class Qwen2VLPreTrainedModel(PreTrainedModel):
     _supports_flash_attn_2 = True
     _supports_sdpa = True
     _supports_cache_class = True
+    _supports_static_cache = True
 
     def _init_weights(self, module):
         std = self.config.initializer_range
