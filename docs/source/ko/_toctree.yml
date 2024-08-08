@@ -117,8 +117,8 @@
     title: 사용자 정의 모델 공유하기
   - local: chat_templating
     title: 챗봇 템플릿 익히기
-  - local: in_translation
-    title: (번역중) Trainer
+  - local: trainer
+    title: Trainer 사용하기
   - local: sagemaker
     title: Amazon SageMaker에서 학습 실행하기
   - local: serialization
