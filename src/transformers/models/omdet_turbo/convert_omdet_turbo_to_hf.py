@@ -311,7 +311,6 @@ def convert_omdet_turbo_checkpoint(args):
     tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-base-patch32")
     processor = OmDetTurboProcessor(image_processor=image_processor, tokenizer=tokenizer)
 
-    print("processor:", processor.tokenizer.init_kwargs)
     # end-to-end consistency test
     run_test(model, processor)
 
