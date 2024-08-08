@@ -178,6 +178,7 @@ _deps = [
     "tensorflow-probability<0.24",
     "tf2onnx",
     "timeout-decorator",
+    "tiktoken==0.7.0",
     "timm<=0.9.16",
     "tokenizers>=0.19,<0.20",
     "torch",
@@ -288,6 +289,7 @@ extras["ftfy"] = deps_list("ftfy")
 extras["onnxruntime"] = deps_list("onnxruntime", "onnxruntime-tools")
 extras["onnx"] = deps_list("onnxconverter-common", "tf2onnx") + extras["onnxruntime"]
 extras["modelcreation"] = deps_list("cookiecutter")
+
 extras["sagemaker"] = deps_list("sagemaker")
 extras["deepspeed"] = deps_list("deepspeed") + extras["accelerate"]
 extras["optuna"] = deps_list("optuna")
@@ -310,7 +312,7 @@ extras["natten"] = deps_list("natten")
 extras["codecarbon"] = deps_list("codecarbon")
 extras["video"] = deps_list("decord", "av")
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
-extras["tiktoken"] = deps_list("blobfile")
+extras["tiktoken"] = deps_list("tiktoken", "blobfile")
 extras["testing"] = (
     deps_list(
         "pytest",
