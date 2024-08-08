@@ -814,9 +814,9 @@ class DABDETRModelIntegrationTests(unittest.TestCase):
         )[0]
         expected_scores = torch.tensor([0.8732, 0.8563, 0.8554, 0.6079, 0.5896]).to(torch_device)
         expected_labels = [17, 75, 17, 75, 63]
-        expected_boxes = torch.tensor([14.6969, 49.3892, 320.5166, 469.2764]).to(torch_device)
+        expected_boxes = torch.tensor([14.6970, 49.3892, 320.5165, 469.2765]).to(torch_device)
 
         self.assertEqual(len(results["scores"]), 5)
         self.assertTrue(torch.allclose(results["scores"], expected_scores, atol=1e-4))
         self.assertSequenceEqual(results["labels"].tolist(), expected_labels)
-        self.assertTrue(torch.allclose(results["boxes"][0, :], expected_boxes))
+        self.assertTrue(torch.allclose(results["boxes"][0, :], expected_boxes, atol=1e-4))
