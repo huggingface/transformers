@@ -59,8 +59,7 @@ class Blip2Processor(ProcessorMixin):
         tokenizer.return_token_type_ids = False
         self.current_processor = image_processor
         self.image_token = AddedToken("<image>", normalized=False, special=True)
-        tokens_to_add = {"additional_special_tokens": [self.image_token]}
-        tokenizer.add_special_tokens(tokens_to_add)
+        tokenizer.add_tokens([self.image_token], special_tokens=True)
         self.num_query_tokens = num_query_tokens
 
         super().__init__(image_processor, tokenizer)
