@@ -544,6 +544,7 @@ class Qwen2IntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     @slow
     @require_flash_attn
+    @pytest.mark.flash_attn_test
     def test_model_450m_long_prompt(self):
         EXPECTED_OUTPUT_TOKEN_IDS = [306, 338]
         # An input with 4097 tokens that is above the size of the sliding window
