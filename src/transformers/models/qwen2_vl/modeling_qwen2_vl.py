@@ -271,11 +271,10 @@ class VisionMlp(nn.Module):
         return self.fc2(self.act(self.fc1(x)))
 
 
-class VisionAttention(nn.Module):
-    def __init__(self, dim: int, num_heads: int = 16, use_flash_attention: bool = False) -> None:
+class VisionFlashAttention2(nn.Module):
+    def __init__(self, dim: int, num_heads: int = 16) -> None:
         super().__init__()
         self.num_heads = num_heads
-        self.use_flash_attention = use_flash_attention
         self.qkv = nn.Linear(dim, dim * 3, bias=True)
         self.proj = nn.Linear(dim, dim)
 
@@ -286,42 +285,54 @@ class VisionAttention(nn.Module):
             q = apply_rotary_pos_emb_vision(q.unsqueeze(0), rotary_pos_emb).squeeze(0)
             k = apply_rotary_pos_emb_vision(k.unsqueeze(0), rotary_pos_emb).squeeze(0)
 
-        if (
-            flash_attn_varlen_func is not None
-            and q.dtype in [torch.float16, torch.bfloat16]
-            and self.use_flash_attention
-        ):
-            max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
-            x = flash_attn_varlen_func(q, k, v, cu_seqlens, cu_seqlens, max_seqlen, max_seqlen)
-            x = x.reshape(L, -1)
-        else:
-            attention_mask = torch.zeros([1, L, L], device=q.device, dtype=torch.bool)
-            for i in range(1, len(cu_seqlens)):
-                attention_mask[..., cu_seqlens[i - 1] : cu_seqlens[i], cu_seqlens[i - 1] : cu_seqlens[i]] = True
-            q = q.transpose(0, 1)
-            k = k.transpose(0, 1)
-            v = v.transpose(0, 1)
-            x = F.scaled_dot_product_attention(q, k, v, attention_mask, dropout_p=0.0).transpose(0, 1).reshape(L, -1)
+        max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
+        x = flash_attn_varlen_func(q, k, v, cu_seqlens, cu_seqlens, max_seqlen, max_seqlen).reshape(L, -1)
         x = self.proj(x)
         return x
 
 
-class Qwen2VLVisionBlock(nn.Module):
-    def __init__(
-        self,
-        dim: int,
-        num_heads: int,
-        mlp_ratio: float,
-        norm_layer: nn.Module = partial(LayerNorm, eps=1e-6),
-        use_flash_attention: bool = False,
-    ) -> None:
+class VisionSpdaAttention(nn.Module):
+    def __init__(self, dim: int, num_heads: int = 16) -> None:
         super().__init__()
-        self.norm1 = norm_layer(dim)
-        self.norm2 = norm_layer(dim)
-        mlp_hidden_dim = int(dim * mlp_ratio)
+        self.num_heads = num_heads
+        self.qkv = nn.Linear(dim, dim * 3, bias=True)
+        self.proj = nn.Linear(dim, dim)
 
-        self.attn = VisionAttention(dim, num_heads=num_heads, use_flash_attention=use_flash_attention)
-        self.mlp = VisionMlp(dim=dim, hidden_dim=mlp_hidden_dim)
+    def forward(self, x: torch.Tensor, cu_seqlens: torch.Tensor, rotary_pos_emb: torch.Tensor = None) -> torch.Tensor:
+        L, _ = x.shape
+        q, k, v = self.qkv(x).reshape(L, 3, self.num_heads, -1).permute(1, 0, 2, 3).unbind(0)
+        if rotary_pos_emb is not None:
+            q = apply_rotary_pos_emb_vision(q.unsqueeze(0), rotary_pos_emb).squeeze(0)
+            k = apply_rotary_pos_emb_vision(k.unsqueeze(0), rotary_pos_emb).squeeze(0)
+
+        attention_mask = torch.zeros([1, L, L], device=q.device, dtype=torch.bool)
+        for i in range(1, len(cu_seqlens)):
+            attention_mask[..., cu_seqlens[i - 1] : cu_seqlens[i], cu_seqlens[i - 1] : cu_seqlens[i]] = True
+        q = q.transpose(0, 1)
+        k = k.transpose(0, 1)
+        v = v.transpose(0, 1)
+        x = F.scaled_dot_product_attention(q, k, v, attention_mask, dropout_p=0.0).transpose(0, 1).reshape(L, -1)
+        x = self.proj(x)
+        return x
+
+
+QWEN2_VL_VISION_ATTENTION_CLASSES = {
+    "flash_attention_2": VisionFlashAttention2,
+    "sdpa": VisionSpdaAttention,
+}
+
+
+class Qwen2VLVisionBlock(nn.Module):
+    def __init__(self, config, norm_layer: nn.Module = partial(LayerNorm, eps=1e-6)) -> None:
+        super().__init__()
+        self.norm1 = norm_layer(config.embed_dim)
+        self.norm2 = norm_layer(config.embed_dim)
+        mlp_hidden_dim = int(config.embed_dim * config.mlp_ratio)
+
+        self.attn = QWEN2_VL_VISION_ATTENTION_CLASSES[config._attn_implementation](
+            config.embed_dim, num_heads=config.num_heads
+        )
+        self.mlp = VisionMlp(dim=config.embed_dim, hidden_dim=mlp_hidden_dim)
 
     def forward(self, x, cu_seqlens, rotary_pos_emb) -> torch.Tensor:
         x = x + self.attn(self.norm1(x), cu_seqlens=cu_seqlens, rotary_pos_emb=rotary_pos_emb)
@@ -330,48 +341,22 @@ class Qwen2VLVisionBlock(nn.Module):
 
 
 class Qwen2VisionTransformer(nn.Module):
-    def __init__(
-        self,
-        patch_size: int = 14,
-        temporal_patch_size: int = 2,
-        spatial_merge_size: int = 2,
-        in_chans: int = 3,
-        hidden_size: int = 1000,
-        embed_dim: int = 768,
-        depth: int = 12,
-        num_heads: int = 16,
-        mlp_ratio: float = 4.0,
-        norm_layer: nn.Module = partial(LayerNorm, eps=1e-6),
-        use_flash_attention: bool = False,
-        *args,
-        **kwargs,
-    ) -> None:
+    def __init__(self, config) -> None:
         super().__init__()
-        self.spatial_merge_size = spatial_merge_size
+        self.spatial_merge_size = config.spatial_merge_size
 
         self.patch_embed = PatchEmbed(
-            patch_size=patch_size,
-            temporal_patch_size=temporal_patch_size,
-            in_chans=in_chans,
-            embed_dim=embed_dim,
+            patch_size=config.patch_size,
+            temporal_patch_size=config.temporal_patch_size,
+            in_chans=config.in_chans,
+            embed_dim=config.embed_dim,
         )
 
-        head_dim = embed_dim // num_heads
+        head_dim = config.embed_dim // config.num_heads
         self.rotary_pos_emb = VisionRotaryEmbedding(head_dim // 2)
 
-        self.blocks = nn.ModuleList(
-            [
-                Qwen2VLVisionBlock(
-                    dim=embed_dim,
-                    num_heads=num_heads,
-                    mlp_ratio=mlp_ratio,
-                    norm_layer=norm_layer,
-                    use_flash_attention=use_flash_attention,
-                )
-                for _ in range(depth)
-            ]
-        )
-        self.merger = PatchMerger(dim=hidden_size, context_dim=embed_dim)
+        self.blocks = nn.ModuleList([Qwen2VLVisionBlock(config) for _ in range(config.depth)])
+        self.merger = PatchMerger(dim=config.hidden_size, context_dim=config.embed_dim)
 
     def get_dtype(self) -> torch.dtype:
         return self.blocks[0].mlp.fc2.weight.dtype
@@ -1228,7 +1213,7 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel):
 
     def __init__(self, config):
         super().__init__(config)
-        self.visual = Qwen2VisionTransformer(**config.vision_config)
+        self.visual = Qwen2VisionTransformer(config.vision_config)
         self.model = Qwen2VLModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
@@ -1262,7 +1247,7 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel):
         video_grid_thw: List[List[int]] = None,
         attention_mask: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        spatial_merge_size = self.config.vision_config["spatial_merge_size"]
+        spatial_merge_size = self.config.vision_config.spatial_merge_size
         image_token_id = self.config.image_token_id
         video_token_id = self.config.video_token_id
         vision_start_token_id = self.config.vision_start_token_id
