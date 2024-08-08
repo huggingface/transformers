@@ -1552,8 +1552,6 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel):
         elif use_cache:
             cache_position = cache_position[-input_length:]
 
-        rope_deltas = kwargs["rope_deltas"] if kwargs.get("rope_deltas", None) is not None else None
-
         model_inputs.update(
             {
                 "past_key_values": past_key_values,
@@ -1564,7 +1562,7 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel):
                 "pixel_values_videos": pixel_values_videos,
                 "image_grid_thw": image_grid_thw,
                 "video_grid_thw": video_grid_thw,
-                "rope_deltas": rope_deltas,
+                "rope_deltas": kwargs.get("rope_deltas", None),
             }
         )
         return model_inputs
