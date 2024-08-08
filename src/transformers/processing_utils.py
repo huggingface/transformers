@@ -529,8 +529,11 @@ class ProcessorMixin(PushToHubMixin):
                 writer.write(chat_template_json_string)
             logger.info(f"chat template saved in {output_chat_template_file}")
 
-        self.to_json_file(output_processor_file)
-        logger.info(f"processor saved in {output_processor_file}")
+        # For now, let's not save to `processor_config.json` if the processor doesn't have extra attributes and
+        # `auto_map` is not specified.
+        if set(processor_dict.keys()) != {"processor_class"}:
+            self.to_json_file(output_processor_file)
+            logger.info(f"processor saved in {output_processor_file}")
 
         if push_to_hub:
             self._upload_modified_files(
