@@ -34,7 +34,6 @@ from transformers.testing_utils import (
     torch_device,
 )
 
-from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
@@ -223,12 +222,13 @@ class LlavaNextVideoVisionText2TextModelTester:
 
 
 @require_torch
-class LlavaNextVideoForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class LlavaNextVideoForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
     """
     Model tester for `LlavaNextVideoForConditionalGeneration`.
     """
 
     all_model_classes = (LlavaNextVideoForConditionalGeneration,) if is_torch_available() else ()
+    all_generative_model_classes = (LlavaNextVideoForConditionalGeneration,) if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
 
@@ -273,6 +273,17 @@ class LlavaNextVideoForConditionalGenerationModelTest(ModelTesterMixin, Generati
 
             with torch.no_grad():
                 model(**inputs)
+
+    def test_greedy_generation(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_generative_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            out = model.generate(**inputs_dict, min_new_tokens=20, max_new_tokens=20)
+            self.assertTrue(out.shape[1] == inputs_dict["input_ids"].shape[1] + 20)
 
     @unittest.skip(
         reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"

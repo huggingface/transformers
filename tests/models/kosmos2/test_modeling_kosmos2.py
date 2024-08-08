@@ -281,6 +281,17 @@ class Kosmos2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         self.model_tester = Kosmos2ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Kosmos2Config, hidden_size=37)
 
+    def test_greedy_generation(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_generative_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            out = model.generate(**inputs_dict, min_new_tokens=20, max_new_tokens=20)
+            self.assertTrue(out.shape[1] == inputs_dict["input_ids"].shape[1] + 20)
+
     # overwrite from common to skip `image_to_text_projection.latent_query`
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
