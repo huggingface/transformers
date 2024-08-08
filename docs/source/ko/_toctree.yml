@@ -239,8 +239,8 @@
     title: 추론 웹 서버를 위한 파이프라인
   - local: model_memory_anatomy
     title: 모델 학습 해부하기
-  - local: in_translation
-    title: (번역중) Getting the most out of LLMs
+  - local: llm_tutorial_optimization
+    title: LLM을 최대한 활용하기
   title: (번역중) 개념 가이드
 - sections:
   - sections:
