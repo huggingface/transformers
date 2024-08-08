@@ -38,10 +38,9 @@ from ...image_utils import (
     make_list_of_images,
     to_numpy_array,
     valid_images,
-    validate_kwargs,
     validate_preprocess_arguments,
 )
-from ...utils import TensorType, logging
+from ...utils import TensorType, filter_out_non_signature_kwargs, logging
 from ...utils.import_utils import is_cv2_available, is_vision_available
 
 
@@ -126,24 +125,6 @@ class NougatImageProcessor(BaseImageProcessor):
         self.do_normalize = do_normalize
         self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
-        self._valid_processor_keys = [
-            "images",
-            "do_crop_margin",
-            "do_resize",
-            "size",
-            "resample",
-            "do_thumbnail",
-            "do_align_long_axis",
-            "do_pad",
-            "do_rescale",
-            "rescale_factor",
-            "do_normalize",
-            "image_mean",
-            "image_std",
-            "return_tensors",
-            "data_format",
-            "input_data_format",
-        ]
 
     def python_find_non_zero(self, image: np.array):
         """This is a reimplementation of a findNonZero function equivalent to cv2."""
@@ -375,6 +356,7 @@ class NougatImageProcessor(BaseImageProcessor):
         )
         return resized_image
 
+    @filter_out_non_signature_kwargs()
     def preprocess(
         self,
         images: ImageInput,
@@ -393,7 +375,6 @@ class NougatImageProcessor(BaseImageProcessor):
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
     ) -> PIL.Image.Image:
         """
         Preprocess an image or batch of images.
@@ -460,8 +441,6 @@ class NougatImageProcessor(BaseImageProcessor):
         image_std = image_std if image_std is not None else self.image_std
 
         images = make_list_of_images(images)
-
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
 
         if not valid_images(images):
             raise ValueError(

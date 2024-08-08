@@ -580,7 +580,7 @@ default template for that model class is used instead. Let's take a look at the 
 >>> from transformers import AutoTokenizer
 >>> tokenizer = AutoTokenizer.from_pretrained("facebook/blenderbot-400M-distill")
 
->>> tokenizer.default_chat_template
+>>> tokenizer.chat_template
 "{% for message in messages %}{% if message['role'] == 'user' %}{{ ' ' }}{% endif %}{{ message['content'] }}{% if not loop.last %}{{ '  ' }}{% endif %}{% endfor %}{{ eos_token }}"
 ```
 
@@ -703,23 +703,6 @@ with other names, pass the name of the template you want to the `chat_template` 
 
 We find that this can be a bit confusing for users, though - so if you're writing a template yourself, we recommend
 trying to put it all in a single template where possible!
-
-### What are "default" templates?
-
-Before the introduction of chat templates, chat handling was hardcoded at the model class level. For backwards 
-compatibility, we have retained this class-specific handling as default templates, also set at the class level. If a
-model does not have a chat template set, but there is a default template for its model class, the `TextGenerationPipeline`
-class and methods like `apply_chat_template` will use the class template instead. You can find out what the default
-template for your tokenizer is by checking the `tokenizer.default_chat_template` attribute.
-
-This is something we do purely for backward compatibility reasons, to avoid breaking any existing workflows. Even when
-the class template is appropriate for your model, we strongly recommend overriding the default template by
-setting the `chat_template` attribute explicitly to make it clear to users that your model has been correctly configured
-for chat.
-
-Now that actual chat templates have been adopted more widely, default templates have been deprecated and will be
-removed in a future release. We strongly recommend setting the `chat_template` attribute for any tokenizers that
-still depend on them!
 
 ### What template should I use?
 
