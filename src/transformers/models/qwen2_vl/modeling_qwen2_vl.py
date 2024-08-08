@@ -595,13 +595,7 @@ class Qwen2VLAttention(nn.Module):
 
         kv_seq_len = key_states.shape[-2]
         if past_key_value is not None:
-            if self.layer_idx is None:
-                raise ValueError(
-                    f"The cache structure has changed since version v4.36. If you are using {self.__class__.__name__} "
-                    "for auto-regressive decoding with k/v caching, please make sure to initialize the attention class "
-                    "with a layer index."
-                )
-            kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
+            kv_seq_len += cache_position[0] + 1
 
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
         if self.rope_scaling and "mrope_section" in self.rope_scaling:
@@ -694,13 +688,7 @@ class Qwen2VLFlashAttention2(Qwen2VLAttention):
 
         kv_seq_len = key_states.shape[-2]
         if past_key_value is not None:
-            if self.layer_idx is None:
-                raise ValueError(
-                    f"The cache structure has changed since version v4.36. If you are using {self.__class__.__name__} "
-                    "for auto-regressive decoding with k/v caching, please make sure to initialize the attention class "
-                    "with a layer index."
-                )
-            kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
+            kv_seq_len += cache_position[0] + 1
 
         # Because the input can be padded, the absolute sequence length depends on the max position id.
         rotary_seq_len = (
@@ -854,7 +842,7 @@ class Qwen2VLSdpaAttention(Qwen2VLAttention):
 
         kv_seq_len = key_states.shape[-2]
         if past_key_value is not None:
-            kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
+            kv_seq_len += cache_position[0] + 1
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
         if self.rope_scaling and "mrope_section" in self.rope_scaling:
             query_states, key_states = apply_multimodal_rotary_pos_emb(
