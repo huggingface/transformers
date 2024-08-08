@@ -99,6 +99,8 @@
     sections:
     - local: generation_strategies
       title: Customize the generation strategy
+    - local: kv_cache
+      title: Best Practices for Generation with Cache
     title: Generation
   - isExpanded: false
     sections:
@@ -436,6 +438,8 @@
         title: MADLAD-400
       - local: model_doc/mamba
         title: Mamba
+      - local: model_doc/mamba2
+        title: mamba2
       - local: model_doc/marian
         title: MarianMT
       - local: model_doc/markuplm
@@ -466,6 +470,8 @@
         title: MT5
       - local: model_doc/mvp
         title: MVP
+      - local: model_doc/nemotron
+        title: Nemotron
       - local: model_doc/nezha
         title: NEZHA
       - local: model_doc/nllb

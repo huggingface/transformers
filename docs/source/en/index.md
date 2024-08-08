@@ -194,6 +194,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                       [M2M100](model_doc/m2m_100)                        |       ✅        |         ❌         |      ❌      |
 |                    [MADLAD-400](model_doc/madlad-400)                    |       ✅        |         ✅         |      ✅      |
 |                         [Mamba](model_doc/mamba)                         |       ✅        |         ❌         |      ❌      |
+|                        [mamba2](model_doc/mamba2)                        |       ✅        |         ❌         |      ❌      |
 |                        [Marian](model_doc/marian)                        |       ✅        |         ✅         |      ✅      |
 |                      [MarkupLM](model_doc/markuplm)                      |       ✅        |         ❌         |      ❌      |
 |                   [Mask2Former](model_doc/mask2former)                   |       ✅        |         ❌         |      ❌      |
@@ -222,6 +223,7 @@ Flax), PyTorch, and/or TensorFlow.
 |               [MusicGen Melody](model_doc/musicgen_melody)               |       ✅        |         ❌         |      ❌      |
 |                           [MVP](model_doc/mvp)                           |       ✅        |         ❌         |      ❌      |
 |                           [NAT](model_doc/nat)                           |       ✅        |         ❌         |      ❌      |
+|                      [Nemotron](model_doc/nemotron)                      |       ✅        |         ❌         |      ❌      |
 |                         [Nezha](model_doc/nezha)                         |       ✅        |         ❌         |      ❌      |
 |                          [NLLB](model_doc/nllb)                          |       ✅        |         ❌         |      ❌      |
 |                      [NLLB-MOE](model_doc/nllb-moe)                      |       ✅        |         ❌         |      ❌      |

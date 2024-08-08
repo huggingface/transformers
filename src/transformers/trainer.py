@@ -162,9 +162,11 @@ from .utils import (
     is_sagemaker_mp_enabled,
     is_torch_compile_available,
     is_torch_mlu_available,
+    is_torch_mps_available,
     is_torch_neuroncore_available,
     is_torch_npu_available,
     is_torch_xla_available,
+    is_torch_xpu_available,
     logging,
     strtobool,
 )
@@ -223,11 +225,6 @@ if is_accelerate_available():
         DistributedDataParallelKwargs,
         DistributedType,
         GradientAccumulationPlugin,
-        is_mlu_available,
-        is_mps_available,
-        is_npu_available,
-        is_torch_version,
-        is_xpu_available,
         load_fsdp_model,
         load_fsdp_optimizer,
         save_fsdp_model,
@@ -3332,13 +3329,13 @@ class Trainer:
             self.args.torch_empty_cache_steps is not None
             and self.state.global_step % self.args.torch_empty_cache_steps == 0
         ):
-            if is_xpu_available():
+            if is_torch_xpu_available():
                 torch.xpu.empty_cache()
-            elif is_mlu_available():
+            elif is_torch_mlu_available():
                 torch.mlu.empty_cache()
-            elif is_npu_available():
+            elif is_torch_npu_available():
                 torch.npu.empty_cache()
-            elif is_torch_version(">=", "2.0") and is_mps_available():
+            elif is_torch_mps_available(min_version="2.0"):
                 torch.mps.empty_cache()
             else:
                 torch.cuda.empty_cache()
