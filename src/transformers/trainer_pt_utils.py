@@ -47,6 +47,10 @@ from .utils import (
     is_training_run_on_sagemaker,
     logging,
 )
+from .modeling_utils import verify_quantization_training_support
+from .models.auto.modeling_auto import (
+    MODEL_MAPPING_NAMES,
+)
 
 
 if is_training_run_on_sagemaker():
@@ -1395,3 +1399,54 @@ class LayerWiseDummyScheduler(LRScheduler):
 
     def _get_closed_form_lr(self):
         return self.base_lrs
+
+
+
+def model_sanity_checks(model):
+    """
+    Performs a variety of sanity checks on the model:
+
+    1. Checks if the model was initialized properly when using `Zero-3`
+    2. Verifies that the model class is suitable for `Trainer`
+    3. Checks if quantization training is supported if detected
+    """
+    if is_deepspeed_zero3_enabled() and not getattr(model, "_transformers_zero3_init_used", True):
+        raise ValueError(
+            "Model was not initialized with `Zero-3` despite being configured for DeepSpeed Zero-3. Please re-initialize your model via `Model.from_pretrained(...)` or `Model.from_config(...)` after creating your `TrainingArguments`!"
+        )
+
+    if model.__class__.__name__ in MODEL_MAPPING_NAMES:
+        raise ValueError(
+            f"The model you have picked ({model.__class__.__name__}) cannot be used as is for training: it only "
+            "computes hidden states and does not accept any labels. You should choose a model with a head "
+            "suitable for your task like any of the `AutoModelForXxx` listed at "
+            "https://huggingface.co/docs/transformers/model_doc/auto"
+        )
+
+    verify_quantization_training_support(model)
+
+def optimizer_sanity_checks(model, optimizer, lr_scheduler, using_model_orchestration):
+    """
+    Performs a variety of sanity checks against the optimizer:
+
+    1. Verifies that optimizers are made correctly when using DeepSpeed or FSDP
+    2. Verifies that if using XLA, the model and optimizer are on the sam edevice
+    """
+    if using_model_orchestration and (optimizer is not None or lr_scheduler is not None):
+        raise RuntimeError(
+            "Passing `optimizers` is not allowed when using DeepSpeed or PyTorch FSDP. "
+            "Instead, subclass `Trainer` and override the `create_optimizer_and_scheduler` method."
+        )
+    if is_torch_xla_available() and optimizer is not None:
+        model_device = next(model.parameters()).device
+        for param_group in optimizer.param_groups:
+            if len(param_group["params"]) > 0:
+                optimizer_device = param_group["params"][0].device
+                break
+        if model_device != optimizer_device:
+            raise ValueError(
+                "The model and the optimizer parameters are not on the same device, which probably means you"
+                " created an optimizer around your model **before** putting on the device and passing it to the"
+                " `Trainer`. Make sure the lines `import torch_xla.core.xla_model as xm` and"
+                " `model.to(xm.xla_device())` is performed before the optimizer creation in your script."
+            )

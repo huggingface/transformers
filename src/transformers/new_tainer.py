@@ -13,6 +13,7 @@ from .integrations import (
     get_reporting_integration_callbacks,
     is_deepspeed_available,
     is_deepspeed_zero3_enabled,
+    propagate_args_to_deepspeed,
 )
 
 # isort: on
@@ -23,10 +24,7 @@ from torch.utils.data import Dataset, IterableDataset, RandomSampler
 
 from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
 from .feature_extraction_sequence_utils import SequenceFeatureExtractor
-from .modeling_utils import PreTrainedModel
-from .models.auto.modeling_auto import (
-    MODEL_MAPPING_NAMES,
-)
+from .modeling_utils import PreTrainedModel, is_peft_model
 from .pytorch_utils import (
     is_torch_greater_or_equal_than_2_3,
 )
@@ -43,6 +41,8 @@ from .trainer_callback import (
 )
 from .trainer_pt_utils import (
     LabelSmoother,
+    model_sanity_checks,
+    optimizer_sanity_checks,
 )
 from .trainer_utils import (
     EvalPrediction,
@@ -50,6 +50,7 @@ from .trainer_utils import (
     has_length,
     number_of_arguments,
     set_seed,
+    create_accelerator,
 )
 from .training_args import ParallelMode, TrainingArguments
 from .utils import (
@@ -67,8 +68,6 @@ from .utils.quantization_config import QuantizationMethod
 
 
 # isort: off
-
-from .modeling_utils import verify_quantization_training_support
 
 DEFAULT_CALLBACKS = [DefaultFlowCallback]
 DEFAULT_PROGRESS_CALLBACK = ProgressCallback
@@ -102,19 +101,6 @@ if is_accelerate_available():
 
 if is_accelerate_available("0.28.0"):
     from accelerate.utils import DataLoaderConfiguration
-
-
-def _is_peft_model(model):
-    if not is_peft_available():
-        return False
-
-    classes_to_check = (PeftModel,)
-    if version.parse(importlib.metadata.version("peft")) >= version.parse("0.7.0"):
-        from peft import PeftMixedModel
-
-        classes_to_check += (PeftMixedModel,)
-
-    return isinstance(model, classes_to_check)
 
 
 class Trainer:
@@ -202,8 +188,8 @@ class Trainer:
         ):
             self.model = self._move_model_to_device(model, args.device)
 
-        self.perform_model_sanity_checks(model)
-        self.perform_optimizer_sanity_checks()
+        model_sanity_checks(model)
+        optimizer_sanity_checks(model, self.optimizer, self.lr_scheduler, self.using_model_orchestration)
 
         # We keep two references so that later we can check if `self.model is self.model_wrapped`
         self.model_wrapped = self.model = model
@@ -309,48 +295,6 @@ class Trainer:
 
         return model
 
-    def perform_model_sanity_checks(self, model):
-        """
-        Performs a variety of sanity checks on the model:
-
-        1. Checks if the model was initialized properly when using `Zero-3`
-        2. Verifies that the model class is suitable for `Trainer`
-        3. Checks if quantization training is supported if detected
-        """
-        if is_deepspeed_zero3_enabled() and not getattr(model, "_transformers_zero3_init_used", True):
-            raise ValueError(
-                "Model was not initialized with `Zero-3` despite being configured for DeepSpeed Zero-3. Please re-initialize your model via `Model.from_pretrained(...)` or `Model.from_config(...)` after creating your `TrainingArguments`!"
-            )
-
-        if model.__class__.__name__ in MODEL_MAPPING_NAMES:
-            raise ValueError(
-                f"The model you have picked ({model.__class__.__name__}) cannot be used as is for training: it only "
-                "computes hidden states and does not accept any labels. You should choose a model with a head "
-                "suitable for your task like any of the `AutoModelForXxx` listed at "
-                "https://huggingface.co/docs/transformers/model_doc/auto"
-            )
-
-        verify_quantization_training_support(model)
-
-    def perform_optimizer_sanity_checks(self):
-        if is_torch_xla_available() and self.optimizer is not None:
-            model_device = next(self.model.parameters()).device
-            for param_group in self.optimizer.param_groups:
-                if len(param_group["params"]) > 0:
-                    optimizer_device = param_group["params"][0].device
-                    break
-            if model_device != optimizer_device:
-                raise ValueError(
-                    "The model and the optimizer parameters are not on the same device, which probably means you"
-                    " created an optimizer around your model **before** putting on the device and passing it to the"
-                    " `Trainer`. Make sure the lines `import torch_xla.core.xla_model as xm` and"
-                    " `model.to(xm.xla_device())` is performed before the optimizer creation in your script."
-                )
-        if self.using_model_orchestration and self.optimizer is not None or self.lr_scheduler is not None:
-            raise RuntimeError(
-                "Passing `optimizers` is not allowed if Deepspeed or PyTorch FSDP is enabled. "
-                "You should subclass `Trainer` and override the `create_optimizer_and_scheduler` method."
-            )
 
     def perform_distributed_sanity_checks(self):
         # Model orchestration verifications
@@ -404,45 +348,8 @@ class Trainer:
         self.callback_handler.remove_callback(callback)
 
     def create_accelerator_and_postprocess(self):
-        grad_acc_kwargs = self.args.accelerator_config.pop("gradient_accumulation_kwargs", {})
-        grad_acc_kwargs["sync_with_dataloader"] = False
-        if "num_steps" not in grad_acc_kwargs:
-            # take the gradient_accumulation_steps setting from TrainingArguments.
-            grad_acc_kwargs["num_steps"] = self.args.gradient_accumulation_steps
-        gradient_accumulation_plugin = GradientAccumulationPlugin(**grad_acc_kwargs)
-
-        accelerator_config = self.args.accelerator_config.to_dict()
-
-        if is_accelerate_available("0.28.0"):
-            dataloader_config = DataLoaderConfiguration(
-                split_batches=accelerator_config.pop("split_batches"),
-                dispatch_batches=accelerator_config.pop("dispatch_batches"),
-                even_batches=accelerator_config.pop("even_batches"),
-                use_seedable_sampler=accelerator_config.pop("use_seedable_sampler"),
-            )
-        non_blocking = accelerator_config.pop("non_blocking")
-        if not is_accelerate_available("0.30.0") and non_blocking:
-            raise ImportError(
-                "`non_blocking` is only supported in accelerate v0.30.0 and above. Please upgrade accelerate to use this feature."
-            )
-        else:
-            if non_blocking and not self.args.dataloader_pin_memory:
-                logger.warning(
-                    "`non_blocking` is enabled but `dataloader_pin_memory` is not. For the best performance, it's recommended to enable both."
-                )
-            dataloader_config.non_blocking = non_blocking
-
-        args = {
-            "deepspeed_plugin": self.args.deepspeed_plugin,
-            "gradient_accumulation_plugin": gradient_accumulation_plugin,
-        }
-        if is_accelerate_available("0.28.0"):
-            args["dataloader_config"] = dataloader_config
-        else:
-            args.update(accelerator_config)
-
         # create accelerator object
-        self.accelerator = Accelerator(**args)
+        self.accelerator = create_accelerator(self.args)
         # some Trainer classes need to use `gather` instead of `gather_for_metrics`, thus we store a flag
         self.gather_function = self.accelerator.gather_for_metrics
 
@@ -456,6 +363,7 @@ class Trainer:
         self.is_fsdp_enabled = getattr(self.accelerator.state, "fsdp_plugin", None) is not None
 
         # post accelerator creation setup
+        # NOTE: This should be simplified to just build a FSDP plugin manually w/ overrides
         if self.is_fsdp_enabled:
             fsdp_plugin = self.accelerator.state.fsdp_plugin
             fsdp_plugin.limit_all_gathers = self.args.fsdp_config.get(
@@ -473,6 +381,177 @@ class Trainer:
                     )
 
         if self.is_deepspeed_enabled and getattr(self.args, "hf_deepspeed_config", None) is None:
-            self.propagate_args_to_deepspeed()
+            propagate_args_to_deepspeed(self.args)
 
         self.perform_distributed_sanity_checks()
+
+    def _set_signature_columns_if_needed(self):
+        if self._signature_columns is not None:
+            return
+
+        # Determine which model to inspect
+        model_to_inspect = self.model
+        if is_peft_model(self.model):
+            if hasattr(self.model, "get_base_model"):
+                model_to_inspect = self.model.get_base_model()
+            else:
+                # PeftMixedModel does not provide a `get_base_model` method
+                model_to_inspect = self.model.base_model.model
+
+        signature = inspect.signature(model_to_inspect.forward)
+        self._signature_columns = list(signature.parameters.keys())
+
+        # Labels may be named label or label_ids, the default data collator handles that.
+        label_columns = set(["label", "label_ids"] + self.label_names)
+        self._signature_columns.extend(label_columns)
+
+    def _remove_unused_columns(self, dataset: "datasets.Dataset", description: Optional[str] = None):
+        if not self.args.remove_unused_columns:
+            return dataset
+        self._set_signature_columns_if_needed()
+        signature_columns = self._signature_columns
+
+        ignored_columns = list(set(dataset.column_names) - set(signature_columns))
+        if len(ignored_columns) > 0:
+            dset_description = "" if description is None else f"in the {description} set"
+            logger.warning(
+                f"The following columns {dset_description} don't have a corresponding argument in "
+                f"`{self.model.__class__.__name__}.forward` and have been ignored: {', '.join(ignored_columns)}."
+                f" If {', '.join(ignored_columns)} are not expected by `{self.model.__class__.__name__}.forward`, "
+                " you can safely ignore this message."
+            )
+
+        columns = [k for k in signature_columns if k in dataset.column_names]
+        if len(columns) == 0:
+            raise ValueError(
+                "No columns in the dataset match the model's forward method signature. "
+                f"The following columns have been ignored: [{', '.join(ignored_columns)}]. "
+                "Please check the dataset and model. You may need to set `remove_unused_columns=False` in `TrainingArguments`."
+            )
+
+        if version.parse(datasets.__version__) < version.parse("1.4.0"):
+            dataset.set_format(
+                type=dataset.format["type"], columns=columns, format_kwargs=dataset.format["format_kwargs"]
+            )
+            return dataset
+        else:
+            return dataset.remove_columns(ignored_columns)
+
+    def _get_collator_with_removed_columns(
+        self, data_collator: Callable, description: Optional[str] = None
+    ) -> Callable:
+        if not self.args.remove_unused_columns:
+            return data_collator
+        self._set_signature_columns_if_needed()
+        signature_columns = self._signature_columns
+
+        remove_columns_collator = RemoveColumnsCollator(
+            data_collator=data_collator,
+            signature_columns=signature_columns,
+            logger=logger,
+            description=description,
+            model_name=self.model.__class__.__name__,
+        )
+        return remove_columns_collator
+
+    def _get_sampler(self, dataset=None, evaluation:bool = False) -> Optional[torch.utils.data.Sampler]:
+        if (
+            evaluation and self.args.world_size < 1
+             or dataset is None 
+             or not has_length(dataset)
+        ):
+            return None
+        
+        if evaluation: 
+            return SequentialSampler(dataset)
+
+        # Build the sampler.
+        if self.args.group_by_length:
+            lengths = None
+            if (
+                is_datasets_available() and 
+                isinstance(dataset, datasets.Dataset) and 
+                self.args.length_column_name in dataset.column_names
+            ):
+                lengths = dataset[self.args.length_column_name]
+            model_input_name = self.tokenizer.model_input_names[0] if self.tokenizer is not None else None
+            return LengthGroupedSampler(
+                self.args.train_batch_size * self.args.gradient_accumulation_steps,
+                dataset=dataset,
+                lengths=lengths,
+                model_input_name=model_input_name,
+            )
+        else:
+            return RandomSampler(dataset)
+
+    def _prepare_dataset_for_dataloader(self, dataset, collator, dataset_type:str="train"):
+        """
+        Prepare a dataset for a dataloader.
+        
+        Returns: 
+            A tuple of (dataset, dataloader_params)
+        """
+        if is_datasets_available() and isinstance(dataset, datasets.Dataset):
+            dataset = self._remove_unused_columns(dataset, description=description)
+        else:
+            data_collator = self._get_collator_with_removed_columns(data_collator, description=description)
+
+        dataloader_params = {
+            "collate_fn": data_collator,
+            "num_workers": self.args.dataloader_num_workers,
+            "pin_memory": self.args.dataloader_pin_memory,
+            "persistent_workers": self.args.dataloader_persistent_workers,
+            "batch_size": self.args._train_batch_size if dataset_type == "train" else self.args.eval_batch_size,
+        }
+
+        if not isinstance(dataset, torch.utils.data.IterableDataset):
+            dataloader_params["sampler"] = self._get_sampler(dataset, evaluation=dataset_type != "train")
+            dataloader_params["drop_last"] = self.args.dataloader_drop_last
+            dataloader_params["prefetch_factor"] = self.args.dataloader_prefetch_factor
+            if dataset_type == "train":
+                dataloader_params["worker_init_fn"] = seed_worker
+        return dataset, dataloader_params
+
+
+    def get_train_dataloader(self):
+        if self.train_dataset is None:
+            raise ValueError("Trainer: training requires a train_dataset.")
+        train_dataset, dataloader_params = self._prepare_dataset_for_dataloader(self.train_dataset, self.data_collator)
+
+        return self.accelerator.prepare(DataLoader(train_dataset, **dataloader_params))
+
+    def get_eval_dataloader(self, eval_dataset: Optional[Union[str, Dataset]] = None) -> DataLoader:
+        if eval_dataset is None and self.eval_dataset is None:
+            raise ValueError("Trainer: evaluation requires an eval_dataset.")
+        
+        # If we have persistent workers, don't do a fork bomb especially as eval datasets
+        # don't change during training
+        dataloader_key = eval_dataset if isinstance(eval_dataset, str) else "eval"
+        if (
+            hasattr(self, "_eval_dataloaders")
+            and dataloader_key in self._eval_dataloaders
+            and self.args.dataloader_persistent_workers
+        ):
+            return self.accelerator.prepare(self._eval_dataloaders[dataloader_key])
+    
+        # Grab the right `eval_dataset` if needed
+        if isinstance(eval_dataset, str):
+            eval_dataset = self.eval_dataset[eval_dataset]
+        elif eval_dataset is None:
+            eval_dataset = self.eval_dataset
+        
+        eval_dataset, dataloader_params = self._prepare_dataset_for_dataloader(eval_dataset, self.data_collator, dataset_type="evaluation")
+        # accelerator.free_memory() will destroy the references, so
+        # we need to store the non-prepared version
+        eval_dataloader = DataLoader(eval_dataset, **dataloader_params)
+        if self.args.dataloader_persistent_workers:
+            if hasattr(self, "_eval_dataloaders"):
+                self._eval_dataloaders[dataloader_key] = eval_dataloader
+            else:
+                self._eval_dataloaders = {dataloader_key: eval_dataloader}
+        
+        return self.accelerator.prepare(eval_dataloader)
+
+    def get_test_dataloader(self, test_dataset: Dataset) -> DataLoader:
+        test_dataset, dataloader_params = self._prepare_dataset_for_dataloader(test_dataset, self.data_collator, dataset_type="test")
+        return self.accelerator.prepare(DataLoader(test_dataset, **dataloader_params))

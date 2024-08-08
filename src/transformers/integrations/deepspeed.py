@@ -55,6 +55,9 @@ else:
     # Deepspeed glue code will never inherit this dummy object as it checks if accelerate is available.
     from builtins import object as DeepSpeedConfig
 
+if is_accelerate_available():
+    from accelerate.state import AcceleratorState
+
 
 class HfDeepSpeedConfig(DeepSpeedConfig):
     """
@@ -440,3 +443,15 @@ def deepspeed_load_checkpoint(deepspeed_engine, checkpoint_path, load_module_str
             raise ValueError(f"[deepspeed] failed to resume from checkpoint {checkpoint_path}")
     else:
         raise ValueError(f"Can't find a valid checkpoint at {checkpoint_path}")
+
+def propagate_args_to_deepspeed(args:TrainingArguments):
+    """
+    Propagates the training arguments to the DeepSpeed configuration.
+    """
+    state = AcceleratorState()
+
+    ds_plugin = state.deepspeed_plugin
+
+    ds_plugin.hf_ds_config = HfTrainerDeepSpeedConfig(ds_plugin.hf_ds_config.config)
+    ds_plugin.deepspeed_config = ds_plugin.hf_ds_config.config
+    ds_plugin.hf_ds_config.trainer_config_process(args, auto_find_batch_size)

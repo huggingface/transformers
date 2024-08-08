@@ -838,25 +838,6 @@ class TrainingArguments:
         default=8, metadata={"help": "Batch size per GPU/TPU/MPS/NPU core/CPU for evaluation."}
     )
 
-    per_gpu_train_batch_size: Optional[int] = field(
-        default=None,
-        metadata={
-            "help": (
-                "Deprecated, the use of `--per_device_train_batch_size` is preferred. "
-                "Batch size per GPU/TPU core/CPU for training."
-            )
-        },
-    )
-    per_gpu_eval_batch_size: Optional[int] = field(
-        default=None,
-        metadata={
-            "help": (
-                "Deprecated, the use of `--per_device_eval_batch_size` is preferred. "
-                "Batch size per GPU/TPU core/CPU for evaluation."
-            )
-        },
-    )
-
     gradient_accumulation_steps: int = field(
         default=1,
         metadata={"help": "Number of updates steps to accumulate before performing a backward/update pass."},
@@ -1324,9 +1305,6 @@ class TrainingArguments:
     )
     skip_memory_metrics: bool = field(
         default=True, metadata={"help": "Whether or not to skip adding of memory profiler reports to metrics."}
-    )
-    use_legacy_prediction_loop: bool = field(
-        default=False, metadata={"help": "Whether or not to use the legacy prediction_loop in the Trainer."}
     )
     push_to_hub: bool = field(
         default=False, metadata={"help": "Whether or not to upload the trained model to the model hub after training."}
@@ -2080,11 +2058,6 @@ class TrainingArguments:
     def __str__(self):
         self_as_dict = asdict(self)
 
-        # Remove deprecated arguments. That code should be removed once
-        # those deprecated arguments are removed from TrainingArguments. (TODO: v5)
-        del self_as_dict["per_gpu_train_batch_size"]
-        del self_as_dict["per_gpu_eval_batch_size"]
-
         self_as_dict = {k: f"<{k.upper()}>" if k.endswith("_token") else v for k, v in self_as_dict.items()}
 
         attrs_as_str = [f"{k}={v},\n" for k, v in sorted(self_as_dict.items())]
@@ -2095,30 +2068,17 @@ class TrainingArguments:
     @property
     def train_batch_size(self) -> int:
         """
-        The actual batch size for training (may differ from `per_gpu_train_batch_size` in distributed training).
+        The actual batch size for training (may differ from `per_device_train_batch_size` in distributed training).
         """
-        if self.per_gpu_train_batch_size:
-            logger.warning(
-                "Using deprecated `--per_gpu_train_batch_size` argument which will be removed in a future "
-                "version. Using `--per_device_train_batch_size` is preferred."
-            )
-        per_device_batch_size = self.per_gpu_train_batch_size or self.per_device_train_batch_size
-        train_batch_size = per_device_batch_size * max(1, self.n_gpu)
-        return train_batch_size
+        return self.per_device_train_batch_size * max(1, self.n_gpu)
+
 
     @property
     def eval_batch_size(self) -> int:
         """
-        The actual batch size for evaluation (may differ from `per_gpu_eval_batch_size` in distributed training).
+        The actual batch size for evaluation (may differ from `per_device_eval_batch_size` in distributed training).
         """
-        if self.per_gpu_eval_batch_size:
-            logger.warning(
-                "Using deprecated `--per_gpu_eval_batch_size` argument which will be removed in a future "
-                "version. Using `--per_device_eval_batch_size` is preferred."
-            )
-        per_device_batch_size = self.per_gpu_eval_batch_size or self.per_device_eval_batch_size
-        eval_batch_size = per_device_batch_size * max(1, self.n_gpu)
-        return eval_batch_size
+        return self.per_device_eval_batch_size * max(1, self.n_gpu)
 
     @property
     def ddp_timeout_delta(self) -> timedelta:
