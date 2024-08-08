@@ -15,7 +15,7 @@
 
 import warnings
 from math import ceil
-from typing import Iterable, List, Optional, Tuple, Union
+from typing import Callable, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -26,7 +26,15 @@ from .image_utils import (
     get_image_size,
     infer_channel_dimension_format,
 )
-from .utils import ExplicitEnum, TensorType, is_jax_tensor, is_tf_tensor, is_torch_tensor
+from .utils import (
+    ExplicitEnum,
+    TensorType,
+    is_jax_tensor,
+    is_matplotlib_available,
+    is_numpy_array,
+    is_tf_tensor,
+    is_torch_tensor,
+)
 from .utils.import_utils import (
     is_flax_available,
     is_tf_available,
@@ -35,7 +43,6 @@ from .utils.import_utils import (
     is_vision_available,
     requires_backends,
 )
-
 
 if is_vision_available():
     import PIL
@@ -53,6 +60,9 @@ if is_flax_available():
 
 if is_torchvision_available():
     from torchvision.transforms import functional as F
+
+if is_matplotlib_available():
+    from matplotlib import colormaps
 
 
 def to_channel_dimension_format(
@@ -278,6 +288,115 @@ def get_resize_output_image_size(
     return (new_long, new_short) if width <= height else (new_short, new_long)
 
 
+def colorize_depth(
+    value: Union[np.ndarray, "torch.Tensor"],
+    vmin: Optional[Union[float, None]] = None,
+    vmax: Optional[Union[float, None]] = None,
+    vmin_perc: Optional[float] = 1.0,
+    vmax_perc: Optional[float] = 99.0,
+    cmap: Optional[str] = "gray_r",
+    invalid_val: Optional[int] = -99,
+    invalid_mask: Optional[Union[np.ndarray, None]] = None,
+    background_color: Optional[Tuple[int]] = (128, 128, 128, 255),
+    gamma_corrected: Optional[bool] = False,
+    normalize: Optional[bool] = False,
+    value_transform: Optional[Union[Callable, None]] = None,
+    return_numpy: bool = False,
+) -> Union[np.ndarray, "PIL.Image.Image"]:
+    """Converts a depth map to a color image.
+
+    Args:
+        value (`torch.Tensor` or `numpy.ndarry`):
+            Input depth map. Shape: (H, W) or (1, H, W) or (1, 1, H, W). All singular dimensions are squeezed
+        vmin (`float`, *optional*):
+            vmin-valued entries are mapped to start color of cmap. If None, value.min() is used. Defaults to None.
+        vmax (`float`, *optional*):
+            vmax-valued entries are mapped to end color of cmap. If None, value.max() is used. Defaults to None.
+        vmin_perc (`float`, *optional*, defaults to `1.0`):
+            use the `vmin_perc`-th percentile as `vmin` (outlier rejection).
+        vmax_perc (`float`, *optional*, defaults to `99.0`):
+            use the `vmax_perc`-th percentile as `vmax` (outlier rejection).
+        normalize (`bool`, *optional*, defaults to `False`):
+            Apply normalization between [0,1] for the colored image values.
+        cmap (`str`, *optional*, defaults to `gray_r`):
+            matplotlib colormap to use (requires matplotlib).
+        invalid_val (`int`, *optional*, defaults to `-99`):
+            Specifies value of invalid pixels that should be colored as 'background_color'.
+        invalid_mask (`numpy.ndarray`, *optional*):
+            Boolean mask for invalid regions. Defaults to None.
+        background_color (`Tuple[int]`, *optional*, defaults to `(128, 128, 128, 255)`):
+            4-tuple RGB color to give to invalid pixels.
+        gamma_corrected (`bool`, *optional*, defaults to `False`):
+            Apply gamma correction to colored image.
+        value_transform (Callable, *optional*):
+            Apply transform function to valid pixels before coloring. Defaults to None.
+        return_numpy (`bool`, *optional*, defaults to `False`):
+            Whether or not to return the resized image as a numpy array. If False a `PIL.Image.Image` object is
+            returned.
+
+    Returns:
+        `numpy.ndarray`, dtype - uint8: Colored depth map. Shape: (H, W, 4)
+    """
+    if is_torch_tensor(value):
+        value = value.detach().cpu().numpy()
+    if is_numpy_array(value):
+        value = value.copy()
+
+    value = value.squeeze()
+    if invalid_mask is None:
+        invalid_mask = value == invalid_val
+    mask = np.logical_not(invalid_mask)
+
+    # normalize
+    vmin = np.percentile(value[mask], vmin_perc) if vmin is None else vmin
+    vmax = np.percentile(value[mask], vmax_perc) if vmax is None else vmax
+    if vmin != vmax:
+        if normalize:
+            value = (value - vmin) / (vmax - vmin)  # 0..1
+        else:
+            value /= vmax  # ..1
+    else:
+        # Avoid 0-division
+        value *= 0.0
+
+    # squeeze last dim if it exists
+    # grey out the invalid values
+
+    value[invalid_mask] = np.nan
+    if value_transform:
+        value = value_transform(value)
+        # value = value / value.max()
+
+    if is_matplotlib_available():
+        cmapper = colormaps.get_cmap(cmap)
+        value = cmapper(value, bytes=True)  # (nxmx4)
+    else:
+        value = (value.clip(0, 1) * 255).astype("uint8")[:, :, None].repeat(4, axis=-1)
+
+    # img = value[:, :, :]
+    img = value[...]
+    img[invalid_mask] = background_color
+
+    #     return img.transpose((2, 0, 1))
+    if gamma_corrected:
+        # gamma correction
+        img = img / 255
+        img = np.power(img, 2.2)
+        img = img * 255
+        img = img.astype(np.uint8)
+
+    if is_vision_available() and not return_numpy:
+        return PIL.Image.fromarray(img)
+
+    if not return_numpy:
+        warnings.warn(
+            "Since `is_vision_available()==False`, this function returns a numpy array instead of a PIL Image.",
+            UserWarning,
+        )
+
+    return img
+
+
 def resize(
     image: np.ndarray,
     size: Tuple[int, int],
@@ -340,9 +459,7 @@ def resize(
         # so we need to add it back if necessary.
         resized_image = np.expand_dims(resized_image, axis=-1) if resized_image.ndim == 2 else resized_image
         # The image is always in channels last format after converting from a PIL image
-        resized_image = to_channel_dimension_format(
-            resized_image, data_format, input_channel_dim=ChannelDimension.LAST
-        )
+        resized_image = to_channel_dimension_format(resized_image, data_format, input_channel_dim=ChannelDimension.LAST)
         # If an image was rescaled to be in the range [0, 255] before converting to a PIL image, then we need to
         # rescale it back to the original range.
         resized_image = rescale(resized_image, 1 / 255) if do_rescale else resized_image
