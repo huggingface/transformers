@@ -225,9 +225,20 @@ array([True, True])
 ## Decoding strategies
 
 Certain combinations of the `generate()` parameters, and ultimately `generation_config`, can be used to enable specific
-decoding strategies. If you are new to this concept, we recommend reading [this blog post that illustrates how common decoding strategies work](https://huggingface.co/blog/how-to-generate).
+decoding strategies. If you are new to this concept, we recommend reading
+[this blog post that illustrates how common decoding strategies work](https://huggingface.co/blog/how-to-generate).
 
 Here, we'll show some of the parameters that control the decoding strategies and illustrate how you can use them.
+
+<Tip>
+
+Selecting a given decoding strategy is not the only way you can influence the outcome of `generate()` with your model.
+The decoding strategies act based (mostly) on the logits, the distribution of probabilities for the next token, and
+thus selecting a good logits manipulation strategy can go a long way! In other words, manipulating the logits is another
+dimension you can act upon, in addition to selecting a decoding strategy. Popular logits manipulation strategies include
+`top_p`, `min_p`, and `repetition_penalty` -- you can check the full list in the [`GenerationConfig`] class.
+
+</Tip>
 
 ### Greedy Search
 

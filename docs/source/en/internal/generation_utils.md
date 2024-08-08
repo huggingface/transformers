@@ -398,6 +398,7 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
 
 [[autodoc]] HybridCache
     - update
+    - get_seq_length
     - reset
 
 [[autodoc]] SlidingWindowCache

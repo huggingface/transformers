@@ -628,9 +628,9 @@ class GemmaIntegrationTest(unittest.TestCase):
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
-    @pytest.mark.flash_attn_test
     @require_flash_attn
     @require_read_token
+    @pytest.mark.flash_attn_test
     def test_model_2b_flash_attn(self):
         model_id = "google/gemma-2b"
         EXPECTED_TEXTS = [

@@ -1016,7 +1016,9 @@ class StaticCache(Cache):
 
         self.dtype = dtype if dtype is not None else torch.float32
         self.num_key_value_heads = (
-            config.num_attention_heads if config.num_key_value_heads is None else config.num_key_value_heads
+            config.num_attention_heads
+            if getattr(config, "num_key_value_heads", None) is None
+            else config.num_key_value_heads
         )
 
         self.key_cache: List[torch.Tensor] = []
@@ -1024,19 +1026,22 @@ class StaticCache(Cache):
         # Note: There will be significant perf decrease if switching to use 5D tensors instead.
         cache_shape = (max_batch_size, self.num_key_value_heads, self.max_cache_len, self.head_dim)
         for idx in range(config.num_hidden_layers):
-            # Note: `torch.export()`` requires mutations to be registered as buffers.
-            self.register_buffer(f"key_cache_{idx}", torch.zeros(cache_shape, dtype=dtype, device=device))
-            self.register_buffer(f"value_cache_{idx}", torch.zeros(cache_shape, dtype=dtype, device=device))
-            key_cache = getattr(self, f"key_cache_{idx}")
-            value_cache = getattr(self, f"value_cache_{idx}")
-            # Note: `mark_static_address` is used to tag the cache as an fixed data pointer, preventing cuda graph
-            # breaks when updating the cache. It can't be used if the cache code is being compiled (but in that case
-            # it is not needed anyway)
+            new_layer_key_cache = torch.zeros(cache_shape, dtype=self.dtype, device=device)
+            new_layer_value_cache = torch.zeros(cache_shape, dtype=self.dtype, device=device)
+            # Notes:
+            # 1. `mark_static_address` is used to tag the cache as an fixed data pointer, preventing cuda graph
+            #     breaks when updating the cache. It can't be used if the cache code is being compiled (but in that case
+            #     it is not needed anyway)
+            # 2. `torch.export()` requires mutations to be registered as buffers.
             if not is_torchdynamo_compiling():
-                torch._dynamo.mark_static_address(key_cache)
-                torch._dynamo.mark_static_address(value_cache)
-            self.key_cache.append(key_cache)
-            self.value_cache.append(value_cache)
+                self.register_buffer(f"key_cache_{idx}", torch.zeros(cache_shape, dtype=dtype, device=device))
+                self.register_buffer(f"value_cache_{idx}", torch.zeros(cache_shape, dtype=dtype, device=device))
+                new_layer_key_cache = getattr(self, f"key_cache_{idx}")
+                new_layer_value_cache = getattr(self, f"value_cache_{idx}")
+                torch._dynamo.mark_static_address(new_layer_key_cache)
+                torch._dynamo.mark_static_address(new_layer_value_cache)
+            self.key_cache.append(new_layer_key_cache)
+            self.value_cache.append(new_layer_value_cache)
 
     def update(
         self,
