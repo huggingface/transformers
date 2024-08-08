@@ -178,6 +178,7 @@ class VitsTokenizer(PreTrainedTokenizer):
                 logger.warning(
                     "Text to the tokenizer contains non-Roman characters. To apply the `uroman` pre-processing "
                     "step automatically, ensure the `uroman` Romanizer is installed with: `pip install uroman` "
+                    "Note `uroman` requires python version >= 3.10"
                     "Otherwise, apply the Romanizer manually as per the instructions: https://github.com/isi-nlp/uroman"
                 )
             else:
