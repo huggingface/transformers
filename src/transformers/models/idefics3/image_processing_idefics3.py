@@ -700,6 +700,12 @@ class Idefics3ImageProcessor(BaseImageProcessor):
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
         do_pad = do_pad if do_pad is not None else self.do_pad
 
+        if not do_image_splitting:
+            logger.warning_once(
+                "Idefics3 was trained on splitted image to support high resolution. Setting do_image_splitting=False will degrade the performance."
+            )
+
+
         images_list = make_list_of_images(images)
 
         if not valid_images(images_list[0]):
