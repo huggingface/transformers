@@ -97,7 +97,7 @@ def prepare_for_hqq_linear(model, quantization_config=None, modules_to_not_conve
 
     # Convert quantization_config to layer-wise config
     skip_modules = quantization_config.skip_modules
-    quant_config = quantization_config.to_dict()
+    quant_config = quantization_config.quant_config
     linear_tags = list(set(linear_tags) - set(skip_modules) - set(modules_to_not_convert))
 
     if any(key in linear_tags for key in quant_config.keys()):
@@ -113,7 +113,11 @@ def prepare_for_hqq_linear(model, quantization_config=None, modules_to_not_conve
     )
 
     # We store quantization config as linear_tag -> hqq quant config
-    model.config.quantization_config = patch_params
+    model.config.quantization_config = {
+        "quant_config": quant_config,
+        "quant_method": quantization_config.quant_method,
+        "skip_modules": skip_modules,
+    }
 
     if not has_been_replaced:
         logger.warning("No linear modules were found in your model for quantization.")

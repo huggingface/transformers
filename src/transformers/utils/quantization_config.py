@@ -258,12 +258,26 @@ class HqqConfig(QuantizationConfigMixin):
         """
         pass
 
+    @classmethod
+    def from_dict(cls, config: Dict[str, Any]):
+        """
+        Override from_dict, used in AutoQuantizationConfig.from_dict in quantizers/auto.py
+        """
+        instance = cls()
+        instance.quant_config = config["quant_config"]
+        instance.skip_modules = config["skip_modules"]
+        return instance
+
     def to_dict(self) -> Dict[str, Any]:
         """
         Serializes this instance to a Python dictionary. Returns:
             `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
         """
-        return self.quant_config
+        return {
+            "quant_config": self.quant_config,
+            "quant_method": self.quant_method,
+            "skip_modules": self.skip_modules,
+        }
 
     def __repr__(self):
         config_dict = self.to_dict()
