@@ -47,7 +47,7 @@ class Blip2Processor(ProcessorMixin):
         tokenizer (`AutoTokenizer`):
             An instance of ['PreTrainedTokenizer`]. The tokenizer is a required input.
         num_query_tokens (`int`, *optional*):
-            MNumber of tokens used by the Qformer as queries, should be same as in model's config.
+            Number of tokens used by the Qformer as queries, should be same as in model's config.
     """
 
     attributes = ["image_processor", "tokenizer"]
