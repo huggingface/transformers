@@ -19,6 +19,7 @@ import unittest
 from transformers import AutoModelForCausalLM, AutoTokenizer, TorchAoConfig
 from transformers.testing_utils import (
     require_torch_gpu,
+    require_torchao,
     torch_device,
 )
 from transformers.utils import is_torch_available, is_torchao_available
@@ -70,6 +71,7 @@ MODEL_ID = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
 
 
 @require_torch_gpu
+@require_torchao
 class TorchAoConfigTest(unittest.TestCase):
     def test_to_dict(self):
         """
@@ -94,7 +96,7 @@ class TorchAoConfigTest(unittest.TestCase):
 
 
 @require_torch_gpu
-@unittest.skipIf(not is_torchao_available(), "TorchAoTest requires torchao to be available")
+@require_torchao
 class TorchAoTest(unittest.TestCase):
     def tearDown(self):
         cleanup()
@@ -120,7 +122,7 @@ class TorchAoTest(unittest.TestCase):
 
         # Note: we quantize the bfloat16 model on the fly to int4
         torchao_runner = TorchAoLLMRunner(
-            model_id=MODEL_ID, quant_config=quant_config, compute_dtype=torch.float16, device=torch_device
+            model_id=MODEL_ID, quant_config=quant_config, compute_dtype=None, device=torch_device
         )
 
         check_torchao_quantized(self, torchao_runner.model.model.layers[0].self_attn.v_proj)
