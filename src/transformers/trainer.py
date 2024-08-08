@@ -12,9 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""
-The Trainer class, to easily train a 🤗 Transformers from scratch or finetune it on a new task.
-"""
 
 import contextlib
 import copy
@@ -284,91 +281,6 @@ FSDP_MODEL_NAME = "pytorch_model_fsdp"
 
 
 class Trainer:
-    """
-    Trainer is a simple but feature-complete training and eval loop for PyTorch, optimized for 🤗 Transformers.
-
-    Args:
-        model ([`PreTrainedModel`] or `torch.nn.Module`, *optional*):
-            The model to train, evaluate or use for predictions. If not provided, a `model_init` must be passed.
-
-            <Tip>
-
-            [`Trainer`] is optimized to work with the [`PreTrainedModel`] provided by the library. You can still use
-            your own models defined as `torch.nn.Module` as long as they work the same way as the 🤗 Transformers
-            models.
-
-            </Tip>
-
-        args ([`TrainingArguments`], *optional*):
-            The arguments to tweak for training. Will default to a basic instance of [`TrainingArguments`] with the
-            `output_dir` set to a directory named *tmp_trainer* in the current directory if not provided.
-        data_collator (`DataCollator`, *optional*):
-            The function to use to form a batch from a list of elements of `train_dataset` or `eval_dataset`. Will
-            default to [`default_data_collator`] if no `tokenizer` is provided, an instance of
-            [`DataCollatorWithPadding`] otherwise.
-        train_dataset (Union[`torch.utils.data.Dataset`, `torch.utils.data.IterableDataset`, `datasets.Dataset`], *optional*):
-            The dataset to use for training. If it is a [`~datasets.Dataset`], columns not accepted by the
-            `model.forward()` method are automatically removed.
-
-            Note that if it's a `torch.utils.data.IterableDataset` with some randomization and you are training in a
-            distributed fashion, your iterable dataset should either use a internal attribute `generator` that is a
-            `torch.Generator` for the randomization that must be identical on all processes (and the Trainer will
-            manually set the seed of this `generator` at each epoch) or have a `set_epoch()` method that internally
-            sets the seed of the RNGs used.
-        eval_dataset (Union[`torch.utils.data.Dataset`, Dict[str, `torch.utils.data.Dataset`, `datasets.Dataset`]), *optional*):
-             The dataset to use for evaluation. If it is a [`~datasets.Dataset`], columns not accepted by the
-             `model.forward()` method are automatically removed. If it is a dictionary, it will evaluate on each
-             dataset prepending the dictionary key to the metric name.
-        tokenizer ([`PreTrainedTokenizerBase`], *optional*):
-            The tokenizer used to preprocess the data. If provided, will be used to automatically pad the inputs to the
-            maximum length when batching inputs, and it will be saved along the model to make it easier to rerun an
-            interrupted training or reuse the fine-tuned model.
-        model_init (`Callable[[], PreTrainedModel]`, *optional*):
-            A function that instantiates the model to be used. If provided, each call to [`~Trainer.train`] will start
-            from a new instance of the model as given by this function.
-
-            The function may have zero argument, or a single one containing the optuna/Ray Tune/SigOpt trial object, to
-            be able to choose different architectures according to hyper parameters (such as layer count, sizes of
-            inner layers, dropout probabilities etc).
-        compute_metrics (`Callable[[EvalPrediction], Dict]`, *optional*):
-            The function that will be used to compute metrics at evaluation. Must take a [`EvalPrediction`] and return
-            a dictionary string to metric values. *Note* When passing TrainingArgs with `batch_eval_metrics` set to
-            `True`, your compute_metrics function must take a boolean `compute_result` argument. This will be triggered
-            after the last eval batch to signal that the function needs to calculate and return the global summary
-            statistics rather than accumulating the batch-level statistics.
-        callbacks (List of [`TrainerCallback`], *optional*):
-            A list of callbacks to customize the training loop. Will add those to the list of default callbacks
-            detailed in [here](callback).
-
-            If you want to remove one of the default callbacks used, use the [`Trainer.remove_callback`] method.
-        optimizers (`Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR]`, *optional*, defaults to `(None, None)`):
-            A tuple containing the optimizer and the scheduler to use. Will default to an instance of [`AdamW`] on your
-            model and a scheduler given by [`get_linear_schedule_with_warmup`] controlled by `args`.
-        preprocess_logits_for_metrics (`Callable[[torch.Tensor, torch.Tensor], torch.Tensor]`, *optional*):
-            A function that preprocess the logits right before caching them at each evaluation step. Must take two
-            tensors, the logits and the labels, and return the logits once processed as desired. The modifications made
-            by this function will be reflected in the predictions received by `compute_metrics`.
-
-            Note that the labels (second parameter) will be `None` if the dataset does not have them.
-
-    Important attributes:
-
-        - **model** -- Always points to the core model. If using a transformers model, it will be a [`PreTrainedModel`]
-          subclass.
-        - **model_wrapped** -- Always points to the most external model in case one or more other modules wrap the
-          original model. This is the model that should be used for the forward pass. For example, under `DeepSpeed`,
-          the inner model is wrapped in `DeepSpeed` and then again in `torch.nn.DistributedDataParallel`. If the inner
-          model hasn't been wrapped, then `self.model_wrapped` is the same as `self.model`.
-        - **is_model_parallel** -- Whether or not a model has been switched to a model parallel mode (different from
-          data parallelism, this means some of the model layers are split on different GPUs).
-        - **place_model_on_device** -- Whether or not to automatically place the model on the device - it will be set
-          to `False` if model parallel or deepspeed is used, or if the default
-          `TrainingArguments.place_model_on_device` is overridden to return `False` .
-        - **is_in_train** -- Whether or not a model is currently running `train` (e.g. when `evaluate` is called while
-          in `train`)
-
-    """
-
     # Those are used as methods of the Trainer in examples.
     from .trainer_pt_utils import _get_learning_rate, log_metrics, metrics_format, save_metrics, save_state
 
@@ -377,8 +289,8 @@ class Trainer:
         model: Union[PreTrainedModel, nn.Module] = None,
         args: TrainingArguments = None,
         data_collator: Optional[DataCollator] = None,
-        train_dataset: Optional[Union[Dataset, IterableDataset, "datasets.Dataset"]] = None,
-        eval_dataset: Optional[Union[Dataset, Dict[str, Dataset], "datasets.Dataset"]] = None,
+        train_dataset: Optional[Union[Dataset, IterableDataset]] = None,
+        eval_dataset: Optional[Union[Dataset, Dict[str, Dataset]]] = None,
         tokenizer: Optional[PreTrainedTokenizerBase] = None,
         model_init: Optional[Callable[[], PreTrainedModel]] = None,
         compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None,
@@ -423,6 +335,7 @@ class Trainer:
                 model = self.call_model_init()
             else:
                 raise RuntimeError("`Trainer` requires either a `model` or `model_init` argument")
+        # TODO: REMOVE THIS IT'S DEPRECATED
         else:
             if model_init is not None:
                 warnings.warn(
@@ -712,10 +625,6 @@ class Trainer:
             xs.set_global_mesh(xs.Mesh(np.array(range(num_devices)), (num_devices, 1), axis_names=("fsdp", "tensor")))
 
     def _activate_neftune(self, model):
-        r"""
-        Activates the neftune as presented in this code: https://github.com/neelsjain/NEFTune and paper:
-        https://arxiv.org/abs/2310.05914
-        """
         unwrapped_model = self.accelerator.unwrap_model(model)
 
         if _is_peft_model(unwrapped_model):
@@ -731,9 +640,6 @@ class Trainer:
         return model
 
     def _deactivate_neftune(self, model):
-        """
-        Deactivates the neftune method. Make sure to call `_activate_neftune` first.
-        """
         if not hasattr(self, "neftune_hook_handle"):
             raise ValueError("Neftune is not activated make sure to call `trainer._activate_neftune()` first")
 
@@ -748,41 +654,12 @@ class Trainer:
         del embeddings.neftune_noise_alpha, unwrapped_model
 
     def add_callback(self, callback):
-        """
-        Add a callback to the current list of [`~transformers.TrainerCallback`].
-
-        Args:
-           callback (`type` or [`~transformers.TrainerCallback]`):
-               A [`~transformers.TrainerCallback`] class or an instance of a [`~transformers.TrainerCallback`]. In the
-               first case, will instantiate a member of that class.
-        """
         self.callback_handler.add_callback(callback)
 
     def pop_callback(self, callback):
-        """
-        Remove a callback from the current list of [`~transformers.TrainerCallback`] and returns it.
-
-        If the callback is not found, returns `None` (and no error is raised).
-
-        Args:
-           callback (`type` or [`~transformers.TrainerCallback]`):
-               A [`~transformers.TrainerCallback`] class or an instance of a [`~transformers.TrainerCallback`]. In the
-               first case, will pop the first member of that class found in the list of callbacks.
-
-        Returns:
-            [`~transformers.TrainerCallback`]: The callback removed, if found.
-        """
         return self.callback_handler.pop_callback(callback)
 
     def remove_callback(self, callback):
-        """
-        Remove a callback from the current list of [`~transformers.TrainerCallback`].
-
-        Args:
-           callback (`type` or [`~transformers.TrainerCallback]`):
-               A [`~transformers.TrainerCallback`] class or an instance of a [`~transformers.TrainerCallback`]. In the
-               first case, will remove the first member of that class found in the list of callbacks.
-        """
         self.callback_handler.remove_callback(callback)
 
     def _move_model_to_device(self, model, device):
@@ -841,7 +718,6 @@ class Trainer:
     def _get_collator_with_removed_columns(
         self, data_collator: Callable, description: Optional[str] = None
     ) -> Callable:
-        """Wrap the data collator in a callable removing unused columns."""
         if not self.args.remove_unused_columns:
             return data_collator
         self._set_signature_columns_if_needed()
@@ -882,14 +758,6 @@ class Trainer:
             return RandomSampler(self.train_dataset)
 
     def get_train_dataloader(self) -> DataLoader:
-        """
-        Returns the training [`~torch.utils.data.DataLoader`].
-
-        Will use no sampler if `train_dataset` does not implement `__len__`, a random sampler (adapted to distributed
-        training if necessary) otherwise.
-
-        Subclass and override this method if you want to inject some custom behavior.
-        """
         if self.train_dataset is None:
             raise ValueError("Trainer: training requires a train_dataset.")
 
@@ -939,15 +807,6 @@ class Trainer:
             return None
 
     def get_eval_dataloader(self, eval_dataset: Optional[Union[str, Dataset]] = None) -> DataLoader:
-        """
-        Returns the evaluation [`~torch.utils.data.DataLoader`].
-
-        Subclass and override this method if you want to inject some custom behavior.
-
-        Args:
-            eval_dataset (`str` or `torch.utils.data.Dataset`, *optional*):
-                If a `str`, will use `self.eval_dataset[eval_dataset]` as the evaluation dataset. If a `Dataset`, will override `self.eval_dataset` and must implement `__len__`. If it is a [`~datasets.Dataset`], columns not accepted by the `model.forward()` method are automatically removed.
-        """
         if eval_dataset is None and self.eval_dataset is None:
             raise ValueError("Trainer: evaluation requires an eval_dataset.")
 
@@ -1000,16 +859,6 @@ class Trainer:
         return self.accelerator.prepare(eval_dataloader)
 
     def get_test_dataloader(self, test_dataset: Dataset) -> DataLoader:
-        """
-        Returns the test [`~torch.utils.data.DataLoader`].
-
-        Subclass and override this method if you want to inject some custom behavior.
-
-        Args:
-            test_dataset (`torch.utils.data.Dataset`, *optional*):
-                The test dataset to use. If it is a [`~datasets.Dataset`], columns not accepted by the
-                `model.forward()` method are automatically removed. It must implement `__len__`.
-        """
         data_collator = self.data_collator
 
         if is_datasets_available() and isinstance(test_dataset, datasets.Dataset):
@@ -1034,13 +883,6 @@ class Trainer:
         return self.accelerator.prepare(DataLoader(test_dataset, **dataloader_params))
 
     def create_optimizer_and_scheduler(self, num_training_steps: int):
-        """
-        Setup the optimizer and the learning rate scheduler.
-
-        We provide a reasonable default that works well. If you want to use something else, you can pass a tuple in the
-        Trainer's init through `optimizers`, or subclass and override this method (or `create_optimizer` and/or
-        `create_scheduler`) in a subclass.
-        """
         self.create_optimizer()
         if IS_SAGEMAKER_MP_POST_1_10 and smp.state.cfg.fp16:
             # If smp >= 1.10 and fp16 is enabled, we unwrap the optimizer
@@ -1050,23 +892,11 @@ class Trainer:
         self.create_scheduler(num_training_steps=num_training_steps, optimizer=optimizer)
 
     def get_decay_parameter_names(self, model) -> List[str]:
-        """
-        Get all parameter names that weight decay will be applied to
-
-        Note that some models implement their own layernorm instead of calling nn.LayerNorm, weight decay could still
-        apply to those modules since this function only filter out instance of nn.LayerNorm
-        """
         decay_parameters = get_parameter_names(model, ALL_LAYERNORM_LAYERS)
         decay_parameters = [name for name in decay_parameters if "bias" not in name]
         return decay_parameters
 
     def create_optimizer(self):
-        """
-        Setup the optimizer.
-
-        We provide a reasonable default that works well. If you want to use something else, you can pass a tuple in the
-        Trainer's init through `optimizers`, or subclass and override this method in a subclass.
-        """
         opt_model = self.model_wrapped if is_sagemaker_mp_enabled() else self.model
 
         if self.optimizer is None:
@@ -1125,27 +955,14 @@ class Trainer:
         return self.optimizer
 
     def get_num_trainable_parameters(self):
-        """
-        Get the number of trainable parameters.
-        """
         return sum(p.numel() for p in self.model.parameters() if p.requires_grad)
 
     def get_learning_rates(self):
-        """
-        Returns the learning rate of each parameter from self.optimizer.
-        """
         if self.optimizer is None:
             raise ValueError("Trainer optimizer is None, please make sure you have setup the optimizer before.")
         return [group["lr"] for group in self.optimizer.param_groups]
 
     def get_optimizer_group(self, param: Optional[Union[str, torch.nn.parameter.Parameter]] = None):
-        """
-        Returns optimizer group for a parameter if given, else returns all optimizer groups for params.
-
-        Args:
-            param (`str` or `torch.nn.parameter.Parameter`, *optional*):
-                The parameter for which optimizer group needs to be returned.
-        """
         if self.optimizer is None:
             raise ValueError("Trainer optimizer is None, please make sure you have setup the optimizer before.")
         if param is not None:
@@ -1158,15 +975,6 @@ class Trainer:
     def get_optimizer_cls_and_kwargs(
         args: TrainingArguments, model: Optional[PreTrainedModel] = None
     ) -> Tuple[Any, Any]:
-        """
-        Returns the optimizer class and optimizer parameters based on the training arguments.
-
-        Args:
-            args (`transformers.training_args.TrainingArguments`):
-                The training arguments for the training session.
-
-        """
-
         # parse args.optim_args
         optim_args = {}
         if args.optim_args:
@@ -1447,13 +1255,6 @@ class Trainer:
         return optimizer_cls, optimizer_kwargs
 
     def create_scheduler(self, num_training_steps: int, optimizer: torch.optim.Optimizer = None):
-        """
-        Setup the scheduler. The optimizer of the trainer must have been set up either before this method is called or
-        passed as an argument.
-
-        Args:
-            num_training_steps (int): The number of training steps to do.
-        """
         if self.lr_scheduler is None:
             self.lr_scheduler = get_scheduler(
                 self.args.lr_scheduler_type,
@@ -1466,10 +1267,6 @@ class Trainer:
         return self.lr_scheduler
 
     def num_examples(self, dataloader: DataLoader) -> int:
-        """
-        Helper to get number of samples in a [`~torch.utils.data.DataLoader`] by accessing its dataset. When
-        dataloader.dataset does not exist or has no length, estimates as best it can
-        """
         try:
             dataset = dataloader.dataset
             # Special case for IterableDatasetShard, we need to dig deeper
@@ -1480,9 +1277,6 @@ class Trainer:
             return len(dataloader) * self.args.per_device_train_batch_size
 
     def num_tokens(self, train_dl: DataLoader, max_steps: Optional[int] = None) -> int:
-        """
-        Helper to get number of tokens in a [`~torch.utils.data.DataLoader`] by enumerating dataloader.
-        """
         train_tokens = 0
         try:
             for step, batch in enumerate(train_dl):
@@ -1496,7 +1290,6 @@ class Trainer:
             return train_tokens
 
     def _hp_search_setup(self, trial: Union["optuna.Trial", Dict[str, Any]]):
-        """HP search setup code"""
         self._trial = trial
 
         if self.hp_search_backend is None or trial is None:
@@ -1848,22 +1641,6 @@ class Trainer:
         ignore_keys_for_eval: Optional[List[str]] = None,
         **kwargs,
     ):
-        """
-        Main training entry point.
-
-        Args:
-            resume_from_checkpoint (`str` or `bool`, *optional*):
-                If a `str`, local path to a saved checkpoint as saved by a previous instance of [`Trainer`]. If a
-                `bool` and equals `True`, load the last checkpoint in *args.output_dir* as saved by a previous instance
-                of [`Trainer`]. If present, training will resume from the model/optimizer/scheduler states loaded here.
-            trial (`optuna.Trial` or `Dict[str, Any]`, *optional*):
-                The trial run or the hyperparameter dictionary for hyperparameter search.
-            ignore_keys_for_eval (`List[str]`, *optional*)
-                A list of keys in the output of your model (if it is a dictionary) that should be ignored when
-                gathering predictions for evaluation during the training.
-            kwargs (`Dict[str, Any]`, *optional*):
-                Additional keyword arguments used to hide deprecated arguments
-        """
         if resume_from_checkpoint is False:
             resume_from_checkpoint = None
 
@@ -3026,7 +2803,6 @@ class Trainer:
             reissue_pt_warnings(caught_warnings)
 
     def _load_optimizer_and_scheduler(self, checkpoint):
-        """If optimizer and scheduler states exist, load them."""
         if checkpoint is None:
             return
 
@@ -3109,7 +2885,6 @@ class Trainer:
                 reissue_pt_warnings(caught_warnings)
 
     def _load_callback_state(self):
-        """If callback states exist and were passed in, restore their states if enabled"""
         if not self.args.restore_callback_states_from_checkpoint:
             return
         # Callback states are stored in stateful_callbacks
@@ -3157,55 +2932,6 @@ class Trainer:
         hp_name: Optional[Callable[["optuna.Trial"], str]] = None,
         **kwargs,
     ) -> Union[BestRun, List[BestRun]]:
-        """
-        Launch an hyperparameter search using `optuna` or `Ray Tune` or `SigOpt`. The optimized quantity is determined
-        by `compute_objective`, which defaults to a function returning the evaluation loss when no metric is provided,
-        the sum of all metrics otherwise.
-
-        <Tip warning={true}>
-
-        To use this method, you need to have provided a `model_init` when initializing your [`Trainer`]: we need to
-        reinitialize the model at each new run. This is incompatible with the `optimizers` argument, so you need to
-        subclass [`Trainer`] and override the method [`~Trainer.create_optimizer_and_scheduler`] for custom
-        optimizer/scheduler.
-
-        </Tip>
-
-        Args:
-            hp_space (`Callable[["optuna.Trial"], Dict[str, float]]`, *optional*):
-                A function that defines the hyperparameter search space. Will default to
-                [`~trainer_utils.default_hp_space_optuna`] or [`~trainer_utils.default_hp_space_ray`] or
-                [`~trainer_utils.default_hp_space_sigopt`] depending on your backend.
-            compute_objective (`Callable[[Dict[str, float]], float]`, *optional*):
-                A function computing the objective to minimize or maximize from the metrics returned by the `evaluate`
-                method. Will default to [`~trainer_utils.default_compute_objective`].
-            n_trials (`int`, *optional*, defaults to 100):
-                The number of trial runs to test.
-            direction (`str` or `List[str]`, *optional*, defaults to `"minimize"`):
-                If it's single objective optimization, direction is `str`, can be `"minimize"` or `"maximize"`, you
-                should pick `"minimize"` when optimizing the validation loss, `"maximize"` when optimizing one or
-                several metrics. If it's multi objectives optimization, direction is `List[str]`, can be List of
-                `"minimize"` and `"maximize"`, you should pick `"minimize"` when optimizing the validation loss,
-                `"maximize"` when optimizing one or several metrics.
-            backend (`str` or [`~training_utils.HPSearchBackend`], *optional*):
-                The backend to use for hyperparameter search. Will default to optuna or Ray Tune or SigOpt, depending
-                on which one is installed. If all are installed, will default to optuna.
-            hp_name (`Callable[["optuna.Trial"], str]]`, *optional*):
-                A function that defines the trial/run name. Will default to None.
-            kwargs (`Dict[str, Any]`, *optional*):
-                Additional keyword arguments passed along to `optuna.create_study` or `ray.tune.run`. For more
-                information see:
-
-                - the documentation of
-                  [optuna.create_study](https://optuna.readthedocs.io/en/stable/reference/generated/optuna.study.create_study.html)
-                - the documentation of [tune.run](https://docs.ray.io/en/latest/tune/api_docs/execution.html#tune-run)
-                - the documentation of [sigopt](https://app.sigopt.com/docs/endpoints/experiments/create)
-
-        Returns:
-            [`trainer_utils.BestRun` or `List[trainer_utils.BestRun]`]: All the information about the best run or best
-            runs for multi-objective optimization. Experiment summary can be found in `run_summary` attribute for Ray
-            backend.
-        """
         if backend is None:
             backend = default_hp_search_backend()
         backend = HPSearchBackend(backend)
@@ -3227,15 +2953,6 @@ class Trainer:
         return best_run
 
     def log(self, logs: Dict[str, float]) -> None:
-        """
-        Log `logs` on the various objects watching training.
-
-        Subclass and override this method to inject custom behavior.
-
-        Args:
-            logs (`Dict[str, float]`):
-                The values to log.
-        """
         if self.state.epoch is not None:
             logs["epoch"] = self.state.epoch
         if self.args.include_num_input_tokens_seen:
@@ -3246,9 +2963,6 @@ class Trainer:
         self.control = self.callback_handler.on_log(self.args, self.state, self.control, logs)
 
     def _prepare_input(self, data: Union[torch.Tensor, Any]) -> Union[torch.Tensor, Any]:
-        """
-        Prepares one `data` before feeding it to the model, be it a tensor or a nested list/dictionary of tensors.
-        """
         if isinstance(data, Mapping):
             return type(data)({k: self._prepare_input(v) for k, v in data.items()})
         elif isinstance(data, (tuple, list)):
@@ -3264,10 +2978,6 @@ class Trainer:
         return data
 
     def _prepare_inputs(self, inputs: Dict[str, Union[torch.Tensor, Any]]) -> Dict[str, Union[torch.Tensor, Any]]:
-        """
-        Prepare `inputs` before feeding them to the model, converting them to tensors if they are not already and
-        handling potential state.
-        """
         inputs = self._prepare_input(inputs)
         if len(inputs) == 0:
             raise ValueError(
@@ -3280,16 +2990,9 @@ class Trainer:
         return inputs
 
     def compute_loss_context_manager(self):
-        """
-        A helper wrapper to group together context managers.
-        """
         return self.autocast_smart_context_manager()
 
     def autocast_smart_context_manager(self, cache_enabled: Optional[bool] = True):
-        """
-        A helper wrapper that creates an appropriate context manager for `autocast` while feeding it the desired
-        arguments, depending on the situation.
-        """
         if self.use_cpu_amp:
             ctx_manager = torch.cpu.amp.autocast(cache_enabled=cache_enabled, dtype=self.amp_dtype)
         else:
@@ -3298,23 +3001,6 @@ class Trainer:
         return ctx_manager
 
     def training_step(self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]]) -> torch.Tensor:
-        """
-        Perform a training step on a batch of inputs.
-
-        Subclass and override to inject custom behavior.
-
-        Args:
-            model (`nn.Module`):
-                The model to train.
-            inputs (`Dict[str, Union[torch.Tensor, Any]]`):
-                The inputs and targets of the model.
-
-                The dictionary will be unpacked before being fed to the model. Most models expect the targets under the
-                argument `labels`. Check your model's documentation for all accepted arguments.
-
-        Return:
-            `torch.Tensor`: The tensor with training loss on this batch.
-        """
         model.train()
         inputs = self._prepare_inputs(inputs)
         if is_sagemaker_mp_enabled():
@@ -3358,11 +3044,6 @@ class Trainer:
         return loss.detach() / self.args.gradient_accumulation_steps
 
     def compute_loss(self, model, inputs, return_outputs=False):
-        """
-        How the loss is computed by Trainer. By default, all models return the loss in the first element.
-
-        Subclass and override for custom behavior.
-        """
         if self.label_smoother is not None and "labels" in inputs:
             labels = inputs.pop("labels")
         else:
@@ -3395,17 +3076,9 @@ class Trainer:
         return (loss, outputs) if return_outputs else loss
 
     def is_local_process_zero(self) -> bool:
-        """
-        Whether or not this process is the local (e.g., on one machine if training in a distributed fashion on several
-        machines) main process.
-        """
         return self.args.local_process_index == 0
 
     def is_world_process_zero(self) -> bool:
-        """
-        Whether or not this process is the global main process (when training in a distributed fashion on several
-        machines, this is only going to be `True` for one process).
-        """
         # Special case for SageMaker ModelParallel since there process_index is dp_process_index, not the global
         # process index.
         if is_sagemaker_mp_enabled():
@@ -3414,12 +3087,6 @@ class Trainer:
             return self.args.process_index == 0
 
     def save_model(self, output_dir: Optional[str] = None, _internal_call: bool = False):
-        """
-        Will save the model, so you can reload it using `from_pretrained()`.
-
-        Will only save from the main process.
-        """
-
         if output_dir is None:
             output_dir = self.args.output_dir
 
@@ -3608,44 +3275,6 @@ class Trainer:
         ignore_keys: Optional[List[str]] = None,
         metric_key_prefix: str = "eval",
     ) -> Dict[str, float]:
-        """
-        Run evaluation and returns metrics.
-
-        The calling script will be responsible for providing a method to compute metrics, as they are task-dependent
-        (pass it to the init `compute_metrics` argument).
-
-        You can also subclass and override this method to inject custom behavior.
-
-        Args:
-            eval_dataset (Union[`Dataset`, Dict[str, `Dataset`]), *optional*):
-                Pass a dataset if you wish to override `self.eval_dataset`. If it is a [`~datasets.Dataset`], columns
-                not accepted by the `model.forward()` method are automatically removed. If it is a dictionary, it will
-                evaluate on each dataset, prepending the dictionary key to the metric name. Datasets must implement the
-                `__len__` method.
-
-                <Tip>
-
-                If you pass a dictionary with names of datasets as keys and datasets as values, evaluate will run
-                separate evaluations on each dataset. This can be useful to monitor how training affects other
-                datasets or simply to get a more fine-grained evaluation.
-                When used with `load_best_model_at_end`, make sure `metric_for_best_model` references exactly one
-                of the datasets. If you, for example, pass in `{"data1": data1, "data2": data2}` for two datasets
-                `data1` and `data2`, you could specify `metric_for_best_model="eval_data1_loss"` for using the
-                loss on `data1` and `metric_for_best_model="eval_data2_loss"` for the loss on `data2`.
-
-                </Tip>
-
-            ignore_keys (`List[str]`, *optional*):
-                A list of keys in the output of your model (if it is a dictionary) that should be ignored when
-                gathering predictions.
-            metric_key_prefix (`str`, *optional*, defaults to `"eval"`):
-                An optional prefix to be used as the metrics key prefix. For example the metrics "bleu" will be named
-                "eval_bleu" if the prefix is "eval" (default)
-
-        Returns:
-            A dictionary containing the evaluation loss and the potential metrics computed from the predictions. The
-            dictionary also contains the epoch number which comes from the training state.
-        """
         # handle multipe eval datasets
         override = eval_dataset is not None
         eval_dataset = eval_dataset if override else self.eval_dataset
@@ -3709,38 +3338,6 @@ class Trainer:
     def predict(
         self, test_dataset: Dataset, ignore_keys: Optional[List[str]] = None, metric_key_prefix: str = "test"
     ) -> PredictionOutput:
-        """
-        Run prediction and returns predictions and potential metrics.
-
-        Depending on the dataset and your use case, your test dataset may contain labels. In that case, this method
-        will also return metrics, like in `evaluate()`.
-
-        Args:
-            test_dataset (`Dataset`):
-                Dataset to run the predictions on. If it is an `datasets.Dataset`, columns not accepted by the
-                `model.forward()` method are automatically removed. Has to implement the method `__len__`
-            ignore_keys (`List[str]`, *optional*):
-                A list of keys in the output of your model (if it is a dictionary) that should be ignored when
-                gathering predictions.
-            metric_key_prefix (`str`, *optional*, defaults to `"test"`):
-                An optional prefix to be used as the metrics key prefix. For example the metrics "bleu" will be named
-                "test_bleu" if the prefix is "test" (default)
-
-        <Tip>
-
-        If your predictions or labels have different sequence length (for instance because you're doing dynamic padding
-        in a token classification task) the predictions will be padded (on the right) to allow for concatenation into
-        one array. The padding index is -100.
-
-        </Tip>
-
-        Returns: *NamedTuple* A namedtuple with the following keys:
-
-            - predictions (`np.ndarray`): The predictions on `test_dataset`.
-            - label_ids (`np.ndarray`, *optional*): The labels (if the dataset contained some).
-            - metrics (`Dict[str, float]`, *optional*): The potential dictionary of metrics (if the dataset contained
-              labels).
-        """
         # memory metrics - must set up as early as possible
         self._memory_tracker.start()
 
@@ -3778,11 +3375,6 @@ class Trainer:
         ignore_keys: Optional[List[str]] = None,
         metric_key_prefix: str = "eval",
     ) -> EvalLoopOutput:
-        """
-        Prediction/evaluation loop, shared by `Trainer.evaluate()` and `Trainer.predict()`.
-
-        Works both with or without labels.
-        """
         args = self.args
 
         prediction_loss_only = prediction_loss_only if prediction_loss_only is not None else args.prediction_loss_only
@@ -3984,10 +3576,6 @@ class Trainer:
         return EvalLoopOutput(predictions=all_preds, label_ids=all_labels, metrics=metrics, num_samples=num_samples)
 
     def _nested_gather(self, tensors, name=None):
-        """
-        Gather value of `tensors` (tensor or list/tuple of nested tensors) and convert them to numpy before
-        concatenating them to `gathered`
-        """
         if tensors is None:
             return
         if is_torch_xla_available():
@@ -4009,29 +3597,6 @@ class Trainer:
         prediction_loss_only: bool,
         ignore_keys: Optional[List[str]] = None,
     ) -> Tuple[Optional[torch.Tensor], Optional[torch.Tensor], Optional[torch.Tensor]]:
-        """
-        Perform an evaluation step on `model` using `inputs`.
-
-        Subclass and override to inject custom behavior.
-
-        Args:
-            model (`nn.Module`):
-                The model to evaluate.
-            inputs (`Dict[str, Union[torch.Tensor, Any]]`):
-                The inputs and targets of the model.
-
-                The dictionary will be unpacked before being fed to the model. Most models expect the targets under the
-                argument `labels`. Check your model's documentation for all accepted arguments.
-            prediction_loss_only (`bool`):
-                Whether or not to return the loss only.
-            ignore_keys (`List[str]`, *optional*):
-                A list of keys in the output of your model (if it is a dictionary) that should be ignored when
-                gathering predictions.
-
-        Return:
-            Tuple[Optional[torch.Tensor], Optional[torch.Tensor], Optional[torch.Tensor]]: A tuple with the loss,
-            logits and labels (each being optional).
-        """
         has_labels = False if len(self.label_names) == 0 else all(inputs.get(k) is not None for k in self.label_names)
         # For CLIP-like models capable of returning loss values.
         # If `return_loss` is not specified or being `None` in `inputs`, we check if the default value of `return_loss`
@@ -4108,27 +3673,12 @@ class Trainer:
         return (loss, logits, labels)
 
     def floating_point_ops(self, inputs: Dict[str, Union[torch.Tensor, Any]]):
-        """
-        For models that inherit from [`PreTrainedModel`], uses that method to compute the number of floating point
-        operations for every backward + forward pass. If using another model, either implement such a method in the
-        model or subclass and override this method.
-
-        Args:
-            inputs (`Dict[str, Union[torch.Tensor, Any]]`):
-                The inputs and targets of the model.
-
-        Returns:
-            `int`: The number of floating-point operations.
-        """
         if hasattr(self.model, "floating_point_ops"):
             return self.model.floating_point_ops(inputs)
         else:
             return 0
 
     def init_hf_repo(self, token: Optional[str] = None):
-        """
-        Initializes a git repo in `self.args.hub_model_id`.
-        """
         # Only on process zero
         if not self.is_world_process_zero():
             return
@@ -4155,31 +3705,6 @@ class Trainer:
         dataset: Union[str, List[str], None] = None,
         dataset_args: Union[str, List[str], None] = None,
     ):
-        """
-        Creates a draft of a model card using the information available to the `Trainer`.
-
-        Args:
-            language (`str`, *optional*):
-                The language of the model (if applicable)
-            license (`str`, *optional*):
-                The license of the model. Will default to the license of the pretrained model used, if the original
-                model given to the `Trainer` comes from a repo on the Hub.
-            tags (`str` or `List[str]`, *optional*):
-                Some tags to be included in the metadata of the model card.
-            model_name (`str`, *optional*):
-                The name of the model.
-            finetuned_from (`str`, *optional*):
-                The name of the model used to fine-tune this one (if applicable). Will default to the name of the repo
-                of the original model given to the `Trainer` (if it comes from the Hub).
-            tasks (`str` or `List[str]`, *optional*):
-                One or several task identifiers, to be included in the metadata of the model card.
-            dataset_tags (`str` or `List[str]`, *optional*):
-                One or several dataset tags, to be included in the metadata of the model card.
-            dataset (`str` or `List[str]`, *optional*):
-                One or several dataset identifiers, to be included in the metadata of the model card.
-            dataset_args (`str` or `List[str]`, *optional*):
-               One or several dataset arguments, to be included in the metadata of the model card.
-        """
         if not self.is_world_process_zero():
             return
 
@@ -4297,23 +3822,6 @@ class Trainer:
         token: Optional[str] = None,
         **kwargs,
     ) -> str:
-        """
-        Upload `self.model` and `self.tokenizer` to the 🤗 model hub on the repo `self.args.hub_model_id`.
-
-        Parameters:
-            commit_message (`str`, *optional*, defaults to `"End of training"`):
-                Message to commit while pushing.
-            blocking (`bool`, *optional*, defaults to `True`):
-                Whether the function should return only when the `git push` has finished.
-            token (`str`, *optional*, defaults to `None`):
-                Token with write permission to overwrite Trainer's original args.
-            kwargs (`Dict[str, Any]`, *optional*):
-                Additional keyword arguments passed along to [`~Trainer.create_model_card`].
-
-        Returns:
-            The URL of the repository where the model was pushed if `blocking=False`, or a `Future` object tracking the
-            progress of the commit if `blocking=True`.
-        """
         model_name = kwargs.pop("model_name", None)
         if model_name is None and self.args.should_save:
             if self.args.hub_model_id is None:
@@ -4374,11 +3882,6 @@ class Trainer:
         ignore_keys: Optional[List[str]] = None,
         metric_key_prefix: str = "eval",
     ) -> EvalLoopOutput:
-        """
-        Prediction/evaluation loop, shared by `Trainer.evaluate()` and `Trainer.predict()`.
-
-        Works both with or without labels.
-        """
         args = self.args
 
         if not has_length(dataloader):
@@ -4544,10 +4047,6 @@ class Trainer:
         return EvalLoopOutput(predictions=preds, label_ids=label_ids, metrics=metrics, num_samples=num_examples)
 
     def _gather_and_numpify(self, tensors, name):
-        """
-        Gather value of `tensors` (tensor or list/tuple of nested tensors) and convert them to numpy before
-        concatenating them to `gathered`
-        """
         if tensors is None:
             return
         if is_torch_xla_available():
@@ -4560,7 +4059,6 @@ class Trainer:
         return nested_numpify(tensors)
 
     def _add_sm_patterns_to_gitignore(self) -> None:
-        """Add SageMaker Checkpointing patterns to .gitignore file."""
         # Make sure we only do this on the main process
         if not self.is_world_process_zero():
             return
@@ -4700,9 +4198,6 @@ class Trainer:
             raise NotImplementedError(f"`{wrapper}` doesn't support `auto_find_batch_size`.")
 
     def propagate_args_to_deepspeed(self, auto_find_batch_size=False):
-        """
-        Sets values in the deepspeed plugin based on the Trainer args
-        """
         from transformers.integrations.deepspeed import HfTrainerDeepSpeedConfig
 
         ds_plugin = self.accelerator.state.deepspeed_plugin

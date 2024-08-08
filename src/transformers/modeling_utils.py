@@ -132,6 +132,7 @@ if is_safetensors_available():
     from safetensors.torch import load_file as safe_load_file
     from safetensors.torch import save_file as safe_save_file
 
+
 logger = logging.get_logger(__name__)
 
 
@@ -5182,3 +5183,46 @@ def get_disk_only_shard_files(device_map, sharded_metadata, start_prefix):
         files_content[filename].append(device_map[weight_name])
 
     return [fname for fname, devices in files_content.items() if set(devices) == {"disk"}]
+
+
+def is_peft_model(model):
+    "Checks if a model is a PEFT model"
+    if is_peft_available():
+        from peft import PeftModel
+
+        classes_to_check = (PeftModel,)
+        # Here we also check if the model is an instance of `PeftMixedModel` introduced in peft>=0.7.0: https://github.com/huggingface/transformers/pull/28321
+        if version.parse(importlib.metadata.version("peft")) >= version.parse("0.7.0"):
+            from peft import PeftMixedModel
+
+            classes_to_check = (*classes_to_check, PeftMixedModel)
+        return isinstance(model, classes_to_check)
+    return False
+
+
+def verify_quantization_training_support(model):
+    is_quantized_and_base_model = getattr(model, "is_quantized", False) and not getattr(
+        model, "_hf_peft_config_loaded", False
+    )
+    quantization_method_supports_training = (
+        getattr(model, "hf_quantizer", None) is not None and model.hf_quantizer.is_trainable
+    )
+
+    # Filter out quantized + compiled models
+    if is_quantized_and_base_model and hasattr(model, "_orig_mod"):
+        raise ValueError(
+            "You cannot fine-tune quantized model with `torch.compile()` make sure to pass a non-compiled model when fine-tuning a quantized model with PEFT"
+        )
+    # At this stage the model is already loaded
+    if is_quantized_and_base_model and not is_peft_model(model):
+        raise ValueError(
+            "You cannot perform fine-tuning on purely quantized models. Please attach trainable adapters on top of"
+            " the quantized model to correctly perform fine-tuning. Please see: https://huggingface.co/docs/transformers/peft"
+            " for more details"
+        )
+    elif is_quantized_and_base_model and not quantization_method_supports_training:
+        raise ValueError(
+            f"The model you are trying to fine-tune is quantized with {model.hf_quantizer.quantization_config.quant_method}"
+            " but that quantization method do not support training. Please open an issue on GitHub: https://github.com/huggingface/transformers"
+            f" to request the support for training support for {model.hf_quantizer.quantization_config.quant_method}"
+        )

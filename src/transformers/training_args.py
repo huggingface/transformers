@@ -24,6 +24,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
+import numpy as np
 from huggingface_hub import get_full_repo_name
 from packaging import version
 
@@ -37,6 +38,7 @@ from .trainer_utils import (
 )
 from .utils import (
     ACCELERATE_MIN_VERSION,
+    XLA_FSDPV2_MIN_VERSION,
     ExplicitEnum,
     cached_property,
     is_accelerate_available,
@@ -47,6 +49,7 @@ from .utils import (
     is_torch_available,
     is_torch_bf16_cpu_available,
     is_torch_bf16_gpu_available,
+    is_torch_compile_available,
     is_torch_mlu_available,
     is_torch_mps_available,
     is_torch_neuroncore_available,
@@ -79,6 +82,14 @@ if is_accelerate_available():
 
 if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
+    from torch_xla import __version__ as XLA_VERSION
+
+    IS_XLA_FSDPV2_POST_2_2 = version.parse(XLA_VERSION) >= version.parse(XLA_FSDPV2_MIN_VERSION)
+    if IS_XLA_FSDPV2_POST_2_2:
+        import torch_xla.distributed.spmd as xs
+        import torch_xla.runtime as xr
+else:
+    IS_XLA_FSDPV2_POST_2_2 = False
 
 if is_torch_neuroncore_available(check_device=False):
     # torchrun support
@@ -105,6 +116,9 @@ if is_torch_neuroncore_available(check_device=False):
 
 if is_sagemaker_mp_enabled():
     import smdistributed.modelparallel.torch as smp
+    from smdistributed.modelparallel import __version__ as SMP_VERSION
+
+    IS_SAGEMAKER_MP_POST_1_10 = version.parse(SMP_VERSION) >= version.parse("1.10")
 
     smp.init()
 
@@ -1671,6 +1685,25 @@ class TrainingArguments:
             if self.half_precision_backend == "apex":
                 raise ValueError(" `--half_precision_backend apex`: GPU bf16 is not supported by apex.")
 
+        if is_sagemaker_mp_enabled():
+            if self.bf16:
+                raise ValueError("SageMaker Model Parallelism does not support BF16 yet. Please use FP16 instead.")
+            if IS_SAGEMAKER_MP_POST_1_10:
+                # When there's mismatch between SMP config and trainer argument, use SMP config as truth
+                if self.fp16 != smp.state.cfg.fp16:
+                    logger.warning(
+                        f"FP16 provided in SM_HP_MP_PARAMETERS is {smp.state.cfg.fp16}, "
+                        f"but FP16 provided in trainer argument is {self.fp16}, "
+                        f"setting to {smp.state.cfg.fp16}"
+                    )
+                    self.fp16 = smp.state.cfg.fp16
+            elif hasattr(smp.state.cfg, "fp16"):
+                # smp < 1.10 does not support fp16 in trainer.
+                logger.warning(
+                    f"FP16 provided in SM_HP_MP_PARAMETERS is {smp.state.cfg.fp16}, "
+                    "but SageMaker Model Parallelism < 1.10 does not support FP16 in trainer."
+                )
+
         if self.lr_scheduler_type == SchedulerType.REDUCE_ON_PLATEAU:
             if self.eval_strategy == IntervalStrategy.NO:
                 raise ValueError("lr_scheduler_type reduce_lr_on_plateau requires an eval strategy")
@@ -1709,21 +1742,15 @@ class TrainingArguments:
                 else:
                     self.accelerator_config = AcceleratorConfig.from_json_file(self.accelerator_config)
 
-            if self.dispatch_batches is not None:
-                warnings.warn(
-                    "Using `--dispatch_batches` is deprecated and will be removed in version 4.41 of 🤗 Transformers. Use"
-                    " `--accelerator_config {'dispatch_batches':VALUE} instead",
-                    FutureWarning,
-                )
-                self.accelerator_config.dispatch_batches = self.dispatch_batches
-
-            if self.split_batches is not None:
-                warnings.warn(
-                    "Using `--split_batches` is deprecated and will be removed in version 4.41 of 🤗 Transformers. Use"
-                    " `--accelerator_config {'split_batches':VALUE} instead",
-                    FutureWarning,
-                )
-                self.accelerator_config.split_batches = self.split_batches
+            if self.accelerator_config.get("gradient_accumulation_kwargs", None) is not None:
+                if not is_accelerate_available("0.28.0"):
+                    raise ImportError("`gradient_accumulation_kwargs` is only supported in accelerate>=0.28.0.")
+                grad_acc_kwargs = self.accelerator_config.get("gradient_accumulation_kwargs", {})
+                if "num_steps" in grad_acc_kwargs and self.gradient_accumulation_steps > 1:
+                    raise ValueError(
+                        "The `AcceleratorConfig`'s `num_steps` was set but `args.gradient_accumulation_steps` is >1."
+                        "If using the passed `AcceleratorConfig` is desired, do not set `gradient_accumulation_steps`."
+                    )
 
         # Initialize device before we proceed
         if self.framework == "pt" and is_torch_available():
@@ -1743,6 +1770,8 @@ class TrainingArguments:
 
         # accelerate integration for torch compile
         if self.torch_compile:
+            if not is_torch_compile_available():
+                raise RuntimeError("Using torch.compile requires PyTorch 2.0 or higher.")
             # set env vars for accelerate
             prefix = "ACCELERATE_DYNAMO_"
             os.environ[prefix + "BACKEND"] = self.torch_compile_backend
@@ -1884,6 +1913,8 @@ class TrainingArguments:
             raise ValueError("`min_num_params` and `transformer_layer_cls_to_wrap` are mutually exclusive.")
         self.fsdp_config["xla"] = self.fsdp_config.get("xla", False)
         self.fsdp_config["xla_fsdp_v2"] = self.fsdp_config.get("xla_fsdp_v2", False)
+        if self.fsdp_config["xla_fsdp_v2"] and not IS_XLA_FSDPV2_POST_2_2:
+            raise ValueError("FSDPv2 requires `torch_xla` 2.2 or higher.")
         self.fsdp_config["xla_fsdp_grad_ckpt"] = self.fsdp_config.get("xla_fsdp_grad_ckpt", False)
         if self.fsdp_config["xla"]:
             if len(self.fsdp) > 0:
@@ -2173,6 +2204,14 @@ class TrainingArguments:
         if is_torch_xla_available():
             device = self.distributed_state.device
             self._n_gpu = 0
+            if self.fsdp_config.get("xla_fsdp_v2", False):
+                # Prepare the SPMD mesh that is going to be used by the data loader and the FSDPv2 wrapper.
+                # Tensor axis is just a placeholder where it will not be used in FSDPv2.
+                num_devices = xr.global_runtime_device_count()
+                xs.set_global_mesh(
+                    xs.Mesh(np.array(range(num_devices)), (num_devices, 1), axis_names=("fsdp", "tensor"))
+                )
+
         elif is_sagemaker_dp_enabled() or is_sagemaker_mp_enabled():
             # Already set _n_gpu
             pass
