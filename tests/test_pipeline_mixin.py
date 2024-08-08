@@ -275,8 +275,10 @@ class PipelineTesterMixin:
                 pipeline_test_class_name,
                 model_architecture.config_class,
                 model_architecture,
-                test_case["tokenizer_name"],
-                image_processor_name or feature_extractor_name,
+                tokenizer_name,
+                image_processor_name,
+                feature_extractor_name,
+                processor_name,
             ):
                 logger.warning(
                     f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')}_{torch_dtype} is skipped: test is "
@@ -726,7 +728,14 @@ class PipelineTesterMixin:
 
     # This contains the test cases to be skipped without model architecture being involved.
     def is_pipeline_test_to_skip(
-        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
     ):
         """Skip some tests based on the classes or their names without the instantiated objects.
 
@@ -734,7 +743,7 @@ class PipelineTesterMixin:
         """
         # No fix is required for this case.
         if (
-            pipeline_test_casse_name == "DocumentQuestionAnsweringPipelineTests"
+            pipeline_test_case_name == "DocumentQuestionAnsweringPipelineTests"
             and tokenizer_name is not None
             and not tokenizer_name.endswith("Fast")
         ):
