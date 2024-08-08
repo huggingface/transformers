@@ -67,19 +67,19 @@ class MaskGenerationPipelineTests(unittest.TestCase):
         (list(TF_MODEL_FOR_MASK_GENERATION_MAPPING.items()) if TF_MODEL_FOR_MASK_GENERATION_MAPPING else [])
     )
 
-    def get_test_pipeline(self, model, tokenizer, processor):
-        image_segmenter = MaskGenerationPipeline(model=model, image_processor=processor)
+    def get_test_pipeline(self, model, tokenizer, processor, torch_dtype="float32"):
+        image_segmenter = MaskGenerationPipeline(model=model, image_processor=processor, torch_dtype=torch_dtype)
         return image_segmenter, [
             "./tests/fixtures/tests_samples/COCO/000000039769.png",
             "./tests/fixtures/tests_samples/COCO/000000039769.png",
         ]
 
-    # TODO: Implement me @Arthur
+    @unittest.skip(reason="TODO @Arthur: Implement me")
     def run_pipeline_test(self, mask_generator, examples):
         pass
 
     @require_tf
-    @unittest.skip("Image segmentation not implemented in TF")
+    @unittest.skip(reason="Image segmentation not implemented in TF")
     def test_small_model_tf(self):
         pass
 

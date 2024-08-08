@@ -66,16 +66,14 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         + (MODEL_FOR_CTC_MAPPING.items() if MODEL_FOR_CTC_MAPPING else [])
     )
 
-    def get_test_pipeline(self, model, tokenizer, processor):
+    def get_test_pipeline(self, model, tokenizer, processor, torch_dtype="float32"):
         if tokenizer is None:
             # Side effect of no Fast Tokenizer class for these model, so skipping
             # But the slow tokenizer test should still run as they're quite small
-            self.skipTest("No tokenizer available")
-            return
-            # return None, None
+            self.skipTest(reason="No tokenizer available")
 
         speech_recognizer = AutomaticSpeechRecognitionPipeline(
-            model=model, tokenizer=tokenizer, feature_extractor=processor
+            model=model, tokenizer=tokenizer, feature_extractor=processor, torch_dtype=torch_dtype
         )
 
         # test with a raw waveform
@@ -206,7 +204,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
     @require_torch
     @require_pyctcdecode
     def test_large_model_pt_with_lm(self):
-        dataset = load_dataset("Narsil/asr_dummy", streaming=True)
+        dataset = load_dataset("Narsil/asr_dummy", streaming=True, trust_remote_code=True)
         third_item = next(iter(dataset["test"].skip(3)))
         filename = third_item["file"]
 
@@ -271,7 +269,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
 
     @require_tf
     def test_small_model_tf(self):
-        self.skipTest("Tensorflow not supported yet.")
+        self.skipTest(reason="Tensorflow not supported yet.")
 
     @require_torch
     def test_torch_small_no_tokenizer_files(self):
@@ -320,7 +318,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
 
     @slow
     @require_torch
-    @slow
     def test_return_timestamps_in_preprocess(self):
         pipe = pipeline(
             task="automatic-speech-recognition",
@@ -328,12 +325,12 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             chunk_length_s=8,
             stride_length_s=1,
         )
-        data = load_dataset("librispeech_asr", "clean", split="test", streaming=True)
+        data = load_dataset("openslr/librispeech_asr", "clean", split="test", streaming=True, trust_remote_code=True)
         sample = next(iter(data))
-        pipe.model.config.forced_decoder_ids = pipe.tokenizer.get_decoder_prompt_ids(language="en", task="transcribe")
 
         res = pipe(sample["audio"]["array"])
         self.assertEqual(res, {"text": " Conquered returned to its place amidst the tents."})
+
         res = pipe(sample["audio"]["array"], return_timestamps=True)
         self.assertEqual(
             res,
@@ -342,9 +339,8 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
                 "chunks": [{"timestamp": (0.0, 3.36), "text": " Conquered returned to its place amidst the tents."}],
             },
         )
-        pipe.model.generation_config.alignment_heads = [[2, 2], [3, 0], [3, 2], [3, 3], [3, 4], [3, 5]]
-        res = pipe(sample["audio"]["array"], return_timestamps="word")
 
+        res = pipe(sample["audio"]["array"], return_timestamps="word")
         # fmt: off
         self.assertEqual(
             res,
@@ -366,12 +362,69 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
 
     @slow
     @require_torch
+    def test_return_timestamps_and_language_in_preprocess(self):
+        pipe = pipeline(
+            task="automatic-speech-recognition",
+            model="openai/whisper-tiny",
+            chunk_length_s=8,
+            stride_length_s=1,
+            return_language=True,
+        )
+        data = load_dataset("openslr/librispeech_asr", "clean", split="test", streaming=True, trust_remote_code=True)
+        sample = next(iter(data))
+
+        res = pipe(sample["audio"]["array"])
+        self.assertEqual(
+            res,
+            {
+                "text": " Conquered returned to its place amidst the tents.",
+                "chunks": [{"language": "english", "text": " Conquered returned to its place amidst the tents."}],
+            },
+        )
+
+        res = pipe(sample["audio"]["array"], return_timestamps=True)
+        self.assertEqual(
+            res,
+            {
+                "text": " Conquered returned to its place amidst the tents.",
+                "chunks": [
+                    {
+                        "timestamp": (0.0, 3.36),
+                        "language": "english",
+                        "text": " Conquered returned to its place amidst the tents.",
+                    }
+                ],
+            },
+        )
+
+        res = pipe(sample["audio"]["array"], return_timestamps="word")
+        # fmt: off
+        self.assertEqual(
+            res,
+            {
+                'text': ' Conquered returned to its place amidst the tents.',
+                'chunks': [
+                    {"language": "english",'text': ' Conquered', 'timestamp': (0.5, 1.2)},
+                    {"language": "english", 'text': ' returned', 'timestamp': (1.2, 1.64)},
+                    {"language": "english",'text': ' to', 'timestamp': (1.64, 1.84)},
+                    {"language": "english",'text': ' its', 'timestamp': (1.84, 2.02)},
+                    {"language": "english",'text': ' place', 'timestamp': (2.02, 2.28)},
+                    {"language": "english",'text': ' amidst', 'timestamp': (2.28, 2.8)},
+                    {"language": "english",'text': ' the', 'timestamp': (2.8, 2.98)},
+                    {"language": "english",'text': ' tents.', 'timestamp': (2.98, 3.48)},
+                ],
+            },
+        )
+        # fmt: on
+
+    @slow
+    @require_torch
     def test_return_timestamps_in_preprocess_longform(self):
         pipe = pipeline(
             task="automatic-speech-recognition",
             model="openai/whisper-tiny.en",
         )
-        data = load_dataset("librispeech_asr", "clean", split="test", streaming=True)
+        data = load_dataset("openslr/librispeech_asr", "clean", split="test", streaming=True, trust_remote_code=True)
         samples = [next(iter(data)) for _ in range(8)]
         audio = np.concatenate([sample["audio"]["array"] for sample in samples])
 
@@ -495,6 +548,23 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
 
         output = speech_recognizer([filename], chunk_length_s=5, batch_size=4)
         self.assertEqual(output, [{"text": " A man said to the universe, Sir, I exist."}])
+
+    @require_torch
+    @slow
+    def test_torch_whisper_batched(self):
+        speech_recognizer = pipeline(
+            task="automatic-speech-recognition",
+            model="openai/whisper-tiny",
+            framework="pt",
+        )
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation[:2]")
+        EXPECTED_OUTPUT = [
+            {"text": " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel."},
+            {"text": " Nor is Mr. Quilters' manner less interesting than his matter."},
+        ]
+
+        output = speech_recognizer(ds["audio"], batch_size=2)
+        self.assertEqual(output, EXPECTED_OUTPUT)
 
     @slow
     def test_find_longest_common_subsequence(self):
@@ -1144,7 +1214,9 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
     @slow
     def test_speculative_decoding_whisper_non_distil(self):
         # Load data:
-        dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation[:1]")
+        dataset = load_dataset(
+            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation[:1]", trust_remote_code=True
+        )
         sample = dataset[0]["audio"]
 
         # Load model:
@@ -1188,7 +1260,9 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
     @slow
     def test_speculative_decoding_whisper_distil(self):
         # Load data:
-        dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation[:1]")
+        dataset = load_dataset(
+            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation[:1]", trust_remote_code=True
+        )
         sample = dataset[0]["audio"]
 
         # Load model:
@@ -1801,7 +1875,7 @@ def require_ffmpeg(test_case):
         subprocess.check_output(["ffmpeg", "-h"], stderr=subprocess.DEVNULL)
         return test_case
     except Exception:
-        return unittest.skip("test requires ffmpeg")(test_case)
+        return unittest.skip(reason="test requires ffmpeg")(test_case)
 
 
 def bytes_iter(chunk_size, chunks):

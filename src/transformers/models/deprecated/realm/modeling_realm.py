@@ -1440,8 +1440,12 @@ class RealmKnowledgeAugEncoder(RealmPreTrainedModel):
         >>> outputs = model(**inputs)
         >>> logits = outputs.logits
         ```"""
-
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if labels is not None and relevance_score is None:
+            raise ValueError(
+                "You have to specify `relevance_score` when `labels` is specified in order to compute loss."
+            )
 
         (flattened_input_ids, flattened_attention_mask, flattened_token_type_ids) = self._flatten_inputs(
             input_ids, attention_mask, token_type_ids
@@ -1468,11 +1472,6 @@ class RealmKnowledgeAugEncoder(RealmPreTrainedModel):
 
         masked_lm_loss = None
         if labels is not None:
-            if candidate_score is None:
-                raise ValueError(
-                    "You have to specify `relevance_score` when `labels` is specified in order to compute loss."
-                )
-
             batch_size, seq_length = labels.size()
 
             if mlm_mask is None:

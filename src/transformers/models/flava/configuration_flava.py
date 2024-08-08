@@ -389,16 +389,16 @@ class FlavaImageCodebookConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        num_groups (`int`, defaults to 4):
+        num_groups (`int`, *optional*, defaults to 4):
             Number of groups to be created. This parameter as of now doesn't affect the model and is used for some
             internal calculation and estimations.
-        input_channels (`int`, defaults to 3):
+        input_channels (`int`, *optional*, defaults to 3):
             Number of channels in the image to be passed.
-        num_blocks_per_group (`int`, defaults to 2):
+        num_blocks_per_group (`int`, *optional*, defaults to 2):
             Number of conv-based blocks per group.
-        hidden_size (`int`, defaults to 256):
+        hidden_size (`int`, *optional*, defaults to 256):
             Size of hidden dim for the blocks.
-        vocab_size (`int`, defaults to 8192):
+        vocab_size (`int`, *optional*, defaults to 8192):
             Size of the output vocabulary for the codebook.
         freeze (`bool`, defaults to `True`):
             Whether to freeze the weights of the model.
@@ -483,9 +483,9 @@ class FlavaConfig(PretrainedConfig):
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
         projection_dim (`int`, *optional*, defaults to 512):
-            Dimentionality of text and image projection layers.
+            Dimensionality of text and image projection layers.
         logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
-            The inital value of the *logit_scale* paramter. Default is used as per the original FLAVA/CLIP
+            The initial value of the *logit_scale* parameter. Default is used as per the original FLAVA/CLIP
             implementation.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
@@ -590,7 +590,7 @@ class FlavaConfig(PretrainedConfig):
                     else:
                         message = (
                             f"`text_config_dict` is provided which will be used to initialize `FlavaTextConfig`. The "
-                            f'value `text_config["{key}"]` will be overriden.'
+                            f'value `text_config["{key}"]` will be overridden.'
                         )
                     logger.info(message)
 
@@ -622,7 +622,7 @@ class FlavaConfig(PretrainedConfig):
                     else:
                         message = (
                             f"`image_config_dict` is provided which will be used to initialize `FlavaImageConfig`. "
-                            f'The value `image_config["{key}"]` will be overriden.'
+                            f'The value `image_config["{key}"]` will be overridden.'
                         )
                     logger.info(message)
 
@@ -654,7 +654,7 @@ class FlavaConfig(PretrainedConfig):
                     else:
                         message = (
                             f"`multimodal_config_dict` is provided which will be used to initialize "
-                            f'`FlavaMultimodalConfig`. The value `multimodal_config["{key}"]` will be overriden.'
+                            f'`FlavaMultimodalConfig`. The value `multimodal_config["{key}"]` will be overridden.'
                         )
                     logger.info(message)
 
@@ -687,7 +687,7 @@ class FlavaConfig(PretrainedConfig):
                     else:
                         message = (
                             f"`image_codebook_config_dict` is provided which will be used to initialize "
-                            f'`FlavaImageCodebookConfig`. The value `image_codebook_config["{key}"]` will be overriden.'
+                            f'`FlavaImageCodebookConfig`. The value `image_codebook_config["{key}"]` will be overridden.'
                         )
                     logger.info(message)
 

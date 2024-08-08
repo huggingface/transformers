@@ -301,6 +301,8 @@ class Swin2SRSelfAttention(nn.Module):
         relative_coords_table = (
             torch.sign(relative_coords_table) * torch.log2(torch.abs(relative_coords_table) + 1.0) / math.log2(8)
         )
+        # set to same dtype as mlp weight
+        relative_coords_table = relative_coords_table.to(next(self.continuous_position_bias_mlp.parameters()).dtype)
         self.register_buffer("relative_coords_table", relative_coords_table, persistent=False)
 
         # get pair-wise relative position index for each token inside the window
@@ -1128,6 +1130,10 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
          ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        loss = None
+        if labels is not None:
+            raise NotImplementedError("Training is not supported at the moment")
+
         height, width = pixel_values.shape[2:]
 
         if self.config.upsampler == "pixelshuffle_aux":
@@ -1158,10 +1164,6 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
 
         reconstruction = reconstruction / self.swin2sr.img_range + self.swin2sr.mean
         reconstruction = reconstruction[:, :, : height * self.upscale, : width * self.upscale]
-
-        loss = None
-        if labels is not None:
-            raise NotImplementedError("Training is not supported at the moment")
 
         if not return_dict:
             output = (reconstruction,) + outputs[1:]

@@ -48,6 +48,7 @@ class MobileViTImageProcessingTester(unittest.TestCase):
         crop_size=None,
         do_flip_channel_order=True,
     ):
+        super().__init__()
         size = size if size is not None else {"shortest_edge": 20}
         crop_size = crop_size if crop_size is not None else {"height": 18, "width": 18}
         self.parent = parent
@@ -87,7 +88,7 @@ class MobileViTImageProcessingTester(unittest.TestCase):
 
 
 def prepare_semantic_single_inputs():
-    dataset = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
+    dataset = load_dataset("hf-internal-testing/fixtures_ade20k", split="test", trust_remote_code=True)
 
     image = Image.open(dataset[0]["file"])
     map = Image.open(dataset[1]["file"])
@@ -96,7 +97,7 @@ def prepare_semantic_single_inputs():
 
 
 def prepare_semantic_batch_inputs():
-    dataset = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
+    dataset = load_dataset("hf-internal-testing/fixtures_ade20k", split="test", trust_remote_code=True)
 
     image1 = Image.open(dataset[0]["file"])
     map1 = Image.open(dataset[1]["file"])
@@ -112,6 +113,7 @@ class MobileViTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = MobileViTImageProcessor if is_vision_available() else None
 
     def setUp(self):
+        super().setUp()
         self.image_processor_tester = MobileViTImageProcessingTester(self)
 
     @property

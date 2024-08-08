@@ -572,7 +572,7 @@ class XLMRobertaXLPreTrainedModel(PreTrainedModel):
 
     config_class = XLMRobertaXLConfig
     base_model_prefix = "roberta"
-    _no_split_modules = ["XLMRobertaXLEmbeddings", "XLMRobertaXLSelfAttention"]
+    _no_split_modules = ["XLMRobertaXLEmbeddings", "XLMRobertaXLLayer"]
 
     # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights
     def _init_weights(self, module):
@@ -1039,7 +1039,7 @@ class XLMRobertaXLForMaskedLM(XLMRobertaXLPreTrainedModel):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
             config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
             loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
-        kwargs (`Dict[str, any]`, optional, defaults to *{}*):
+        kwargs (`Dict[str, any]`, *optional*, defaults to `{}`):
             Used to hide legacy arguments that have been deprecated.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict

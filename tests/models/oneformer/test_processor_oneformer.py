@@ -73,7 +73,7 @@ class OneFormerProcessorTester(unittest.TestCase):
         image_mean=[0.5, 0.5, 0.5],
         image_std=[0.5, 0.5, 0.5],
         num_labels=10,
-        reduce_labels=False,
+        do_reduce_labels=False,
         ignore_index=255,
         max_seq_length=77,
         task_seq_length=77,
@@ -105,7 +105,7 @@ class OneFormerProcessorTester(unittest.TestCase):
         self.height = 3
         self.width = 4
         self.num_labels = num_labels
-        self.reduce_labels = reduce_labels
+        self.do_reduce_labels = do_reduce_labels
         self.ignore_index = ignore_index
 
     def prepare_processor_dict(self):
@@ -116,7 +116,7 @@ class OneFormerProcessorTester(unittest.TestCase):
             "image_mean": self.image_mean,
             "image_std": self.image_std,
             "num_labels": self.num_labels,
-            "reduce_labels": self.reduce_labels,
+            "do_reduce_labels": self.do_reduce_labels,
             "ignore_index": self.ignore_index,
             "class_info_file": self.class_info_file,
             "metadata": self.metadata,
@@ -143,6 +143,8 @@ class OneFormerProcessorTester(unittest.TestCase):
             image = image_inputs[0]
             if isinstance(image, Image.Image):
                 w, h = image.size
+            elif isinstance(image, np.ndarray):
+                h, w = image.shape[0], image.shape[1]
             else:
                 h, w = image.shape[1], image.shape[2]
             if w < h:
@@ -207,6 +209,7 @@ class OneFormerProcessingTest(unittest.TestCase):
         self.assertTrue(hasattr(processor, "max_seq_length"))
         self.assertTrue(hasattr(processor, "task_seq_length"))
 
+    @unittest.skip
     def test_batch_feature(self):
         pass
 
@@ -395,6 +398,7 @@ class OneFormerProcessingTest(unittest.TestCase):
 
         return inputs
 
+    @unittest.skip
     def test_init_without_params(self):
         pass
 
@@ -465,7 +469,7 @@ class OneFormerProcessingTest(unittest.TestCase):
         panoptic_map2, inst2class2 = create_panoptic_map(annotation2, segments_info2)
 
         image_processor = OneFormerImageProcessor(
-            reduce_labels=True,
+            do_reduce_labels=True,
             ignore_index=0,
             size=(512, 512),
             class_info_file="ade20k_panoptic.json",
@@ -553,7 +557,7 @@ class OneFormerProcessingTest(unittest.TestCase):
         panoptic_map2, inst2class2 = create_panoptic_map(annotation2, segments_info2)
 
         image_processor = OneFormerImageProcessor(
-            reduce_labels=True,
+            do_reduce_labels=True,
             ignore_index=0,
             size=(512, 512),
             class_info_file="ade20k_panoptic.json",
@@ -641,7 +645,7 @@ class OneFormerProcessingTest(unittest.TestCase):
         panoptic_map2, inst2class2 = create_panoptic_map(annotation2, segments_info2)
 
         image_processor = OneFormerImageProcessor(
-            reduce_labels=True,
+            do_reduce_labels=True,
             ignore_index=0,
             size=(512, 512),
             class_info_file="ade20k_panoptic.json",
@@ -710,7 +714,7 @@ class OneFormerProcessingTest(unittest.TestCase):
 
     def test_post_process_semantic_segmentation(self):
         image_processor = OneFormerImageProcessor(
-            reduce_labels=True,
+            do_reduce_labels=True,
             ignore_index=0,
             size=(512, 512),
             class_info_file="ade20k_panoptic.json",
@@ -744,7 +748,7 @@ class OneFormerProcessingTest(unittest.TestCase):
 
     def test_post_process_instance_segmentation(self):
         image_processor = OneFormerImageProcessor(
-            reduce_labels=True,
+            do_reduce_labels=True,
             ignore_index=0,
             size=(512, 512),
             class_info_file="ade20k_panoptic.json",
@@ -770,7 +774,7 @@ class OneFormerProcessingTest(unittest.TestCase):
 
     def test_post_process_panoptic_segmentation(self):
         image_processor = OneFormerImageProcessor(
-            reduce_labels=True,
+            do_reduce_labels=True,
             ignore_index=0,
             size=(512, 512),
             class_info_file="ade20k_panoptic.json",

@@ -39,6 +39,7 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     logging,
     replace_return_docstrings,
+    torch_int,
 )
 from .configuration_mobilevit import MobileViTConfig
 
@@ -437,8 +438,16 @@ class MobileViTLayer(nn.Module):
 
         batch_size, channels, orig_height, orig_width = features.shape
 
-        new_height = int(math.ceil(orig_height / patch_height) * patch_height)
-        new_width = int(math.ceil(orig_width / patch_width) * patch_width)
+        new_height = (
+            torch_int(torch.ceil(orig_height / patch_height) * patch_height)
+            if torch.jit.is_tracing()
+            else int(math.ceil(orig_height / patch_height) * patch_height)
+        )
+        new_width = (
+            torch_int(torch.ceil(orig_width / patch_width) * patch_width)
+            if torch.jit.is_tracing()
+            else int(math.ceil(orig_width / patch_width) * patch_width)
+        )
 
         interpolate = False
         if new_width != orig_width or new_height != orig_height:
@@ -1026,6 +1035,9 @@ class MobileViTForSemanticSegmentation(MobileViTPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        if labels is not None and self.config.num_labels == 1:
+            raise ValueError("The number of labels should be greater than one")
+
         outputs = self.mobilevit(
             pixel_values,
             output_hidden_states=True,  # we need the intermediate hidden states
@@ -1038,15 +1050,12 @@ class MobileViTForSemanticSegmentation(MobileViTPreTrainedModel):
 
         loss = None
         if labels is not None:
-            if self.config.num_labels == 1:
-                raise ValueError("The number of labels should be greater than one")
-            else:
-                # upsample logits to the images' original size
-                upsampled_logits = nn.functional.interpolate(
-                    logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
-                )
-                loss_fct = CrossEntropyLoss(ignore_index=self.config.semantic_loss_ignore_index)
-                loss = loss_fct(upsampled_logits, labels)
+            # upsample logits to the images' original size
+            upsampled_logits = nn.functional.interpolate(
+                logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
+            )
+            loss_fct = CrossEntropyLoss(ignore_index=self.config.semantic_loss_ignore_index)
+            loss = loss_fct(upsampled_logits, labels)
 
         if not return_dict:
             if output_hidden_states:

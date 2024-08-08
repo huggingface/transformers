@@ -17,13 +17,14 @@ Generic utilities
 
 import inspect
 import tempfile
+import warnings
 from collections import OrderedDict, UserDict
 from collections.abc import MutableMapping
 from contextlib import ExitStack, contextmanager
 from dataclasses import fields, is_dataclass
 from enum import Enum
-from functools import partial
-from typing import Any, ContextManager, Iterable, List, Tuple
+from functools import partial, wraps
+from typing import Any, ContextManager, Iterable, List, Optional, Tuple
 
 import numpy as np
 from packaging import version
@@ -213,7 +214,7 @@ def _is_tf_symbolic_tensor(x):
     # the `is_symbolic_tensor` predicate is only available starting with TF 2.14
     if hasattr(tf, "is_symbolic_tensor"):
         return tf.is_symbolic_tensor(x)
-    return type(x) == tf.Tensor
+    return isinstance(x, tf.Tensor)
 
 
 def is_tf_symbolic_tensor(x):
@@ -750,3 +751,106 @@ def infer_framework(model_class):
             return "flax"
     else:
         raise TypeError(f"Could not infer framework from class {model_class}.")
+
+
+def torch_int(x):
+    """
+    Casts an input to a torch int64 tensor if we are in a tracing context, otherwise to a Python int.
+    """
+    if not is_torch_available():
+        return int(x)
+
+    import torch
+
+    return x.to(torch.int64) if torch.jit.is_tracing() and isinstance(x, torch.Tensor) else int(x)
+
+
+def torch_float(x):
+    """
+    Casts an input to a torch float32 tensor if we are in a tracing context, otherwise to a Python float.
+    """
+    if not is_torch_available():
+        return int(x)
+
+    import torch
+
+    return x.to(torch.float32) if torch.jit.is_tracing() and isinstance(x, torch.Tensor) else int(x)
+
+
+def filter_out_non_signature_kwargs(extra: Optional[list] = None):
+    """
+    Decorator to filter out named arguments that are not in the function signature.
+
+    This decorator ensures that only the keyword arguments that match the function's signature, or are specified in the
+    `extra` list, are passed to the function. Any additional keyword arguments are filtered out and a warning is issued.
+
+    Parameters:
+        extra (`Optional[list]`, *optional*):
+            A list of extra keyword argument names that are allowed even if they are not in the function's signature.
+
+    Returns:
+        Callable:
+            A decorator that wraps the function and filters out invalid keyword arguments.
+
+    Example usage:
+
+        ```python
+        @filter_out_non_signature_kwargs(extra=["allowed_extra_arg"])
+        def my_function(arg1, arg2, **kwargs):
+            print(arg1, arg2, kwargs)
+
+        my_function(arg1=1, arg2=2, allowed_extra_arg=3, invalid_arg=4)
+        # This will print: 1 2 {"allowed_extra_arg": 3}
+        # And issue a warning: "The following named arguments are not valid for `my_function` and were ignored: 'invalid_arg'"
+        ```
+    """
+    extra = extra or []
+    extra_params_to_pass = set(extra)
+
+    def decorator(func):
+        sig = inspect.signature(func)
+        function_named_args = set(sig.parameters.keys())
+        valid_kwargs_to_pass = function_named_args.union(extra_params_to_pass)
+
+        # Required for better warning message
+        is_instance_method = "self" in function_named_args
+        is_class_method = "cls" in function_named_args
+
+        # Mark function as decorated
+        func._filter_out_non_signature_kwargs = True
+
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            valid_kwargs = {}
+            invalid_kwargs = {}
+
+            for k, v in kwargs.items():
+                if k in valid_kwargs_to_pass:
+                    valid_kwargs[k] = v
+                else:
+                    invalid_kwargs[k] = v
+
+            if invalid_kwargs:
+                invalid_kwargs_names = [f"'{k}'" for k in invalid_kwargs.keys()]
+                invalid_kwargs_names = ", ".join(invalid_kwargs_names)
+
+                # Get the class name for better warning message
+                if is_instance_method:
+                    cls_prefix = args[0].__class__.__name__ + "."
+                elif is_class_method:
+                    cls_prefix = args[0].__name__ + "."
+                else:
+                    cls_prefix = ""
+
+                warnings.warn(
+                    f"The following named arguments are not valid for `{cls_prefix}{func.__name__}`"
+                    f" and were ignored: {invalid_kwargs_names}",
+                    UserWarning,
+                    stacklevel=2,
+                )
+
+            return func(*args, **valid_kwargs)
+
+        return wrapper
+
+    return decorator

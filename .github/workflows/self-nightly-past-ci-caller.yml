@@ -2,32 +2,30 @@ name: Self-hosted runner (nightly-past-ci-caller)
 
 on:
   schedule:
-    # 2:17 am on each Sunday and Thursday
-
-    - cron: "17 2 * * 0,4"
+    - cron: "17 2,14 * * *"
   push:
     branches:
-      - run_nightly_ci*
       - run_past_ci*
 
 jobs:
-  build_nightly_ci_images:
-    name: Build Nightly CI Docker Images
-    if: (github.event_name == 'schedule') || ((github.event_name == 'push') && startsWith(github.ref_name, 'run_nightly_ci'))
-    uses: ./.github/workflows/build-nightly-ci-docker-images.yml
-    secrets: inherit
-
-  run_nightly_ci:
-    name: Nightly CI
-    needs: [build_nightly_ci_images]
-    uses: ./.github/workflows/self-nightly-scheduled.yml
-    secrets: inherit
+  get_number:
+    name: Get number
+    runs-on: ubuntu-22.04
+    outputs:
+      run_number: ${{ steps.get_number.outputs.run_number }}
+    steps:
+      - name: Get number
+        id: get_number
+        run: |
+          echo "${{ github.run_number }}"
+          echo "$(python3 -c 'print(int(${{ github.run_number }}) % 10)')"
+          echo "run_number=$(python3 -c 'print(int(${{ github.run_number }}) % 10)')" >> $GITHUB_OUTPUT
 
   run_past_ci_pytorch_1-13:
     name: PyTorch 1.13
-    if: (cancelled() != true) && ((github.event_name == 'schedule') || ((github.event_name == 'push') && startsWith(github.ref_name, 'run_past_ci')))
-    needs: [run_nightly_ci]
-    uses: ./.github/workflows/self-past.yml
+    needs: get_number
+    if: needs.get_number.outputs.run_number == 0 && (cancelled() != true) && ((github.event_name == 'schedule') || ((github.event_name == 'push') && startsWith(github.ref_name, 'run_past_ci')))
+    uses: ./.github/workflows/self-past-caller.yml
     with:
       framework: pytorch
       version: "1.13"
@@ -36,9 +34,9 @@ jobs:
 
   run_past_ci_pytorch_1-12:
     name: PyTorch 1.12
-    if: (cancelled() != true) && ((github.event_name == 'schedule') || ((github.event_name == 'push') && startsWith(github.ref_name, 'run_past_ci')))
-    needs: [run_past_ci_pytorch_1-13]
-    uses: ./.github/workflows/self-past.yml
+    needs: get_number
+    if: needs.get_number.outputs.run_number == 1 && (cancelled() != true) && ((github.event_name == 'schedule') || ((github.event_name == 'push') && startsWith(github.ref_name, 'run_past_ci')))
+    uses: ./.github/workflows/self-past-caller.yml
     with:
       framework: pytorch
       version: "1.12"
@@ -47,9 +45,9 @@ jobs:
 
   run_past_ci_pytorch_1-11:
     name: PyTorch 1.11
-    if: (cancelled() != true) && ((github.event_name == 'schedule') || ((github.event_name == 'push') && startsWith(github.ref_name, 'run_past_ci')))
-    needs: [run_past_ci_pytorch_1-12]
-    uses: ./.github/workflows/self-past.yml
+    needs: get_number
+    if: needs.get_number.outputs.run_number == 2 && (cancelled() != true) && ((github.event_name == 'schedule') || ((github.event_name == 'push') && startsWith(github.ref_name, 'run_past_ci')))
+    uses: ./.github/workflows/self-past-caller.yml
     with:
       framework: pytorch
       version: "1.11"
@@ -58,9 +56,9 @@ jobs:
 
   run_past_ci_tensorflow_2-11:
     name: TensorFlow 2.11
-    if: (cancelled() != true) && ((github.event_name == 'push') && startsWith(github.ref_name, 'run_past_ci'))
-    needs: [run_past_ci_pytorch_1-11]
-    uses: ./.github/workflows/self-past.yml
+    needs: get_number
+    if: needs.get_number.outputs.run_number == 3 && (cancelled() != true) && ((github.event_name == 'push') && startsWith(github.ref_name, 'run_past_ci'))
+    uses: ./.github/workflows/self-past-caller.yml
     with:
       framework: tensorflow
       version: "2.11"
@@ -69,9 +67,9 @@ jobs:
 
   run_past_ci_tensorflow_2-10:
     name: TensorFlow 2.10
-    if: (cancelled() != true) && ((github.event_name == 'push') && startsWith(github.ref_name, 'run_past_ci'))
-    needs: [run_past_ci_tensorflow_2-11]
-    uses: ./.github/workflows/self-past.yml
+    needs: get_number
+    if: needs.get_number.outputs.run_number == 4 && (cancelled() != true) && ((github.event_name == 'push') && startsWith(github.ref_name, 'run_past_ci'))
+    uses: ./.github/workflows/self-past-caller.yml
     with:
       framework: tensorflow
       version: "2.10"
@@ -80,9 +78,9 @@ jobs:
 
   run_past_ci_tensorflow_2-9:
     name: TensorFlow 2.9
-    if: (cancelled() != true) && ((github.event_name == 'push') && startsWith(github.ref_name, 'run_past_ci'))
-    needs: [run_past_ci_tensorflow_2-10]
-    uses: ./.github/workflows/self-past.yml
+    needs: get_number
+    if: needs.get_number.outputs.run_number == 5 && (cancelled() != true) && ((github.event_name == 'push') && startsWith(github.ref_name, 'run_past_ci'))
+    uses: ./.github/workflows/self-past-caller.yml
     with:
       framework: tensorflow
       version: "2.9"
@@ -91,9 +89,9 @@ jobs:
 
   run_past_ci_tensorflow_2-8:
     name: TensorFlow 2.8
-    if: (cancelled() != true) && ((github.event_name == 'push') && startsWith(github.ref_name, 'run_past_ci'))
-    needs: [run_past_ci_tensorflow_2-9]
-    uses: ./.github/workflows/self-past.yml
+    needs: get_number
+    if: needs.get_number.outputs.run_number == 6 && (cancelled() != true) && ((github.event_name == 'push') && startsWith(github.ref_name, 'run_past_ci'))
+    uses: ./.github/workflows/self-past-caller.yml
     with:
       framework: tensorflow
       version: "2.8"
@@ -102,9 +100,9 @@ jobs:
 
   run_past_ci_tensorflow_2-7:
     name: TensorFlow 2.7
-    if: (cancelled() != true) && ((github.event_name == 'push') && startsWith(github.ref_name, 'run_past_ci'))
-    needs: [run_past_ci_tensorflow_2-8]
-    uses: ./.github/workflows/self-past.yml
+    needs: get_number
+    if: needs.get_number.outputs.run_number == 7 && (cancelled() != true) && ((github.event_name == 'push') && startsWith(github.ref_name, 'run_past_ci'))
+    uses: ./.github/workflows/self-past-caller.yml
     with:
       framework: tensorflow
       version: "2.7"
@@ -113,9 +111,9 @@ jobs:
 
   run_past_ci_tensorflow_2-6:
     name: TensorFlow 2.6
-    if: (cancelled() != true) && ((github.event_name == 'push') && startsWith(github.ref_name, 'run_past_ci'))
-    needs: [run_past_ci_tensorflow_2-7]
-    uses: ./.github/workflows/self-past.yml
+    needs: get_number
+    if: needs.get_number.outputs.run_number == 8 && (cancelled() != true) && ((github.event_name == 'push') && startsWith(github.ref_name, 'run_past_ci'))
+    uses: ./.github/workflows/self-past-caller.yml
     with:
       framework: tensorflow
       version: "2.6"
@@ -124,9 +122,9 @@ jobs:
 
   run_past_ci_tensorflow_2-5:
     name: TensorFlow 2.5
-    if: (cancelled() != true) && ((github.event_name == 'push') && startsWith(github.ref_name, 'run_past_ci'))
-    needs: [run_past_ci_tensorflow_2-6]
-    uses: ./.github/workflows/self-past.yml
+    needs: get_number
+    if: needs.get_number.outputs.run_number == 9 &&  (cancelled() != true) && ((github.event_name == 'push') && startsWith(github.ref_name, 'run_past_ci'))
+    uses: ./.github/workflows/self-past-caller.yml
     with:
       framework: tensorflow
       version: "2.5"
