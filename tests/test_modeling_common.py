@@ -4058,15 +4058,14 @@ class ModelTesterMixin:
     @require_torch_accelerator
     @slow
     def test_sdpa_can_compile_dynamic(self):
+        if not self.has_attentions:
+            self.skipTest(reason="Model architecture does not support attentions")
         if "cuda" in torch_device:
             compute_capability = torch.cuda.get_device_capability()
             major, _ = compute_capability
 
             if not torch.version.cuda or major < 8:
-                self.skipTest("This test requires an NVIDIA GPU with compute capability >= 8.0")
-
-        if not torch.version.cuda or major < 8:
-            self.skipTest(reason="This test requires an NVIDIA GPU with compute capability >= 8.0")
+                self.skipTest(reason="This test requires an NVIDIA GPU with compute capability >= 8.0")
 
         for model_class in self.all_model_classes:
             if not model_class._supports_sdpa:
