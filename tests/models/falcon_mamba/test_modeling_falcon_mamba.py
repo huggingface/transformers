@@ -93,8 +93,9 @@ class FalconMambaModelTester:
         self.pad_token_id = vocab_size - 1
         self.tie_word_embeddings = tie_word_embeddings
 
+    # Ignore copy
     def get_large_model_config(self):
-        return FalconMambaConfig.from_pretrained("hf-internal-testing/falcon_mamba-2.8b")
+        return FalconMambaConfig.from_pretrained("tiiuae/falcon-mamba-7b")
 
     def prepare_config_and_inputs(
         self, gradient_checkpointing=False, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False
@@ -384,7 +385,9 @@ class FalconMambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
     @slow
     # Ignore copy
     def test_model_from_pretrained(self):
-        model = FalconMambaModel.from_pretrained("tiiuae/falcon_mamba-7b")
+        model = FalconMambaModel.from_pretrained(
+            "tiiuae/falcon-mamba-7b", torch_dtype=torch.float16, low_cpu_mem_usage=True
+        )
         self.assertIsNotNone(model)
 
     def test_model_outputs_equivalence(self):
@@ -461,7 +464,7 @@ class FalconMambaIntegrationTests(unittest.TestCase):
 
         self.assertEqual(
             self.tokenizer.batch_decode(out, skip_special_tokens=False)[0],
-            "Hello today I'm going to show you how to make a very easy and simple origami.\nStep",
+            "Hello today I am going to show you how to make a simple and easy to make paper plane.\nStep",
         )
 
     @require_bitsandbytes
@@ -474,7 +477,7 @@ class FalconMambaIntegrationTests(unittest.TestCase):
 
         self.assertEqual(
             self.tokenizer.batch_decode(out, skip_special_tokens=False)[0],
-            """Hello today I\'m going to talk about the "Theory of Relativity" by Albert Einstein.""",
+            """Hello today I'm going to talk about the "C" in the "C-I-""",
         )
 
     def test_generation_torch_compile(self):
@@ -486,5 +489,5 @@ class FalconMambaIntegrationTests(unittest.TestCase):
 
         self.assertEqual(
             self.tokenizer.batch_decode(out, skip_special_tokens=False)[0],
-            "Hello today I'm going to show you how to make a very easy and simple origami.\nStep",
+            "Hello today I am going to show you how to make a simple and easy to make paper plane.\nStep",
         )
