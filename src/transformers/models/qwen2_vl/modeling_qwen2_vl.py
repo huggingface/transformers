@@ -87,12 +87,6 @@ class Qwen2VLCausalLMOutputWithPast(ModelOutput):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-        state (`torch.FloatTensor`, *optional*):
-            Attentions mask, used to update attention mask and position_ids.
-        image_hidden_states (`tuple(torch.FloatTensor)`, *optional*):
-            Tuple of `torch.FloatTensor` (one for the output of the image embeddings, `(seqlens, hidden_size)`.
-
-            image_hidden_states of the model produced by the vision encoder, and optionally by the perceiver
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -100,7 +94,6 @@ class Qwen2VLCausalLMOutputWithPast(ModelOutput):
     past_key_values: Optional[List[torch.FloatTensor]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
-    state: Optional[torch.FloatTensor] = None
     rope_deltas: Optional[torch.LongTensor] = None
 
 
@@ -1513,7 +1506,6 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            state=attention_mask,
             rope_deltas=rope_deltas,
         )
 
