@@ -190,6 +190,70 @@ class OptimizerNames(ExplicitEnum):
     LOMO = "lomo"
     ADALOMO = "adalomo"
 
+class OptimizerGroups:
+    """
+    A helper class for grouping optimizers based on their class
+    and contains the ability to look up which group a given optimizer
+    belongs to.
+
+    All groups should be `frozenset`'s
+    """
+
+    @classmethod
+    def find_groups(cls, optimizer_name: OptimizerNames):
+        matching_groups = None
+        for group_name, group in cls.__dict__.items():
+            if isinstance(group, frozenset) and optimizer_name in group:
+                if matching_groups is None:
+                    matching_groups = []
+                matching_groups.append(group_name)
+        return matching_groups
+
+    ADAMW = frozenset([
+        name for name in OptimizerNames
+        if "adamw" in name.value
+    ])
+    ADAMW_TORCH = frozenset([
+        name for name in OptimizerNames
+        if "adamw_torch" in name.value
+    ])
+    LION = frozenset([
+        name for name in OptimizerNames
+        if "lion" in name.value
+    ])
+    RMSPROP = frozenset([
+        name for name in OptimizerNames
+        if "rmsprop" in name.value
+    ])
+    GALORE = frozenset([
+        name for name in OptimizerNames
+        if "galore" in name.value
+    ])
+    LOMO = frozenset([
+        name for name in OptimizerNames
+        if "lomo" in name.value
+    ])
+    BNB_COMPATIBLE = frozenset([
+        OptimizerNames.ADAMW_BNB,
+        OptimizerNames.ADAMW_8BIT,
+        OptimizerNames.PAGED_ADAMW,
+        OptimizerNames.PAGED_ADAMW_8BIT,
+        OptimizerNames.LION,
+        OptimizerNames.LION_8BIT,
+        OptimizerNames.PAGED_LION,
+        OptimizerNames.PAGED_LION_8BIT,
+        OptimizerNames.RMSPROP_BNB,
+        OptimizerNames.RMSPROP_8BIT,
+        OptimizerNames.RMSPROP_32BIT,
+    ])
+    TORCH_NATIVE = frozenset([
+        OptimizerNames.SGD,
+        OptimizerNames.ADAGRAD,
+        OptimizerNames.RMSPROP,
+    ])
+
+
+
 
 # Sometimes users will pass in a `str` repr of a dict in the CLI
 # We need to track what fields those can be. Each time a new arg
@@ -2054,6 +2118,11 @@ class TrainingArguments:
                 "--eval_use_gather_object requires Accelerate to be version of `accelerate` > 0.30.0."
                 "This is not supported and we recommend you to update your version."
             )
+
+        if self.optim_target_modules is not None and not isinstance(self.optim_target_modules, (list,str)):
+            raise ValueError(
+                    f"`optim_target_modules` has to be a list of strings, a string corresponding to a regex, or a specific module or 'all-linear', you passed {self.optim_target_modules}"
+                )
 
     def __str__(self):
         self_as_dict = asdict(self)

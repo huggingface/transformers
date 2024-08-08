@@ -68,7 +68,6 @@ from .models.auto.modeling_auto import (
 )
 from .optimization import Adafactor, get_scheduler
 from .pytorch_utils import (
-    ALL_LAYERNORM_LAYERS,
     is_torch_greater_or_equal_than_1_13,
     is_torch_greater_or_equal_than_2_3,
 )
@@ -96,7 +95,6 @@ from .trainer_pt_utils import (
     find_batch_size,
     get_model_param_count,
     get_module_class_from_name,
-    get_parameter_names,
     is_deepspeed_zero3_enabled,
     nested_concat,
     nested_detach,
@@ -130,6 +128,7 @@ from .trainer_utils import (
     set_seed,
     speed_metrics,
 )
+from .trainer_distributed_pt_utils import apply_ipex_optimization
 from .training_args import OptimizerNames, ParallelMode, TrainingArguments
 from .utils import (
     ADAPTER_CONFIG_NAME,
@@ -891,11 +890,6 @@ class Trainer:
             optimizer = self.optimizer
         self.create_scheduler(num_training_steps=num_training_steps, optimizer=optimizer)
 
-    def get_decay_parameter_names(self, model) -> List[str]:
-        decay_parameters = get_parameter_names(model, ALL_LAYERNORM_LAYERS)
-        decay_parameters = [name for name in decay_parameters if "bias" not in name]
-        return decay_parameters
-
     def create_optimizer(self):
         opt_model = self.model_wrapped if is_sagemaker_mp_enabled() else self.model
 
@@ -1427,28 +1421,6 @@ class Trainer:
 
         return model
 
-    def ipex_optimize_model(self, model, training=False, dtype=torch.float32):
-        if not is_ipex_available():
-            raise ImportError(
-                "Using IPEX but IPEX is not installed or IPEX's version does not match current PyTorch, please refer"
-                " to https://github.com/intel/intel-extension-for-pytorch."
-            )
-
-        import intel_extension_for_pytorch as ipex
-
-        if not training:
-            model.eval()
-            dtype = torch.bfloat16 if not self.is_in_train and self.args.bf16_full_eval else dtype
-            # conv_bn_folding is disabled as it fails in symbolic tracing, resulting in ipex warnings
-            model = ipex.optimize(model, dtype=dtype, level="O1", conv_bn_folding=False, inplace=not self.is_in_train)
-        else:
-            if not model.training:
-                model.train()
-            model, self.optimizer = ipex.optimize(
-                model, dtype=dtype, optimizer=self.optimizer, inplace=True, level="O1"
-            )
-
-        return model
 
     def compare_trainer_and_checkpoint_args(self, training_args, trainer_state):
         attributes_map = {
@@ -1481,7 +1453,7 @@ class Trainer:
     def _wrap_model(self, model, training=True, dataloader=None):
         if self.args.use_ipex:
             dtype = torch.bfloat16 if self.use_cpu_amp else torch.float32
-            model = self.ipex_optimize_model(model, training, dtype=dtype)
+            model = apply_ipex_optimization(model, self.optimizer, training, dtype=dtype, is_in_train=self.args.is_in_train)
 
         if is_sagemaker_mp_enabled():
             # Wrapping the base model twice in a DistributedModel will raise an error.

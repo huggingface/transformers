@@ -444,7 +444,7 @@ def deepspeed_load_checkpoint(deepspeed_engine, checkpoint_path, load_module_str
     else:
         raise ValueError(f"Can't find a valid checkpoint at {checkpoint_path}")
 
-def propagate_args_to_deepspeed(args:TrainingArguments):
+def propagate_args_to_deepspeed(args):
     """
     Propagates the training arguments to the DeepSpeed configuration.
     """

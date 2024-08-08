@@ -39,17 +39,19 @@ from torch.utils.data import Dataset, IterableDataset, RandomSampler, Sampler
 from torch.utils.data.distributed import DistributedSampler
 
 from .integrations.deepspeed import is_deepspeed_zero3_enabled
+from .modeling_utils import verify_quantization_training_support
+from .models.auto.modeling_auto import (
+    MODEL_MAPPING_NAMES,
+)
+from .pytorch_utils import ALL_LAYERNORM_LAYERS
 from .tokenization_utils_base import BatchEncoding
 from .utils import (
     is_sagemaker_mp_enabled,
     is_torch_available,
     is_torch_xla_available,
     is_training_run_on_sagemaker,
+    is_ipex_available,
     logging,
-)
-from .modeling_utils import verify_quantization_training_support
-from .models.auto.modeling_auto import (
-    MODEL_MAPPING_NAMES,
 )
 
 
@@ -1450,3 +1452,17 @@ def optimizer_sanity_checks(model, optimizer, lr_scheduler, using_model_orchestr
                 " `Trainer`. Make sure the lines `import torch_xla.core.xla_model as xm` and"
                 " `model.to(xm.xla_device())` is performed before the optimizer creation in your script."
             )
+
+def get_decay_parameter_names(model) -> List[str]:
+    """
+    This function returns the decay parameter names for the model.
+
+    Args:
+        model (torch.nn.Module): The model for which to get the decay parameter names.
+
+    Returns:
+        List[str]: The decay parameter names.
+    """
+    decay_parameters = get_parameter_names(model, ALL_LAYERNORM_LAYERS)
+    decay_parameters = [name for name in decay_parameters if "bias" not in name]
+    return decay_parameters
