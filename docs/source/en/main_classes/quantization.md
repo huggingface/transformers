@@ -61,7 +61,7 @@ Learn how to quantize models in the [Quantization](../quantization) guide.
 
 [[autodoc]] FbgemmFp8Config
 
-## TorchAOConfig
+## TorchAoConfig
 
 [[autodoc]] TorchAoConfig
 
