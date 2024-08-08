@@ -263,8 +263,7 @@ def compute_metrics(
         Mapping[str, float]: Metrics in a form of dictionary {<metric_name>: <metric_value>}
     """
 
-    predictions, targets = evaluation_results.predictions, evaluation_results.label_ids
-
+    predictions, targets, inputs = evaluation_results.predictions, evaluation_results.label_ids, evaluation_results.inputs
     # For metric computation we need to provide:
     #  - targets in a form of list of dictionaries with keys "boxes", "labels"
     #  - predictions in a form of list of dictionaries with keys "boxes", "scores", "labels"
@@ -289,11 +288,11 @@ def compute_metrics(
 
     # Collect predictions in the required format for metric computation,
     # model produce boxes in YOLO format, then processor convert them to Pascal VOC format
-    for batch, target_sizes in zip(predictions, image_sizes):
-        batch_logits, batch_boxes = batch[1], batch[2]
+    for batch, target_sizes, input_ids in zip(predictions, image_sizes, inputs):
+        batch_logits, batch_boxes = batch[2], batch[3]
         output = ModelOutput(logits=torch.tensor(batch_logits), pred_boxes=torch.tensor(batch_boxes))
         post_processed_output = processor.post_process_grounded_object_detection(
-            output, box_threshold=box_threshold, text_threshold=text_threshold, target_sizes=target_sizes
+            output, input_ids, box_threshold=box_threshold, text_threshold=text_threshold, target_sizes=target_sizes
         )
         post_processed_output = convert_zero_shot_to_coco_format(post_processed_output, label2id)
         post_processed_predictions.extend(post_processed_output)
@@ -576,11 +575,11 @@ def main():
         processor=processor,
         id2label=id2label,
         label2id=label2id,
-        random_text_prompt=False,
+        random_text_prompt=True,
     )
 
-    dataset["train"] = dataset["train"].with_transform(train_transform_batch)
-    dataset["validation"] = dataset["validation"].with_transform(validation_transform_batch)
+    dataset["train"] = dataset["test"].with_transform(train_transform_batch)
+    dataset["validation"] = dataset["test"].with_transform(validation_transform_batch)
     dataset["test"] = dataset["test"].with_transform(validation_transform_batch)
 
     # ------------------------------------------------------------------------------------------------
