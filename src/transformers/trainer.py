@@ -148,6 +148,7 @@ from .utils import (
     PushToHubMixin,
     can_return_loss,
     find_labels,
+    get_torch_version,
     is_accelerate_available,
     is_apex_available,
     is_bitsandbytes_available,
@@ -169,7 +170,6 @@ from .utils import (
     is_torch_xpu_available,
     logging,
     strtobool,
-    get_torch_version,
 )
 from .utils.quantization_config import QuantizationMethod
 
