@@ -40,14 +40,14 @@ python run_zero_shot_object_detection.py \
     --do_train true \
     --do_eval true \
     --output_dir grounding-dino-tiny-finetuned-cppe-5-10k-steps \
-    --num_train_epochs 100 \
+    --num_train_epochs 10 \
     --image_square_size 600 \
     --fp16 true \
     --learning_rate 5e-5 \
     --weight_decay 1e-4 \
     --dataloader_num_workers 4 \
     --dataloader_prefetch_factor 2 \
-    --per_device_train_batch_size 8 \
+    --per_device_train_batch_size 1 \
     --gradient_accumulation_steps 1 \
     --remove_unused_columns false \
     --eval_do_concat_batches false \
