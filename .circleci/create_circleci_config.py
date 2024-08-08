@@ -254,7 +254,7 @@ torch_job = CircleCIJob(
 tokenization_job = CircleCIJob(
     "tokenization",
     docker_image=[{"image": "huggingface/transformers-torch-light"}],
-    install_steps=["uv venv && uv pip install . && uv pip install tokenizers=0.20.0rc1"],
+    install_steps=["uv venv && uv pip install ."],
     parallelism=6,
     pytest_num_workers=4
 )
