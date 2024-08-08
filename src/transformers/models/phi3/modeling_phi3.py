@@ -145,6 +145,10 @@ class Phi3RotaryEmbedding(nn.Module):
     @torch.no_grad()
     def forward(self, x, position_ids, seq_len=None):
         # x: [bs, num_attention_heads, seq_len, head_size]
+        if position_ids is None and seq_len is None:
+            raise ValueError("You have to provide either position_ids or seq_len")
+        if position_ids is None:
+            position_ids = torch.arange(seq_len, device=x.device, dtype=torch.int64).unsqueeze(0).expand(x.shape[0], -1)
         self.inv_freq.to(x.device)
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
         position_ids_expanded = position_ids[:, None, :].float()
@@ -175,7 +179,11 @@ class Phi3SuScaledRotaryEmbedding(Phi3RotaryEmbedding):
 
     @torch.no_grad()
     def forward(self, x, position_ids, seq_len=None):
-        seq_len = torch.max(position_ids) + 1
+        if position_ids is None and seq_len is None:
+            raise ValueError("You have to provide either position_ids or seq_len")
+        if position_ids is None:
+            position_ids = torch.arange(seq_len, device=x.device, dtype=torch.int64).unsqueeze(0).expand(x.shape[0], -1)
+        seq_len = torch.max(position_ids) + 1 if seq_len is None else seq_len
         if seq_len > self.original_max_position_embeddings:
             ext_factors = torch.tensor(self.long_factor, dtype=torch.float32, device=x.device)
         else:
@@ -215,7 +223,11 @@ class Phi3YarnScaledRotaryEmbedding(Phi3RotaryEmbedding):
 
     @torch.no_grad()
     def forward(self, x, position_ids, seq_len=None):
-        seq_len = torch.max(position_ids) + 1
+        if position_ids is None and seq_len is None:
+            raise ValueError("You have to provide either position_ids or seq_len")
+        if position_ids is None:
+            position_ids = torch.arange(seq_len, device=x.device, dtype=torch.int64).unsqueeze(0).expand(x.shape[0], -1)
+        seq_len = torch.max(position_ids) + 1 if seq_len is None else seq_len
         if seq_len > self.original_max_position_embeddings:
             ext_factors = torch.tensor(self.long_factor, dtype=torch.float32, device=x.device)
         else:
@@ -256,7 +268,11 @@ class Phi3LongRoPEScaledRotaryEmbedding(Phi3RotaryEmbedding):
 
     @torch.no_grad()
     def forward(self, x, position_ids, seq_len=None):
-        seq_len = torch.max(position_ids) + 1
+        if position_ids is None and seq_len is None:
+            raise ValueError("You have to provide either position_ids or seq_len")
+        if position_ids is None:
+            position_ids = torch.arange(seq_len, device=x.device, dtype=torch.int64).unsqueeze(0).expand(x.shape[0], -1)
+        seq_len = torch.max(position_ids) + 1 if seq_len is None else seq_len
         if seq_len > self.original_max_position_embeddings:
             ext_factors = torch.tensor(self.long_factor, dtype=torch.float32, device=x.device)
         else:
@@ -540,7 +556,7 @@ class Phi3FlashAttention2(Phi3Attention):
             max(kv_seq_len, position_ids[:, -1].max().item() + 1) if position_ids is not None else kv_seq_len
         )
 
-        cos, sin = self.rotary_emb(value_states, seq_len=rotary_seq_len, position_ids=position_ids)
+        cos, sin = self.rotary_emb(value_states, position_ids, seq_len=rotary_seq_len)
 
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
