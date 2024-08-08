@@ -81,8 +81,7 @@ For dataset, make sure it provides labels in the same format as [CPPE-5](https:/
 
 Note that zero-shot inference output is not the same output format as object-detection output. In order to compute the evaluation metric performance, we have to modify the output little bit.
 
-![W&B report](https://i.imgur.com/ASNjamQ.png)
-
+Note that standard GPU usage for float16 is 10.2GB
 
 ## PyTorch version, no Trainer
 

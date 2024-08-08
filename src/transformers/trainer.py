@@ -2247,7 +2247,7 @@ class Trainer:
                 total_batched_samples += 1
 
                 if self.args.include_num_input_tokens_seen:
-                    main_input_name = getattr(self.model, "main_input_name", "input_ids")
+                    main_input_name = self._get_input_by_name()
                     if main_input_name not in inputs:
                         logger.warning(
                             "Tried to track the number of tokens seen, however the current model is "
@@ -3248,6 +3248,10 @@ class Trainer:
         self.state.log_history.append(output)
         self.control = self.callback_handler.on_log(self.args, self.state, self.control, logs)
 
+    def _get_input_by_name(self) -> str:
+        """Simple getattr function for getting input by name"""
+        return getattr(self.model, "main_input_name", "input_ids")
+
     def _prepare_input(self, data: Union[torch.Tensor, Any]) -> Union[torch.Tensor, Any]:
         """
         Prepares one `data` before feeding it to the model, be it a tensor or a nested list/dictionary of tensors.
@@ -3865,7 +3869,7 @@ class Trainer:
 
             # Prediction step
             losses, logits, labels = self.prediction_step(model, inputs, prediction_loss_only, ignore_keys=ignore_keys)
-            main_input_name = getattr(self.model, "main_input_name", "input_ids")
+            main_input_name = self._get_input_by_name()
             inputs_decode = self._prepare_input(inputs[main_input_name]) if args.include_inputs_for_metrics else None
 
             if is_torch_xla_available():
@@ -4455,7 +4459,7 @@ class Trainer:
 
         for step, inputs in enumerate(dataloader):
             loss, logits, labels = self.prediction_step(model, inputs, prediction_loss_only, ignore_keys=ignore_keys)
-            main_input_name = getattr(self.model, "main_input_name", "input_ids")
+            main_input_name = self._get_input_by_name()
             inputs_decode = self._prepare_input(inputs[main_input_name]) if args.include_inputs_for_metrics else None
 
             if loss is not None:

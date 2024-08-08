@@ -60,6 +60,13 @@ class ModelOutput:
     pred_boxes: torch.Tensor
 
 
+
+class ZeroShotTrainer(Trainer):
+    def _get_input_by_name(self):
+        """Simple getattr function for getting input by name"""
+        return getattr(self.model, "input_ids", "input_ids")
+
+
 def format_image_annotations_as_coco(
     image_id: str, categories: List[int], areas: List[float], bboxes: List[Tuple[float]]
 ) -> dict:
@@ -263,7 +270,11 @@ def compute_metrics(
         Mapping[str, float]: Metrics in a form of dictionary {<metric_name>: <metric_value>}
     """
 
-    predictions, targets, inputs = evaluation_results.predictions, evaluation_results.label_ids, evaluation_results.inputs
+    predictions, targets, inputs = (
+        evaluation_results.predictions,
+        evaluation_results.label_ids,
+        evaluation_results.inputs,
+    )
     # For metric computation we need to provide:
     #  - targets in a form of list of dictionaries with keys "boxes", "labels"
     #  - predictions in a form of list of dictionaries with keys "boxes", "scores", "labels"
@@ -588,7 +599,7 @@ def main():
 
     eval_compute_metrics_fn = partial(compute_metrics, processor=processor, id2label=id2label, label2id=label2id)
 
-    trainer = Trainer(
+    trainer = ZeroShotTrainer(
         model=model,
         args=training_args,
         train_dataset=dataset["train"] if training_args.do_train else None,
