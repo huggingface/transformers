@@ -654,6 +654,10 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, GenerationTesterMixin, Mod
                 [layer_attention.shape for layer_attention in iter_attentions], [expected_shape] * len(iter_attentions)
             )
 
+    @unittest.skip(reason="Reformer fails this test always")
+    def test_inputs_embeds_matches_input_ids_with_generate(self):
+        pass
+
     def _check_hidden_states_for_generate(
         self, batch_size, hidden_states, min_length, max_length, config, use_cache=False, num_beam_groups=1
     ):

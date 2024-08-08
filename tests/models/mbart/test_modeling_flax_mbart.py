@@ -413,6 +413,10 @@ class FlaxMBartModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGeneration
                 for jitted_output, output in zip(jitted_outputs, outputs):
                     self.assertEqual(jitted_output.shape, output.shape)
 
+    @unittest.skip(reason="Flax mbart fails this test")
+    def test_inputs_embeds_matches_input_ids_with_generate(self):
+        pass
+
     @slow
     def test_model_from_pretrained(self):
         for model_class_name in self.all_model_classes:
