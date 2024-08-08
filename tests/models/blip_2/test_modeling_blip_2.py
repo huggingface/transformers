@@ -1043,8 +1043,9 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
         image = prepare_img()
         prompt = "Question: which city is this? Answer:"
 
-        # Make sure we will go teh legacy path by setting these args to None
+        # Make sure we will go the legacy path by setting these args to None
         processor.num_query_tokens = None
+        model.config.image_token_index = None
         inputs = processor(images=image, text=prompt, return_tensors="pt").to(torch_device, dtype=torch.float16)
 
         predictions = model.generate(**inputs, do_sample=False, max_new_tokens=15)
@@ -1052,8 +1053,9 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
 
         # Add args to the config to trigger new logic when inputs are expanded in processing file
         processor.num_query_tokens = model.config.num_query_tokens
+        processor.tokenizer.add_special_tokens({"additional_special_tokens": ["<image>"]})
+        model.config.image_token_index = len(processor.tokenizer) - 1
         model.resize_token_embeddings(processor.tokenizer.vocab_size, pad_to_multiple_of=64)
-        model.config.image_token_index = processor.tokenizer.vocab_size
 
         # Generate again with new inputs
         inputs = processor(images=image, text=prompt, return_tensors="pt").to(torch_device, dtype=torch.float16)

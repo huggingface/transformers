@@ -820,7 +820,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                     "Expanding inputs for image tokens in LLaVa-NeXT should be done in processing. "
                     "Please add `patch_size` and `vision_feature_select_strategy` to the model's processing config or set directly "
                     "with `processor.patch_size = {{patch_size}}` and processor.vision_feature_select_strategy = {{vision_feature_select_strategy}}`. "
-                    "Using processors without these attributes in the config is deprecated and will throw an error in v4.44."
+                    "Using processors without these attributes in the config is deprecated and will throw an error in v4.47."
                 )
                 if input_ids.shape[1] != 1:
                     inputs_embeds = inputs_embeds.to(image_features.dtype)
@@ -863,7 +863,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                     attention_mask = torch.cat((extended_attention_mask, attention_mask[:, -target_length:]), dim=1)
                     position_ids = torch.sum(attention_mask, dim=1).unsqueeze(-1) - 1
 
-            # TODO: @raushan retain only the new behavior after v4.44
+            # TODO: @raushan retain only the new behavior after v4.47
             else:
                 special_image_mask = (
                     (input_ids == self.config.image_token_index).unsqueeze(-1).expand_as(inputs_embeds)
@@ -939,17 +939,9 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
         )
 
         if legacy_processing:
-            # legacy specific code copied from prev version
-            if past_key_values is not None:
-                model_inputs["input_ids"] = model_inputs["input_ids"][:, -1:]
-                if "position_ids" in model_inputs:
-                    model_inputs["position_ids"] = model_inputs["position_ids"][:, -1:]
-
             model_inputs["pixel_values"] = pixel_values
             model_inputs["image_sizes"] = image_sizes
-            model_inputs["cache_position"] = None
-
-        elif past_key_values is None:
+        elif cache_position[0] == 0:
             # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
             # Otherwise we need pixel values to be passed to model
             model_inputs["pixel_values"] = pixel_values

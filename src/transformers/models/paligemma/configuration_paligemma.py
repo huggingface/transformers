@@ -110,14 +110,11 @@ class PaliGemmaConfig(PretrainedConfig):
                 vocab_size=257152,
                 vision_use_head=False,
             )
-        self.vocab_size = self.vocab_size
 
         self.text_config = text_config
-
         if isinstance(self.text_config, dict):
             text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "gemma"
             self.text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
-            self.vocab_size = self.text_config.vocab_size
         elif text_config is None:
             self.text_config = CONFIG_MAPPING["gemma"](
                 hidden_size=2048,
@@ -135,7 +132,7 @@ class PaliGemmaConfig(PretrainedConfig):
     @property
     def ignore_index(self):
         warnings.warn(
-            "The `ignore_index` attribute is deprecated and will be removed in v4.44.",
+            "The `ignore_index` attribute is deprecated and will be removed in v4.47.",
             FutureWarning,
         )
         return self._ignore_index

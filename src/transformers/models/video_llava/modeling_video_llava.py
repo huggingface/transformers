@@ -552,7 +552,7 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
                     "Expanding inputs for image tokens in Video-LLaVa should be done in processing. "
                     "Please add `patch_size` and `vision_feature_select_strategy` to the model's processing config or set directly "
                     "with `processor.patch_size = {{patch_size}}` and processor.vision_feature_select_strategy = {{vision_feature_select_strategy}}`. "
-                    "Using processors without these attributes in the config is deprecated and will throw an error in v4.44."
+                    "Using processors without these attributes in the config is deprecated and will throw an error in v4.47."
                 )
                 if input_ids.shape[1] != 1:
                     for features, frames in ((image_features, 1), (video_features, num_frames)):
@@ -601,7 +601,7 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
                     attention_mask = torch.cat((extended_attention_mask, attention_mask[:, -target_length:]), dim=1)
                     position_ids = torch.sum(attention_mask, dim=1).unsqueeze(-1) - 1
 
-            # TODO: @raushan retain only the new behavior after v4.44
+            # TODO: @raushan retain only the new behavior after v4.47
             else:
                 if image_outputs is not None:
                     special_image_mask = (
