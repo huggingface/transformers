@@ -335,6 +335,16 @@ class PipelineTesterMixin:
         if TRANSFORMERS_TINY_MODEL_PATH != "hf-internal-testing":
             repo_id = os.path.join(TRANSFORMERS_TINY_MODEL_PATH, model_type, repo_name)
 
+        # TODO: We should check if a model file is on the Hub repo. instead.
+        try:
+            model = model_architecture.from_pretrained(repo_id, revision=commit)
+        except Exception:
+            logger.warning(
+                f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')}_{torch_dtype} is skipped: Could not find or load "
+                f"the model from `{repo_id}` with `{model_architecture}`."
+            )
+            self.skipTest(f"Could not find or load the model from {repo_id} with {model_architecture}.")
+
         tokenizer = None
         if tokenizer_name is not None:
             tokenizer_class = getattr(transformers_module, tokenizer_name)
@@ -366,16 +376,6 @@ class PipelineTesterMixin:
                 f"any tokenizer / image processor / feature extractor from `{repo_id}`."
             )
             self.skipTest(f"Could not find or load any tokenizer / processor from {repo_id}.")
-
-        # TODO: We should check if a model file is on the Hub repo. instead.
-        try:
-            model = model_architecture.from_pretrained(repo_id, revision=commit)
-        except Exception:
-            logger.warning(
-                f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')}_{torch_dtype} is skipped: Could not find or load "
-                f"the model from `{repo_id}` with `{model_architecture}`."
-            )
-            self.skipTest(f"Could not find or load the model from {repo_id} with {model_architecture}.")
 
         pipeline_test_class_name = pipeline_test_mapping[task]["test"].__name__
         if self.is_pipeline_test_to_skip_more(pipeline_test_class_name, model.config, model, tokenizer, **processors):
