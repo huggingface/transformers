@@ -64,8 +64,12 @@ class TorchAoHfQuantizer(HfQuantizer):
     def update_torch_dtype(self, torch_dtype):
         if self.quantization_config.quant_type == "int4_weight_only":
             if torch_dtype is not None and torch_dtype != torch.bfloat16:
-                logger.warn(
-                    f"Setting torch_dtype to {torch_dtype} for int4_weight_only quantization, but only bfloat16 is supported right now. Setting torch_dtype to torch.bfloat16."
+                logger.warning_once(
+                    f"Setting torch_dtype to {torch_dtype} for int4_weight_only quantization, but only bfloat16 is supported right now. Please set the torch_dtype to bfloat16."
+                )
+            if torch_dtype is None:
+                logger.warning_once(
+                    "Setting torch_dtype to torch.bfloat16 for int4_weight_only quantization since only bfloat16 is supported right now. Please set torch_dtype=torch.bfloat16 to remove this warning."
                 )
                 torch_dtype = torch.bfloat16
         return torch_dtype
