@@ -1445,6 +1445,18 @@ class Trainer:
                 optimizer_cls = Lomo
 
             optimizer_kwargs.update({"model": model})
+        elif args.optim == OptimizerNames.GROKADAMW:
+            try:
+                from grokadamw import GrokAdamW
+                optimizer_cls = GrokAdamW
+                optimizer_kwargs.update({"alpha_init": float(optim_args.get("alpha_init", 0.98)),
+                                        "lamb": float(optim_args.get("lamb", 2.0)),
+                                        "gamma": float(optim_args.get("gamma", 0.1)),
+                                        "grokking_signal_decay_rate": float(optim_args.get("grokking_signal_decay_rate", 0.1)),
+                                        "gradient_clipping": float(optim_args.get("gradient_clipping", 1.0)),
+                                        })
+            except ImportError:
+                raise ValueError("Please install grokadamw with `pip install grokadamw`")
         else:
             raise ValueError(f"Trainer cannot instantiate unsupported optimizer: {args.optim}")
         return optimizer_cls, optimizer_kwargs
