@@ -151,7 +151,7 @@ def get_imports(filename: Union[str, os.PathLike]) -> List[str]:
     content = re.sub(r"\s*try\s*:\s*.*?\s*except\s*.*?:", "", content, flags=re.MULTILINE | re.DOTALL)
     # filter out imports under is_flash_attn_2_available block for avoid import issues in cpu only environment
     content = re.sub(
-        r"if is_flash_attn_[0-9]+_available\(\):\s*(from flash_attn\s*.*\s*)+", "", content, flags=re.MULTILINE
+        r"if is_flash_attn[a-zA-Z0-9_]+available\(\):\s*(from flash_attn\s*.*\s*)+", "", content, flags=re.MULTILINE
     )
 
     # Imports of the form `import xxx`
