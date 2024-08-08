@@ -42,7 +42,7 @@ BboxInput = Union[
 ]
 
 
-class InstructBlipProcessorKwargs(ProcessingKwargs, total=False):
+class Kosmos2ProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "add_special_tokens": True,
@@ -132,7 +132,7 @@ class Kosmos2Processor(ProcessorMixin):
         text: Union[TextInput, List[TextInput]] = None,
         audio=None,
         videos=None,
-        **kwargs: Unpack[InstructBlipProcessorKwargs],
+        **kwargs: Unpack[Kosmos2ProcessorKwargs],
     ) -> BatchFeature:
         """
         This method uses [`CLIPImageProcessor.__call__`] method to prepare image(s) for the model, and
@@ -163,7 +163,7 @@ class Kosmos2Processor(ProcessorMixin):
         add_eos_token = kwargs.pop("add_eos_token", False)
 
         output_kwargs = self._merge_kwargs(
-            InstructBlipProcessorKwargs,
+            Kosmos2ProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
