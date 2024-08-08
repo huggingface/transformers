@@ -148,7 +148,9 @@ class Phi3RotaryEmbedding(nn.Module):
         if position_ids is None and seq_len is None:
             raise ValueError("You have to provide either position_ids or seq_len")
         if position_ids is None:
-            position_ids = torch.arange(seq_len, device=x.device, dtype=torch.int64).unsqueeze(0).expand(x.shape[0], -1)
+            position_ids = (
+                torch.arange(seq_len, device=x.device, dtype=torch.int64).unsqueeze(0).expand(x.shape[0], -1)
+            )
         self.inv_freq.to(x.device)
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
         position_ids_expanded = position_ids[:, None, :].float()
@@ -182,7 +184,9 @@ class Phi3SuScaledRotaryEmbedding(Phi3RotaryEmbedding):
         if position_ids is None and seq_len is None:
             raise ValueError("You have to provide either position_ids or seq_len")
         if position_ids is None:
-            position_ids = torch.arange(seq_len, device=x.device, dtype=torch.int64).unsqueeze(0).expand(x.shape[0], -1)
+            position_ids = (
+                torch.arange(seq_len, device=x.device, dtype=torch.int64).unsqueeze(0).expand(x.shape[0], -1)
+            )
         seq_len = torch.max(position_ids) + 1 if seq_len is None else seq_len
         if seq_len > self.original_max_position_embeddings:
             ext_factors = torch.tensor(self.long_factor, dtype=torch.float32, device=x.device)
@@ -226,7 +230,9 @@ class Phi3YarnScaledRotaryEmbedding(Phi3RotaryEmbedding):
         if position_ids is None and seq_len is None:
             raise ValueError("You have to provide either position_ids or seq_len")
         if position_ids is None:
-            position_ids = torch.arange(seq_len, device=x.device, dtype=torch.int64).unsqueeze(0).expand(x.shape[0], -1)
+            position_ids = (
+                torch.arange(seq_len, device=x.device, dtype=torch.int64).unsqueeze(0).expand(x.shape[0], -1)
+            )
         seq_len = torch.max(position_ids) + 1 if seq_len is None else seq_len
         if seq_len > self.original_max_position_embeddings:
             ext_factors = torch.tensor(self.long_factor, dtype=torch.float32, device=x.device)
@@ -271,7 +277,9 @@ class Phi3LongRoPEScaledRotaryEmbedding(Phi3RotaryEmbedding):
         if position_ids is None and seq_len is None:
             raise ValueError("You have to provide either position_ids or seq_len")
         if position_ids is None:
-            position_ids = torch.arange(seq_len, device=x.device, dtype=torch.int64).unsqueeze(0).expand(x.shape[0], -1)
+            position_ids = (
+                torch.arange(seq_len, device=x.device, dtype=torch.int64).unsqueeze(0).expand(x.shape[0], -1)
+            )
         seq_len = torch.max(position_ids) + 1 if seq_len is None else seq_len
         if seq_len > self.original_max_position_embeddings:
             ext_factors = torch.tensor(self.long_factor, dtype=torch.float32, device=x.device)
