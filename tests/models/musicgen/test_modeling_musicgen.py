@@ -622,14 +622,11 @@ class MusicgenDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
     @require_torch_sdpa
     @slow
-    # Copied from tests.test_modeling_common.ModelTesterMixin.test_eager_matches_sdpa_inference
     def test_eager_matches_sdpa_inference(self, torch_dtype: str):
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
 
-        if (not self.is_multimodal and not self.all_model_classes[0]._supports_sdpa) or (
-            self.is_multimodal and not self.supports_sdpa
-        ):
+        if not self.all_model_classes[0]._supports_sdpa:
             self.skipTest(f"{self.all_model_classes[0].__name__} does not support SDPA")
 
         if torch_dtype == "float16" and not is_torch_fp16_available_on_device(torch_device):
@@ -1939,14 +1936,11 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
     @require_torch_sdpa
     @slow
-    # Copied from tests.test_modeling_common.ModelTesterMixin.test_eager_matches_sdpa_inference
     def test_eager_matches_sdpa_inference(self, torch_dtype: str):
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
 
-        if (not self.is_multimodal and not self.all_model_classes[0]._supports_sdpa) or (
-            self.is_multimodal and not self.supports_sdpa
-        ):
+        if not self.all_model_classes[0]._supports_sdpa:
             self.skipTest(f"{self.all_model_classes[0].__name__} does not support SDPA")
 
         if torch_dtype == "float16" and not is_torch_fp16_available_on_device(torch_device):
@@ -2007,15 +2001,18 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                 audio_encoder_attn = "sdpa" if model.audio_encoder._supports_sdpa else "eager"
                 text_encoder_attn = "sdpa" if model.text_encoder._supports_sdpa else "eager"
                 decoder_attn = "sdpa" if model.decoder._supports_sdpa else "eager"
-                self.assertTrue(model_sdpa.config.audio_encoder._attn_implementation == audio_encoder_attn)
-                self.assertTrue(model_sdpa.config.text_encoder._attn_implementation == text_encoder_attn)
-                self.assertTrue(model_sdpa.config.decoder._attn_implementation == decoder_attn)
+
+                # `None` as it is the requested one which will be assigned to each sub-config
+                # Sub-model will dispatch to SDPA if it can (checked below that `SDPA` layers are present)
+                self.assertTrue(model_sdpa.audio_encoder.config._attn_implementation == audio_encoder_attn)
+                self.assertTrue(model_sdpa.text_encoder.config._attn_implementation == text_encoder_attn)
+                self.assertTrue(model_sdpa.decoder.config._attn_implementation == decoder_attn)
                 self.assertTrue(
                     model_sdpa.config._attn_implementation
                     == {
-                        "audio_encoder": audio_encoder_attn,
-                        "text_encoder": text_encoder_attn,
-                        "decoder": decoder_attn,
+                        "audio_encoder": None,
+                        "text_encoder": None,
+                        "decoder": None,
                     }
                 )
 
@@ -2026,9 +2023,9 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                 )
                 model_eager = model_eager.eval().to(torch_device)
 
-                self.assertTrue(model_eager.config.audio_encoder._attn_implementation == "eager")
-                self.assertTrue(model_eager.config.text_encoder._attn_implementation == "eager")
-                self.assertTrue(model_eager.config.decoder._attn_implementation == "eager")
+                self.assertTrue(model_eager.audio_encoder.config._attn_implementation == "eager")
+                self.assertTrue(model_eager.text_encoder.config._attn_implementation == "eager")
+                self.assertTrue(model_eager.decoder.config._attn_implementation == "eager")
                 self.assertTrue(
                     model_eager.config._attn_implementation
                     == {"audio_encoder": "eager", "text_encoder": "eager", "decoder": "eager"}

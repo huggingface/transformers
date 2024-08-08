@@ -939,6 +939,7 @@ class CLIPTextTransformer(nn.Module):
 )
 class CLIPTextModel(CLIPPreTrainedModel):
     config_class = CLIPTextConfig
+    _is_composite = False
 
     _no_split_modules = ["CLIPTextEmbeddings", "CLIPEncoderLayer"]
 
@@ -1060,6 +1061,7 @@ class CLIPVisionModel(CLIPPreTrainedModel):
     config_class = CLIPVisionConfig
     main_input_name = "pixel_values"
     _no_split_modules = ["CLIPEncoderLayer"]
+    _is_composite = False
 
     def __init__(self, config: CLIPVisionConfig):
         super().__init__(config)
@@ -1139,12 +1141,12 @@ class CLIPModel(CLIPPreTrainedModel):
         self.vision_embed_dim = vision_config.hidden_size
 
         text_model = CLIPTextModel._from_config(
-            text_config, attn_implementation=config.text_config._attn_implementation
+            text_config, attn_implementation=config._attn_implementation["text_config"]
         )
         self.text_model = text_model.text_model
 
         vision_model = CLIPVisionModel._from_config(
-            vision_config, attn_implementation=config.vision_config._attn_implementation
+            vision_config, attn_implementation=config._attn_implementation["vision_config"]
         )
         self.vision_model = vision_model.vision_model
 
@@ -1355,6 +1357,7 @@ class CLIPModel(CLIPPreTrainedModel):
 )
 class CLIPTextModelWithProjection(CLIPPreTrainedModel):
     config_class = CLIPTextConfig
+    _is_composite = False
 
     _no_split_modules = ["CLIPTextEmbeddings", "CLIPEncoderLayer"]
 
@@ -1438,6 +1441,7 @@ class CLIPTextModelWithProjection(CLIPPreTrainedModel):
 class CLIPVisionModelWithProjection(CLIPPreTrainedModel):
     config_class = CLIPVisionConfig
     main_input_name = "pixel_values"
+    _is_composite = False
 
     def __init__(self, config: CLIPVisionConfig):
         super().__init__(config)
@@ -1517,13 +1521,14 @@ class CLIPVisionModelWithProjection(CLIPPreTrainedModel):
 )
 class CLIPForImageClassification(CLIPPreTrainedModel):
     main_input_name = "pixel_values"
+    _is_composite = False
 
     def __init__(self, config: CLIPConfig) -> None:
         super().__init__(config)
 
         self.num_labels = config.num_labels
         vision_model = CLIPVisionModel._from_config(
-            config.vision_config, attn_implementation=config.vision_config._attn_implementation
+            config.vision_config, attn_implementation=config._attn_implementation
         )
         self.vision_model = vision_model.vision_model
 

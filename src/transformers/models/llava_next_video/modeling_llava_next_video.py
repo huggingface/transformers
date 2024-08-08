@@ -382,7 +382,7 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel):
     ):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(
-            config.vision_config, attn_implementation=config.vision_config._attn_implementation
+            config.vision_config, attn_implementation=config._attn_implementation["vision_config"]
         )
         self.multi_modal_projector = LlavaNextVideoMultiModalProjector(config)
 
@@ -391,7 +391,7 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel):
 
         self.vocab_size = config.text_config.vocab_size
         self.language_model = AutoModelForCausalLM.from_config(
-            config.text_config, attn_implementation=config.text_config._attn_implementation
+            config.text_config, attn_implementation=config._attn_implementation["text_config"]
         )
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self._padding_side = "left"  # set it to left by default, user can use setter to change padding_sides

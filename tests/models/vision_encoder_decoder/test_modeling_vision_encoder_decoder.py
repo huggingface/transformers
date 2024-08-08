@@ -84,8 +84,7 @@ if is_vision_available():
 
 @require_torch
 class EncoderDecoderMixin:
-    has_attentions: bool = False
-    supports_sdpa: bool = False
+    supports_sdpa = False
 
     def get_encoder_decoder_model(self, config, decoder_config):
         pass
@@ -393,9 +392,6 @@ class EncoderDecoderMixin:
     @require_torch_sdpa
     @slow
     def test_eager_matches_sdpa_inference(self, torch_dtype: str):
-        if not self.has_attentions:
-            self.skipTest(reason="Model architecture does not support attentions")
-
         if not self.supports_sdpa:
             self.skipTest("SDPA is not supported")
 
@@ -428,20 +424,17 @@ class EncoderDecoderMixin:
             model_sdpa = model_sdpa.eval().to(torch_device)
 
             # see https://github.com/huggingface/transformers/pull/32238
-            # TL:DR; each sub-config will dispatch its own attn depending on whether it's supported or not
-            # In this case we get SDPA by default if it `_supports_Sdpa` else fallback to "eager"
+            # `None` as it is the requested one which will be assigned to each sub-config
+            # Sub-model will dispatch to SDPA if it can (checked below that `SDPA` layers are present)
             encoder_attn = "sdpa" if model.encoder._supports_sdpa else "eager"
             decoder_attn = "sdpa" if model.decoder._supports_sdpa else "eager"
-
-            self.assertTrue(
-                model_sdpa.config._attn_implementation == {"encoder": encoder_attn, "decoder": decoder_attn}
-            )
-            self.assertTrue(model_sdpa.config.encoder._attn_implementation == encoder_attn)
-            self.assertTrue(model_sdpa.config.decoder._attn_implementation == decoder_attn)
+            self.assertTrue(model_sdpa.config._attn_implementation == {"encoder": None, "decoder": None})
+            self.assertTrue(model_sdpa.encoder.config._attn_implementation == encoder_attn)
+            self.assertTrue(model_sdpa.decoder.config._attn_implementation == decoder_attn)
 
             # Also test that nothing break if we request SDPA explicitly, when both sub-parts support it.
-            # If the model supports sdpa (i.e. one of sub-models supports it) we'll dispatch safely whenever possible
-            # Otherwise we should raise error that SDPA is not supported, as none of the sub-models support SDPA
+            # If the model supports sdpa (i.e. all of sub-models supports it) we'll dispatch safely
+            # Otherwise we should raise error that SDPA is not supported, as some of the sub-models doesn't support
             if encoder_attn == "sdpa" and decoder_attn == "sdpa":
                 model_sdpa_explicit = VisionEncoderDecoderModel.from_pretrained(
                     tmpdirname, torch_dtype=torch_dtype, attn_implementation="sdpa"
@@ -452,8 +445,11 @@ class EncoderDecoderMixin:
                     model_sdpa_explicit.config._attn_implementation
                     == {"encoder": encoder_attn, "decoder": decoder_attn}
                 )
-                self.assertTrue(model_sdpa_explicit.config.encoder._attn_implementation == encoder_attn)
-                self.assertTrue(model_sdpa_explicit.config.decoder._attn_implementation == decoder_attn)
+            else:
+                with self.assertRaises(ValueError):
+                    model_sdpa_explicit = VisionEncoderDecoderModel.from_pretrained(
+                        tmpdirname, torch_dtype=torch_dtype, attn_implementation="sdpa"
+                    )
 
             model_eager = VisionEncoderDecoderModel.from_pretrained(
                 tmpdirname,
@@ -463,8 +459,8 @@ class EncoderDecoderMixin:
             model_eager = model_eager.eval().to(torch_device)
 
             self.assertTrue(model_eager.config._attn_implementation == {"encoder": "eager", "decoder": "eager"})
-            self.assertTrue(model_eager.config.encoder._attn_implementation == "eager")
-            self.assertTrue(model_eager.config.decoder._attn_implementation == "eager")
+            self.assertTrue(model_eager.encoder.config._attn_implementation == "eager")
+            self.assertTrue(model_eager.decoder.config._attn_implementation == "eager")
 
             for name, submodule in model_eager.named_modules():
                 class_name = submodule.__class__.__name__
@@ -603,7 +599,6 @@ class DeiT2RobertaModelTest(EncoderDecoderMixin, unittest.TestCase):
 
 @require_torch
 class ViT2BertModelTest(EncoderDecoderMixin, unittest.TestCase):
-    has_attentions = True
     supports_sdpa = True  # one submodel support SDPA
 
     def get_pretrained_model_and_inputs(self):
@@ -758,7 +753,6 @@ class Swin2BartModelTest(EncoderDecoderMixin, unittest.TestCase):
 
 @require_torch
 class ViT2TrOCR(EncoderDecoderMixin, unittest.TestCase):
-    has_attentions = True
     supports_sdpa = True  # one submodel support SDPA
 
     def get_encoder_decoder_model(self, config, decoder_config):
@@ -918,7 +912,6 @@ class LayoutLMv32TrOCR(EncoderDecoderMixin, unittest.TestCase):
 
 @require_torch
 class VIT2GPT2Test(EncoderDecoderMixin, unittest.TestCase):
-    has_attentions = True
     supports_sdpa = True  # both submodels support SDPA
 
     def get_encoder_decoder_model(self, config, decoder_config):
@@ -1036,7 +1029,6 @@ class VIT2GPT2Test(EncoderDecoderMixin, unittest.TestCase):
 
 @require_torch
 class Donut2GPT2Test(EncoderDecoderMixin, unittest.TestCase):
-    has_attentions = True
     supports_sdpa = True  # one submodel (GPT2) support SDPA
 
     def get_encoder_decoder_model(self, config, decoder_config):

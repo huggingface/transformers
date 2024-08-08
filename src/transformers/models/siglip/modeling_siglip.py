@@ -999,6 +999,7 @@ class SiglipTextTransformer(nn.Module):
 )
 class SiglipTextModel(SiglipPreTrainedModel):
     config_class = SiglipTextConfig
+    _is_composite = False
 
     def __init__(self, config: SiglipTextConfig):
         super().__init__(config)
@@ -1141,6 +1142,7 @@ class SiglipMultiheadAttentionPoolingHead(nn.Module):
 class SiglipVisionModel(SiglipPreTrainedModel):
     config_class = SiglipVisionConfig
     main_input_name = "pixel_values"
+    _is_composite = False
 
     def __init__(self, config: SiglipVisionConfig):
         super().__init__(config)
@@ -1220,10 +1222,10 @@ class SiglipModel(SiglipPreTrainedModel):
 
         # First, initialize the text and vision models with proper attention implementation
         text_model = SiglipTextModel._from_config(
-            text_config, attn_implementation=config.text_config._attn_implementation
+            text_config, attn_implementation=config._attn_implementation["text_config"]
         )
         vision_model = SiglipVisionModel._from_config(
-            vision_config, attn_implementation=config.vision_config._attn_implementation
+            vision_config, attn_implementation=config._attn_implementation["vision_config"]
         )
 
         # Second, get the text and vision submodules (for backward compatibility)
@@ -1451,6 +1453,7 @@ class SiglipModel(SiglipPreTrainedModel):
 )
 class SiglipForImageClassification(SiglipPreTrainedModel):
     main_input_name = "pixel_values"
+    _is_composite = False
 
     def __init__(self, config: SiglipConfig) -> None:
         super().__init__(config)
@@ -1460,7 +1463,7 @@ class SiglipForImageClassification(SiglipPreTrainedModel):
         # Create the vision model with proper attention
         # and take only vision_model submodule (for backward compatibility)
         vision_model = SiglipVisionModel._from_config(
-            config.vision_config, attn_implementation=config.vision_config._attn_implementation
+            config.vision_config, attn_implementation=config._attn_implementation
         )
         self.vision_model = vision_model.vision_model
 

@@ -998,9 +998,7 @@ class Idefics2PerceiverLayer(nn.Module):
 
         self.input_latents_norm = Idefics2RMSNorm(self.hidden_size, eps=self.rms_norm_eps)
         self.input_context_norm = Idefics2RMSNorm(self.hidden_size, eps=self.rms_norm_eps)
-        self.self_attn = IDEFICS2_PERCEIVER_ATTENTION_CLASSES[config.perceiver_config._attn_implementation](
-            config, layer_idx=layer_idx
-        )
+        self.self_attn = IDEFICS2_PERCEIVER_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx=layer_idx)
         self.post_attention_layernorm = Idefics2RMSNorm(self.hidden_size, eps=self.rms_norm_eps)
         self.mlp = Idefics2MLP(
             hidden_size=config.text_config.hidden_size,
@@ -1101,7 +1099,7 @@ class Idefics2PerceiverResampler(Idefics2PreTrainedModel):
         self.layers = nn.ModuleList([Idefics2PerceiverLayer(config, idx) for idx in range(self.depth)])
         self.norm = Idefics2RMSNorm(self.hidden_size, eps=self.rms_norm_eps)
 
-        self._use_flash_attention_2 = config.perceiver_config._attn_implementation == "flash_attention_2"
+        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
 
     def forward(
         self,
@@ -1149,7 +1147,9 @@ class Idefics2Connector(nn.Module):
             output_size=config.text_config.hidden_size,
             hidden_act=config.text_config.hidden_act,
         )
-        self.perceiver_resampler = Idefics2PerceiverResampler(config)
+        self.perceiver_resampler = Idefics2PerceiverResampler._from_config(
+            config, attn_implementation=config._attn_implementation["perceiver_config"]
+        )
 
     def forward(self, image_hidden_states, attention_mask):
         image_hidden_states = self.modality_projection(image_hidden_states)
@@ -1237,16 +1237,18 @@ class Idefics2Model(Idefics2PreTrainedModel):
         self.padding_idx = self.config.text_config.pad_token_id
         self.vocab_size = self.config.text_config.vocab_size
 
-        self.vision_model = Idefics2VisionTransformer(config.vision_config)
+        self.vision_model = Idefics2VisionTransformer._from_config(
+            config.vision_config, attn_implementation=config._attn_implementation["vision_config"]
+        )
         self.connector = Idefics2Connector(config)
         self.text_model = AutoModel.from_config(
-            config.text_config, attn_implementation=config.text_config._attn_implementation
+            config.text_config, attn_implementation=config._attn_implementation["text_config"]
         )
 
         self.image_seq_len = config.perceiver_config.resampler_n_latents
         self.image_token_id = self.config.image_token_id
 
-        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
+        self._use_flash_attention_2 = config._attn_implementation["text_config"] == "flash_attention_2"
 
         self.post_init()
 

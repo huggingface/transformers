@@ -445,7 +445,6 @@ class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationT
     test_attention_outputs = False
     test_torchscript = False
 
-    is_multimodal = True
     # We define thsi flag here because in VLMs these flags depend on which LM/vision models are used
     # So we can't know if SDPA is supported before starting to load the model
     # This flag is used by tests and is set to False because vision models used in tests don't support SDPA
@@ -710,7 +709,6 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixi
     test_attention_outputs = False
     test_torchscript = False
 
-    is_multimodal = True
     # We define thsi flag here because in VLMs these flags depend on which LM/vision models are used
     # So we can't know if SDPA is supported before starting to load the model
     # This flag is used by tests and is set to False because vision models used in tests don't support SDPA

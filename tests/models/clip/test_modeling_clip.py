@@ -257,16 +257,16 @@ class CLIPModelTesterMixin(ModelTesterMixin):
                 self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
                 self.assertTrue(model_eager.config._attn_implementation == "eager")
             else:
-                # sigLip has one shared cls attr for all models
+                # CLIP has one shared cls attr for all models, so both submodels are SDPA or eager
+                # We expect `None` as it is the requested one which will be assigned to each sub-config
+                # Sub-model will dispatch to SDPA if it can (checked below that `SDPA` layers are present)
                 vision_attn = text_attn = "sdpa" if model._supports_sdpa else "eager"
-                self.assertTrue(model_sdpa.config.vision_config._attn_implementation == vision_attn)
-                self.assertTrue(model_sdpa.config.text_config._attn_implementation == text_attn)
-                self.assertTrue(
-                    model_sdpa.config._attn_implementation == {"text_config": text_attn, "vision_config": vision_attn}
-                )
+                self.assertTrue(model_sdpa.vision_model.config._attn_implementation == vision_attn)
+                self.assertTrue(model_sdpa.text_model.config._attn_implementation == text_attn)
+                self.assertTrue(model_sdpa.config._attn_implementation == {"text_config": None, "vision_config": None})
 
-                self.assertTrue(model_eager.config.vision_config._attn_implementation == "eager")
-                self.assertTrue(model_eager.config.text_config._attn_implementation == "eager")
+                self.assertTrue(model_eager.vision_model.config._attn_implementation == "eager")
+                self.assertTrue(model_eager.text_model.config._attn_implementation == "eager")
                 self.assertTrue(
                     model_eager.config._attn_implementation == {"text_config": "eager", "vision_config": "eager"}
                 )
@@ -1156,6 +1156,7 @@ class CLIPForImageClassificationModelTest(CLIPModelTesterMixin, PipelineTesterMi
             torch_dtype=torch_dtype,
             logit_keys=("logits",),
             use_attention_mask_options=(None,),
+            is_composite=False,
         )
 
 

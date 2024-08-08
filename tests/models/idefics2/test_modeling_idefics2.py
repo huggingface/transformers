@@ -350,12 +350,15 @@ class Idefics2ModelTest(ModelTesterMixin, unittest.TestCase):
                 model_sdpa = model_sdpa.eval().to(torch_device)
 
                 # see https://github.com/huggingface/transformers/pull/32238
-                perceiver_attn = "sdpa" if model.connector.perceiver_resampler._supports_sdpa else "eager"
-                vision_attn = "sdpa" if model.vision_model._supports_sdpa else "eager"
-
-                self.assertTrue(model_sdpa.config.text_config._attn_implementation == "sdpa")
-                self.assertTrue(model_sdpa.config.perceiver_config._attn_implementation == perceiver_attn)
-                self.assertTrue(model_sdpa.config.vision_config._attn_implementation == vision_attn)
+                # we put `None` because that is the requested attn implementation, which will dispatch to SDPA internally if available
+                perceiver_attn = None if model.connector.perceiver_resampler._supports_sdpa else "eager"
+                vision_attn = None if model.vision_model._supports_sdpa else "eager"
+                self.assertTrue(
+                    model_sdpa.config._attn_implementation
+                    == {"text_config": None, "perceiver_config": None, "vision_config": None}
+                )
+                self.assertTrue(model_sdpa.vision_model.config._attn_implementation == vision_attn)
+                self.assertTrue(model_sdpa.connector.perceiver_resampler.config._attn_implementation == perceiver_attn)
 
                 # Also test that nothing break if we request SDPA explicitly
                 # If the model supports sdpa (i.e. one of sub-models supports it) we'll raise error because we
@@ -370,9 +373,12 @@ class Idefics2ModelTest(ModelTesterMixin, unittest.TestCase):
                 )
                 model_eager = model_eager.eval().to(torch_device)
 
-                self.assertTrue(model_eager.config.text_config._attn_implementation == "eager")
-                self.assertTrue(model_sdpa.config.perceiver_config._attn_implementation == "eager")
-                self.assertTrue(model_sdpa.config.vision_config._attn_implementation == "eager")
+                self.assertTrue(
+                    model_eager.config._attn_implementation
+                    == {"text_config": "eager", "perceiver_config": "eager", "vision_config": "eager"}
+                )
+                self.assertTrue(model_eager.vision_model.config._attn_implementation == "eager")
+                self.assertTrue(model_eager.connector.perceiver_resampler.config._attn_implementation == "eager")
 
                 for name, submodule in model_eager.named_modules():
                     class_name = submodule.__class__.__name__

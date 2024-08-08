@@ -184,7 +184,6 @@ class ModelTesterMixin:
     is_encoder_decoder = False
     has_attentions = True
     model_split_percents = [0.5, 0.7, 0.9]
-    is_multimodal = False
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = copy.deepcopy(inputs_dict)
@@ -3712,8 +3711,9 @@ class ModelTesterMixin:
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
 
-        if (not self.is_multimodal and not self.all_model_classes[0]._supports_sdpa) or (
-            self.is_multimodal and not self.supports_sdpa
+        print(not self.all_model_classes[0]._supports_sdpa, not self.all_model_classes[0]._is_composite)
+        if (not self.all_model_classes[0]._supports_sdpa and not self.all_model_classes[0]._is_composite) or (
+            self.all_model_classes[0]._is_composite and not self.supports_sdpa
         ):
             self.skipTest(f"{self.all_model_classes[0].__name__} does not support SDPA")
 
@@ -3777,20 +3777,18 @@ class ModelTesterMixin:
                 model_sdpa = model_class.from_pretrained(tmpdirname, torch_dtype=torch_dtype)
                 model_sdpa = model_sdpa.eval().to(torch_device)
 
-                if self.is_multimodal:
-                    vision_supports_sdpa = (
-                        model.image_tower._supports_sdpa
-                        if hasattr(model_sdpa, "image_tower")
-                        else model.vision_tower._supports_sdpa
-                    )
-                    vision_attn = "sdpa" if vision_supports_sdpa else "eager"
+                if model_sdpa._is_composite:
+                    vision_model_name = "image_tower" if hasattr(model_sdpa, "image_tower") else "vision_tower"
+                    vision_attn = "sdpa" if getattr(model, vision_model_name)._supports_sdpa else "eager"
                     text_attn = "sdpa" if model.language_model._supports_sdpa else "eager"
-                    self.assertTrue(model_sdpa.config.vision_config._attn_implementation == vision_attn)
-                    self.assertTrue(model_sdpa.config.text_config._attn_implementation == text_attn)
+
+                    # `None` as it is the requested one which will be assigned to each sub-config
+                    # Sub-model will dispatch to SDPA if it can (checked below that `SDPA` layers are present)
                     self.assertTrue(
-                        model_sdpa.config._attn_implementation
-                        == {"text_config": text_attn, "vision_config": vision_attn}
+                        model_sdpa.config._attn_implementation == {"text_config": None, "vision_config": None}
                     )
+                    self.assertTrue(model_sdpa.language_model.config._attn_implementation == text_attn)
+                    self.assertTrue(getattr(model_sdpa, vision_model_name).config._attn_implementation == vision_attn)
                 else:
                     self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
 
@@ -3801,12 +3799,12 @@ class ModelTesterMixin:
                 )
                 model_eager = model_eager.eval().to(torch_device)
 
-                if self.is_multimodal:
-                    self.assertTrue(model_eager.config.vision_config._attn_implementation == "eager")
-                    self.assertTrue(model_eager.config.text_config._attn_implementation == "eager")
+                if model_eager._is_composite:
                     self.assertTrue(
                         model_eager.config._attn_implementation == {"text_config": "eager", "vision_config": "eager"}
                     )
+                    self.assertTrue(model_eager.language_model.config._attn_implementation == "eager")
+                    self.assertTrue(getattr(model_eager, vision_model_name).config._attn_implementation == "eager")
                 else:
                     self.assertTrue(model_eager.config._attn_implementation == "eager")
 
@@ -4044,8 +4042,8 @@ class ModelTesterMixin:
             self.skipTest(reason="This test requires an NVIDIA GPU with compute capability >= 8.0")
 
         for model_class in self.all_model_classes:
-            if (not self.is_multimodal and not model_class._supports_sdpa) or (
-                self.is_multimodal and not self.supports_sdpa
+            if (not model_class._is_composite and not model_class._supports_sdpa) or (
+                model_class._is_composite and not self.supports_sdpa
             ):
                 self.skipTest(f"{model_class.__name__} does not support SDPA")
 
@@ -4092,8 +4090,8 @@ class ModelTesterMixin:
             self.skipTest(reason="This test requires an NVIDIA GPU with compute capability >= 8.0")
 
         for model_class in self.all_model_classes:
-            if (not self.is_multimodal and not model_class._supports_sdpa) or (
-                self.is_multimodal and not self.supports_sdpa
+            if (not model_class._is_composite and not model_class._supports_sdpa) or (
+                model_class._is_composite and not self.supports_sdpa
             ):
                 self.skipTest(f"{model_class.__name__} does not support SDPA")
 
@@ -4136,8 +4134,8 @@ class ModelTesterMixin:
             self.skipTest(f"{self.__class__.__name__} tests a model that does support generate: skipping this test")
 
         for model_class in self.all_generative_model_classes:
-            if (not self.is_multimodal and not model_class._supports_sdpa) or (
-                self.is_multimodal and not self.supports_sdpa
+            if (not model_class._is_composite and not model_class._supports_sdpa) or (
+                model_class._is_composite and not self.supports_sdpa
             ):
                 self.skipTest(f"{model_class.__name__} does not support SDPA")
 

@@ -224,14 +224,14 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
     def __init__(self, config: PaliGemmaConfig):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(
-            config=config.vision_config, attn_implementation=config.vision_config._attn_implementation
+            config=config.vision_config, attn_implementation=config._attn_implementation["vision_config"]
         )
         self.multi_modal_projector = PaliGemmaMultiModalProjector(config)
         self.vocab_size = config.text_config.vocab_size
         self._attn_implementation = config._attn_implementation
 
         language_model = AutoModelForCausalLM.from_config(
-            config=config.text_config, attn_implementation=config.text_config._attn_implementation
+            config=config.text_config, attn_implementation=config._attn_implementation["text_config"]
         )
 
         if language_model._tied_weights_keys is not None:
