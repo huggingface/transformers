@@ -1027,6 +1027,11 @@ def is_vision_available():
     return _pil_available
 
 
+@lru_cache
+def is_matplotlib_available():
+    return _is_package_available("matplotlib")
+
+
 def is_pytesseract_available():
     return _pytesseract_available
 
