@@ -4293,7 +4293,6 @@ class ModelTesterMixin:
             self.skipTest(reason="Model architecture does not support attentions")
 
         max_new_tokens = 2
-
         for model_class in self.all_generative_model_classes:
             if not model_class._supports_flash_attn_2:
                 self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")

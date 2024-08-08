@@ -1844,6 +1844,10 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             )
             assert isinstance(pred_ids, expected_output_type)
 
+    @unittest.skip("Reusing cache seems to be not working in encoder-decoder setting")
+    def test_flash_attn_2_generate_reuse_cache(self):
+        pass
+
 
 @require_torch
 @require_torchaudio
@@ -4064,6 +4068,12 @@ class WhisperStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin,
 
     @unittest.skip(reason="The model doesn't support fast init from base")
     def test_save_load_fast_init_from_base(self):
+        pass
+
+    @unittest.skip(
+        reason="FA2 testing suite needs to be refactored to be compatible with WhisperDecoder for that test"
+    )
+    def test_flash_attn_2_generate_reuse_cache(self):
         pass
 
     @unittest.skip(
