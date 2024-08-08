@@ -170,8 +170,8 @@
       title: (번역중) Methods and tools for efficient training on a single GPU
     - local: perf_train_gpu_many
       title: 다중 GPU에서 훈련 진행하기
-    - local: in_translation
-      title: (번역중) Fully Sharded Data Parallel
+    - local: fsdp
+      title: 완전 분할 데이터 병렬 처리
     - local: in_translation
       title: (번역중) DeepSpeed
     - local: perf_train_cpu
