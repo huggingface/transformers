@@ -169,6 +169,7 @@ from .utils import (
     is_torch_xpu_available,
     logging,
     strtobool,
+    get_torch_version,
 )
 from .utils.quantization_config import QuantizationMethod
 
@@ -3335,7 +3336,7 @@ class Trainer:
                 torch.mlu.empty_cache()
             elif is_torch_npu_available():
                 torch.npu.empty_cache()
-            elif is_torch_mps_available():
+            elif get_torch_version() >= "2.0" and is_torch_mps_available():
                 torch.mps.empty_cache()
             else:
                 torch.cuda.empty_cache()
