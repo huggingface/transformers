@@ -257,9 +257,8 @@ class CLIPModelTesterMixin(ModelTesterMixin):
                 self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
                 self.assertTrue(model_eager.config._attn_implementation == "eager")
             else:
-                vision_attn = text_attn = (
-                    "sdpa" if model._supports_sdpa else "eager"
-                )  # sigLip has one shared cls attr for all models
+                # sigLip has one shared cls attr for all models
+                vision_attn = text_attn = "sdpa" if model._supports_sdpa else "eager"
                 self.assertTrue(model_sdpa.config.vision_config._attn_implementation == vision_attn)
                 self.assertTrue(model_sdpa.config.text_config._attn_implementation == text_attn)
                 self.assertTrue(
