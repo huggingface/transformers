@@ -13,20 +13,17 @@ from ...test_processing_common import ProcessorTesterMixin
 if is_vision_available():
     from PIL import Image
 
-if is_vision_available() and is_torch_available():
-    from transformers import AutoProcessor, FuyuImageProcessor, FuyuProcessor
-
 if is_torch_available():
     import torch
 
+    from transformers import AutoProcessor, FuyuImageProcessor, FuyuProcessor
     from transformers.models.fuyu.processing_fuyu import construct_full_unpacked_stream, full_unpacked_stream_to_tensor
 
 
 @require_torch
 @require_torch_gpu
-@require_vision
 @slow
-class FuyuProcessingTest(ProcessorTesterMixin, unittest.TestCase):  # TODO Which mixins do we add here?
+class FuyuProcessingTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = FuyuProcessor
 
     def setUp(self):
