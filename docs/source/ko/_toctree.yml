@@ -151,8 +151,8 @@
     title: (번역중) AQLM
   - local: quantization/quanto
     title: Quanto
-  - local: in_translation
-    title: (번역중) EETQ
+  - local: quantization/eetq
+    title: EETQ
   - local: in_translation
     title: (번역중) HQQ
   - local: in_translation
