@@ -169,7 +169,7 @@ class Qwen2AudioForConditionalGenerationModelTest(ModelTesterMixin, unittest.Tes
 @require_torch
 class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.processor = AutoProcessor.from_pretrained("faychu/test")
+        self.processor = AutoProcessor.from_pretrained("Qwen/Qwen2-Audio-7B-Instruct")
 
     def tearDown(self):
         gc.collect()
@@ -178,7 +178,7 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     def test_small_model_integration_test_single(self):
         # Let' s make sure we test the preprocessing to replace what is used
-        model = Qwen2AudioForConditionalGeneration.from_pretrained("faychu/test")
+        model = Qwen2AudioForConditionalGeneration.from_pretrained("Qwen/Qwen2-Audio-7B-Instruct")
 
         url = "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/glass-breaking-151256.mp3"
         messages = [
@@ -250,7 +250,7 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     def test_small_model_integration_test_batch(self):
         # Let' s make sure we test the preprocessing to replace what is used
-        model = Qwen2AudioForConditionalGeneration.from_pretrained("faychu/test")
+        model = Qwen2AudioForConditionalGeneration.from_pretrained("Qwen/Qwen2-Audio-7B-Instruct")
 
         conversation1 = [
             {
@@ -325,7 +325,7 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     def test_small_model_integration_test_multiturn(self):
         # Let' s make sure we test the preprocessing to replace what is used
-        model = Qwen2AudioForConditionalGeneration.from_pretrained("faychu/test")
+        model = Qwen2AudioForConditionalGeneration.from_pretrained("Qwen/Qwen2-Audio-7B-Instruct")
 
         messages = [
             {"role": "system", "content": "You are a helpful assistant."},
