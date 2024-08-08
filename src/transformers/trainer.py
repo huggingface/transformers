@@ -3335,7 +3335,7 @@ class Trainer:
                 torch.mlu.empty_cache()
             elif is_torch_npu_available():
                 torch.npu.empty_cache()
-            elif is_torch_mps_available(min_version="2.0"):
+            elif is_torch_mps_available():
                 torch.mps.empty_cache()
             else:
                 torch.cuda.empty_cache()
