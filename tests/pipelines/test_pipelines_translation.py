@@ -47,10 +47,24 @@ class TranslationPipelineTests(unittest.TestCase):
         if isinstance(model.config, MBartConfig):
             src_lang, tgt_lang = list(tokenizer.lang_code_to_id.keys())[:2]
             translator = TranslationPipeline(
-                model=model, tokenizer=tokenizer, src_lang=src_lang, tgt_lang=tgt_lang, torch_dtype=torch_dtype
+                model=model,
+                tokenizer=tokenizer,
+                feature_extractor=feature_extractor,
+                image_processor=image_processor,
+                processor=processor,
+                torch_dtype=torch_dtype,
+                src_lang=src_lang,
+                tgt_lang=tgt_lang,
             )
         else:
-            translator = TranslationPipeline(model=model, tokenizer=tokenizer, torch_dtype=torch_dtype)
+            translator = TranslationPipeline(
+                model=model,
+                tokenizer=tokenizer,
+                feature_extractor=feature_extractor,
+                image_processor=image_processor,
+                processor=processor,
+                torch_dtype=torch_dtype,
+            )
         return translator, ["Some string", "Some other text"]
 
     def run_pipeline_test(self, translator, _):

@@ -386,7 +386,14 @@ class TextGenerationPipelineTests(unittest.TestCase):
         processor=None,
         torch_dtype="float32",
     ):
-        text_generator = TextGenerationPipeline(model=model, tokenizer=tokenizer, torch_dtype=torch_dtype)
+        text_generator = TextGenerationPipeline(
+            model=model,
+            tokenizer=tokenizer,
+            feature_extractor=feature_extractor,
+            image_processor=image_processor,
+            processor=processor,
+            torch_dtype=torch_dtype,
+        )
         return text_generator, ["This is a test", "Another test"]
 
     def test_stop_sequence_stopping_criteria(self):
@@ -404,6 +411,7 @@ class TextGenerationPipelineTests(unittest.TestCase):
     def run_pipeline_test(self, text_generator, _):
         model = text_generator.model
         tokenizer = text_generator.tokenizer
+        processor = text_generator.processor
 
         outputs = text_generator("This is a test")
         self.assertEqual(outputs, [{"generated_text": ANY(str)}])
@@ -413,7 +421,7 @@ class TextGenerationPipelineTests(unittest.TestCase):
         self.assertEqual(outputs, [{"generated_text": ANY(str)}])
         self.assertNotIn("This is a test", outputs[0]["generated_text"])
 
-        text_generator = pipeline(task="text-generation", model=model, tokenizer=tokenizer, return_full_text=False)
+        text_generator = pipeline(task="text-generation", model=model, tokenizer=tokenizer, processor=processor, return_full_text=False)
         outputs = text_generator("This is a test")
         self.assertEqual(outputs, [{"generated_text": ANY(str)}])
         self.assertNotIn("This is a test", outputs[0]["generated_text"])

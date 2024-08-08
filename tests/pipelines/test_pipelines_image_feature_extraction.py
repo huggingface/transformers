@@ -184,7 +184,12 @@ class ImageFeatureExtractionPipelineTests(unittest.TestCase):
             )
 
         feature_extractor_pipeline = ImageFeatureExtractionPipeline(
-            model=model, image_processor=image_processor, torch_dtype=torch_dtype
+            model=model,
+            tokenizer=tokenizer,
+            feature_extractor=feature_extractor,
+            image_processor=image_processor,
+            processor=processor,
+            torch_dtype=torch_dtype,
         )
         img = prepare_img()
         return feature_extractor_pipeline, [img, img]

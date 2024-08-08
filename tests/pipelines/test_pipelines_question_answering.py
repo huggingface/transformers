@@ -63,7 +63,14 @@ class QAPipelineTests(unittest.TestCase):
             # This is an bimodal model, we need to find a more consistent way
             # to switch on those models.
             return None, None
-        question_answerer = QuestionAnsweringPipeline(model, tokenizer, torch_dtype=torch_dtype)
+        question_answerer = QuestionAnsweringPipeline(
+            model=model,
+            tokenizer=tokenizer,
+            feature_extractor=feature_extractor,
+            image_processor=image_processor,
+            processor=processor,
+            torch_dtype=torch_dtype,
+        )
 
         examples = [
             {"question": "Where was HuggingFace founded ?", "context": "HuggingFace was founded in Paris."},

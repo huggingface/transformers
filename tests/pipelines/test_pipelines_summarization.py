@@ -41,7 +41,14 @@ class SummarizationPipelineTests(unittest.TestCase):
         processor=None,
         torch_dtype="float32",
     ):
-        summarizer = SummarizationPipeline(model=model, tokenizer=tokenizer, torch_dtype=torch_dtype)
+        summarizer = SummarizationPipeline(
+            model=model,
+            tokenizer=tokenizer,
+            feature_extractor=feature_extractor,
+            image_processor=image_processor,
+            processor=processor,
+            torch_dtype=torch_dtype,
+        )
         return summarizer, ["(CNN)The Palestinian Authority officially became", "Some other text"]
 
     def run_pipeline_test(self, summarizer, _):

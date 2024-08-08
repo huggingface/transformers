@@ -263,7 +263,14 @@ class FillMaskPipelineTests(unittest.TestCase):
         if tokenizer is None or tokenizer.mask_token_id is None:
             self.skipTest(reason="The provided tokenizer has no mask token, (probably reformer or wav2vec2)")
 
-        fill_masker = FillMaskPipeline(model=model, tokenizer=tokenizer, torch_dtype=torch_dtype)
+        fill_masker = FillMaskPipeline(
+            model=model,
+            tokenizer=tokenizer,
+            feature_extractor=feature_extractor,
+            image_processor=image_processor,
+            processor=processor,
+            torch_dtype=torch_dtype,
+        )
         examples = [
             f"This is another {tokenizer.mask_token} test",
         ]

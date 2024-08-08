@@ -66,7 +66,12 @@ class DepthEstimationPipelineTests(unittest.TestCase):
         torch_dtype="float32",
     ):
         depth_estimator = DepthEstimationPipeline(
-            model=model, image_processor=image_processor, torch_dtype=torch_dtype
+            model=model,
+            tokenizer=tokenizer,
+            feature_extractor=feature_extractor,
+            image_processor=image_processor,
+            processor=processor,
+            torch_dtype=torch_dtype,
         )
         return depth_estimator, [
             "./tests/fixtures/tests_samples/COCO/000000039769.png",

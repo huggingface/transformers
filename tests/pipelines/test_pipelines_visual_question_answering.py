@@ -65,7 +65,9 @@ class VisualQuestionAnsweringPipelineTests(unittest.TestCase):
         torch_dtype="float32",
     ):
         vqa_pipeline = pipeline(
-            "visual-question-answering", model="hf-internal-testing/tiny-vilt-random-vqa", torch_dtype=torch_dtype
+            "visual-question-answering",
+            model="hf-internal-testing/tiny-vilt-random-vqa",
+            torch_dtype=torch_dtype,
         )
         examples = [
             {

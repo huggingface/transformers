@@ -202,7 +202,12 @@ class FeatureExtractionPipelineTests(unittest.TestCase):
                 """
             )
         feature_extractor_pipeline = FeatureExtractionPipeline(
-            model=model, tokenizer=tokenizer, feature_extractor=feature_extractor, torch_dtype=torch_dtype
+            model=model,
+            tokenizer=tokenizer,
+            feature_extractor=feature_extractor,
+            image_processor=image_processor,
+            processor=processor,
+            torch_dtype=torch_dtype,
         )
         return feature_extractor_pipeline, ["This is a test", "This is another test"]
 

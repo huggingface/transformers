@@ -51,7 +51,13 @@ class VideoClassificationPipelineTests(unittest.TestCase):
             repo_id="nateraw/video-demo", filename="archery.mp4", repo_type="dataset"
         )
         video_classifier = VideoClassificationPipeline(
-            model=model, image_processor=image_processor, top_k=2, torch_dtype=torch_dtype
+            model=model,
+            tokenizer=tokenizer,
+            feature_extractor=feature_extractor,
+            image_processor=image_processor,
+            processor=processor,
+            torch_dtype=torch_dtype,
+            top_k=2,
         )
         examples = [
             example_video_filepath,

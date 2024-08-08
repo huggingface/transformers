@@ -76,7 +76,14 @@ class MaskGenerationPipelineTests(unittest.TestCase):
         processor=None,
         torch_dtype="float32",
     ):
-        image_segmenter = MaskGenerationPipeline(model=model, image_processor=image_processor, torch_dtype=torch_dtype)
+        image_segmenter = MaskGenerationPipeline(
+            model=model,
+            tokenizer=tokenizer,
+            feature_extractor=feature_extractor,
+            image_processor=image_processor,
+            processor=processor,
+            torch_dtype=torch_dtype,
+        )
         return image_segmenter, [
             "./tests/fixtures/tests_samples/COCO/000000039769.png",
             "./tests/fixtures/tests_samples/COCO/000000039769.png",

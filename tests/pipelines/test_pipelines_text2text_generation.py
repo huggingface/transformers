@@ -44,7 +44,14 @@ class Text2TextGenerationPipelineTests(unittest.TestCase):
         processor=None,
         torch_dtype="float32",
     ):
-        generator = Text2TextGenerationPipeline(model=model, tokenizer=tokenizer, torch_dtype=torch_dtype)
+        generator = Text2TextGenerationPipeline(
+            model=model,
+            tokenizer=tokenizer,
+            feature_extractor=feature_extractor,
+            image_processor=image_processor,
+            processor=processor,
+            torch_dtype=torch_dtype,
+        )
         return generator, ["Something to write", "Something else"]
 
     def run_pipeline_test(self, generator, _):

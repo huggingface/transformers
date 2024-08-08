@@ -81,7 +81,12 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             self.skipTest(reason="No tokenizer available")
 
         speech_recognizer = AutomaticSpeechRecognitionPipeline(
-            model=model, tokenizer=tokenizer, feature_extractor=feature_extractor, torch_dtype=torch_dtype
+            model=model,
+            tokenizer=tokenizer,
+            feature_extractor=feature_extractor,
+            image_processor=image_processor,
+            processor=processor,
+            torch_dtype=torch_dtype,
         )
 
         # test with a raw waveform

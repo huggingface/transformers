@@ -55,7 +55,12 @@ class ImageToTextPipelineTests(unittest.TestCase):
         torch_dtype="float32",
     ):
         pipe = ImageToTextPipeline(
-            model=model, tokenizer=tokenizer, image_processor=image_processor, torch_dtype=torch_dtype
+            model=model,
+            tokenizer=tokenizer,
+            feature_extractor=feature_extractor,
+            image_processor=image_processor,
+            processor=processor,
+            torch_dtype=torch_dtype,
         )
         examples = [
             Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png"),
