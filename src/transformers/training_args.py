@@ -1769,7 +1769,7 @@ class TrainingArguments:
                 else:
                     self.accelerator_config = AcceleratorConfig.from_json_file(self.accelerator_config)
 
-            if self.accelerator_config.get("gradient_accumulation_kwargs", None) is not None:
+            if self.accelerator_config.gradient_accumulation_kwargs is not None:
                 if not is_accelerate_available("0.28.0"):
                     raise ImportError("`gradient_accumulation_kwargs` is only supported in accelerate>=0.28.0.")
                 grad_acc_kwargs = self.accelerator_config.get("gradient_accumulation_kwargs", {})

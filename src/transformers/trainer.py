@@ -1,3 +1,4 @@
+import contextlib
 import copy
 import functools
 import glob
@@ -11,6 +12,7 @@ import sys
 import tempfile
 import time
 import warnings
+from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
 
@@ -40,6 +42,7 @@ from .configuration_utils import PretrainedConfig
 from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
 from .debug_utils import DebugOption, DebugUnderflowOverflow
 from .feature_extraction_sequence_utils import SequenceFeatureExtractor
+from .hyperparameter_search import ALL_HYPERPARAMETER_SEARCH_BACKENDS, default_hp_search_backend
 from .integrations.deepspeed import deepspeed_init, deepspeed_load_checkpoint, is_deepspeed_available
 from .integrations.tpu import tpu_spmd_dataloader
 from .modeling_utils import (
@@ -48,6 +51,9 @@ from .modeling_utils import (
     load_peft_adapters,
     load_sagemaker_model,
     load_sharded_checkpoint,
+)
+from .models.auto.modeling_auto import (
+    MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
 )
 from .optimization import Adafactor, get_scheduler
 from .pytorch_utils import (
@@ -91,13 +97,16 @@ from .trainer_pt_utils import (
 )
 from .trainer_utils import (
     PREFIX_CHECKPOINT_DIR,
+    BestRun,
     EvalLoopOutput,
     EvalPrediction,
     HPSearchBackend,
     PredictionOutput,
     RemoveColumnsCollator,
+    TrainerMemoryTracker,
     TrainOutput,
     check_target_module_exists,
+    default_compute_objective,
     denumpify_detensorize,
     enable_full_determinism,
     find_executable_batch_size,
@@ -131,8 +140,12 @@ from .utils import (
     is_sagemaker_dp_enabled,
     is_sagemaker_mp_enabled,
     is_torch_compile_available,
+    is_torch_mlu_available,
+    is_torch_mps_available,
     is_torch_neuroncore_available,
+    is_torch_npu_available,
     is_torch_xla_available,
+    is_torch_xpu_available,
     logging,
     strtobool,
 )
@@ -212,11 +225,15 @@ if is_accelerate_available():
     if is_deepspeed_available():
         from accelerate.utils import DeepSpeedSchedulerWrapper
 
-if is_accelerate_available("0.28.0"):
-    pass
-
 if is_sagemaker_mp_enabled():
     import smdistributed.modelparallel.torch as smp
+    from smdistributed.modelparallel import __version__ as SMP_VERSION
+
+    IS_SAGEMAKER_MP_POST_1_10 = version.parse(SMP_VERSION) >= version.parse("1.10")
+
+    from .trainer_pt_utils import smp_forward_backward, smp_gather
+else:
+    IS_SAGEMAKER_MP_POST_1_10 = False
 
 if TYPE_CHECKING:
     import optuna
@@ -258,7 +275,19 @@ class Trainer:
         # Seed must be set before instantiating the model
         enable_full_determinism(args.seed) if args.full_determinism else set_seed(args.seed)
 
+        self.hp_name = None
+        self.deepspeed = None
+        self.is_in_train = False
+
         self.create_accelerator_and_postprocess()
+
+        # memory metrics - must be set up as early as possible
+        self._memory_tracker = TrainerMemoryTracker(self.args.skip_memory_metrics)
+        self._memory_tracker.start()
+
+        # set the correct log level depending on the node
+        log_level = args.get_process_log_level()
+        logging.set_verbosity(log_level)
 
         # Force device and distributed setup init explicitly
         args._setup_devices
@@ -300,6 +329,17 @@ class Trainer:
                 )
             self.model_init = model_init
             model = self.call_model_init()
+        else:
+            if model_init is not None:
+                warnings.warn(
+                    "`Trainer` requires either a `model` or `model_init` argument, but not both. `model_init` will"
+                    " overwrite your model when calling the `train` method. This will become a fatal error in the next"
+                    " release.",
+                    FutureWarning,
+                )
+            self.model_init = model_init
+
+        self.setup_model_parallelism(model)
 
         # one place to sort out whether to place the model on device or not
         # postpone switching model to cuda when:
@@ -332,6 +372,33 @@ class Trainer:
         if self.is_model_parallel:
             self.args._n_gpu = 1
 
+        # Mixed precision setup
+        self.use_apex = False
+        self.use_cpu_amp = False
+
+        # Mixed precision: SageMaker Model Parallel
+        if is_sagemaker_mp_enabled():
+            # BF16 + model parallelism in SageMaker: currently not supported, raise an error
+            if args.bf16:
+                raise ValueError("SageMaker Model Parallelism does not support BF16 yet. Please use FP16 instead ")
+
+            if IS_SAGEMAKER_MP_POST_1_10:
+                # When there's mismatch between SMP config and trainer argument, use SMP config as truth
+                if args.fp16 != smp.state.cfg.fp16:
+                    logger.warning(
+                        f"FP16 provided in SM_HP_MP_PARAMETERS is {smp.state.cfg.fp16}, "
+                        f"but FP16 provided in trainer argument is {args.fp16}, "
+                        f"setting to {smp.state.cfg.fp16}"
+                    )
+                    args.fp16 = smp.state.cfg.fp16
+            else:
+                # smp < 1.10 does not support fp16 in trainer.
+                if hasattr(smp.state.cfg, "fp16"):
+                    logger.warning(
+                        f"FP16 provided in SM_HP_MP_PARAMETERS is {smp.state.cfg.fp16}, "
+                        "but SageMaker Model Parallelism < 1.10 does not support FP16 in trainer."
+                    )
+
         # Mixed precision (when not using `Accelerator`)
         if args.half_precision_backend == "auto":
             if args.device == torch.device("cpu"):
@@ -362,7 +429,7 @@ class Trainer:
         # Callbacks
         default_callbacks = DEFAULT_CALLBACKS + get_reporting_integration_callbacks(args.report_to)
         callbacks = default_callbacks if callbacks is None else default_callbacks + callbacks
-        self.callback_hanlder = CallbackHandler(
+        self.callback_handler = CallbackHandler(
             callbacks, self.model, self.tokenizer, self.optimizer, self.lr_scheduler, self.accelerator
         )
         self.add_callback(PrinterCallback if self.args.disable_tqdm else DEFAULT_PROGRESS_CALLBACK)
@@ -776,7 +843,7 @@ class Trainer:
             "num_workers": self.args.dataloader_num_workers,
             "pin_memory": self.args.dataloader_pin_memory,
             "persistent_workers": self.args.dataloader_persistent_workers,
-            "batch_size": self.args._train_batch_size if dataset_type == "train" else self.args.eval_batch_size,
+            "batch_size": self._train_batch_size if dataset_type == "train" else self.args.eval_batch_size,
         }
 
         if not isinstance(dataset, torch.utils.data.IterableDataset):
@@ -977,6 +1044,7 @@ class Trainer:
                 }
             )
             class_name = "AdamW"
+            import_to_try = None
 
             # Based on the optimizer, import/grab the right `__init__`
             if args.optim == OptimizerNames.ADAMW_HF:
@@ -1612,12 +1680,151 @@ class Trainer:
             # Wait for the checkpoint to be uploaded.
             self._finish_current_push()
 
-            # After training we make sure to retrieve back the original forward pass method
-            # for the embedding layer by removing the forward post hook.
-            if self.neftune_noise_alpha is not None:
-                self._deactivate_neftune(self.model)
-
             return TrainOutput(self.state.global_step, train_loss, metrics)
+
+    def compute_loss_context_manager(self, cache_enabled=False):
+        """
+        A helper wrapper that creates an appropriate context manager for `autocast` while feeding it the desired
+        arguments, depending on the situation.
+        Only really enabled when `use_cpu_amp=True`, else delegates it to `Accelerate`
+        """
+        if self.use_cpu_amp:
+            ctx_manager = torch.cpu.amp.autocast(cache_enabled=cache_enabled, dtype=self.amp_dtype)
+        else:
+            ctx_manager = contextlib.nullcontext()
+
+        return ctx_manager
+
+    def _prepare_input(self, data: Union[torch.Tensor, Any]) -> Union[torch.Tensor, Any]:
+        """
+        Prepares one `data` before feeding it to the model, be it a tensor or a nested list/dictionary of tensors.
+        """
+        if isinstance(data, Mapping):
+            return type(data)({k: self._prepare_input(v) for k, v in data.items()})
+        elif isinstance(data, (tuple, list)):
+            return type(data)(self._prepare_input(v) for v in data)
+        elif isinstance(data, torch.Tensor):
+            kwargs = {"device": self.args.device}
+            if self.is_deepspeed_enabled and (torch.is_floating_point(data) or torch.is_complex(data)):
+                # NLP models inputs are int/uint and those get adjusted to the right dtype of the
+                # embedding. Other models such as wav2vec2's inputs are already float and thus
+                # may need special handling to match the dtypes of the model
+                kwargs.update({"dtype": self.accelerator.state.deepspeed_plugin.hf_ds_config.dtype()})
+            return data.to(**kwargs)
+        return data
+
+    def _prepare_inputs(self, inputs: Dict[str, Union[torch.Tensor, Any]]) -> Dict[str, Union[torch.Tensor, Any]]:
+        """
+        Prepare `inputs` before feeding them to the model, converting them to tensors if they are not already and
+        handling potential state.
+        """
+        inputs = self._prepare_input(inputs)
+        if len(inputs) == 0:
+            raise ValueError(
+                "The batch received was empty, your model won't be able to train on it. Double-check that your "
+                f"training dataset contains keys expected by the model: {','.join(self._signature_columns)}."
+            )
+        if self.args.past_index >= 0 and self._past is not None:
+            inputs["mems"] = self._past
+
+        return inputs
+
+    def training_step(self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]]) -> torch.Tensor:
+        """
+        Perform a training step on a batch of inputs.
+
+        Subclass and override to inject custom behavior.
+
+        Args:
+            model (`nn.Module`):
+                The model to train.
+            inputs (`Dict[str, Union[torch.Tensor, Any]]`):
+                The inputs and targets of the model.
+
+                The dictionary will be unpacked before being fed to the model. Most models expect the targets under the
+                argument `labels`. Check your model's documentation for all accepted arguments.
+
+        Return:
+            `torch.Tensor`: The tensor with training loss on this batch.
+        """
+        model.train()
+        inputs = self._prepare_inputs(inputs)
+        if is_sagemaker_mp_enabled():
+            loss_mb = smp_forward_backward(model, inputs, self.args.gradient_accumulation_steps)
+            return loss_mb.reduce_mean().detach().to(self.args.device)
+
+        with self.compute_loss_context_manager():
+            loss = self.compute_loss(model, inputs)
+
+        del inputs
+        if (
+            self.args.torch_empty_cache_steps is not None
+            and self.state.global_step % self.args.torch_empty_cache_steps == 0
+        ):
+            if is_torch_xpu_available():
+                torch.xpu.empty_cache()
+            elif is_torch_mlu_available():
+                torch.mlu.empty_cache()
+            elif is_torch_npu_available():
+                torch.npu.empty_cache()
+            elif is_torch_mps_available(min_version="2.0"):
+                torch.mps.empty_cache()
+            else:
+                torch.cuda.empty_cache()
+
+        kwargs = {}
+
+        # For LOMO optimizers you need to explicitly use the learnign rate
+        if self.args.optim in [OptimizerNames.LOMO, OptimizerNames.ADALOMO]:
+            kwargs["learning_rate"] = self._get_learning_rate()
+
+        if self.args.n_gpu > 1:
+            loss = loss.mean()  # mean() to average on multi-gpu parallel training
+
+        if self.use_apex:
+            with amp.scale_loss(loss, self.optimizer) as scaled_loss:
+                scaled_loss.backward()
+        else:
+            self.accelerator.backward(loss, **kwargs)
+
+        return loss.detach() / self.args.gradient_accumulation_steps
+
+    def compute_loss(self, model, inputs, return_outputs=False):
+        """
+        How the loss is computed by Trainer. By default, all models return the loss in the first element.
+
+        Subclass and override for custom behavior.
+        """
+        if self.label_smoother is not None and "labels" in inputs:
+            labels = inputs.pop("labels")
+        else:
+            labels = None
+        outputs = model(**inputs)
+        # Save past state if it exists
+        # TODO: this needs to be fixed and made cleaner later.
+        if self.args.past_index >= 0:
+            self._past = outputs[self.args.past_index]
+
+        if labels is not None:
+            unwrapped_model = self.accelerator.unwrap_model(model)
+            if is_peft_model(unwrapped_model):
+                model_name = unwrapped_model.base_model.model._get_name()
+            else:
+                model_name = unwrapped_model._get_name()
+            if model_name in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES.values():
+                loss = self.label_smoother(outputs, labels, shift_labels=True)
+            else:
+                loss = self.label_smoother(outputs, labels)
+        else:
+            if isinstance(outputs, dict) and "loss" not in outputs:
+                raise ValueError(
+                    "The model did not return a loss from the inputs, only the following keys: "
+                    f"{','.join(outputs.keys())}. For reference, the inputs it received are {','.join(inputs.keys())}."
+                )
+            # We don't use .loss here since the model may return tuples instead of ModelOutput.
+            loss = outputs["loss"] if isinstance(outputs, dict) else outputs[0]
+
+        return (loss, outputs) if return_outputs else loss
 
     def train(
         self,
@@ -2079,6 +2286,85 @@ class Trainer:
                     checkpoint = ray.train.Checkpoint.from_directory(temp_checkpoint_dir)
                 metrics["objective"] = self.objective
                 ray.train.report(metrics, checkpoint=checkpoint)
+
+    def hyperparameter_search(
+        self,
+        hp_space: Optional[Callable[["optuna.Trial"], Dict[str, float]]] = None,
+        compute_objective: Optional[Callable[[Dict[str, float]], float]] = None,
+        n_trials: int = 20,
+        direction: Union[str, List[str]] = "minimize",
+        backend: Optional[Union["str", HPSearchBackend]] = None,
+        hp_name: Optional[Callable[["optuna.Trial"], str]] = None,
+        **kwargs,
+    ) -> Union[BestRun, List[BestRun]]:
+        """
+        Launch an hyperparameter search using `optuna` or `Ray Tune` or `SigOpt`. The optimized quantity is determined
+        by `compute_objective`, which defaults to a function returning the evaluation loss when no metric is provided,
+        the sum of all metrics otherwise.
+
+        <Tip warning={true}>
+
+        To use this method, you need to have provided a `model_init` when initializing your [`Trainer`]: we need to
+        reinitialize the model at each new run. This is incompatible with the `optimizers` argument, so you need to
+        subclass [`Trainer`] and override the method [`~Trainer.create_optimizer_and_scheduler`] for custom
+        optimizer/scheduler.
+
+        </Tip>
+
+        Args:
+            hp_space (`Callable[["optuna.Trial"], Dict[str, float]]`, *optional*):
+                A function that defines the hyperparameter search space. Will default to
+                [`~trainer_utils.default_hp_space_optuna`] or [`~trainer_utils.default_hp_space_ray`] or
+                [`~trainer_utils.default_hp_space_sigopt`] depending on your backend.
+            compute_objective (`Callable[[Dict[str, float]], float]`, *optional*):
+                A function computing the objective to minimize or maximize from the metrics returned by the `evaluate`
+                method. Will default to [`~trainer_utils.default_compute_objective`].
+            n_trials (`int`, *optional*, defaults to 100):
+                The number of trial runs to test.
+            direction (`str` or `List[str]`, *optional*, defaults to `"minimize"`):
+                If it's single objective optimization, direction is `str`, can be `"minimize"` or `"maximize"`, you
+                should pick `"minimize"` when optimizing the validation loss, `"maximize"` when optimizing one or
+                several metrics. If it's multi objectives optimization, direction is `List[str]`, can be List of
+                `"minimize"` and `"maximize"`, you should pick `"minimize"` when optimizing the validation loss,
+                `"maximize"` when optimizing one or several metrics.
+            backend (`str` or [`~training_utils.HPSearchBackend`], *optional*):
+                The backend to use for hyperparameter search. Will default to optuna or Ray Tune or SigOpt, depending
+                on which one is installed. If all are installed, will default to optuna.
+            hp_name (`Callable[["optuna.Trial"], str]]`, *optional*):
+                A function that defines the trial/run name. Will default to None.
+            kwargs (`Dict[str, Any]`, *optional*):
+                Additional keyword arguments passed along to `optuna.create_study` or `ray.tune.run`. For more
+                information see:
+
+                - the documentation of
+                  [optuna.create_study](https://optuna.readthedocs.io/en/stable/reference/generated/optuna.study.create_study.html)
+                - the documentation of [tune.run](https://docs.ray.io/en/latest/tune/api_docs/execution.html#tune-run)
+                - the documentation of [sigopt](https://app.sigopt.com/docs/endpoints/experiments/create)
+
+        Returns:
+            [`trainer_utils.BestRun` or `List[trainer_utils.BestRun]`]: All the information about the best run or best
+            runs for multi-objective optimization. Experiment summary can be found in `run_summary` attribute for Ray
+            backend.
+        """
+        if backend is None:
+            backend = default_hp_search_backend()
+        backend = HPSearchBackend(backend)
+        backend_obj = ALL_HYPERPARAMETER_SEARCH_BACKENDS[backend]()
+        backend_obj.ensure_available()
+        self.hp_search_backend = backend
+        if self.model_init is None:
+            raise RuntimeError(
+                "To use hyperparameter search, you need to pass your model through a model_init function."
+            )
+
+        self.hp_space = backend_obj.default_hp_space if hp_space is None else hp_space
+        self.hp_name = hp_name
+        self.compute_objective = default_compute_objective if compute_objective is None else compute_objective
+
+        best_run = backend_obj.run(self, n_trials, direction, **kwargs)
+
+        self.hp_search_backend = None
+        return best_run
 
     def _tune_save_checkpoint(self, checkpoint_dir: str):
         output_dir = os.path.join(checkpoint_dir, f"{PREFIX_CHECKPOINT_DIR}-{self.state.global_step}")

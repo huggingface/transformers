@@ -1623,9 +1623,13 @@ def create_accelerator(args):
     from accelerate import Accelerator
     from accelerate.utils import GradientAccumulationPlugin
 
+    grad_acc_kwargs = {}
+
     if is_accelerate_available("0.28.0"):
         from accelerate.utils import DataLoaderConfiguration
-    grad_acc_kwargs = args.accelerator_config.pop("gradient_accumulation_kwargs", {})
+
+        if args.accelerator_config.gradient_accumulation_kwargs is not None:
+            grad_acc_kwargs = args.accelerator_config.gradient_accumulation_kwargs
     grad_acc_kwargs["sync_with_dataloader"] = False
     if "num_steps" not in grad_acc_kwargs:
         # take the gradient_accumulation_steps setting from TrainingArguments.
