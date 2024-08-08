@@ -24,6 +24,7 @@ if is_torch_available():
 
 @require_torch
 @require_torch_gpu
+@require_vision
 @slow
 class FuyuProcessingTest(ProcessorTesterMixin, unittest.TestCase):  # TODO Which mixins do we add here?
     processor_class = FuyuProcessor
