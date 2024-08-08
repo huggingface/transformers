@@ -38,7 +38,7 @@ pip install --upgrade accelerate transformers
 </hfoption>
 </hfoptions>
 
-이제 `BitsAndBytesConfig`를 [`~PreTrainedModel.from_pretrained`] 메소드에 전달하여 모델을 양자화할 수 있습니다. 이는 Accelerate 가져오기를 지원�하고 `torch.nn.Linear` 레이어가 포함된 모든 모델에서 작동합니다.
+이제 `BitsAndBytesConfig`를 [`~PreTrainedModel.from_pretrained`] 메소드에 전달하여 모델을 양자화할 수 있습니다. 이는 Accelerate 가져오기를 지원하고 `torch.nn.Linear` 레이어가 포함된 모든 모델에서 작동합니다.
 
 <hfoptions id="bnb">
 <hfoption id="8-bit">
