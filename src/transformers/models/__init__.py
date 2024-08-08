@@ -166,6 +166,7 @@ from . import (
     nougat,
     nystromformer,
     olmo,
+    omdet_turbo,
     oneformer,
     openai,
     opt,
