@@ -175,6 +175,8 @@ class OptimizerNames(ExplicitEnum):
     GALORE_ADAFACTOR_LAYERWISE = "galore_adafactor_layerwise"
     LOMO = "lomo"
     ADALOMO = "adalomo"
+    SCHEDULE_FREE_ADAMW = "schedule_free_adamw"
+    SCHEDULE_FREE_SGD = "schedule_free_sgd"
 
 
 # Sometimes users will pass in a `str` repr of a dict in the CLI

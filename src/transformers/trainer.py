@@ -160,6 +160,7 @@ from .utils import (
     is_safetensors_available,
     is_sagemaker_dp_enabled,
     is_sagemaker_mp_enabled,
+    is_schedulefree_available,
     is_torch_compile_available,
     is_torch_mlu_available,
     is_torch_mps_available,
@@ -1442,6 +1443,34 @@ class Trainer:
                 optimizer_cls = Lomo
 
             optimizer_kwargs.update({"model": model})
+        elif args.optim in [
+            OptimizerNames.SCHEDULE_FREE_ADAMW,
+            OptimizerNames.SCHEDULE_FREE_SGD,
+        ]:
+            if not is_schedulefree_available():
+                raise ImportError(
+                    "You need to install `schedulefree` in order to use schedulefree optimizers"
+                    " install it with `pip install schedulefree`"
+                )
+            from schedulefree import AdamWScheduleFree, SGDScheduleFree
+
+            additional_optim_kwargs = {}
+            if args.optim == OptimizerNames.SCHEDULE_FREE_ADAMW:
+                optimizer_cls = AdamWScheduleFree
+                additional_optim_kwargs = adam_kwargs
+            elif args.optim == OptimizerNames.SCHEDULE_FREE_SGD:
+                optimizer_cls = SGDScheduleFree
+            else:
+                raise ValueError("Invalid schedulefree optimizer")
+            additional_optim_kwargs["weight_decay"] = args.weight_decay
+            additional_optim_kwargs["warmup_steps"] = args.warmup_steps
+            additional_optim_kwargs.update(
+                {
+                    "weight_lr_power": float(getattr(torch, optim_args.get("weight_lr_power", 2.0))),
+                    "r": float(getattr(torch, optim_args.get("r", 0.0))),
+                }
+            )
+            optimizer_kwargs.update(additional_optim_kwargs)
         else:
             raise ValueError(f"Trainer cannot instantiate unsupported optimizer: {args.optim}")
         return optimizer_cls, optimizer_kwargs
@@ -3316,6 +3345,9 @@ class Trainer:
             `torch.Tensor`: The tensor with training loss on this batch.
         """
         model.train()
+        if "ScheduleFree" in self.optimizer.__class__.__name__:
+            self.optimizer.train()
+
         inputs = self._prepare_inputs(inputs)
         if is_sagemaker_mp_enabled():
             loss_mb = smp_forward_backward(model, inputs, self.args.gradient_accumulation_steps)
@@ -3831,6 +3863,8 @@ class Trainer:
         logger.info(f"  Batch size = {batch_size}")
 
         model.eval()
+        if "ScheduleFree" in self.optimizer.__class__.__name__:
+            self.optimizer.eval()
 
         self.callback_handler.eval_dataloader = dataloader
         # Do this before wrapping.
@@ -4444,6 +4478,8 @@ class Trainer:
             inputs_gatherer = DistributedTensorGatherer(world_size, num_examples, make_multiple_of=make_multiple_of)
 
         model.eval()
+        if "ScheduleFree" in self.optimizer.__class__.__name__:
+            self.optimizer.eval()
 
         if args.past_index >= 0:
             self._past = None

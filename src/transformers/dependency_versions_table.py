@@ -68,6 +68,7 @@ deps = {
     "sacremoses": "sacremoses",
     "safetensors": "safetensors>=0.4.1",
     "sagemaker": "sagemaker>=2.31.0",
+    "schedulefree": "schedulefree>=1.2.6",
     "scikit-learn": "scikit-learn",
     "scipy": "scipy<1.13.0",
     "sentencepiece": "sentencepiece>=0.1.91,!=0.1.92",
