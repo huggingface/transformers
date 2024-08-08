@@ -161,7 +161,6 @@ def _compute_dynamic_ntk_parameters(
 def _compute_ntk_parameters(
     config: Optional[PretrainedConfig] = None,
     device: Optional["torch.device"] = None,
-    seq_len: Optional[int] = None,
     **rope_kwargs,
 ) -> Tuple["torch.Tensor", float]:
     """
@@ -171,8 +170,6 @@ def _compute_ntk_parameters(
             The model configuration.
         device (`torch.device`):
             The device to use for initialization of the inverse frequencies.
-        seq_len (`int`, *optional*):
-            The current sequence length, used to update the dynamic RoPE at inference time.
         rope_kwargs (`Dict`, *optional*):
             BC compatibility with the previous RoPE class instantiation, will be removed in v4.45.
     Returns:
@@ -188,13 +185,11 @@ def _compute_ntk_parameters(
     if len(rope_kwargs) > 0:
         base = rope_kwargs["base"]
         dim = rope_kwargs["dim"]
-        max_position_embeddings = rope_kwargs["max_position_embeddings"]
         factor = rope_kwargs["factor"]
     elif config is not None:
         base = config.rope_theta
         partial_rotary_factor = config.partial_rotary_factor if hasattr(config, "partial_rotary_factor") else 1.0
         dim = int((config.hidden_size // config.num_attention_heads) * partial_rotary_factor)
-        max_position_embeddings = config.max_position_embeddings
         factor = config.rope_scaling["factor"]
 
     attention_factor = 1.0  # Unused in this type of RoPE

@@ -235,6 +235,30 @@ class RopeTest(unittest.TestCase):
             torch.testing.assert_close(inv_freq, default_inv_freq / factor)
         torch.testing.assert_close(inv_freq, EXPECTED_INV_FREQ)
 
+    def test_ntk_rope_numerically(self):
+        # This is a ntk scaling strategy,
+
+        # input sanity checks: if these change, the output will also change
+        config = LlamaConfig()
+        self.assertEqual(config.rope_scaling, None)
+        self.assertEqual(config.hidden_size, 4096)
+        self.assertEqual(config.num_attention_heads, 32)
+        self.assertEqual(config.rope_theta, 10000.0)
+        self.assertFalse(hasattr(config, "partial_rotary_factor"))
+
+        default_rope_fn = ROPE_INIT_FUNCTIONS["default"]
+        default_inv_freq, _ = default_rope_fn(config=config, device=torch_device)
+
+        rope_fn = ROPE_INIT_FUNCTIONS["default"]
+        default_inv_freq, _ = rope_fn(config=config, device=torch_device)
+
+        dim = int(config.hidden_size // config.num_attention_heads)
+        for factor in (2.0, 10.0, 20.0):
+            config.rope_scaling = {"rope_type": "ntk", "factor": factor}
+            inv_freq, _ = rope_fn(config=config, device=torch_device)
+            with self.assertRaises(AssertionError):  # It is NOT a linear factor
+                torch.testing.assert_close(inv_freq, default_inv_freq / (factor ** (dim / (dim - 2))))
+
     def test_yarn_rope_numerically(self):
         # fmt: off
         EXPECTED_INV_FREQ = torch.tensor(
