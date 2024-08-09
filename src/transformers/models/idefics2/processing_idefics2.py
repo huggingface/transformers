@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image, load_image
-from ...processing_utils import ProcessorMixin
+from ...processing_utils import ProcessingKwargs, ProcessorMixin
 from ...tokenization_utils_base import AddedToken, BatchEncoding, PaddingStrategy, TextInput, TruncationStrategy
 from ...utils import TensorType, logging
 
@@ -38,6 +38,24 @@ def is_url(val) -> bool:
 
 def is_image_or_image_url(elem):
     return is_url(elem) or is_valid_image(elem)
+
+
+class IdeficsProcessorKwargs(ProcessingKwargs, total=False):
+    _defaults = {
+        "text_kwargs": {
+            "add_special_tokens": True,
+            "padding": False,
+            "stride": 0,
+            "return_attention_mask": True,
+            "return_overflowing_tokens": False,
+            "return_special_tokens_mask": False,
+            "return_offsets_mapping": False,
+            "return_token_type_ids": False,
+            "return_length": False,
+            "verbose": True,
+        },
+        "images_kwargs": {},
+    }
 
 
 class Idefics2Processor(ProcessorMixin):
