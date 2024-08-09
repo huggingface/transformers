@@ -39,6 +39,9 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "LlavaConfig"
 
+# Base docstring
+_CHECKPOINT_FOR_DOC = "llava-hf/llava-1.5-7b-hf"
+
 
 @dataclass
 # Copied from transformers.models.idefics.modeling_idefics.IdeficsCausalLMOutputWithPast with Idefics->Llava
@@ -126,6 +129,7 @@ class LlavaPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["LlavaVisionAttention"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
+    _supports_cache_class = True
 
     def _init_weights(self, module):
         # important: this ported version of Llava isn't meant for training from scratch - only

@@ -234,7 +234,7 @@ class PTtoTFCommand(BaseTransformersCLICommand):
                 }
             )
         if "pixel_values" in model_forward_signature:
-            sample_images = load_dataset("cifar10", "plain_text", split="test")[:2]["img"]
+            sample_images = load_dataset("uoft-cs/cifar10", "plain_text", split="test")[:2]["img"]  # no-script
             processor_inputs.update({"images": sample_images})
         if "input_features" in model_forward_signature:
             feature_extractor_signature = inspect.signature(processor.feature_extractor).parameters

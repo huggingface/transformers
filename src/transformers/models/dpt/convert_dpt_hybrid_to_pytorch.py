@@ -43,7 +43,7 @@ def get_dpt_config(checkpoint_url):
         config.neck_hidden_sizes = [256, 512, 1024, 1024]
         expected_shape = (1, 384, 384)
 
-    if "nyu" or "midas" in checkpoint_url:
+    if "nyu" in checkpoint_url or "midas" in checkpoint_url:
         config.hidden_size = 768
         config.reassemble_factors = [1, 1, 1, 0.5]
         config.neck_hidden_sizes = [256, 512, 768, 768]

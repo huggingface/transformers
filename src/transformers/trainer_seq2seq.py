@@ -80,7 +80,7 @@ class Seq2SeqTrainer(Trainer):
         Loads a `~generation.GenerationConfig` from the `Seq2SeqTrainingArguments.generation_config` arguments.
 
         Args:
-            gen_config_arg (`str` or [`~generation.GenerationConfig`]):
+            gen_config_arg (`str` or [`~generation.GenerationConfig]`):
                 `Seq2SeqTrainingArguments.generation_config` argument.
 
         Returns:

@@ -50,6 +50,7 @@ class VideoMAEImageProcessingTester(unittest.TestCase):
         image_std=[0.5, 0.5, 0.5],
         crop_size=None,
     ):
+        super().__init__()
         size = size if size is not None else {"shortest_edge": 18}
         crop_size = crop_size if crop_size is not None else {"height": 18, "width": 18}
 
@@ -99,6 +100,7 @@ class VideoMAEImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = VideoMAEImageProcessor if is_vision_available() else None
 
     def setUp(self):
+        super().setUp()
         self.image_processor_tester = VideoMAEImageProcessingTester(self)
 
     @property

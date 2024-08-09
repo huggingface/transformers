@@ -69,6 +69,7 @@ PRIVATE_MODELS = [
     "MT5Stack",
     "UMT5Stack",
     "Pop2PianoStack",
+    "Qwen2AudioEncoder",
     "SwitchTransformersStack",
     "TFDPRSpanPredictor",
     "MaskFormerSwinModel",
@@ -90,6 +91,7 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "RecurrentGemmaModel",  # Building part of bigger (tested) model.
     "FuyuForCausalLM",  # Not tested fort now
     "InstructBlipQFormerModel",  # Building part of bigger (tested) model.
+    "InstructBlipVideoQFormerModel",  # Building part of bigger (tested) model.
     "UMT5EncoderModel",  # Building part of bigger (tested) model.
     "Blip2QFormerModel",  # Building part of bigger (tested) model.
     "ErnieMForInformationExtraction",
@@ -126,6 +128,7 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "SeamlessM4TTextToUnitModel",  # Building part of bigger (tested) model.
     "SeamlessM4TCodeHifiGan",  # Building part of bigger (tested) model.
     "SeamlessM4TTextToUnitForConditionalGeneration",  # Building part of bigger (tested) model.
+    "ChameleonVQVAE",  # VQVAE here is used only for encoding (discretizing) and is tested as part of bigger model
 ]
 
 # Update this list with test files that don't have a tester with a `all_model_classes` variable and which don't
@@ -248,6 +251,8 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "GPTSw3DoubleHeadsModel",
     "InstructBlipVisionModel",
     "InstructBlipQFormerModel",
+    "InstructBlipVideoVisionModel",
+    "InstructBlipVideoQFormerModel",
     "LayoutLMForQuestionAnswering",
     "LukeForMaskedLM",
     "LukeForEntityClassification",
@@ -319,6 +324,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "SegGptForImageSegmentation",
     "SiglipVisionModel",
     "SiglipTextModel",
+    "ChameleonVQVAE",  # no autoclass for VQ-VAE models
 ]
 
 # DO NOT edit this list!
@@ -997,6 +1003,7 @@ SHOULD_HAVE_THEIR_OWN_PAGE = [
     "DinatBackbone",
     "Dinov2Backbone",
     "FocalNetBackbone",
+    "HieraBackbone",
     "MaskFormerSwinBackbone",
     "MaskFormerSwinConfig",
     "MaskFormerSwinModel",

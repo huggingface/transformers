@@ -54,9 +54,9 @@ class ImageToImagePipelineTests(unittest.TestCase):
     @require_torch
     @require_vision
     @slow
-    def test_pipeline(self):
+    def test_pipeline(self, torch_dtype="float32"):
         model_id = "caidas/swin2SR-classical-sr-x2-64"
-        upscaler = pipeline("image-to-image", model=model_id)
+        upscaler = pipeline("image-to-image", model=model_id, torch_dtype=torch_dtype)
         upscaled_list = upscaler(self.examples)
 
         self.assertEqual(len(upscaled_list), len(self.examples))
@@ -65,6 +65,12 @@ class ImageToImagePipelineTests(unittest.TestCase):
 
         self.assertEqual(upscaled_list[0].size, (1296, 976))
         self.assertEqual(upscaled_list[1].size, (1296, 976))
+
+    @require_torch
+    @require_vision
+    @slow
+    def test_pipeline_fp16(self):
+        self.test_pipeline(torch_dtype="float16")
 
     @require_torch
     @require_vision

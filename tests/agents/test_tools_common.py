@@ -60,7 +60,7 @@ def output_type(output):
     elif isinstance(output, (torch.Tensor, AgentAudio)):
         return "audio"
     else:
-        raise ValueError(f"Invalid output: {output}")
+        raise TypeError(f"Invalid output: {output}")
 
 
 @is_agent_test

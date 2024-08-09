@@ -651,7 +651,7 @@ class PipelineUtilsTest(unittest.TestCase):
         if len(relevant_auto_classes) == 0:
             # task has no default
             logger.debug(f"{task} in {framework} has no default")
-            return
+            self.skipTest(f"{task} in {framework} has no default")
 
         # by default use first class
         auto_model_cls = relevant_auto_classes[0]

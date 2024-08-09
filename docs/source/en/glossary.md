@@ -139,7 +139,7 @@ reading the whole sentence with a mask to hide future tokens at a certain timest
 
 ### deep learning (DL)
 
-Machine learning algorithms which uses neural networks with several layers.
+Machine learning algorithms which use neural networks with several layers.
 
 ## E
 

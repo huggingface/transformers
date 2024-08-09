@@ -214,7 +214,7 @@ class TimeSeriesTransformerModelTest(ModelTesterMixin, PipelineTesterMixin, unit
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
         self.model_tester.check_encoder_decoder_model_standalone(*config_and_inputs)
 
-    # Ignore since we have no tokens embeddings
+    @unittest.skip(reason="Model has no tokens embeddings")
     def test_resize_tokens_embeddings(self):
         pass
 

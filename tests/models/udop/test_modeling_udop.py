@@ -320,7 +320,7 @@ class UdopModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_fp16_forward(*config_and_inputs)
 
-    @unittest.skip("Gradient checkpointing is not supported by this model")
+    @unittest.skip(reason="Gradient checkpointing is not supported by this model")
     def test_training_gradient_checkpointing(self):
         pass
 

@@ -43,7 +43,7 @@ class BloomTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         kwargs.update(self.special_tokens_map)
         return BloomTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
 
-    @unittest.skip("This needs a slow tokenizer. Bloom does not have one!")
+    @unittest.skip(reason="This needs a slow tokenizer. Bloom does not have one!")
     def test_encode_decode_with_spaces(self):
         return
 
@@ -123,7 +123,7 @@ class BloomTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             - https://huggingface.co/bigscience/tokenizer/
         """
         tokenizer = self.get_rust_tokenizer()
-        ds = load_dataset("xnli", "all_languages", split="test", streaming=True)
+        ds = load_dataset("facebook/xnli", "all_languages", split="test", streaming=True)
 
         sample_data = next(iter(ds))["premise"]  # pick up one data
         input_text = list(sample_data.values())
@@ -135,6 +135,7 @@ class BloomTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     @require_jinja
     def test_tokenization_for_chat(self):
         tokenizer = self.get_rust_tokenizer()
+        tokenizer.chat_template = "{% for message in messages %}" "{{ message.content }}{{ eos_token }}" "{% endfor %}"
         test_chats = [
             [{"role": "system", "content": "You are a helpful chatbot."}, {"role": "user", "content": "Hello!"}],
             [
