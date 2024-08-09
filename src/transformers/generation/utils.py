@@ -47,6 +47,7 @@ from ..models.auto import (
     MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
     MODEL_FOR_VISION_2_SEQ_MAPPING,
 )
+from ..pytorch_utils import is_torch_greater_or_equal_than_2_4
 from ..tokenization_utils import ExtensionsTrie
 from ..utils import (
     ModelOutput,
@@ -488,10 +489,10 @@ class GenerationMixin:
             return default_attention_mask
 
         # Otherwise we have may have information -> try to infer the attention mask
-        if inputs.device.type == "mps":
-            # mps does not support torch.isin (https://github.com/pytorch/pytorch/issues/77764)
+        if inputs.device.type == "mps" and not is_torch_greater_or_equal_than_2_4:
+            # mps does not support torch.isin for torch<2.4 (https://github.com/pytorch/pytorch/issues/77764)
             raise ValueError(
-                "Can't infer missing attention mask on `mps` device. Please provide an `attention_mask` or use a different device."
+                "Can't infer missing attention mask on `mps` device for torch<2.4. Please provide an `attention_mask` or upgrade to torch>=2.4"
             )
 
         is_pad_token_in_inputs = (pad_token_id is not None) and (
@@ -1428,7 +1429,9 @@ class GenerationMixin:
         model_kwargs["cache_position"] = cache_position
         return model_kwargs
 
-    def _get_cache(self, cache_implementation: str, max_batch_size: int, max_cache_len: int, model_kwargs) -> Cache:
+    def _get_cache(
+        self, cache_implementation: str, max_batch_size: int, max_cache_len: int, device: torch.device, model_kwargs
+    ) -> Cache:
         """
         Sets a cache for `generate`, that will persist across calls. A new cache will only be initialized a
         new `generate` call requires a larger cache or uses a different batch size.
@@ -1470,13 +1473,13 @@ class GenerationMixin:
                     # NOTE: self.dtype is not compatible with torch.compile, as it calls `self.parameters()`.
                     # Workaround: trust the lm_head, whose attribute name is somewhat consistent across generative
                     # models. May cause trobles with non-text modalities.
-                    cache_dtype = self.lm_head.weight.dtype
+                    cache_dtype = self.get_output_embeddings().weight.dtype
 
             cache_kwargs = {
                 "config": self.config,
                 "max_batch_size": max_batch_size,
                 "max_cache_len": max_cache_len,
-                "device": self.device,
+                "device": device,
                 "dtype": cache_dtype,
             }
             self._cache = cache_cls(**cache_kwargs)
@@ -1812,12 +1815,11 @@ class GenerationMixin:
                         "issue: https://github.com/huggingface/transformers/issues/28981"
                     )
                 model_kwargs[cache_name] = self._get_cache(
-                    generation_config.cache_implementation,
-                    getattr(generation_config, "num_beams", 1)
-                    * getattr(generation_config, "num_return_sequences", 1)
-                    * batch_size,
-                    generation_config.max_length,
-                    model_kwargs,
+                    cache_implementation=generation_config.cache_implementation,
+                    max_batch_size=generation_config.num_beams * generation_config.num_return_sequences * batch_size,
+                    max_cache_len=generation_config.max_length,
+                    device=device,
+                    model_kwargs=model_kwargs,
                 )
             elif generation_config.cache_implementation == "quantized":
                 if not self._supports_quantized_cache:

@@ -16,6 +16,7 @@
 """Testing suite for the PyTorch Phi-3 model."""
 
 import unittest
+from typing import List
 
 from parameterized import parameterized
 
@@ -69,7 +70,7 @@ if is_torch_available():
             ).logits
 
         @staticmethod
-        def generate(model: Phi3ForCausalLM, prompt_tokens: torch.LongTensor, max_seq_len: int) -> list[int]:
+        def generate(model: Phi3ForCausalLM, prompt_tokens: torch.LongTensor, max_seq_len: int) -> List[int]:
             model = Phi3MiniWithStaticCache(model, 1, max_seq_len + prompt_tokens.shape[-1])
 
             response_tokens = []

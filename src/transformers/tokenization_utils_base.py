@@ -1600,7 +1600,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         if "clean_up_tokenization_spaces" not in kwargs:
             warnings.warn(
                 "`clean_up_tokenization_spaces` was not set. It will be set to `True` by default. This "
-                "behavior will be depracted in transformers v4.45, and will be then set to `False` by default. "
+                "behavior will be deprecated in transformers v4.45, and will be then set to `False` by default. "
                 "For more details check this issue: https://github.com/huggingface/transformers/issues/31884",
                 FutureWarning,
             )
