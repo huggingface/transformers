@@ -97,7 +97,7 @@ excuse me, I've got some oil changes to attend to. (winks)
 
 채팅을 계속하려면, 자신의 답장을 추가하면 됩니다. 
 파이프라인에서 반환된 `response` 객체에는 현재까지 모든 채팅을 포함하고 있으므로 
-메세지를 추가하고 다시 전달하기만하면 됩니다.
+메세지를 추가하고 다시 전달하기만 하면 됩니다.
 
 ```python
 chat = response[0]['generated_text']
