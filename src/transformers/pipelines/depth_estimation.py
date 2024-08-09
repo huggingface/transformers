@@ -2,9 +2,15 @@ from typing import List, Union
 
 import numpy as np
 
-from ..utils import add_end_docstrings, is_torch_available, is_vision_available, logging, requires_backends
+from ..models.zoedepth import ZoeDepthForDepthEstimation
+from ..utils import (
+    add_end_docstrings,
+    is_torch_available,
+    is_vision_available,
+    logging,
+    requires_backends,
+)
 from .base import Pipeline, build_pipeline_init_args
-
 
 if is_vision_available():
     from PIL import Image
@@ -89,6 +95,7 @@ class DepthEstimationPipeline(Pipeline):
 
     def preprocess(self, image, timeout=None):
         image = load_image(image, timeout)
+        self.image_size = image.size
         model_inputs = self.image_processor(images=image, return_tensors=self.framework)
         if self.framework == "pt":
             model_inputs = model_inputs.to(self.torch_dtype)
@@ -97,19 +104,34 @@ class DepthEstimationPipeline(Pipeline):
 
     def _forward(self, model_inputs):
         target_size = model_inputs.pop("target_size")
+        if isinstance(self.model, ZoeDepthForDepthEstimation):
+            # That added flipped inference is the default behaviour in the original repo
+            # https://github.com/isl-org/ZoeDepth/blob/edb6daf45458569e24f50250ef1ed08c015f17a7/zoedepth/models/depth_model.py#L99
+            model_outputs = self.model(
+                pixel_values=torch.cat(
+                    [model_inputs["pixel_values"], torch.flip(model_inputs["pixel_values"], dims=[3])]
+                )
+            )
         model_outputs = self.model(**model_inputs)
         model_outputs["target_size"] = target_size
         return model_outputs
 
     def postprocess(self, model_outputs):
-        predicted_depth = model_outputs.predicted_depth
-        prediction = torch.nn.functional.interpolate(
-            predicted_depth.unsqueeze(1), size=model_outputs["target_size"], mode="bicubic", align_corners=False
-        )
-        output = prediction.squeeze().cpu().numpy()
-        formatted = (output * 255 / np.max(output)).astype("uint8")
-        depth = Image.fromarray(formatted)
-        output_dict = {}
-        output_dict["predicted_depth"] = predicted_depth
-        output_dict["depth"] = depth
-        return output_dict
+        if isinstance(self.model, ZoeDepthForDepthEstimation):
+            model_outputs_pd, model_outputs_flip_pd = model_outputs.predicted_depth.chunk(2)
+            model_outputs.predicted_depth = None
+            model_outputs_flip = model_outputs.copy()
+            model_outputs.predicted_depth = model_outputs_pd
+            model_outputs_flip.predicted_depth = model_outputs_flip_pd
+            return self.image_processor.post_process_depth_estimation(
+                model_outputs,
+                [self.image_size[::-1]],
+                outputs_flip=model_outputs_flip,
+                normalize=True,
+            )[0]
+
+        return self.image_processor.post_process_depth_estimation(
+            model_outputs,
+            target_sizes=model_outputs["target_size"],
+            normalize=True,
+        )[0]
