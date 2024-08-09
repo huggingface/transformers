@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 from packaging import version
 
+from ..utils import is_torch_npu_available
 from .base import HfQuantizer
 
 
@@ -64,7 +65,7 @@ class Bnb8BitHfQuantizer(HfQuantizer):
             self.modules_to_not_convert = self.quantization_config.llm_int8_skip_modules
 
     def validate_environment(self, *args, **kwargs):
-        if not torch.cuda.is_available():
+        if not (torch.cuda.is_available() or is_torch_npu_available()):
             raise RuntimeError("No GPU found. A GPU is needed for quantization.")
 
         if not is_accelerate_available():
@@ -127,10 +128,14 @@ class Bnb8BitHfQuantizer(HfQuantizer):
 
     def update_device_map(self, device_map):
         if device_map is None:
-            device_map = {"": torch.cuda.current_device()}
+            if is_torch_npu_available():
+                current_device = torch.npu.current_device()
+            else:
+                current_device = torch.cuda.current_device()
+            device_map = {"": current_device}
             logger.info(
                 "The device_map was not initialized. "
-                "Setting device_map to {'':torch.cuda.current_device()}. "
+                "Setting device_map to {'':current_device}. "
                 "If you want to use the model for inference, please set device_map ='auto' "
             )
         return device_map

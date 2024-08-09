@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 from packaging import version
 
+from ..utils import is_torch_npu_available
 from .base import HfQuantizer
 from .quantizers_utils import get_module_from_name
 
@@ -64,8 +65,8 @@ class Bnb4BitHfQuantizer(HfQuantizer):
             self.modules_to_not_convert = self.quantization_config.llm_int8_skip_modules
 
     def validate_environment(self, *args, **kwargs):
-        if not torch.cuda.is_available():
-            raise RuntimeError("No GPU found. A GPU is needed for quantization.")
+        if not (torch.cuda.is_available() or is_torch_npu_available()):
+            raise RuntimeError("No GPU/NPU found. A GPU/NPU is needed for quantization.")
         if not is_accelerate_available():
             raise ImportError(
                 f"Using `bitsandbytes` 4-bit quantization requires Accelerate: `pip install 'accelerate>={ACCELERATE_MIN_VERSION}'`"
@@ -164,10 +165,13 @@ class Bnb4BitHfQuantizer(HfQuantizer):
         old_value = getattr(module, tensor_name)
 
         if tensor_name == "bias":
+            # `torch.Tensor.to(<int num>)` is not supported by `torch_npu` (see this [issue](https://github.com/Ascend/pytorch/issues/16)).
+            if isinstance(target_device, int) and is_torch_npu_available():
+                device = f"npu:{target_device}"
             if param_value is None:
-                new_value = old_value.to(target_device)
+                new_value = old_value.to(device)
             else:
-                new_value = param_value.to(target_device)
+                new_value = param_value.to(device)
 
             new_value = torch.nn.Parameter(new_value, requires_grad=old_value.requires_grad)
             module._parameters[tensor_name] = new_value
@@ -249,10 +253,14 @@ class Bnb4BitHfQuantizer(HfQuantizer):
     # Copied from transformers.quantizers.quantizer_bnb_8bit.Bnb8BitHfQuantizer.update_device_map
     def update_device_map(self, device_map):
         if device_map is None:
-            device_map = {"": torch.cuda.current_device()}
+            if is_torch_npu_available():
+                current_device = torch.npu.current_device()
+            else:
+                current_device = torch.cuda.current_device()
+            device_map = {"": current_device}
             logger.info(
                 "The device_map was not initialized. "
-                "Setting device_map to {'':torch.cuda.current_device()}. "
+                "Setting device_map to {'':current_device}. "
                 "If you want to use the model for inference, please set device_map ='auto' "
             )
         return device_map
