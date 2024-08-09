@@ -59,6 +59,7 @@ from . import (
     cpmant,
     ctrl,
     cvt,
+    dac,
     data2vec,
     dbrx,
     deberta,
