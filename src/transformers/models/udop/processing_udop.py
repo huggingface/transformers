@@ -53,9 +53,7 @@ class UdopProcessorKwargs(ProcessingKwargs, total=False):
             "return_length": False,
             "verbose": True,
         },
-        "images_kwargs": {
-            "num_image_tokens": 64,
-        },
+        "images_kwargs": {},
     }
 
 
@@ -92,27 +90,8 @@ class UdopProcessor(ProcessorMixin):
         self,
         images: Optional[ImageInput] = None,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
-        # text_pair: Optional[Union[PreTokenizedInput, List[PreTokenizedInput]]] = None,
-        # boxes: Union[List[List[int]], List[List[List[int]]]] = None,
-        # word_labels: Optional[Union[List[int], List[List[int]]]] = None,
-        # text_target: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
-        # text_pair_target: Optional[
-        #     Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]
-        # ] = None,
-        # add_special_tokens: bool = True,
-        # padding: Union[bool, str, PaddingStrategy] = False,
-        # truncation: Union[bool, str, TruncationStrategy] = False,
-        # max_length: Optional[int] = None,
-        # stride: int = 0,
-        # pad_to_multiple_of: Optional[int] = None,
-        # return_token_type_ids: Optional[bool] = None,
-        # return_attention_mask: Optional[bool] = None,
-        # return_overflowing_tokens: bool = False,
-        # return_special_tokens_mask: bool = False,
-        # return_offsets_mapping: bool = False,
-        # return_length: bool = False,
-        # verbose: bool = True,
-        # return_tensors: Optional[Union[str, TensorType]] = None,
+        audio=None,
+        videos=None,
         **kwargs: Unpack[UdopProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -158,22 +137,6 @@ class UdopProcessor(ProcessorMixin):
         if output_kwargs["text_kwargs"].get("text_target", None) is not None:
             # use the processor to prepare the targets of UDOP
             return self.tokenizer(
-                # text_target=text_target,
-                # text_pair_target=text_pair_target,
-                # add_special_tokens=add_special_tokens,
-                # padding=padding,
-                # truncation=truncation,
-                # max_length=max_length,
-                # stride=stride,
-                # pad_to_multiple_of=pad_to_multiple_of,
-                # return_token_type_ids=return_token_type_ids,
-                # return_attention_mask=return_attention_mask,
-                # return_overflowing_tokens=return_overflowing_tokens,
-                # return_special_tokens_mask=return_special_tokens_mask,
-                # return_offsets_mapping=return_offsets_mapping,
-                # return_length=return_length,
-                # verbose=verbose,
-                # return_tensors=return_tensors,
                 **output_kwargs["text_kwargs"],
             )
 
@@ -198,23 +161,6 @@ class UdopProcessor(ProcessorMixin):
 
             encoded_inputs = self.tokenizer(
                 text=text if text is not None else features_words,
-                # text_pair=text_pair,
-                # boxes=boxes if boxes is not None else features_boxes,
-                # word_labels=word_labels,
-                # add_special_tokens=add_special_tokens,
-                # padding=padding,
-                # truncation=truncation,
-                # max_length=max_length,
-                # stride=stride,
-                # pad_to_multiple_of=pad_to_multiple_of,
-                # return_token_type_ids=return_token_type_ids,
-                # return_attention_mask=return_attention_mask,
-                # return_overflowing_tokens=return_overflowing_tokens,
-                # return_special_tokens_mask=return_special_tokens_mask,
-                # return_offsets_mapping=return_offsets_mapping,
-                # return_length=return_length,
-                # verbose=verbose,
-                # return_tensors=return_tensors,
                 **output_kwargs["text_kwargs"],
             )
 
@@ -275,4 +221,4 @@ class UdopProcessor(ProcessorMixin):
     @property
     # Copied from transformers.models.layoutlmv3.processing_layoutlmv3.LayoutLMv3Processor.model_input_names
     def model_input_names(self):
-        return ["pixel_values", "input_ids", "bbox", "attention_mask"]
+        return ["pixel_values", "input_ids", "attention_mask", "bbox"]
