@@ -155,7 +155,6 @@ from .utils import (
     SAFE_WEIGHTS_NAME,
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
-    XLA_FSDPV2_MIN_VERSION,
     PushInProgress,
     can_return_loss,
     find_labels,
@@ -210,13 +209,6 @@ if is_datasets_available():
 if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
     import torch_xla.debug.metrics as met
-    from torch_xla import __version__ as XLA_VERSION
-
-    IS_XLA_FSDPV2_POST_2_2 = version.parse(XLA_VERSION) >= version.parse(XLA_FSDPV2_MIN_VERSION)
-    if IS_XLA_FSDPV2_POST_2_2:
-        pass
-else:
-    IS_XLA_FSDPV2_POST_2_2 = False
 
 
 if is_sagemaker_mp_enabled():
@@ -228,8 +220,6 @@ if is_sagemaker_mp_enabled():
     from .trainer_pt_utils import smp_forward_backward, smp_forward_only, smp_gather, smp_nested_concat
 else:
     IS_SAGEMAKER_MP_POST_1_10 = False
-
-logger = logging.get_logger(__name__)
 
 if is_safetensors_available():
     import safetensors.torch
@@ -289,14 +279,19 @@ FSDP_MODEL_NAME = "pytorch_model_fsdp"
 class Trainer:
     """
     Trainer is a simple but feature-complete training and eval loop for PyTorch, optimized for 🤗 Transformers.
+
     Args:
         model ([`PreTrainedModel`] or `torch.nn.Module`, *optional*):
             The model to train, evaluate or use for predictions. If not provided, a `model_init` must be passed.
+
             <Tip>
+
             [`Trainer`] is optimized to work with the [`PreTrainedModel`] provided by the library. You can still use
             your own models defined as `torch.nn.Module` as long as they work the same way as the 🤗 Transformers
             models.
+
             </Tip>
+
         args ([`TrainingArguments`], *optional*):
             The arguments to tweak for training. Will default to a basic instance of [`TrainingArguments`] with the
             `output_dir` set to a directory named *tmp_trainer* in the current directory if not provided.
@@ -307,6 +302,7 @@ class Trainer:
         train_dataset (Union[`torch.utils.data.Dataset`, `torch.utils.data.IterableDataset`, `datasets.Dataset`], *optional*):
             The dataset to use for training. If it is a [`~datasets.Dataset`], columns not accepted by the
             `model.forward()` method are automatically removed.
+
             Note that if it's a `torch.utils.data.IterableDataset` with some randomization and you are training in a
             distributed fashion, your iterable dataset should either use a internal attribute `generator` that is a
             `torch.Generator` for the randomization that must be identical on all processes (and the Trainer will
@@ -323,6 +319,7 @@ class Trainer:
         model_init (`Callable[[], PreTrainedModel]`, *optional*):
             A function that instantiates the model to be used. If provided, each call to [`~Trainer.train`] will start
             from a new instance of the model as given by this function.
+
             The function may have zero argument, or a single one containing the optuna/Ray Tune/SigOpt trial object, to
             be able to choose different architectures according to hyper parameters (such as layer count, sizes of
             inner layers, dropout probabilities etc).
@@ -335,6 +332,7 @@ class Trainer:
         callbacks (List of [`TrainerCallback`], *optional*):
             A list of callbacks to customize the training loop. Will add those to the list of default callbacks
             detailed in [here](callback).
+
             If you want to remove one of the default callbacks used, use the [`Trainer.remove_callback`] method.
         optimizers (`Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR]`, *optional*, defaults to `(None, None)`):
             A tuple containing the optimizer and the scheduler to use. Will default to an instance of [`AdamW`] on your
@@ -343,8 +341,11 @@ class Trainer:
             A function that preprocess the logits right before caching them at each evaluation step. Must take two
             tensors, the logits and the labels, and return the logits once processed as desired. The modifications made
             by this function will be reflected in the predictions received by `compute_metrics`.
+
             Note that the labels (second parameter) will be `None` if the dataset does not have them.
+
     Important attributes:
+
         - **model** -- Always points to the core model. If using a transformers model, it will be a [`PreTrainedModel`]
           subclass.
         - **model_wrapped** -- Always points to the most external model in case one or more other modules wrap the
@@ -358,6 +359,7 @@ class Trainer:
           `TrainingArguments.place_model_on_device` is overridden to return `False` .
         - **is_in_train** -- Whether or not a model is currently running `train` (e.g. when `evaluate` is called while
           in `train`)
+
     """
 
     # Those are used as methods of the Trainer in examples.
@@ -368,8 +370,8 @@ class Trainer:
         model: Union[PreTrainedModel, nn.Module] = None,
         args: TrainingArguments = None,
         data_collator: Optional[DataCollator] = None,
-        train_dataset: Optional[Union[Dataset, IterableDataset]] = None,
-        eval_dataset: Optional[Union[Dataset, Dict[str, Dataset]]] = None,
+        train_dataset: Optional[Union[Dataset, IterableDataset, "datasets.Dataset"]] = None,
+        eval_dataset: Optional[Union[Dataset, Dict[str, Dataset], "datasets.Dataset"]] = None,
         tokenizer: Optional[PreTrainedTokenizerBase] = None,
         model_init: Optional[Callable[[], PreTrainedModel]] = None,
         compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None,
@@ -398,7 +400,7 @@ class Trainer:
 
         self.create_accelerator_and_postprocess()
 
-        # memory metrics - must be set up as early as possible
+        # memory metrics - must set up as early as possible
         self._memory_tracker = TrainerMemoryTracker(self.args.skip_memory_metrics)
         self._memory_tracker.start()
 
@@ -406,7 +408,7 @@ class Trainer:
         log_level = args.get_process_log_level()
         logging.set_verbosity(log_level)
 
-        # Force device and distributed setup init explicitly
+        # force device and distributed setup init explicitly
         args._setup_devices
 
         # Init and verify data related items
