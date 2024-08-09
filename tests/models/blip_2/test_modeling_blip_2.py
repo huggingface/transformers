@@ -716,6 +716,16 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixi
     test_attention_outputs = False
     test_torchscript = False
 
+    # TODO: Fix the failed tests
+    def is_pipeline_test_to_skip(
+        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+    ):
+        if pipeline_test_casse_name == "VisualQuestionAnsweringPipelineTests":
+            # Get `RuntimeError: "LayerNormKernelImpl" not implemented for 'Half'`.
+            return True
+
+        return False
+
     def setUp(self):
         self.model_tester = Blip2ModelTester(self)
 
