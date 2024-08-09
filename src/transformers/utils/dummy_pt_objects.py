@@ -696,6 +696,9 @@ MODEL_FOR_IMAGE_MAPPING = None
 MODEL_FOR_IMAGE_SEGMENTATION_MAPPING = None
 
 
+MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING = None
+
+
 MODEL_FOR_IMAGE_TO_IMAGE_MAPPING = None
 
 
@@ -857,6 +860,13 @@ class AutoModelForImageClassification(metaclass=DummyObject):
 
 
 class AutoModelForImageSegmentation(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class AutoModelForImageTextToText(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
