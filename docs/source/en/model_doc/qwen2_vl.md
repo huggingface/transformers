@@ -19,7 +19,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The Qwen2_VL is the new model series of large vision-language models from the Qwen team. 
+The Qwen2_VL is a major update to our [Qwen-VL](https://arxiv.org/pdf/2308.12966) model from the Qwen team. 
 
 #### What’s New in Qwen2-VL?
 
@@ -32,120 +32,274 @@ The Qwen2_VL is the new model series of large vision-language models from the Qw
 
 ## Usage example
 
-### Single image inference
+### Single Media inference
+
+The model can accept both images and videos as input. Here's an example code for inference.
 
 ```python
+
+from PIL import Image
+import requests
 import torch
+from torchvision import io
+from typing import Dict
 from transformers import Qwen2VLForConditionalGeneration, AutoTokenizer, AutoProcessor
 
 # Load the model in half-precision on the available device(s)
 model = Qwen2VLForConditionalGeneration.from_pretrained("Qwen/Qwen2-VL-7B-Instruct", device_map="auto")
-tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-VL-7B-Instruct")
 processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-7B-Instruct")
 
-# You can directly insert a local file path, a URL, or a base64-encoded image into the position where you want in the text.
-## Local file path
-messages = [{"role": "user", "content": [{"type": "image", "image": "file:///path/to/your/image.jpg"}, {"type": "text", "text": "Describe this image."}]}]
-## Image URL
-messages = [{"role": "user", "content": [{"type": "image", "image": "http://path/to/your/image.jpg"}, {"type": "text", "text": "Describe this image."}]}]
-## Base64 encoded image
-messages = [{"role": "user", "content": [{"type": "image", "image": "data:image;base64,/9j/..."}, {"type": "text", "text": "Describe this image."}]}]
+# Image
+url = "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen-VL/assets/demo.jpeg"
+image = Image.open(requests.get(url, stream=True).raw)
 
-# Model dynamically adjusts image size, specify dimensions if required.
-messages = [{"role": "user", "content": [{"type": "image", "image": "file:///path/to/your/image.jpg", "resized_height": 280, "resized_width": 420}, {"type": "text", "text": "Describe this image."}]}]
+conversation = [
+    {
+        "role":"user",
+        "content":[
+            {
+                "type":"image",
+            },
+            {
+                "type":"text",
+                "text":"Describe this image."
+            }
+        ]
+    }
+]
 
-# Preparation for inference
-text, vision_infos = processor.apply_chat_template(messages, add_generation_prompt=True)
-inputs = processor(text=[text], vision_infos=[vision_infos], padding=True, return_tensors="pt")
+
+# Preprocess the inputs
+text_prompt = processor.apply_chat_template(conversation, add_generation_prompt=True)
+# Excepted output: '<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>Describe this image.<|im_end|>\n<|im_start|>assistant\n'
+
+inputs = processor(text=[text_prompt], images=[image],videos=video, padding=True, return_tensors="pt")
 inputs = inputs.to('cuda')
 
 # Inference: Generation of the output
-generated_ids = model.generate(**inputs, max_new_tokens=128)
-generated_ids_trimmed = [out_ids[len(in_ids):] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)]
-output_text = tokenizer.batch_decode(generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False)
+output_ids = model.generate(**inputs, max_new_tokens=128)
+generated_ids = [output_ids[len(input_ids):] for input_ids, output_ids in zip(inputs.input_ids, output_ids)]
+output_text = processor.batch_decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
 print(output_text)
-```
-
-### Multi image inference
 
 
-```python
 
-# Messages containing multiple images and a text query
-messages = [{"role": "user", "content": [{"type": "image", "image": "file:///path/to/image1.jpg"}, {"type": "image", "image": "file:///path/to/image2.jpg"}, {"type": "text", "text": "Identify the similarities between these images."}]}]
+# Video
+def fetch_video(ele: Dict, nframe_factor=2):
+    if isinstance(ele['video'], str):
+        # TODO: support http url
+        def round_by_factor(number: int, factor: int) -> int:
+            return round(number / factor) * factor
 
-# Preparation for inference
-text, vision_infos = processor.apply_chat_template(messages, add_generation_prompt=True)
-inputs = processor(text=[text], vision_infos=[vision_infos], padding=True, return_tensors="pt")
-inputs = inputs.to('cuda')
+        video = ele["video"]
+        if video.startswith("file://"):
+            video = video[7:]
 
-# Inference
-generated_ids = model.generate(**inputs, max_new_tokens=128)
-generated_ids_trimmed = [out_ids[len(in_ids):] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)]
-output_text = tokenizer.batch_decode(generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False)
-print(output_text)
-```
+        video, _, info = io.read_video(
+            video,
+            start_pts=ele.get("video_start", 0.0),
+            end_pts=ele.get("video_end", None),
+            pts_unit="sec",
+            output_format="TCHW",
+        )
+        assert not ("fps" in ele and "nframes" in ele), "Only accept either `fps` or `nframes`"
+        if "nframes" in ele:
+            nframes = round_by_factor(ele["nframes"], nframe_factor)
+        else:
+            fps = ele.get("fps", 1.0)
+            nframes = round_by_factor(video.size(0) / info["video_fps"] * fps, nframe_factor)
+        idx = torch.linspace(0, video.size(0) - 1, nframes, dtype=torch.int64)
+        return video[idx]
 
-### Video inference
-
-
-```python
-
-
-# Messages containing a images list as a video and a text query
-messages = [{"role": "user", "content": [{"type": "video", "video": ["file:///path/to/frame1.jpg", "file:///path/to/frame2.jpg", "file:///path/to/frame3.jpg", "file:///path/to/frame4.jpg"], 'fps': 1.0}, {"type": "text", "text": "Describe this video."}]}]
-# Messages containing a video and a text query
-messages = [{"role": "user", "content": [{"type": "video", "video": "file:///path/to/video1.mp4", 'max_pixels': 360*420, 'fps': 1.0}, {"type": "text", "text": "Describe this video."}]}]
-
-# Preparation for inference
-text, vision_infos = processor.apply_chat_template(messages, add_generation_prompt=True)
-inputs = processor(text=[text], vision_infos=[vision_infos], padding=True, return_tensors="pt")
-inputs = inputs.to('cuda')
-
-# Inference
-generated_ids = model.generate(**inputs, max_new_tokens=128)
-generated_ids_trimmed = [out_ids[len(in_ids):] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)]
-output_text = tokenizer.batch_decode(generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False)
-print(output_text)
-```
-
-
-### Batch inference
-
-```python
-
-# Sample messages for batch inference
-messages1 = [
+video_info = {"type": "video", "video": "/path/to/video.mp4", "fps": 1.0}
+video = fetch_video(video_info)
+conversation = [
     {
         "role": "user",
         "content": [
-            {"type": "image", "image": "file:///path/to/image1.jpg"},
-            {"type": "image", "image": "file:///path/to/image2.jpg"},
-            {"type": "text", "text": "What are the common elements in these pictures?"},
+            {"type": "video"},
+            {"type": "text", "text": "What happened in the video?"},
         ],
     }
 ]
-messages2 = [{"role": "system", "content": "You are a helpful assistant."}, {"role": "user", "content": "Who are you?"}]
-# Combine messages for batch processing
-messages = [messages1, messages1]
 
+# Preprocess the inputs
+text_prompt = processor.apply_chat_template(conversation, add_generation_prompt=True)
+# Excepted output: '<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n<|im_start|>user\n<|vision_start|><|video_pad|><|vision_end|>What happened in the video?<|im_end|>\n<|im_start|>assistant\n'
+
+inputs = processor(text=[text_prompt], images=[image],videos=video, padding=True, return_tensors="pt")
+inputs = inputs.to('cuda')
+
+# Inference: Generation of the output
+output_ids = model.generate(**inputs, max_new_tokens=128)
+generated_ids = [output_ids[len(input_ids):] for input_ids, output_ids in zip(inputs.input_ids, output_ids)]
+output_text = processor.batch_decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
+print(output_text)
+
+```
+
+
+### Batch Mixed Media Inference
+
+The model can batch inputs composed of mixed samples of various types such as images, videos, and text. Here is an example.
+
+```python
+
+image1 = Image.open("/path/to/image1.jpg")
+image2 = Image.open("/path/to/image2.jpg")
+image3 = Image.open("/path/to/image3.jpg")
+video = fetch_video({
+    "type": "video",
+    "video": "/path/to/video.mp4",
+    "fps": 1.0
+})
+
+# Conversation for the first image
+conversation1 = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "image"},
+            {"type": "text", "text": "Describe this image."}
+        ]
+    }
+]
+
+# Conversation with two images
+conversation2 = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "image"},
+            {"type": "image"},
+            {"type": "text", "text": "What is written in the pictures?"}
+        ]
+    }
+]
+
+# Conversation with pure text
+conversation3 = [
+    {
+        "role": "user",
+        "content": "who are you?"
+    }
+]
+
+
+# Conversation with mixed midia
+conversation4 = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "image"},
+            {"type": "image"},
+            {"type": "video"},
+            {"type": "text", "text": "What are the common elements in these medias?"},
+        ],
+    }
+]
+
+conversations = [conversation1, conversation2, conversation3, conversation4]
 # Preparation for batch inference
-texts, vision_infos = zip(*[processor.apply_chat_template(msg, add_generation_prompt=True) for msg in messages])
-inputs = processor(text=texts, vision_infos=vision_infos, padding=True, return_tensors="pt")
+texts = [processor.apply_chat_template(msg, add_generation_prompt=True) for msg in conversations]
+inputs = processor(text=texts, mages=[image1,image2,image3],videos=[video], padding=True, return_tensors="pt")
 inputs = inputs.to('cuda')
 
 # Batch Inference
-generated_ids = model.generate(**inputs, max_new_tokens=128)
-generated_ids_trimmed = [out_ids[len(in_ids):] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)]
-output_texts = tokenizer.batch_decode(generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False)
-print(output_texts)
+output_ids = model.generate(**inputs, max_new_tokens=128)
+generated_ids = [output_ids[len(input_ids):] for input_ids, output_ids in zip(inputs.input_ids, output_ids)]
+output_text = processor.batch_decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
+print(output_text)
+```
+
+### Usage Tips
+
+#### About Image Resolution
+
+The model supports a wide range of resolution inputs. By default, it uses the native resolution for input, but higher resolutions can enhance performance at the cost of more computation. Users can set the minimum and maximum number of pixels to achieve an optimal configuration for their needs.
+
+```python
+
+min_pixels = 224*224
+max_pixels = 2048*2048
+processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-7B-Instruct", min_pixels=min_pixels, max_pixels=max_pixels)
+
 ```
 
 
 
-### We strongly recommend using Flash-Attention 2 to speed up generation
+#### About Multiple Image Inputs
 
-First make sure to install flash-attn. Refer to the [original repository of Flash Attention](https://github.com/Dao-AILab/flash-attention) regarding that package installation. Simply set the `use_flash_attention=True` in the `config.json` file.
+By default, images and video content are directly included in the conversation. When handling multiple images, it's helpful to add labels to the images and videos for better reference. Users can control this behavior with the following settings:
+
+
+
+```python
+
+conversation = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "image"}, 
+            {"type": "text", "text": "Hello, how are you?"}
+        ]
+    },
+    {
+        "role": "assistant",
+        "content": "I'm doing well, thank you for asking. How can I assist you today?"
+    },
+    {
+        "role": "user",
+        "content": [
+            {"type": "text", "text": "Can you describe these images and video?"}, 
+            {"type": "image"}, 
+            {"type": "image"}, 
+            {"type": "video"}, 
+            {"type": "text", "text": "These are from my vacation."}
+        ]
+    },
+    {
+        "role": "assistant",
+        "content": "I'd be happy to describe the images and video for you. Could you please provide more context about your vacation?"
+    },
+    {
+        "role": "user",
+        "content": "It was a trip to the mountains. Can you see the details in the images and video?"
+    }
+]
+
+# default:
+prompt_without_id = processor.apply_chat_template(conversation, add_generation_prompt=True)
+# Excepted output: '<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>Hello, how are you?<|im_end|>\n<|im_start|>assistant\nI'm doing well, thank you for asking. How can I assist you today?<|im_end|>\n<|im_start|>user\nCan you describe these images and video?<|vision_start|><|image_pad|><|vision_end|><|vision_start|><|image_pad|><|vision_end|><|vision_start|><|video_pad|><|vision_end|>These are from my vacation.<|im_end|>\n<|im_start|>assistant\nI'd be happy to describe the images and video for you. Could you please provide more context about your vacation?<|im_end|>\n<|im_start|>user\nIt was a trip to the mountains. Can you see the details in the images and video?<|im_end|>\n<|im_start|>assistant\n'
+
+
+# add ids
+prompt_with_id = processor.apply_chat_template(conversation, add_generation_prompt=True, add_vision_id=True)
+# Excepted output: '<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n<|im_start|>user\nPicture 1: <|vision_start|><|image_pad|><|vision_end|>Hello, how are you?<|im_end|>\n<|im_start|>assistant\nI'm doing well, thank you for asking. How can I assist you today?<|im_end|>\n<|im_start|>user\nCan you describe these images and video?Picture 2: <|vision_start|><|image_pad|><|vision_end|>Picture 3: <|vision_start|><|image_pad|><|vision_end|>Video 1: <|vision_start|><|video_pad|><|vision_end|>These are from my vacation.<|im_end|>\n<|im_start|>assistant\nI'd be happy to describe the images and video for you. Could you please provide more context about your vacation?<|im_end|>\n<|im_start|>user\nIt was a trip to the mountains. Can you see the details in the images and video?<|im_end|>\n<|im_start|>assistant\n'
+
+```
+
+#### We strongly recommend using Flash-Attention 2 to speed up generation
+
+First, make sure to install the latest version of Flash Attention 2:
+
+```bash
+pip install -U flash-attn --no-build-isolation
+```
+
+Also, you should have a hardware that is compatible with Flash-Attention 2. Read more about it in the official documentation of the [flash attention repository](https://github.com/Dao-AILab/flash-attention). FlashAttention-2 can only be used when a model is loaded in `torch.float16` or `torch.bfloat16`.
+
+To load and run a model using Flash Attention-2, simply add `attn_implementation="flash_attention_2"` when loading the model as follows:
+
+```python
+from transformers import Qwen2VLForConditionalGeneration
+
+model = Qwen2VLForConditionalGeneration.from_pretrained(
+    "Qwen/Qwen2-VL-7B-Instruct", 
+    torch_dtype=torch.bfloat16, 
+    attn_implementation="flash_attention_2",
+)
+```
 
 
 ## Qwen2VLConfig
