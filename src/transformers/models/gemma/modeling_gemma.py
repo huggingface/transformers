@@ -142,6 +142,12 @@ class GemmaRotaryEmbedding(nn.Module):
     @torch.no_grad()
     def forward(self, x, position_ids, seq_len=None):
         # x: [bs, num_attention_heads, seq_len, head_size]
+        if position_ids is None and seq_len is None:
+            raise ValueError("You have to provide either position_ids or seq_len")
+        if position_ids is None:
+            position_ids = (
+                torch.arange(seq_len, device=x.device, dtype=torch.int64).unsqueeze(0).expand(x.shape[0], -1)
+            )
         self.inv_freq.to(x.device)
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
         position_ids_expanded = position_ids[:, None, :].float()
