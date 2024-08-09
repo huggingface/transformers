@@ -303,7 +303,7 @@ class BlipTextEmbeddings(nn.Module):
         seq_length = input_ids.shape[-1] if input_ids is not None else inputs_embeds.shape[-2]
 
         if position_ids is None:
-            position_ids = self.position_ids[:, :seq_length]
+            position_ids = self.position_ids[:, :seq_length].clone()
 
         if inputs_embeds is None:
             inputs_embeds = self.token_embedding(input_ids)
