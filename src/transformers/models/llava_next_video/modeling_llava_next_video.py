@@ -450,6 +450,7 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel):
         self.vocab_size = model_embeds.num_embeddings
         return model_embeds
 
+    # Copied from transformers.models.llava_next.modeling_llava_next.LlavaNextForConditionalGeneration._merge_input_ids_with_image_features
     def _merge_input_ids_with_image_features(
         self,
         image_features,
@@ -553,6 +554,19 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel):
         image_token_index = image_token_index if image_token_index is not None else self.config.image_token_index
         ignore_index = ignore_index if ignore_index is not None else self.config.ignore_index
 
+        if self.training and self.padding_side == "left":
+            logger.warning_once(
+                "Padding side is set to 'left' but the model is in training mode. For training "
+                "it is recommended to set `model.padding_side='right' and `processor.tokenizer.padding_side='right'`. "
+                "If that's intended, ignore this warning"
+            )
+        if not self.training and self.padding_side == "right":
+            logger.warning_once(
+                "Padding side is set to 'right' but the model is in inference mode. For correct "
+                "generation results, please set `model.padding_side='left'` and `processor.tokenizer.padding_side='left'`. "
+                "If that's intended, ignore this warning"
+            )
+
         with torch.no_grad():
             # ! in llava 1.6, number of patches is variable
             num_images = feature_lens.size(0)
@@ -563,18 +577,14 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel):
             _left_padding = torch.any(attention_mask[:, 0] == 0)
             _right_padding = torch.any(attention_mask[:, -1] == 0)
 
-            left_padding = True if not self.training else False
-            if batch_size > 1 and not self.training:
-                if _left_padding and not _right_padding:
-                    left_padding = True
-                elif not _left_padding and _right_padding:
-                    left_padding = False
-                elif not _left_padding and not _right_padding:
-                    # both side is 1, so cannot tell
-                    left_padding = self.padding_side == "left"
-                else:
-                    # invalid attention_mask
+            left_padding = self.padding_side == "left"
+            if batch_size > 1:
+                if _left_padding and _right_padding:
                     raise ValueError(f"both side of attention_mask has zero, invalid. {attention_mask}")
+                elif _right_padding and left_padding:
+                    left_padding = False
+                elif _left_padding and not left_padding:
+                    left_padding = True
 
             # Whether to turn off right padding
             # 1. Create a mask to know where special image tokens are
@@ -672,7 +682,9 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel):
                     f"{image_to_overwrite.sum()=} != {num_image_features=} The input provided to the model are wrong. "
                     f"The number of image tokens is {torch.sum(special_image_token_mask)} while"
                     f" the number of image given to the model is {num_images}. "
-                    f"This prevents correct indexing and breaks batch generation."
+                    f"This prevents correct indexing and breaks batch generation. "
+                    f"Make sure you have same amount of special image tokens as there are images "
+                    f"and that model.padding_side == processor.tokenizer.padding_side."
                 )
         final_embedding[image_to_overwrite] = image_features.contiguous().reshape(-1, embed_dim).to(target_device)
         final_attention_mask |= image_to_overwrite
