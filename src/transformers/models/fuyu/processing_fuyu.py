@@ -245,10 +245,10 @@ def _tokenize_prompts_with_image_and_batch(
         bos_token = tokenizer.vocab["|ENDOFTEXT|"]
     prompts_tokens = [[[bos_token] + x for x in prompt_seq] for prompt_seq in prompts_tokens]
     if add_beginning_of_answer_token:
-        boa = tokenizer.vocab[BEGINNING_OF_ANSWER_STRING]
+        beginning_of_answer = tokenizer.vocab[BEGINNING_OF_ANSWER_STRING]
         # Only add bbox open token to the last subsequence since that is what will be completed
         for token_seq in prompts_tokens:
-            token_seq[-1].append(boa)
+            token_seq[-1].append(beginning_of_answer)
 
     # Now we have a list of list of tokens which each list has a different
     # size. We want to extend this list to:
@@ -680,6 +680,32 @@ class FuyuProcessor(ProcessorMixin):
             results.append(seq)
 
         return results
+
+    def post_process_image_text_to_text(self, generated_outputs):
+        """
+        Post-processes the output of `FuyuForConditionalGeneration` to only return the text output.
+
+        Args:
+            generated_outputs (`torch.Tensor` or `np.ndarray`):
+                The output of the model. The output is expected to be a tensor of shape `(batch_size, sequence_length)`
+                containing the token ids of the generated sequences.
+
+        Returns:
+            `List[str]`: The decoded text output.
+        """
+        beginning_of_answer = self.tokenizer.vocab[BEGINNING_OF_ANSWER_STRING]
+        # get boa index for each outputted sequence tensor
+        # start all generated sequences from the beginning of the answer token, pad to have consistent length
+        unpadded_output_sequences = [
+            seq[(seq == beginning_of_answer).nonzero(as_tuple=True)[0] + 1 :] for seq in generated_outputs
+        ]
+        max_len = max(len(seq) for seq in unpadded_output_sequences)
+        # convert to torch and pad sequences
+        padded_output_sequences = torch.full((len(unpadded_output_sequences), max_len), self.pad_token_id)
+        for i, seq in enumerate(unpadded_output_sequences):
+            padded_output_sequences[i, : len(seq)] = torch.tensor(seq)
+
+        return self.batch_decode(padded_output_sequences, skip_special_tokens=True)
 
     def batch_decode(self, *args, **kwargs):
         """
