@@ -24,6 +24,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...modeling_attn_mask_utils import _prepare_4d_attention_mask_for_sdpa
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
@@ -34,7 +35,12 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
+from ...pytorch_utils import (
+    apply_chunking_to_forward,
+    find_pruneable_heads_and_indices,
+    is_torch_greater_or_equal_than_2_2,
+    prune_linear_layer,
+)
 from ...utils import (
     ModelOutput,
     add_code_sample_docstrings,
@@ -358,6 +364,66 @@ class AlbertAttention(nn.Module):
         return (layernormed_context_layer, attention_probs) if output_attentions else (layernormed_context_layer,)
 
 
+class AlbertSdpaAttention(AlbertAttention):
+    def __init__(self, config):
+        super().__init__(config)
+        self.dropout_prob = config.attention_probs_dropout_prob
+        self.require_contiguous_qkv = not is_torch_greater_or_equal_than_2_2
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        output_attentions: bool = False,
+    ) -> Union[Tuple[torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]:
+        if self.position_embedding_type != "absolute" or output_attentions or head_mask is not None:
+            logger.warning(
+                "AlbertSdpaAttention is used but `torch.nn.functional.scaled_dot_product_attention` does not support "
+                "non-absolute `position_embedding_type` or `output_attentions=True` or `head_mask`. Falling back to "
+                "the eager attention implementation, but specifying the eager implementation will be required from "
+                "Transformers version v5.0.0 onwards. This warning can be removed using the argument "
+                '`attn_implementation="eager"` when loading the model.'
+            )
+            return super().forward(hidden_states, attention_mask, head_mask, output_attentions)
+
+        batch_size, seq_len, _ = hidden_states.size()
+        query_layer = self.transpose_for_scores(self.query(hidden_states))
+        key_layer = self.transpose_for_scores(self.key(hidden_states))
+        value_layer = self.transpose_for_scores(self.value(hidden_states))
+
+        # SDPA with memory-efficient backend is broken in torch==2.1.2 when using non-contiguous inputs and a custom
+        # attn_mask, so we need to call `.contiguous()` here. This was fixed in torch==2.2.0.
+        # Reference: https://github.com/pytorch/pytorch/issues/112577
+        if self.require_contiguous_qkv and query_layer.device.type == "cuda" and attention_mask is not None:
+            query_layer = query_layer.contiguous()
+            key_layer = key_layer.contiguous()
+            value_layer = value_layer.contiguous()
+
+        attention_output = torch.nn.functional.scaled_dot_product_attention(
+            query=query_layer,
+            key=key_layer,
+            value=value_layer,
+            attn_mask=attention_mask,
+            dropout_p=self.dropout_prob if self.training else 0.0,
+            is_causal=False,
+        )
+
+        attention_output = attention_output.transpose(1, 2)
+        attention_output = attention_output.reshape(batch_size, seq_len, self.all_head_size)
+
+        projected_context_layer = self.dense(attention_output)
+        projected_context_layer_dropout = self.output_dropout(projected_context_layer)
+        layernormed_context_layer = self.LayerNorm(hidden_states + projected_context_layer_dropout)
+        return (layernormed_context_layer,)
+
+
+ALBERT_ATTENTION_CLASSES = {
+    "eager": AlbertAttention,
+    "sdpa": AlbertSdpaAttention,
+}
+
+
 class AlbertLayer(nn.Module):
     def __init__(self, config: AlbertConfig):
         super().__init__()
@@ -366,7 +432,7 @@ class AlbertLayer(nn.Module):
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
         self.full_layer_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.attention = AlbertAttention(config)
+        self.attention = ALBERT_ATTENTION_CLASSES[config._attn_implementation](config)
         self.ffn = nn.Linear(config.hidden_size, config.intermediate_size)
         self.ffn_output = nn.Linear(config.intermediate_size, config.hidden_size)
         self.activation = ACT2FN[config.hidden_act]
@@ -496,6 +562,7 @@ class AlbertPreTrainedModel(PreTrainedModel):
     config_class = AlbertConfig
     load_tf_weights = load_tf_weights_in_albert
     base_model_prefix = "albert"
+    _supports_sdpa = True
 
     def _init_weights(self, module):
         """Initialize the weights."""
@@ -635,6 +702,9 @@ class AlbertModel(AlbertPreTrainedModel):
             self.pooler = None
             self.pooler_activation = None
 
+        self.attn_implementation = config._attn_implementation
+        self.position_embedding_type = config.position_embedding_type
+
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -708,14 +778,28 @@ class AlbertModel(AlbertPreTrainedModel):
             else:
                 token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 
-        extended_attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
-        extended_attention_mask = extended_attention_mask.to(dtype=self.dtype)  # fp16 compatibility
-        extended_attention_mask = (1.0 - extended_attention_mask) * torch.finfo(self.dtype).min
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
-
         embedding_output = self.embeddings(
             input_ids, position_ids=position_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds
         )
+
+        use_sdpa_attention_mask = (
+            self.attn_implementation == "sdpa"
+            and self.position_embedding_type == "absolute"
+            and head_mask is None
+            and not output_attentions
+        )
+
+        if use_sdpa_attention_mask:
+            extended_attention_mask = _prepare_4d_attention_mask_for_sdpa(
+                attention_mask, embedding_output.dtype, tgt_len=seq_length
+            )
+        else:
+            extended_attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
+            extended_attention_mask = extended_attention_mask.to(dtype=self.dtype)  # fp16 compatibility
+            extended_attention_mask = (1.0 - extended_attention_mask) * torch.finfo(self.dtype).min
+
+        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
+
         encoder_outputs = self.encoder(
             embedding_output,
             extended_attention_mask,
