@@ -123,6 +123,9 @@ class LlamaConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         mlp_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in up_proj, down_proj and gate_proj layers in the MLP layers.
+        head_dim (`int`, *optional*, defaults to None):
+            The attention head dimension. If None, it will default to hidden_size // num_heads
+
 
     ```python
     >>> from transformers import LlamaModel, LlamaConfig
@@ -163,6 +166,7 @@ class LlamaConfig(PretrainedConfig):
         attention_bias=False,
         attention_dropout=0.0,
         mlp_bias=False,
+        head_dim=None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -187,6 +191,7 @@ class LlamaConfig(PretrainedConfig):
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.mlp_bias = mlp_bias
+        self.head_dim = head_dim
 
         # Validate the correctness of rotary position embeddings parameters
         # BC: if there is a 'type' field, move it to 'rope_type'.
