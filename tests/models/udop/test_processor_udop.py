@@ -472,7 +472,7 @@ class UdopProcessorIntegrationTests(unittest.TestCase):
             question = "What's his name?"
             words = ["hello", "world"]
             boxes = [[1, 2, 3, 4], [5, 6, 7, 8]]
-            input_processor = processor(images[0], question, words, boxes, return_tensors="pt")
+            input_processor = processor(images[0], question, text_pair=words, boxes=boxes, return_tensors="pt")
 
             # verify keys
             expected_keys = ["attention_mask", "bbox", "input_ids", "pixel_values"]
@@ -488,7 +488,9 @@ class UdopProcessorIntegrationTests(unittest.TestCase):
             questions = ["How old is he?", "what's the time"]
             words = [["hello", "world"], ["my", "name", "is", "niels"]]
             boxes = [[[1, 2, 3, 4], [5, 6, 7, 8]], [[3, 2, 5, 1], [6, 7, 4, 2], [3, 9, 2, 4], [1, 1, 2, 3]]]
-            input_processor = processor(images, questions, words, boxes, padding=True, return_tensors="pt")
+            input_processor = processor(
+                images, questions, text_pair=words, boxes=boxes, padding=True, return_tensors="pt"
+            )
 
             # verify keys
             expected_keys = ["attention_mask", "bbox", "input_ids", "pixel_values"]
