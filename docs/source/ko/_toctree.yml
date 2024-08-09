@@ -172,7 +172,7 @@
       title: 다중 GPU에서 훈련 진행하기
     - local: in_translation
       title: (번역중) Fully Sharded Data Parallel
-    - local: DeepSpeed
+    - local: deepspeed
       title: DeepSpeed
     - local: perf_train_cpu
       title: CPU에서 훈련
