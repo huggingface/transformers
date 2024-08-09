@@ -51,7 +51,6 @@ class Qwen2VLImageProcessingTester(unittest.TestCase):
         patch_size=14,
         temporal_patch_size=2,
         merge_size=2,
-        vision_token_id=151859,
         do_convert_rgb=True,
     ):
         self.parent = parent
@@ -66,7 +65,6 @@ class Qwen2VLImageProcessingTester(unittest.TestCase):
         self.patch_size = patch_size
         self.temporal_patch_size = temporal_patch_size
         self.merge_size = merge_size
-        self.vision_token_id = vision_token_id
         self.do_resize = do_resize
         self.do_normalize = do_normalize
         self.image_mean = image_mean
@@ -83,7 +81,6 @@ class Qwen2VLImageProcessingTester(unittest.TestCase):
             "patch_size": self.patch_size,
             "temporal_patch_size": self.temporal_patch_size,
             "merge_size": self.merge_size,
-            "vision_token_id": self.vision_token_id,
         }
 
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
@@ -124,7 +121,6 @@ class Qwen2VLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertTrue(hasattr(image_processing, "patch_size"))
         self.assertTrue(hasattr(image_processing, "temporal_patch_size"))
         self.assertTrue(hasattr(image_processing, "merge_size"))
-        self.assertTrue(hasattr(image_processing, "vision_token_id"))
 
     def test_image_processor_from_dict_with_kwargs(self):
         image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
@@ -153,20 +149,20 @@ class Qwen2VLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         # Test not batched input
         prcocess_out = image_processing(image_inputs[0], return_tensors="pt")
         encoded_images = prcocess_out.pixel_values
-        vision_grid_thws = prcocess_out.vision_grid_thw
+        image_grid_thws = prcocess_out.image_grid_thw
         expected_output_image_shape = (4900, 1176)
-        expected_vision_grid_thws = torch.Tensor([[1, 70, 70]])
+        expected_image_grid_thws = torch.Tensor([[1, 70, 70]])
         self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
-        self.assertTrue((vision_grid_thws == expected_vision_grid_thws).all())
+        self.assertTrue((image_grid_thws == expected_image_grid_thws).all())
 
         # Test batched
         prcocess_out = image_processing(image_inputs, return_tensors="pt")
         encoded_images = prcocess_out.pixel_values
-        vision_grid_thws = prcocess_out.vision_grid_thw
+        image_grid_thws = prcocess_out.image_grid_thw
         expected_output_image_shape = (34300, 1176)
-        expected_vision_grid_thws = torch.Tensor([[1, 70, 70]] * 7)
+        expected_image_grid_thws = torch.Tensor([[1, 70, 70]] * 7)
         self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
-        self.assertTrue((vision_grid_thws == expected_vision_grid_thws).all())
+        self.assertTrue((image_grid_thws == expected_image_grid_thws).all())
 
     def test_call_numpy(self):
         # Initialize image_processing
@@ -179,20 +175,20 @@ class Qwen2VLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         # Test not batched input
         prcocess_out = image_processing(image_inputs[0], return_tensors="pt")
         encoded_images = prcocess_out.pixel_values
-        vision_grid_thws = prcocess_out.vision_grid_thw
+        image_grid_thws = prcocess_out.image_grid_thw
         expected_output_image_shape = (4900, 1176)
-        expected_vision_grid_thws = torch.Tensor([[1, 70, 70]])
+        expected_image_grid_thws = torch.Tensor([[1, 70, 70]])
         self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
-        self.assertTrue((vision_grid_thws == expected_vision_grid_thws).all())
+        self.assertTrue((image_grid_thws == expected_image_grid_thws).all())
 
         # Test batched
         prcocess_out = image_processing(image_inputs, return_tensors="pt")
         encoded_images = prcocess_out.pixel_values
-        vision_grid_thws = prcocess_out.vision_grid_thw
+        image_grid_thws = prcocess_out.image_grid_thw
         expected_output_image_shape = (34300, 1176)
-        expected_vision_grid_thws = torch.Tensor([[1, 70, 70]] * 7)
+        expected_image_grid_thws = torch.Tensor([[1, 70, 70]] * 7)
         self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
-        self.assertTrue((vision_grid_thws == expected_vision_grid_thws).all())
+        self.assertTrue((image_grid_thws == expected_image_grid_thws).all())
 
     def test_call_pytorch(self):
         # Initialize image_processing
@@ -206,20 +202,20 @@ class Qwen2VLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         # Test not batched input
         prcocess_out = image_processing(image_inputs[0], return_tensors="pt")
         encoded_images = prcocess_out.pixel_values
-        vision_grid_thws = prcocess_out.vision_grid_thw
+        image_grid_thws = prcocess_out.image_grid_thw
         expected_output_image_shape = (4900, 1176)
-        expected_vision_grid_thws = torch.Tensor([[1, 70, 70]])
+        expected_image_grid_thws = torch.Tensor([[1, 70, 70]])
         self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
-        self.assertTrue((vision_grid_thws == expected_vision_grid_thws).all())
+        self.assertTrue((image_grid_thws == expected_image_grid_thws).all())
 
         # Test batched
         prcocess_out = image_processing(image_inputs, return_tensors="pt")
         encoded_images = prcocess_out.pixel_values
-        vision_grid_thws = prcocess_out.vision_grid_thw
+        image_grid_thws = prcocess_out.image_grid_thw
         expected_output_image_shape = (34300, 1176)
-        expected_vision_grid_thws = torch.Tensor([[1, 70, 70]] * 7)
+        expected_image_grid_thws = torch.Tensor([[1, 70, 70]] * 7)
         self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
-        self.assertTrue((vision_grid_thws == expected_vision_grid_thws).all())
+        self.assertTrue((image_grid_thws == expected_image_grid_thws).all())
 
     @unittest.skip(reason="Qwen2VLImageProcessor doesn't treat 4 channel PIL and numpy consistently yet")
     def test_call_numpy_4_channels(self):
@@ -232,22 +228,22 @@ class Qwen2VLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         # Test batched as a list of images
         prcocess_out = image_processing(image_inputs, return_tensors="pt")
         encoded_images = prcocess_out.pixel_values
-        vision_grid_thws = prcocess_out.vision_grid_thw
+        image_grid_thws = prcocess_out.image_grid_thw
         expected_output_image_shape = (34300, 1176)
-        expected_vision_grid_thws = torch.Tensor([[1, 70, 70]] * 7)
+        expected_image_grid_thws = torch.Tensor([[1, 70, 70]] * 7)
         self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
-        self.assertTrue((vision_grid_thws == expected_vision_grid_thws).all())
+        self.assertTrue((image_grid_thws == expected_image_grid_thws).all())
 
         # Test batched as a nested list of images, where each sublist is one batch
         image_inputs_nested = image_inputs[:3] + image_inputs[3:]
         prcocess_out = image_processing(image_inputs_nested, return_tensors="pt")
         encoded_images_nested = prcocess_out.pixel_values
-        vision_grid_thws_nested = prcocess_out.vision_grid_thw
+        image_grid_thws_nested = prcocess_out.image_grid_thw
         expected_output_image_shape = (34300, 1176)
-        expected_vision_grid_thws = torch.Tensor([[1, 70, 70]] * 7)
+        expected_image_grid_thws = torch.Tensor([[1, 70, 70]] * 7)
         self.assertEqual(tuple(encoded_images_nested.shape), expected_output_image_shape)
-        self.assertTrue((vision_grid_thws == expected_vision_grid_thws).all())
+        self.assertTrue((image_grid_thws == expected_image_grid_thws).all())
 
         # Image processor should return same pixel values, independently of ipnut format
         self.assertTrue((encoded_images_nested == encoded_images).all())
-        self.assertTrue((vision_grid_thws_nested == expected_vision_grid_thws).all())
+        self.assertTrue((image_grid_thws_nested == expected_image_grid_thws).all())
