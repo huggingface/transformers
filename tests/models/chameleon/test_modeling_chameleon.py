@@ -27,6 +27,7 @@ from transformers.testing_utils import (
     require_read_token,
     require_torch,
     require_torch_gpu,
+    require_torch_multi_gpu,
     slow,
     torch_device,
 )
@@ -61,6 +62,8 @@ class ChameleonModelTester:
         use_labels=True,
         vocab_size=99,
         image_token_id=98,
+        boi_token_id=97,
+        eoi_token_id=96,
         hidden_size=32,
         num_hidden_layers=2,
         num_attention_heads=2,
@@ -90,6 +93,8 @@ class ChameleonModelTester:
         self.use_labels = use_labels
         self.vocab_size = vocab_size
         self.image_token_id = image_token_id
+        self.boi_token_id = boi_token_id
+        self.eoi_token_id = eoi_token_id
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
@@ -141,7 +146,9 @@ class ChameleonModelTester:
         start = self.vq_img_token_start_id
         end = self.vq_img_token_start_id + self.vq_num_embeds
         for i in range(start, end):
-            vocab_map[i] = f"IMGIMGBS{i}"  # dummy str for each token, anything starting with IMGIMG
+            image_token_infix = "".join(chr(ord("A") + int(c)) for c in str(i))
+            # dummy str for each image token, anything starting with IMGIMG
+            vocab_map[i] = f"IMGIMG{image_token_infix}Z"
 
         return ChameleonConfig(
             vocab_size=self.vocab_size,
@@ -160,6 +167,9 @@ class ChameleonModelTester:
             pad_token_id=self.pad_token_id,
             vocabulary_map={v: k for k, v in vocab_map.items()},
             vq_config=self.get_vq_config(),
+            image_token_id=self.image_token_id,
+            boi_token_id=self.boi_token_id,
+            eoi_token_id=self.eoi_token_id,
         )
 
     def get_vq_config(self):
@@ -454,6 +464,32 @@ class ChameleonIntegrationTest(unittest.TestCase):
 
         # greedy generation outputs
         EXPECTED_TEXT_COMPLETION = ['What do these two images have in common?The two images show a connection between two things that are not necessarily related. The first image shows a group of stars, while the second image shows a network of lines connecting two points. The connection between']  # fmt: skip
+        generated_ids = model.generate(**inputs, max_new_tokens=40, do_sample=False)
+        text = processor.batch_decode(generated_ids, skip_special_tokens=True)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
+
+    @slow
+    @require_bitsandbytes
+    @require_read_token
+    @require_torch_multi_gpu
+    def test_model_7b_multi_gpu(self):
+        model = ChameleonForConditionalGeneration.from_pretrained(
+            "facebook/chameleon-7b",
+            load_in_4bit=True,
+            device_map="auto",
+            max_memory={0: "1GB"},
+        )
+        processor = ChameleonProcessor.from_pretrained("facebook/chameleon-7b")
+
+        image = Image.open(
+            requests.get("https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg", stream=True).raw
+        )
+        prompt = "<image>Describe what do you see here and tell me about the history behind it?"
+
+        inputs = processor(prompt, images=image, return_tensors="pt").to(model.device, torch.float16)
+
+        # greedy generation outputs
+        EXPECTED_TEXT_COMPLETION = ['Describe what do you see here and tell me about the history behind it?The image depicts a star map, with a bright blue line extending across the center of the image. The line is labeled "390 light years" and is accompanied by a small black and']  # fmt: skip
         generated_ids = model.generate(**inputs, max_new_tokens=40, do_sample=False)
         text = processor.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)

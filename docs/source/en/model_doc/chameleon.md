@@ -50,12 +50,17 @@ The original code can be found [here](https://github.com/facebookresearch/chamel
 
 - We advise users to use `padding_side="left"` when computing batched generation as it leads to more accurate results. Simply make sure to set `processor.tokenizer.padding_side = "left"` before generating.
 
+- When generating images, we advice users to load the model in `bfloat16` for better results. Simply make sure to set `torch_dtype=torch.bfloat16` when loading the model.
+
 - Note that Chameleon was tuned for safety alignment. If the model is refusing to answer, consider asking a more concrete question, instead of an open question.
 
 - Chameleon generates in chat format which means that the generated text will always be the "assistant's turn". You can enable a text completion generation by passing `return_for_text_completion=True` when calling the processor.
 
 > [!NOTE]
 > Chameleon implementation in Transformers uses a special image token to indicate where to merge image embeddings. For special image token we didn't add a new one but used one of the reserved tokens: `<reserved08707>`. You have to add `<image>` to your prompt in the place where the image should be embedded for correct generation.
+
+> [!NOTE]
+> The official model checkpoint currently only supports text generation. To generate images and interleaved text-image responses, you can use finetuned versions such as [Anole](https://arxiv.org/abs/2407.06135). Note however that Anole has a bias for "empty" or background patches, so it is recommended to use sampling when generating images (i.e. setting `do_sample=True` during generation) to reduce the likelihood of generating a blank image.
 
 ## Usage example
 
@@ -117,12 +122,155 @@ prompts = [
 
 # We can simply feed images in the order they have to be used in the text prompt
 # Each "<image>" token uses one image leaving the next for the subsequent "<image>" tokens
-inputs = processor(text=prompts, images=[image_stop, image_cats, image_snowman], padding=True, return_tensors="pt").to(device="cuda", dtype=torch.bfloat16)
+inputs = processor(
+    text=prompts,
+    images=[image_stop, image_cats, image_snowman],
+    padding=True,
+    return_tensors="pt",
+).to(device="cuda", dtype=torch.bfloat16)
 
 # Generate
 generate_ids = model.generate(**inputs, max_new_tokens=50)
 processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
 ```
+
+### Text to image generation
+
+Chameleon can also generate images. However, the official model checkpoint currently only supports text generation. We need to use finetuned versions such as [Anole](https://arxiv.org/abs/2407.06135) to do image generation. Here is how you can do it:
+
+```python
+import torch
+from transformers import ChameleonProcessor, ChameleonForConditionalGeneration
+
+processor = ChameleonProcessor.from_pretrained("leloy/Anole-7b-v0.1-hf")
+model = ChameleonForConditionalGeneration.from_pretrained(
+    "leloy/Anole-7b-v0.1-hf",
+    device_map="auto",
+    torch_dtype=torch.bfloat16,
+)
+
+# Prepare a prompt
+prompt = "Generate an image of a snowman."
+
+# Preprocess the prompt
+inputs = processor(prompt, padding=True, return_tensors="pt").to(model.device, dtype=model.dtype)
+
+# Generate discrete image tokens
+generate_ids = model.generate(
+    **inputs,
+    multimodal_generation_mode="image-only",
+    # Note: We need to set `max_new_tokens` to 1026 since the model generates the `image_start_token` marker token first, then 1024 image tokens, and finally the `image_end_token` marker token.
+    max_new_tokens=1026,
+    # This is important because most of the image tokens during training were for "empty" patches, so greedy decoding of image tokens will likely result in a blank image.
+    do_sample=True,
+)
+
+# Only keep the tokens from the response
+response_ids = generate_ids[:, inputs["input_ids"].shape[-1]:]
+
+# Decode the generated image tokens
+pixel_values = model.decode_image_tokens(response_ids[:, 1:-1])
+images = processor.postprocess_pixel_values(pixel_values)
+
+# Save the image
+images[0].save("snowman.png")
+```
+
+### Text-image to image generation
+
+We can also interleave text and images in the prompt to generate images. Here is how you can do it:
+
+```python
+import requests
+
+import torch
+from PIL import Image
+from transformers import ChameleonProcessor, ChameleonForConditionalGeneration
+from transformers.image_transforms import to_pil_image
+
+processor = ChameleonProcessor.from_pretrained("leloy/Anole-7b-v0.1-hf")
+model = ChameleonForConditionalGeneration.from_pretrained(
+    "leloy/Anole-7b-v0.1-hf",
+    device_map="auto",
+    torch_dtype=torch.bfloat16,
+)
+
+# Get image of a snowman
+url = "https://huggingface.co/microsoft/kosmos-2-patch14-224/resolve/main/snowman.jpg"
+image_snowman = Image.open(requests.get(url, stream=True).raw)
+
+# Prepare a prompt
+prompt = "Generate a variation of this image.<image>"
+
+# Preprocess the prompt
+inputs = processor(
+    prompt,
+    images=[image_snowman],
+    padding=True,
+    return_tensors="pt",
+).to(model.device, dtype=model.dtype)
+
+# Generate discrete image tokens
+generate_ids = model.generate(
+    **inputs,
+    multimodal_generation_mode="image-only",
+    # Note: We need to set `max_new_tokens` to 1026 since the model generates the `image_start_token` marker token first, then 1024 image tokens, and finally the `image_end_token` marker token.
+    max_new_tokens=1026,
+    # This is important because most of the image tokens during training were for "empty" patches, so greedy decoding of image tokens will likely result in a blank image.
+    do_sample=True,
+)
+
+# Only keep the tokens from the response
+response_ids = generate_ids[:, inputs["input_ids"].shape[-1]:]
+
+# The generated image tokens are wrapped by the `image_start_token` and `image_end_token` tokens. We need to remove them before decoding the image tokens.
+image_token_ids = response_ids[:, 1:-1]
+
+# Decode the generated image tokens
+pixel_values = model.decode_image_tokens(image_token_ids)
+pixel_values = processor.postprocess_pixel_values(pixel_values)
+
+# Save the image
+image = to_pil_image(pixel_values[0].detach().cpu())
+image.save("snowman.png")
+```
+
+### Interleaved text-image generation
+
+We can also generate interleaved text and images in the output. Here is how you can do it:
+
+```python
+import torch
+from transformers import ChameleonProcessor, ChameleonForConditionalGeneration
+
+processor = ChameleonProcessor.from_pretrained("leloy/Anole-7b-v0.1-hf")
+model = ChameleonForConditionalGeneration.from_pretrained(
+    "leloy/Anole-7b-v0.1-hf",
+    device_map="auto",
+    torch_dtype=torch.bfloat16,
+)
+
+# Prepare a prompt
+prompt = "Can you draw a snowman and explain how to build one?"
+
+# Preprocess the prompt
+inputs = processor(prompt, padding=True, return_tensors="pt").to(model.device, dtype=model.dtype)
+
+# Generate interleaved text and discrete image tokens
+generate_ids = model.generate(
+    **inputs,
+    multimodal_generation_mode="interleaved-text-image",
+    # Note: We will need a larger `max_new_tokens` value since we are generating both text and image tokens.
+    max_new_tokens=4096,
+    # This is important because most of the image tokens during training were for "empty" patches, so greedy decoding of image tokens will likely result in a blank image.
+    do_sample=True,
+)
+
+# Only keep the tokens from the response
+response_ids = generate_ids[:, inputs["input_ids"].shape[-1]:]
+```
+
+From here, you can split the response tokens into text and image token segments, decode them separately as shown in the previous examples, and finally render the resulting text and images together. You can also use [MMSG](https://github.com/leloykun/mmsg) to do this more easily.
 
 ## Model optimization
 

@@ -24,7 +24,7 @@ from PIL import Image
 
 from transformers import (
     ChameleonConfig,
-    ChameleonForCausalLM,
+    ChameleonForConditionalGeneration,
     ChameleonImageProcessor,
     ChameleonProcessor,
 )
@@ -49,9 +49,9 @@ python src/transformers/models/chameleon/convert_chameleon_weights_to_hf.py \
 Thereafter, models can be loaded via:
 
 ```py
-from transformers import ChameleonForCausalLM, LlamaTokenizer
+from transformers import ChameleonForConditionalGeneration, LlamaTokenizer
 
-model = ChameleonForCausalLM.from_pretrained("/output/path")
+model = ChameleonForConditionalGeneration.from_pretrained("/output/path")
 tokenizer = LlamaTokenizer.from_pretrained("/output/path")
 ```
 
@@ -81,7 +81,7 @@ def write_json(text, path):
         json.dump(text, f)
 
 
-def write_model(model_path, input_base_path, model_size, chameleon_version=1):
+def write_model(model_path, input_base_path, model_size, chameleon_version=1, vqvae_path=None):
     os.makedirs(model_path, exist_ok=True)
     input_model_path = os.path.join(input_base_path, "models", model_size.lower())
     params_path = os.path.join(input_model_path, "params.json")
@@ -316,8 +316,6 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1):
     vqgan_path = os.path.join(input_base_path, "tokenizer/vqgan.ckpt")
     vqgan_state_dict = torch.load(vqgan_path, map_location="cpu")["state_dict"]
     for k, v in vqgan_state_dict.items():
-        if "decoder" in k:
-            continue  # we dont do image generation yet
         state_dict[f"model.vqmodel.{k}"] = v
 
     # Write configs
@@ -370,12 +368,25 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1):
         swin_norm=swin_norm,
         vq_config=vq_config,
         vocabulary_map=vocabulary_map,
+        image_token_id=vocabulary_map["<image>"],
+        boi_token_id=vocabulary_map["<racm3:break>"],
+        eoi_token_id=vocabulary_map["<eoss>"],
     )
     with init_empty_weights():
-        model = ChameleonForCausalLM(config)
+        model = ChameleonForConditionalGeneration(config)
+
+    # Add to generation config
+    model.generation_config._from_model_config = False
+    model.generation_config.multimodal_generation_mode = "text-only"
+    model.generation_config.do_sample = True
+    model.generation_config.temperature = 0.7
+    model.generation_config.top_p = 0.7
 
     model.load_state_dict(state_dict, assign=True, strict=False)
     model.save_pretrained(model_path, safe_serialization=True)
+
+    if vqvae_path is not None:
+        model.model.vqmodel.save_pretrained(vqvae_path, safe_serialization=True)
 
     # Load and save the processor
     tokenizer = LlamaTokenizerFast(
@@ -397,7 +408,7 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1):
     # taken from https://github.com/facebookresearch/chameleon/blob/7a72f40aa5f462965c8374f25257f55b65b25ff4/data/prompts_for_human_evaluations.jsonl
     print("Loading the checkpoint in a Chameleon model...")
     print("*" * 100)
-    model = ChameleonForCausalLM.from_pretrained(
+    model = ChameleonForConditionalGeneration.from_pretrained(
         model_path, attn_implementation="eager", torch_dtype=torch.bfloat16, device_map="auto"
     )
     processor = ChameleonProcessor.from_pretrained(model_path)
@@ -463,12 +474,18 @@ def main():
         type=int,
         help="Version of the Chameleon model to convert",
     )
+    parser.add_argument(
+        "--vqvae_path",
+        default=None,
+        help="Location to write VQ-VAE model",
+    )
     args = parser.parse_args()
     write_model(
         model_path=args.output_dir,
         input_base_path=args.input_dir,
         model_size=args.model_size,
         chameleon_version=args.chameleon_version,
+        vqvae_path=args.vqvae_path,
     )
 
 
