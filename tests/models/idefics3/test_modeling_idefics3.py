@@ -467,7 +467,7 @@ class Idefics3ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
 @require_torch
 class Idefics3ForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.processor = AutoProcessor.from_pretrained("HuggingFaceM4/idefics3-8b-base")
+        self.processor = AutoProcessor.from_pretrained("HuggingFaceM4/Idefics3-8B-Llama3-base")
         self.image1 = Image.open(
             BytesIO(
                 requests.get(
@@ -493,7 +493,7 @@ class Idefics3ForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     def test_integration_test(self):
         model = Idefics3ForConditionalGeneration.from_pretrained(
-            "HuggingFaceM4/idefics3-8b-base",
+            "HuggingFaceM4/Idefics3-8B-Llama3-base",
             torch_dtype=torch.bfloat16,
             device_map="auto",
         )
@@ -517,7 +517,7 @@ class Idefics3ForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_integration_test_4bit(self):
         # Let' s make sure we test the preprocessing to replace what is used
         model = Idefics3ForConditionalGeneration.from_pretrained(
-            "HuggingFaceM4/idefics3-8b-base", load_in_4bit=True, device_map="auto"
+            "HuggingFaceM4/Idefics3-8B-Llama3-base", load_in_4bit=True, device_map="auto"
         )
 
         # Create pixel inputs

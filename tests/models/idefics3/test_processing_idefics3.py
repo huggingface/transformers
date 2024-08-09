@@ -31,7 +31,7 @@ if is_vision_available():
 @require_vision
 class Idefics3ProcessorTest(unittest.TestCase):
     def setUp(self):
-        self.processor = Idefics3Processor.from_pretrained("HuggingFaceM4/idefics3-8b", image_seq_len=2)
+        self.processor = Idefics3Processor.from_pretrained("HuggingFaceM4/Idefics3-8B-Llama3", image_seq_len=2)
         self.image1 = Image.open(
             BytesIO(
                 requests.get(

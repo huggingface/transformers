@@ -1114,8 +1114,8 @@ class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel):
         >>> image2 = load_image("https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg")
         >>> image3 = load_image("https://cdn.britannica.com/68/170868-050-8DDE8263/Golden-Gate-Bridge-San-Francisco.jpg")
 
-        >>> processor = AutoProcessor.from_pretrained("HuggingFaceM4/idefics3-8b")
-        >>> model = AutoModelForVision2Seq.from_pretrained("HuggingFaceM4/idefics3-8b", device_map="auto")
+        >>> processor = AutoProcessor.from_pretrained("HuggingFaceM4/Idefics3-8B-Llama3")
+        >>> model = AutoModelForVision2Seq.from_pretrained("HuggingFaceM4/Idefics3-8B-Llama3", device_map="auto")
 
         >>> BAD_WORDS_IDS = processor.tokenizer(["<image>", "<fake_token_around_image>"], add_special_tokens=False).input_ids
         >>> EOS_WORDS_IDS = [processor.tokenizer.eos_token_id]

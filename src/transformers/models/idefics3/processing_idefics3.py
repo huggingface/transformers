@@ -145,7 +145,7 @@ class Idefics3Processor(ProcessorMixin):
         >>> from transformers import Idefics3Processor
         >>> from transformers.image_utils import load_image
 
-        >>> processor = Idefics3Processor.from_pretrained("HuggingFaceM4/idefics3-8b", image_seq_len=2)
+        >>> processor = Idefics3Processor.from_pretrained("HuggingFaceM4/Idefics3-8B-Llama3", image_seq_len=2)
         >>> processor.image_processor.do_image_splitting = False  # Force as False to simplify the example
 
         >>> url1 = "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"

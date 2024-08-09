@@ -31,7 +31,7 @@ from transformers import (
 
 
 EPILOG_TXT = """Example:
-    python transformers/src/transformers/models/idefics3/convert_idefics3_weights_to_hf.py --original_model_id HuggingFaceM4/idefics3-8b --output_hub_path org/idefics3
+    python transformers/src/transformers/models/idefics3/convert_idefics3_weights_to_hf.py --original_model_id HuggingFaceM4/Idefics3-8B-Llama3 --output_hub_path org/idefics3
 """
 
 
