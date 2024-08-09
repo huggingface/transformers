@@ -16,19 +16,11 @@
 Image/Text processor class for Chinese-CLIP
 """
 
-import sys
 import warnings
 from typing import List, Union
 
 from ...image_utils import ImageInput
-from ...processing_utils import ProcessingKwargs, ProcessorMixin
-
-
-if sys.version_info >= (3, 11):
-    from typing import Unpack
-else:
-    from typing_extensions import Unpack
-
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
 
 
