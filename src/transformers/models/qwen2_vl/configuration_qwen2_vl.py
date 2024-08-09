@@ -14,9 +14,8 @@
 # limitations under the License.
 """Qwen2VL model configuration"""
 
-from typing import Union
-
 import os
+from typing import Union
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -38,7 +37,6 @@ class Qwen2VLVisionConfig(PretrainedConfig):
         in_chans=3,
         patch_size=14,
         spatial_merge_size=2,
-        spatial_patch_size=14,
         temporal_patch_size=2,
         attn_implementation="sdpa",
         **kwargs,
@@ -53,7 +51,6 @@ class Qwen2VLVisionConfig(PretrainedConfig):
         self.in_chans = in_chans
         self.patch_size = patch_size
         self.spatial_merge_size = spatial_merge_size
-        self.spatial_patch_size = spatial_patch_size
         self.temporal_patch_size = temporal_patch_size
         self._attn_implementation = attn_implementation
 
