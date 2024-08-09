@@ -862,13 +862,6 @@ class Idefics3Model(Idefics3PreTrainedModel):
     def set_input_embeddings(self, value):
         self.text_model.set_input_embeddings(value)
 
-    def resize_token_embeddings(self, new_num_tokens: Optional[int] = None, pad_to_multiple_of=None) -> nn.Embedding:
-        model_embeds = self.text_model.resize_token_embeddings(
-            new_num_tokens=new_num_tokens, pad_to_multiple_of=pad_to_multiple_of
-        )
-        self.config.text_config.vocab_size = model_embeds.num_embeddings
-        return model_embeds
-
     def inputs_merger(
         self,
         input_ids: torch.LongTensor,
@@ -940,11 +933,7 @@ class Idefics3Model(Idefics3PreTrainedModel):
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         past_seen_tokens = 0
-        return_legacy_cache = False
         if use_cache:
-            if not isinstance(past_key_values, Cache):  # kept for BC (non `Cache` `past_key_values` inputs)
-                return_legacy_cache = True
-                past_key_values = DynamicCache.from_legacy_cache(past_key_values)
             past_seen_tokens = past_key_values.get_seq_length()
 
         if inputs_embeds is not None and input_ids is None and past_seen_tokens == 0:
@@ -1016,9 +1005,6 @@ class Idefics3Model(Idefics3PreTrainedModel):
             return_dict=return_dict,
         )
 
-        if return_legacy_cache and use_cache:
-            outputs.past_key_values = outputs.past_key_values.to_legacy_cache()
-
         if not return_dict:
             return tuple(v for v in [*outputs, image_hidden_states] if v is not None)
 
@@ -1074,21 +1060,6 @@ class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
-
-    def resize_token_embeddings(self, new_num_tokens: Optional[int] = None, pad_to_multiple_of=None) -> nn.Embedding:
-        model_embeds = self._resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
-        if new_num_tokens is None and pad_to_multiple_of is None:
-            return model_embeds
-
-        # Update base model and current model config
-        # Ignore copy
-        self.config.text_config.vocab_size = model_embeds.weight.shape[0]
-        self.vocab_size = self.config.text_config.vocab_size
-
-        # Tie weights again if needed
-        self.tie_weights()
-
-        return model_embeds
 
     def tie_weights(self):
         """
@@ -1292,13 +1263,3 @@ class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel):
         # Get the precomputed image_hidden_states
         model_kwargs["image_hidden_states"] = outputs.image_hidden_states
         return model_kwargs
-
-    @staticmethod
-    # Copied from transformers.models.opt.modeling_opt.OPTForCausalLM._reorder_cache
-    def _reorder_cache(past_key_values, beam_idx):
-        reordered_past = ()
-        for layer_past in past_key_values:
-            reordered_past += (
-                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
-            )
-        return reordered_past

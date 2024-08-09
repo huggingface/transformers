@@ -739,7 +739,7 @@ class Idefics3ImageProcessor(BaseImageProcessor):
 
         # We will resize both height and width of each image to the nearest 364 multiple, disregarding the aspect ratio
         # for size=(10, 364) -> rescaled_size=(364, 364)
-        # for size=(11, 365) -> rescaled_size=(364, 364*2) 
+        # for size=(11, 365) -> rescaled_size=(364, 364*2)
         new_images_list = []
         for images in images_list:
             new_images = []
