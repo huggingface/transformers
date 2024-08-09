@@ -119,6 +119,7 @@ from .import_utils import (
     is_bitsandbytes_available,
     is_bs4_available,
     is_coloredlogs_available,
+    is_compressed_tensors_available,
     is_cv2_available,
     is_cython_available,
     is_datasets_available,

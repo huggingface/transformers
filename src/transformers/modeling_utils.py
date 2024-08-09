@@ -4016,7 +4016,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 dispatch_model(model, **device_map_kwargs)
 
         if hf_quantizer is not None:
-            hf_quantizer.postprocess_model(model)
+            hf_quantizer.postprocess_model(model, resolved_archive_file=resolved_archive_file)
             model.hf_quantizer = hf_quantizer
 
         if _adapter_model_path is not None:

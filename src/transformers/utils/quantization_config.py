@@ -42,6 +42,7 @@ class QuantizationMethod(str, Enum):
     QUANTO = "quanto"
     EETQ = "eetq"
     HQQ = "hqq"
+    COMPRESSED_TENSORS = "compressed-tensors"
     FBGEMM_FP8 = "fbgemm_fp8"
 
 
@@ -1050,7 +1051,78 @@ class EetqConfig(QuantizationConfigMixin):
             raise ValueError(f"Only support weights in {accepted_weights} but found {self.weights}")
 
 
-@dataclass
+class CompressedTensorsConfig(QuantizationConfigMixin):
+    """
+    This is a wrapper class that handles compressed-tensors quantization config options.
+    It is a wrapper around `compressed_tensors.QuantizationConfig`
+    Args:
+        config_groups (`typing.Dict[str, typing.Union[ForwardRef('QuantizationScheme'), typing.List[str]]]`, *optional*):
+            dictionary mapping group name to a quantization scheme definition
+        format (`str`, *optional*, defaults to `"dense"`):
+            format the model is represented as
+        quantization_status (`QuantizationStatus`, *optional*, defaults to `"initialized"`):
+            status of model in the quantization lifecycle, ie 'initialized', 'calibration', 'frozen'
+        global_compression_ratio (`typing.Union[float, NoneType]`, *optional*):
+            0-1 float percentage of model compression
+        ignore (`typing.Union[typing.List[str], NoneType]`, *optional*):
+            layer names or types to not quantize, supports regex prefixed by 're:'
+        sparsity_config (`typing.Dict[str, typing.Any]`, *optional*):
+            configuration for sparsity compression
+        quant_method (`str`, *optional*, defaults to `"compressed-tensors"`):
+            do not override, should be compressed-tensors
+    """
+
+    def __init__(
+        self,
+        config_groups: Dict[str, Union["QuantizationScheme", List[str]]] = None,  # noqa: F821
+        format: str = "dense",
+        quantization_status: "QuantizationStatus" = "initialized",  # noqa: F821
+        global_compression_ratio: Optional[float] = None,
+        ignore: Optional[List[str]] = None,
+        sparsity_config: Dict[str, Any] = None,
+        quant_method: str = "compressed-tensors",
+        **kwargs,
+    ):
+        from compressed_tensors import QuantizationConfig
+        from compressed_tensors.config import SparsityCompressionConfig
+
+        self.quantization_config = None
+        self.sparsity_config = None
+
+        # parse from dict to load nested QuantizationScheme objects
+        if config_groups:
+            self.quantization_config = QuantizationConfig.parse_obj(
+                {
+                    "config_groups": config_groups,
+                    "quant_method": quant_method,
+                    "format": format,
+                    "quantization_status": quantization_status,
+                    "global_compression_ratio": global_compression_ratio,
+                    "ignore": ignore,
+                }
+            )
+
+        if sparsity_config:
+            self.sparsity_config = SparsityCompressionConfig.load_from_registry(
+                sparsity_config.get("format"), **sparsity_config
+            )
+
+        super().__init__(quant_method=QuantizationMethod.COMPRESSED_TENSORS)
+
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Serializes this instance to a Python dictionary. Returns:
+            `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
+        """
+        quantization_config = self.quantization_config.dict() if self.quantization_config is not None else None
+        sparsity_config = self.sparsity_config.dict() if self.sparsity_config is not None else None
+
+        return {
+            "quantization_config": quantization_config,
+            "sparsity_config": sparsity_config,
+        }
+
+
 class FbgemmFp8Config(QuantizationConfigMixin):
     """
     This is a wrapper class about all possible attributes and features that you can play with a model that has been
