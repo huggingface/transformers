@@ -4211,7 +4211,20 @@ class ModelTesterMixin:
                     low_cpu_mem_usage=True,
                 ).to(torch_device)
 
-                self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
+                if model_sdpa._is_composite:
+                    vision_model_name = "image_tower" if hasattr(model_sdpa, "image_tower") else "vision_tower"
+                    vision_attn = "sdpa" if getattr(model, vision_model_name)._supports_sdpa else "eager"
+                    text_attn = "sdpa" if model.language_model._supports_sdpa else "eager"
+
+                    # `None` as it is the requested one which will be assigned to each sub-config
+                    # Sub-model will dispatch to SDPA if it can (checked below that `SDPA` layers are present)
+                    self.assertTrue(
+                        model_sdpa.config._attn_implementation == {"text_config": None, "vision_config": None}
+                    )
+                    self.assertTrue(model_sdpa.language_model.config._attn_implementation == text_attn)
+                    self.assertTrue(getattr(model_sdpa, vision_model_name).config._attn_implementation == vision_attn)
+                else:
+                    self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
 
                 model_eager = model_class.from_pretrained(
                     tmpdirname,
@@ -4220,7 +4233,14 @@ class ModelTesterMixin:
                     attn_implementation="eager",
                 ).to(torch_device)
 
-                self.assertTrue(model_eager.config._attn_implementation == "eager")
+                if model_eager._is_composite:
+                    self.assertTrue(
+                        model_eager.config._attn_implementation == {"text_config": "eager", "vision_config": "eager"}
+                    )
+                    self.assertTrue(model_eager.language_model.config._attn_implementation == "eager")
+                    self.assertTrue(getattr(model_eager, vision_model_name).config._attn_implementation == "eager")
+                else:
+                    self.assertTrue(model_eager.config._attn_implementation == "eager")
 
                 for name, submodule in model_eager.named_modules():
                     class_name = submodule.__class__.__name__
