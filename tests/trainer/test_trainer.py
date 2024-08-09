@@ -1366,7 +1366,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
             # Check this works
             _ = trainer.train()
-            
+
     @require_grokadamw
     @require_torch_gpu
     def test_grokadamw():
