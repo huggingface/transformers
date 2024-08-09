@@ -154,7 +154,7 @@ def apply_multimodal_rotary_pos_emb(q, k, cos, sin, position_ids, mrope_section=
             The position indices of the tokens corresponding to the query and key tensors. For example, this can be
             used to pass offsetted position ids when working with a KV-cache.
         mrope_section(`List(int)`):
-            Multimodal Sections for t,h,w in Multimodal inputs
+            Multimodal rope section is for channel dimension of temporal, height and width in rope calculation.
         unsqueeze_dim (`int`, *optional*, defaults to 1):
             The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
             sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
