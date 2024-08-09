@@ -246,7 +246,7 @@ def prepare_img():
 @slow
 class DepthAnythingModelIntegrationTest(unittest.TestCase):
     def test_inference(self):
-        # -- `relative` depth model
+        # -- `relative` depth model --
         image_processor = DPTImageProcessor.from_pretrained("LiheYoung/depth-anything-small-hf")
         model = DepthAnythingForDepthEstimation.from_pretrained("LiheYoung/depth-anything-small-hf").to(torch_device)
 
@@ -268,7 +268,7 @@ class DepthAnythingModelIntegrationTest(unittest.TestCase):
 
         self.assertTrue(torch.allclose(predicted_depth[0, :3, :3], expected_slice, atol=1e-6))
 
-        # -- `metric` depth model
+        # -- `metric` depth model --
         image_processor = DPTImageProcessor.from_pretrained("depth-anything/depth-anything-V2-metric-indoor-small-hf")
         model = DepthAnythingForDepthEstimation.from_pretrained(
             "depth-anything/depth-anything-V2-metric-indoor-small-hf"
