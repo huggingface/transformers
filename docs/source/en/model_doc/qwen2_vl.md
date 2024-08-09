@@ -148,6 +148,8 @@ The model can batch inputs composed of mixed samples of various types such as im
 image1 = Image.open("/path/to/image1.jpg")
 image2 = Image.open("/path/to/image2.jpg")
 image3 = Image.open("/path/to/image3.jpg")
+image4 = Image.open("/path/to/image4.jpg")
+image5 = Image.open("/path/to/image5.jpg")
 video = fetch_video({
     "type": "video",
     "video": "/path/to/video.mp4",
@@ -202,7 +204,7 @@ conversation4 = [
 conversations = [conversation1, conversation2, conversation3, conversation4]
 # Preparation for batch inference
 texts = [processor.apply_chat_template(msg, add_generation_prompt=True) for msg in conversations]
-inputs = processor(text=texts, mages=[image1,image2,image3],videos=[video], padding=True, return_tensors="pt")
+inputs = processor(text=texts, mages=[image1,image2,image3,image4,image5],videos=[video], padding=True, return_tensors="pt")
 inputs = inputs.to('cuda')
 
 # Batch Inference
