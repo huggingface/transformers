@@ -786,6 +786,11 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                     if special_tokens_map is not None:
                         tokens = [special_tokens_map.get(token, token) for token in tokens]
                     post_processor["special_tokens"][key]["tokens"] = tokens
+                    for token in tokens:
+                        token_id =tokenizer.token_to_id(token)
+                        if token_id is None:
+                            raise ValueError("Attempted to set a token in the post processor that does not exist in the mapping")
+
                     post_processor["special_tokens"][key]["ids"] = [tokenizer.token_to_id(token) for token in tokens]
 
             for special_token in ["cls", "sep"]:
@@ -794,9 +799,13 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                     if special_tokens_map is not None and token in special_tokens_map:
                         token = special_tokens_map[token]
                     token_id = tokenizer.token_to_id(token)
+                    if token_id is None:
+                        raise ValueError("Attempted to set a token in the post processor that does not exist in the mapping")
                     post_processor[special_token] = [token, token_id]
 
             trained_tokenizer_json["post_processor"] = post_processor
+            import pdb;pdb.set_trace()
+            print(json.dumps(trained_tokenizer_json["post_processor"]))
             tokenizer = TokenizerFast.from_str(json.dumps(trained_tokenizer_json))
 
         kwargs = self.init_kwargs.copy()
