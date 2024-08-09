@@ -132,7 +132,6 @@ if is_safetensors_available():
     from safetensors.torch import load_file as safe_load_file
     from safetensors.torch import save_file as safe_save_file
 
-
 logger = logging.get_logger(__name__)
 
 

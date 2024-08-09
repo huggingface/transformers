@@ -156,6 +156,7 @@ from .utils import (
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
     PushInProgress,
+    PushToHubMixin,
     can_return_loss,
     find_labels,
     is_accelerate_available,
@@ -179,10 +180,6 @@ from .utils import (
     strtobool,
 )
 from .utils.quantization_config import QuantizationMethod
-
-
-def _get_fsdp_ckpt_kwargs():
-    return {"adapter_only": True} if is_accelerate_available("0.27.0") else {}
 
 
 # isort: off
@@ -264,6 +261,10 @@ if TYPE_CHECKING:
         import datasets
 
 logger = logging.get_logger(__name__)
+
+
+def _get_fsdp_ckpt_kwargs():
+    return {"adapter_only": True} if is_accelerate_available("0.27.0") else {}
 
 
 # Name of the files used for checkpointing
@@ -3376,6 +3377,45 @@ class Trainer:
 
         # Good practice: save your training arguments together with the trained model
         torch.save(self.args, os.path.join(output_dir, TRAINING_ARGS_NAME))
+
+    def _save_tpu(self, output_dir: Optional[str] = None):
+        output_dir = output_dir if output_dir is not None else self.args.output_dir
+
+        logger.info(f"Saving model checkpoint to {output_dir}")
+        model = self.model
+        xm.mark_step()
+
+        if xm.is_master_ordinal():
+            os.makedirs(output_dir, exist_ok=True)
+            torch.save(self.args, os.path.join(output_dir, TRAINING_ARGS_NAME))
+
+        # Save a trained model and configuration using `save_pretrained()`.
+        # They can then be reloaded using `from_pretrained()`
+        supported_classes = (PushToHubMixin,)
+        xm.rendezvous("saving_checkpoint")
+        if not isinstance(model, supported_classes):
+            if isinstance(self.accelerator.unwrap_model(model), supported_classes):
+                self.accelerator.unwrap_model(model).save_pretrained(
+                    output_dir,
+                    is_main_process=self.args.should_save,
+                    state_dict=xm._maybe_convert_to_cpu(model.state_dict()),
+                    save_function=xm.save,
+                    safe_serialization=self.args.save_safetensors,
+                )
+            else:
+                logger.info("Trainer.model is not a `PreTrainedModel`, only saving its state dict.")
+                state_dict = xm._maybe_convert_to_cpu(model.state_dict())
+                xm.save(state_dict, os.path.join(output_dir, WEIGHTS_NAME))
+        else:
+            model.save_pretrained(
+                output_dir,
+                is_main_process=self.args.should_save,
+                save_function=xm.save,
+                safe_serialization=self.args.save_safetensors,
+                state_dict=xm._maybe_convert_to_cpu(model.state_dict()),
+            )
+        if self.tokenizer is not None and self.args.should_save:
+            self.tokenizer.save_pretrained(output_dir)
 
     def _save_checkpoint(self, model, trial, metrics=None):
         # In all cases, including ddp/dp/deepspeed, self.model is always a reference to the model we
