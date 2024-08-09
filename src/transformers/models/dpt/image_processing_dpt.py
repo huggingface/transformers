@@ -20,7 +20,7 @@ from typing import Dict, Iterable, List, Optional, Tuple, Union
 import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from ...image_transforms import pad, resize, to_channel_dimension_format
+from ...image_transforms import colorize_depth, pad, resize, to_channel_dimension_format
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -37,8 +37,14 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
-from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
-
+from ...modeling_outputs import DepthEstimatorOutput
+from ...utils import (
+    TensorType,
+    filter_out_non_signature_kwargs,
+    is_vision_available,
+    logging,
+    requires_backends,
+)
 
 if is_torch_available():
     import torch
@@ -395,8 +401,7 @@ class DPTImageProcessor(BaseImageProcessor):
 
         if do_rescale:
             images = [
-                self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
-                for image in images
+                self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format) for image in images
             ]
 
         if do_normalize:
@@ -441,9 +446,7 @@ class DPTImageProcessor(BaseImageProcessor):
         # Resize logits and compute semantic segmentation maps
         if target_sizes is not None:
             if len(logits) != len(target_sizes):
-                raise ValueError(
-                    "Make sure that you pass in as many target sizes as the batch dimension of the logits"
-                )
+                raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the logits")
 
             if is_torch_tensor(target_sizes):
                 target_sizes = target_sizes.numpy()
@@ -461,3 +464,74 @@ class DPTImageProcessor(BaseImageProcessor):
             semantic_segmentation = [semantic_segmentation[i] for i in range(semantic_segmentation.shape[0])]
 
         return semantic_segmentation
+
+    def post_process_depth_estimation(
+        self,
+        outputs: DepthEstimatorOutput,
+        target_sizes: Optional[Union[torch.Tensor, List[Tuple[int, int]], None]] = None,
+        vmin_perc: Optional[float] = 1.0,
+        vmax_perc: Optional[float] = 99.0,
+        cmap: Optional[str] = "gray_r",
+        gamma_corrected: Optional[bool] = False,
+        normalize: Optional[bool] = False,
+    ) -> List[Dict]:
+        """
+        Converts the raw output of [`DepthEstimatorOutput`] into final depth predictions and depth PIL images.
+        Only supports PyTorch.
+
+        Args:
+            outputs ([`DepthEstimatorOutput`]):
+                Raw outputs of the model.
+            target_sizes (`torch.Tensor` or `List[Tuple[int, int]]`, *optional*):
+                Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size (height,
+                width) of each image in the batch. If left to None, predictions will not be resized.
+            remove_padding (`bool`, *optional*):
+                By default ZoeDepth addes padding to fix the boundary artifacts in the output depth map, so we need remove
+                this padding during post_processing. The parameter exists here in case the user changed the image
+                preprocessing to not include padding.
+
+            vmin_perc (`float`, *optional*, defaults to `1.0`):
+                use the `vmin_perc`-th percentile as minimum value during normalization.
+            vmax_perc (`float`, *optional*, defaults to `99.0`):
+                use the `vmax_perc`-th percentile as maximum value during normalization.
+            normalize (`bool`, *optional*, defaults to `False`):
+                Apply normalization between [0,1] for the colored image values.
+            cmap (`str`, *optional*, defaults to `gray_r`):
+                matplotlib colormap to use (requires matplotlib).
+            gamma_corrected (`bool`, *optional*, defaults to `False`):
+                Apply gamma correction to colored image.
+
+        Returns:
+            `List[Dict]`: A list of dictionaries, each dictionary containing the depth predictions and a depth PIL image as
+            predicted by the model.
+        """
+        requires_backends(self, "torch")
+
+        predicted_depth = outputs.predicted_depth
+
+        if (target_sizes is not None) and (len(predicted_depth) != len(target_sizes)):
+            raise ValueError(
+                "Make sure that you pass in as many target sizes as the batch dimension of the predicted depth"
+            )
+
+        results = []
+        for i, d in enumerate(predicted_depth):
+            if target_sizes is not None:
+                target_size = target_sizes[i]
+                d = torch.nn.functional.interpolate(
+                    d.unsqueeze(0).unsqueeze(1), size=target_size, mode="bicubic", align_corners=False
+                ).squeeze()
+
+            results.append({"predicted_depth": d, "depth": None})
+
+            if is_vision_available():
+                results[-1]["depth"] = colorize_depth(
+                    d.detach().cpu().numpy(),
+                    vmin_perc=vmin_perc,
+                    vmax_perc=vmax_perc,
+                    cmap=cmap,
+                    gamma_corrected=gamma_corrected,
+                    normalize=normalize,
+                )
+
+        return results

@@ -21,9 +21,13 @@ from transformers.file_utils import is_torch_available, is_vision_available
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+from ...test_modeling_common import (
+    ModelTesterMixin,
+    _config_zero_init,
+    floats_tensor,
+    ids_tensor,
+)
 from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 if is_torch_available():
     import torch
@@ -384,3 +388,34 @@ class DPTModelIntegrationTest(unittest.TestCase):
         segmentation = image_processor.post_process_semantic_segmentation(outputs=outputs)
         expected_shape = torch.Size((480, 480))
         self.assertEqual(segmentation[0].shape, expected_shape)
+
+    def test_post_processing_depth_estimation(self):
+        image_processor = DPTImageProcessor.from_pretrained("Intel/dpt-large")
+        model = DPTForDepthEstimation.from_pretrained("Intel/dpt-large")
+
+        image = prepare_img()
+        inputs = image_processor(images=image, return_tensors="pt")
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(**inputs)
+
+        output = image_processor.post_process_depth_estimation(outputs=outputs)[0]
+        depth = output["depth"]
+        output = output["predicted_depth"]
+        expected_shape = torch.Size((384, 384))
+        self.assertTrue(output.shape == expected_shape)
+        self.assertTrue(depth.size[::-1] == expected_shape)
+
+        output_l = image_processor.post_process_depth_estimation(outputs=outputs, target_sizes=[(500, 500)])[0]
+        depth_l = output_l["depth"]
+        output_l = output_l["predicted_depth"]
+        expected_shape = torch.Size((500, 500))
+        self.assertTrue(output_l.shape == expected_shape)
+        self.assertTrue(depth_l.size[::-1] == expected_shape)
+
+        output_enlarged = torch.nn.functional.interpolate(
+            output.unsqueeze(0).unsqueeze(1), size=(500, 500), mode="bicubic", align_corners=False
+        ).squeeze()
+        self.assertTrue(output_enlarged.shape == expected_shape)
+        self.assertTrue(torch.allclose(output_l, output_enlarged, rtol=1e-3))
