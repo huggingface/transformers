@@ -48,7 +48,6 @@ from ...utils import (
     logging,
     requires_backends,
 )
-from .modeling_zoedepth import ZoeDepthDepthEstimatorOutput
 
 
 if is_vision_available():
@@ -453,10 +452,10 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
 
     def post_process_depth_estimation(
         self,
-        outputs: ZoeDepthDepthEstimatorOutput,
+        outputs,
         source_sizes: Union[torch.Tensor, List[Tuple[int, int]]],
         target_sizes: Optional[Union[torch.Tensor, List[Tuple[int, int]], None]] = None,
-        outputs_flip: Optional[Union[ZoeDepthDepthEstimatorOutput, None]] = None,
+        outputs_flip=None,
         remove_padding: Optional[Union[bool, None]] = None,
         vmin_perc: Optional[float] = 1.0,
         vmax_perc: Optional[float] = 99.0,

@@ -37,7 +37,6 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
-from ...modeling_outputs import DepthEstimatorOutput
 from ...utils import (
     TensorType,
     filter_out_non_signature_kwargs,
@@ -471,7 +470,7 @@ class DPTImageProcessor(BaseImageProcessor):
 
     def post_process_depth_estimation(
         self,
-        outputs: DepthEstimatorOutput,
+        outputs,
         target_sizes: Optional[Union[torch.Tensor, List[Tuple[int, int]], None]] = None,
         vmin_perc: Optional[float] = 1.0,
         vmax_perc: Optional[float] = 99.0,
