@@ -28,6 +28,7 @@ from ..utils import (
     is_accelerate_available,
     is_bitsandbytes_available,
     is_torch_available,
+    is_torch_xpu_available,
     logging,
 )
 
@@ -64,8 +65,6 @@ class Bnb4BitHfQuantizer(HfQuantizer):
             self.modules_to_not_convert = self.quantization_config.llm_int8_skip_modules
 
     def validate_environment(self, *args, **kwargs):
-        if not torch.cuda.is_available():
-            raise RuntimeError("No GPU found. A GPU is needed for quantization.")
         if not is_accelerate_available():
             raise ImportError(
                 f"Using `bitsandbytes` 4-bit quantization requires Accelerate: `pip install 'accelerate>={ACCELERATE_MIN_VERSION}'`"
@@ -74,6 +73,17 @@ class Bnb4BitHfQuantizer(HfQuantizer):
             raise ImportError(
                 "Using `bitsandbytes` 4-bit quantization requires the latest version of bitsandbytes: `pip install -U bitsandbytes`"
             )
+        import bitsandbytes as bnb
+
+        bnb_is_multibackend_enabled = "multi_backend" in getattr(bnb, "features", set())
+
+        if not torch.cuda.is_available():
+            import bitsandbytes as bnb
+
+            if not bnb_is_multibackend_enabled:
+                raise RuntimeError(
+                    "Current bitsandbytes (`main`) only supports CUDA, please switch to the `multi-backend-refactor` preview release for WIP support of other backends."
+                )
 
         if kwargs.get("from_tf", False) or kwargs.get("from_flax", False):
             raise ValueError(
@@ -90,7 +100,9 @@ class Bnb4BitHfQuantizer(HfQuantizer):
             device_map_without_lm_head = {
                 key: device_map[key] for key in device_map.keys() if key not in self.modules_to_not_convert
             }
-            if "cpu" in device_map_without_lm_head.values() or "disk" in device_map_without_lm_head.values():
+            if set(device_map.values()) == {"cpu"} and bnb_is_multibackend_enabled:
+                pass
+            elif "cpu" in device_map_without_lm_head.values() or "disk" in device_map_without_lm_head.values():
                 raise ValueError(
                     "Some modules are dispatched on the CPU or the disk. Make sure you have enough GPU RAM to fit the "
                     "quantized model. If you want to dispatch the model on the CPU or the disk while keeping these modules "
@@ -249,10 +261,15 @@ class Bnb4BitHfQuantizer(HfQuantizer):
     # Copied from transformers.quantizers.quantizer_bnb_8bit.Bnb8BitHfQuantizer.update_device_map
     def update_device_map(self, device_map):
         if device_map is None:
-            device_map = {"": torch.cuda.current_device()}
+            if torch.cuda.is_available():
+                device_map = {"": torch.cuda.current_device()}
+            elif is_torch_xpu_available():
+                device_map = {"": f"xpu:{torch.xpu.current_device()}"}
+            else:
+                device_map = {"": "cpu"}
             logger.info(
                 "The device_map was not initialized. "
-                "Setting device_map to {'':torch.cuda.current_device()}. "
+                f"Setting device_map to {device_map}. "
                 "If you want to use the model for inference, please set device_map ='auto' "
             )
         return device_map

@@ -332,7 +332,7 @@ def get_keys_to_not_convert(model):
 
 
 # Copied from PEFT: https://github.com/huggingface/peft/blob/47b3712898539569c02ec5b3ed4a6c36811331a1/src/peft/utils/integrations.py#L41
-def dequantize_bnb_weight(weight: "torch.nn.Parameter", state=None):
+def dequantize_bnb_weight(weight: "torch.nn.Parameter", dtype: "torch.dtype", state=None):
     """
     Helper function to dequantize 4bit or 8bit bnb weights.
 
@@ -350,7 +350,7 @@ def dequantize_bnb_weight(weight: "torch.nn.Parameter", state=None):
         logger.warning_once(
             f"The model is going to be dequantized in {output_tensor.dtype} - if you want to upcast it to another dtype, make sure to pass the desired dtype when quantizing the model through `bnb_4bit_quant_type` argument of `BitsAndBytesConfig`"
         )
-        return output_tensor
+        return output_tensor.to(dtype)
 
     if state.SCB is None:
         state.SCB = weight.SCB
@@ -361,7 +361,7 @@ def dequantize_bnb_weight(weight: "torch.nn.Parameter", state=None):
     if state.CxB is None:
         state.CxB, state.SB = bnb.functional.transform(weight.data, to_order=state.formatB)
     out32, Sout32 = bnb.functional.igemmlt(im, state.CxB, Sim, state.SB)
-    return bnb.functional.mm_dequant(out32, Sout32, SCim, state.SCB, bias=None).t()
+    return bnb.functional.mm_dequant(out32, Sout32, SCim, state.SCB, bias=None).t().to(dtype)
 
 
 def _create_accelerate_new_hook(old_hook):
@@ -383,6 +383,7 @@ def _create_accelerate_new_hook(old_hook):
 
 def _dequantize_and_replace(
     model,
+    dtype,
     modules_to_not_convert=None,
     current_key_name=None,
     quantization_config=None,
@@ -422,7 +423,7 @@ def _dequantize_and_replace(
                 else:
                     state = None
 
-                new_module.weight = torch.nn.Parameter(dequantize_bnb_weight(module.weight, state))
+                new_module.weight = torch.nn.Parameter(dequantize_bnb_weight(module.weight, dtype, state))
 
                 if bias is not None:
                     new_module.bias = bias
@@ -440,6 +441,7 @@ def _dequantize_and_replace(
         if len(list(module.children())) > 0:
             _, has_been_replaced = _dequantize_and_replace(
                 module,
+                dtype,
                 modules_to_not_convert,
                 current_key_name,
                 quantization_config,
@@ -457,6 +459,7 @@ def dequantize_and_replace(
 ):
     model, has_been_replaced = _dequantize_and_replace(
         model,
+        model.dtype,
         modules_to_not_convert=modules_to_not_convert,
         quantization_config=quantization_config,
     )

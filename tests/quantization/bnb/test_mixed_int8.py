@@ -30,12 +30,14 @@ from transformers import (
     pipeline,
 )
 from transformers.testing_utils import (
+    apply_skip_if_not_implemented,
     is_accelerate_available,
+    is_bitsandbytes_available,
     is_torch_available,
     require_accelerate,
     require_bitsandbytes,
     require_torch,
-    require_torch_gpu,
+    require_torch_gpu_if_bnb_not_multi_backend_enabled,
     require_torch_multi_gpu,
     slow,
 )
@@ -77,10 +79,21 @@ if is_torch_available():
             return self.module(input, *args, **kwargs) + self.adapter(input)
 
 
+if is_bitsandbytes_available():
+    import bitsandbytes as bnb
+
+    def setUpModule():
+        global device
+        if hasattr(bnb, "features") and "multi_backend" in bnb.features:
+            device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        else:
+            device = torch.device("cuda:0")
+
+
 @require_bitsandbytes
 @require_accelerate
 @require_torch
-@require_torch_gpu
+@require_torch_gpu_if_bnb_not_multi_backend_enabled
 @slow
 class BaseMixedInt8Test(unittest.TestCase):
     # We keep the constants inside the init function and model loading inside setUp function
@@ -108,6 +121,7 @@ class BaseMixedInt8Test(unittest.TestCase):
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
 
 
+@apply_skip_if_not_implemented
 class MixedInt8Test(BaseMixedInt8Test):
     def setUp(self):
         super().setUp()
@@ -263,7 +277,7 @@ class MixedInt8Test(BaseMixedInt8Test):
         the same output across GPUs. So we'll generate few tokens (5-10) and check their output.
         """
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
-        output_sequences = self.model_8bit.generate(input_ids=encoded_input["input_ids"].to(0), max_new_tokens=10)
+        output_sequences = self.model_8bit.generate(input_ids=encoded_input["input_ids"].to(device), max_new_tokens=10)
 
         self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
 
@@ -280,7 +294,7 @@ class MixedInt8Test(BaseMixedInt8Test):
 
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
         output_sequences = model_8bit_from_config.generate(
-            input_ids=encoded_input["input_ids"].to(0), max_new_tokens=10
+            input_ids=encoded_input["input_ids"].to(device), max_new_tokens=10
         )
 
         self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
@@ -298,7 +312,7 @@ class MixedInt8Test(BaseMixedInt8Test):
         model_8bit.dequantize()
 
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
-        output_sequences = model_8bit.generate(input_ids=encoded_input["input_ids"].to(0), max_new_tokens=10)
+        output_sequences = model_8bit.generate(input_ids=encoded_input["input_ids"].to(device), max_new_tokens=10)
 
         self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
 
@@ -346,7 +360,7 @@ class MixedInt8Test(BaseMixedInt8Test):
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
 
         self.model_fp16 = self.model_fp16.to(torch.float32)
-        _ = self.model_fp16.generate(input_ids=encoded_input["input_ids"].to(0), max_new_tokens=10)
+        _ = self.model_fp16.generate(input_ids=encoded_input["input_ids"].to(device), max_new_tokens=10)
 
         # Check this does not throw an error
         _ = self.model_fp16.to("cpu")
@@ -385,7 +399,9 @@ class MixedInt8Test(BaseMixedInt8Test):
 
             # generate
             encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
-            output_sequences = model_from_saved.generate(input_ids=encoded_input["input_ids"].to(0), max_new_tokens=10)
+            output_sequences = model_from_saved.generate(
+                input_ids=encoded_input["input_ids"].to(device), max_new_tokens=10
+            )
 
         self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
 
@@ -410,7 +426,9 @@ class MixedInt8Test(BaseMixedInt8Test):
 
             # generate
             encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
-            output_sequences = model_from_saved.generate(input_ids=encoded_input["input_ids"].to(0), max_new_tokens=10)
+            output_sequences = model_from_saved.generate(
+                input_ids=encoded_input["input_ids"].to(device), max_new_tokens=10
+            )
 
         self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
 
@@ -435,7 +453,9 @@ class MixedInt8Test(BaseMixedInt8Test):
 
             # generate
             encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
-            output_sequences = model_from_saved.generate(input_ids=encoded_input["input_ids"].to(0), max_new_tokens=10)
+            output_sequences = model_from_saved.generate(
+                input_ids=encoded_input["input_ids"].to(device), max_new_tokens=10
+            )
 
             self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
 
@@ -455,7 +475,7 @@ class MixedInt8Test(BaseMixedInt8Test):
 
         # generate
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
-        output_sequences = model.generate(input_ids=encoded_input["input_ids"].to(0), max_new_tokens=10)
+        output_sequences = model.generate(input_ids=encoded_input["input_ids"].to(device), max_new_tokens=10)
 
         self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
 
@@ -463,7 +483,7 @@ class MixedInt8Test(BaseMixedInt8Test):
 @require_bitsandbytes
 @require_accelerate
 @require_torch
-@require_torch_gpu
+@require_torch_gpu_if_bnb_not_multi_backend_enabled
 @slow
 class MixedInt8T5Test(unittest.TestCase):
     @classmethod
@@ -494,14 +514,14 @@ class MixedInt8T5Test(unittest.TestCase):
 
         # test with `google-t5/t5-small`
         model = T5ForConditionalGeneration.from_pretrained(self.model_name, load_in_8bit=True, device_map="auto")
-        encoded_input = self.tokenizer(self.input_text, return_tensors="pt").to(0)
+        encoded_input = self.tokenizer(self.input_text, return_tensors="pt").to(device)
         _ = model.generate(**encoded_input)
 
         # test with `flan-t5-small`
         model = T5ForConditionalGeneration.from_pretrained(
             self.dense_act_model_name, load_in_8bit=True, device_map="auto"
         )
-        encoded_input = self.tokenizer(self.input_text, return_tensors="pt").to(0)
+        encoded_input = self.tokenizer(self.input_text, return_tensors="pt").to(device)
         _ = model.generate(**encoded_input)
         T5ForConditionalGeneration._keep_in_fp32_modules = modules
 
@@ -521,14 +541,14 @@ class MixedInt8T5Test(unittest.TestCase):
         # there was a bug with decoders - this test checks that it is fixed
         self.assertTrue(isinstance(model.decoder.block[0].layer[0].SelfAttention.q, bnb.nn.Linear8bitLt))
 
-        encoded_input = self.tokenizer(self.input_text, return_tensors="pt").to(0)
+        encoded_input = self.tokenizer(self.input_text, return_tensors="pt").to(device)
         _ = model.generate(**encoded_input)
 
         # test with `flan-t5-small`
         model = T5ForConditionalGeneration.from_pretrained(
             self.dense_act_model_name, load_in_8bit=True, device_map="auto"
         )
-        encoded_input = self.tokenizer(self.input_text, return_tensors="pt").to(0)
+        encoded_input = self.tokenizer(self.input_text, return_tensors="pt").to(device)
         _ = model.generate(**encoded_input)
 
     def test_inference_with_keep_in_fp32_serialized(self):
@@ -553,14 +573,14 @@ class MixedInt8T5Test(unittest.TestCase):
             # there was a bug with decoders - this test checks that it is fixed
             self.assertTrue(isinstance(model.decoder.block[0].layer[0].SelfAttention.q, bnb.nn.Linear8bitLt))
 
-            encoded_input = self.tokenizer(self.input_text, return_tensors="pt").to(0)
+            encoded_input = self.tokenizer(self.input_text, return_tensors="pt").to(device)
             _ = model.generate(**encoded_input)
 
             # test with `flan-t5-small`
             model = T5ForConditionalGeneration.from_pretrained(
                 self.dense_act_model_name, load_in_8bit=True, device_map="auto"
             )
-            encoded_input = self.tokenizer(self.input_text, return_tensors="pt").to(0)
+            encoded_input = self.tokenizer(self.input_text, return_tensors="pt").to(device)
             _ = model.generate(**encoded_input)
 
 
@@ -614,6 +634,7 @@ class MixedInt8ModelClassesTest(BaseMixedInt8Test):
         self.assertTrue(self.seq_to_seq_model.lm_head.weight.__class__ == torch.nn.Parameter)
 
 
+@apply_skip_if_not_implemented
 class MixedInt8TestPipeline(BaseMixedInt8Test):
     def setUp(self):
         super().setUp()
@@ -648,6 +669,7 @@ class MixedInt8TestPipeline(BaseMixedInt8Test):
 
 
 @require_torch_multi_gpu
+@apply_skip_if_not_implemented
 class MixedInt8TestMultiGpu(BaseMixedInt8Test):
     def setUp(self):
         super().setUp()
@@ -669,11 +691,12 @@ class MixedInt8TestMultiGpu(BaseMixedInt8Test):
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
 
         # Second real batch
-        output_parallel = model_parallel.generate(input_ids=encoded_input["input_ids"].to(0), max_new_tokens=10)
+        output_parallel = model_parallel.generate(input_ids=encoded_input["input_ids"].to(device), max_new_tokens=10)
         self.assertIn(self.tokenizer.decode(output_parallel[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
 
 
 @require_torch_multi_gpu
+@apply_skip_if_not_implemented
 class MixedInt8TestCpuGpu(BaseMixedInt8Test):
     def setUp(self):
         super().setUp()
@@ -683,7 +706,7 @@ class MixedInt8TestCpuGpu(BaseMixedInt8Test):
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
 
         # Check the exactness of the results
-        output_parallel = model.generate(input_ids=encoded_input["input_ids"].to(0), max_new_tokens=10)
+        output_parallel = model.generate(input_ids=encoded_input["input_ids"].to(device), max_new_tokens=10)
 
         # Get the generation
         output_text = self.tokenizer.decode(output_parallel[0], skip_special_tokens=True)
@@ -819,6 +842,7 @@ class MixedInt8TestCpuGpu(BaseMixedInt8Test):
             self.check_inference_correctness(model_8bit)
 
 
+@apply_skip_if_not_implemented
 class MixedInt8TestTraining(BaseMixedInt8Test):
     def setUp(self):
         self.model_name = "facebook/opt-350m"
@@ -831,7 +855,10 @@ class MixedInt8TestTraining(BaseMixedInt8Test):
         # Step 1: freeze all parameters
         model = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_8bit=True)
 
-        self.assertEqual(set(model.hf_device_map.values()), {torch.cuda.current_device()})
+        if torch.cuda.is_available():
+            self.assertEqual(set(model.hf_device_map.values()), {torch.cuda.current_device()})
+        else:
+            self.assertTrue(all(param.device.type == "cpu" for param in model.parameters()))
 
         for param in model.parameters():
             param.requires_grad = False  # freeze the model - train adapters later
@@ -847,7 +874,7 @@ class MixedInt8TestTraining(BaseMixedInt8Test):
                 module.v_proj = LoRALayer(module.v_proj, rank=16)
 
         # Step 3: dummy batch
-        batch = self.tokenizer("Test batch ", return_tensors="pt").to(0)
+        batch = self.tokenizer("Test batch ", return_tensors="pt").to(device)
 
         # Step 4: Check if the gradient is not None
         with torch.cuda.amp.autocast():
@@ -862,6 +889,7 @@ class MixedInt8TestTraining(BaseMixedInt8Test):
                 self.assertTrue(module.weight.grad is None)
 
 
+@apply_skip_if_not_implemented
 class MixedInt8GPT2Test(MixedInt8Test):
     model_name = "openai-community/gpt2-xl"
     EXPECTED_RELATIVE_DIFFERENCE = 1.8720077507258357
@@ -870,6 +898,9 @@ class MixedInt8GPT2Test(MixedInt8Test):
     EXPECTED_OUTPUTS.add("Hello my name is John Doe, and I'm a fan of the")
     # Expected values on a A10
     EXPECTED_OUTPUTS.add("Hello my name is John Doe, and I am a member of the")
+    # Expected values on Intel CPU
+    EXPECTED_OUTPUTS.add("Hello my name is John Doe. I am a man. I am")
+    EXPECTED_OUTPUTS.add("Hello my name is John, and I'm a writer. I'm")
 
     def test_int8_from_pretrained(self):
         r"""
@@ -887,6 +918,6 @@ class MixedInt8GPT2Test(MixedInt8Test):
 
         # generate
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
-        output_sequences = model.generate(input_ids=encoded_input["input_ids"].to(0), max_new_tokens=10)
+        output_sequences = model.generate(input_ids=encoded_input["input_ids"].to(device), max_new_tokens=10)
 
         self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
