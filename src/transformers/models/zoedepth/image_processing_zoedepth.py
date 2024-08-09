@@ -20,7 +20,12 @@ from typing import Dict, Iterable, List, Optional, Tuple, Union
 import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from ...image_transforms import PaddingMode, pad, to_channel_dimension_format
+from ...image_transforms import (
+    PaddingMode,
+    colorize_depth,
+    pad,
+    to_channel_dimension_format,
+)
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -126,10 +131,10 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
         resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
             Defines the resampling filter to use if resizing the image. Can be overidden by `resample` in `preprocess`.
         keep_aspect_ratio (`bool`, *optional*, defaults to `True`):
-            If `True`, the image is resized by choosing the smaller of the height and width scaling factors and using it for
-            both dimensions. This ensures that the image is scaled down as little as possible while still fitting within the
-            desired output size. In case `ensure_multiple_of` is also set, the image is further resized to a size that is a
-            multiple of this value by flooring the height and width to the nearest multiple of this value.
+            If `True`, the image is resized by choosing the smaller of the height and width scaling factors and using it
+            for both dimensions. This ensures that the image is scaled down as little as possible while still fitting
+            within the desired output size. In case `ensure_multiple_of` is also set, the image is further resized to a
+            size that is a multiple of this value by flooring the height and width to the nearest multiple of this value.
             Can be overidden by `keep_aspect_ratio` in `preprocess`.
         ensure_multiple_of (`int`, *optional*, defaults to 32):
             If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Works by flooring
@@ -331,19 +336,21 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
             size (`Dict[str, int]`, *optional*, defaults to `self.size`):
-                Size of the image after resizing. If `keep_aspect_ratio` is `True`, he image is resized by choosing the smaller of
-                the height and width scaling factors and using it for both dimensions. If `ensure_multiple_of` is also set,
-                the image is further resized to a size that is a multiple of this value.
+                Size of the image after resizing. If `keep_aspect_ratio` is `True`, he image is resized by choosing the
+                smaller of the height and width scaling factors and using it for both dimensions. If `ensure_multiple_of`
+                is also set, the image is further resized to a size that is a multiple of this value.
             keep_aspect_ratio (`bool`, *optional*, defaults to `self.keep_aspect_ratio`):
-                If `True` and `do_resize=True`, the image is resized by choosing the smaller of the height and width scaling factors and using it for
-                both dimensions. This ensures that the image is scaled down as little as possible while still fitting within the
-                desired output size. In case `ensure_multiple_of` is also set, the image is further resized to a size that is a
-                multiple of this value by flooring the height and width to the nearest multiple of this value.
+                If `True` and `do_resize=True`, the image is resized by choosing the smaller of the height and width
+                scaling factors and using it for both dimensions. This ensures that the image is scaled down as little
+                as possible while still fitting within the desired output size. In case `ensure_multiple_of` is also
+                set, the image is further resized to a size that is a multiple of this value by flooring the height and
+                width to the nearest multiple of this value.
             ensure_multiple_of (`int`, *optional*, defaults to `self.ensure_multiple_of`):
-                If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Works by flooring
-                the height and width to the nearest multiple of this value.
+                If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Works by
+                flooring the height and width to the nearest multiple of this value.
 
-                Works both with and without `keep_aspect_ratio` being set to `True`. Can be overidden by `ensure_multiple_of` in `preprocess`.
+                Works both with and without `keep_aspect_ratio` being set to `True`. Can be overidden by
+                `ensure_multiple_of` in `preprocess`.
             resample (`int`, *optional*, defaults to `self.resample`):
                 Resampling filter to use if resizing the image. This can be one of the enum `PILImageResampling`, Only
                 has an effect if `do_resize` is set to `True`.
@@ -442,3 +449,129 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
 
         data = {"pixel_values": images}
         return BatchFeature(data=data, tensor_type=return_tensors)
+
+    def post_process_depth_estimation(
+        self,
+        outputs,
+        source_sizes: Union[TensorType, List[Tuple[int, int]]],
+        target_sizes: Optional[Union[TensorType, List[Tuple[int, int]], None]] = None,
+        outputs_flip=None,
+        remove_padding: Optional[Union[bool, None]] = None,
+        vmin_perc: Optional[float] = 1.0,
+        vmax_perc: Optional[float] = 99.0,
+        cmap: Optional[str] = "gray_r",
+        gamma_corrected: Optional[bool] = False,
+        normalize: Optional[bool] = False,
+    ) -> List[Dict]:
+        """
+        Converts the raw output of [`ZoeDepthDepthEstimatorOutput`] into final depth predictions and depth PIL images.
+        Only supports PyTorch.
+
+        Args:
+            outputs ([`ZoeDepthDepthEstimatorOutput`]):
+                Raw outputs of the model.
+            outputs_flip ([`ZoeDepthDepthEstimatorOutput`], *optional*):
+                Raw outputs of the model from flipped input (averaged out in the end).
+            source_sizes (`TensorType` or `List[Tuple[int, int]]`):
+                Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the source size
+                (height, width) of each image in the batch before preprocessing.
+            target_sizes (`TensorType` or `List[Tuple[int, int]]`, *optional*):
+                Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size
+                (height, width) of each image in the batch. If left to None, predictions will not be resized.
+            remove_padding (`bool`, *optional*):
+                By default ZoeDepth addes padding to fix the boundary artifacts in the output depth map, so we need
+                remove this padding during post_processing. The parameter exists here in case the user changed the image
+                preprocessing to not include padding.
+
+            vmin_perc (`float`, *optional*, defaults to `1.0`):
+                use the `vmin_perc`-th percentile as minimum value during normalization (outlier rejection).
+            vmax_perc (`float`, *optional*, defaults to `99.0`):
+                use the `vmax_perc`-th percentile as maximum value during normalization (outlier rejection).
+            normalize (`bool`, *optional*, defaults to `False`):
+                Apply normalization between [0,1] for the colored image values.
+            cmap (`str`, *optional*, defaults to `gray_r`):
+                matplotlib colormap to use (requires matplotlib).
+            gamma_corrected (`bool`, *optional*, defaults to `False`):
+                Apply gamma correction to colored image.
+
+        Returns:
+            `List[Dict]`: A list of dictionaries, each dictionary containing the depth predictions and a depth PIL image
+            as predicted by the model.
+        """
+        requires_backends(self, "torch")
+
+        predicted_depth = outputs.predicted_depth
+
+        if (outputs_flip is not None) and (predicted_depth.shape != outputs_flip.predicted_depth.shape):
+            raise ValueError("Make sure that `outputs` and `outputs_flip` have the same shape")
+
+        if (target_sizes is not None) and (len(predicted_depth) != len(target_sizes)):
+            raise ValueError(
+                "Make sure that you pass in as many target sizes as the batch dimension of the predicted depth"
+            )
+
+        if remove_padding is None:
+            remove_padding = self.do_pad
+
+        if (source_sizes is None and remove_padding) or (len(predicted_depth) != len(source_sizes)):
+            raise ValueError(
+                "Make sure that you pass in as many source image sizes as the batch dimension of the logits"
+            )
+
+        if outputs_flip is not None:
+            predicted_depth = torch.stack([predicted_depth, outputs_flip.predicted_depth], dim=1)
+        else:
+            predicted_depth = predicted_depth.unsqueeze(1)
+
+        # Zoe Depth model adds padding around the images to fix the boundary artifacts in the output depth map
+        # The padding length is `int(np.sqrt(img_h/2) * fh)` for the height and similar for the width
+        # fh (and fw respectively) are equal to '3' by default
+        # Check [here](https://github.com/isl-org/ZoeDepth/blob/edb6daf45458569e24f50250ef1ed08c015f17a7/zoedepth/models/depth_model.py#L57)
+        # for the original implementation.
+        # In this section, we remove this padding to get the final depth image and depth prediction
+        fh = fw = 3
+
+        results = []
+        for i, d in enumerate(predicted_depth):
+            # d.shape = [1 if not flip else 2, H, W]
+            if source_sizes is not None:
+                pad_h = pad_w = 0
+                s = source_sizes[i]
+
+                if remove_padding:
+                    pad_h = int(np.sqrt(s[0] / 2) * fh)
+                    pad_w = int(np.sqrt(s[1] / 2) * fw)
+
+                d = nn.functional.interpolate(
+                    d.unsqueeze(1), size=[s[0] + 2 * pad_h, s[1] + 2 * pad_w], mode="bicubic", align_corners=False
+                )
+
+                if pad_h > 0:
+                    d = d[:, :, pad_h:-pad_h, :]
+                if pad_w > 0:
+                    d = d[:, :, :, pad_w:-pad_w]
+
+                d = d.squeeze(1)
+            # d.shape = [1 if not flip else 2, H, W]
+            if outputs_flip is not None:
+                d, d_f = d.chunk(2)
+                d = (d + torch.flip(d_f, dims=[-1])) / 2
+            # d.shape = [1, H, W]
+            if target_sizes is not None:
+                target_size = [target_sizes[i][0], target_sizes[i][1]]
+                d = nn.functional.interpolate(d.unsqueeze(1), size=target_size, mode="bicubic", align_corners=False)
+            d = d.squeeze()
+            # d.shape = [H, W]
+            results.append({"predicted_depth": d, "depth": None})
+
+            if is_vision_available():
+                results[-1]["depth"] = colorize_depth(
+                    d.detach().cpu().numpy(),
+                    vmin_perc=vmin_perc,
+                    vmax_perc=vmax_perc,
+                    cmap=cmap,
+                    gamma_corrected=gamma_corrected,
+                    normalize=normalize,
+                )
+
+        return results
