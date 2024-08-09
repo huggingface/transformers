@@ -32,6 +32,7 @@ from ...image_utils import (
     ImageInput,
     PILImageResampling,
     infer_channel_dimension_format,
+    is_pil_image,
     is_scaled_image,
     make_list_of_images,
     to_numpy_array,
@@ -305,6 +306,13 @@ class CLIPImageProcessor(BaseImageProcessor):
 
         if do_convert_rgb:
             images = [convert_to_rgb(image) for image in images]
+
+        if input_data_format is None and is_pil_image(images[0]):
+            # Before PIL Image is converted to Numpy array
+            # In case we have a 1-row or 3-row image in the shape of (1, xxx, 3) or (3, xxx, 3)
+            # 'infer_channel_dimension_format' can't correctly infer
+            # And we assume that all images have the same channel dimension format.
+            input_data_format = ChannelDimension.LAST
 
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
