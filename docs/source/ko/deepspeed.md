@@ -120,7 +120,7 @@ DeepSpeed 구성 옵션의 전체 목록은 [DeepSpeed Configuration JSON](https
 git clone https://github.com/microsoft/DeepSpeedExamples
 cd DeepSpeedExamples
 find . -name '*json'
-# find examples with the Lamb optimizer
+# Lamb 옵티마이저 샘플 찾기
 grep -i Lamb $(find . -name '*json')
 ```
 
