@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 <Tip warning={true}>
 
-Transformers Agent는 실험 중인 API로 언제든지 변경될 수 있습니다. API나 기반 모델이 자주 업데이트되므로, 에이전트가 제공하는 결과물은 달라질 수 있습니다.
+Transformers Agent는 실험 중인 API이므로 언제든지 변경될 수 있습니다. API나 기반 모델이 자주 업데이트되므로, 에이전트가 제공하는 결과물은 달라질 수 있습니다.
 
 </Tip>
 
