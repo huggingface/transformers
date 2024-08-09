@@ -1822,12 +1822,12 @@ class Blip2TextModelWithProjection(Blip2PreTrainedModel):
         >>> device = "cuda" if torch.cuda.is_available() else "cpu"
 
         >>> model = Blip2TextModelWithProjection.from_pretrained(
-        ...     "jpizarrom/blip2-itm-vit-g", torch_dtype=torch.float16
+        ...     "Salesforce/blip2-itm-vit-g", torch_dtype=torch.float16
         ... )
 
         >>> model.to(device)  # doctest: +IGNORE_RESULT
 
-        >>> processor = AutoProcessor.from_pretrained("jpizarrom/blip2-itm-vit-g")
+        >>> processor = AutoProcessor.from_pretrained("Salesforce/blip2-itm-vit-g")
 
         >>> inputs = processor(text=["a photo of a cat", "a photo of a dog"], return_tensors="pt").to(device)
 
@@ -1918,9 +1918,9 @@ class Blip2VisionModelWithProjection(Blip2PreTrainedModel):
 
         >>> device = "cuda" if torch.cuda.is_available() else "cpu"
 
-        >>> processor = AutoProcessor.from_pretrained("jpizarrom/blip2-itm-vit-g")
+        >>> processor = AutoProcessor.from_pretrained("Salesforce/blip2-itm-vit-g")
         >>> model = Blip2VisionModelWithProjection.from_pretrained(
-        ...     "jpizarrom/blip2-itm-vit-g", torch_dtype=torch.float16
+        ...     "Salesforce/blip2-itm-vit-g", torch_dtype=torch.float16
         ... )
         >>> model.to(device)  # doctest: +IGNORE_RESULT
 
@@ -2380,8 +2380,8 @@ class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
 
         >>> device = "cuda" if torch.cuda.is_available() else "cpu"
 
-        >>> model = Blip2ForImageTextRetrieval.from_pretrained("jpizarrom/blip2-itm-vit-g", torch_dtype=torch.float16)
-        >>> processor = AutoProcessor.from_pretrained("jpizarrom/blip2-itm-vit-g")
+        >>> model = Blip2ForImageTextRetrieval.from_pretrained("Salesforce/blip2-itm-vit-g", torch_dtype=torch.float16)
+        >>> processor = AutoProcessor.from_pretrained("Salesforce/blip2-itm-vit-g")
 
         >>> model.to(device)  # doctest: +IGNORE_RESULT
 

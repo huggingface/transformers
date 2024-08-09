@@ -991,7 +991,7 @@ class Blip2TextModelWithProjectionTest(ModelTesterMixin, unittest.TestCase):
     @slow
     @require_torch_gpu
     def test_model_from_pretrained(self):
-        model_name = "jpizarrom/blip2-itm-vit-g"
+        model_name = "Salesforce/blip2-itm-vit-g"
         model = Blip2TextModelWithProjection.from_pretrained(model_name)
         self.assertIsNotNone(model)
         self.assertTrue(hasattr(model, "text_projection"))
@@ -1166,7 +1166,7 @@ class Blip2VisionModelWithProjectionTest(ModelTesterMixin, unittest.TestCase):
     @slow
     @require_torch_gpu
     def test_model_from_pretrained(self):
-        model_name = "jpizarrom/blip2-itm-vit-g"
+        model_name = "Salesforce/blip2-itm-vit-g"
         model = Blip2VisionModelWithProjection.from_pretrained(model_name)
         self.assertIsNotNone(model)
         self.assertTrue(hasattr(model, "vision_projection"))
@@ -1317,7 +1317,7 @@ class Blip2TextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
     @slow
     @require_torch_gpu
     def test_model_from_pretrained(self):
-        model_name = "jpizarrom/blip2-itm-vit-g"
+        model_name = "Salesforce/blip2-itm-vit-g"
         model = Blip2ForImageTextRetrieval.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
@@ -1589,7 +1589,7 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
 
     @require_torch_gpu
     def test_inference_itm(self):
-        model_name = "jpizarrom/blip2-itm-vit-g"
+        model_name = "Salesforce/blip2-itm-vit-g"
         processor = Blip2Processor.from_pretrained(model_name)
         model = Blip2ForImageTextRetrieval.from_pretrained(model_name).to(torch_device)
 
@@ -1609,7 +1609,7 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
     @require_torch_gpu
     @require_torch_fp16
     def test_inference_itm_fp16(self):
-        model_name = "jpizarrom/blip2-itm-vit-g"
+        model_name = "Salesforce/blip2-itm-vit-g"
         processor = Blip2Processor.from_pretrained(model_name)
         model = Blip2ForImageTextRetrieval.from_pretrained(model_name, torch_dtype=torch.float16).to(torch_device)
 
@@ -1631,7 +1631,7 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
     @require_torch_gpu
     @require_torch_fp16
     def test_inference_vision_with_projection_fp16(self):
-        model_name = "jpizarrom/blip2-itm-vit-g"
+        model_name = "Salesforce/blip2-itm-vit-g"
         processor = Blip2Processor.from_pretrained(model_name)
         model = Blip2VisionModelWithProjection.from_pretrained(model_name, torch_dtype=torch.float16).to(torch_device)
 
@@ -1655,7 +1655,7 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
     @require_torch_gpu
     @require_torch_fp16
     def test_inference_text_with_projection_fp16(self):
-        model_name = "jpizarrom/blip2-itm-vit-g"
+        model_name = "Salesforce/blip2-itm-vit-g"
         processor = Blip2Processor.from_pretrained(model_name)
         model = Blip2TextModelWithProjection.from_pretrained(model_name, torch_dtype=torch.float16).to(torch_device)
 
