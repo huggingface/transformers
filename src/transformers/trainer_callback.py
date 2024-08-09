@@ -23,7 +23,6 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional, Union
 
 import numpy as np
-import torch
 from tqdm.auto import tqdm
 
 from .trainer_utils import IntervalStrategy, has_length, neftune_post_forward_hook
@@ -763,6 +762,7 @@ class InputTokenTrackingCallback(TrainerCallback, ExportableState):
         self.add_inputs(inputs, args.device)
 
     def add_inputs(self, inputs, device):
+        import torch
         self.num_input_tokens_seen += (
             torch.sum(
                 self.accelerator.gather(
