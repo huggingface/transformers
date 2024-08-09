@@ -867,3 +867,24 @@ all implementations of Jinja:
 - Replace `True`, `False` and `None`, which are Python-specific, with `true`, `false` and `none`.
 - Directly rendering a dict or list may give different results in other implementations (for example, string entries
   might change from single-quoted to double-quoted). Adding the `tojson` filter can help to ensure consistency here.
+
+### Writing and debugging larger templates
+
+When this feature was introduced, most templates were quite small, the Jinja equivalent of a "one-liner" script. 
+However, with new models and features like tool-use and RAG, some templates can be 100 lines long or more. When
+writing templates like these, it's a good idea to write them in a separate file, using a text editor. You can easily 
+extract a chat template to a file:
+
+```python
+open("template.jinja", "w").write(tokenizer.chat_template)
+```
+
+Or load the edited template back into the tokenizer:
+
+```python
+tokenizer.chat_template = open("template.jinja").read()
+```
+
+As an added bonus, when you write a long, multi-line template in a separate file, line numbers in that file will
+exactly correspond to line numbers in template parsing or execution errors. This will make it much easier to
+identify the source of issues.
