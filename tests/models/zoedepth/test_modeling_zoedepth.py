@@ -215,18 +215,26 @@ def prepare_img():
 @slow
 class ZoeDepthModelIntegrationTest(unittest.TestCase):
     expected_slice_post_processing = {
-        (False, False): torch.tensor(
-            [[1.1348238, 1.1193453, 1.130562], [1.1754476, 1.1613507, 1.1701596], [1.2287744, 1.2101802, 1.2148322]]
-        ),
-        (False, True): torch.tensor(
-            [[1.0610938, 1.1042216, 1.1429265], [1.1099341, 1.148696, 1.1817775], [1.1656011, 1.1988826, 1.2268101]]
-        ),
-        (True, False): torch.tensor(
-            [[1.8382794, 1.8380532, 1.8375976], [1.848761, 1.8485023, 1.8479986], [1.8571457, 1.8568444, 1.8562847]]
-        ),
-        (True, True): torch.tensor(
-            [[1.8306141, 1.8305621, 1.8303483], [1.8410318, 1.8409299, 1.8406585], [1.8492792, 1.8491366, 1.8488203]]
-        ),
+        (False, False): [
+            [1.1348238, 1.1193453, 1.130562],
+            [1.1754476, 1.1613507, 1.1701596],
+            [1.2287744, 1.2101802, 1.2148322],
+        ],
+        (False, True): [
+            [1.0610938, 1.1042216, 1.1429265],
+            [1.1099341, 1.148696, 1.1817775],
+            [1.1656011, 1.1988826, 1.2268101],
+        ],
+        (True, False): [
+            [1.8382794, 1.8380532, 1.8375976],
+            [1.848761, 1.8485023, 1.8479986],
+            [1.8571457, 1.8568444, 1.8562847],
+        ],
+        (True, True): [
+            [1.8306141, 1.8305621, 1.8303483],
+            [1.8410318, 1.8409299, 1.8406585],
+            [1.8492792, 1.8491366, 1.8488203],
+        ],
     }  # (pad, flip)
 
     def test_inference_depth_estimation(self):
@@ -332,7 +340,7 @@ class ZoeDepthModelIntegrationTest(unittest.TestCase):
         outputs_pil = [out["depth"] for out in outputs]
         outputs = [out["predicted_depth"] for out in outputs]
 
-        expected_slice = self.expected_slice_post_processing[pad_input, flip_aug].to(torch_device)
+        expected_slice = torch.tensor(self.expected_slice_post_processing[pad_input, flip_aug]).to(torch_device)
         for img, out_pil, out in zip(images, outputs_pil, outputs):
             self.assertTrue(img.size == out.shape[::-1])
             self.assertTrue(img.size == out_pil.size)
