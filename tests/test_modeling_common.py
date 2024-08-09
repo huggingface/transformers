@@ -1302,6 +1302,15 @@ class ModelTesterMixin:
                 # (Even with this call, there are still memory leak by ~0.04MB)
                 self.clear_torch_jit_class_registry()
 
+    # def test_strict_torch_compile(self):
+    #     config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+    #     for model_class in self.all_model_classes:
+    #         model = model_class(config=config)
+    #         compiled_model = torch.compile(model, fullgraph=True)
+    #         _ = compiled_model(**inputs_dict)
+
+
     def test_headmasking(self):
         if not self.test_head_masking:
             self.skipTest(reason="Model does not support head masking")
