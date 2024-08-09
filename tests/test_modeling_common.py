@@ -2824,13 +2824,14 @@ class ModelTesterMixin:
         for model_class in self.all_model_classes:
             if model_class.__name__ not in get_values(MODEL_FOR_CAUSAL_LM_MAPPING_NAMES):
                 continue
+
             model = model_class(config)
             model.to(torch_device)
             model.eval()
 
-            model_forward_args = inspect.signature(model.forward).parameters
-            if "inputs_embeds" not in model_forward_args:
-                self.skipTest(reason="This model doesn't use `inputs_embeds`")
+            model_generation_args = inspect.signature(model.prepare_inputs_for_generation).parameters
+            if "inputs_embeds" not in model_generation_args:
+                self.skipTest(reason="This model doesn't use `inputs_embeds` for generation")
 
             inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
             pad_token_id = config.pad_token_id if config.pad_token_id is not None else 1

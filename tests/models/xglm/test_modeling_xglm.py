@@ -357,10 +357,6 @@ class XGLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def test_model_parallelism(self):
         super().test_model_parallelism()
 
-    @unittest.skip(reason="XGLM does not accept inputs_embeds in generation")
-    def test_inputs_embeds_matches_input_ids_with_generate(self):
-        pass
-
 
 @require_torch
 class XGLMModelLanguageGenerationTest(unittest.TestCase):

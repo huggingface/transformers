@@ -273,10 +273,6 @@ class OpenAIGPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         model = OpenAIGPTModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
-    @unittest.skip(reason="OpenAIGPT does not accept inputs_embeds in generation")
-    def test_inputs_embeds_matches_input_ids_with_generate(self):
-        pass
-
 
 @require_torch
 class OPENAIGPTModelLanguageGenerationTest(unittest.TestCase):
