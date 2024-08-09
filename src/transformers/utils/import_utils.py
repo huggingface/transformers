@@ -297,6 +297,10 @@ def is_torch_available():
     return _torch_available
 
 
+def is_accelerate_available(min_version: str = ACCELERATE_MIN_VERSION):
+    return _accelerate_available and version.parse(_accelerate_version) >= version.parse(min_version)
+
+
 def is_torch_deterministic():
     """
     Check whether pytorch uses deterministic algorithms by looking if torch.set_deterministic_debug_mode() is set to 1 or 2"
@@ -382,6 +386,21 @@ def is_mamba_ssm_available():
             return False
         else:
             return _is_package_available("mamba_ssm")
+    return False
+
+
+def is_mamba_2_ssm_available():
+    if is_torch_available():
+        import torch
+
+        if not torch.cuda.is_available():
+            return False
+        else:
+            if _is_package_available("mamba_ssm"):
+                import mamba_ssm
+
+                if version.parse(mamba_ssm.__version__) >= version.parse("2.0.4"):
+                    return True
     return False
 
 
@@ -670,18 +689,20 @@ def is_torch_compile_available():
 def is_torchdynamo_compiling():
     if not is_torch_available():
         return False
-    try:
-        # Importing torch._dynamo causes issues with PyTorch profiler (https://github.com/pytorch/pytorch/issues/130622) hence rather relying on `torch.compiler.is_compiling()` when possible.
-        if version.parse(_torch_version) >= version.parse("2.3.0"):
-            import torch
 
-            return torch.compiler.is_compiling()
-        else:
+    # Importing torch._dynamo causes issues with PyTorch profiler (https://github.com/pytorch/pytorch/issues/130622)
+    # hence rather relying on `torch.compiler.is_compiling()` when possible (torch>=2.3)
+    try:
+        import torch
+
+        return torch.compiler.is_compiling()
+    except Exception:
+        try:
             import torch._dynamo as dynamo  # noqa: F401
 
             return dynamo.is_compiling()
-    except Exception:
-        return False
+        except Exception:
+            return False
 
 
 def is_torch_tensorrt_fx_available():
@@ -866,10 +887,6 @@ def is_protobuf_available():
     if importlib.util.find_spec("google") is None:
         return False
     return importlib.util.find_spec("google.protobuf") is not None
-
-
-def is_accelerate_available(min_version: str = ACCELERATE_MIN_VERSION):
-    return _accelerate_available and version.parse(_accelerate_version) >= version.parse(min_version)
 
 
 def is_fsdp_available(min_version: str = FSDP_MIN_VERSION):
@@ -1603,7 +1620,7 @@ def direct_transformers_import(path: str, file="__init__.py") -> ModuleType:
 
     Args:
         path (`str`): The path to the source file
-        file (`str`, optional): The file to join with the path. Defaults to "__init__.py".
+        file (`str`, *optional*): The file to join with the path. Defaults to "__init__.py".
 
     Returns:
         `ModuleType`: The resulting imported module
