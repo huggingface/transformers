@@ -1473,7 +1473,7 @@ class GenerationMixin:
                     # NOTE: self.dtype is not compatible with torch.compile, as it calls `self.parameters()`.
                     # Workaround: trust the lm_head, whose attribute name is somewhat consistent across generative
                     # models. May cause trobles with non-text modalities.
-                    cache_dtype = self.lm_head.weight.dtype
+                    cache_dtype = self.get_output_embeddings().weight.dtype
 
             cache_kwargs = {
                 "config": self.config,
