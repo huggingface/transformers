@@ -565,7 +565,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
         Args:
             token_ids (`Union[int, List[int], np.ndarray, torch.Tensor, tf.Tensor]`):
                 List of tokenized input ids. Can be obtained using the `__call__` method.
-            time_precision (`float`, `optional`, defaults to 0.02):
+            time_precision (`float`, *optional*, defaults to 0.02):
                 The time ratio to convert from token to time.
         """
         offsets = []
@@ -615,7 +615,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
         Compute the timestamp token ids for a given precision and save to least-recently used (LRU) cache.
 
         Args:
-            time_precision (`float`, `optional`, defaults to 0.02):
+            time_precision (`float`, *optional*, defaults to 0.02):
                 The time ratio to convert from token to time.
         """
         return self.convert_tokens_to_ids([("<|%.2f|>" % (i * time_precision)) for i in range(1500 + 1)])
@@ -671,7 +671,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
             output_offsets (`bool`, *optional*, defaults to `False`):
                 Whether or not to output the offsets of the tokens. This should only be set if the model predicted
                 timestamps.
-            time_precision (`float`, `optional`, defaults to 0.02):
+            time_precision (`float`, *optional*, defaults to 0.02):
                 The time ratio to convert from token to time.
             decode_with_timestamps (`bool`, *optional*, defaults to `False`):
                 Whether or not to decode with timestamps included in the raw text.

@@ -18,7 +18,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.44.0.dev0"
+__version__ = "4.45.0.dev0"
 
 from typing import TYPE_CHECKING
 
@@ -545,6 +545,7 @@ _import_structure = {
     ],
     "models.m2m_100": ["M2M100Config"],
     "models.mamba": ["MambaConfig"],
+    "models.mamba2": ["Mamba2Config"],
     "models.marian": ["MarianConfig"],
     "models.markuplm": [
         "MarkupLMConfig",
@@ -593,6 +594,7 @@ _import_structure = {
         "MusicgenMelodyDecoderConfig",
     ],
     "models.mvp": ["MvpConfig", "MvpTokenizer"],
+    "models.nemotron": ["NemotronConfig"],
     "models.nllb": [],
     "models.nllb_moe": ["NllbMoeConfig"],
     "models.nougat": ["NougatProcessor"],
@@ -653,6 +655,11 @@ _import_structure = {
     "models.qwen2": [
         "Qwen2Config",
         "Qwen2Tokenizer",
+    ],
+    "models.qwen2_audio": [
+        "Qwen2AudioConfig",
+        "Qwen2AudioEncoderConfig",
+        "Qwen2AudioProcessor",
     ],
     "models.qwen2_moe": ["Qwen2MoeConfig"],
     "models.rag": ["RagConfig", "RagRetriever", "RagTokenizer"],
@@ -1228,10 +1235,14 @@ else:
         "DynamicCache",
         "EncoderDecoderCache",
         "HQQQuantizedCache",
+        "HybridCache",
+        "MambaCache",
+        "OffloadedCache",
         "QuantizedCache",
         "QuantizedCacheConfig",
         "QuantoQuantizedCache",
         "SinkCache",
+        "SlidingWindowCache",
         "StaticCache",
     ]
     _import_structure["data.datasets"] = [
@@ -2556,6 +2567,13 @@ else:
             "MambaPreTrainedModel",
         ]
     )
+    _import_structure["models.mamba2"].extend(
+        [
+            "Mamba2ForCausalLM",
+            "Mamba2Model",
+            "Mamba2PreTrainedModel",
+        ]
+    )
     _import_structure["models.marian"].extend(["MarianForCausalLM", "MarianModel", "MarianMTModel"])
     _import_structure["models.markuplm"].extend(
         [
@@ -2747,6 +2765,16 @@ else:
             "MvpForSequenceClassification",
             "MvpModel",
             "MvpPreTrainedModel",
+        ]
+    )
+    _import_structure["models.nemotron"].extend(
+        [
+            "NemotronForCausalLM",
+            "NemotronForQuestionAnswering",
+            "NemotronForSequenceClassification",
+            "NemotronForTokenClassification",
+            "NemotronModel",
+            "NemotronPreTrainedModel",
         ]
     )
     _import_structure["models.nllb_moe"].extend(
@@ -2966,6 +2994,13 @@ else:
             "Qwen2ForTokenClassification",
             "Qwen2Model",
             "Qwen2PreTrainedModel",
+        ]
+    )
+    _import_structure["models.qwen2_audio"].extend(
+        [
+            "Qwen2AudioEncoder",
+            "Qwen2AudioForConditionalGeneration",
+            "Qwen2AudioPreTrainedModel",
         ]
     )
     _import_structure["models.qwen2_moe"].extend(
@@ -5240,6 +5275,7 @@ if TYPE_CHECKING:
     )
     from .models.m2m_100 import M2M100Config
     from .models.mamba import MambaConfig
+    from .models.mamba2 import Mamba2Config
     from .models.marian import MarianConfig
     from .models.markuplm import (
         MarkupLMConfig,
@@ -5297,6 +5333,7 @@ if TYPE_CHECKING:
         MusicgenMelodyDecoderConfig,
     )
     from .models.mvp import MvpConfig, MvpTokenizer
+    from .models.nemotron import NemotronConfig
     from .models.nllb_moe import NllbMoeConfig
     from .models.nougat import NougatProcessor
     from .models.nystromformer import (
@@ -5368,6 +5405,11 @@ if TYPE_CHECKING:
     from .models.pvt import PvtConfig
     from .models.pvt_v2 import PvtV2Config
     from .models.qwen2 import Qwen2Config, Qwen2Tokenizer
+    from .models.qwen2_audio import (
+        Qwen2AudioConfig,
+        Qwen2AudioEncoderConfig,
+        Qwen2AudioProcessor,
+    )
     from .models.qwen2_moe import Qwen2MoeConfig
     from .models.rag import RagConfig, RagRetriever, RagTokenizer
     from .models.recurrent_gemma import RecurrentGemmaConfig
@@ -5964,10 +6006,14 @@ if TYPE_CHECKING:
             DynamicCache,
             EncoderDecoderCache,
             HQQQuantizedCache,
+            HybridCache,
+            MambaCache,
+            OffloadedCache,
             QuantizedCache,
             QuantizedCacheConfig,
             QuantoQuantizedCache,
             SinkCache,
+            SlidingWindowCache,
             StaticCache,
         )
         from .data.datasets import (
@@ -7049,6 +7095,11 @@ if TYPE_CHECKING:
             MambaModel,
             MambaPreTrainedModel,
         )
+        from .models.mamba2 import (
+            Mamba2ForCausalLM,
+            Mamba2Model,
+            Mamba2PreTrainedModel,
+        )
         from .models.marian import MarianForCausalLM, MarianModel, MarianMTModel
         from .models.markuplm import (
             MarkupLMForQuestionAnswering,
@@ -7201,6 +7252,14 @@ if TYPE_CHECKING:
             MvpForSequenceClassification,
             MvpModel,
             MvpPreTrainedModel,
+        )
+        from .models.nemotron import (
+            NemotronForCausalLM,
+            NemotronForQuestionAnswering,
+            NemotronForSequenceClassification,
+            NemotronForTokenClassification,
+            NemotronModel,
+            NemotronPreTrainedModel,
         )
         from .models.nllb_moe import (
             NllbMoeForConditionalGeneration,
@@ -7370,6 +7429,11 @@ if TYPE_CHECKING:
             Qwen2ForTokenClassification,
             Qwen2Model,
             Qwen2PreTrainedModel,
+        )
+        from .models.qwen2_audio import (
+            Qwen2AudioEncoder,
+            Qwen2AudioForConditionalGeneration,
+            Qwen2AudioPreTrainedModel,
         )
         from .models.qwen2_moe import (
             Qwen2MoeForCausalLM,
