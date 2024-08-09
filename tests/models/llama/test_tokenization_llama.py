@@ -24,6 +24,7 @@ from datasets import load_dataset
 from transformers import (
     SPIECE_UNDERLINE,
     AddedToken,
+    AutoTokenizer,
     LlamaTokenizer,
     LlamaTokenizerFast,
 )
@@ -32,6 +33,7 @@ from transformers.testing_utils import (
     get_tests_dir,
     nested_simplify,
     require_jinja,
+    require_read_token,
     require_sentencepiece,
     require_tokenizers,
     require_torch,
@@ -822,3 +824,24 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         self.assertEqual(input_ids, [284, 1, 156])
         tokens = self.tokenizer.tokenize("No <s> ▁He")
         self.assertEqual(tokens, ["▁No", "<s>", "▁He"])  # spaces are eaten by rstrip / lstrip
+
+    @require_read_token
+    def test_bos_eos_tokens(self):
+        new_eos_token = "<new_eos>"
+        tokenizer = AutoTokenizer.from_pretrained("huggyllama/llama-7b", add_bos_token=False, add_eos_token=True)
+        self.assertNotEqual(tokenizer("hello")["input_ids"][0], tokenizer.bos_token_id)  # no bos token
+        self.assertEqual(tokenizer("hello")["input_ids"][-1], tokenizer.eos_token_id)  # eos token
+
+        tokenizer.add_special_tokens({"eos_token": new_eos_token})  # update new eos token
+        tokens = tokenizer.tokenize("hello", add_special_tokens=True)
+        self.assertEqual(tokens[-1], new_eos_token)
+
+        tokenizer_pretrained_fast = AutoTokenizer.from_pretrained(
+            "meta-llama/Meta-Llama-3-8B", add_bos_token=True, add_eos_token=True
+        )
+        self.assertEqual(tokenizer_pretrained_fast("hello")["input_ids"][0], tokenizer_pretrained_fast.bos_token_id)
+        self.assertEqual(tokenizer_pretrained_fast("hello")["input_ids"][-1], tokenizer_pretrained_fast.eos_token_id)
+
+        tokenizer_pretrained_fast.add_special_tokens({"eos_token": new_eos_token})  # update new eos token
+        tokens = tokenizer_pretrained_fast.tokenize("hello", add_special_tokens=True)
+        self.assertEqual(tokens[-1], new_eos_token)
