@@ -255,7 +255,7 @@ class PipelineTesterMixin:
         test_cases = [
             {
                 "tokenizer_name": tokenizer_name,
-                "image_prcessor_name": image_processor_name,
+                "image_processor_name": image_processor_name,
                 "feature_extractor_name": feature_extractor_name,
                 "processor_name": processor_name,
             }
@@ -267,7 +267,7 @@ class PipelineTesterMixin:
 
         for test_case in test_cases:
             tokenizer_name = test_case["tokenizer_name"]
-            image_processor_name = test_case["image_prcessor_name"]
+            image_processor_name = test_case["image_processor_name"]
             feature_extractor_name = test_case["feature_extractor_name"]
             processor_name = test_case["processor_name"]
 
