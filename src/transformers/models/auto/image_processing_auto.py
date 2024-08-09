@@ -45,6 +45,7 @@ from .configuration_auto import (
 
 logger = logging.get_logger(__name__)
 
+<<<<<<< Updated upstream
 
 if TYPE_CHECKING:
     # This significantly improves completion suggestion performance when
@@ -160,6 +161,94 @@ for model_type, image_processors in IMAGE_PROCESSOR_MAPPING_NAMES.items():
         fast_image_processor_class = fast_image_processor_class[0]
 
     IMAGE_PROCESSOR_MAPPING_NAMES[model_type] = (slow_image_processor_class, fast_image_processor_class)
+=======
+IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
+    [
+        ("align", "EfficientNetImageProcessor"),
+        ("beit", "BeitImageProcessor"),
+        ("bit", "BitImageProcessor"),
+        ("blip", "BlipImageProcessor"),
+        ("blip-2", "BlipImageProcessor"),
+        ("bridgetower", "BridgeTowerImageProcessor"),
+        ("chinese_clip", "ChineseCLIPImageProcessor"),
+        ("clip", "CLIPImageProcessor"),
+        ("clipseg", "ViTImageProcessor"),
+        ("conditional_detr", "ConditionalDetrImageProcessor"),
+        ("convnext", "ConvNextImageProcessor"),
+        ("convnextv2", "ConvNextImageProcessor"),
+        ("cvt", "ConvNextImageProcessor"),
+        ("data2vec-vision", "BeitImageProcessor"),
+        ("deformable_detr", "DeformableDetrImageProcessor"),
+        ("deit", "DeiTImageProcessor"),
+        ("depth_anything", "DPTImageProcessor"),
+        ("deta", "DetaImageProcessor"),
+        ("detr", "DetrImageProcessor"),
+        ("dinat", "ViTImageProcessor"),
+        ("dinov2", "BitImageProcessor"),
+        ("donut-swin", "DonutImageProcessor"),
+        ("dpt", "DPTImageProcessor"),
+        ("efficientformer", "EfficientFormerImageProcessor"),
+        ("efficientnet", "EfficientNetImageProcessor"),
+        ("flava", "FlavaImageProcessor"),
+        ("focalnet", "BitImageProcessor"),
+        ("fuyu", "FuyuImageProcessor"),
+        ("git", "CLIPImageProcessor"),
+        ("glpn", "GLPNImageProcessor"),
+        ("groupvit", "CLIPImageProcessor"),
+        ("idefics", "IdeficsImageProcessor"),
+        ("imagegpt", "ImageGPTImageProcessor"),
+        ("instructblip", "BlipImageProcessor"),
+        ("kosmos-2", "CLIPImageProcessor"),
+        ("layoutlmv2", "LayoutLMv2ImageProcessor"),
+        ("layoutlmv3", "LayoutLMv3ImageProcessor"),
+        ("levit", "LevitImageProcessor"),
+        ("llava", "CLIPImageProcessor"),
+        ("llark", "CLIPImageProcessor"),
+        ("mask2former", "Mask2FormerImageProcessor"),
+        ("maskformer", "MaskFormerImageProcessor"),
+        ("mgp-str", "ViTImageProcessor"),
+        ("mobilenet_v1", "MobileNetV1ImageProcessor"),
+        ("mobilenet_v2", "MobileNetV2ImageProcessor"),
+        ("mobilevit", "MobileViTImageProcessor"),
+        ("mobilevit", "MobileViTImageProcessor"),
+        ("mobilevitv2", "MobileViTImageProcessor"),
+        ("nat", "ViTImageProcessor"),
+        ("nougat", "NougatImageProcessor"),
+        ("oneformer", "OneFormerImageProcessor"),
+        ("owlv2", "Owlv2ImageProcessor"),
+        ("owlvit", "OwlViTImageProcessor"),
+        ("perceiver", "PerceiverImageProcessor"),
+        ("pix2struct", "Pix2StructImageProcessor"),
+        ("poolformer", "PoolFormerImageProcessor"),
+        ("pvt", "PvtImageProcessor"),
+        ("regnet", "ConvNextImageProcessor"),
+        ("resnet", "ConvNextImageProcessor"),
+        ("sam", "SamImageProcessor"),
+        ("segformer", "SegformerImageProcessor"),
+        ("siglip", "SiglipImageProcessor"),
+        ("swiftformer", "ViTImageProcessor"),
+        ("swin", "ViTImageProcessor"),
+        ("swin2sr", "Swin2SRImageProcessor"),
+        ("swinv2", "ViTImageProcessor"),
+        ("table-transformer", "DetrImageProcessor"),
+        ("timesformer", "VideoMAEImageProcessor"),
+        ("tvlt", "TvltImageProcessor"),
+        ("tvp", "TvpImageProcessor"),
+        ("upernet", "SegformerImageProcessor"),
+        ("van", "ConvNextImageProcessor"),
+        ("videomae", "VideoMAEImageProcessor"),
+        ("vilt", "ViltImageProcessor"),
+        ("vipllava", "CLIPImageProcessor"),
+        ("vit", "ViTImageProcessor"),
+        ("vit_hybrid", "ViTHybridImageProcessor"),
+        ("vit_mae", "ViTImageProcessor"),
+        ("vit_msn", "ViTImageProcessor"),
+        ("vitmatte", "VitMatteImageProcessor"),
+        ("xclip", "CLIPImageProcessor"),
+        ("yolos", "YolosImageProcessor"),
+    ]
+)
+>>>>>>> Stashed changes
 
 IMAGE_PROCESSOR_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, IMAGE_PROCESSOR_MAPPING_NAMES)
 

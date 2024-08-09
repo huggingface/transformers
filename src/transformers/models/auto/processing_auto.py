@@ -71,8 +71,12 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("layoutlmv2", "LayoutLMv2Processor"),
         ("layoutlmv3", "LayoutLMv3Processor"),
         ("llava", "LlavaProcessor"),
+<<<<<<< Updated upstream
         ("llava-next-video", "LlavaNextVideoProcessor"),
         ("llava_next", "LlavaNextProcessor"),
+=======
+        ("llark", "LLarkProcessor"),
+>>>>>>> Stashed changes
         ("markuplm", "MarkupLMProcessor"),
         ("mctct", "MCTCTProcessor"),
         ("mgp-str", "MgpstrProcessor"),
