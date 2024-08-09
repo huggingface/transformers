@@ -1088,6 +1088,7 @@ MODELS_NOT_IN_README = [
     "CLIPVisionModel",
     "SiglipVisionModel",
     "ChineseCLIPVisionModel",
+    "ViTPoseBackbone",
 ]
 
 # Template for new entries to add in the main README when we have missing models.
