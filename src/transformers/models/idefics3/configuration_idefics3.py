@@ -30,7 +30,7 @@ class Idefics3VisionConfig(PretrainedConfig):
     Idefics3 vision encoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the SigLIP checkpoint
     [google/siglip-base-patch16-224](https://huggingface.co/google/siglip-base-patch16-224) used in the Idefics3 model
-    [HuggingFaceM4/idefics3-8b](https://huggingface.co/HuggingFaceM4/idefics3-8b).
+    [HuggingFaceM4/Idefics3-8B-Llama3](https://huggingface.co/HuggingFaceM4/Idefics3-8B-Llama3).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -132,7 +132,7 @@ class Idefics3Config(PretrainedConfig):
     This is the configuration class to store the configuration of a [`Idefics3Model`]. It is used to instantiate a
     Idefics3 model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the model of the Idefics3
-    [HuggingFaceM4/idefics3-8b](https://huggingface.co/HuggingFaceM4/idefics3-8b) architecture.
+    [HuggingFaceM4/Idefics3-8B-Llama3](https://huggingface.co/HuggingFaceM4/Idefics3-8B-Llama3) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -150,8 +150,6 @@ class Idefics3Config(PretrainedConfig):
             Custom text config or dict for the text model
         scale_factor (`int`, *optional*, defaults to 2):
             The scale factor for the image encoder.
-        hidden_size (`int`, *optional*, defaults to 4096):
-            Dimensionality of the encoder layers and the pooler layer.
         pad_token_id (`int`, *optional*, defaults to 128002):
             The id of the padding token.
         max_position_embeddings (`int`, *optional*, defaults to 131072):
@@ -179,7 +177,6 @@ class Idefics3Config(PretrainedConfig):
         vision_config=None,
         text_config=None,
         scale_factor=2,
-        hidden_size=4096,
         pad_token_id=128_002,
         max_position_embeddings=131_072,
         **kwargs,
@@ -210,6 +207,5 @@ class Idefics3Config(PretrainedConfig):
 
         self.text_config = text_config
         self.scale_factor = scale_factor
-        self.hidden_size = hidden_size
 
         super().__init__(**kwargs, tie_word_embeddings=tie_word_embeddings)
