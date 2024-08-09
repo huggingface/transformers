@@ -219,6 +219,5 @@ class UdopProcessor(ProcessorMixin):
         return self.tokenizer.batch_decode(generated_outputs, skip_special_tokens=True)
 
     @property
-    # Copied from transformers.models.layoutlmv3.processing_layoutlmv3.LayoutLMv3Processor.model_input_names
     def model_input_names(self):
         return ["pixel_values", "input_ids", "attention_mask", "bbox"]
