@@ -117,8 +117,8 @@
     title: 사용자 정의 모델 공유하기
   - local: chat_templating
     title: 챗봇 템플릿 익히기
-  - local: in_translation
-    title: (번역중) Trainer
+  - local: trainer
+    title: Trainer 사용하기
   - local: sagemaker
     title: Amazon SageMaker에서 학습 실행하기
   - local: serialization
@@ -141,6 +141,28 @@
 - sections:
   - local: in_translation
     title: (번역중) Getting started
+  - local: quantization/bitsandbytes
+    title: bitsandbytes
+  - local: in_translation
+    title: (번역중) GPTQ
+  - local: in_translation
+    title: (번역중) AWQ
+  - local: in_translation
+    title: (번역중) AQLM
+  - local: in_translation
+    title: (번역중) Quanto
+  - local: in_translation
+    title: (번역중) EETQ
+  - local: in_translation
+    title: (번역중) HQQ
+  - local: in_translation
+    title: (번역중) Optimum
+  - local: in_translation
+    title: (번역중) Contribute new quantization method
+  title: (번역중) 경량화 메소드
+- sections:
+  - local: in_translation
+    title: (번역중) Getting started
   - local: in_translation
     title: (번역중) bitsandbytes
   - local: quantization/gptq
@@ -151,8 +173,8 @@
     title: (번역중) AQLM
   - local: quantization/quanto
     title: Quanto
-  - local: in_translation
-    title: (번역중) EETQ
+  - local: quantization/eetq
+    title: EETQ
   - local: in_translation
     title: (번역중) HQQ
   - local: in_translation
@@ -170,8 +192,8 @@
       title: (번역중) Methods and tools for efficient training on a single GPU
     - local: perf_train_gpu_many
       title: 다중 GPU에서 훈련 진행하기
-    - local: in_translation
-      title: (번역중) Fully Sharded Data Parallel
+    - local: fsdp
+      title: 완전 분할 데이터 병렬 처리
     - local: in_translation
       title: (번역중) DeepSpeed
     - local: perf_train_cpu
@@ -239,8 +261,8 @@
     title: 추론 웹 서버를 위한 파이프라인
   - local: model_memory_anatomy
     title: 모델 학습 해부하기
-  - local: in_translation
-    title: (번역중) Getting the most out of LLMs
+  - local: llm_tutorial_optimization
+    title: LLM을 최대한 활용하기
   title: (번역중) 개념 가이드
 - sections:
   - sections:
