@@ -3522,8 +3522,9 @@ class Trainer:
                     save_model=False,
                 )
                 model = model.module.module
-                if isinstance(self.accelerator.unwrap_model(model), supported_classes):
-                    self.accelerator.unwrap_model(model).save_pretrained(
+                unwrapped_model = self.accelerator.unwrap_model(model)
+                if isinstance(unwrapped_model, supported_classes):
+                    unwrapped_model.save_pretrained(
                         output_dir,
                         state_dict=full_state_dict,
                         save_function=xm.save,
