@@ -16,12 +16,43 @@
 Processor class for LayoutXLM.
 """
 
+import sys
 import warnings
 from typing import List, Optional, Union
 
-from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
-from ...utils import TensorType
+from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin
+from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
+
+
+if sys.version_info >= (3, 11):
+    from typing import Unpack
+else:
+    from typing_extensions import Unpack
+
+
+class LayoutXLMImagesKwargs(ImagesKwargs, total=False):
+    apply_ocr: bool
+    ocr_lang: Optional[str]
+    tesseract_config: Optional[str]
+
+
+class LayoutXLMProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: LayoutXLMImagesKwargs
+    _defaults = {
+        "text_kwargs": {
+            "add_special_tokens": True,
+            "padding": False,
+            "stride": 0,
+            "return_overflowing_tokens": False,
+            "return_special_tokens_mask": False,
+            "return_offsets_mapping": False,
+            "return_length": False,
+            "verbose": True,
+        },
+        "images_kwargs": {
+            "apply_ocr": True,
+        },
+    }
 
 
 class LayoutXLMProcessor(ProcessorMixin):
@@ -72,25 +103,11 @@ class LayoutXLMProcessor(ProcessorMixin):
         text_pair: Optional[Union[PreTokenizedInput, List[PreTokenizedInput]]] = None,
         boxes: Union[List[List[int]], List[List[List[int]]]] = None,
         word_labels: Optional[Union[List[int], List[List[int]]]] = None,
-        add_special_tokens: bool = True,
-        padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = None,
-        max_length: Optional[int] = None,
-        stride: int = 0,
-        pad_to_multiple_of: Optional[int] = None,
-        return_token_type_ids: Optional[bool] = None,
-        return_attention_mask: Optional[bool] = None,
-        return_overflowing_tokens: bool = False,
-        return_special_tokens_mask: bool = False,
-        return_offsets_mapping: bool = False,
-        return_length: bool = False,
-        verbose: bool = True,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        **kwargs,
+        **kwargs: Unpack[LayoutXLMProcessorKwargs],
     ) -> BatchEncoding:
         """
         This method first forwards the `images` argument to [`~LayoutLMv2ImagePrpcessor.__call__`]. In case
-        [`LayoutLMv2ImagePrpcessor`] was initialized with `apply_ocr` set to `True`, it passes the obtained words and
+        [`LayoutLMv2ImageProcessor`] was initialized with `apply_ocr` set to `True`, it passes the obtained words and
         bounding boxes along with the additional arguments to [`~LayoutXLMTokenizer.__call__`] and returns the output,
         together with resized `images`. In case [`LayoutLMv2ImagePrpcessor`] was initialized with `apply_ocr` set to
         `False`, it passes the words (`text`/``text_pair`) and `boxes` specified by the user along with the additional
@@ -98,26 +115,36 @@ class LayoutXLMProcessor(ProcessorMixin):
 
         Please refer to the docstring of the above two methods for more information.
         """
+        output_kwargs = self._merge_kwargs(
+            LayoutXLMProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            image_processor_init_kwargs=self.image_processor.init_kwargs,
+            **kwargs,
+        )
+
         # verify input
-        if self.image_processor.apply_ocr and (boxes is not None):
+        if output_kwargs["images_kwargs"]["apply_ocr"] and (boxes is not None):
             raise ValueError(
                 "You cannot provide bounding boxes "
                 "if you initialized the image processor with apply_ocr set to True."
             )
 
-        if self.image_processor.apply_ocr and (word_labels is not None):
+        if output_kwargs["images_kwargs"]["apply_ocr"] and (word_labels is not None):
             raise ValueError(
                 "You cannot provide word labels if you initialized the image processor with apply_ocr set to True."
             )
 
-        if return_overflowing_tokens is True and return_offsets_mapping is False:
+        if (
+            output_kwargs["text_kwargs"]["return_overflowing_tokens"]
+            and not output_kwargs["text_kwargs"]["return_offsets_mapping"]
+        ):
             raise ValueError("You cannot return overflowing tokens without returning the offsets mapping.")
 
         # first, apply the image processor
-        features = self.image_processor(images=images, return_tensors=return_tensors)
+        features = self.image_processor(images=images, **output_kwargs["images_kwargs"])
 
         # second, apply the tokenizer
-        if text is not None and self.image_processor.apply_ocr and text_pair is None:
+        if text is not None and output_kwargs["images_kwargs"]["apply_ocr"] and text_pair is None:
             if isinstance(text, str):
                 text = [text]  # add batch dimension (as the image processor always adds a batch dimension)
             text_pair = features["words"]
@@ -127,26 +154,12 @@ class LayoutXLMProcessor(ProcessorMixin):
             text_pair=text_pair if text_pair is not None else None,
             boxes=boxes if boxes is not None else features["boxes"],
             word_labels=word_labels,
-            add_special_tokens=add_special_tokens,
-            padding=padding,
-            truncation=truncation,
-            max_length=max_length,
-            stride=stride,
-            pad_to_multiple_of=pad_to_multiple_of,
-            return_token_type_ids=return_token_type_ids,
-            return_attention_mask=return_attention_mask,
-            return_overflowing_tokens=return_overflowing_tokens,
-            return_special_tokens_mask=return_special_tokens_mask,
-            return_offsets_mapping=return_offsets_mapping,
-            return_length=return_length,
-            verbose=verbose,
-            return_tensors=return_tensors,
-            **kwargs,
+            **output_kwargs["text_kwargs"],
         )
 
         # add pixel values
         images = features.pop("pixel_values")
-        if return_overflowing_tokens is True:
+        if output_kwargs["text_kwargs"]["return_overflowing_tokens"]:
             images = self.get_overflowing_images(images, encoded_inputs["overflow_to_sample_mapping"])
         encoded_inputs["image"] = images
 

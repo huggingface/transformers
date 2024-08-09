@@ -76,6 +76,7 @@ class ImageProcessingMixin(PushToHubMixin):
 
     def __init__(self, **kwargs):
         """Set elements of `kwargs` as attributes."""
+        self.init_kwargs = copy.deepcopy(kwargs)
         # This key was saved while we still used `XXXFeatureExtractor` for image processing. Now we use
         # `XXXImageProcessor`, this attribute and its value are misleading.
         kwargs.pop("feature_extractor_type", None)

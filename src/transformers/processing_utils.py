@@ -729,6 +729,7 @@ class ProcessorMixin(PushToHubMixin):
         self,
         ModelProcessorKwargs: ProcessingKwargs,
         tokenizer_init_kwargs: Optional[Dict] = None,
+        image_processor_init_kwargs: Optional[Dict] = None,
         **kwargs,
     ) -> Dict[str, Dict]:
         """
@@ -764,6 +765,8 @@ class ProcessorMixin(PushToHubMixin):
                 Typed dictionary of kwargs specifically required by the model passed.
             tokenizer_init_kwargs (`Dict`, *optional*):
                 Dictionary of kwargs the tokenizer was instantiated with and need to take precedence over defaults.
+            image_processor_init_kwargs (`Dict`, *optional*):
+                Dictionary of kwargs the image processor was instantiated with and need to take precedence over defaults.
 
         Returns:
             output_kwargs (`Dict`):
@@ -790,11 +793,17 @@ class ProcessorMixin(PushToHubMixin):
         # get defaults from set model processor kwargs if they exist
         for modality in default_kwargs:
             default_kwargs[modality] = ModelProcessorKwargs._defaults.get(modality, {}).copy()
-            # update defaults with arguments from tokenizer init
+        # update defaults with arguments from feature processor init
+        for modality, init_kwargs in [
+            ("text", tokenizer_init_kwargs),
+            ("images", image_processor_init_kwargs),
+        ]:
+            if init_kwargs is None:
+                continue
             for modality_key in ModelProcessorKwargs.__annotations__[modality].__annotations__.keys():
                 # init with tokenizer init kwargs if necessary
-                if modality_key in tokenizer_init_kwargs:
-                    default_kwargs[modality][modality_key] = tokenizer_init_kwargs[modality_key]
+                if modality_key in init_kwargs:
+                    default_kwargs[modality][modality_key] = init_kwargs[modality_key]
         # now defaults kwargs are updated with the tokenizers defaults.
         # pass defaults to output dictionary
         output_kwargs.update(default_kwargs)
