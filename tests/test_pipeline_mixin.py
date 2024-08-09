@@ -271,7 +271,7 @@ class PipelineTesterMixin:
             feature_extractor_name = test_case["feature_extractor_name"]
             processor_name = test_case["processor_name"]
 
-            if self.is_pipeline_test_to_skip(
+            do_skip_test_case = self.is_pipeline_test_to_skip(
                 pipeline_test_class_name,
                 model_architecture.config_class,
                 model_architecture,
@@ -279,7 +279,9 @@ class PipelineTesterMixin:
                 image_processor_name,
                 feature_extractor_name,
                 processor_name,
-            ):
+            )
+
+            if do_skip_test_case:
                 logger.warning(
                     f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')}_{torch_dtype} is skipped: test is "
                     f"currently known to fail for: model `{model_architecture.__name__}` | tokenizer "
@@ -336,7 +338,9 @@ class PipelineTesterMixin:
 
         if TRANSFORMERS_TINY_MODEL_PATH != "hf-internal-testing":
             repo_id = os.path.join(TRANSFORMERS_TINY_MODEL_PATH, model_type, repo_name)
-
+        
+        # -------------------- Load model --------------------
+            
         # TODO: We should check if a model file is on the Hub repo. instead.
         try:
             model = model_architecture.from_pretrained(repo_id, revision=commit)
@@ -347,13 +351,23 @@ class PipelineTesterMixin:
             )
             self.skipTest(f"Could not find or load the model from {repo_id} with {model_architecture}.")
 
+        # -------------------- Load tokenizer --------------------
+            
         tokenizer = None
         if tokenizer_name is not None:
-            tokenizer_class = getattr(transformers_module, tokenizer_name)
-            tokenizer = tokenizer_class.from_pretrained(repo_id, revision=commit)
+            try:
+                tokenizer_class = getattr(transformers_module, tokenizer_name)
+                tokenizer = tokenizer_class.from_pretrained(repo_id, revision=commit)
+            except Exception:
+                logger.warning(
+                    f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')}_{torch_dtype} is skipped: "
+                    f"Could not load the tokenizer from `{repo_id}` with `{tokenizer_name}`."
+                )
+                self.skipTest(f"Could not load the tokenizer from {repo_id} with {tokenizer_name}.")
 
+        # -------------------- Load processors --------------------
+                
         processors = {}
-
         for key, name in zip(
             ["image_processor", "feature_extractor", "processor"],
             [image_processor_name, feature_extractor_name, processor_name],
@@ -366,10 +380,12 @@ class PipelineTesterMixin:
                     processors[key] = processor
                 except Exception:
                     logger.warning(
-                        f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')}_{torch_dtype} is skipped: Could not load the "
-                        f"{key} from `{repo_id}` with `{name}`."
+                        f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')}_{torch_dtype} is skipped: "
+                        f"Could not load the {key} from `{repo_id}` with `{name}`."
                     )
                     self.skipTest(f"Could not load the {key} from {repo_id} with {name}.")
+
+        # ---------------------------------------------------------
 
         # TODO: Maybe not upload such problematic tiny models to Hub.
         if tokenizer is None and "image_processor" not in processors and "feature_extractor" not in processors:
