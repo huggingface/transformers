@@ -148,7 +148,6 @@ from .utils import (
     PushToHubMixin,
     can_return_loss,
     find_labels,
-    get_torch_version,
     is_accelerate_available,
     is_apex_available,
     is_bitsandbytes_available,
@@ -3336,7 +3335,7 @@ class Trainer:
                 torch.mlu.empty_cache()
             elif is_torch_npu_available():
                 torch.npu.empty_cache()
-            elif get_torch_version() >= "2.0" and is_torch_mps_available():
+            elif is_torch_mps_available():
                 torch.mps.empty_cache()
             else:
                 torch.cuda.empty_cache()
