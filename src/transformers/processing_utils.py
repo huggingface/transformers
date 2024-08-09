@@ -151,6 +151,8 @@ class ImagesKwargs(TypedDict, total=False):
             Standard deviation to use if normalizing the image.
         do_pad (`bool`, *optional*):
             Whether to pad the image to the `(max_height, max_width)` of the images in the batch.
+        pad_size (`Dict[str, int]`, *optional*):
+            The size `{"height": int, "width" int}` to pad the images to.
         do_center_crop (`bool`, *optional*):
             Whether to center crop the image.
         data_format (`ChannelDimension` or `str`, *optional*):
@@ -170,6 +172,7 @@ class ImagesKwargs(TypedDict, total=False):
     image_mean: Optional[Union[float, List[float]]]
     image_std: Optional[Union[float, List[float]]]
     do_pad: Optional[bool]
+    pad_size: Optional[Dict[str, int]]
     do_center_crop: Optional[bool]
     data_format: Optional[ChannelDimension]
     input_data_format: Optional[Union[str, ChannelDimension]]
@@ -809,7 +812,8 @@ class ProcessorMixin(PushToHubMixin):
                     # check if this key was passed as a flat kwarg.
                     if kwarg_value != "__empty__" and modality_key in non_modality_kwargs:
                         raise ValueError(
-                            f"Keyword argument {modality_key} was passed two times: in a dictionary for {modality} and as a **kwarg."
+                            f"Keyword argument {modality_key} was passed two times:\n"
+                            f"in a dictionary for {modality} and as a **kwarg."
                         )
                 elif modality_key in kwargs:
                     kwarg_value = kwargs.pop(modality_key, "__empty__")
