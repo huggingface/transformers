@@ -226,12 +226,6 @@ if is_accelerate_available():
         DistributedDataParallelKwargs,
         DistributedType,
         GradientAccumulationPlugin,
-        is_mlu_available,
-        is_mps_available,
-        is_musa_available,
-        is_npu_available,
-        is_torch_version,
-        is_xpu_available,
         load_fsdp_model,
         load_fsdp_optimizer,
         save_fsdp_model,
@@ -3359,7 +3353,7 @@ class Trainer:
                 torch.mlu.empty_cache()
             elif is_musa_available():
                 torch.musa.empty_cache()
-            elif is_npu_available():
+            elif is_torch_npu_available():
                 torch.npu.empty_cache()
             elif is_torch_mps_available(min_version="2.0"):
                 torch.mps.empty_cache()
