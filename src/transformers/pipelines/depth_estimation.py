@@ -1,6 +1,5 @@
 from typing import List, Union
 
-from ..models.zoedepth import ZoeDepthForDepthEstimation
 from ..utils import (
     add_end_docstrings,
     is_torch_available,
@@ -101,7 +100,7 @@ class DepthEstimationPipeline(Pipeline):
         return model_inputs
 
     def _forward(self, model_inputs):
-        if isinstance(self.model, ZoeDepthForDepthEstimation):
+        if self.model.config.architectures == ["ZoeDepthForDepthEstimation"]:
             # That added flipped inference is the default behaviour in the original repo
             # https://github.com/isl-org/ZoeDepth/blob/edb6daf45458569e24f50250ef1ed08c015f17a7/zoedepth/models/depth_model.py#L99
             return self.model(
@@ -113,7 +112,7 @@ class DepthEstimationPipeline(Pipeline):
         return self.model(**model_inputs)
 
     def postprocess(self, model_outputs):
-        if isinstance(self.model, ZoeDepthForDepthEstimation):
+        if self.model.config.architectures == ["ZoeDepthForDepthEstimation"]:
             model_outputs_pd, model_outputs_flip_pd = model_outputs.predicted_depth.chunk(2)
             model_outputs.predicted_depth = None
             model_outputs_flip = model_outputs.copy()
