@@ -182,8 +182,7 @@ class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, unittest.Test
     test_torchscript = False
     test_head_masking = False
 
-    is_multimodal = True
-    # We define thsi flag here because in VLMs these flags depend on which LM/vision models are used
+    # We define this flag here because in VLMs these flags depend on which LM/vision models are used
     # So we can't know if SDPA is supported before starting to load the model
     # This flag is used by tests and is set to True because LM/vision models used in tests support SDPA
     supports_sdpa = True

@@ -472,7 +472,7 @@ _import_structure = {
     "models.hubert": ["HubertConfig"],
     "models.ibert": ["IBertConfig"],
     "models.idefics": ["IdeficsConfig"],
-    "models.idefics2": ["Idefics2Config", "Idefics2PerceiverConfig", "Idefics2VisionConfig"],
+    "models.idefics2": ["Idefics2Config"],
     "models.imagegpt": ["ImageGPTConfig"],
     "models.informer": ["InformerConfig"],
     "models.instructblip": [
@@ -2344,10 +2344,8 @@ else:
         [
             "Idefics2ForConditionalGeneration",
             "Idefics2Model",
-            "Idefics2PerceiverResampler",
             "Idefics2PreTrainedModel",
             "Idefics2Processor",
-            "Idefics2VisionTransformer",
         ]
     )
     _import_structure["models.imagegpt"].extend(
@@ -5154,7 +5152,7 @@ if TYPE_CHECKING:
     from .models.idefics import (
         IdeficsConfig,
     )
-    from .models.idefics2 import Idefics2Config, Idefics2PerceiverConfig, Idefics2VisionConfig
+    from .models.idefics2 import Idefics2Config
     from .models.imagegpt import ImageGPTConfig
     from .models.informer import InformerConfig
     from .models.instructblip import (
@@ -6873,10 +6871,8 @@ if TYPE_CHECKING:
         from .models.idefics2 import (
             Idefics2ForConditionalGeneration,
             Idefics2Model,
-            Idefics2PerceiverResampler,
             Idefics2PreTrainedModel,
             Idefics2Processor,
-            Idefics2VisionTransformer,
         )
         from .models.imagegpt import (
             ImageGPTForCausalImageModeling,

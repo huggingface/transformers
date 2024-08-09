@@ -199,8 +199,8 @@ class VisionTextDualEncoderModel(PreTrainedModel):
 
         # make sure that the individual model's config refers to the shared config
         # so that the updates to the config will be synced
-        self.config.vision_config._attn_implementation = self.vision_config.config._attn_implementation
-        self.config.text_config._attn_implementation = self.text_config.config._attn_implementation
+        self.config.vision_config._attn_implementation = self.vision_model.config._attn_implementation
+        self.config.text_config._attn_implementation = self.text_model.config._attn_implementation
         self.vision_model.config = self.config.vision_config
         self.text_model.config = self.config.text_config
 

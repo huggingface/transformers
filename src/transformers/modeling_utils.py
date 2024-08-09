@@ -1519,14 +1519,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # If a config is passed with a preset attn_implementation, we skip the automatic dispatch and use the user-provided config, with hard checks that the requested attention implementation is available.
             requested_attn_implementation = config._attn_implementation_internal
 
-        # MultiModal-LLM/Encoder-Decoder related block: since they consist of two or might be more sub-configs
-        # we have to check and dispatch SDPA to each sub-config, in case any of them support it.
-        # If one sub-model supports SDPA while other doesn't, an error will be raised following the
-        # typical SDPA-dispatch path (i.e. if hard_check). Same goes for FA2.
+        # Composite models consisting of several PretrainedModels have to specify attention impl as a dict
+        # where keys are sub-config names. But most people will specify one `str` which means that should dispatch
+        # for all sub-models or do not specify anything (`None`).
+        # Below we check is a models is composite and manually prepare a dict of attn impl if not already passed as a dict.
+        # Later each sub-model will dispatch with its own attn impl, by calling `_from_config(attn_impl="sdpa/FA2/eager")`
+        # If any of sub-models don't support requested attn, an error will be raised
         sub_configs = {
             key: getattr(config, key) for key in config if isinstance(getattr(config, key), PretrainedConfig)
         }
-        if sub_configs:
+        if sub_configs:  # so we have a composite model
             attn_implementation_per_subconfig = {}
             for key, sub_config in sub_configs.items():
                 attn_implementation_per_subconfig[key] = (
@@ -1535,7 +1537,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     else requested_attn_implementation.get(key)
                 )
 
-            if cls._is_composite:
+            if cls._is_composite:  # some composite models don't use attn impl, e.g. VQ-VAE
                 config._attn_implementation = attn_implementation_per_subconfig
                 requested_attn_implementation = config._attn_implementation
 
@@ -1638,8 +1640,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         If all checks pass and `hard_check_only` is False, the method will set the config attribute `attn_implementation` to "flash_attention_2" so that the model can initialize the correct attention module.
         """
-
-        # VLM/Encoder-Decoder etc. have to follow the sdpa attr of its sub-configs
         if not cls._supports_flash_attn_2:
             raise ValueError(
                 f"{cls.__name__} does not support Flash Attention 2.0 yet. Please request to add support where"

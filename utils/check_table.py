@@ -175,14 +175,8 @@ MODEL_NAMES_WITH_SAME_CONFIG = {
 }
 MODEL_NAMES_TO_IGNORE = [
     "CLIPVisionModel",
-    "CLIPTextModel",
-    "Idefics2VisionTransformer",
-    "Idefics2PerceiverResampler",
     "SiglipVisionModel",
-    "SiglipTextModel",
     "ChineseCLIPVisionModel",
-    "MusicGenDecoder",
-    "MusicGen Melody Decoder",
 ]
 
 

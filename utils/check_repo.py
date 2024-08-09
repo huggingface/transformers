@@ -81,6 +81,8 @@ PRIVATE_MODELS = [
     "SeamlessM4Tv2TextToUnitModel",
     "SeamlessM4Tv2CodeHifiGan",
     "SeamlessM4Tv2TextToUnitForConditionalGeneration",
+    "Idefics2PerceiverResampler",
+    "Idefics2VisionTransformer",
 ]
 
 # Update this list for models that are not tested with a comment explaining the reason it should not be.
@@ -128,8 +130,6 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "SeamlessM4TCodeHifiGan",  # Building part of bigger (tested) model.
     "SeamlessM4TTextToUnitForConditionalGeneration",  # Building part of bigger (tested) model.
     "ChameleonVQVAE",  # VQVAE here is used only for encoding (discretizing) and is tested as part of bigger model
-    "Idefics2VisionTransformer",  # Idefics2 modules are tested as part of a bigger model
-    "Idefics2PerceiverResampler",  # Idefics2 modules are tested as part of a bigger model
 ]
 
 # Update this list with test files that don't have a tester with a `all_model_classes` variable and which don't
@@ -319,7 +319,10 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "SeamlessM4Tv2CodeHifiGan",
     "SeamlessM4Tv2ForSpeechToSpeech",  # no auto class for speech-to-speech
     "SegGptForImageSegmentation",
+    "SiglipVisionModel",
+    "SiglipTextModel",
     "ChameleonVQVAE",  # no autoclass for VQ-VAE models
+    "CLIPTextModel",
 ]
 
 # DO NOT edit this list!

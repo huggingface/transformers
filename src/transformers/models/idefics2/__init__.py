@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING
 from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_vision_available
 
 
-_import_structure = {"configuration_idefics2": ["Idefics2Config", "Idefics2VisionConfig", "Idefics2PerceiverConfig"]}
+_import_structure = {"configuration_idefics2": ["Idefics2Config"]}
 
 
 try:
@@ -38,13 +38,11 @@ else:
         "Idefics2ForConditionalGeneration",
         "Idefics2PreTrainedModel",
         "Idefics2Model",
-        "Idefics2VisionTransformer",
-        "Idefics2PerceiverResampler",
     ]
     _import_structure["processing_idefics2"] = ["Idefics2Processor"]
 
 if TYPE_CHECKING:
-    from .configuration_idefics2 import Idefics2Config, Idefics2PerceiverConfig, Idefics2VisionConfig
+    from .configuration_idefics2 import Idefics2Config
 
     try:
         if not is_vision_available():
@@ -63,9 +61,7 @@ if TYPE_CHECKING:
         from .modeling_idefics2 import (
             Idefics2ForConditionalGeneration,
             Idefics2Model,
-            Idefics2PerceiverResampler,
             Idefics2PreTrainedModel,
-            Idefics2VisionTransformer,
         )
         from .processing_idefics2 import Idefics2Processor
 

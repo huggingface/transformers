@@ -408,7 +408,6 @@ class Idefics2ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
     test_head_masking = False
     test_torchscript = False
 
-    is_multimodal = True
     # We define this flag here because in VLMs these flags depend on which LM/vision models are used
     # So we can't know if SDPA is supported before starting to load the model
     # This flag is used by tests and is set to False because LM/vision models used in tests don't support SDPA
