@@ -21,16 +21,22 @@ from typing import Callable, Iterable, Optional, Tuple, Union
 
 import torch
 from torch import nn
+from torch.distributed._tensor import Replicate
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LambdaLR, ReduceLROnPlateau
 
+from .modeling_utils import PreTrainedModel
 from .trainer_pt_utils import LayerWiseDummyOptimizer, LayerWiseDummyScheduler
 from .trainer_utils import SchedulerType
-from .utils import logging
+from .utils import is_accelerate_available, logging
 from .utils.versions import require_version
 
 
 logger = logging.get_logger(__name__)
+
+if is_accelerate_available():
+    from accelerate import PartialState
+    from accelerate.utils import gather, reduce
 
 
 def _get_constant_lambda(_=None):
@@ -938,6 +944,325 @@ class AdafactorSchedule(LambdaLR):
         if len(lrs) == 0:
             lrs = self.base_lrs  # if called before stepping
         return lrs
+
+
+class AdamMini(Optimizer):
+    """
+    Implements Adam Mini algorithm as introduced in [Adam-mini: Use Fewer Learning Rates To Gain More]
+    (https://arxiv.org/abs/2406.16793).
+
+    Parameters:
+        model (`Union[PreTrainedModel, nn.Module]`):
+            The model being trained.
+        lr (`float`, *optional*, defaults to 0.001):
+            The learning rate to use.
+        betas (`Tuple[float,float]`, *optional*, defaults to `(0.9, 0.999)`):
+            Adam's betas parameters (b1, b2).
+        eps (`float`, *optional*, defaults to 1e-06):
+            Adam's epsilon for numerical stability.
+        weight_decay (`float`, *optional*, defaults to 0.0):
+            Decoupled weight decay to apply.
+        model_sharding (`bool`, *optional*, defaults to `False`):
+            Set to True if you are using model parallelism with more than 1 GPU, including FSDP and
+            zero_1,2,3 in Deepspeed. Set to False if otherwise.
+        n_feature (`int`, *optional*):
+            Dimension for hidden features. Can be left unspecified if training non-transformer models.
+        n_head (`int`, *optional*):
+            Number of attention heads. Can be left unspecified if training non-transformer models.
+        n_kv_head (`int`, *optional*):
+            Number of heads for Key and Value. Or equivalently, number of query groups in Group Query
+            Attention. Also known as "n_query_groups". If not specified, it will be equal to n_head.
+            Can be left unspecified if training non-transformer models.
+    """
+
+    def __init__(
+        self,
+        model: Union[PreTrainedModel, nn.Module],
+        lr: float = 1e-3,
+        betas: Tuple[float, float] = (0.9, 0.999),
+        eps: float = 1e-6,
+        weight_decay: float = 0.0,
+        model_sharding: bool = False,
+        n_feature: int = None,
+        n_head: int = None,
+        n_kv_head: int = None,
+    ):
+        if lr < 0.0:
+            raise ValueError(f"Invalid learning rate: {lr} - should be >= 0.0")
+        if not 0.0 <= betas[0] < 1.0:
+            raise ValueError(f"Invalid beta parameter: {betas[0]} - should be in [0.0, 1.0)")
+        if not 0.0 <= betas[1] < 1.0:
+            raise ValueError(f"Invalid beta parameter: {betas[1]} - should be in [0.0, 1.0)")
+        if not 0.0 <= weight_decay:
+            raise ValueError(f"Invalid weight_decay value: {weight_decay} - should be >= 0.0")
+        if not 0.0 <= eps:
+            raise ValueError(f"Invalid epsilon value: {eps} - should be >= 0.0")
+
+        self.n_feature = n_feature
+        self.n_head = n_head
+        if n_kv_head is not None:
+            self.n_kv_head = n_kv_head
+            if self.n_head % self.n_kv_head != 0:
+                raise ValueError("n_head is not a multiple of n_kv_head")
+        else:
+            self.n_kv_head = self.n_head
+        self.model = model
+        self.model_sharding = model_sharding
+        self.world_size = 1
+        if is_accelerate_available():
+            self.world_size = PartialState().num_processes
+
+        optim_groups = []
+        count_embd = 0
+        count_output = 0
+        count_q = 0
+        count_k = 0
+        for name, param in self.model.named_parameters():
+            self.device = param.device
+            if param.requires_grad:
+                dic = {}
+                dic["name"] = name
+                dic["params"] = param
+                if "norm" in name or "ln_f" in name:
+                    dic["weight_decay"] = 0.0
+                else:
+                    dic["weight_decay"] = weight_decay
+
+                if "embed" in name or "wte" in name or "embd" in name:
+                    count_embd += 1
+
+                if "lm_head.weight" in name or "output.weight" in name:
+                    count_output += 1
+
+                if "q_proj.weight" in name or "wq.weight" in name:
+                    count_q += 1
+
+                    if self.n_feature is None:
+                        raise ValueError(
+                            "n_feature is None. Should be specified for transformer models and"
+                            " 'n_feature * n_feature' should be a multiple of n_head"
+                        )
+                    if self.n_head is None:
+                        raise ValueError(
+                            "n_head is None. Should be specified for transformer models and"
+                            " n_head should be a factor of 'n_feature * n_feature'"
+                        )
+
+                    dic["parameter_per_head"] = self.n_feature * self.n_feature // self.n_head
+                    if (self.n_feature * self.n_feature % self.n_head) != 0:
+                        raise ValueError("'n_feature * n_feature' is not a multiple of n_head")
+
+                if "k_proj.weight" in name or "wk.weight" in name:
+                    count_k += 1
+
+                    if self.n_feature is None:
+                        raise ValueError(
+                            "n_feature is None. Should be specified for transformer models and"
+                            " 'n_feature * n_feature' should be a multiple of n_head"
+                        )
+                    if self.n_head is None:
+                        raise ValueError(
+                            "n_head is None. Should be specified for transformer models and"
+                            " n_head should be a factor of 'n_feature * n_feature'"
+                        )
+
+                    dic["parameter_per_head"] = self.n_feature * self.n_feature // self.n_head
+                    if (self.n_feature * self.n_feature % self.n_head) != 0:
+                        raise ValueError("'n_feature * n_feature' is not a multiple of n_head")
+
+                optim_groups.append(dic)
+
+        if count_embd == 0:
+            warnings.warn(
+                "No embedding layer found. If you are training Transformers, please check the name of your embedding"
+                " layer and manually add them to 'self.embd_blocks' of Adam-mini."
+            )
+        if count_output == 0:
+            warnings.warn(
+                "No output layer found. If you are training Transformers (without weight-tying), please check the name"
+                " of your output layer and manually add them to 'self.embd_blocks' of Adam-mini. Please ignore this"
+                " warning if you are using weight-tying."
+            )
+        if count_q == 0:
+            warnings.warn(
+                "No Query found. If you are training Transformers, please check the name of your Query in attention"
+                " blocks and manually add them to 'self.qk_blocks' of Adam-mini"
+            )
+
+        if count_k == 0:
+            warnings.warn(
+                "No Key found. If you are training Transformers, please check the name of your Key in attention blocks"
+                " and manually add them to 'self.qk_blocks' of Adam-mini"
+            )
+
+        if count_output + count_embd + count_q + count_k == 0:
+            warnings.warn(
+                "Using default PyTorch partition for Adam-mini. It can cause training instability on large-scale"
+                " Transformers."
+            )
+
+        # embd_blocks, including embd and output layers. Use normal adamW updates for these blocks
+        self.embd_blocks = {"embed", "embd", "wte", "lm_head.weight", "output.weight"}
+        # Query and Keys, will assign lrs by heads
+        self.qk_blocks = {"k_proj.weight", "q_proj.weight", "wq.weight", "wk.weight"}
+
+        defaults = {"lr": lr, "betas": betas, "eps": eps, "weight_decay": weight_decay}
+
+        super().__init__(optim_groups, defaults)
+
+    @torch.no_grad()
+    def step(self, closure=None):
+        """
+        Performs a single optimization step
+
+        Arguments:
+            closure (callable, optional): A closure that reevaluates the model
+                and returns the loss.
+        """
+        loss = None
+        if closure is not None:
+            loss = closure()
+
+        for group in self.param_groups:
+            beta1 = group["betas"][0]
+            beta2 = group["betas"][1]
+            lr = group["lr"]
+            name = group["name"]
+            eps = group["eps"]
+
+            for p in group["params"]:
+                state = self.state[p]
+
+                if any(block in name for block in self.embd_blocks):
+                    if p.grad is None:
+                        continue
+                    if len(state) == 0:
+                        state["m"] = torch.zeros_like(p.data).to(torch.float32)
+                        state["iteration"] = 0
+                        state["v"] = torch.zeros_like(p.data).to(torch.float32)
+
+                    grad = p.grad.data.to(torch.float32)
+
+                    state["v"].mul_(beta2).addcmul_(grad, grad.conj(), value=1 - beta2)
+                    state["iteration"] += 1
+                    if group["weight_decay"] != 0:
+                        p.data.mul_(1 - lr * group["weight_decay"])
+
+                    state["m"].lerp_(grad, 1 - beta1)
+
+                    bias_correction_1 = 1 - beta1 ** state["iteration"]
+                    bias_correction_2 = 1 - beta2 ** state["iteration"]
+                    bias_correction_2_sqrt = math.sqrt(bias_correction_2)
+
+                    h = (state["v"].sqrt() / bias_correction_2_sqrt).add_(eps)
+                    stepsize = lr / bias_correction_1
+                    p.addcdiv_(state["m"], h, value=-stepsize)
+
+                elif any(block in name for block in self.qk_blocks):
+                    if p.grad is None:
+                        continue
+
+                    dim = group["parameter_per_head"]
+
+                    if len(state) == 0:
+                        state["m"] = torch.zeros_like(p.data).to(torch.float32)
+
+                        state["m"] = state["m"].view(-1, dim)
+                        state["head"] = state["m"].shape[0]
+                        state["iteration"] = 0
+
+                        state["vmean"] = torch.zeros_like(state["m"][0 : state["head"], 0:1]).to(self.device)
+
+                    grad = p.grad.data.to(torch.float32)
+                    head = state["head"]
+                    grad = grad.view(head, dim)
+
+                    tmp_lr = torch.mean(grad * grad, dim=1).unsqueeze(1).to(self.device)
+
+                    state["vmean"].mul_(beta2).add_(tmp_lr, alpha=1 - beta2)
+                    v = state["vmean"]
+
+                    state["iteration"] += 1
+                    if group["weight_decay"] != 0:
+                        p.data.mul_(1 - lr * group["weight_decay"])
+
+                    state["m"].lerp_(grad, 1 - beta1)
+
+                    bias_correction_1 = 1 - beta1 ** state["iteration"]
+                    bias_correction_2 = 1 - beta2 ** state["iteration"]
+                    bias_correction_2_sqrt = math.sqrt(bias_correction_2)
+
+                    h = (v.sqrt() / bias_correction_2_sqrt).add_(eps)
+                    stepsize = ((1 / bias_correction_1) / h).view(head, 1)
+
+                    update = state["m"] * (stepsize.to(state["m"].device))
+
+                    if p.dim() > 1:
+                        d0, d1 = p.size()
+                        update = update.view(d0, d1)
+                    else:
+                        update = update.view(-1)
+
+                    update.mul_(lr)
+                    p.add_(-update)
+
+                else:
+                    if len(state) == 0:
+                        dimension = torch.tensor(p.data.numel()).to(self.device).to(torch.float32)
+                        reduced = False
+                        if (self.world_size > 1) and (self.model_sharding is True):
+                            tensor_list = gather(dimension)
+                            s = 0
+                            dimension = 0
+                            for d in tensor_list:
+                                if d > 0:
+                                    s = s + 1
+                                dimension = dimension + d
+                            if s >= 2:
+                                reduced = True
+
+                        state["m"] = torch.zeros_like(p.data).to(torch.float32)
+                        state["iteration"] = 0
+                        state["reduced"] = reduced
+
+                        state["vmean"] = torch.zeros_like(torch.sum(p.data * p.data)).to(self.device)
+                        state["dimension"] = dimension.item()
+                    if p.grad is None:
+                        tmp_lr = torch.zeros_like(torch.sum(p.data * p.data)).to(self.device)
+                    else:
+                        grad = p.grad.data.to(torch.float32)
+                        tmp_lr = torch.sum(grad * grad).to(self.device)
+
+                    if state["reduced"]:
+                        if "device_mesh" in dir(tmp_lr):
+                            lr_local = tmp_lr.to_local()
+                            reduce(lr_local, reduction="sum")
+                            tmp_lr.redistribute(placements=[Replicate()])
+                        else:
+                            reduce(tmp_lr, reduction="sum")
+
+                    if p.grad is None:
+                        continue
+                    tmp_lr = tmp_lr / (state["dimension"])
+                    tmp_lr = tmp_lr.to(grad.device)
+
+                    if group["weight_decay"] != 0:
+                        p.data.mul_(1 - lr * group["weight_decay"])
+                    state["iteration"] += 1
+                    state["m"].lerp_(grad, 1 - beta1)
+
+                    bias_correction_1 = 1 - beta1 ** state["iteration"]
+                    bias_correction_2 = 1 - beta2 ** state["iteration"]
+                    bias_correction_2_sqrt = math.sqrt(bias_correction_2)
+                    state["vmean"] = (1 - beta2) * tmp_lr + beta2 * state["vmean"]
+                    h = (state["vmean"].sqrt() / bias_correction_2_sqrt).add_(eps)
+
+                    stepsize = (1 / bias_correction_1) / h
+                    update = state["m"] * (stepsize.to(state["m"].device))
+                    update.mul_(lr)
+                    p.add_(-update)
+
+        return loss
 
 
 def get_adafactor_schedule(optimizer, initial_lr=0.0):

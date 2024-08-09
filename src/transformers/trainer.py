@@ -1219,6 +1219,23 @@ class Trainer:
                 optimizer_kwargs.update(adam_kwargs)
             except ImportError:
                 raise ValueError("Trainer tried to instantiate apex FusedAdam but apex is not installed!")
+        elif args.optim == OptimizerNames.ADAM_MINI:
+            from .optimization import AdamMini
+
+            if model is None:
+                raise ValueError("You need to pass a model in order to correctly initialize an Adam Mini optimizer.")
+
+            optimizer_cls = AdamMini
+            optimizer_kwargs.update(adam_kwargs)
+            optimizer_kwargs.update(
+                {
+                    "model": model,
+                    "model_sharding": strtobool(optim_args.get("model_sharding", "False")),
+                    "n_feature": int(optim_args["n_feature"]) if "n_feature" in optim_args else None,
+                    "n_head": int(optim_args["n_head"]) if "n_head" in optim_args else None,
+                    "n_kv_head": int(optim_args["n_kv_head"]) if "n_kv_head" in optim_args else None,
+                }
+            )
         elif args.optim in [
             OptimizerNames.ADAMW_BNB,
             OptimizerNames.ADAMW_8BIT,

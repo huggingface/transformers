@@ -30,6 +30,10 @@ The `.optimization` module provides:
 
 [[autodoc]] Adafactor
 
+## AdamMini (PyTorch)
+
+[[autodoc]] AdamMini
+
 ## AdamWeightDecay (TensorFlow)
 
 [[autodoc]] AdamWeightDecay

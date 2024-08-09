@@ -9866,6 +9866,13 @@ class Adafactor(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class AdamMini(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class AdamW(metaclass=DummyObject):
     _backends = ["torch"]
 

@@ -28,6 +28,7 @@ if is_torch_available():
 
     from transformers import (
         Adafactor,
+        AdamMini,
         AdamW,
         get_constant_schedule,
         get_constant_schedule_with_warmup,
@@ -109,6 +110,49 @@ class OptimizationTest(unittest.TestCase):
             w.grad.detach_()  # No zero_grad() function on simple tensors. we do it ourselves.
             w.grad.zero_()
         self.assertListAlmostEqual(w.tolist(), [0.4, 0.2, -0.5], tol=1e-2)
+
+    def test_adam_mini(self):
+        class SimpleModel(nn.Module):
+            def __init__(self, input_dim, hidden_dim):
+                super(SimpleModel, self).__init__()
+                self.layer1 = nn.Linear(input_dim, hidden_dim)
+                self.relu = nn.ReLU()
+                self.layer2 = nn.Linear(hidden_dim, 1)
+
+            def forward(self, x):
+                out = self.layer1(x)
+                out = self.relu(out)
+                out = self.layer2(out)
+                return out
+
+        num_samples, num_features = 100, 4
+        inputs = torch.randn(num_samples, num_features)
+        weights = torch.randn(num_features)
+        targets = inputs @ weights + torch.randn(num_samples) * 0.1
+
+        hidden_dim = 10
+        model = SimpleModel(num_features, hidden_dim)
+        criterion = nn.MSELoss()
+
+        optimizer = AdamMini(
+            model=model,
+            lr=1e-2,
+            betas=(0.9, 0.999),
+            eps=1e-6,
+            weight_decay=0.0,
+        )
+        for _ in range(1000):
+            outputs = model(inputs)
+            loss = criterion(outputs.squeeze(), targets)
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+        with torch.no_grad():
+            preds = model(inputs)
+            loss = criterion(preds.squeeze(), targets)
+        self.assertListAlmostEqual([loss], [0.0], tol=0.01)
 
 
 @require_torch
