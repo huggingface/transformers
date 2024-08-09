@@ -64,6 +64,7 @@ from transformers.testing_utils import (
     require_galore_torch,
     require_intel_extension_for_pytorch,
     require_lomo,
+    require_grokadamw,
     require_optuna,
     require_peft,
     require_ray,
@@ -1360,6 +1361,28 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 learning_rate=1e-9,
                 logging_steps=5,
                 optim="adalomo",
+            )
+            trainer = Trainer(tiny_llama, args, train_dataset=train_dataset)
+
+            # Check this works
+            _ = trainer.train()
+            
+    @require_grokadamw
+    @require_torch_gpu
+    def test_grokadamw():
+        config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
+        tiny_llama = LlamaForCausalLM(config)
+        x = torch.randint(0, 100, (128,))
+        train_dataset = RepeatDataset(x)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Trainer without inf/nan filter
+            args = TrainingArguments(
+                tmpdir,
+                learning_rate=2e-5,
+                logging_steps=5,
+                optim="grokadamw",
+                max_steps=20,
             )
             trainer = Trainer(tiny_llama, args, train_dataset=train_dataset)
 
