@@ -167,6 +167,48 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         ):
             _ = speech_recognizer(waveform, return_timestamps="char")
 
+    @require_torch
+    def test_small_model_pt_fp16(self):
+        speech_recognizer = pipeline(
+            task="automatic-speech-recognition",
+            model="facebook/s2t-small-mustc-en-fr-st",
+            tokenizer="facebook/s2t-small-mustc-en-fr-st",
+            framework="pt",
+            torch_dtype=torch.float16,
+        )
+        waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
+        output = speech_recognizer(waveform)
+        self.assertEqual(output, {"text": "(Applaudissements)"})
+        output = speech_recognizer(waveform, chunk_length_s=10)
+        self.assertEqual(output, {"text": "(Applaudissements)"})
+
+        # Non CTC models cannot use return_timestamps
+        with self.assertRaisesRegex(
+            ValueError, "^We cannot return_timestamps yet on non-CTC models apart from Whisper!$"
+        ):
+            _ = speech_recognizer(waveform, return_timestamps="char")
+
+    @require_torch
+    def test_small_model_pt_bf16(self):
+        speech_recognizer = pipeline(
+            task="automatic-speech-recognition",
+            model="facebook/s2t-small-mustc-en-fr-st",
+            tokenizer="facebook/s2t-small-mustc-en-fr-st",
+            framework="pt",
+            torch_dtype=torch.bfloat16,
+        )
+        waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
+        output = speech_recognizer(waveform)
+        self.assertEqual(output, {"text": "(Applaudissements)"})
+        output = speech_recognizer(waveform, chunk_length_s=10)
+        self.assertEqual(output, {"text": "(Applaudissements)"})
+
+        # Non CTC models cannot use return_timestamps
+        with self.assertRaisesRegex(
+            ValueError, "^We cannot return_timestamps yet on non-CTC models apart from Whisper!$"
+        ):
+            _ = speech_recognizer(waveform, return_timestamps="char")
+
     @slow
     @require_torch_accelerator
     def test_whisper_fp16(self):

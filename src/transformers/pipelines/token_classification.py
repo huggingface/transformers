@@ -19,6 +19,8 @@ if is_tf_available():
 
     from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES
 if is_torch_available():
+    import torch
+
     from ..models.auto.modeling_auto import MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES
 
 
@@ -299,7 +301,12 @@ class TokenClassificationPipeline(ChunkPipeline):
             ignore_labels = ["O"]
         all_entities = []
         for model_outputs in all_outputs:
-            logits = model_outputs["logits"][0].numpy()
+            if self.framework == "pt" and model_outputs["logits"][0].dtype == torch.bfloat16:
+                # To enable using bf16
+                logits = model_outputs["logits"][0].float().numpy()
+            else:
+                logits = model_outputs["logits"][0].numpy()
+
             sentence = all_outputs[0]["sentence"]
             input_ids = model_outputs["input_ids"][0]
             offset_mapping = (
