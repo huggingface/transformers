@@ -28,7 +28,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, SlidingWindowCache, StaticCache
+from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
@@ -875,12 +875,11 @@ class MistralModel(MistralPreTrainedModel):
 
         # cache_position must be valid here no matter which cache we use
         past_seen_tokens = cache_position[0] if past_key_values is not None else 0
-        using_static_cache = isinstance(past_key_values, StaticCache)
-        using_sliding_window_cache = isinstance(past_key_values, SlidingWindowCache)
 
         if (
             self.config._attn_implementation == "sdpa"
-            and not (using_static_cache or using_sliding_window_cache)
+            and past_key_values is not None
+            and not (past_key_values.is_static or past_key_values.is_sliding)
             and not output_attentions
         ):
             if AttentionMaskConverter._ignore_causal_mask_sdpa(
@@ -895,11 +894,8 @@ class MistralModel(MistralPreTrainedModel):
         dtype, device = input_tensor.dtype, input_tensor.device
         min_dtype = torch.finfo(dtype).min
         sequence_length = input_tensor.shape[1]
-        # SlidingWindowCache
-        if using_sliding_window_cache:
-            target_length = max(sequence_length, self.config.sliding_window)
-        # StaticCache
-        elif using_static_cache:
+        # SlidingWindowCache or StaticCache
+        if past_key_values is not None and (past_key_values.is_sliding or past_key_values.is_static):
             target_length = past_key_values.get_max_length()
         # DynamicCache or no cache
         else:
@@ -920,7 +916,9 @@ class MistralModel(MistralPreTrainedModel):
             )
             exclude_mask = torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
             if self.config.sliding_window is not None:
-                if not using_sliding_window_cache or sequence_length > self.config.sliding_window:
+                if past_key_values is not None and (
+                    not past_key_values.is_sliding or sequence_length > self.config.sliding_window
+                ):
                     exclude_mask.bitwise_or_(
                         torch.arange(target_length, device=device)
                         <= (cache_position.reshape(-1, 1) - self.config.sliding_window)

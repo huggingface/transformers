@@ -28,6 +28,9 @@ class Cache(torch.nn.Module):
     Base, abstract class for all caches. The actual data structure is specific to each subclass.
     """
 
+    is_static = False
+    is_sliding = False
+
     def __init__(self):
         super().__init__()
 
@@ -818,6 +821,8 @@ class SinkCache(Cache):
         ```
     """
 
+    is_sliding = True
+
     def __init__(self, window_length: int, num_sink_tokens: int) -> None:
         super().__init__()
         self.key_cache: List[torch.Tensor] = []
@@ -1005,6 +1010,8 @@ class StaticCache(Cache):
         ```
     """
 
+    is_static = True
+
     def __init__(self, config: PretrainedConfig, max_batch_size: int, max_cache_len: int, device, dtype=None) -> None:
         super().__init__()
         self.max_batch_size = max_batch_size
@@ -1158,6 +1165,8 @@ class SlidingWindowCache(StaticCache):
         ```
     """
 
+    is_sliding = True
+
     def __init__(self, config: PretrainedConfig, max_batch_size: int, max_cache_len: int, device, dtype=None) -> None:
         super().__init__()
         if not hasattr(config, "sliding_window") or config.sliding_window is None:
@@ -1220,8 +1229,7 @@ class SlidingWindowCache(StaticCache):
         return k_out, v_out
 
     def get_max_length(self) -> Optional[int]:
-        # in theory there is no limit because the sliding window size is fixed no matter how long the sentence is
-        return None
+        return self.max_cache_len
 
     def reset(self):
         for layer_idx in range(len(self.key_cache)):
