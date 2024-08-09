@@ -653,9 +653,6 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
             if cache_length < past_length and attention_mask is not None:
                 attention_mask = attention_mask[:, -(cache_length + input_ids.shape[1]) :]
 
-            pixel_values_videos = None
-            pixel_values_images = None
-
         position_ids = kwargs.get("position_ids", None)
         if attention_mask is not None and position_ids is None:
             # create position_ids on the fly for batch generation
@@ -681,6 +678,3 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
             }
         )
         return model_inputs
-
-    def _reorder_cache(self, *args, **kwargs):
-        return self.language_model._reorder_cache(*args, **kwargs)
