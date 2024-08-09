@@ -16,6 +16,8 @@
 
 import unittest
 
+import numpy as np
+
 from transformers import Dinov2Config, ZoeDepthConfig
 from transformers.file_utils import is_torch_available, is_vision_available
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
@@ -23,7 +25,6 @@ from transformers.testing_utils import require_torch, require_vision, slow, torc
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 if is_torch_available():
     import torch
@@ -212,6 +213,21 @@ def prepare_img():
 @require_vision
 @slow
 class ZoeDepthModelIntegrationTest(unittest.TestCase):
+    expected_slice_post_processing = {
+        (False, False): torch.tensor(
+            [[1.1348238, 1.1193453, 1.130562], [1.1754476, 1.1613507, 1.1701596], [1.2287744, 1.2101802, 1.2148322]]
+        ),
+        (False, True): torch.tensor(
+            [[1.0610938, 1.1042216, 1.1429265], [1.1099341, 1.148696, 1.1817775], [1.1656011, 1.1988826, 1.2268101]]
+        ),
+        (True, False): torch.tensor(
+            [[1.8382794, 1.8380532, 1.8375976], [1.848761, 1.8485023, 1.8479986], [1.8571457, 1.8568444, 1.8562847]]
+        ),
+        (True, True): torch.tensor(
+            [[1.8306141, 1.8305621, 1.8303483], [1.8410318, 1.8409299, 1.8406585], [1.8492792, 1.8491366, 1.8488203]]
+        ),
+    }  # (pad, flip)
+
     def test_inference_depth_estimation(self):
         image_processor = ZoeDepthImageProcessor.from_pretrained("Intel/zoedepth-nyu")
         model = ZoeDepthForDepthEstimation.from_pretrained("Intel/zoedepth-nyu").to(torch_device)
@@ -255,3 +271,105 @@ class ZoeDepthModelIntegrationTest(unittest.TestCase):
         ).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.predicted_depth[0, :3, :3], expected_slice, atol=1e-4))
+
+    def check_target_size(
+        self,
+        image_processor,
+        pad_input,
+        images,
+        outputs,
+        outputs_pil,
+        raw_outputs,
+        raw_outputs_flip=None,
+    ):
+        outputs_large = image_processor.post_process_depth_estimation(
+            raw_outputs,
+            [img.size[::-1] for img in images],
+            outputs_flip=raw_outputs_flip,
+            cmap="gray",
+            target_sizes=[tuple(np.array(img.size[::-1]) * 2) for img in images],
+            remove_padding=pad_input,
+            vmin_perc=0,
+            vmax_perc=100,
+        )
+        outputs_large_pil = [out["depth"] for out in outputs_large]
+        outputs_large = [out["predicted_depth"] for out in outputs_large]
+
+        for img, out, out_pil, out_l, out_l_pil in zip(images, outputs, outputs_pil, outputs_large, outputs_large_pil):
+            out_l_reduced = torch.nn.functional.interpolate(
+                out_l.unsqueeze(0).unsqueeze(1), size=img.size[::-1], mode="bicubic", align_corners=False
+            )
+            self.assertTrue((np.array(out_l_pil.size) == np.array(img.size) * 2).all())
+            self.assertTrue((np.array(out_l.shape)[::-1] == np.array(img.size) * 2).all())
+            self.assertTrue(torch.allclose(out, out_l_reduced, rtol=1e-2))
+            self.assertTrue(
+                np.allclose(
+                    np.array(out_pil.convert("L")),
+                    np.array(out_l_pil.convert("L").resize(out_pil.size)),
+                    rtol=1e-1,
+                )
+            )
+
+    def check_post_processing_test(self, image_processor, images, model, pad_input=True, flip_aug=True):
+        inputs = image_processor(images=images, return_tensors="pt", do_pad=pad_input).to(torch_device)
+
+        with torch.no_grad():
+            raw_outputs = model(**inputs)
+            raw_outputs_flip = None
+            if flip_aug:
+                raw_outputs_flip = model(pixel_values=torch.flip(inputs.pixel_values, dims=[3]))
+
+        outputs = image_processor.post_process_depth_estimation(
+            raw_outputs,
+            [img.size[::-1] for img in images],
+            outputs_flip=raw_outputs_flip,
+            cmap="gray",
+            remove_padding=pad_input,
+            vmin_perc=0,
+            vmax_perc=100,
+        )
+        outputs_pil = [out["depth"] for out in outputs]
+        outputs = [out["predicted_depth"] for out in outputs]
+
+        expected_slice = self.expected_slice_post_processing[pad_input, flip_aug].to(torch_device)
+        for img, out_pil, out in zip(images, outputs_pil, outputs):
+            self.assertTrue(img.size == out.shape[::-1])
+            self.assertTrue(img.size == out_pil.size)
+            self.assertTrue(torch.allclose(expected_slice, out[:3, :3], rtol=1e-3))
+            self.assertTrue(
+                np.allclose(
+                    np.array(Image.fromarray((out * 255 / out.max()).cpu().numpy().astype("uint8"))),
+                    np.array(out_pil.convert("L")),
+                    rtol=1e-1,
+                )
+            )
+
+        self.check_target_size(image_processor, pad_input, images, outputs, outputs_pil, raw_outputs, raw_outputs_flip)
+
+    def test_post_processing_depth_estimation_post_processing_nopad_noflip(self):
+        images = [prepare_img()] * 2
+        image_processor = ZoeDepthImageProcessor.from_pretrained("Intel/zoedepth-nyu-kitti")
+        model = ZoeDepthForDepthEstimation.from_pretrained("Intel/zoedepth-nyu-kitti").to(torch_device)
+
+        self.check_post_processing_test(image_processor, images, model, pad_input=False, flip_aug=False)
+
+    def test_inference_depth_estimation_post_processing_nopad_flip(self):
+        images = [prepare_img()] * 2
+        image_processor = ZoeDepthImageProcessor.from_pretrained("Intel/zoedepth-nyu-kitti")
+        model = ZoeDepthForDepthEstimation.from_pretrained("Intel/zoedepth-nyu-kitti").to(torch_device)
+
+        self.check_post_processing_test(image_processor, images, model, pad_input=False, flip_aug=True)
+
+    def test_inference_depth_estimation_post_processing_pad_noflip(self):
+        images = [prepare_img()] * 2
+        image_processor = ZoeDepthImageProcessor.from_pretrained("Intel/zoedepth-nyu-kitti")
+        model = ZoeDepthForDepthEstimation.from_pretrained("Intel/zoedepth-nyu-kitti").to(torch_device)
+
+        self.check_post_processing_test(image_processor, images, model, pad_input=True, flip_aug=False)
+
+    def test_inference_depth_estimation_post_processing_pad_flip(self):
+        images = [prepare_img()] * 2
+        image_processor = ZoeDepthImageProcessor.from_pretrained("Intel/zoedepth-nyu-kitti")
+        model = ZoeDepthForDepthEstimation.from_pretrained("Intel/zoedepth-nyu-kitti").to(torch_device)
+
+        self.check_post_processing_test(image_processor, images, model, pad_input=True, flip_aug=True)
