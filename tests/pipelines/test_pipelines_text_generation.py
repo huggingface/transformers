@@ -489,6 +489,7 @@ class TextGenerationPipelineTests(unittest.TestCase):
             "GPTNeoXForCausalLM",
             "GPTNeoXJapaneseForCausalLM",
             "FuyuForCausalLM",
+            "LlamaForCausalLM",
         ]
         if (
             tokenizer.model_max_length < 10000
