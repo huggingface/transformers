@@ -14,7 +14,8 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Transformers로 채팅하기[[Chatting with Transformers]]
+# Transformers로 채팅하기[[chatting-with-transformers]]
+앵커의 경우 소문자로 표기하고, 띄어쓰기는 '-'로 변경해 줘야 합니다. 아래 앵커들도 확인 부탁드려요!
 
 이 글을 보고 있다면 **채팅 모델**에 대해 어느 정도 알고 계실 것입니다.
 채팅 모델이란 메세지를 주고받을 수 있는 대화형 인공지능입니다. 
