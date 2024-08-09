@@ -39,7 +39,7 @@ The original code can be found [here](https://github.com/state-spaces/mamba).
 
 ### A simple generation example: 
 ```python 
-from transformers import MambaConfig, Mamba2ForCausalLM, AutoTokenizer
+from transformers import Mamba2Config, Mamba2ForCausalLM, AutoTokenizer
 import torch
 model_id = 'mistralai/Mamba-Codestral-7B-v0.1'
 tokenizer = AutoTokenizer.from_pretrained(model_id, revision='refs/pr/9', from_slow=True, legacy=False)
