@@ -16,6 +16,7 @@
 
 import collections.abc
 import math
+import numpy as np
 from typing import Dict, List, Optional, Set, Tuple, Union
 
 import torch
@@ -325,7 +326,7 @@ class ProPainterLayer(nn.Module):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = PROPAINTER_ATTENTION_CLASSES[config._attn_implementation](config)
+        # self.attention = PROPAINTER_ATTENTION_CLASSES[config._attn_implementation](config)
         self.intermediate = ProPainterIntermediate(config)
         self.output = ProPainterOutput(config)
         self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -544,9 +545,9 @@ class ProPainterBasicEncoder(nn.Module):
         return x
 
 class ProPainterBasicMotionEncoder(nn.Module):
-    def __init__(self, args):
+    def __init__(self, config):
         super(ProPainterBasicMotionEncoder, self).__init__()
-        cor_planes = args.corr_levels * (2*args.corr_radius + 1)**2
+        cor_planes = config.corr_levels * (2*config.corr_radius + 1)**2
         self.convc1 = nn.Conv2d(cor_planes, 256, 1, padding=0)
         self.convc2 = nn.Conv2d(256, 192, 3, padding=1)
         self.convf1 = nn.Conv2d(2, 128, 7, padding=3)
@@ -603,10 +604,10 @@ class ProPainterFlowHead(nn.Module):
         return self.conv2(self.relu(self.conv1(x)))
 
 class ProPainterBasicUpdateBlock(nn.Module):
-    def __init__(self, args, hidden_dim=128, input_dim=128):
+    def __init__(self, config, hidden_dim=128, input_dim=128):
         super(ProPainterBasicUpdateBlock, self).__init__()
-        self.args = args
-        self.encoder = ProPainterBasicMotionEncoder(args)
+        self.config = config
+        self.encoder = ProPainterBasicMotionEncoder(config)
         self.gru = ProPainterSepConvGRU(hidden_dim=hidden_dim, input_dim=128+hidden_dim)
         self.flow_head = ProPainterFlowHead(hidden_dim, hidden_dim=256)
 
@@ -707,32 +708,32 @@ def upflow8(flow, mode='bilinear'):
 
 
 class ProPainterRaftOpticalFlow(nn.Module):
-    def __init__(self, args):
+    def __init__(self, config):
         super(ProPainterRaftOpticalFlow, self).__init__()
-        self.args = args
+        self.config = config
 
-        if args.small:
+        if config.small:
             self.hidden_dim = hdim = 96
             self.context_dim = cdim = 64
-            args.corr_levels = 4
-            args.corr_radius = 3
+            config.corr_levels = 4
+            config.corr_radius = 3
 
         else:
             self.hidden_dim = hdim = 128
             self.context_dim = cdim = 128
-            args.corr_levels = 4
-            args.corr_radius = 4
+            config.corr_levels = 4
+            config.corr_radius = 4
 
-        if 'dropout' not in args._get_kwargs():
-            args.dropout = 0
+        if 'dropout' not in config._get_kwconfig():
+            config.dropout = 0
 
-        if 'alternate_corr' not in args._get_kwargs():
-            args.alternate_corr = False
+        if 'alternate_corr' not in config._get_kwconfig():
+            config.alternate_corr = False
         
         # feature network, context network, and update block
-        self.fnet = ProPainterBasicEncoder(output_dim=256, norm_fn='instance', dropout=args.dropout)
-        self.cnet = ProPainterBasicEncoder(output_dim=hdim+cdim, norm_fn='batch', dropout=args.dropout)
-        self.update_block = ProPainterBasicUpdateBlock(self.args, hidden_dim=hdim)
+        self.fnet = ProPainterBasicEncoder(output_dim=256, norm_fn='instance', dropout=config.dropout)
+        self.cnet = ProPainterBasicEncoder(output_dim=hdim+cdim, norm_fn='batch', dropout=config.dropout)
+        self.update_block = ProPainterBasicUpdateBlock(self.config, hidden_dim=hdim)
 
 
     def freeze_bn(self):
@@ -762,8 +763,7 @@ class ProPainterRaftOpticalFlow(nn.Module):
         up_flow = up_flow.permute(0, 1, 4, 2, 5, 3)
         return up_flow.reshape(N, 2, 8*H, 8*W)
 
-
-    def forward(self, image1, image2, iters=12, flow_init=None, test_mode=True):
+    def _forward(self, image1, image2, iters=12, flow_init=None):
         """ Estimate optical flow between pair of frames """
 
         # image1 = 2 * (image1 / 255.0) - 1.0
@@ -776,17 +776,17 @@ class ProPainterRaftOpticalFlow(nn.Module):
         cdim = self.context_dim
 
         # run the feature network
-        with autocast(enabled=self.args.mixed_precision):
+        with autocast(enabled=self.config.mixed_precision):
             fmap1, fmap2 = self.fnet([image1, image2])
 
         fmap1 = fmap1.float()
         fmap2 = fmap2.float()
         
         
-        corr_fn = ProPainterCorrBlock(fmap1, fmap2, radius=self.args.corr_radius)
+        corr_fn = ProPainterCorrBlock(fmap1, fmap2, radius=self.config.corr_radius)
 
         # run the context network
-        with autocast(enabled=self.args.mixed_precision):
+        with autocast(enabled=self.config.mixed_precision):
             cnet = self.cnet(image1)
             net, inp = torch.split(cnet, [hdim, cdim], dim=1)
             net = torch.tanh(net)
@@ -797,13 +797,12 @@ class ProPainterRaftOpticalFlow(nn.Module):
         if flow_init is not None:
             coords1 = coords1 + flow_init
 
-        flow_predictions = []
-        for itr in range(iters):
+        for _ in range(iters):
             coords1 = coords1.detach()
             corr = corr_fn(coords1) # index correlation volume
 
             flow = coords1 - coords0
-            with autocast(enabled=self.args.mixed_precision):
+            with autocast(enabled=self.config.mixed_precision):
                 net, up_mask, delta_flow = self.update_block(net, inp, corr, flow)
 
             # F(t+1) = F(t) + \Delta(t)
@@ -815,12 +814,26 @@ class ProPainterRaftOpticalFlow(nn.Module):
             else:
                 flow_up = self.upsample_flow(coords1 - coords0, up_mask)
 
-            flow_predictions.append(flow_up)
 
-        if test_mode:
-            return coords1 - coords0, flow_up
+        return coords1 - coords0, flow_up
 
-        return flow_predictions
+    def forward(self, gt_local_frames, iters=20):
+        b, l_t, c, h, w = gt_local_frames.size()
+        # print(gt_local_frames.shape)
+
+        # with torch.no_grad():
+        gtlf_1 = gt_local_frames[:, :-1, :, :, :].reshape(-1, c, h, w)
+        gtlf_2 = gt_local_frames[:, 1:, :, :, :].reshape(-1, c, h, w)
+
+        _, gt_flows_forward = self._forward(gtlf_1, gtlf_2, iters=iters, test_mode=True)
+        _, gt_flows_backward = self._forward(gtlf_2, gtlf_1, iters=iters, test_mode=True)
+
+        
+        gt_flows_forward = gt_flows_forward.view(b, l_t-1, 2, h, w)
+        gt_flows_backward = gt_flows_backward.view(b, l_t-1, 2, h, w)
+
+        return gt_flows_forward, gt_flows_backward
+
 
 ##################################################ProPainterRaftOpticalFlow MODULES ENDS HERE######################################################
 
@@ -2198,7 +2211,9 @@ class ProPainterModel(ProPainterPreTrainedModel):
     def __init__(self, config: ProPainterConfig):
         super().__init__(config)
         self.config = config
-
+        self.optical_flow_model = ProPainterRaftOpticalFlow()
+        self.flow_completion_net = ProPainterRecurrentFlowCompleteNet()
+        self.propainter_inpaint_generator = ProPainterInpaintGenerator()
         self.embeddings = ProPainterEmbeddings(config)
         # self.encoder = ProPainterEncoder()
         #############look into it
@@ -2209,6 +2224,22 @@ class ProPainterModel(ProPainterPreTrainedModel):
 
     def get_input_embeddings(self) -> ProPainterPatchEmbeddings:
         return self.embeddings.patch_embeddings
+    
+    def _get_ref_index(mid_neighbor_id, neighbor_ids, length, ref_stride=10, ref_num=-1):
+        ref_index = []
+        if ref_num == -1:
+            for i in range(0, length, ref_stride):
+                if i not in neighbor_ids:
+                    ref_index.append(i)
+        else:
+            start_idx = max(0, mid_neighbor_id - ref_stride * (ref_num // 2))
+            end_idx = min(length, mid_neighbor_id + ref_stride * (ref_num // 2))
+            for i in range(start_idx, end_idx, ref_stride):
+                if i not in neighbor_ids:
+                    if len(ref_index) > ref_num:
+                        break
+                    ref_index.append(i)
+        return ref_index
 
     def _prune_heads(self, heads_to_prune: Dict[int, List[int]]) -> None:
         """
@@ -2228,17 +2259,17 @@ class ProPainterModel(ProPainterPreTrainedModel):
     )
     def forward(
         self,
+        pixel_values_inp: Optional[List[np.ndarray]] = None,
         pixel_values: Optional[torch.Tensor] = None,
-        bool_masked_pos: Optional[torch.BoolTensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
+        flow_masks: Optional[torch.BoolTensor] = None,
+        masks_dilated: Optional[torch.Tensor] = None,
+        size: Optional[Tuple[int,int]] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        interpolate_pos_encoding: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutput]:
         r"""
-        bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`, *optional*):
-            Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
+
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -2248,278 +2279,430 @@ class ProPainterModel(ProPainterPreTrainedModel):
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
-
+        
+        w, h = size
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
         # attention_probs has shape bsz x n_heads x N x N
         # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
         # TODO: maybe have a cleaner way to cast the input (from `ImageProcessor` side?)
-        expected_dtype = self.embeddings.patch_embeddings.projection.weight.dtype
-        if pixel_values.dtype != expected_dtype:
-            pixel_values = pixel_values.to(expected_dtype)
+        # expected_dtype = self.embeddings.patch_embeddings.projection.weight.dtype
+        # if pixel_values.dtype != expected_dtype:
+        #     pixel_values = pixel_values.to(expected_dtype)
 
-        embedding_output = self.embeddings(
-            pixel_values, bool_masked_pos=bool_masked_pos, interpolate_pos_encoding=interpolate_pos_encoding
-        )
+        # embedding_output = self.embeddings(
+        #     pixel_values, bool_masked_pos=bool_masked_pos, interpolate_pos_encoding=interpolate_pos_encoding
+        # )
 
-        encoder_outputs = self.encoder(
-            embedding_output,
-            head_mask=head_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-        sequence_output = encoder_outputs[0]
-        sequence_output = self.layernorm(sequence_output)
-        pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
+        # encoder_outputs = self.encoder( #.hidden_states, .attentions
+        #     embedding_output,
+        #     head_mask=head_mask,
+        #     output_attentions=output_attentions,
+        #     output_hidden_states=output_hidden_states,
+        #     return_dict=return_dict,
+        # )
+        # sequence_output = encoder_outputs[0]#last hidden state
+        # sequence_output = self.layernorm(sequence_output)
+        # pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
-        if not return_dict:
-            head_outputs = (sequence_output, pooled_output) if pooled_output is not None else (sequence_output,)
-            return head_outputs + encoder_outputs[1:]
+        # if not return_dict:
+        #     head_outputs = (sequence_output, pooled_output) if pooled_output is not None else (sequence_output,)
+        #     return head_outputs + encoder_outputs[1:]
+        
+        video_length = pixel_values.size(1)
+        with torch.no_grad():
+            # ---- compute flow ----
+            if pixel_values.size(-1) <= 640: 
+                short_clip_len = 12
+            elif pixel_values.size(-1) <= 720: 
+                short_clip_len = 8
+            elif pixel_values.size(-1) <= 1280:
+                short_clip_len = 4
+            else:
+                short_clip_len = 2
+            
+            # use fp32 for RAFT
+            if pixel_values.size(1) > short_clip_len:
+                gt_flows_f_list, gt_flows_b_list = [], []
+                for f in range(0, video_length, short_clip_len):
+                    end_f = min(video_length, f + short_clip_len)
+                    if f == 0:
+                        flows_f, flows_b = self.optical_flow_model(pixel_values[:,f:end_f], iters=self.config.raft_iter)
+                    else:
+                        flows_f, flows_b = self.optical_flow_model(pixel_values[:,f-1:end_f], iters=self.config.raft_iter)
+                    
+                    gt_flows_f_list.append(flows_f)
+                    gt_flows_b_list.append(flows_b)
+                    torch.cuda.empty_cache()
+                    
+                gt_flows_f = torch.cat(gt_flows_f_list, dim=1)
+                gt_flows_b = torch.cat(gt_flows_b_list, dim=1)
+                gt_flows_bi = (gt_flows_f, gt_flows_b)
+            else:
+                gt_flows_bi = self.optical_flow_model(pixel_values, iters=self.config.raft_iter)
+                torch.cuda.empty_cache()
+
+
+            # if use_half:
+            #     frames, flow_masks, masks_dilated = frames.half(), flow_masks.half(), masks_dilated.half()
+            #     gt_flows_bi = (gt_flows_bi[0].half(), gt_flows_bi[1].half())
+            #     fix_flow_complete = fix_flow_complete.half()
+            #     model = model.half()
+
+            
+            # ---- complete flow ----
+            flow_length = gt_flows_bi[0].size(1)
+            if flow_length > self.config.subvideo_length:
+                pred_flows_f, pred_flows_b = [], []
+                pad_len = 5
+                for f in range(0, flow_length, self.config.subvideo_length):
+                    s_f = max(0, f - pad_len)
+                    e_f = min(flow_length, f + self.config.subvideo_length + pad_len)
+                    pad_len_s = max(0, f) - s_f
+                    pad_len_e = e_f - min(flow_length, f + self.config.subvideo_length)
+                    pred_flows_bi_sub, _ = self.flow_completion_net.forward_bidirect_flow(
+                        (gt_flows_bi[0][:, s_f:e_f], gt_flows_bi[1][:, s_f:e_f]), 
+                        flow_masks[:, s_f:e_f+1])
+                    pred_flows_bi_sub = self.flow_completion_net.combine_flow(
+                        (gt_flows_bi[0][:, s_f:e_f], gt_flows_bi[1][:, s_f:e_f]), 
+                        pred_flows_bi_sub, 
+                        flow_masks[:, s_f:e_f+1])
+
+                    pred_flows_f.append(pred_flows_bi_sub[0][:, pad_len_s:e_f-s_f-pad_len_e])
+                    pred_flows_b.append(pred_flows_bi_sub[1][:, pad_len_s:e_f-s_f-pad_len_e])
+                    torch.cuda.empty_cache()
+                    
+                pred_flows_f = torch.cat(pred_flows_f, dim=1)
+                pred_flows_b = torch.cat(pred_flows_b, dim=1)
+                pred_flows_bi = (pred_flows_f, pred_flows_b)
+            else:
+                pred_flows_bi, _ = self.flow_completion_net.forward_bidirect_flow(gt_flows_bi, flow_masks)
+                pred_flows_bi = self.flow_completion_net.combine_flow(gt_flows_bi, pred_flows_bi, flow_masks)
+                torch.cuda.empty_cache()
+                
+
+            # ---- image propagation ----
+            masked_frames = pixel_values * (1 - masks_dilated)
+            subvideo_length_img_prop = min(100, self.config.subvideo_length) # ensure a minimum of 100 frames for image propagation
+            if video_length > subvideo_length_img_prop:
+                updated_frames, updated_masks = [], []
+                pad_len = 10
+                for f in range(0, video_length, subvideo_length_img_prop):
+                    s_f = max(0, f - pad_len)
+                    e_f = min(video_length, f + subvideo_length_img_prop + pad_len)
+                    pad_len_s = max(0, f) - s_f
+                    pad_len_e = e_f - min(video_length, f + subvideo_length_img_prop)
+
+                    b, t, _, _, _ = masks_dilated[:, s_f:e_f].size()
+                    pred_flows_bi_sub = (pred_flows_bi[0][:, s_f:e_f-1], pred_flows_bi[1][:, s_f:e_f-1])
+                    prop_imgs_sub, updated_local_masks_sub = self.propainter_inpaint_generator.img_propagation(masked_frames[:, s_f:e_f], 
+                                                                        pred_flows_bi_sub, 
+                                                                        masks_dilated[:, s_f:e_f], 
+                                                                        'nearest')
+                    updated_frames_sub = pixel_values[:, s_f:e_f] * (1 - masks_dilated[:, s_f:e_f]) + \
+                                        prop_imgs_sub.view(b, t, 3, h, w) * masks_dilated[:, s_f:e_f]
+                    updated_masks_sub = updated_local_masks_sub.view(b, t, 1, h, w)
+                    
+                    updated_frames.append(updated_frames_sub[:, pad_len_s:e_f-s_f-pad_len_e])
+                    updated_masks.append(updated_masks_sub[:, pad_len_s:e_f-s_f-pad_len_e])
+                    torch.cuda.empty_cache()
+                    
+                updated_frames = torch.cat(updated_frames, dim=1)
+                updated_masks = torch.cat(updated_masks, dim=1)
+            else:
+                b, t, _, _, _ = masks_dilated.size()
+                prop_imgs, updated_local_masks = self.propainter_inpaint_generator.img_propagation(masked_frames, pred_flows_bi, masks_dilated, 'nearest')
+                updated_frames = pixel_values * (1 - masks_dilated) + prop_imgs.view(b, t, 3, h, w) * masks_dilated
+                updated_masks = updated_local_masks.view(b, t, 1, h, w)
+                torch.cuda.empty_cache()
+                
+        
+        ori_frames = pixel_values_inp
+        comp_frames = [None] * video_length
+
+        neighbor_stride = self.config.neighbor_length // 2
+        if video_length > self.config.subvideo_length:
+            ref_num = self.config.subvideo_length // self.config.ref_stride
+        else:
+            ref_num = -1
+        
+        # ---- feature propagation + transformer ----
+        for f in range(0, video_length, neighbor_stride):
+            neighbor_ids = [
+                i for i in range(max(0, f - neighbor_stride),
+                                    min(video_length, f + neighbor_stride + 1))
+            ]
+            ref_ids = self._get_ref_index(f, neighbor_ids, video_length, self.config.ref_stride, ref_num)
+            selected_imgs = updated_frames[:, neighbor_ids + ref_ids, :, :, :]
+            selected_masks = masks_dilated[:, neighbor_ids + ref_ids, :, :, :]
+            selected_update_masks = updated_masks[:, neighbor_ids + ref_ids, :, :, :]
+            selected_pred_flows_bi = (pred_flows_bi[0][:, neighbor_ids[:-1], :, :, :], pred_flows_bi[1][:, neighbor_ids[:-1], :, :, :])
+            
+            with torch.no_grad():
+                # 1.0 indicates mask
+                l_t = len(neighbor_ids)
+                
+                # pred_img = selected_imgs # results of image propagation
+                pred_img = self.propainter_inpaint_generator(selected_imgs, selected_pred_flows_bi, selected_masks, selected_update_masks, l_t)
+                
+                pred_img = pred_img.view(-1, 3, h, w)
+
+                pred_img = (pred_img + 1) / 2
+                pred_img = pred_img.cpu().permute(0, 2, 3, 1).numpy() * 255
+                binary_masks = masks_dilated[0, neighbor_ids, :, :, :].cpu().permute(
+                    0, 2, 3, 1).numpy().astype(np.uint8)
+                for i in range(len(neighbor_ids)):
+                    idx = neighbor_ids[i]
+                    img = np.array(pred_img[i]).astype(np.uint8) * binary_masks[i] \
+                        + ori_frames[idx] * (1 - binary_masks[i])
+                    if comp_frames[idx] is None:
+                        comp_frames[idx] = img
+                    else: 
+                        comp_frames[idx] = comp_frames[idx].astype(np.float32) * 0.5 + img.astype(np.float32) * 0.5
+                        
+                    comp_frames[idx] = comp_frames[idx].astype(np.uint8)
 
         return BaseModelOutput(
-            last_hidden_state=sequence_output,
-            pooler_output=pooled_output,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
+            last_hidden_state=None,
+            hidden_states=None,
+            attentions=None,
         )
 
 
-@add_start_docstrings(
-    """ProPainter Model with a decoder on top for masked image modeling, as proposed in [SimMIM](https://arxiv.org/abs/2111.09886).
+# @add_start_docstrings(
+#     """ProPainter Model with a decoder on top for masked image modeling, as proposed in [SimMIM](https://arxiv.org/abs/2111.09886).
 
-    <Tip>
+#     <Tip>
 
-    Note that we provide a script to pre-train this model on custom data in our [examples
-    directory](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-pretraining).
+#     Note that we provide a script to pre-train this model on custom data in our [examples
+#     directory](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-pretraining).
 
-    </Tip>
-    """,
-    PROPAINTER_START_DOCSTRING,
-)
+#     </Tip>
+#     """,
+#     PROPAINTER_START_DOCSTRING,
+# )
 
-class ProPainterModelForVideoInPainting(ProPainterPreTrainedModel):
-    def __init__(self, config: ProPainterConfig) -> None:
-        super().__init__(config)
+# class ProPainterModelForVideoInPainting(ProPainterPreTrainedModel):
+#     def __init__(self, config: ProPainterConfig) -> None:
+#         super().__init__(config)
 
-        self.propainter = ProPainterModel(config, add_pooling_layer=False, use_mask_token=True)
+#         self.propainter = ProPainterModel(config, add_pooling_layer=False, use_mask_token=True)
 
-        self.decoder = nn.Sequential(
-            nn.Conv2d(
-                in_channels=config.hidden_size,
-                out_channels=config.encoder_stride**2 * config.num_channels,
-                kernel_size=1,
-            ),
-            nn.PixelShuffle(config.encoder_stride),
-        )
+#         self.decoder = nn.Sequential(
+#             nn.Conv2d(
+#                 in_channels=config.hidden_size,
+#                 out_channels=config.encoder_stride**2 * config.num_channels,
+#                 kernel_size=1,
+#             ),
+#             nn.PixelShuffle(config.encoder_stride),
+#         )
 
-        # Initialize weights and apply final processing
-        self.post_init()
+#         # Initialize weights and apply final processing
+#         self.post_init()
 
-    @add_start_docstrings_to_model_forward(PROPAINTER_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_IMAGE_CLASS_CHECKPOINT,
-        output_type=MaskedImageModelingOutput,
-        config_class=_CONFIG_FOR_DOC,
-        expected_output=_EXPECTED_OUTPUT_SHAPE,
-    )
-    @replace_return_docstrings(output_type=MaskedImageModelingOutput, config_class=_CONFIG_FOR_DOC)
-    def forward(
-        self,
-        pixel_values: Optional[torch.Tensor] = None,
-        bool_masked_pos: Optional[torch.BoolTensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        interpolate_pos_encoding: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, MaskedImageModelingOutput]:
-        r"""
-        bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`):
-            Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
+#     @add_start_docstrings_to_model_forward(PROPAINTER_INPUTS_DOCSTRING)
+#     @add_code_sample_docstrings(
+#         checkpoint=_IMAGE_CLASS_CHECKPOINT,
+#         output_type=MaskedImageModelingOutput,
+#         config_class=_CONFIG_FOR_DOC,
+#         expected_output=_EXPECTED_OUTPUT_SHAPE,
+#     )
+#     @replace_return_docstrings(output_type=MaskedImageModelingOutput, config_class=_CONFIG_FOR_DOC)
+#     def forward(
+#         self,
+#         pixel_values: Optional[torch.Tensor] = None,
+#         bool_masked_pos: Optional[torch.BoolTensor] = None,
+#         head_mask: Optional[torch.Tensor] = None,
+#         output_attentions: Optional[bool] = None,
+#         output_hidden_states: Optional[bool] = None,
+#         interpolate_pos_encoding: Optional[bool] = None,
+#         return_dict: Optional[bool] = None,
+#     ) -> Union[tuple, MaskedImageModelingOutput]:
+#         r"""
+#         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`):
+#             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
 
-        Returns:
+#         Returns:
 
-        Examples:
-        ```python
-        >>> from transformers import AutoImageProcessor, ProPainterForMaskedImageModeling
-        >>> import torch
-        >>> from PIL import Image
-        >>> import requests
+#         Examples:
+#         ```python
+#         >>> from transformers import AutoImageProcessor, ProPainterForMaskedImageModeling
+#         >>> import torch
+#         >>> from PIL import Image
+#         >>> import requests
 
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+#         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+#         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = AutoImageProcessor.from_pretrained("ruffy369/propainter")
-        >>> model = ProPainterForMaskedImageModeling.from_pretrained("ruffy369/propainter")
+#         >>> image_processor = AutoImageProcessor.from_pretrained("ruffy369/propainter")
+#         >>> model = ProPainterForMaskedImageModeling.from_pretrained("ruffy369/propainter")
 
-        >>> num_patches = (model.config.image_size // model.config.patch_size) ** 2
-        >>> pixel_values = image_processor(images=image, return_tensors="pt").pixel_values
-        >>> # create random boolean mask of shape (batch_size, num_patches)
-        >>> bool_masked_pos = torch.randint(low=0, high=2, size=(1, num_patches)).bool()
+#         >>> num_patches = (model.config.image_size // model.config.patch_size) ** 2
+#         >>> pixel_values = image_processor(images=image, return_tensors="pt").pixel_values
+#         >>> # create random boolean mask of shape (batch_size, num_patches)
+#         >>> bool_masked_pos = torch.randint(low=0, high=2, size=(1, num_patches)).bool()
 
-        >>> outputs = model(pixel_values, bool_masked_pos=bool_masked_pos)
-        >>> loss, reconstructed_pixel_values = outputs.loss, outputs.reconstruction
-        >>> list(reconstructed_pixel_values.shape)
-        [1, 3, 224, 224]
-        ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+#         >>> outputs = model(pixel_values, bool_masked_pos=bool_masked_pos)
+#         >>> loss, reconstructed_pixel_values = outputs.loss, outputs.reconstruction
+#         >>> list(reconstructed_pixel_values.shape)
+#         [1, 3, 224, 224]
+#         ```"""
+#         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if bool_masked_pos is not None and (self.config.patch_size != self.config.encoder_stride):
-            raise ValueError(
-                "When `bool_masked_pos` is provided, `patch_size` must be equal to `encoder_stride` to ensure that "
-                "the reconstructed image has the same dimensions as the input. "
-                f"Got `patch_size` = {self.config.patch_size} and `encoder_stride` = {self.config.encoder_stride}."
-            )
+#         if bool_masked_pos is not None and (self.config.patch_size != self.config.encoder_stride):
+#             raise ValueError(
+#                 "When `bool_masked_pos` is provided, `patch_size` must be equal to `encoder_stride` to ensure that "
+#                 "the reconstructed image has the same dimensions as the input. "
+#                 f"Got `patch_size` = {self.config.patch_size} and `encoder_stride` = {self.config.encoder_stride}."
+#             )
 
-        outputs = self.propainter(
-            pixel_values,
-            bool_masked_pos=bool_masked_pos,
-            head_mask=head_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            interpolate_pos_encoding=interpolate_pos_encoding,
-            return_dict=return_dict,
-        )
+#         outputs = self.propainter(
+#             pixel_values,
+#             bool_masked_pos=bool_masked_pos,
+#             head_mask=head_mask,
+#             output_attentions=output_attentions,
+#             output_hidden_states=output_hidden_states,
+#             interpolate_pos_encoding=interpolate_pos_encoding,
+#             return_dict=return_dict,
+#         )
 
-        sequence_output = outputs[0]
+#         sequence_output = outputs[0]
 
-        # Reshape to (batch_size, num_channels, height, width)
-        sequence_output = sequence_output[:, 1:]
-        batch_size, sequence_length, num_channels = sequence_output.shape
-        height = width = math.floor(sequence_length**0.5)
-        sequence_output = sequence_output.permute(0, 2, 1).reshape(batch_size, num_channels, height, width)
+#         # Reshape to (batch_size, num_channels, height, width)
+#         sequence_output = sequence_output[:, 1:]
+#         batch_size, sequence_length, num_channels = sequence_output.shape
+#         height = width = math.floor(sequence_length**0.5)
+#         sequence_output = sequence_output.permute(0, 2, 1).reshape(batch_size, num_channels, height, width)
 
-        # Reconstruct pixel values
-        reconstructed_pixel_values = self.decoder(sequence_output)
+#         # Reconstruct pixel values
+#         reconstructed_pixel_values = self.decoder(sequence_output)
 
-        masked_im_loss = None
-        if bool_masked_pos is not None:
-            size = self.config.image_size // self.config.patch_size
-            bool_masked_pos = bool_masked_pos.reshape(-1, size, size)
-            mask = (
-                bool_masked_pos.repeat_interleave(self.config.patch_size, 1)
-                .repeat_interleave(self.config.patch_size, 2)
-                .unsqueeze(1)
-                .contiguous()
-            )
-            reconstruction_loss = nn.functional.l1_loss(pixel_values, reconstructed_pixel_values, reduction="none")
-            masked_im_loss = (reconstruction_loss * mask).sum() / (mask.sum() + 1e-5) / self.config.num_channels
+#         masked_im_loss = None
+#         if bool_masked_pos is not None:
+#             size = self.config.image_size // self.config.patch_size
+#             bool_masked_pos = bool_masked_pos.reshape(-1, size, size)
+#             mask = (
+#                 bool_masked_pos.repeat_interleave(self.config.patch_size, 1)
+#                 .repeat_interleave(self.config.patch_size, 2)
+#                 .unsqueeze(1)
+#                 .contiguous()
+#             )
+#             reconstruction_loss = nn.functional.l1_loss(pixel_values, reconstructed_pixel_values, reduction="none")
+#             masked_im_loss = (reconstruction_loss * mask).sum() / (mask.sum() + 1e-5) / self.config.num_channels
 
-        if not return_dict:
-            output = (reconstructed_pixel_values,) + outputs[1:]
-            return ((masked_im_loss,) + output) if masked_im_loss is not None else output
+#         if not return_dict:
+#             output = (reconstructed_pixel_values,) + outputs[1:]
+#             return ((masked_im_loss,) + output) if masked_im_loss is not None else output
 
-        return MaskedImageModelingOutput(
-            loss=masked_im_loss,
-            reconstruction=reconstructed_pixel_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
+#         return MaskedImageModelingOutput(
+#             loss=masked_im_loss,
+#             reconstruction=reconstructed_pixel_values,
+#             hidden_states=outputs.hidden_states,
+#             attentions=outputs.attentions,
+#         )
 
 
-@add_start_docstrings(
-    """
-    ProPainter Model transformer with an image classification head on top (a linear layer on top of the final hidden state of
-    the [CLS] token) e.g. for ImageNet.
+# @add_start_docstrings(
+#     """
+#     ProPainter Model transformer with an image classification head on top (a linear layer on top of the final hidden state of
+#     the [CLS] token) e.g. for ImageNet.
 
-    <Tip>
+#     <Tip>
 
-        Note that it's possible to fine-tune ProPainter on higher resolution images than the ones it has been trained on, by
-        setting `interpolate_pos_encoding` to `True` in the forward of the model. This will interpolate the pre-trained
-        position embeddings to the higher resolution.
+#         Note that it's possible to fine-tune ProPainter on higher resolution images than the ones it has been trained on, by
+#         setting `interpolate_pos_encoding` to `True` in the forward of the model. This will interpolate the pre-trained
+#         position embeddings to the higher resolution.
 
-    </Tip>
-    """,
-    PROPAINTER_START_DOCSTRING,
-)
-# Copied from transformers.models.vit.modeling_vit.ViTForImageClassification with VIT->PROPAINTER,ViT->ProPainter,vit->propainter
-class ProPainterModelForVideoOutPainting(ProPainterPreTrainedModel):
-    def __init__(self, config: ProPainterConfig) -> None:
-        super().__init__(config)
+#     </Tip>
+#     """,
+#     PROPAINTER_START_DOCSTRING,
+# )
+# # Copied from transformers.models.vit.modeling_vit.ViTForImageClassification with VIT->PROPAINTER,ViT->ProPainter,vit->propainter
+# class ProPainterModelForVideoOutPainting(ProPainterPreTrainedModel):
+#     def __init__(self, config: ProPainterConfig) -> None:
+#         super().__init__(config)
 
-        self.num_labels = config.num_labels
-        self.propainter = ProPainterModel(config, add_pooling_layer=False)
+#         self.num_labels = config.num_labels
+#         self.propainter = ProPainterModel(config, add_pooling_layer=False)
 
-        # Classifier head
-        self.classifier = nn.Linear(config.hidden_size, config.num_labels) if config.num_labels > 0 else nn.Identity()
+#         # Classifier head
+#         self.classifier = nn.Linear(config.hidden_size, config.num_labels) if config.num_labels > 0 else nn.Identity()
 
-        # Initialize weights and apply final processing
-        self.post_init()
+#         # Initialize weights and apply final processing
+#         self.post_init()
 
-    @add_start_docstrings_to_model_forward(PROPAINTER_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_IMAGE_CLASS_CHECKPOINT,
-        output_type=MaskedImageModelingOutput,
-        config_class=_CONFIG_FOR_DOC,
-        expected_output=_EXPECTED_OUTPUT_SHAPE,
-    )
-    def forward(
-        self,
-        pixel_values: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        interpolate_pos_encoding: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, MaskedImageModelingOutput]:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+#     @add_start_docstrings_to_model_forward(PROPAINTER_INPUTS_DOCSTRING)
+#     @add_code_sample_docstrings(
+#         checkpoint=_IMAGE_CLASS_CHECKPOINT,
+#         output_type=MaskedImageModelingOutput,
+#         config_class=_CONFIG_FOR_DOC,
+#         expected_output=_EXPECTED_OUTPUT_SHAPE,
+#     )
+#     def forward(
+#         self,
+#         pixel_values: Optional[torch.Tensor] = None,
+#         head_mask: Optional[torch.Tensor] = None,
+#         labels: Optional[torch.Tensor] = None,
+#         output_attentions: Optional[bool] = None,
+#         output_hidden_states: Optional[bool] = None,
+#         interpolate_pos_encoding: Optional[bool] = None,
+#         return_dict: Optional[bool] = None,
+#     ) -> Union[tuple, MaskedImageModelingOutput]:
+#         r"""
+#         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+#             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
+#             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+#             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+#         """
+#         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.propainter(
-            pixel_values,
-            head_mask=head_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            interpolate_pos_encoding=interpolate_pos_encoding,
-            return_dict=return_dict,
-        )
+#         outputs = self.propainter(
+#             pixel_values,
+#             head_mask=head_mask,
+#             output_attentions=output_attentions,
+#             output_hidden_states=output_hidden_states,
+#             interpolate_pos_encoding=interpolate_pos_encoding,
+#             return_dict=return_dict,
+#         )
 
-        sequence_output = outputs[0]
+#         sequence_output = outputs[0]
 
-        logits = self.classifier(sequence_output[:, 0, :])
+#         logits = self.classifier(sequence_output[:, 0, :])
 
-        loss = None
-        if labels is not None:
-            # move labels to correct device to enable model parallelism
-            labels = labels.to(logits.device)
-            if self.config.problem_type is None:
-                if self.num_labels == 1:
-                    self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
-                    self.config.problem_type = "single_label_classification"
-                else:
-                    self.config.problem_type = "multi_label_classification"
+#         loss = None
+#         if labels is not None:
+#             # move labels to correct device to enable model parallelism
+#             labels = labels.to(logits.device)
+#             if self.config.problem_type is None:
+#                 if self.num_labels == 1:
+#                     self.config.problem_type = "regression"
+#                 elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+#                     self.config.problem_type = "single_label_classification"
+#                 else:
+#                     self.config.problem_type = "multi_label_classification"
 
-            if self.config.problem_type == "regression":
-                loss_fct = MSELoss()
-                if self.num_labels == 1:
-                    loss = loss_fct(logits.squeeze(), labels.squeeze())
-                else:
-                    loss = loss_fct(logits, labels)
-            elif self.config.problem_type == "single_label_classification":
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-            elif self.config.problem_type == "multi_label_classification":
-                loss_fct = BCEWithLogitsLoss()
-                loss = loss_fct(logits, labels)
+#             if self.config.problem_type == "regression":
+#                 loss_fct = MSELoss()
+#                 if self.num_labels == 1:
+#                     loss = loss_fct(logits.squeeze(), labels.squeeze())
+#                 else:
+#                     loss = loss_fct(logits, labels)
+#             elif self.config.problem_type == "single_label_classification":
+#                 loss_fct = CrossEntropyLoss()
+#                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+#             elif self.config.problem_type == "multi_label_classification":
+#                 loss_fct = BCEWithLogitsLoss()
+#                 loss = loss_fct(logits, labels)
 
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return ((loss,) + output) if loss is not None else output
+#         if not return_dict:
+#             output = (logits,) + outputs[1:]
+#             return ((loss,) + output) if loss is not None else output
 
-        return MaskedImageModelingOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
+#         return MaskedImageModelingOutput(
+#             loss=loss,
+#             logits=logits,
+#             hidden_states=outputs.hidden_states,
+#             attentions=outputs.attentions,
+#         )
