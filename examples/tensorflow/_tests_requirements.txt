@@ -14,7 +14,7 @@ streamlit
 elasticsearch
 nltk
 pandas
-datasets >= 1.13.3,<2.20.0 # Temporary upper version
+datasets >= 1.13.3
 fire
 pytest<8.0.1
 conllu

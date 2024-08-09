@@ -317,7 +317,7 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         for model_class in self.all_model_classes:
             check_hidden_states_output(inputs_dict, config, model_class)
 
-    @unittest.skip("No tokens embeddings")
+    @unittest.skip(reason="No tokens embeddings")
     def test_resize_tokens_embeddings(self):
         pass
 

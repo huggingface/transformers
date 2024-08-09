@@ -1602,7 +1602,7 @@ class UdopModel(UdopPreTrainedModel):
 
         >>> # load an example image, along with the words and coordinates
         >>> # which were extracted using an OCR engine
-        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
+        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train", trust_remote_code=True)
         >>> example = dataset[0]
         >>> image = example["image"]
         >>> words = example["tokens"]
@@ -1781,7 +1781,7 @@ class UdopForConditionalGeneration(UdopPreTrainedModel):
 
         >>> # load an example image, along with the words and coordinates
         >>> # which were extracted using an OCR engine
-        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
+        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train", trust_remote_code=True)
         >>> example = dataset[0]
         >>> image = example["image"]
         >>> words = example["tokens"]
@@ -2009,7 +2009,7 @@ class UdopEncoderModel(UdopPreTrainedModel):
 
         >>> # load an example image, along with the words and coordinates
         >>> # which were extracted using an OCR engine
-        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
+        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train", trust_remote_code=True)
         >>> example = dataset[0]
         >>> image = example["image"]
         >>> words = example["tokens"]

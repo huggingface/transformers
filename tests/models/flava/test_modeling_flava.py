@@ -176,8 +176,8 @@ class FlavaImageModelTest(ModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    @unittest.skip("Flava does not use input_ids")
     def test_inputs_embeds(self):
-        # FLAVA does not use inputs_embeds
         pass
 
     def test_model_get_set_embeddings(self):
@@ -300,9 +300,11 @@ class FlavaImageModelTest(ModelTesterMixin, unittest.TestCase):
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
+    @unittest.skip
     def test_training(self):
         pass
 
+    @unittest.skip
     def test_training_gradient_checkpointing(self):
         pass
 
@@ -318,13 +320,13 @@ class FlavaImageModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    # skip this test as FlavaImageModel has no base class and is
-    # not available in MODEL_MAPPING
+    @unittest.skip(reason="FlavaImageModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_from_base(self):
         pass
 
     # skip this test as FlavaImageModel has no base class and is
     # not available in MODEL_MAPPING
+    @unittest.skip(reason="FlavaImageModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_to_base(self):
         pass
 
@@ -459,9 +461,11 @@ class FlavaTextModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    @unittest.skip
     def test_training(self):
         pass
 
+    @unittest.skip
     def test_training_gradient_checkpointing(self):
         pass
 
@@ -477,17 +481,16 @@ class FlavaTextModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
+    @unittest.skip(reason="FLAVA does not use input_embeds")
     def test_inputs_embeds(self):
         # FLAVA does not use inputs_embeds
         pass
 
-    # skip this test as FlavaTextModel has no base class and is
-    # not available in MODEL_MAPPING
+    @unittest.skip(reason="FlavaTextModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_from_base(self):
         pass
 
-    # skip this test as FlavaTextModel has no base class and is
-    # not available in MODEL_MAPPING
+    @unittest.skip(reason="FlavaTextModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_to_base(self):
         pass
 
@@ -619,13 +622,15 @@ class FlavaMultimodalModelTest(ModelTesterMixin, unittest.TestCase):
             expected_arg_names = ["hidden_states"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
 
+    @unittest.skip("FLAVA does not have input embeddings")
     def test_model_get_set_embeddings(self):
-        # No embedding in multimodal model
         pass
 
+    @unittest.skip
     def test_training(self):
         pass
 
+    @unittest.skip
     def test_training_gradient_checkpointing(self):
         pass
 
@@ -641,17 +646,15 @@ class FlavaMultimodalModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
+    @unittest.skip(reason="FLAVA does not use input_embeds")
     def test_inputs_embeds(self):
-        # FLAVA does not use inputs_embeds
         pass
 
-    # skip this test as FlavaMultimodalModel has no base class and is
-    # not available in MODEL_MAPPING
+    @unittest.skip(reason="FlavaMultimodalModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_from_base(self):
         pass
 
-    # skip this test as FlavaMultimodalModel has no base class and is
-    # not available in MODEL_MAPPING
+    @unittest.skip(reason="FlavaMultimodalModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_to_base(self):
         pass
 
@@ -742,20 +745,23 @@ class FlavaImageCodebookTest(ModelTesterMixin, unittest.TestCase):
     def test_attention_outputs(self):
         pass
 
+    @unittest.skip(reason="No embedding in multimodal model")
     def test_model_get_set_embeddings(self):
-        # No embedding in multimodal model
         pass
 
+    @unittest.skip
     def test_training(self):
         pass
 
+    @unittest.skip
     def test_hidden_states_output(self):
         pass
 
+    @unittest.skip(reason="FlavaImageCodebook has no attentions")
     def test_retain_grad_hidden_states_attentions(self):
-        # no attentions
         pass
 
+    @unittest.skip
     def test_training_gradient_checkpointing(self):
         pass
 
@@ -771,20 +777,19 @@ class FlavaImageCodebookTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
+    @unittest.skip(reason="FLAVA does not use input_embeds")
     def test_inputs_embeds(self):
-        # FLAVA does not use inputs_embeds
         pass
 
+    @unittest.skip
     def test_model_outputs_equivalence(self):
         pass
 
-    # skip this test as FlavaImageCodebook has no base class and is
-    # not available in MODEL_MAPPING
+    @unittest.skip(reason="FlavaImageCodebook has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_from_base(self):
         pass
 
-    # skip this test as FlavaImageCodebook has no base class and is
-    # not available in MODEL_MAPPING
+    @unittest.skip(reason="FlavaImageCodebook has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_to_base(self):
         pass
 
@@ -931,19 +936,19 @@ class FlavaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    # hidden_states are tested in individual model tests
+    @unittest.skip(reason="tested in individual model tests")
     def test_hidden_states_output(self):
         pass
 
-    # input_embeds are tested in individual model tests
+    @unittest.skip(reason="tested in individual model tests")
     def test_inputs_embeds(self):
         pass
 
-    # tested in individual model tests
+    @unittest.skip(reason="tested in individual model tests")
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
-    # FlavaModel does not have input/output embeddings
+    @unittest.skip(reason="FlavaModel does not have input/output embeddings")
     def test_model_get_set_embeddings(self):
         pass
 
@@ -973,7 +978,7 @@ class FlavaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:
-            return
+            self.skipTest(reason="test_torchscript is set to False")
 
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
         configs_no_init.torchscript = True

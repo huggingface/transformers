@@ -41,6 +41,7 @@ class LayoutLMv3ImageProcessingTester(unittest.TestCase):
         size=None,
         apply_ocr=True,
     ):
+        super().__init__()
         size = size if size is not None else {"height": 18, "width": 18}
         self.parent = parent
         self.batch_size = batch_size
@@ -102,7 +103,7 @@ class LayoutLMv3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
 
         from datasets import load_dataset
 
-        ds = load_dataset("hf-internal-testing/fixtures_docvqa", split="test")
+        ds = load_dataset("hf-internal-testing/fixtures_docvqa", split="test", trust_remote_code=True)
 
         image = Image.open(ds[0]["file"]).convert("RGB")
 

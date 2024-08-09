@@ -126,12 +126,9 @@ class VideoLlavaPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["VideoLlavaVisionAttention"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
-    _no_split_modules = ["VideoLlavaVisionAttention"]
+    _supports_cache_class = True
 
     def _init_weights(self, module):
-        # important: this ported version of VideoLlava isn't meant for training from scratch - only
-        # inference and fine-tuning - so the proper init weights code has been removed - the original codebase
-        # https://github.com/haotian-liu/LLaVA/tree/main/video_llava should serve for that purpose
         std = (
             self.config.initializer_range
             if hasattr(self.config, "initializer_range")
@@ -460,7 +457,7 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
         >>> model = VideoLlavaForConditionalGeneration.from_pretrained("LanguageBind/Video-LLaVA-7B-hf")
         >>> processor = VideoLlavaProcessor.from_pretrained("LanguageBind/Video-LLaVA-7B-hf")
 
-        >>> prompt = "USER: <video>Why is this video funny? ASSISTANT:"
+        >>> prompt = "USER: <video>\nWhy is this video funny? ASSISTANT:"
         >>> video_path = hf_hub_download(repo_id="raushan-testing-hf/videos-test", filename="sample_demo_1.mp4", repo_type="dataset")
         >>> container = av.open(video_path)
 
@@ -480,8 +477,8 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
         >>> prompt = [
-        ...     "USER: <image> How many cats do you see? ASSISTANT:",
-        ...     "USER: <video>Why is this video funny? ASSISTANT:"
+        ...     "USER: <image>\nHow many cats do you see? ASSISTANT:",
+        ...     "USER: <video>\nWhy is this video funny? ASSISTANT:"
         ... ]
         >>> inputs = processor(text=prompt, images=image, videos=clip, padding=True, return_tensors="pt")
 

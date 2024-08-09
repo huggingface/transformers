@@ -269,7 +269,7 @@ class RwkvModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     pipeline_model_mapping = (
         {"feature-extraction": RwkvModel, "text-generation": RwkvForCausalLM} if is_torch_available() else {}
     )
-    # all_generative_model_classes = (RwkvForCausalLM,) if is_torch_available() else ()
+    all_generative_model_classes = (RwkvForCausalLM,) if is_torch_available() else ()
     fx_compatible = False
     test_missing_keys = False
     test_model_parallel = False
@@ -421,6 +421,52 @@ class RwkvModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         model_name = "RWKV/rwkv-4-169m-pile"
         model = RwkvModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
+
+    def test_beam_sample_generate_dict_output(self):
+        # This model has a custom attention output shape AND config flags, let's skip those checks
+        old_has_attentions = self.has_attentions
+        self.has_attentions = False
+        super().test_beam_sample_generate_dict_output()
+        self.has_attentions = old_has_attentions
+
+    def test_beam_search_generate_dict_output(self):
+        # This model has a custom attention output shape AND config flags, let's skip those checks
+        old_has_attentions = self.has_attentions
+        self.has_attentions = False
+        super().test_beam_search_generate_dict_output()
+        self.has_attentions = old_has_attentions
+
+    def test_constrained_beam_search_generate_dict_output(self):
+        # This model has a custom attention output shape AND config flags, let's skip those checks
+        old_has_attentions = self.has_attentions
+        self.has_attentions = False
+        super().test_constrained_beam_search_generate_dict_output()
+        self.has_attentions = old_has_attentions
+
+    def test_greedy_generate_dict_outputs(self):
+        # This model has a custom attention output shape AND config flags, let's skip those checks
+        old_has_attentions = self.has_attentions
+        self.has_attentions = False
+        super().test_greedy_generate_dict_outputs()
+        self.has_attentions = old_has_attentions
+
+    def test_group_beam_search_generate_dict_output(self):
+        # This model has a custom attention output shape AND config flags, let's skip those checks
+        old_has_attentions = self.has_attentions
+        self.has_attentions = False
+        super().test_group_beam_search_generate_dict_output()
+        self.has_attentions = old_has_attentions
+
+    def test_sample_generate_dict_output(self):
+        # This model has a custom attention output shape AND config flags, let's skip those checks
+        old_has_attentions = self.has_attentions
+        self.has_attentions = False
+        super().test_sample_generate_dict_output()
+        self.has_attentions = old_has_attentions
+
+    @unittest.skip("This model doesn't support padding")
+    def test_left_padding_compatibility(self):
+        pass
 
 
 @unittest.skipIf(

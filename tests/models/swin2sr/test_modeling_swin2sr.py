@@ -175,15 +175,16 @@ class Swin2SRModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     def setUp(self):
         self.model_tester = Swin2SRModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Swin2SRConfig, embed_dim=37)
+        self.config_tester = ConfigTester(
+            self,
+            config_class=Swin2SRConfig,
+            embed_dim=37,
+            has_text_modality=False,
+            common_properties=["image_size", "patch_size", "num_channels"],
+        )
 
     def test_config(self):
-        self.config_tester.create_and_test_config_to_json_string()
-        self.config_tester.create_and_test_config_to_json_file()
-        self.config_tester.create_and_test_config_from_and_save_pretrained()
-        self.config_tester.create_and_test_config_with_num_labels()
-        self.config_tester.check_config_can_be_init_without_params()
-        self.config_tester.check_config_arguments_init()
+        self.config_tester.run_common_tests()
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -330,5 +331,26 @@ class Swin2SRModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.reconstruction.shape, expected_shape)
         expected_slice = torch.tensor(
             [[0.5458, 0.5546, 0.5638], [0.5526, 0.5565, 0.5651], [0.5396, 0.5426, 0.5621]]
+        ).to(torch_device)
+        self.assertTrue(torch.allclose(outputs.reconstruction[0, 0, :3, :3], expected_slice, atol=1e-4))
+
+    def test_inference_fp16(self):
+        processor = Swin2SRImageProcessor()
+        model = Swin2SRForImageSuperResolution.from_pretrained(
+            "caidas/swin2SR-classical-sr-x2-64", torch_dtype=torch.float16
+        ).to(torch_device)
+
+        image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+        inputs = processor(images=image, return_tensors="pt").to(model.dtype).to(torch_device)
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(**inputs)
+
+        # verify the logits
+        expected_shape = torch.Size([1, 3, 976, 1296])
+        self.assertEqual(outputs.reconstruction.shape, expected_shape)
+        expected_slice = torch.tensor(
+            [[0.5454, 0.5542, 0.5640], [0.5518, 0.5562, 0.5649], [0.5391, 0.5425, 0.5620]], dtype=model.dtype
         ).to(torch_device)
         self.assertTrue(torch.allclose(outputs.reconstruction[0, 0, :3, :3], expected_slice, atol=1e-4))
