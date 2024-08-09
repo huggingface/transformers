@@ -763,6 +763,7 @@ class InputTokenTrackingCallback(TrainerCallback, ExportableState):
 
     def add_inputs(self, inputs, device):
         import torch
+
         self.num_input_tokens_seen += (
             torch.sum(
                 self.accelerator.gather(
