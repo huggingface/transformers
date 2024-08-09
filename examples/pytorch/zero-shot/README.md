@@ -71,7 +71,8 @@ python run_zero_shot_object_detection.py \
 `--eval_do_concat_batches false` is required for correct evaluation of detection models;  
 `--ignore_mismatched_sizes true` is required to load detection model for finetuning with different number of classes.
 
-The resulting model can be seen here: https://huggingface.co/danelcsb/grounding-dino-tiny-finetuned-10k-cppe-5-10k-steps. The corresponding Weights and Biases report [here](https://api.wandb.ai/links/qubvel-hf-co/bnm0r5ex). Note that it's always advised to check the original paper to know the details regarding training hyperparameters. Hyperparameters for current example were not tuned. To improve model quality you could try:
+The resulting model can be seen here: https://huggingface.co/danelcsb/grounding-dino-tiny-finetuned-10k-cppe-5-10k-steps.. Note that it's always advised to check the original paper to know the details regarding training hyperparameters. Hyperparameters for current example were not tuned. To improve model quality you could try:
+ - changing freeze policy of image backbone and text backbone
  - changing image size parameters (`--shortest_edge`/`--longest_edge`)
  - changing training parameters, such as learning rate, batch size, warmup, optimizer and many more (see [TrainingArguments](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments))
  - adding more image augmentations (we created a helpful [HF Space](https://huggingface.co/spaces/qubvel-hf/albumentations-demo) to choose some)
@@ -79,22 +80,27 @@ The resulting model can be seen here: https://huggingface.co/danelcsb/grounding-
 Note that you can replace the model and dataset by simply setting the `model_name_or_path` and `dataset_name` arguments respectively, with model or dataset from the [hub](https://huggingface.co/). 
 For dataset, make sure it provides labels in the same format as [CPPE-5](https://huggingface.co/datasets/cppe-5) dataset and boxes are provided in [COCO format](https://albumentations.ai/docs/getting_started/bounding_boxes_augmentation/#coco).
 
-Note that zero-shot inference output is not the same output format as object-detection output. In order to compute the evaluation metric performance, we have to modify the output little bit.
+Note that zero-shot inference output is not the same output format as object-detection output. In order to compute the evaluation metric performance such as mean average precision, we have to modify the output little bit.
 
-| Train method | Batch size | freeze_text_backbone | freeze_backbone | precision | GPU Memory Usage |
-|--------------|------------|----------------------|-----------------|-----------|------------------|
-| trainer      | 1          | Y                    | Y               | fp16      | 14.839 GB        |
-| trainer      | 2          | Y                    | Y               | fp16      | 21.889 GB        |
-| trainer      | 1          | Y                    | Y               | fp32      | 16.301GB         |
-| no_trainer   | 1          | Y                    | Y               | fp32      | 20.949 GB        |
-| no_trainer   | 1          | Y                    | N               | fp32      | 21.691 GB        |
-| no_trainer   | 1          | N                    | N               | fp32      | 22.577 GB        |
+| Train method | Batch size | freeze_text_backbone | freeze_backbone | precision | MSDA kernels | GPU Memory Usage (GB) | Time (s/epoch) |
+|--------------|------------|----------------------|-----------------|-----------|--------------|-----------------------|----------------|
+| trainer      | 2          | Y                    | Y               | fp16      | Y            | 22.785                | 353            |
+| trainer      | 1          | Y                    | Y               | fp32      | Y            | 8.813                 | 429            |
+| no_trainer   | 2          | N                    | N               | fp32      | Y            | OOM                   | -              |
+| no_trainer   | 1          | N                    | N               | fp32      | N            | 20.441                | 724            |
+| no_trainer   | 1          | N                    | N               | fp32      | Y            | 11.243                | 473            |
+| no_trainer   | 1          | Y                    | Y               | fp32      | Y            | 11.539                | 386            |
+
+Above table is tested on following device.
+- Platform: Linux-5.4.0-167-generic-x86_64-with-glibc2.35
+- GPU type: NVIDIA TITAN RTX
+- PyTorch version (GPU): 2.2.2
 
 ## PyTorch version, no Trainer
 
 Based on the script [`run_zero_shot_object_detection_no_trainer.py`](https://github.com/huggingface/transformers/blob/main/examples/pytorch/object-detection/run_zero_shot_object_detection.py).
 
-The script leverages [🤗 `Accelerate`](https://github.com/huggingface/accelerate), which allows to write your own training loop in PyTorch, but have it run instantly on any (distributed) environment, including CPU, multi-CPU, GPU, multi-GPU and TPU. It also supports mixed precision.
+The script leverages [🤗 `Accelerate`](https://github.com/huggingface/accelerate), which allows to write your own training loop in PyTorch, but have it run instantly on any (distributed) environment, including CPU, multi-CPU, GPU, multi-GPU and TPU. It also supports mixed precision. However, currently multi-GPU evaluation is not working due to following [issue](https://github.com/Lightning-AI/torchmetrics/issues/2477).
 
 First, run:
 
