@@ -128,7 +128,7 @@ But, hey, that's what makes art, art, right? (laughs)
 이 튜토리얼의 후반부에서는 성능과 메모리 관리, 
 그리고 사용자의 필요에 맞는 채팅 모델 선택과 같은 구체적인 주제들을 다룰 것입니다.
 
-## 채팅 모델 고르기[[Choosing a chat model]]
+## 채팅 모델 고르기[[choosing-a-chat-model]]
 
 [Hugging Face Hub](https://huggingface.co/models?pipeline_tag=text-generation&sort=trending)는 채팅 모델을 다양하게 제공하고 있습니다.
 처음 사용하는 사람에게는 모델을 선택하기가 어려울지 모릅니다.
@@ -140,7 +140,7 @@ But, hey, that's what makes art, art, right? (laughs)
 위의 둘을 서로 밀접하게 연관되어 있습니다. - 모델의 크기가 클수록 보통 더 좋은 성능을 보이지만, 
 크기가 같은 모델끼리도 유의미한 차이가 날 수 있습니다!
 
-### 모델의 명칭과 크기[[Size and model naming]]
+### 모델의 명칭과 크기[[size-and-model-naming]]
 
 모델의 크기는 모델 이름에 있는 숫자로 쉽게 알 수 있습니다. 
 예를 들어, "8B" 또는 "70B"와 같은 숫자는 모델의 **파라미터** 수를 나타냅니다. 
@@ -156,7 +156,7 @@ But, hey, that's what makes art, art, right? (laughs)
 양자화는 파라미터당 메모리 사용량을 8비트, 4비트, 또는 그 이하로 줄이는 데 사용됩니다. 
 이 주제에 대해서는 아래의 [메모리 고려사항](#memory-considerations) 챕터에서 더 자세히 다룰 예정입니다.
 
-### 그럼 어떤 채팅 모델이 최고야?[[But which chat model is best?]]
+### 그럼 어떤 채팅 모델이 최고야?[[but-which-chat-model-is-best?]]
 모델의 크기 외에도 고려할 점이 많습니다. 
 이를 한눈에 살펴보려면 **리더보드**를 참고하는 것이 좋습니다. 
 가장 인기 있는 리더보드 두 가지는 [OpenLLM Leaderboard](https://huggingface.co/spaces/HuggingFaceH4/open_llm_leaderboard)와 [LMSys Chatbot Arena Leaderboard](https://chat.lmsys.org/?leaderboard)입니다. 
@@ -164,7 +164,7 @@ LMSys 리더보드에는 독점 모델도 포함되어 있으니,
 `license` 열에서 접근 가능한 모델을 선택한 후
 [Hugging Face Hub](https://huggingface.co/models?pipeline_tag=text-generation&sort=trending)에서 검색해 보세요.
 
-### 전문 분야[[Specialist domains]]
+### 전문 분야[[specialist-domains]]
 일부 모델은 의료 또는 법률 텍스트와 같은 특정 도메인이나 비영어권 언어에 특화되어 있기도 합니다. 
 이러한 도메인에서 작업할 경우 특화된 모델이 좋은 성능을 보일 수 있습니다. 
 하지만 항상 그럴 것이라 단정하기는 힘듭니다. 
@@ -173,7 +173,7 @@ LMSys 리더보드에는 독점 모델도 포함되어 있으니,
 다행히도 [domain-specific leaderboards](https://huggingface.co/blog/leaderboard-medicalllm)가 점차 등장하고 있어, 특정 도메인에 최고의 모델을 쉽게 찾을 수 있을 것입니다. 
 
 
-## 파이프라인 내부는 어떻게 되어있는가?[[What happens inside the pipeline?]]
+## 파이프라인 내부는 어떻게 되어있는가?[[what-happens-inside-the-pipeline?]]
 위의 빠른 시작에서는 고수준(High-Level) 파이프라인을 사용하였습니다.
 이는 간편한 방법이지만, 유연성은 떨어집니다.
 이제 더 저수준(Low-Level) 접근 방식을 통해 대화에 포함된 각 단계를 살펴보겠습니다. 
@@ -221,12 +221,12 @@ print("Decoded output:\n", decoded_output)
 4. 모델에서 응답을 [생성](https://huggingface.co/docs/transformers/en/llm_tutorial)합니다.
 5. 모델이 출력한 토큰을 다시 문자열로 디코딩합니다.
 
-## 성능, 메모리와 하드웨어[[Performance, memory and hardware]]
+## 성능, 메모리와 하드웨어[[performance,-memory-and-hardware]]
 이제 대부분의 머신 러닝 작업이 GPU에서 실행된다는 것을 아실 겁니다. 
 다소 느리기는 해도 CPU에서 채팅 모델이나 언어 모델로부터 텍스트를 생성하는 것도 가능합니다. 
 하지만 모델을 GPU 메모리에 올려놓을 수만 있다면, GPU를 사용하는 것이 일반적으로 더 선호되는 방식입니다.
 
-### 메모리 고려사항[[Memory considerations]]
+### 메모리 고려사항[[memory-considerations]]
 
 기본적으로, [`TextGenerationPipeline`]이나 [`AutoModelForCausalLM`]과 같은 
 Hugging Face 클래스는 모델을 `float32` 정밀도(Precision)로 로드합니다. 
@@ -265,7 +265,7 @@ pipe = pipeline("text-generation", "meta-llama/Meta-Llama-3-8B-Instruct", device
 자세한 내용은 [Quantization guide](./quantization)를 참조해 주세요.
 
 
-### 성능 고려사항[[Performance considerations]]
+### 성능 고려사항[[performance-considerations]]
 
 <Tip>
 
