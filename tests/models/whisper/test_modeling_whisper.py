@@ -2268,6 +2268,65 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
 
     @slow
+    def test_tiny_longform_timestamps_generation(self):
+        set_seed(0)
+        processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
+        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
+        model.to(torch_device)
+
+        dataset = load_dataset("distil-whisper/librispeech_long", "clean", split="validation")
+        sample = dataset[0]["audio"]
+
+        input_features = processor(
+            sample["array"], return_tensors="pt", truncation=False, sampling_rate=sample["sampling_rate"]
+        )
+        input_features = input_features.to(torch_device)
+
+        generated_ids = model.generate(**input_features, return_timestamps=True, return_segments=True)
+
+        EXPECTED_TRANSCRIPT = [
+            {
+                "text": " Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel.",
+                "timestamp": (0.0, 6.5600000000000005),
+            },
+            {
+                "text": " Nor is Mr. Quilter's manner less interesting than his matter.",
+                "timestamp": (6.5600000000000005, 11.24),
+            },
+            {
+                "text": " He tells us that at this festive season of the year, with Christmas and roast beef looming",
+                "timestamp": (11.24, 16.88),
+            },
+            {
+                "text": " before us, similarly drawn from eating and its results occur most readily to the mind.",
+                "timestamp": (16.88, 23.76),
+            },
+            {
+                "text": " He has grave doubts whether Sir Frederick Latins' work is really Greek after all, and",
+                "timestamp": (23.76, 29.44),
+            },
+            {"text": " can discover in it but little of rocky ithaka.", "timestamp": (29.44, 33.72)},
+            {
+                "text": " Lennils, pictures, are a sort of upguards and atom paintings, and Mason's exquisite itals",
+                "timestamp": (33.72, 40.32),
+            },
+            {"text": " are as national as a jingo poem.", "timestamp": (40.32, 44.72)},
+            {
+                "text": " Mr. Birkut Foster's landscapes smile at one much in the same way that Mr. Carker used",
+                "timestamp": (44.72, 50.4),
+            },
+            {"text": " to flash his teeth.", "timestamp": (50.4, 52.96)},
+            {
+                "text": " And Mr. John Collier gives his sitter a cheerful slap on the back before he says, like",
+                "timestamp": (52.96, 58.68),
+            },
+            {"text": " a shampoo and a Turkish bath next man.", "timestamp": (58.68, 61.96)},
+        ]
+
+        transcript = processor.batch_decode(generated_ids["sequences"], skip_special_tokens=True, output_offsets=True)
+        self.assertEqual(transcript[0]["offsets"], EXPECTED_TRANSCRIPT)
+
+    @slow
     def test_large_timestamp_generation(self):
         set_seed(0)
         processor = WhisperProcessor.from_pretrained("openai/whisper-large-v3")
