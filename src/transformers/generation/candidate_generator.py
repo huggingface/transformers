@@ -119,6 +119,10 @@ class AssistedCandidateGenerator(CandidateGenerator):
                     value.detach().to(device) if isinstance(value, torch.Tensor) else copy.deepcopy(value)
                 )
 
+        # Remove potential default "num_logits_to_keep" key
+        if "num_logits_to_keep" in assistant_kwargs.keys() and not assistant_model._supports_num_logits_to_keep():
+            del assistant_kwargs["num_logits_to_keep"]
+
         if "assistant_encoder_outputs" in model_kwargs:
             assistant_kwargs["encoder_outputs"] = model_kwargs["assistant_encoder_outputs"]
         elif assistant_model.config.is_encoder_decoder:
