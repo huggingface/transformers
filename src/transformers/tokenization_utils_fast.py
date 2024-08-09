@@ -705,74 +705,99 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             `text_iterator`.
 
         """
-        tokenizer_json = self._tokenizer
+        tokenizer_json = json.loads(self._tokenizer.to_str())
         # Remove added tokens for now (uses IDs of tokens)
-        added_tokens = tokenizer_json.get_added_tokens_decoder()
+        added_tokens = tokenizer_json.pop("added_tokens")
         # Remove post processor for now (uses IDs of tokens)
-        post_processor = tokenizer_json.post_processor
+        post_processor = tokenizer_json.pop("post_processor")
 
         unk_token = None
         # Remove vocab
-        model_type = str(tokenizer_json.model.__class__.__name__)
-        if model_type == "BPE":
-            tokenizer_json.model.vocab = {}
-            tokenizer_json.model.merges = []
-            kwargs["continuing_subword_prefix"] = tokenizer_json.mode.continuing_subword_prefix
-            kwargs["end_of_word_suffix"] = tokenizer_json.mode.end_of_word_suffix
-        elif model_type == "Unigram":
-            if False and tokenizer_json.model.unk_id is not None:
-                unk_token = "<unk>"
+        if tokenizer_json["model"]["type"] == "BPE":
+            tokenizer_json["model"]["vocab"] = {}
+            tokenizer_json["model"]["merges"] = []
+        elif tokenizer_json["model"]["type"] == "Unigram":
+            if tokenizer_json["model"]["unk_id"] is not None:
+                unk_id = tokenizer_json["model"]["unk_id"]
+                unk_token = tokenizer_json["model"]["vocab"][unk_id][0]
                 if special_tokens_map is not None and unk_token in special_tokens_map:
                     unk_token = special_tokens_map[unk_token]
-                tokenizer_json.model.unk_id = 0
-                tokenizer_json.model.vocab = [[unk_token, 0.0]]
-                kwargs["unk_token"] = unk_token
-        elif model_type in ["WordLevel", "WordPiece"]:
-            tokenizer_json.model.vocab = {}
+                tokenizer_json["model"]["unk_id"] = 0
+                tokenizer_json["model"]["vocab"] = [[unk_token, 0.0]]
+        elif tokenizer_json["model"]["type"] in ["WordLevel", "WordPiece"]:
+            tokenizer_json["model"]["vocab"] = {}
         else:
             raise ValueError(
-                f"This method does not support this type of tokenizer (found {model_type}) "
+                f"This method does not support this type of tokenizer (found {tokenizer_json['model']['type']}) "
                 "only BPE, Unigram, WordLevel and WordPiece."
             )
 
+        if (
+            special_tokens_map is not None
+            and "unk_token" in tokenizer_json["model"]
+            and tokenizer_json["model"]["unk_token"] in special_tokens_map
+        ):
+            tokenizer_json["model"]["unk_token"] = special_tokens_map[tokenizer_json["model"]["unk_token"]]
+
+        tokenizer = TokenizerFast.from_str(json.dumps(tokenizer_json))
+
         # Get the special tokens from the current tokenizer if none are specified.
         special_tokens = []
-        for (id, added_token) in added_tokens.items():
-            special = added_token.special
-            if model_type!= "Unigram" and not special:
+        for added_token in added_tokens:
+            special = added_token.pop("special", None)
+            _ = added_token.pop("id", None)
+            if tokenizer_json["model"]["type"] != "Unigram" and not special:
                 continue
-            if special_tokens_map is not None and added_token.content in special_tokens_map:
-                added_token.content = special_tokens_map[added_token.content]
-            special_tokens.append(added_token)
+            if special_tokens_map is not None and added_token["content"] in special_tokens_map:
+                added_token["content"] = special_tokens_map[added_token["content"]]
+            special_tokens.append(AddedToken(**added_token))
 
         if new_special_tokens is not None:
             special_tokens.extend(new_special_tokens)
 
-        if tokenizer_json.pre_tokenizer is not None and model_type == "ByteLevel":
-            kwargs["initial_alphabet"] = tokenizer_json.pre_tokenizer.alphabet()
+        # Trainer needs to know the end of word / continuing subword thingies in BPE
+        if (
+            tokenizer_json["model"]["type"] == "BPE"
+            and "continuing_subword_prefix" not in kwargs
+            and tokenizer_json["model"]["continuing_subword_prefix"] is not None
+        ):
+            kwargs["continuing_subword_prefix"] = tokenizer_json["model"]["continuing_subword_prefix"]
+        if (
+            tokenizer_json["model"]["type"] == "BPE"
+            and "end_of_word_suffix" not in kwargs
+            and tokenizer_json["model"]["end_of_word_suffix"] is not None
+        ):
+            kwargs["end_of_word_suffix"] = tokenizer_json["model"]["end_of_word_suffix"]
+        if tokenizer_json["model"]["type"] == "Unigram" and unk_token is not None:
+            kwargs["unk_token"] = unk_token
+        if tokenizer_json["pre_tokenizer"] is not None and tokenizer_json["pre_tokenizer"]["type"] == "ByteLevel":
+            kwargs["initial_alphabet"] = pre_tokenizers_fast.ByteLevel.alphabet()
 
-        trainer_class = MODEL_TO_TRAINER_MAPPING[model_type]
+        trainer_class = MODEL_TO_TRAINER_MAPPING[tokenizer_json["model"]["type"]]
         trainer = trainer_class(vocab_size=vocab_size, special_tokens=special_tokens, **kwargs)
-        tokenizer_json.train_from_iterator(text_iterator, length=length, trainer=trainer)
+        tokenizer.train_from_iterator(text_iterator, length=length, trainer=trainer)
 
         if post_processor is not None:
-            if hasattr(post_processor, "special_tokens"):
-                for key in post_processor.special_tokens:
-                    tokens = post_processor.special_tokens.key.tokens
+            trained_tokenizer_json = json.loads(tokenizer.to_str())
+            # Almost done, we just have to adjust the token IDs in the post processor
+            if "special_tokens" in post_processor:
+                for key in post_processor["special_tokens"]:
+                    tokens = post_processor["special_tokens"][key]["tokens"]
                     if special_tokens_map is not None:
                         tokens = [special_tokens_map.get(token, token) for token in tokens]
-                    post_processor.special_tokens.key.tokens = tokens
-                    post_processor.special_tokens.key.ids = [tokenizer_json.token_to_id(token) for token in tokens]
+                    post_processor["special_tokens"][key]["tokens"] = tokens
+                    post_processor["special_tokens"][key]["ids"] = [tokenizer.token_to_id(token) for token in tokens]
 
             for special_token in ["cls", "sep"]:
                 if special_token in post_processor:
                     token, _ = post_processor[special_token]
                     if special_tokens_map is not None and token in special_tokens_map:
                         token = special_tokens_map[token]
-                    token_id = tokenizer_json.token_to_id(token)
+                    token_id = tokenizer.token_to_id(token)
                     post_processor[special_token] = [token, token_id]
 
-            tokenizer_json.post_processor = post_processor
+            trained_tokenizer_json["post_processor"] = post_processor
+            tokenizer = TokenizerFast.from_str(json.dumps(trained_tokenizer_json))
 
         kwargs = self.init_kwargs.copy()
         # Map pad/cls/mask token at the Transformers level
