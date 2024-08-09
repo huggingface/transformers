@@ -19,6 +19,7 @@ import unittest
 from transformers import AutoModelForCausalLM, AutoTokenizer, TorchAoConfig
 from transformers.testing_utils import (
     require_torch_gpu,
+    require_torch_multi_gpu,
     require_torchao,
     torch_device,
 )
@@ -31,23 +32,6 @@ if is_torch_available():
 if is_torchao_available():
     from torchao.dtypes import AffineQuantizedTensor
     from torchao.dtypes.affine_quantized_tensor import TensorCoreTiledLayoutType
-
-
-class TorchAoLLMRunner:
-    def __init__(self, model_id, quant_config, compute_dtype, device):
-        self.model = AutoModelForCausalLM.from_pretrained(
-            model_id,
-            torch_dtype=compute_dtype,
-            device_map=device,
-            quantization_config=quant_config,
-        )
-        self.tokenizer = AutoTokenizer.from_pretrained(model_id)
-        self.device = self.model.device
-
-
-def cleanup():
-    torch.cuda.empty_cache()
-    gc.collect()
 
 
 def check_torchao_quantized(test_module, qlayer, batch_size=1, context_size=1024):
@@ -64,10 +48,6 @@ def check_forward(test_module, model, batch_size=1, context_size=1024):
         out = model(torch.zeros([batch_size, context_size], device=model.device, dtype=torch.int32)).logits
     test_module.assertEqual(out.shape[0], batch_size)
     test_module.assertEqual(out.shape[1], context_size)
-    cleanup()
-
-
-MODEL_ID = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
 
 
 @require_torch_gpu
@@ -98,21 +78,39 @@ class TorchAoConfigTest(unittest.TestCase):
 @require_torch_gpu
 @require_torchao
 class TorchAoTest(unittest.TestCase):
-    def tearDown(self):
-        cleanup()
+    input_text = "What are we having for dinner?"
+    max_new_tokens = 10
 
-    def test_int4wo_quan(self):
+    EXPECTED_OUTPUT = "What are we having for dinner?\n- 1. What is the temperature outside"
+
+    model_name = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+
+    def tearDown(self):
+        gc.collect()
+        torch.cuda.empty_cache()
+        gc.collect()
+
+    def test_int4wo_quant(self):
         """
         Simple LLM model testing int4 weight only quantization
         """
         quant_config = TorchAoConfig("int4_weight_only", group_size=32)
 
         # Note: we quantize the bfloat16 model on the fly to int4
-        torchao_runner = TorchAoLLMRunner(
-            model_id=MODEL_ID, quant_config=quant_config, compute_dtype=torch.bfloat16, device=torch_device
+        quantized_model = AutoModelForCausalLM.from_pretrained(
+            self.model_name,
+            torch_dtype=torch.bfloat16,
+            device_map=torch_device,
+            quantization_config=quant_config,
         )
+        tokenizer = AutoTokenizer.from_pretrained(self.model_name)
 
-        check_torchao_quantized(self, torchao_runner.model.model.layers[0].self_attn.v_proj)
+        check_torchao_quantized(self, quantized_model.model.layers[0].self_attn.v_proj)
+
+        input_ids = tokenizer(self.input_text, return_tensors="pt").to(torch_device)
+
+        output = quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
+        self.assertEqual(tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
     def test_int4wo_quant_bfloat16_conversion(self):
         """
@@ -121,11 +119,94 @@ class TorchAoTest(unittest.TestCase):
         quant_config = TorchAoConfig("int4_weight_only", group_size=32)
 
         # Note: we quantize the bfloat16 model on the fly to int4
-        torchao_runner = TorchAoLLMRunner(
-            model_id=MODEL_ID, quant_config=quant_config, compute_dtype=None, device=torch_device
+        quantized_model = AutoModelForCausalLM.from_pretrained(
+            self.model_name,
+            torch_dtype=None,
+            device_map=torch_device,
+            quantization_config=quant_config,
         )
+        tokenizer = AutoTokenizer.from_pretrained(self.model_name)
 
-        check_torchao_quantized(self, torchao_runner.model.model.layers[0].self_attn.v_proj)
+        check_torchao_quantized(self, quantized_model.model.layers[0].self_attn.v_proj)
+
+        input_ids = tokenizer(self.input_text, return_tensors="pt").to(torch_device)
+
+        output = quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
+        self.assertEqual(tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+
+    @require_torch_multi_gpu
+    def test_int4wo_quant_multi_gpu(self):
+        """
+        Simple test that checks if the quantized model int4 wieght only is working properly with multiple GPUs
+        set CUDA_VISIBLE_DEVICES=0,1 if you have more than 2 GPUS
+        """
+
+        quant_config = TorchAoConfig("int4_weight_only", group_size=32)
+        quantized_model = AutoModelForCausalLM.from_pretrained(
+            self.model_name,
+            torch_dtype=torch.bfloat16,
+            device_map="auto",
+            quantization_config=quant_config,
+        )
+        tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+
+        self.assertTrue(set(quantized_model.hf_device_map.values()) == {0, 1})
+
+        input_ids = tokenizer(self.input_text, return_tensors="pt").to(torch_device)
+
+        output = quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
+        self.assertEqual(tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+
+    def test_int4wo_offload(self):
+        """
+        Simple test that checks if the quantized model int4 wieght only is working properly with cpu/disk offload
+        """
+
+        device_map_offload = {
+            "model.embed_tokens": 0,
+            "model.layers.0": 0,
+            "model.layers.1": 0,
+            "model.layers.2": 0,
+            "model.layers.3": 0,
+            "model.layers.4": 0,
+            "model.layers.5": 0,
+            "model.layers.6": 0,
+            "model.layers.7": 0,
+            "model.layers.8": 0,
+            "model.layers.9": 0,
+            "model.layers.10": 0,
+            "model.layers.11": 0,
+            "model.layers.12": 0,
+            "model.layers.13": 0,
+            "model.layers.14": 0,
+            "model.layers.15": 0,
+            "model.layers.16": 0,
+            "model.layers.17": 0,
+            "model.layers.18": 0,
+            "model.layers.19": "cpu",
+            "model.layers.20": "cpu",
+            "model.layers.21": "disk",
+            "model.norm": 0,
+            "model.rotary_emb": 0,
+            "lm_head": 0,
+        }
+
+        quant_config = TorchAoConfig("int4_weight_only", group_size=32)
+
+        quantized_model = AutoModelForCausalLM.from_pretrained(
+            self.model_name,
+            torch_dtype=torch.bfloat16,
+            device_map=device_map_offload,
+            quantization_config=quant_config,
+        )
+        tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+
+        input_ids = tokenizer(self.input_text, return_tensors="pt").to(torch_device)
+
+        output = quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
+        EXPECTED_OUTPUT = "What are we having for dinner?\n- 2. What is the temperature outside"
+
+        self.assertEqual(tokenizer.decode(output[0], skip_special_tokens=True), EXPECTED_OUTPUT)
 
 
 if __name__ == "__main__":

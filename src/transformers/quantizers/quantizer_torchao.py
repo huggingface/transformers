@@ -11,7 +11,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import TYPE_CHECKING
+import importlib
+from typing import TYPE_CHECKING, Union
+
+from packaging import version
 
 from .base import HfQuantizer
 from .quantizers_utils import get_module_from_name
@@ -57,9 +60,21 @@ class TorchAoHfQuantizer(HfQuantizer):
     def __init__(self, quantization_config, **kwargs):
         super().__init__(quantization_config, **kwargs)
 
-    def validate_environment(self, device_map, **kwargs):
+    def validate_environment(self, *args, **kwargs):
         if not is_torchao_available():
             raise ImportError("Loading an torchao quantized model requires torchao library (`pip install torchao`)")
+
+        self.offload = False
+        device_map = kwargs.get("device_map", None)
+        if isinstance(device_map, dict):
+            if "cpu" in device_map.values() or "disk" in device_map.values():
+                if self.pre_quantized:
+                    raise ValueError(
+                        "You are attempting to perform cpu/disk offload with a pre-quantized torchao model "
+                        "This is not supported yet . Please remove the CPU or disk device from the device_map."
+                    )
+                else:
+                    self.offload = True
 
     def update_torch_dtype(self, torch_dtype):
         if self.quantization_config.quant_type == "int4_weight_only":
@@ -73,6 +88,28 @@ class TorchAoHfQuantizer(HfQuantizer):
                 )
                 torch_dtype = torch.bfloat16
         return torch_dtype
+
+    def adjust_target_dtype(self, target_dtype: "torch.dtype") -> "torch.dtype":
+        if version.parse(importlib.metadata.version("accelerate")) > version.parse("0.19.0"):
+            from accelerate.utils import CustomDtype
+
+            map_to_target_dtype = {
+                "int4_weight_only": CustomDtype.INT4,
+                "int8_weight_only": torch.int8,
+                "int8_dynamic_activation_int8_weight": torch.int8,
+            }
+            return map_to_target_dtype[self.quantization_config.quant_type]
+        else:
+            raise ValueError(
+                "You are using `device_map='auto'` on a torchao quantized model. To automatically compute"
+                " the appropriate device map, you should upgrade your `accelerate` library with "
+                "`pip install --upgrade accelerate`"
+            )
+
+    def adjust_max_memory(self, max_memory: Dict[str, Union[int, str]]) -> Dict[str, Union[int, str]]:
+        # need more space for the quantization parameters (e.g. scale). Tested with int4 wo and group size = 128
+        max_memory = {key: val * 0.9 for key, val in max_memory.items()}
+        return max_memory
 
     def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
         from ..integrations import get_keys_to_not_convert
@@ -92,8 +129,12 @@ class TorchAoHfQuantizer(HfQuantizer):
         state_dict: Dict[str, Any],
         **kwargs,
     ) -> bool:
+        param_device = kwargs.pop("param_device", None)
         # check if the param_name is not in self.modules_to_not_convert
         if any((key + "." in param_name) or (key == param_name) for key in self.modules_to_not_convert):
+            return False
+        elif param_device == "cpu" and self.offload:
+            # if we have offload, we don't quantize the weight since we can't put it to the quantized weight to the meta device
             return False
         else:
             # we only quantize the weight of nn.Linear
