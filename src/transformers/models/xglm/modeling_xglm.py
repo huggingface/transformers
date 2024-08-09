@@ -799,7 +799,7 @@ class XGLMForCausalLM(XGLMPreTrainedModel):
         )
 
     def prepare_inputs_for_generation(
-        self, input_ids, past_key_values=None, attention_mask=None, use_cache=None, **kwargs
+        self, input_ids, past_key_values=None, attention_mask=None, use_cache=None, inputs_embeds=None, **kwargs
     ):
         if past_key_values is not None:
             past_length = past_key_values[0][0].shape[2]
@@ -826,13 +826,21 @@ class XGLMForCausalLM(XGLMPreTrainedModel):
             if attention_mask is None:
                 attention_mask = input_ids.new_ones(input_ids.shape)
         # first step, decoder_cached_states are empty
-        return {
-            "input_ids": input_ids,  # encoder_outputs is defined. input_ids not needed
-            "attention_mask": attention_mask,
-            "position_ids": position_ids,
-            "past_key_values": past_key_values,
-            "use_cache": use_cache,
-        }
+        if inputs_embeds is not None and past_key_values is None:
+            model_inputs = {"inputs_embeds": inputs_embeds}
+        else:
+            model_inputs = {"input_ids": input_ids}
+
+        model_inputs.update(
+            {
+                "attention_mask": attention_mask,
+                "position_ids": position_ids,
+                "past_key_values": past_key_values,
+                "use_cache": use_cache,
+            }
+        )
+
+        return model_inputs
 
     @staticmethod
     def _reorder_cache(past_key_values, beam_idx):
