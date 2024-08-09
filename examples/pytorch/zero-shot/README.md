@@ -16,7 +16,7 @@ limitations under the License.
 
 # Object detection examples
 
-This directory contains 2 scripts that showcase how to fine-tune any model supported by the [`AutoModelForObjectDetection` API](https://huggingface.co/docs/transformers/main/en/model_doc/auto#transformers.AutoModelForObjectDetection) (such as [DETR](https://huggingface.co/docs/transformers/main/en/model_doc/detr), [DETA](https://huggingface.co/docs/transformers/main/en/model_doc/deta), [Deformable DETR](https://huggingface.co/docs/transformers/main/en/model_doc/deformable_detr)) using PyTorch.
+This directory contains 2 scripts that showcase how to fine-tune any model supported by the [`GroundingDinoForObjectDetection` API](https://huggingface.co/docs/transformers/main/en/model_doc/grounding-dino#transformers.GroundingDinoForObjectDetection) using PyTorch.
 
 Content:
 * [PyTorch version, Trainer](#pytorch-version-trainer)
@@ -27,31 +27,33 @@ Content:
 
 ## PyTorch version, Trainer
 
-Based on the script [`run_object_detection.py`](https://github.com/huggingface/transformers/blob/main/examples/pytorch/object-detection/run_object_detection.py).
+Based on the script [`run_zero_shot_object_detection.py`](https://github.com/huggingface/transformers/blob/main/examples/pytorch/zero-shot/run_zero_shot_object_detection.py).
 
 The script leverages the [🤗 Trainer API](https://huggingface.co/docs/transformers/main_classes/trainer) to automatically take care of the training for you, running on distributed environments right away.
 
-Here we show how to fine-tune a [DETR](https://huggingface.co/facebook/detr-resnet-50) model on the [CPPE-5](https://huggingface.co/datasets/cppe-5) dataset:
+Here we show how to fine-tune a [GroundingDino](https://huggingface.co/IDEA-Research/grounding-dino-tiny) model on the [CPPE-5](https://huggingface.co/datasets/cppe-5) dataset:
 
 ```bash
-python run_object_detection.py \
-    --model_name_or_path facebook/detr-resnet-50 \
+python run_zero_shot_object_detection.py \
+    --model_name_or_path IDEA-Research/grounding-dino-tiny \
     --dataset_name cppe-5 \
     --do_train true \
     --do_eval true \
-    --output_dir detr-finetuned-cppe-5-10k-steps \
-    --num_train_epochs 100 \
+    --output_dir grounding-dino-tiny-finetuned-cppe-5-10k-steps \
+    --num_train_epochs 10 \
     --image_square_size 600 \
     --fp16 true \
     --learning_rate 5e-5 \
     --weight_decay 1e-4 \
     --dataloader_num_workers 4 \
     --dataloader_prefetch_factor 2 \
-    --per_device_train_batch_size 8 \
+    --per_device_train_batch_size 1 \
+    --per_device_eval_batch_size 1 \
     --gradient_accumulation_steps 1 \
     --remove_unused_columns false \
     --eval_do_concat_batches false \
     --ignore_mismatched_sizes true \
+    --include_inputs_for_metrics true \
     --metric_for_best_model eval_map \
     --greater_is_better true \
     --load_best_model_at_end true \
@@ -60,7 +62,7 @@ python run_object_detection.py \
     --save_strategy epoch \
     --save_total_limit 2 \
     --push_to_hub true \
-    --push_to_hub_model_id detr-finetuned-cppe-5-10k-steps \
+    --push_to_hub_model_id grounding-dino-tiny-finetuned-cppe-5-10k-steps \
     --hub_strategy end \
     --seed 1337
 ```
@@ -69,7 +71,8 @@ python run_object_detection.py \
 `--eval_do_concat_batches false` is required for correct evaluation of detection models;  
 `--ignore_mismatched_sizes true` is required to load detection model for finetuning with different number of classes.
 
-The resulting model can be seen here: https://huggingface.co/qubvel-hf/detr-resnet-50-finetuned-10k-cppe5. The corresponding Weights and Biases report [here](https://api.wandb.ai/links/qubvel-hf-co/bnm0r5ex). Note that it's always advised to check the original paper to know the details regarding training hyperparameters. Hyperparameters for current example were not tuned. To improve model quality you could try:
+The resulting model can be seen here: https://huggingface.co/danelcsb/grounding-dino-tiny-finetuned-10k-cppe-5-10k-steps.. Note that it's always advised to check the original paper to know the details regarding training hyperparameters. Hyperparameters for current example were not tuned. To improve model quality you could try:
+ - changing freeze policy of image backbone and text backbone
  - changing image size parameters (`--shortest_edge`/`--longest_edge`)
  - changing training parameters, such as learning rate, batch size, warmup, optimizer and many more (see [TrainingArguments](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments))
  - adding more image augmentations (we created a helpful [HF Space](https://huggingface.co/spaces/qubvel-hf/albumentations-demo) to choose some)
@@ -77,14 +80,27 @@ The resulting model can be seen here: https://huggingface.co/qubvel-hf/detr-resn
 Note that you can replace the model and dataset by simply setting the `model_name_or_path` and `dataset_name` arguments respectively, with model or dataset from the [hub](https://huggingface.co/). 
 For dataset, make sure it provides labels in the same format as [CPPE-5](https://huggingface.co/datasets/cppe-5) dataset and boxes are provided in [COCO format](https://albumentations.ai/docs/getting_started/bounding_boxes_augmentation/#coco).
 
-![W&B report](https://i.imgur.com/ASNjamQ.png)
+Note that zero-shot inference output is not the same output format as object-detection output. In order to compute the evaluation metric performance such as mean average precision, we have to modify the output little bit.
 
+| Train method | Batch size | freeze_text_backbone | freeze_backbone | precision | MSDA kernels | GPU Memory Usage (GB) | Time (s/epoch) |
+|--------------|------------|----------------------|-----------------|-----------|--------------|-----------------------|----------------|
+| trainer      | 2          | Y                    | Y               | fp16      | Y            | 22.785                | 353            |
+| trainer      | 1          | Y                    | Y               | fp32      | Y            | 8.813                 | 429            |
+| no_trainer   | 2          | N                    | N               | fp32      | Y            | OOM                   | -              |
+| no_trainer   | 1          | N                    | N               | fp32      | N            | 20.441                | 724            |
+| no_trainer   | 1          | N                    | N               | fp32      | Y            | 11.243                | 473            |
+| no_trainer   | 1          | Y                    | Y               | fp32      | Y            | 11.539                | 386            |
+
+Above table is tested on following device.
+- Platform: Linux-5.4.0-167-generic-x86_64-with-glibc2.35
+- GPU type: NVIDIA TITAN RTX
+- PyTorch version (GPU): 2.2.2
 
 ## PyTorch version, no Trainer
 
-Based on the script [`run_object_detection_no_trainer.py`](https://github.com/huggingface/transformers/blob/main/examples/pytorch/object-detection/run_object_detection.py).
+Based on the script [`run_zero_shot_object_detection_no_trainer.py`](https://github.com/huggingface/transformers/blob/main/examples/pytorch/object-detection/run_zero_shot_object_detection.py).
 
-The script leverages [🤗 `Accelerate`](https://github.com/huggingface/accelerate), which allows to write your own training loop in PyTorch, but have it run instantly on any (distributed) environment, including CPU, multi-CPU, GPU, multi-GPU and TPU. It also supports mixed precision.
+The script leverages [🤗 `Accelerate`](https://github.com/huggingface/accelerate), which allows to write your own training loop in PyTorch, but have it run instantly on any (distributed) environment, including CPU, multi-CPU, GPU, multi-GPU and TPU. It also supports mixed precision. However, currently multi-GPU evaluation is not working due to following [issue](https://github.com/Lightning-AI/torchmetrics/issues/2477).
 
 First, run:
 
@@ -101,24 +117,26 @@ accelerate test
 that will check everything is ready for training. Finally, you can launch training with
 
 ```bash
-accelerate launch run_object_detection_no_trainer.py \
-    --model_name_or_path "facebook/detr-resnet-50" \
+accelerate launch run_zero_shot_object_detection_no_trainer.py \
+    --model_name_or_path "IDEA-Research/grounding-dino-tiny" \
     --dataset_name cppe-5 \
-    --output_dir "detr-resnet-50-finetuned" \
-    --num_train_epochs 100 \
+    --output_dir "grounding-dino-tiny-finetuned-cppe-5-10k-steps-no-trainer" \
+    --num_train_epochs 10 \
     --image_square_size 600 \
-    --per_device_train_batch_size 8 \
-    --per_device_eval_batch_size 8 \
+    --per_device_train_batch_size 1 \
+    --per_device_eval_batch_size 1 \
     --checkpointing_steps epoch \
     --learning_rate 5e-5 \
     --ignore_mismatched_sizes \
     --with_tracking \
-    --push_to_hub
+    --push_to_hub \
+    --freeze_backbone \
+    --freeze_text_backbone
 ```
 
 and boom, you're training, possibly on multiple GPUs, logging everything to all trackers found in your environment (like Weights and Biases, Tensorboard) and regularly pushing your model to the hub (with the repo name being equal to `args.output_dir` at your HF username) 🤗
 
-With the default settings, the script fine-tunes a [DETR](https://huggingface.co/facebook/detr-resnet-50) model on the [CPPE-5](https://huggingface.co/datasets/cppe-5) dataset. The resulting model can be seen here: https://huggingface.co/qubvel-hf/detr-resnet-50-finetuned-10k-cppe5-no-trainer. 
+With the default settings, the script fine-tunes a [GroundingDino](https://huggingface.co/IDEA-Research/grounding-dino-tiny) model on the [CPPE-5](https://huggingface.co/datasets/cppe-5) dataset. The resulting model can be seen here: https://huggingface.co/danelcsb/grounding-dino-tiny-finetuned-10k-cppe-5-no-trainer. 
 
 
 ## Reload and perform inference
@@ -130,20 +148,21 @@ import requests
 import torch
 
 from PIL import Image
-from transformers import AutoImageProcessor, AutoModelForObjectDetection
+from transformers import AutoProcessor, AutoModelForZeroShotObjectDetection
 
 # Name of repo on the hub or path to a local folder
-model_name = "qubvel-hf/detr-resnet-50-finetuned-10k-cppe5"
+model_name = "danelcsb/grounding-dino-tiny-finetuned-10k-cppe5"
 
-image_processor = AutoImageProcessor.from_pretrained(model_name)
-model = AutoModelForObjectDetection.from_pretrained(model_name)
+image_processor = AutoProcessor.from_pretrained(model_name)
+model = AutoModelForZeroShotObjectDetection.from_pretrained(model_name)
 
 # Load image for inference
 url = "https://images.pexels.com/photos/8413299/pexels-photo-8413299.jpeg?auto=compress&cs=tinysrgb&w=630&h=375&dpr=2"
 image = Image.open(requests.get(url, stream=True).raw)
+text = "Coverall. Face_Shield. Gloves. Goggles. Mask"
 
 # Prepare image for the model
-inputs = image_processor(images=image, return_tensors="pt")
+inputs = image_processor(images=image, text=text, return_tensors="pt")
 
 with torch.no_grad():
     outputs = model(**inputs)
@@ -152,7 +171,7 @@ with torch.no_grad():
 # this include conversion to Pascal VOC format and filtering non confident boxes
 width, height = image.size
 target_sizes = torch.tensor([height, width]).unsqueeze(0)  # add batch dim
-results = image_processor.post_process_object_detection(outputs, threshold=0.5, target_sizes=target_sizes)[0]
+results = processor.post_process_grounded_object_detection(outputs, inputs.input_ids, box_threshold=0.15, text_threshold=0.1, target_sizes=target_sizes)[0]
 
 for score, label, box in zip(results["scores"], results["labels"], results["boxes"]):
     box = [round(i, 2) for i in box.tolist()]
