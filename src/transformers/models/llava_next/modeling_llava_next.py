@@ -231,7 +231,6 @@ class LlavaNextPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["LlavaNextVisionAttention"]
     _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn_2 = True
     _is_composite = True
     _supports_cache_class = True
 
