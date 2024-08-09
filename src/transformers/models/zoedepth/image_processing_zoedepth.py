@@ -453,8 +453,8 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
     def post_process_depth_estimation(
         self,
         outputs,
-        source_sizes: Union[torch.Tensor, List[Tuple[int, int]]],
-        target_sizes: Optional[Union[torch.Tensor, List[Tuple[int, int]], None]] = None,
+        source_sizes: Union[TensorType, List[Tuple[int, int]]],
+        target_sizes: Optional[Union[TensorType, List[Tuple[int, int]], None]] = None,
         outputs_flip=None,
         remove_padding: Optional[Union[bool, None]] = None,
         vmin_perc: Optional[float] = 1.0,
@@ -472,10 +472,10 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
                 Raw outputs of the model.
             outputs_flip ([`ZoeDepthDepthEstimatorOutput`], *optional*):
                 Raw outputs of the model from flipped input (averaged out in the end).
-            source_sizes (`torch.Tensor` or `List[Tuple[int, int]]`):
+            source_sizes (`TensorType` or `List[Tuple[int, int]]`):
                 Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the source size
                 (height, width) of each image in the batch before preprocessing.
-            target_sizes (`torch.Tensor` or `List[Tuple[int, int]]`, *optional*):
+            target_sizes (`TensorType` or `List[Tuple[int, int]]`, *optional*):
                 Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size
                 (height, width) of each image in the batch. If left to None, predictions will not be resized.
             remove_padding (`bool`, *optional*):

@@ -471,7 +471,7 @@ class DPTImageProcessor(BaseImageProcessor):
     def post_process_depth_estimation(
         self,
         outputs,
-        target_sizes: Optional[Union[torch.Tensor, List[Tuple[int, int]], None]] = None,
+        target_sizes: Optional[Union[TensorType, List[Tuple[int, int]], None]] = None,
         vmin_perc: Optional[float] = 1.0,
         vmax_perc: Optional[float] = 99.0,
         cmap: Optional[str] = "gray_r",
@@ -485,7 +485,7 @@ class DPTImageProcessor(BaseImageProcessor):
         Args:
             outputs ([`DepthEstimatorOutput`]):
                 Raw outputs of the model.
-            target_sizes (`torch.Tensor` or `List[Tuple[int, int]]`, *optional*):
+            target_sizes (`TensorType` or `List[Tuple[int, int]]`, *optional*):
                 Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size (height,
                 width) of each image in the batch. If left to None, predictions will not be resized.
             remove_padding (`bool`, *optional*):
