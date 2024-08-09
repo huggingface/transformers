@@ -22,7 +22,13 @@
 
 from transformers import PretrainedConfig
 
+from ...utils import (
+    logging,
+)
 from ..auto import CONFIG_MAPPING
+
+
+logger = logging.get_logger(__name__)
 
 
 class LlavaNextVideoConfig(PretrainedConfig):
@@ -62,6 +68,10 @@ class LlavaNextVideoConfig(PretrainedConfig):
             Pooling mode to use for videos. Can be "average", "max" or "conv".
         spatial_pool_stride (`int`, *optional*, defaults to 2):
             Stride used in the pooling layer for videos.
+        image_seq_length (`int`, *optional*, defaults to 576):
+            Sequence length of one image embedding.
+        video_seq_length (`int`, *optional*, defaults to 288):
+            Sequence length of one video embedding.
 
     Example:
 
@@ -99,11 +109,15 @@ class LlavaNextVideoConfig(PretrainedConfig):
         video_token_index=32000,
         spatial_pool_mode="average",
         spatial_pool_stride=2,
+        image_seq_length=576,
+        video_seq_length=288,
         **kwargs,
     ):
         self.video_token_index = video_token_index
         self.spatial_pool_mode = spatial_pool_mode
         self.spatial_pool_stride = spatial_pool_stride
+        self.image_seq_length = image_seq_length
+        self.video_seq_length = video_seq_length
         self.ignore_index = ignore_index
         self.image_token_index = image_token_index
         self.projector_hidden_act = projector_hidden_act

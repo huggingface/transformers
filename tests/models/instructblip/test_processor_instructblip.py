@@ -119,7 +119,7 @@ class InstructBlipProcessorTest(unittest.TestCase):
             tokenizer=tokenizer, image_processor=image_processor, qformer_tokenizer=qformer_tokenizer
         )
 
-        input_str = "lower newer"
+        input_str = ["lower newer"]
 
         encoded_processor = processor(text=input_str)
 

@@ -19,10 +19,13 @@ Processor class for VideoLlava.
 from typing import List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput
+from ...image_utils import ImageInput, get_image_size, to_numpy_array
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
-from ...utils import TensorType
+from ...utils import TensorType, logging
+
+
+logger = logging.get_logger(__name__)
 
 
 class VideoLlavaProcessor(ProcessorMixin):
@@ -37,16 +40,39 @@ class VideoLlavaProcessor(ProcessorMixin):
             The image processor is a required input.
         tokenizer ([`LlamaTokenizerFast`], *optional*):
             The tokenizer is a required input.
+        patch_size (`int`, *optional*):
+            Patch size from the vision tower.
+        vision_feature_select_strategy (`str`, *optional*):
+            The feature selection strategy used to select the vision feature from the vision backbone.
+            Shoudl be same as in model's config
+        image_token (`str`, *optional*, defaults to `"<image>"`):
+            Special token used to denote image location.
+        video_token (`str`, *optional*, defaults to `"<video>"`):
+            Special token used to denote video location.
         chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
             in a chat into a tokenizable string.
     """
 
     attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = ["chat_template"]
+    valid_kwargs = ["chat_template", "patch_size", "vision_feature_select_strategy", "image_token", "video_token"]
     image_processor_class = "VideoLlavaImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
-    def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
+    def __init__(
+        self,
+        image_processor=None,
+        tokenizer=None,
+        patch_size=None,
+        vision_feature_select_strategy=None,
+        image_token="<image>",  # set the default and let users change if they have peculiar special tokens in rare cases
+        video_token="<video>",
+        chat_template=None,
+        **kwargs,
+    ):
+        self.patch_size = patch_size
+        self.vision_feature_select_strategy = vision_feature_select_strategy
+        self.image_token = image_token
+        self.video_token = video_token
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     def __call__(
@@ -114,8 +140,46 @@ class VideoLlavaProcessor(ProcessorMixin):
             encoded_images = self.image_processor(images=images, videos=videos, return_tensors=return_tensors)
             data.update(encoded_images)
 
+        if isinstance(text, str):
+            text = [text]
+        elif not isinstance(text, list) and not isinstance(text[0], str):
+            raise ValueError("Invalid input text. Please provide a string, or a list of strings")
+
+        if encoded_images is not None and self.patch_size is None or self.vision_feature_select_strategy is None:
+            prompt_strings = text
+            logger.warning_once(
+                "Expanding inputs for image tokens in Video-LLaVa should be done in processing. "
+                "Please add `patch_size` and `vision_feature_select_strategy` to the model's processing config or set directly "
+                "with `processor.patch_size = {{patch_size}}` and processor.vision_feature_select_strategy = {{vision_feature_select_strategy}}`. "
+                "Using processors without these attributes in the config is deprecated and will throw an error in v4.44."
+            )
+        elif encoded_images is not None:
+            # Replace the image token with the expanded image token sequence
+            if "pixel_values" in encoded_images:
+                height, width = get_image_size(to_numpy_array(encoded_images.get("pixel_values")[0]))
+                num_frames = 1
+            else:
+                one_video = to_numpy_array(encoded_images.get("pixel_values_videos")[0])
+                height, width = get_image_size(one_video[0])
+                num_frames = one_video.shape[0]  # frame dim is always after batch dim
+
+            num_image_tokens = (height // self.patch_size) * (width // self.patch_size) + 1
+            num_video_tokens = num_image_tokens * num_frames
+            if self.vision_feature_select_strategy == "default":
+                num_image_tokens -= 1
+
+            prompt_strings = []
+            for sample in text:
+                sample = sample.replace(self.image_token, self.image_token * num_image_tokens)
+                sample = sample.replace(self.video_token, self.video_token * num_video_tokens)
+                prompt_strings.append(sample)
+
         text_inputs = self.tokenizer(
-            text, return_tensors=return_tensors, padding=padding, truncation=truncation, max_length=max_length
+            prompt_strings,
+            return_tensors=return_tensors,
+            padding=padding,
+            truncation=truncation,
+            max_length=max_length,
         )
         data.update(text_inputs)
 
