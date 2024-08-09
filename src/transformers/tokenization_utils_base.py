@@ -842,6 +842,9 @@ class SpecialTokensMixin:
         "pad_token",
         "cls_token",
         "mask_token",
+        "image_token",
+        "boi_token",
+        "eoi_token",
         "additional_special_tokens",
     ]
 
@@ -853,6 +856,9 @@ class SpecialTokensMixin:
         self._pad_token = None
         self._cls_token = None
         self._mask_token = None
+        self._image_token = None
+        self._boi_token = None
+        self._eoi_token = None
         self._pad_token_type_id = 0
         self._additional_special_tokens = []
         self.verbose = verbose
@@ -1119,6 +1125,44 @@ class SpecialTokensMixin:
         return str(self._mask_token)
 
     @property
+    def image_token(self) -> str:
+        """
+        `str`: Image token, to use with Vision-Language Models. Placeholder for image embeddings and
+        will be used to merge image embeds with language-model embeds. Log an error if used while not having been set.
+        """
+        if self._image_token is None:
+            if self.verbose:
+                logger.error("Using image_token, but it is not set yet.")
+            return None
+        return str(self._image_token)
+
+    @property
+    def boi_token(self) -> str:
+        """
+        `str`: BOI token, to use if a Vision-Language Model has a special beginning-of-image token
+        to separate image tokens from language tokens. Log an error if used while not
+        having been set.
+        """
+        if self._boi_token is None:
+            if self.verbose:
+                logger.error("Using boi_token, but it is not set yet.")
+            return None
+        return str(self._boi_token)
+
+    @property
+    def eoi_token(self) -> str:
+        """
+        `str`: EOI token, to use if a Vision-Language Model has a special end-of-image token
+        to separate image tokens from language tokens. Log an error if used while not
+        having been set.
+        """
+        if self._eoi_token is None:
+            if self.verbose:
+                logger.error("Using eoi_token, but it is not set yet.")
+            return None
+        return str(self._eoi_token)
+
+    @property
     def additional_special_tokens(self) -> List[str]:
         """
         `List[str]`: All the additional special tokens you may want to use. Log an error if used while not having been
@@ -1171,6 +1215,24 @@ class SpecialTokensMixin:
         if not isinstance(value, (str, AddedToken)) and value is not None:
             raise ValueError("Cannot set a non-string value as the MASK token")
         self._mask_token = value
+
+    @image_token.setter
+    def image_token(self, value):
+        if not isinstance(value, (str, AddedToken)) and value is not None:
+            raise ValueError("Cannot set a non-string value as the IMAGE token")
+        self._image_token = value
+
+    @boi_token.setter
+    def boi_token(self, value):
+        if not isinstance(value, (str, AddedToken)) and value is not None:
+            raise ValueError("Cannot set a non-string value as the BOI token")
+        self._boi_token = value
+
+    @eoi_token.setter
+    def eoi_token(self, value):
+        if not isinstance(value, (str, AddedToken)) and value is not None:
+            raise ValueError("Cannot set a non-string value as the EOI token")
+        self._eoi_token = value
 
     @additional_special_tokens.setter
     def additional_special_tokens(self, value):
@@ -1254,6 +1316,37 @@ class SpecialTokensMixin:
         return self.convert_tokens_to_ids(self.mask_token)
 
     @property
+    def image_token_id(self) -> Optional[int]:
+        """
+        `Optional[int]`: Id of the image token in the vocabulary, used with Vision-Language Models.
+        Placeholder for image embeddings and will be used to merge image embeds with language-model embeds.
+        Returns `None` if the token has not been set.
+        """
+        if self._image_token is None:
+            return None
+        return self.convert_tokens_to_ids(self.image_token)
+
+    @property
+    def boi_token_id(self) -> Optional[int]:
+        """
+        `Optional[int]`: Id of the boi token in the vocabulary, used if a Vision-Language Model has a special
+        beginning-of-image token to separate image tokens from language tokens. Returns `None` if the token has not been set.
+        """
+        if self._boi_token is None:
+            return None
+        return self.convert_tokens_to_ids(self.boi_token)
+
+    @property
+    def eoi_token_id(self) -> Optional[int]:
+        """
+        `Optional[int]`: Id of the eoi token in the vocabulary, used if a Vision-Language Model has a special end-of-image token
+        to separate image tokens from language tokens. Returns `None` if the token has not been set.
+        """
+        if self._eoi_token is None:
+            return None
+        return self.convert_tokens_to_ids(self.eoi_token)
+
+    @property
     def additional_special_tokens_ids(self) -> List[int]:
         """
         `List[int]`: Ids of all the additional special tokens in the vocabulary. Log an error if used while not having
@@ -1288,6 +1381,18 @@ class SpecialTokensMixin:
     @mask_token_id.setter
     def mask_token_id(self, value):
         self._mask_token = self.convert_ids_to_tokens(value) if value is not None else None
+
+    @image_token_id.setter
+    def image_token_id(self, value):
+        self._image_token = self.convert_ids_to_tokens(value) if value is not None else None
+
+    @boi_token_id.setter
+    def boi_token_id(self, value):
+        self._boi_token = self.convert_ids_to_tokens(value) if value is not None else None
+
+    @eoi_token_id.setter
+    def eoi_token_id(self, value):
+        self._eoi_token = self.convert_ids_to_tokens(value) if value is not None else None
 
     @additional_special_tokens_ids.setter
     def additional_special_tokens_ids(self, values):
