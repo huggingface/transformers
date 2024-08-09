@@ -114,7 +114,7 @@ class TFTrainingArguments(TrainingArguments):
             Whether to log and evaluate the first `global_step` or not.
         logging_steps (`int`, *optional*, defaults to 500):
             Number of update steps between two logs if `logging_strategy="steps"`.
-        save_strategy (`str` or [`~trainer_utils.IntervalStrategy`], *optional*, defaults to `"steps"`):
+        save_strategy (`str` or [`~trainer_utils.SaveStrategy`], *optional*, defaults to `"steps"`):
             The checkpoint save strategy to adopt during training. Possible values are:
 
                 - `"no"`: No save is done during training.
