@@ -18,16 +18,11 @@ Image/Text processor class for ALIGN
 
 from typing import List, Union
 
-
-try:
-    from typing import Unpack
-except ImportError:
-    from typing_extensions import Unpack
-
 from ...image_utils import ImageInput
 from ...processing_utils import (
     ProcessingKwargs,
     ProcessorMixin,
+    Unpack,
 )
 from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
 

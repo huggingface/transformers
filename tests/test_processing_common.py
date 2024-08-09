@@ -46,7 +46,6 @@ if is_vision_available():
 
 @require_torch
 @require_vision
-@require_torch
 class ProcessorTesterMixin:
     processor_class = None
 
@@ -60,7 +59,10 @@ class ProcessorTesterMixin:
             component_class_name = component_class_name[0]
 
         component_class = processor_class_from_name(component_class_name)
-        component = component_class.from_pretrained(self.tmpdirname, **kwargs)  # noqa
+        if hasattr(self, "tmpdirname"):
+            component = component_class.from_pretrained(self.tmpdirname, **kwargs)  # noqa
+        elif hasattr(self, "model_id"):
+            component = component_class.from_pretrained(self.model_id, **kwargs)  # noqa
 
         return component
 
@@ -126,13 +128,12 @@ class ProcessorTesterMixin:
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor")
-        tokenizer = self.get_component("tokenizer", max_length=117)
+        tokenizer = self.get_component("tokenizer", max_length=117, padding="max_length")
 
         processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
         self.skip_processor_without_typed_kwargs(processor)
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()
-
         inputs = processor(text=input_str, images=image_input, return_tensors="pt")
         self.assertEqual(len(inputs["input_ids"][0]), 117)
 
@@ -165,8 +166,9 @@ class ProcessorTesterMixin:
         self.skip_processor_without_typed_kwargs(processor)
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()
-
-        inputs = processor(text=input_str, images=image_input, return_tensors="pt", max_length=112)
+        inputs = processor(
+            text=input_str, images=image_input, return_tensors="pt", max_length=112, padding="max_length"
+        )
         self.assertEqual(len(inputs["input_ids"][0]), 112)
 
     @require_torch
@@ -232,7 +234,6 @@ class ProcessorTesterMixin:
             padding="longest",
             max_length=76,
         )
-
         self.assertEqual(inputs["pixel_values"].shape[2], 214)
 
         self.assertEqual(len(inputs["input_ids"][0]), 6)
@@ -311,6 +312,31 @@ class ProcessorTesterMixin:
         self.assertEqual(inputs["pixel_values"].shape[2], 214)
 
         self.assertEqual(len(inputs["input_ids"][0]), 76)
+
+    @require_torch
+    @require_vision
+    # TODO: the same test, but for audio + text processors that have strong overlap in kwargs
+    def test_overlapping_text_kwargs_handling(self):
+        if "image_processor" not in self.processor_class.attributes:
+            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+        image_processor = self.get_component("image_processor")
+        tokenizer = self.get_component("tokenizer")
+        if not tokenizer.pad_token:
+            tokenizer.pad_token = "[TEST_PAD]"
+        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
+        self.skip_processor_without_typed_kwargs(processor)
+
+        input_str = "lower newer"
+        image_input = self.prepare_image_inputs()
+
+        with self.assertRaises(ValueError):
+            _ = processor(
+                text=input_str,
+                images=image_input,
+                return_tensors="pt",
+                padding="max_length",
+                text_kwargs={"padding": "do_not_pad"},
+            )
 
 
 class MyProcessor(ProcessorMixin):
