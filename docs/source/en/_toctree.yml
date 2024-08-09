@@ -163,6 +163,8 @@
     title: FBGEMM_FP8
   - local: quantization/optimum
     title: Optimum
+  - local: quantization/torchao
+    title: TorchAO
   - local: quantization/contribute
     title: Contribute new quantization method
   title: Quantization Methods

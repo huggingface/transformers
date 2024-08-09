@@ -20,16 +20,16 @@ import json
 import os
 from dataclasses import dataclass
 from enum import Enum
+from inspect import Parameter, signature
 from typing import Any, Dict, List, Optional, Union
 
 from packaging import version
 
-from ..utils import is_auto_awq_available, is_hqq_available, is_torch_available, logging
+from ..utils import is_auto_awq_available, is_hqq_available, is_torch_available, is_torchao_available, logging
 
 
 if is_torch_available():
     import torch
-
 
 logger = logging.get_logger(__name__)
 
@@ -43,6 +43,7 @@ class QuantizationMethod(str, Enum):
     EETQ = "eetq"
     HQQ = "hqq"
     FBGEMM_FP8 = "fbgemm_fp8"
+    TORCHAO = "torchao"
 
 
 class AWQLinearVersion(str, Enum):
@@ -1079,3 +1080,84 @@ class FbgemmFp8Config(QuantizationConfigMixin):
         loading_attibutes = ["activation_scale_ub"]
         loading_attibutes_dict = {i: j for i, j in attibutes_dict.items() if i in loading_attibutes}
         return loading_attibutes_dict
+
+
+@dataclass
+class TorchAoConfig(QuantizationConfigMixin):
+    """This is a config class for torchao quantization/sparsity techniques.
+
+    Args:
+        quant_type (`str`):
+            The type of quantization we want to use, currently supporting: `int4_weight_only`, `int8_weight_only` and `int8_dynamic_activation_int8_weight`.
+        modules_to_not_convert (`list`, *optional*, default to `None`):
+            The list of modules to not quantize, useful for quantizing models that explicitly require to have
+            some modules left in their original precision.
+        kwargs (`Dict[str, Any]`, *optional*):
+            The keyword arguments for the chosen type of quantization, for example, int4_weight_only quantization supports two keyword arguments
+            `group_size` and `inner_k_tiles` currently. More API examples and documentation of arguments can be found in
+            https://github.com/pytorch/ao/tree/main/torchao/quantization#other-available-quantization-techniques
+
+    Example:
+
+    ```python
+    quantization_config = TorchAoConfig("int4_weight_only", group_size=32)
+    # int4_weight_only quant is only working with *torch.bfloat16* dtype right now
+    model = AutoModelForCausalLM.from_pretrained(model_id, device_map="cuda", torch_dtype=torch.bfloat16, quantization_config=quantization_config)
+    ```
+    """
+
+    def __init__(self, quant_type: str, modules_to_not_convert: Optional[List] = None, **kwargs):
+        self.quant_method = QuantizationMethod.TORCHAO
+        self.quant_type = quant_type
+        self.modules_to_not_convert = modules_to_not_convert
+        self.kwargs = kwargs
+        self._STR_TO_METHOD = {}
+        if is_torchao_available():
+            from torchao.quantization import (
+                int4_weight_only,
+                int8_dynamic_activation_int8_weight,
+                int8_weight_only,
+            )
+
+            self._STR_TO_METHOD = {
+                "int4_weight_only": int4_weight_only,
+                "int8_weight_only": int8_weight_only,
+                "int8_dynamic_activation_int8_weight": int8_dynamic_activation_int8_weight,
+            }
+        else:
+            raise ValueError(
+                "TorchAoConfig requires torchao to be installed, please install with `pip install torchao`"
+            )
+
+        self.post_init()
+
+    def post_init(self):
+        r"""
+        Safety checker that arguments are correct - also replaces some NoneType arguments with their default values.
+        """
+        if not version.parse(importlib.metadata.version("torchao")) >= version.parse("0.4.0"):
+            raise ValueError("Requires torchao 0.4.0 version and above")
+
+        if self.quant_type not in self._STR_TO_METHOD.keys():
+            raise ValueError(
+                f"Requested quantization type: {self.quant_type} is not supported yet, please add support in TorchAoConfig and TorchAoHfQuantizer."
+            )
+
+        method = self._STR_TO_METHOD[self.quant_type]
+        sig = signature(method)
+        all_kwargs = [
+            param.name
+            for param in sig.parameters.values()
+            if param.kind in [Parameter.KEYWORD_ONLY, Parameter.POSITIONAL_OR_KEYWORD]
+        ]
+        for k in self.kwargs:
+            if k not in all_kwargs:
+                raise ValueError(
+                    f"Unexpected keyword arg: {k} for API: {method}, accepted keyword args are: {all_kwargs}"
+                )
+
+    def get_apply_tensor_subclass(self):
+        return self._STR_TO_METHOD[self.quant_type](**self.kwargs)
+
+    def __repr__(self):
+        return f"{self.quant_type}({', '.join(str(k) + '=' + str(v) for k, v in self.kwargs.items())})"
