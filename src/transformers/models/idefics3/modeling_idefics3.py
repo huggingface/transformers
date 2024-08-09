@@ -383,6 +383,7 @@ class Idefics3VisionMLP(nn.Module):
         hidden_states = self.fc2(hidden_states)
         return hidden_states
 
+
 class Idefics3SimpleMLP(nn.Module):
     def __init__(self, input_size, output_size):
         super().__init__()
@@ -392,6 +393,7 @@ class Idefics3SimpleMLP(nn.Module):
 
     def forward(self, x):
         return self.proj(x)
+
 
 class Idefics3EncoderLayer(nn.Module):
     def __init__(self, config: Idefics3Config):
@@ -688,7 +690,7 @@ class Idefics3PreTrainedModel(PreTrainedModel):
     config_class = Idefics3Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["Idefics3VisionAttention", "Idefics3SimpleMLP", "Idefics3DecoderLayer"]
+    _no_split_modules = ["Idefics3VisionAttention", "Idefics3DecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
     _supports_cache_class = True
@@ -1074,7 +1076,6 @@ class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel):
         self.lm_head = new_embeddings
 
     def resize_token_embeddings(self, new_num_tokens: Optional[int] = None, pad_to_multiple_of=None) -> nn.Embedding:
-        # model_embeds = self.model.resize_token_embeddings(new_num_tokens=new_num_tokens, pad_to_multiple_of=pad_to_multiple_of)
         model_embeds = self._resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
         if new_num_tokens is None and pad_to_multiple_of is None:
             return model_embeds
