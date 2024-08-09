@@ -1070,7 +1070,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
     def _decode(
         self,
-        token_ids: List[int],
+        token_ids: Union[int, List[int]],
         skip_special_tokens: bool = False,
         clean_up_tokenization_spaces: bool = None,
         spaces_between_special_tokens: bool = True,
@@ -1079,6 +1079,10 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         self._decode_use_source_tokenizer = kwargs.pop("use_source_tokenizer", False)
 
         filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens)
+        # If given is a single id, return the decoded text without further processing
+        if isinstance(filtered_tokens, str):
+            return filtered_tokens
+
         legacy_added_tokens = set(self._added_tokens_encoder.keys()) - set(self.all_special_tokens) | {
             token for token in self.additional_special_tokens if self.convert_tokens_to_ids(token) >= self.vocab_size
         }
