@@ -20,6 +20,10 @@ import random
 import unittest
 from pathlib import Path
 
+from transformers.models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING_NAMES
+from transformers.models.auto.image_processing_auto import IMAGE_PROCESSOR_MAPPING_NAMES
+from transformers.models.auto.processing_auto import PROCESSOR_MAPPING_NAMES
+from transformers.models.auto.tokenization_auto import TOKENIZER_MAPPING_NAMES
 from transformers.testing_utils import (
     is_pipeline_test,
     require_decord,
@@ -144,11 +148,10 @@ class PipelineTesterMixin:
         model_architectures = self.pipeline_model_mapping[task]
         if not isinstance(model_architectures, tuple):
             model_architectures = (model_architectures,)
-        if not isinstance(model_architectures, tuple):
-            raise TypeError(f"`model_architectures` must be a tuple. Got {type(model_architectures)} instead.")
 
         for model_architecture in model_architectures:
             model_arch_name = model_architecture.__name__
+            model_type = model_architecture.config_class.model_type
 
             # Get the canonical name
             for _prefix in ["Flax", "TF"]:
@@ -156,28 +159,57 @@ class PipelineTesterMixin:
                     model_arch_name = model_arch_name[len(_prefix) :]
                     break
 
-            tokenizer_names = []
-            processor_names = []
+            # tokenizers are mapped to tuple, e.g. ("XxxTokenizer", None)
+            tokenizer_names = TOKENIZER_MAPPING_NAMES.get(model_type, [None])
+            if len(tokenizer_names) > 1:
+                tokenizer_names = [name for name in tokenizer_names if name is not None]
+
+            # image processors are mapped to tuple, e.g. ("XxxImageProcessor", None)
+            image_processor_names = IMAGE_PROCESSOR_MAPPING_NAMES.get(model_type, [None])
+            if len(image_processor_names) > 1:
+                image_processor_names = [name for name in image_processor_names if name is not None]
+
+            # feature extractors are mapped to instance, e.g. "XxxFeatureExtractor"
+            feature_extractor_names = FEATURE_EXTRACTOR_MAPPING_NAMES.get(model_type, [None])
+            if not isinstance(feature_extractor_names, (list, tuple)):
+                feature_extractor_names = [feature_extractor_names]
+
+            # processors are mapped to instance, e.g. "XxxProcessor"
+            processor_names = PROCESSOR_MAPPING_NAMES.get(model_type, [None])
+            if not isinstance(processor_names, (list, tuple)):
+                processor_names = [processor_names]
+
             commit = None
-            if model_arch_name in tiny_model_summary:
-                tokenizer_names = tiny_model_summary[model_arch_name]["tokenizer_classes"]
-                processor_names = tiny_model_summary[model_arch_name]["processor_classes"]
-                if "sha" in tiny_model_summary[model_arch_name]:
-                    commit = tiny_model_summary[model_arch_name]["sha"]
-            # Adding `None` (if empty) so we can generate tests
-            tokenizer_names = [None] if len(tokenizer_names) == 0 else tokenizer_names
-            processor_names = [None] if len(processor_names) == 0 else processor_names
+            if model_arch_name in tiny_model_summary and "sha" in tiny_model_summary[model_arch_name]:
+                commit = tiny_model_summary[model_arch_name]["sha"]
 
             repo_name = f"tiny-random-{model_arch_name}"
             if TRANSFORMERS_TINY_MODEL_PATH != "hf-internal-testing":
                 repo_name = model_arch_name
 
             self.run_model_pipeline_tests(
-                task, repo_name, model_architecture, tokenizer_names, processor_names, commit, torch_dtype
+                task,
+                repo_name,
+                model_architecture,
+                tokenizer_names=tokenizer_names,
+                image_processor_names=image_processor_names,
+                feature_extractor_names=feature_extractor_names,
+                processor_names=processor_names,
+                commit=commit,
+                torch_dtype=torch_dtype,
             )
 
     def run_model_pipeline_tests(
-        self, task, repo_name, model_architecture, tokenizer_names, processor_names, commit, torch_dtype="float32"
+        self,
+        task,
+        repo_name,
+        model_architecture,
+        tokenizer_names,
+        image_processor_names,
+        feature_extractor_names,
+        processor_names,
+        commit,
+        torch_dtype="float32",
     ):
         """Run pipeline tests for a specific `task` with the give model class and tokenizer/processor class names
 
@@ -190,8 +222,12 @@ class PipelineTesterMixin:
                 A subclass of `PretrainedModel` or `PretrainedModel`.
             tokenizer_names (`List[str]`):
                 A list of names of a subclasses of `PreTrainedTokenizerFast` or `PreTrainedTokenizer`.
+            image_processor_names (`List[str]`):
+                A list of names of subclasses of `BaseImageProcessor`.
+            feature_extractor_names (`List[str]`):
+                A list of names of subclasses of `FeatureExtractionMixin`.
             processor_names (`List[str]`):
-                A list of names of subclasses of `BaseImageProcessor` or `FeatureExtractionMixin`.
+                A list of names of subclasses of `ProcessorMixin`.
             commit (`str`):
                 The commit hash of the model repository on the Hub.
             torch_dtype (`str`, `optional`, defaults to `'float32'`):
@@ -201,27 +237,66 @@ class PipelineTesterMixin:
         # `run_pipeline_test`.
         pipeline_test_class_name = pipeline_test_mapping[task]["test"].__name__
 
-        for tokenizer_name in tokenizer_names:
-            for processor_name in processor_names:
-                if self.is_pipeline_test_to_skip(
-                    pipeline_test_class_name,
-                    model_architecture.config_class,
-                    model_architecture,
-                    tokenizer_name,
-                    processor_name,
-                ):
-                    logger.warning(
-                        f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')}_{torch_dtype} is skipped: test is "
-                        f"currently known to fail for: model `{model_architecture.__name__}` | tokenizer "
-                        f"`{tokenizer_name}` | processor `{processor_name}`."
-                    )
-                    continue
-                self.run_pipeline_test(
-                    task, repo_name, model_architecture, tokenizer_name, processor_name, commit, torch_dtype
+        test_cases = [
+            {
+                "tokenizer_name": tokenizer_name,
+                "image_processor_name": image_processor_name,
+                "feature_extractor_name": feature_extractor_name,
+                "processor_name": processor_name,
+            }
+            for tokenizer_name in tokenizer_names
+            for image_processor_name in image_processor_names
+            for feature_extractor_name in feature_extractor_names
+            for processor_name in processor_names
+        ]
+
+        for test_case in test_cases:
+            tokenizer_name = test_case["tokenizer_name"]
+            image_processor_name = test_case["image_processor_name"]
+            feature_extractor_name = test_case["feature_extractor_name"]
+            processor_name = test_case["processor_name"]
+
+            do_skip_test_case = self.is_pipeline_test_to_skip(
+                pipeline_test_class_name,
+                model_architecture.config_class,
+                model_architecture,
+                tokenizer_name,
+                image_processor_name,
+                feature_extractor_name,
+                processor_name,
+            )
+
+            if do_skip_test_case:
+                logger.warning(
+                    f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')}_{torch_dtype} is skipped: test is "
+                    f"currently known to fail for: model `{model_architecture.__name__}` | tokenizer "
+                    f"`{tokenizer_name}` | image processor `{image_processor_name}` | feature extractor {feature_extractor_name}."
                 )
+                continue
+
+            self.run_pipeline_test(
+                task,
+                repo_name,
+                model_architecture,
+                tokenizer_name=tokenizer_name,
+                image_processor_name=image_processor_name,
+                feature_extractor_name=feature_extractor_name,
+                processor_name=processor_name,
+                commit=commit,
+                torch_dtype=torch_dtype,
+            )
 
     def run_pipeline_test(
-        self, task, repo_name, model_architecture, tokenizer_name, processor_name, commit, torch_dtype="float32"
+        self,
+        task,
+        repo_name,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
+        commit,
+        torch_dtype="float32",
     ):
         """Run pipeline tests for a specific `task` with the give model class and tokenizer/processor class name
 
@@ -236,7 +311,7 @@ class PipelineTesterMixin:
                 A subclass of `PretrainedModel` or `PretrainedModel`.
             tokenizer_name (`str`):
                 The name of a subclass of `PreTrainedTokenizerFast` or `PreTrainedTokenizer`.
-            processor_name (`str`):
+            image_processor_or_feature_extractor_name (`str`):
                 The name of a subclass of `BaseImageProcessor` or `FeatureExtractionMixin`.
             commit (`str`):
                 The commit hash of the model repository on the Hub.
@@ -244,35 +319,12 @@ class PipelineTesterMixin:
                 The torch dtype to use for the model. Can be used for FP16/other precision inference.
         """
         repo_id = f"{TRANSFORMERS_TINY_MODEL_PATH}/{repo_name}"
+        model_type = model_architecture.config_class.model_type
+
         if TRANSFORMERS_TINY_MODEL_PATH != "hf-internal-testing":
-            model_type = model_architecture.config_class.model_type
             repo_id = os.path.join(TRANSFORMERS_TINY_MODEL_PATH, model_type, repo_name)
 
-        tokenizer = None
-        if tokenizer_name is not None:
-            tokenizer_class = getattr(transformers_module, tokenizer_name)
-            tokenizer = tokenizer_class.from_pretrained(repo_id, revision=commit)
-
-        processor = None
-        if processor_name is not None:
-            processor_class = getattr(transformers_module, processor_name)
-            # If the required packages (like `Pillow` or `torchaudio`) are not installed, this will fail.
-            try:
-                processor = processor_class.from_pretrained(repo_id, revision=commit)
-            except Exception:
-                logger.warning(
-                    f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')}_{torch_dtype} is skipped: Could not load the "
-                    f"processor from `{repo_id}` with `{processor_name}`."
-                )
-                self.skipTest(f"Could not load the processor from {repo_id} with {processor_name}.")
-
-        # TODO: Maybe not upload such problematic tiny models to Hub.
-        if tokenizer is None and processor is None:
-            logger.warning(
-                f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')}_{torch_dtype} is skipped: Could not find or load "
-                f"any tokenizer / processor from `{repo_id}`."
-            )
-            self.skipTest(f"Could not find or load any tokenizer / processor from {repo_id}.")
+        # -------------------- Load model --------------------
 
         # TODO: We should check if a model file is on the Hub repo. instead.
         try:
@@ -284,19 +336,64 @@ class PipelineTesterMixin:
             )
             self.skipTest(f"Could not find or load the model from {repo_id} with {model_architecture}.")
 
+        # -------------------- Load tokenizer --------------------
+
+        tokenizer = None
+        if tokenizer_name is not None:
+            try:
+                tokenizer_class = getattr(transformers_module, tokenizer_name)
+                tokenizer = tokenizer_class.from_pretrained(repo_id, revision=commit)
+            except Exception:
+                logger.warning(
+                    f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')}_{torch_dtype} is skipped: "
+                    f"Could not load the tokenizer from `{repo_id}` with `{tokenizer_name}`."
+                )
+                self.skipTest(f"Could not load the tokenizer from {repo_id} with {tokenizer_name}.")
+
+        # -------------------- Load processors --------------------
+
+        processors = {}
+        for key, name in zip(
+            ["image_processor", "feature_extractor", "processor"],
+            [image_processor_name, feature_extractor_name, processor_name],
+        ):
+            if name is not None:
+                try:
+                    # Can fail if some extra dependencies are not installed
+                    processor_class = getattr(transformers_module, name)
+                    processor = processor_class.from_pretrained(repo_id, revision=commit)
+                    processors[key] = processor
+                except Exception:
+                    logger.warning(
+                        f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')}_{torch_dtype} is skipped: "
+                        f"Could not load the {key} from `{repo_id}` with `{name}`."
+                    )
+                    self.skipTest(f"Could not load the {key} from {repo_id} with {name}.")
+
+        # ---------------------------------------------------------
+
+        # TODO: Maybe not upload such problematic tiny models to Hub.
+        if tokenizer is None and "image_processor" not in processors and "feature_extractor" not in processors:
+            logger.warning(
+                f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')}_{torch_dtype} is skipped: Could not find or load "
+                f"any tokenizer / image processor / feature extractor from `{repo_id}`."
+            )
+            self.skipTest(f"Could not find or load any tokenizer / processor from {repo_id}.")
+
         pipeline_test_class_name = pipeline_test_mapping[task]["test"].__name__
-        if self.is_pipeline_test_to_skip_more(pipeline_test_class_name, model.config, model, tokenizer, processor):
+        if self.is_pipeline_test_to_skip_more(pipeline_test_class_name, model.config, model, tokenizer, **processors):
             logger.warning(
                 f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')}_{torch_dtype} is skipped: test is "
                 f"currently known to fail for: model `{model_architecture.__name__}` | tokenizer "
-                f"`{tokenizer_name}` | processor `{processor_name}`."
+                f"`{tokenizer_name}` | image processor `{image_processor_name}` | feature extractor `{feature_extractor_name}`."
             )
             self.skipTest(
-                f"Test is known to fail for: model `{model_architecture.__name__}` | tokenizer `{tokenizer_name}` | processor `{processor_name}`."
+                f"Test is known to fail for: model `{model_architecture.__name__}` | tokenizer `{tokenizer_name}` "
+                f"| image processor `{image_processor_name}` | feature extractor `{feature_extractor_name}`."
             )
 
         # validate
-        validate_test_components(self, task, model, tokenizer, processor)
+        validate_test_components(model, tokenizer)
 
         if hasattr(model, "eval"):
             model = model.eval()
@@ -305,7 +402,7 @@ class PipelineTesterMixin:
         # `run_pipeline_test`.
         task_test = pipeline_test_mapping[task]["test"]()
 
-        pipeline, examples = task_test.get_test_pipeline(model, tokenizer, processor, torch_dtype=torch_dtype)
+        pipeline, examples = task_test.get_test_pipeline(model, tokenizer, **processors, torch_dtype=torch_dtype)
         if pipeline is None:
             # The test can disable itself, but it should be very marginal
             # Concerns: Wav2Vec2ForCTC without tokenizer test (FastTokenizer don't exist)
@@ -632,7 +729,14 @@ class PipelineTesterMixin:
 
     # This contains the test cases to be skipped without model architecture being involved.
     def is_pipeline_test_to_skip(
-        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
     ):
         """Skip some tests based on the classes or their names without the instantiated objects.
 
@@ -640,7 +744,7 @@ class PipelineTesterMixin:
         """
         # No fix is required for this case.
         if (
-            pipeline_test_casse_name == "DocumentQuestionAnsweringPipelineTests"
+            pipeline_test_case_name == "DocumentQuestionAnsweringPipelineTests"
             and tokenizer_name is not None
             and not tokenizer_name.endswith("Fast")
         ):
@@ -649,11 +753,20 @@ class PipelineTesterMixin:
 
         return False
 
-    def is_pipeline_test_to_skip_more(self, pipeline_test_casse_name, config, model, tokenizer, processor):  # noqa
+    def is_pipeline_test_to_skip_more(
+        self,
+        pipeline_test_case_name,
+        config,
+        model,
+        tokenizer,
+        image_processor=None,
+        feature_extractor=None,
+        processor=None,
+    ):  # noqa
         """Skip some more tests based on the information from the instantiated objects."""
         # No fix is required for this case.
         if (
-            pipeline_test_casse_name == "QAPipelineTests"
+            pipeline_test_case_name == "QAPipelineTests"
             and tokenizer is not None
             and getattr(tokenizer, "pad_token", None) is None
             and not tokenizer.__class__.__name__.endswith("Fast")
@@ -664,7 +777,7 @@ class PipelineTesterMixin:
         return False
 
 
-def validate_test_components(test_case, task, model, tokenizer, processor):
+def validate_test_components(model, tokenizer):
     # TODO: Move this to tiny model creation script
     # head-specific (within a model type) necessary changes to the config
     # 1. for `BlenderbotForCausalLM`

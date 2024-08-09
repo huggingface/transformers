@@ -292,7 +292,14 @@ class LayoutLMv3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
     # TODO: Fix the failed tests
     def is_pipeline_test_to_skip(
-        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
     ):
         # `DocumentQuestionAnsweringPipeline` is expected to work with this model, but it combines the text and visual
         # embedding along the sequence dimension (dim 1), which causes an error during post-processing as `p_mask` has

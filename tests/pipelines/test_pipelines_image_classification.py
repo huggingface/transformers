@@ -55,9 +55,23 @@ class ImageClassificationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING
     tf_model_mapping = TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING
 
-    def get_test_pipeline(self, model, tokenizer, processor, torch_dtype="float32"):
+    def get_test_pipeline(
+        self,
+        model,
+        tokenizer=None,
+        image_processor=None,
+        feature_extractor=None,
+        processor=None,
+        torch_dtype="float32",
+    ):
         image_classifier = ImageClassificationPipeline(
-            model=model, image_processor=processor, top_k=2, torch_dtype=torch_dtype
+            model=model,
+            tokenizer=tokenizer,
+            feature_extractor=feature_extractor,
+            image_processor=image_processor,
+            processor=processor,
+            torch_dtype=torch_dtype,
+            top_k=2,
         )
         examples = [
             Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png"),

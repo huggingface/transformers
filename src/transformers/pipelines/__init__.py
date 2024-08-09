@@ -28,7 +28,9 @@ from ..models.auto.configuration_auto import AutoConfig
 from ..models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING, AutoFeatureExtractor
 from ..models.auto.image_processing_auto import IMAGE_PROCESSOR_MAPPING, AutoImageProcessor
 from ..models.auto.modeling_auto import AutoModelForDepthEstimation, AutoModelForImageToImage
+from ..models.auto.processing_auto import PROCESSOR_MAPPING, AutoProcessor
 from ..models.auto.tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
+from ..processing_utils import ProcessorMixin
 from ..tokenization_utils import PreTrainedTokenizer
 from ..utils import (
     CONFIG_NAME,
@@ -556,6 +558,7 @@ def pipeline(
     tokenizer: Optional[Union[str, PreTrainedTokenizer, "PreTrainedTokenizerFast"]] = None,
     feature_extractor: Optional[Union[str, PreTrainedFeatureExtractor]] = None,
     image_processor: Optional[Union[str, BaseImageProcessor]] = None,
+    processor: Optional[Union[str, ProcessorMixin]] = None,
     framework: Optional[str] = None,
     revision: Optional[str] = None,
     use_fast: bool = True,
@@ -644,6 +647,25 @@ def pipeline(
             `model` is not specified or not a string, then the default feature extractor for `config` is loaded (if it
             is a string). However, if `config` is also not given or not a string, then the default feature extractor
             for the given `task` will be loaded.
+        image_procesor (`str` or [`BaseImageProcessor`], *optional*):
+            The image processor that will be used by the pipeline to preprocess images for the model. This can be a
+            model identifier or an actual image processor inheriting from [`BaseImageProcessor`].
+
+            Image processors are used for Vision models and multi-modal models that require image inputs. Multi-modal
+            models will also require a tokenizer to be passed.
+
+            If not provided, the default image processor for the given `model` will be loaded (if it is a string). If
+            `model` is not specified or not a string, then the default image processor for `config` is loaded (if it is
+            a string).
+        processor (`str` or [`ProcessorMixin`], *optional*):
+            The processor that will be used by the pipeline to preprocess data for the model. This can be a model
+            identifier or an actual processor inheriting from [`ProcessorMixin`].
+
+            Processors are used for multi-modal models that require multi-modal inputs, for example, a model that
+            requires both text and image inputs.
+
+            If not provided, the default processor for the given `model` will be loaded (if it is a string). If `model`
+            is not specified or not a string, then the default processor for `config` is loaded (if it is a string).
         framework (`str`, *optional*):
             The framework to use, either `"pt"` for PyTorch or `"tf"` for TensorFlow. The specified framework must be
             installed.
@@ -904,9 +926,17 @@ def pipeline(
 
     model_config = model.config
     hub_kwargs["_commit_hash"] = model.config._commit_hash
+
     load_tokenizer = type(model_config) in TOKENIZER_MAPPING or model_config.tokenizer_class is not None
     load_feature_extractor = type(model_config) in FEATURE_EXTRACTOR_MAPPING or feature_extractor is not None
     load_image_processor = type(model_config) in IMAGE_PROCESSOR_MAPPING or image_processor is not None
+    load_processor = type(model_config) in PROCESSOR_MAPPING or processor is not None
+
+    # Check that pipeline class required loading
+    load_tokenizer = load_tokenizer and pipeline_class._load_tokenizer
+    load_feature_extractor = load_feature_extractor and pipeline_class._load_feature_extractor
+    load_image_processor = load_image_processor and pipeline_class._load_image_processor
+    load_processor = load_processor and pipeline_class._load_processor
 
     # If `model` (instance of `PretrainedModel` instead of `str`) is passed (and/or same for config), while
     # `image_processor` or `feature_extractor` is `None`, the loading will fail. This happens particularly for some
@@ -1069,6 +1099,25 @@ def pipeline(
                     if not is_pyctcdecode_available():
                         logger.warning("Try to install `pyctcdecode`: `pip install pyctcdecode")
 
+    if load_processor:
+        # Try to infer processor from model or config name (if provided as str)
+        if processor is None:
+            if isinstance(model_name, str):
+                processor = model_name
+            elif isinstance(config, str):
+                processor = config
+            else:
+                # Impossible to guess what is the right processor here
+                raise Exception(
+                    "Impossible to guess which processor to use. "
+                    "Please provide a processor instance or a path/identifier "
+                    "to a processor."
+                )
+
+        # Instantiate processor if needed
+        if isinstance(processor, (str, tuple)):
+            processor = AutoProcessor.from_pretrained(processor, _from_pipeline=task, **hub_kwargs, **model_kwargs)
+
     if task == "translation" and model.config.task_specific_params:
         for key in model.config.task_specific_params:
             if key.startswith("translation"):
@@ -1093,5 +1142,8 @@ def pipeline(
 
     if device is not None:
         kwargs["device"] = device
+
+    if processor is not None:
+        kwargs["processor"] = processor
 
     return pipeline_class(model=model, framework=framework, task=task, **kwargs)

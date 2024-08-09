@@ -320,8 +320,23 @@ class TextGenerationPipelineTests(unittest.TestCase):
             ],
         )
 
-    def get_test_pipeline(self, model, tokenizer, processor, torch_dtype="float32"):
-        text_generator = TextGenerationPipeline(model=model, tokenizer=tokenizer, torch_dtype=torch_dtype)
+    def get_test_pipeline(
+        self,
+        model,
+        tokenizer=None,
+        image_processor=None,
+        feature_extractor=None,
+        processor=None,
+        torch_dtype="float32",
+    ):
+        text_generator = TextGenerationPipeline(
+            model=model,
+            tokenizer=tokenizer,
+            feature_extractor=feature_extractor,
+            image_processor=image_processor,
+            processor=processor,
+            torch_dtype=torch_dtype,
+        )
         return text_generator, ["This is a test", "Another test"]
 
     def test_stop_sequence_stopping_criteria(self):
@@ -413,6 +428,7 @@ class TextGenerationPipelineTests(unittest.TestCase):
             "XGLMForCausalLM",
             "GPTNeoXForCausalLM",
             "FuyuForCausalLM",
+            "LlamaForCausalLM",
         ]
         if (
             tokenizer.model_max_length < 10000
