@@ -229,10 +229,12 @@ def _flash_attention_forward(
     if is_deepspeed_sp_enabled():
         spg = ds_comm_groups._get_sequence_parallel_group()
         #qkv tensors are of shape (batch_size, seq_len, num_heads, head_dim)
-        #Gather on seq_len dimension, scatter on num_heads dimension
-        query_states = _SeqAllToAll.apply(spg, query_states, 2, 1)
-        key_states = _SeqAllToAll.apply(spg, key_states, 2, 1)
-        value_states = _SeqAllToAll.apply(spg, value_states, 2, 1)
+        scatter_idx = 2 #Scatter on num_heads dimension
+        gather_idx = 1  #Gather on seq_len dimension
+        batch_dim_idx = 0 #Synonymous with the batch_first==true
+        query_states = _SeqAllToAll.apply(spg, query_states, scatter_idx, gather_idx, batch_dim_idx)
+        key_states = _SeqAllToAll.apply(spg, key_states, scatter_idx, gather_idx,batch_dim_idx)
+        value_states = _SeqAllToAll.apply(spg, value_states, scatter_idx, gather_idx,batch_dim_idx)
 
     if not use_top_left_mask:
         causal = is_causal
@@ -313,7 +315,9 @@ def _flash_attention_forward(
         )
 
     if is_deepspeed_sp_enabled():
-        #Gather on num_heads dimension, scatter on seq_len dimension
-        attn_output = _SeqAllToAll.apply(spg, attn_output, 1, 2)
+        scatter_idx = 1 #Scatter back on seq_len dimension
+        gather_idx = 2  #Gather on num_heads dimension
+        batch_dim_idx = 0
+        attn_output = _SeqAllToAll.apply(spg, attn_output, scatter_idx, gather_idx,batch_dim_idx)
 
     return attn_output
