@@ -4577,6 +4577,41 @@ class ModelTesterMixin:
 
                 self.assertFalse(fa2_correctly_converted)
 
+    def test_attn_implementation_composite_models(self):
+        """
+        Tests if composite models can receive a dict object as attn_implementation, where each key should be
+        one of the sub-configs from the model's config.
+        """
+        if not self.has_attentions:
+            self.skipTest(reason="Model architecture does not support attentions")
+
+        for model_class in self.all_model_classes:
+            if not model_class._is_composite:
+                self.skipTest("Model is not a composite model.")
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            sub_configs = {
+                key: getattr(config, key) for key in config if isinstance(getattr(config, key), PretrainedConfig)
+            }
+
+            # set eager as it will be the one supported in all models, for the sake of testing
+            # if passing a dicr fails or not
+            attn_implementation_per_subconfig = {}
+            for key, sub_config in sub_configs.items():
+                attn_implementation_per_subconfig[key] = "eager"
+
+            config._attn_implementation = attn_implementation_per_subconfig
+            model = model_class(config)
+            self.assertTrue(model.config._attn_implementation == attn_implementation_per_subconfig)
+            for name, submodule in model.named_modules():
+                class_name = submodule.__class__.__name__
+                if (
+                    "SdpaAttention" in class_name
+                    or "SdpaSelfAttention" in class_name
+                    or "FlashAttention" in class_name
+                ):
+                    raise ValueError("The eager model should not have SDPA/FA2 attention layers")
+
     def _get_custom_4d_mask_test_data(self):
         # Sequence in which all but the last token is the same
         input_ids = torch.tensor(
