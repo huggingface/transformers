@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import importlib
-import inspect
+from functools import cached_property
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 from packaging import version
@@ -209,8 +209,7 @@ class Bnb4BitHfQuantizer(HfQuantizer):
                         unexpected_keys.remove(k)
 
             param_kwargs = {}
-            sig = inspect.signature(bnb.nn.Params4bit.from_prequantized)
-            if "module" in sig.parameters:
+            if self.is_bnb_gte_0_43_3:
                 param_kwargs["module"] = module
 
             new_value = bnb.nn.Params4bit.from_prequantized(
@@ -324,6 +323,10 @@ class Bnb4BitHfQuantizer(HfQuantizer):
             return False
 
         return True
+
+    @cached_property
+    def is_bnb_gte_0_43_3(self) -> bool:
+        return version.parse(importlib.metadata.version("bitsandbytes")) >= version.parse("0.43.3")
 
     @property
     def is_trainable(self) -> bool:
