@@ -40,15 +40,12 @@ from .utils import (
     is_torch_npu_available,
     is_torch_xla_available,
     is_torch_xpu_available,
-    logging,
     requires_backends,
 )
 
 
 if is_torch_available():
     import torch
-
-logger = logging.get_logger(__name__)
 
 
 def seed_worker(_):
