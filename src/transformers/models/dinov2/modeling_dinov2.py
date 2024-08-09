@@ -59,16 +59,25 @@ _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 class Dinov2Embeddings(nn.Module):
     """
-    Construct the CLS token, mask token, position and patch embeddings.
+    Construct the CLS token, register tokens, mask token, position and patch embeddings.
     """
 
     def __init__(self, config: Dinov2Config) -> None:
         super().__init__()
 
         self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
+        self.register_tokens = (
+            nn.Parameter(torch.randn(1, config.num_register_tokens, config.hidden_size))
+            if config.num_register_tokens
+            else None
+        )
         self.mask_token = nn.Parameter(torch.zeros(1, config.hidden_size))
         self.patch_embeddings = Dinov2PatchEmbeddings(config)
+
+        # This is kinda confusing... its only used for intepolation image size....
+        # The acctual image size is dependent on the input pixel_values
         num_patches = self.patch_embeddings.num_patches
+
         self.position_embeddings = nn.Parameter(torch.randn(1, num_patches + 1, config.hidden_size))
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.config = config
@@ -82,30 +91,70 @@ class Dinov2Embeddings(nn.Module):
         https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174
         """
 
-        num_patches = embeddings.shape[1] - 1
-        num_positions = self.position_embeddings.shape[1] - 1
-        if num_patches == num_positions and height == width:
+        # embeddings           - (batch_size, seq_length , hidden_size) - seq_length contains [CLS]
+        # position_embeddings  - (1,        , num_patches, hidden_size) - num_patches seams to be defined drom a predefined image size
+        dim_patches = embeddings.shape[1] - 1  # Substract the [CLS] token position embeddings
+        num_positions = self.position_embeddings.shape[1] - 1  # Substract the [CLS] token position embeddings
+
+        # Do nothing if sequence lengths match
+        if dim_patches == num_positions and height == width:
             return self.position_embeddings
-        class_pos_embed = self.position_embeddings[:, 0]
-        patch_pos_embed = self.position_embeddings[:, 1:]
+
+        # Split [CLS] from patches
+        class_pos_embed = self.position_embeddings[:, 0]  # [CLS] token position embeddings
+        patch_pos_embed = self.position_embeddings[:, 1:]  # Patch tokens positioanl embeddings
+
+        # This just seems to be the hidden_size
         dim = embeddings.shape[-1]
-        height = height // self.config.patch_size
-        width = width // self.config.patch_size
-        # we add a small number to avoid floating point error in the interpolation
-        # see discussion at https://github.com/facebookresearch/dino/issues/8
-        height, width = height + 0.1, width + 0.1
-        patch_pos_embed = patch_pos_embed.reshape(1, int(math.sqrt(num_positions)), int(math.sqrt(num_positions)), dim)
+
+        # Get patch width and patch height (actual patch sized not the wierd ones defined in self.patch_embeddings)
+        height = height // self.patch_embeddings.patch_size[0]
+        width = width // self.patch_embeddings.patch_size[1]
+
+        # Get image_size patch dimensions
+        # Again this seams to be the patch width and height for a predefined image size
+        dim_patches = self.patch_embeddings.dim_patches
+
+        # Reshape into (1, dim_patches[0], dim_patches[1], hidden_size)
+        patch_pos_embed = patch_pos_embed.reshape(1, dim_patches[0], dim_patches[1], dim)
+
+        # (1, hidden_size, dim_patches[0], dim_patches[1]) - I think this is just to make interpolation work
         patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
+
+        # This practicaly is like image scaling just for tensors
         target_dtype = patch_pos_embed.dtype
-        patch_pos_embed = nn.functional.interpolate(
-            patch_pos_embed.to(dtype=torch.float32),
-            scale_factor=(float(height / math.sqrt(num_positions)), float(width / math.sqrt(num_positions))),
-            mode="bicubic",
-            align_corners=False,
-        ).to(dtype=target_dtype)
+        if self.config.interpolate_offset:
+            # Historical kludge: add a small number to avoid floating point error in the interpolation, see https://github.com/facebookresearch/dino/issues/8
+            # Note: still needed for backward-compatibility, the underlying operators are using both output size and scale factors
+            height, width = height + self.config.interpolate_offset, width + self.config.interpolate_offset
+
+            patch_pos_embed = nn.functional.interpolate(
+                patch_pos_embed.to(dtype=torch.float32),
+                # Kinda a wierd API since its factor upscaling and not dest dimension upscaling
+                # The reason we're recomputing the size is because we need the  float decimals that are removed with int()
+                scale_factor=(float(height / dim_patches[0]), float(width / dim_patches[1])),
+                mode="bicubic",
+                align_corners=False,
+                antialias=self.config.interpolate_antialias,
+            ).to(dtype=target_dtype)
+        else:
+            patch_pos_embed = nn.functional.interpolate(
+                patch_pos_embed.to(dtype=torch.float32),
+                # Better api for scaling
+                size=(height, width),
+                mode="bicubic",
+                align_corners=False,
+                antialias=self.config.interpolate_antialias,
+            ).to(dtype=target_dtype)
+
+        # Double check the interpolation (resize) output is correctly sized
         if int(height) != patch_pos_embed.shape[-2] or int(width) != patch_pos_embed.shape[-1]:
             raise ValueError("Width or height does not match with the interpolated position embeddings")
+
+        # (1, dim_patches[0], dim_patches[1], hidden_size) - Undo intepolation reshape
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
+
+        # Concats [CLS] and patch embeddings
         return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1)
 
     def forward(self, pixel_values: torch.Tensor, bool_masked_pos: Optional[torch.Tensor] = None) -> torch.Tensor:
@@ -125,6 +174,11 @@ class Dinov2Embeddings(nn.Module):
         # add positional encoding to each token
         embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
 
+        # Add reg tokens
+        if self.register_tokens is not None:
+            register_tokens = self.register_tokens.expand(batch_size, -1, -1)
+            embeddings = torch.cat((embeddings[:, :1], register_tokens, embeddings[:, 1:]), dim=1)
+
         embeddings = self.dropout(embeddings)
 
         return embeddings
@@ -142,12 +196,19 @@ class Dinov2PatchEmbeddings(nn.Module):
         image_size, patch_size = config.image_size, config.patch_size
         num_channels, hidden_size = config.num_channels, config.hidden_size
 
-        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
-        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        image_size = (
+            image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
+        )  # (width, height)
+        patch_size = (
+            patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
+        )  # (height, width)
+        dim_patches = (image_size[1] // patch_size[0], image_size[0] // patch_size[1])  # (height, width)
+        num_patches = dim_patches[0] * dim_patches[1]
+
         self.image_size = image_size
         self.patch_size = patch_size
         self.num_channels = num_channels
+        self.dim_patches = dim_patches
         self.num_patches = num_patches
 
         self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
@@ -505,6 +566,13 @@ class Dinov2PreTrainedModel(PreTrainedModel):
                 std=self.config.initializer_range,
             ).to(module.cls_token.dtype)
 
+            if module.register_tokens is not None:
+                module.register_tokens.data = nn.init.trunc_normal_(
+                    module.register_tokens.data.to(torch.float32),
+                    mean=0.0,
+                    std=self.config.initializer_range,
+                ).to(module.register_tokens.dtype)
+
 
 DINOV2_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
@@ -709,7 +777,7 @@ class Dinov2ForImageClassification(Dinov2PreTrainedModel):
         sequence_output = outputs[0]  # batch_size, sequence_length, hidden_size
 
         cls_token = sequence_output[:, 0]
-        patch_tokens = sequence_output[:, 1:]
+        patch_tokens = sequence_output[:, 1 + self.dinov2.config.num_register_tokens :]
 
         linear_input = torch.cat([cls_token, patch_tokens.mean(dim=1)], dim=1)
 
@@ -830,12 +898,14 @@ class Dinov2Backbone(Dinov2PreTrainedModel, BackboneMixin):
                 if self.config.apply_layernorm:
                     hidden_state = self.layernorm(hidden_state)
                 if self.config.reshape_hidden_states:
-                    hidden_state = hidden_state[:, 1:]
+                    hidden_state = hidden_state[:, 1 + self.config.num_register_tokens :]
                     # this was actually a bug in the original implementation that we copied here,
                     # cause normally the order is height, width
                     batch_size, _, height, width = pixel_values.shape
-                    patch_size = self.config.patch_size
-                    hidden_state = hidden_state.reshape(batch_size, height // patch_size, width // patch_size, -1)
+                    patch_size = self.embeddings.patch_embeddings.patch_size
+                    hidden_state = hidden_state.reshape(
+                        batch_size, height // patch_size[0], width // patch_size[1], -1
+                    )
                     hidden_state = hidden_state.permute(0, 3, 1, 2).contiguous()
                 feature_maps += (hidden_state,)
 
