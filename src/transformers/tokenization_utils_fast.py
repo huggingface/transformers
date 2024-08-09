@@ -830,4 +830,4 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         if len(additional_special_tokens) > 0:
             kwargs["additional_special_tokens"] = additional_special_tokens
 
-        return self.__class__(tokenizer_object=tokenizer_json, **kwargs)
+        return self.__class__(tokenizer_object=tokenizer, **kwargs)
