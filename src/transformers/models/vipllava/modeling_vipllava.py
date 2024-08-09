@@ -134,7 +134,7 @@ class VipLlavaPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["VipLlavaVisionAttention"]
     _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn_2 = True
+    _is_composite = True
     _supports_cache_class = True
 
     def _init_weights(self, module):
@@ -158,14 +158,6 @@ class VipLlavaPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-
-    @property
-    def _supports_sdpa(self):
-        """
-        Retrieve language_model's attribute to check whether the model supports
-        SDPA or not.
-        """
-        return self.language_model._supports_sdpa
 
 
 VIPLLAVA_INPUTS_DOCSTRING = r"""
@@ -242,12 +234,14 @@ VIPLLAVA_INPUTS_DOCSTRING = r"""
 class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel):
     def __init__(self, config: VipLlavaConfig):
         super().__init__(config)
-        self.vision_tower = AutoModel.from_config(config.vision_config)
+        self.vision_tower = AutoModel.from_config(
+            config.vision_config, attn_implementation=config._attn_implementation["vision_config"]
+        )
 
         self.multi_modal_projector = VipLlavaMultiModalProjector(config)
         self.vocab_size = config.text_config.vocab_size
         self.language_model = AutoModelForCausalLM.from_config(
-            config.text_config, attn_implementation=config._attn_implementation
+            config.text_config, attn_implementation=config._attn_implementation["text_config"]
         )
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self.post_init()

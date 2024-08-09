@@ -212,6 +212,10 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         pass
 
     @unittest.skip(reason="To fix, Mamba 2 cache slicing test case is an edge case")
+    def test_inputs_embeds_matches_input_ids_with_generate(self):
+        pass
+
+    @unittest.skip(reason="To fix, Mamba 2 cache slicing test case is an edge case")
     def test_greedy_generate_dict_outputs_use_cache(self):
         pass
 

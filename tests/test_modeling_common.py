@@ -2824,13 +2824,14 @@ class ModelTesterMixin:
         for model_class in self.all_model_classes:
             if model_class.__name__ not in get_values(MODEL_FOR_CAUSAL_LM_MAPPING_NAMES):
                 continue
+
             model = model_class(config)
             model.to(torch_device)
             model.eval()
 
-            model_forward_args = inspect.signature(model.forward).parameters
-            if "inputs_embeds" not in model_forward_args:
-                self.skipTest(reason="This model doesn't use `inputs_embeds`")
+            model_generation_args = inspect.signature(model.prepare_inputs_for_generation).parameters
+            if "inputs_embeds" not in model_generation_args:
+                self.skipTest(reason="This model doesn't use `inputs_embeds` for generation")
 
             inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
             pad_token_id = config.pad_token_id if config.pad_token_id is not None else 1
@@ -3760,7 +3761,9 @@ class ModelTesterMixin:
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
 
-        if not self.all_model_classes[0]._supports_sdpa:
+        if (not self.all_model_classes[0]._supports_sdpa and not self.all_model_classes[0]._is_composite) or (
+            self.all_model_classes[0]._is_composite and not self.supports_sdpa
+        ):
             self.skipTest(f"{self.all_model_classes[0].__name__} does not support SDPA")
 
         if torch_dtype == "float16" and not is_torch_fp16_available_on_device(torch_device):
@@ -3823,7 +3826,20 @@ class ModelTesterMixin:
                 model_sdpa = model_class.from_pretrained(tmpdirname, torch_dtype=torch_dtype)
                 model_sdpa = model_sdpa.eval().to(torch_device)
 
-                self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
+                if model_sdpa._is_composite:
+                    vision_model_name = "image_tower" if hasattr(model_sdpa, "image_tower") else "vision_tower"
+                    vision_attn = "sdpa" if getattr(model, vision_model_name)._supports_sdpa else "eager"
+                    text_attn = "sdpa" if model.language_model._supports_sdpa else "eager"
+
+                    # `None` as it is the requested one which will be assigned to each sub-config
+                    # Sub-model will dispatch to SDPA if it can (checked below that `SDPA` layers are present)
+                    self.assertTrue(
+                        model_sdpa.config._attn_implementation == {"text_config": None, "vision_config": None}
+                    )
+                    self.assertTrue(model_sdpa.language_model.config._attn_implementation == text_attn)
+                    self.assertTrue(getattr(model_sdpa, vision_model_name).config._attn_implementation == vision_attn)
+                else:
+                    self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
 
                 model_eager = model_class.from_pretrained(
                     tmpdirname,
@@ -3832,7 +3848,14 @@ class ModelTesterMixin:
                 )
                 model_eager = model_eager.eval().to(torch_device)
 
-                self.assertTrue(model_eager.config._attn_implementation == "eager")
+                if model_eager._is_composite:
+                    self.assertTrue(
+                        model_eager.config._attn_implementation == {"text_config": "eager", "vision_config": "eager"}
+                    )
+                    self.assertTrue(model_eager.language_model.config._attn_implementation == "eager")
+                    self.assertTrue(getattr(model_eager, vision_model_name).config._attn_implementation == "eager")
+                else:
+                    self.assertTrue(model_eager.config._attn_implementation == "eager")
 
                 for name, submodule in model_eager.named_modules():
                     class_name = submodule.__class__.__name__
@@ -4068,7 +4091,9 @@ class ModelTesterMixin:
             self.skipTest(reason="This test requires an NVIDIA GPU with compute capability >= 8.0")
 
         for model_class in self.all_model_classes:
-            if not model_class._supports_sdpa:
+            if (not model_class._is_composite and not model_class._supports_sdpa) or (
+                model_class._is_composite and not self.supports_sdpa
+            ):
                 self.skipTest(f"{model_class.__name__} does not support SDPA")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -4114,7 +4139,9 @@ class ModelTesterMixin:
             self.skipTest(reason="This test requires an NVIDIA GPU with compute capability >= 8.0")
 
         for model_class in self.all_model_classes:
-            if not model_class._supports_sdpa:
+            if (not model_class._is_composite and not model_class._supports_sdpa) or (
+                model_class._is_composite and not self.supports_sdpa
+            ):
                 self.skipTest(f"{model_class.__name__} does not support SDPA")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -4156,7 +4183,9 @@ class ModelTesterMixin:
             self.skipTest(f"{self.__class__.__name__} tests a model that does support generate: skipping this test")
 
         for model_class in self.all_generative_model_classes:
-            if not model_class._supports_sdpa:
+            if (not model_class._is_composite and not model_class._supports_sdpa) or (
+                model_class._is_composite and not self.supports_sdpa
+            ):
                 self.skipTest(f"{model_class.__name__} does not support SDPA")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -4182,7 +4211,20 @@ class ModelTesterMixin:
                     low_cpu_mem_usage=True,
                 ).to(torch_device)
 
-                self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
+                if model_sdpa._is_composite:
+                    vision_model_name = "image_tower" if hasattr(model_sdpa, "image_tower") else "vision_tower"
+                    vision_attn = "sdpa" if getattr(model, vision_model_name)._supports_sdpa else "eager"
+                    text_attn = "sdpa" if model.language_model._supports_sdpa else "eager"
+
+                    # `None` as it is the requested one which will be assigned to each sub-config
+                    # Sub-model will dispatch to SDPA if it can (checked below that `SDPA` layers are present)
+                    self.assertTrue(
+                        model_sdpa.config._attn_implementation == {"text_config": None, "vision_config": None}
+                    )
+                    self.assertTrue(model_sdpa.language_model.config._attn_implementation == text_attn)
+                    self.assertTrue(getattr(model_sdpa, vision_model_name).config._attn_implementation == vision_attn)
+                else:
+                    self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
 
                 model_eager = model_class.from_pretrained(
                     tmpdirname,
@@ -4191,7 +4233,14 @@ class ModelTesterMixin:
                     attn_implementation="eager",
                 ).to(torch_device)
 
-                self.assertTrue(model_eager.config._attn_implementation == "eager")
+                if model_eager._is_composite:
+                    self.assertTrue(
+                        model_eager.config._attn_implementation == {"text_config": "eager", "vision_config": "eager"}
+                    )
+                    self.assertTrue(model_eager.language_model.config._attn_implementation == "eager")
+                    self.assertTrue(getattr(model_eager, vision_model_name).config._attn_implementation == "eager")
+                else:
+                    self.assertTrue(model_eager.config._attn_implementation == "eager")
 
                 for name, submodule in model_eager.named_modules():
                     class_name = submodule.__class__.__name__
@@ -4229,6 +4278,8 @@ class ModelTesterMixin:
             self.skipTest(f"No generative model classes for {self.__class__.__name__}")
 
         for model_class in self.all_generative_model_classes:
+            if model_class._supports_sdpa:
+                self.skipTest(reason="Model architecture does not support attentions")
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
             if config.model_type not in WINDOW_ATTENTION_MODELS:
@@ -4330,6 +4381,59 @@ class ModelTesterMixin:
                     do_sample=False,
                     use_cache=True,
                 )
+
+    @require_flash_attn
+    @require_torch_gpu
+    @mark.flash_attn_test
+    @slow
+    def test_flash_attn_2_can_dispatch_composite_models(self):
+        """
+        Tests if composite models can dispatch on FA2 if the sub-models supports FA2.
+        The tests is needed as we handle differently composite models and we cannot check them
+        with above tests. If any of the sub-models does not support FA2, we'll raise an error when dispatching
+        that particular sub-model. Otherwise we dispatch safely in all sub-modules.
+        """
+        if not self.has_attentions:
+            self.skipTest(reason="Model architecture does not support attentions")
+
+        if not is_torch_fp16_available_on_device(torch_device):
+            self.skipTest(f"float16 not supported on {torch_device} (on the specific device currently used)")
+
+        torch_dtype = torch.float16
+        for model_class in self.all_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+            if not model_class._is_composite:
+                self.skipTest("This model is not a composte model!")
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch_dtype)
+
+                supports_fa2_all_modules = all(
+                    module._supports_flash_attn_2
+                    for name, module in model.named_modules()
+                    if isinstance(module, PreTrainedModel) and name != ""
+                )
+                if not supports_fa2_all_modules:
+                    with self.assertRaises(ValueError):
+                        model_fa2 = model_class.from_pretrained(
+                            tmpdirname, torch_dtype=torch_dtype, attn_implementation="flash_attention_2"
+                        )
+                else:
+                    model_fa2 = model_class.from_pretrained(
+                        tmpdirname, torch_dtype=torch_dtype, attn_implementation="flash_attention_2"
+                    )
+                    self.assertTrue("flash_attention_2" in model_fa2.config._attn_implementation.values())
+
+                    has_fa2 = False
+                    for name, submodule in model_fa2.named_modules():
+                        class_name = submodule.__class__.__name__
+                        if "FlashAttention" in class_name:
+                            has_fa2 = True
+                            break
+                    if not has_fa2:
+                        raise ValueError("The FA2 model should have FA2 layers")
 
     @require_flash_attn
     @require_torch_gpu
@@ -4555,6 +4659,41 @@ class ModelTesterMixin:
                         break
 
                 self.assertFalse(fa2_correctly_converted)
+
+    def test_attn_implementation_composite_models(self):
+        """
+        Tests if composite models can receive a dict object as attn_implementation, where each key should be
+        one of the sub-configs from the model's config.
+        """
+        if not self.has_attentions:
+            self.skipTest(reason="Model architecture does not support attentions")
+
+        for model_class in self.all_model_classes:
+            if not model_class._is_composite:
+                self.skipTest("Model is not a composite model.")
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            sub_configs = {
+                key: getattr(config, key) for key in config if isinstance(getattr(config, key), PretrainedConfig)
+            }
+
+            # set eager as it will be the one supported in all models, for the sake of testing
+            # if passing a dicr fails or not
+            attn_implementation_per_subconfig = {}
+            for key, sub_config in sub_configs.items():
+                attn_implementation_per_subconfig[key] = "eager"
+
+            config._attn_implementation = attn_implementation_per_subconfig
+            model = model_class(config)
+            self.assertTrue(model.config._attn_implementation == attn_implementation_per_subconfig)
+            for name, submodule in model.named_modules():
+                class_name = submodule.__class__.__name__
+                if (
+                    "SdpaAttention" in class_name
+                    or "SdpaSelfAttention" in class_name
+                    or "FlashAttention" in class_name
+                ):
+                    raise ValueError("The eager model should not have SDPA/FA2 attention layers")
 
     def _get_custom_4d_mask_test_data(self):
         # Sequence in which all but the last token is the same

@@ -1331,6 +1331,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     # SDPA support
     _supports_sdpa = False
 
+    # Composite models consisting of several PretrainedModels
+    _is_composite = False
+
     # Has support for a `Cache` instance as `past_key_values`? Does it support a `StaticCache`?
     _supports_cache_class = False
     _supports_static_cache = False
@@ -1514,7 +1517,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     ' We recommend to just use `attn_implementation="flash_attention_2"` when loading the model.'
                 )
 
-            if config._attn_implementation not in ["eager", "sdpa", "flash_attention_2"]:
+            if not isinstance(config._attn_implementation, dict) and config._attn_implementation not in [
+                "eager",
+                "sdpa",
+                "flash_attention_2",
+            ]:
                 message = f'Specified `attn_implementation="{config._attn_implementation}"` is not supported. The only possible arguments are `attn_implementation="eager"` (manual attention implementation)'
                 if cls._supports_flash_attn_2:
                     message += ', `"attn_implementation=flash_attention_2"` (implementation using flash attention 2)'
@@ -1524,6 +1531,28 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             # If a config is passed with a preset attn_implementation, we skip the automatic dispatch and use the user-provided config, with hard checks that the requested attention implementation is available.
             requested_attn_implementation = config._attn_implementation_internal
+
+        # Composite models consisting of several PretrainedModels have to specify attention impl as a dict
+        # where keys are sub-config names. But most people will specify one `str` which means that should dispatch
+        # for all sub-models or do not specify anything (`None`).
+        # Below we check is a models is composite and manually prepare a dict of attn impl if not already passed as a dict.
+        # Later each sub-model will dispatch with its own attn impl, by calling `_from_config(attn_impl="sdpa/FA2/eager")`
+        # If any of sub-models don't support requested attn, an error will be raised
+        sub_configs = {
+            key: getattr(config, key) for key in config if isinstance(getattr(config, key), PretrainedConfig)
+        }
+        if sub_configs:  # so we have a composite model
+            attn_implementation_per_subconfig = {}
+            for key, sub_config in sub_configs.items():
+                attn_implementation_per_subconfig[key] = (
+                    requested_attn_implementation
+                    if not isinstance(requested_attn_implementation, dict)
+                    else requested_attn_implementation.get(key)
+                )
+
+            if cls._is_composite:  # some composite models don't use attn impl, e.g. VQ-VAE
+                config._attn_implementation = attn_implementation_per_subconfig
+                requested_attn_implementation = config._attn_implementation
 
         if use_flash_attention_2:
             logger.warning_once(
@@ -1555,6 +1584,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     "Using the `SDPA` attention implementation on multi-gpu setup with ROCM may lead to performance issues due to the FA backend. Disabling it to use alternative backends."
                 )
                 torch.backends.cuda.enable_flash_sdp(False)
+        elif isinstance(requested_attn_implementation, dict):
+            config._attn_implementation = requested_attn_implementation
         else:
             config._attn_implementation = "eager"
 

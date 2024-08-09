@@ -125,7 +125,7 @@ class VideoLlavaPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["VideoLlavaVisionAttention"]
     _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn_2 = True
+    _is_composite = True
     _supports_cache_class = True
 
     def _init_weights(self, module):
@@ -238,13 +238,17 @@ VIDEO_LLAVA_INPUTS_DOCSTRING = r"""
 class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
     def __init__(self, config: VideoLlavaConfig):
         super().__init__(config)
-        self.video_tower = AutoModel.from_config(config.vision_config)
-        self.image_tower = AutoModel.from_config(config.vision_config)
+        self.video_tower = AutoModel.from_config(
+            config.vision_config, attn_implementation=config._attn_implementation["vision_config"]
+        )
+        self.image_tower = AutoModel.from_config(
+            config.vision_config, attn_implementation=config._attn_implementation["vision_config"]
+        )
 
         self.multi_modal_projector = VideoLlavaMultiModalProjector(config)
         self.vocab_size = config.text_config.vocab_size
         self.language_model = AutoModelForCausalLM.from_config(
-            config.text_config, attn_implementation=config._attn_implementation
+            config.text_config, attn_implementation=config._attn_implementation["text_config"]
         )
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self.post_init()

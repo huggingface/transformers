@@ -831,6 +831,10 @@ class PretrainedConfig(PushToHubMixin):
     def __repr__(self):
         return f"{self.__class__.__name__} {self.to_json_string()}"
 
+    def __iter__(self):
+        for attr in copy.deepcopy(self.__dict__):
+            yield attr
+
     def to_diff_dict(self) -> Dict[str, Any]:
         """
         Removes all attributes from config which correspond to the default config attributes for better readability and

@@ -314,6 +314,8 @@ class InstructBlipVideoPreTrainedModel(PreTrainedModel):
     config_class = InstructBlipVideoConfig
     base_model_prefix = "blip"
     supports_gradient_checkpointing = True
+    _is_composite = True
+
     _no_split_modules = [
         "InstructBlipVideoQFormerEmbeddings",
         "InstructBlipVideoAttention",
@@ -534,6 +536,9 @@ INSTRUCTBLIPVIDEO_INPUTS_DOCSTRING = r"""
 class InstructBlipVideoVisionModel(InstructBlipVideoPreTrainedModel):
     main_input_name = "pixel_values"
     config_class = InstructBlipVideoVisionConfig
+
+    # Ignore copy
+    _is_composite = False
 
     def __init__(self, config: InstructBlipVideoVisionConfig):
         super().__init__(config)
@@ -1083,6 +1088,8 @@ class InstructBlipVideoQFormerModel(InstructBlipVideoPreTrainedModel):
     instruction as input.
     """
 
+    _is_composite = True
+
     def __init__(self, config: InstructBlipVideoQFormerConfig):
         super().__init__(config)
         self.config = config
@@ -1290,7 +1297,9 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipVideoPreTrainedModel
     def __init__(self, config: InstructBlipVideoConfig):
         super().__init__(config)
 
-        self.vision_model = InstructBlipVideoVisionModel(config.vision_config)
+        self.vision_model = InstructBlipVideoVisionModel._from_config(
+            config.vision_config, attn_implementation=config._attn_implementation["vision_config"]
+        )
 
         self.query_tokens = nn.Parameter(torch.zeros(1, config.num_query_tokens, config.qformer_config.hidden_size))
         self.qformer = InstructBlipVideoQFormerModel(config.qformer_config)
@@ -1299,11 +1308,11 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipVideoPreTrainedModel
 
         if config.use_decoder_only_language_model:
             language_model = AutoModelForCausalLM.from_config(
-                config.text_config, attn_implementation=config._attn_implementation
+                config.text_config, attn_implementation=config._attn_implementation["text_config"]
             )
         else:
             language_model = AutoModelForSeq2SeqLM.from_config(
-                config.text_config, attn_implementation=config._attn_implementation
+                config.text_config, attn_implementation=config._attn_implementation["text_config"]
             )
 
         if language_model._no_split_modules is not None:

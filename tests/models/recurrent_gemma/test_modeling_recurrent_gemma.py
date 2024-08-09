@@ -390,6 +390,12 @@ class RecurrentGemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
     def test_assisted_decoding_sample(self):
         pass
 
+    @unittest.skip(
+        reason="RecurentGemma generation tests are not fully supported"
+    )  # TODO: @gante after adding MixinTests
+    def test_inputs_embeds_matches_input_ids_with_generate(self):
+        pass
+
     def _check_hidden_states_for_generate(
         self, batch_size, hidden_states, min_length, max_length, config, use_cache=False, num_beam_groups=1
     ):

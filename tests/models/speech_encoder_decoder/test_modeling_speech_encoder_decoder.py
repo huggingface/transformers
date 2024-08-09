@@ -17,8 +17,20 @@
 import tempfile
 import unittest
 
+from parameterized import parameterized
+
 from transformers import is_torch_available
-from transformers.testing_utils import require_deterministic_for_xpu, require_torch, slow, torch_device
+from transformers.testing_utils import (
+    require_deterministic_for_xpu,
+    require_torch,
+    require_torch_sdpa,
+    slow,
+    torch_device,
+)
+from transformers.utils import (
+    is_torch_bf16_available_on_device,
+    is_torch_fp16_available_on_device,
+)
 
 from ...test_modeling_common import floats_tensor, ids_tensor, random_attention_mask
 from ..bert.test_modeling_bert import BertModelTester
@@ -440,6 +452,94 @@ class EncoderDecoderMixin:
                 out_1[np.isnan(out_1)] = 0
                 max_diff = np.amax(np.abs(out_1 - out_2))
                 self.assertLessEqual(max_diff, 1e-5)
+
+    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
+    @require_torch_sdpa
+    @slow
+    def test_eager_matches_sdpa_inference(self, torch_dtype: str):
+        # if not self.supports_sdpa:
+        #    self.skipTest("SDPA is not supported")
+
+        if torch_dtype == "float16" and not is_torch_fp16_available_on_device(torch_device):
+            self.skipTest(f"float16 not supported on {torch_device} (on the specific device currently used)")
+
+        if torch_dtype == "bfloat16" and not is_torch_bf16_available_on_device(torch_device):
+            self.skipTest(
+                f"bfloat16 not supported on {torch_device} (on the specific device currently used, e.g. Nvidia T4 GPU)"
+            )
+
+        # Not sure whether it's fine to put torch.XXX in a decorator if torch is not available so hacking it here instead.
+        if torch_dtype == "float16":
+            torch_dtype = torch.float16
+        elif torch_dtype == "bfloat16":
+            torch_dtype = torch.bfloat16
+        elif torch_dtype == "float32":
+            torch_dtype = torch.float32
+
+        inputs_dict = self.prepare_config_and_inputs()
+        encoder_config, decoder_config = inputs_dict["config"], inputs_dict["decoder_config"]
+        config = SpeechEncoderDecoderConfig.from_encoder_decoder_configs(
+            encoder_config=encoder_config, decoder_config=decoder_config
+        )
+        model = SpeechEncoderDecoderModel(config=config)
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.save_pretrained(tmpdirname)
+            model_sdpa = SpeechEncoderDecoderModel.from_pretrained(tmpdirname, torch_dtype=torch_dtype)
+            model_sdpa = model_sdpa.eval().to(torch_device)
+
+            # see https://github.com/huggingface/transformers/pull/32238
+            # `None` as it is the requested one which will be assigned to each sub-config
+            # Sub-model will dispatch to SDPA if it can (checked below that `SDPA` layers are present)
+            encoder_attn = "sdpa" if model.encoder._supports_sdpa else "eager"
+            decoder_attn = "sdpa" if model.decoder._supports_sdpa else "eager"
+            self.assertTrue(model_sdpa.config._attn_implementation == {"encoder": None, "decoder": None})
+            self.assertTrue(model_sdpa.encoder.config._attn_implementation == encoder_attn)
+            self.assertTrue(model_sdpa.decoder.config._attn_implementation == decoder_attn)
+
+            # Also test that nothing break if we request SDPA explicitly, when both sub-parts support it.
+            # If the model supports sdpa (i.e. all of sub-models supports it) we'll dispatch safely
+            # Otherwise we should raise error that SDPA is not supported, as some of the sub-models doesn't support
+            if encoder_attn == "sdpa" and decoder_attn == "sdpa":
+                model_sdpa_explicit = SpeechEncoderDecoderModel.from_pretrained(
+                    tmpdirname, torch_dtype=torch_dtype, attn_implementation="sdpa"
+                )
+                model_sdpa_explicit = model_sdpa_explicit.eval().to(torch_device)
+
+                self.assertTrue(
+                    model_sdpa_explicit.config._attn_implementation
+                    == {"encoder": encoder_attn, "decoder": decoder_attn}
+                )
+            else:
+                with self.assertRaises(ValueError):
+                    model_sdpa_explicit = SpeechEncoderDecoderModel.from_pretrained(
+                        tmpdirname, torch_dtype=torch_dtype, attn_implementation="sdpa"
+                    )
+
+            model_eager = SpeechEncoderDecoderModel.from_pretrained(
+                tmpdirname,
+                torch_dtype=torch_dtype,
+                attn_implementation="eager",
+            )
+            model_eager = model_eager.eval().to(torch_device)
+
+            self.assertTrue(model_eager.config._attn_implementation == {"encoder": "eager", "decoder": "eager"})
+            self.assertTrue(model_eager.encoder.config._attn_implementation == "eager")
+            self.assertTrue(model_eager.decoder.config._attn_implementation == "eager")
+
+            for name, submodule in model_eager.named_modules():
+                class_name = submodule.__class__.__name__
+                if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
+                    raise ValueError("The eager model should not have SDPA attention layers")
+
+            has_sdpa = False
+            for name, submodule in model_sdpa.named_modules():
+                class_name = submodule.__class__.__name__
+                if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
+                    has_sdpa = True
+                    break
+            if not has_sdpa:
+                raise ValueError("The SDPA model should have SDPA attention layers")
 
 
 @require_torch

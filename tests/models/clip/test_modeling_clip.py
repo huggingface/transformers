@@ -196,6 +196,7 @@ class CLIPModelTesterMixin(ModelTesterMixin):
         torch_dtype: str,
         use_attention_mask_options: Tuple[Optional[str], ...] = (None, "left", "right"),
         logit_keys: Tuple[str, ...] = ("logits_per_image", "logits_per_text", "image_embeds", "text_embeds"),
+        is_composite: bool = True,
     ):
         if not self.all_model_classes[0]._supports_sdpa:
             self.skipTest(f"{self.all_model_classes[0].__name__} does not support SDPA")
@@ -252,8 +253,23 @@ class CLIPModelTesterMixin(ModelTesterMixin):
                 )
                 model_eager = model_eager.eval().to(torch_device)
 
-            self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
-            self.assertTrue(model_eager.config._attn_implementation == "eager")
+            if not is_composite:
+                self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
+                self.assertTrue(model_eager.config._attn_implementation == "eager")
+            else:
+                # CLIP has one shared cls attr for all models, so both submodels are SDPA or eager
+                # We expect `None` as it is the requested one which will be assigned to each sub-config
+                # Sub-model will dispatch to SDPA if it can (checked below that `SDPA` layers are present)
+                vision_attn = text_attn = "sdpa" if model._supports_sdpa else "eager"
+                self.assertTrue(model_sdpa.vision_model.config._attn_implementation == vision_attn)
+                self.assertTrue(model_sdpa.text_model.config._attn_implementation == text_attn)
+                self.assertTrue(model_sdpa.config._attn_implementation == {"text_config": None, "vision_config": None})
+
+                self.assertTrue(model_eager.vision_model.config._attn_implementation == "eager")
+                self.assertTrue(model_eager.text_model.config._attn_implementation == "eager")
+                self.assertTrue(
+                    model_eager.config._attn_implementation == {"text_config": "eager", "vision_config": "eager"}
+                )
 
             for name, submodule in model_eager.named_modules():
                 class_name = submodule.__class__.__name__
@@ -459,6 +475,7 @@ class CLIPVisionModelTest(CLIPModelTesterMixin, unittest.TestCase):
             torch_dtype=torch_dtype,
             logit_keys=("last_hidden_state", "pooler_output", "image_embeds"),
             use_attention_mask_options=(None,),
+            is_composite=False,
         )
 
 
@@ -637,6 +654,7 @@ class CLIPTextModelTest(CLIPModelTesterMixin, unittest.TestCase):
             torch_dtype=torch_dtype,
             logit_keys=("last_hidden_state", "pooler_output", "text_embeds"),
             use_attention_mask_options=(None, "right"),  # "left" is not supported for text model
+            is_composite=False,
         )
 
     @require_torch_sdpa
@@ -1138,6 +1156,7 @@ class CLIPForImageClassificationModelTest(CLIPModelTesterMixin, PipelineTesterMi
             torch_dtype=torch_dtype,
             logit_keys=("logits",),
             use_attention_mask_options=(None,),
+            is_composite=False,
         )
 
 

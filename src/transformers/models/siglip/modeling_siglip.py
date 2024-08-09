@@ -668,6 +668,8 @@ class SiglipPreTrainedModel(PreTrainedModel):
     config_class = SiglipConfig
     base_model_prefix = "siglip"
     supports_gradient_checkpointing = True
+    _is_composite = True
+
     _no_split_modules = [
         "SiglipTextEmbeddings",
         "SiglipEncoderLayer",
@@ -997,6 +999,7 @@ class SiglipTextTransformer(nn.Module):
 )
 class SiglipTextModel(SiglipPreTrainedModel):
     config_class = SiglipTextConfig
+    _is_composite = False
 
     def __init__(self, config: SiglipTextConfig):
         super().__init__(config)
@@ -1139,6 +1142,7 @@ class SiglipMultiheadAttentionPoolingHead(nn.Module):
 class SiglipVisionModel(SiglipPreTrainedModel):
     config_class = SiglipVisionConfig
     main_input_name = "pixel_values"
+    _is_composite = False
 
     def __init__(self, config: SiglipVisionConfig):
         super().__init__(config)
@@ -1217,8 +1221,12 @@ class SiglipModel(SiglipPreTrainedModel):
         vision_config = config.vision_config
 
         # First, initialize the text and vision models with proper attention implementation
-        text_model = SiglipTextModel._from_config(text_config, attn_implementation=config._attn_implementation)
-        vision_model = SiglipVisionModel._from_config(vision_config, attn_implementation=config._attn_implementation)
+        text_model = SiglipTextModel._from_config(
+            text_config, attn_implementation=config._attn_implementation["text_config"]
+        )
+        vision_model = SiglipVisionModel._from_config(
+            vision_config, attn_implementation=config._attn_implementation["vision_config"]
+        )
 
         # Second, get the text and vision submodules (for backward compatibility)
         self.text_model = text_model.text_model
@@ -1445,6 +1453,7 @@ class SiglipModel(SiglipPreTrainedModel):
 )
 class SiglipForImageClassification(SiglipPreTrainedModel):
     main_input_name = "pixel_values"
+    _is_composite = False
 
     def __init__(self, config: SiglipConfig) -> None:
         super().__init__(config)

@@ -76,6 +76,7 @@ class SiglipModelTesterMixin(ModelTesterMixin):
         torch_dtype: str,
         use_attention_mask_options: Tuple[bool, ...] = (True, False),
         logit_keys: Tuple[str, ...] = ("logits_per_image", "logits_per_text", "image_embeds", "text_embeds"),
+        is_composite: bool = True,
     ):
         if not self.all_model_classes[0]._supports_sdpa:
             self.skipTest(f"{self.all_model_classes[0].__name__} does not support SDPA")
@@ -132,8 +133,24 @@ class SiglipModelTesterMixin(ModelTesterMixin):
                 )
                 model_eager = model_eager.eval().to(torch_device)
 
-            self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
-            self.assertTrue(model_eager.config._attn_implementation == "eager")
+            if not is_composite:
+                self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
+                self.assertTrue(model_eager.config._attn_implementation == "eager")
+            else:
+                # SigLip has one shared cls attr for all models, so we assign both submodels heer
+                vision_attn = text_attn = "sdpa" if model._supports_sdpa else "eager"
+
+                # `None` as it is the requested one which will be assigned to each sub-config
+                # Sub-model will dispatch to SDPA if it can (checked below that `SDPA` layers are present)
+                self.assertTrue(model_sdpa.vision_model.config._attn_implementation == vision_attn)
+                self.assertTrue(model_sdpa.text_model.config._attn_implementation == text_attn)
+                self.assertTrue(model_sdpa.config._attn_implementation == {"text_config": None, "vision_config": None})
+
+                self.assertTrue(model_eager.vision_model.config._attn_implementation == "eager")
+                self.assertTrue(model_eager.text_model.config._attn_implementation == "eager")
+                self.assertTrue(
+                    model_eager.config._attn_implementation == {"text_config": "eager", "vision_config": "eager"}
+                )
 
             for name, submodule in model_eager.named_modules():
                 class_name = submodule.__class__.__name__
@@ -398,6 +415,7 @@ class SiglipVisionModelTest(SiglipModelTesterMixin, unittest.TestCase):
             torch_dtype=torch_dtype,
             logit_keys=("pooler_output", "last_hidden_state"),
             use_attention_mask_options=(False,),
+            is_composite=False,
         )
 
 
@@ -560,6 +578,7 @@ class SiglipTextModelTest(SiglipModelTesterMixin, unittest.TestCase):
             torch_dtype=torch_dtype,
             logit_keys=("pooler_output", "last_hidden_state"),
             use_attention_mask_options=(False, True),
+            is_composite=False,
         )
 
 
@@ -922,7 +941,7 @@ class SiglipForImageClassificationModelTest(SiglipModelTesterMixin, PipelineTest
     @is_flaky()
     def test_eager_matches_sdpa_inference(self, torch_dtype: str):
         super().test_eager_matches_sdpa_inference(
-            torch_dtype=torch_dtype, logit_keys=("logits",), use_attention_mask_options=(False,)
+            torch_dtype=torch_dtype, logit_keys=("logits",), use_attention_mask_options=(False,), is_composite=False
         )
 
 

@@ -624,7 +624,6 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
     @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
     @require_torch_sdpa
     @slow
-    # Copied from tests.models.musicgen.test_modeling_musicgen.MusicgenDecoderTest.test_eager_matches_sdpa_inference
     def test_eager_matches_sdpa_inference(self, torch_dtype: str):
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
@@ -1921,7 +1920,6 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
     @require_torch_sdpa
     @slow
-    # Copied from tests.test_modeling_common.ModelTesterMixin.test_eager_matches_sdpa_inference
     def test_eager_matches_sdpa_inference(self, torch_dtype: str):
         if not self.all_model_classes[0]._supports_sdpa:
             self.skipTest(f"{self.all_model_classes[0].__name__} does not support SDPA")
@@ -1981,7 +1979,23 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                 model_sdpa = model_class.from_pretrained(tmpdirname, torch_dtype=torch_dtype)
                 model_sdpa = model_sdpa.eval().to(torch_device)
 
-                self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
+                audio_encoder_attn = "sdpa" if model.audio_encoder._supports_sdpa else "eager"
+                text_encoder_attn = "sdpa" if model.text_encoder._supports_sdpa else "eager"
+                decoder_attn = "sdpa" if model.decoder._supports_sdpa else "eager"
+
+                # `None` as it is the requested one which will be assigned to each sub-config
+                # Sub-model will dispatch to SDPA if it can (checked below that `SDPA` layers are present)
+                self.assertTrue(model_sdpa.audio_encoder.config._attn_implementation == audio_encoder_attn)
+                self.assertTrue(model_sdpa.text_encoder.config._attn_implementation == text_encoder_attn)
+                self.assertTrue(model_sdpa.decoder.config._attn_implementation == decoder_attn)
+                self.assertTrue(
+                    model_sdpa.config._attn_implementation
+                    == {
+                        "audio_encoder": None,
+                        "text_encoder": None,
+                        "decoder": None,
+                    }
+                )
 
                 model_eager = model_class.from_pretrained(
                     tmpdirname,
@@ -1990,7 +2004,13 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                 )
                 model_eager = model_eager.eval().to(torch_device)
 
-                self.assertTrue(model_eager.config._attn_implementation == "eager")
+                self.assertTrue(model_eager.audio_encoder.config._attn_implementation == "eager")
+                self.assertTrue(model_eager.text_encoder.config._attn_implementation == "eager")
+                self.assertTrue(model_eager.decoder.config._attn_implementation == "eager")
+                self.assertTrue(
+                    model_eager.config._attn_implementation
+                    == {"audio_encoder": "eager", "text_encoder": "eager", "decoder": "eager"}
+                )
 
                 for name, submodule in model_eager.named_modules():
                     if "SdpaAttention" in submodule.__class__.__name__:

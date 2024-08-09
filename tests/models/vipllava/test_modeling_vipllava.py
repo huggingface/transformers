@@ -158,10 +158,16 @@ class VipLlavaForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestC
     """
 
     all_model_classes = (VipLlavaForConditionalGeneration,) if is_torch_available() else ()
+    all_generative_model_classes = (VipLlavaForConditionalGeneration,) if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = True
     test_head_masking = False
+
+    # We define this flag here because in VLMs these flags depend on which LM/vision models are used
+    # So we can't know if SDPA is supported before starting to load the model
+    # This flag is used by tests and is set to True because LM/vision models used in tests support SDPA
+    supports_sdpa = True
 
     def setUp(self):
         self.model_tester = VipLlavaVisionText2TextModelTester(self)

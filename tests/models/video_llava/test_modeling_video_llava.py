@@ -30,7 +30,6 @@ from transformers import (
 )
 from transformers.testing_utils import require_bitsandbytes, require_torch, require_torch_gpu, slow, torch_device
 
-from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
@@ -190,16 +189,22 @@ class VideoLlavaVisionText2TextModelTester:
 
 
 @require_torch
-class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
     """
     Model tester for `VideoLlavaForConditionalGeneration`.
     """
 
     all_model_classes = (VideoLlavaForConditionalGeneration,) if is_torch_available() else ()
+    all_generative_model_classes = (VideoLlavaForConditionalGeneration,) if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = True
     test_head_masking = False
+
+    # We define this flag here because in VLMs these flags depend on which LM/vision models are used
+    # So we can't know if SDPA is supported before starting to load the model
+    # This flag is used by tests and is set to True because LM/vision models used in tests support SDPA
+    supports_sdpa = True
 
     def setUp(self):
         self.model_tester = VideoLlavaVisionText2TextModelTester(self)

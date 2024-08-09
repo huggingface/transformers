@@ -577,6 +577,7 @@ class CLIPPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _supports_sdpa = True
     _supports_flash_attn_2 = True
+    _is_composite = True
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -938,6 +939,7 @@ class CLIPTextTransformer(nn.Module):
 )
 class CLIPTextModel(CLIPPreTrainedModel):
     config_class = CLIPTextConfig
+    _is_composite = False
 
     _no_split_modules = ["CLIPTextEmbeddings", "CLIPEncoderLayer"]
 
@@ -1059,6 +1061,7 @@ class CLIPVisionModel(CLIPPreTrainedModel):
     config_class = CLIPVisionConfig
     main_input_name = "pixel_values"
     _no_split_modules = ["CLIPEncoderLayer"]
+    _is_composite = False
 
     def __init__(self, config: CLIPVisionConfig):
         super().__init__(config)
@@ -1137,10 +1140,14 @@ class CLIPModel(CLIPPreTrainedModel):
         self.text_embed_dim = text_config.hidden_size
         self.vision_embed_dim = vision_config.hidden_size
 
-        text_model = CLIPTextModel._from_config(text_config, attn_implementation=config._attn_implementation)
+        text_model = CLIPTextModel._from_config(
+            text_config, attn_implementation=config._attn_implementation["text_config"]
+        )
         self.text_model = text_model.text_model
 
-        vision_model = CLIPVisionModel._from_config(vision_config, attn_implementation=config._attn_implementation)
+        vision_model = CLIPVisionModel._from_config(
+            vision_config, attn_implementation=config._attn_implementation["vision_config"]
+        )
         self.vision_model = vision_model.vision_model
 
         self.visual_projection = nn.Linear(self.vision_embed_dim, self.projection_dim, bias=False)
@@ -1350,6 +1357,7 @@ class CLIPModel(CLIPPreTrainedModel):
 )
 class CLIPTextModelWithProjection(CLIPPreTrainedModel):
     config_class = CLIPTextConfig
+    _is_composite = False
 
     _no_split_modules = ["CLIPTextEmbeddings", "CLIPEncoderLayer"]
 
@@ -1433,6 +1441,7 @@ class CLIPTextModelWithProjection(CLIPPreTrainedModel):
 class CLIPVisionModelWithProjection(CLIPPreTrainedModel):
     config_class = CLIPVisionConfig
     main_input_name = "pixel_values"
+    _is_composite = False
 
     def __init__(self, config: CLIPVisionConfig):
         super().__init__(config)
@@ -1512,6 +1521,7 @@ class CLIPVisionModelWithProjection(CLIPPreTrainedModel):
 )
 class CLIPForImageClassification(CLIPPreTrainedModel):
     main_input_name = "pixel_values"
+    _is_composite = False
 
     def __init__(self, config: CLIPConfig) -> None:
         super().__init__(config)
