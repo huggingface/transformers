@@ -186,7 +186,9 @@
   - local: performance
     title: 성능 및 확장성
   - local: in_translation
-    title: (번역중) LLM inference optimization
+    title: (번역중) Quantization
+  - local: llm_optims
+    title: LLM 추론 최적화
   - sections:
     - local: in_translation
       title: (번역중) Methods and tools for efficient training on a single GPU
