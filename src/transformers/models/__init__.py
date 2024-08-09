@@ -156,6 +156,7 @@ from . import (
     mpnet,
     mpt,
     mra,
+    msclap,
     mt5,
     musicgen,
     musicgen_melody,

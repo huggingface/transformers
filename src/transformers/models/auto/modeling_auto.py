@@ -165,6 +165,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("mpnet", "MPNetModel"),
         ("mpt", "MptModel"),
         ("mra", "MraModel"),
+        ("msclap", "MSClapModel"),
         ("mt5", "MT5Model"),
         ("musicgen", "MusicgenModel"),
         ("musicgen_melody", "MusicgenMelodyModel"),
