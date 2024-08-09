@@ -18,11 +18,11 @@ Processor class for IDEFICS.
 
 import sys
 import warnings
-from typing import List, Union
+from typing import Callable, List, Optional, Union
 from urllib.parse import urlparse
 
 from ...feature_extraction_utils import BatchFeature
-from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, TextKwargs
 from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
 from ...utils import is_tf_available, is_torch_available
 from ...utils.deprecation import deprecate_kwarg
@@ -42,11 +42,23 @@ if is_tf_available():
 IMAGE_TOKEN = "<image>"
 
 
+class IdeficsImagesKwargs(ImagesKwargs, total=False):
+    transform: Optional[Callable]
+
+
+class IdeficsTextKwargs(TextKwargs, total=False):
+    add_eos_token: Optional[bool]
+    add_end_of_utterance_token: Optional[bool]
+
+
 class IdeficsProcessorKwargs(ProcessingKwargs, total=False):
+    text_kwargs: IdeficsTextKwargs
+    images_kwargs: IdeficsImagesKwargs
     _defaults = {
         "text_kwargs": {
             "add_special_tokens": False,
             "padding": "longest",
+            "add_eos_token": False,
         },
         "images_kwargs": {},
     }
@@ -217,9 +229,6 @@ class IdeficsProcessor(ProcessorMixin):
             else False
         )
 
-    @deprecate_kwarg(
-        old_name="transform", version="5.0.0", additional_message="Add kwargs to the image processor instead."
-    )
     @deprecate_kwarg(old_name="prompts", version="5.0.0", new_name="text", raise_if_both_names=True)
     def __call__(
         self,
@@ -277,7 +286,7 @@ class IdeficsProcessor(ProcessorMixin):
             "Describe this image.\nAssistant:",
         ]
 
-        inputs = processor(prompts, return_tensors="pt")
+        inputs = processor(text=prompts, return_tensors="pt")
         generated_ids = model.generate(**inputs, max_length=100)
         generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
         ```
@@ -309,7 +318,7 @@ class IdeficsProcessor(ProcessorMixin):
                 transforms.Normalize(mean=self.image_mean, std=self.image_std),
             ]
         )
-        inputs = processor(prompts, transform=image_transform, return_tensors="pt")
+        inputs = processor(text=prompts, transform=image_transform, return_tensors="pt")
         ```
 
         In order to help debug prompt generation enable `debug=True` which will show you what's happening.
@@ -348,11 +357,6 @@ class IdeficsProcessor(ProcessorMixin):
                 raise ValueError("When using the image-text-to-text behavior, the prompts should only contain text.")
             prompts = list(zip(images, text))
 
-        # for BC
-        transform = kwargs.pop("transform", None)
-        add_eos_token = kwargs.pop("add_eos_token", False)
-        add_end_of_utterance_token = kwargs.pop("add_end_of_utterance_token", None)
-
         # Temporary fix for "paddding_side" in init_kwargs
         _ = self.tokenizer.init_kwargs.pop("padding_side", None)
 
@@ -361,8 +365,9 @@ class IdeficsProcessor(ProcessorMixin):
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
-        if transform is not None:
-            output_kwargs["images_kwargs"]["transform"] = transform
+
+        add_eos_token = output_kwargs["text_kwargs"].pop("add_eos_token", False)
+        add_end_of_utterance_token = output_kwargs["text_kwargs"].pop("add_end_of_utterance_token", None)
 
         # if the value isn't overriden by the user, check if the tokenizer was trained with this token and then use it
         if add_end_of_utterance_token is None:
