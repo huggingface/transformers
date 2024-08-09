@@ -32,7 +32,7 @@ rendered properly in your Markdown viewer.
 또한 채팅 모델의 성능과 메모리 사용을 최적화하는 방법에 대한 팁도 제공할 것입니다.
 
 
-## 빠른시작[[Quickstart]]
+## 빠른 시작[[Quickstart]]
 
 자세히 볼 여유가 없는 분들을 위해 간단히 요약해 보겠습니다: 
 채팅 모델은 대화 메세지를 계속해서 생성해 나갑니다.
