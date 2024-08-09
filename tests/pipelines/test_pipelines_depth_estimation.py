@@ -34,6 +34,7 @@ from transformers.testing_utils import (
 
 from .test_pipelines_common import ANY
 
+
 if is_torch_available():
     import torch
 

@@ -1,7 +1,5 @@
 from typing import List, Union
 
-import numpy as np
-
 from ..models.zoedepth import ZoeDepthForDepthEstimation
 from ..utils import (
     add_end_docstrings,
@@ -11,6 +9,7 @@ from ..utils import (
     requires_backends,
 )
 from .base import Pipeline, build_pipeline_init_args
+
 
 if is_vision_available():
     from PIL import Image

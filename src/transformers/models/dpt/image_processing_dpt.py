@@ -46,6 +46,7 @@ from ...utils import (
     requires_backends,
 )
 
+
 if is_torch_available():
     import torch
 
@@ -401,7 +402,8 @@ class DPTImageProcessor(BaseImageProcessor):
 
         if do_rescale:
             images = [
-                self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format) for image in images
+                self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
+                for image in images
             ]
 
         if do_normalize:
@@ -446,7 +448,9 @@ class DPTImageProcessor(BaseImageProcessor):
         # Resize logits and compute semantic segmentation maps
         if target_sizes is not None:
             if len(logits) != len(target_sizes):
-                raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the logits")
+                raise ValueError(
+                    "Make sure that you pass in as many target sizes as the batch dimension of the logits"
+                )
 
             if is_torch_tensor(target_sizes):
                 target_sizes = target_sizes.numpy()
