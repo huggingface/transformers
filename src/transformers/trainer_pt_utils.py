@@ -1618,6 +1618,38 @@ def wait_for_everyone():
         wait_for_everyone()
 
 
+# Below are passthrough functions to modules that align
+# themselves with torch standards
+# e.g. `torch.cuda.random.get_rng_state()`
+# v.s. `torch.npu.random.get_rng_state()`
+def get_rng_state(torch_module, parallel: bool = False):
+    """
+    Calls the proper get_rng_state based on `parallel`
+    from `torch_module`
+    """
+    if parallel:
+        return torch_module.random.get_rng_state_all()
+    else:
+        return torch_module.random.get_rng_state()
+
+
+def set_rng_state(torch_module, rng_state, parallel: bool = False):
+    """
+    Calls the proper `set_rng_state` based on `parallel`
+    from `torch_module`
+    """
+    if parallel:
+        torch_module.random.set_rng_state_all(rng_state)
+    else:
+        try:
+            torch_module.random.set_rng_state(rng_state)
+        except Exception as e:
+            logger.info(
+                f"Didn't manage to set back the {torch_module.split('.')[1]} RNG states because of the following error:\n {e}"
+                "\nThis won't yield the same results as if the training had not been interrupted."
+            )
+
+
 def create_accelerator(args):
     "Creates an accelerator based on `args`"
     from accelerate import Accelerator

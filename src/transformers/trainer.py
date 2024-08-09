@@ -111,6 +111,7 @@ from .trainer_pt_utils import (
     find_batch_size,
     get_decay_parameter_names,
     get_model_param_count,
+    get_rng_state,
     model_sanity_checks,
     nested_concat,
     nested_detach,
@@ -119,6 +120,7 @@ from .trainer_pt_utils import (
     optimizer_sanity_checks,
     reissue_pt_warnings,
     remove_dummy_checkpoint,
+    set_rng_state,
     wait_for_everyone,
 )
 from .trainer_utils import (
@@ -170,6 +172,7 @@ from .utils import (
     is_sagemaker_dp_enabled,
     is_sagemaker_mp_enabled,
     is_torch_compile_available,
+    is_torch_cuda_available,
     is_torch_mlu_available,
     is_torch_mps_available,
     is_torch_neuroncore_available,
@@ -2935,41 +2938,16 @@ class Trainer:
         random.setstate(checkpoint_rng_state["python"])
         np.random.set_state(checkpoint_rng_state["numpy"])
         torch.random.set_rng_state(checkpoint_rng_state["cpu"])
-        if torch.cuda.is_available():
-            if self.args.parallel_mode == ParallelMode.DISTRIBUTED:
-                torch.cuda.random.set_rng_state_all(checkpoint_rng_state["cuda"])
-            else:
-                try:
-                    torch.cuda.random.set_rng_state(checkpoint_rng_state["cuda"])
-                except Exception as e:
-                    logger.info(
-                        f"Didn't manage to set back the RNG states of the GPU because of the following error:\n {e}"
-                        "\nThis won't yield the same results as if the training had not been interrupted."
-                    )
+
+        is_parallel = self.args.parallel_mode == ParallelMode.DISTRIBUTED
+        if is_torch_cuda_available():
+            set_rng_state(torch.cuda, checkpoint_rng_state["cuda"], is_parallel)
         if is_torch_xla_available():
-            xm.set_rng_state(checkpoint_rng_state["xla"])
+            set_rng_state(xm, checkpoint_rng_state["xla"])
         if is_torch_npu_available():
-            if self.args.parallel_mode == ParallelMode.DISTRIBUTED:
-                torch.npu.random.set_rng_state_all(checkpoint_rng_state["npu"])
-            else:
-                try:
-                    torch.npu.random.set_rng_state(checkpoint_rng_state["npu"])
-                except Exception as e:
-                    logger.info(
-                        f"Didn't manage to set back the RNG states of the NPU because of the following error:\n {e}"
-                        "\nThis won't yield the same results as if the training had not been interrupted."
-                    )
+            set_rng_state(torch.npu, checkpoint_rng_state["npu"], is_parallel)
         if is_torch_mlu_available():
-            if self.args.parallel_mode == ParallelMode.DISTRIBUTED:
-                torch.mlu.random.set_rng_state_all(checkpoint_rng_state["mlu"])
-            else:
-                try:
-                    torch.mlu.random.set_rng_state(checkpoint_rng_state["mlu"])
-                except Exception as e:
-                    logger.info(
-                        f"Didn't manage to set back the RNG states of the MLU because of the following error:\n {e}"
-                        "\nThis won't yield the same results as if the training had not been interrupted."
-                    )
+            set_rng_state(torch.mlu, checkpoint_rng_state["mlu"], is_parallel)
 
     def _load_from_checkpoint(self, resume_from_checkpoint, model=None):
         if model is None:
@@ -3416,6 +3394,37 @@ class Trainer:
             )
         if self.tokenizer is not None and self.args.should_save:
             self.tokenizer.save_pretrained(output_dir)
+
+    def _save_rng_state(self, output_dir):
+        fname = os.path.join(
+            output_dir, f"rng_state_{self.args.process_index}.pth" if self.args.world_size > 1 else "rng_state.pth"
+        )
+
+        # Save RNG state in non-distributed training
+        rng_states = {
+            "python": random.getstate(),
+            "numpy": np.random.get_state(),
+            "cpu": torch.random.get_rng_state(),
+        }
+
+        is_parallel = self.args.parallel_mode == ParallelMode.DISTRIBUTED
+        if torch.cuda.is_available():
+            rng_states["cuda"] = get_rng_state(torch.cuda, is_parallel)
+
+        if is_torch_xla_available():
+            rng_states["xla"] = get_rng_state(xm)
+
+        if is_torch_npu_available():
+            rng_states["npu"] = get_rng_state(torch.npu, is_parallel)
+
+        if is_torch_mlu_available():
+            rng_states["mlu"] = get_rng_state(torch.mlu, is_parallel)
+
+        # A process can arrive here before the process 0 has a chance to save the model, in which case output_dir may
+        # not yet exist.
+        os.makedirs(output_dir, exist_ok=True)
+
+        torch.save(rng_states, fname)
 
     def _save_checkpoint(self, model, trial, metrics=None):
         # In all cases, including ddp/dp/deepspeed, self.model is always a reference to the model we
