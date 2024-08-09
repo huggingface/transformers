@@ -32,7 +32,7 @@ class ProPainterConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`ProPainterModel`]. It is used to instantiate an ProPainter
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the ProPainter
-    [google/propainter-base-patch16-224](https://huggingface.co/google/propainter-base-patch16-224) architecture.
+    [ruffy369/propainter](https://huggingface.co/ruffy369/propainter) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -85,38 +85,113 @@ class ProPainterConfig(PretrainedConfig):
     ```"""
 
     model_type = "propainter"
+    # attribute_map = {
+    #     "hidden_size": "latent_dim",
+    #     "num_attention_heads": "attention_heads",
+    #     "num_hidden_layers": "num_enc_layers",
+    #     "vocab_size": "vocab_size",
+    #     "num_key_value_heads": "num_heads",
+    # }
+
 
     def __init__(
         self,
-        hidden_size=768,
-        num_hidden_layers=12,
-        num_attention_heads=12,
-        intermediate_size=3072,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.0,
-        attention_probs_dropout_prob=0.0,
-        initializer_range=0.02,
-        layer_norm_eps=1e-12,
-        image_size=224,
-        patch_size=16,
-        num_channels=3,
-        qkv_bias=True,
-        encoder_stride=16,
+        # hidden_size=768,
+        # num_hidden_layers=12,
+        # num_attention_heads=12,
+        # intermediate_size=3072,
+        # hidden_act="gelu",
+        # hidden_dropout_prob=0.0,
+        # attention_probs_dropout_prob=0.0,
+        # initializer_range=0.02,
+        # layer_norm_eps=1e-12,
+        # image_size=224,
+        # patch_size=16,
+        # num_channels=3,
+        # qkv_bias=True,
+        # encoder_stride=16,
+        width_flow_complete_net=432,
+        height_flow_complete_net=240,
+        width_propainter=432,
+        height_propainter=240,
+        num_local_frames_flow_complete_net=10,
+        num_ref_frames_flow_complete_net=1,
+        num_local_frames_propainter=10,
+        num_ref_frames_propainter=6,
+        load_flow_flow_complete_net=0,
+        load_flow_propainter=0,
+        flow_weight_flow_complete_net=0.25,
+        beta1_flow_complete_net=0,
+        beta2_flow_complete_net=0.99,
+        lr_flow_complete_net=5e-5,
+        batch_size_flow_complete_net=8,
+        num_workers_flow_complete_net=4,
+        num_prefetch_queue_flow_complete_net=4,
+        log_freq_flow_complete_net=100,
+        save_freq_flow_complete_net=5e3,
+        iterations_flow_complete_net=700e3,
+        hole_weight=1,
+        valid_weight=1,
+        flow_weight_propainter=1,
+        adversarial_weight=0.01,
+        GAN_LOSS="hinge",
+        perceptual_weight=0,
+        interp_mode="nearest",
+        beta1_propainter=0,
+        beta2_propainter=0.99,
+        lr_propainter=1e-4,
+        batch_size_propainter=8,
+        num_workers_propainter=8,
+        num_prefetch_queue_propainter=8,
+        log_freq_propainter=100,
+        save_freq_propainte=1e4,
+        iterations_propainter=700e3,
+        ref_stride=10,
+        neighbor_length=10,
+        subvideo_length=80,
+        raft_optical_flow_iter=20,
+        
         **kwargs,
     ):
         super().__init__(**kwargs)
 
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.qkv_bias = qkv_bias
-        self.encoder_stride = encoder_stride
+        self.width_flow_complete_net =  width_flow_complete_net
+        self.height_flow_complete_net = height_flow_complete_net
+        self.width_propainter =  width_propainter
+        self.height_propainter = height_propainter
+        self.num_local_frames_flow_complete_net = num_local_frames_flow_complete_net
+        self.num_ref_frames_flow_complete_net = num_ref_frames_flow_complete_net
+        self.num_local_frames_propainter = num_local_frames_propainter
+        self.num_ref_frames_propainter = num_ref_frames_propainter
+        self.load_flow_flow_complete_net = load_flow_flow_complete_net
+        self.load_flow_propainter = load_flow_propainter
+        self.flow_weight_flow_complete_net = flow_weight_flow_complete_net
+        self.beta1_flow_complete_net = beta1_flow_complete_net
+        self.beta2_flow_complete_net = beta2_flow_complete_net
+        self.lr_flow_complete_net = lr_flow_complete_net
+        self.batch_size_flow_complete_net = batch_size_flow_complete_net
+        self.num_workers_flow_complete_net = num_workers_flow_complete_net
+        self.num_prefetch_queue_flow_complete_net = num_prefetch_queue_flow_complete_net
+        self.log_freq_flow_complete_net = log_freq_flow_complete_net
+        self.save_freq_flow_complete_net = save_freq_flow_complete_net
+        self.iterations_flow_complete_net = iterations_flow_complete_net
+        self.hole_weight = hole_weight
+        self.valid_weight = valid_weight
+        self.flow_weight_propainter = flow_weight_propainter
+        self.adversarial_weight = adversarial_weight
+        self.GAN_LOSS = GAN_LOSS
+        self.perceptual_weight = perceptual_weight
+        self.interp_mode = interp_mode
+        self.beta1_propainter = beta1_propainter
+        self.beta2_propainter = beta2_propainter
+        self.lr_propainter = lr_propainter
+        self.batch_size_propainter = batch_size_propainter
+        self.num_workers_propainter = num_workers_propainter
+        self.num_prefetch_queue_propainter = num_prefetch_queue_propainter
+        self.log_freq_propainter = log_freq_propainter
+        self.save_freq_propainte = save_freq_propainte
+        self.iterations_propainter = iterations_propainter
+        self.ref_stride = ref_stride
+        self.neighbor_length = neighbor_length
+        self.subvideo_length = subvideo_length
+        self.raft_optical_flow_iter = raft_optical_flow_iter
