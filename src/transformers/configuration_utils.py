@@ -630,6 +630,8 @@ class PretrainedConfig(PushToHubMixin):
         original_kwargs = copy.deepcopy(kwargs)
         # Get config dict associated with the base config file
         config_dict, kwargs = cls._get_config_dict(pretrained_model_name_or_path, **kwargs)
+        if config_dict is None:
+            return {}, kwargs
         if "_commit_hash" in config_dict:
             original_kwargs["_commit_hash"] = config_dict["_commit_hash"]
 
@@ -700,6 +702,8 @@ class PretrainedConfig(PushToHubMixin):
                     subfolder=subfolder,
                     _commit_hash=commit_hash,
                 )
+                if resolved_config_file is None:
+                    return None, kwargs
                 commit_hash = extract_commit_hash(resolved_config_file, commit_hash)
             except EnvironmentError:
                 # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted to

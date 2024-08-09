@@ -51,7 +51,7 @@ class Wav2Vec2Processor(ProcessorMixin):
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
         try:
             return super().from_pretrained(pretrained_model_name_or_path, **kwargs)
-        except OSError:
+        except (OSError, ValueError):
             warnings.warn(
                 f"Loading a tokenizer inside {cls.__name__} from a config that does not"
                 " include a `tokenizer_class` attribute is deprecated and will be "

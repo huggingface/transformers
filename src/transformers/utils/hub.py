@@ -369,7 +369,7 @@ def cached_file(
     if os.path.isdir(path_or_repo_id):
         resolved_file = os.path.join(os.path.join(path_or_repo_id, subfolder), filename)
         if not os.path.isfile(resolved_file):
-            if _raise_exceptions_for_missing_entries:
+            if _raise_exceptions_for_missing_entries and filename not in ["config.json", f"{subfolder}/config.json"]:
                 raise EnvironmentError(
                     f"{path_or_repo_id} does not appear to have a file named {full_filename}. Checkout "
                     f"'https://huggingface.co/{path_or_repo_id}/tree/{revision}' for available files."
@@ -453,6 +453,8 @@ def cached_file(
             return None
         if revision is None:
             revision = "main"
+        if filename in ["config.json", f"{subfolder}/config.json"]:
+            return None
         raise EnvironmentError(
             f"{path_or_repo_id} does not appear to have a file named {full_filename}. Checkout "
             f"'https://huggingface.co/{path_or_repo_id}/tree/{revision}' for available files."
