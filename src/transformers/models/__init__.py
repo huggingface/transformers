@@ -103,6 +103,7 @@ from . import (
     gpt_neox_japanese,
     gpt_sw3,
     gptj,
+    granite,
     grounding_dino,
     groupvit,
     herbert,
