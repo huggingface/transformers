@@ -116,6 +116,7 @@ class InstructBlipProcessor(ProcessorMixin):
         """
         if images is None and text is None:
             raise ValueError("You have to specify at least images or text.")
+
         output_kwargs = self._merge_kwargs(
             InstructBlipProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,

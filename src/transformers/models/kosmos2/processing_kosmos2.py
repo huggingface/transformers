@@ -32,7 +32,7 @@ if sys.version_info >= (3, 11):
 else:
     from typing_extensions import Unpack
 
-from ...processing_utils import ProcessingKwargs
+from ...processing_utils import ImagesKwargs, ProcessingKwargs, TextKwargs
 
 
 BboxInput = Union[
@@ -43,7 +43,19 @@ BboxInput = Union[
 ]
 
 
+class Kosmos2ImagesKwargs(ImagesKwargs, total=False):
+    bboxes: Optional[List[float]]
+    num_image_tokens: Optional[int]
+    first_image_token_id: Optional[int]
+
+
+class Kosmos2TextKwargs(TextKwargs, total=False):
+    add_eos_token: Optional[bool]
+
+
 class Kosmos2ProcessorKwargs(ProcessingKwargs, total=False):
+    text_kwargs: Kosmos2TextKwargs
+    images_kwargs: Kosmos2ImagesKwargs
     _defaults = {
         "text_kwargs": {
             "add_special_tokens": True,
@@ -54,8 +66,11 @@ class Kosmos2ProcessorKwargs(ProcessingKwargs, total=False):
             "return_offsets_mapping": False,
             "return_token_type_ids": False,
             "verbose": True,
+            "add_eos_token": False,
         },
-        "images_kwargs": {},
+        "images_kwargs": {
+            "num_image_tokens": 64,
+        },
     }
 
 
@@ -158,10 +173,6 @@ class Kosmos2Processor(ProcessorMixin):
         if images is None and text is None:
             raise ValueError("You have to specify either images or text.")
 
-        bboxes = kwargs.pop("bboxes", None)
-        num_image_tokens = kwargs.pop("num_image_tokens", 64)
-        first_image_token_id = kwargs.pop("first_image_token_id", None)
-        add_eos_token = kwargs.pop("add_eos_token", False)
         # Temporary fix for "paddding_side" in init_kwargs
         _ = self.tokenizer.init_kwargs.pop("padding_side", None)
 
@@ -170,6 +181,11 @@ class Kosmos2Processor(ProcessorMixin):
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
+
+        bboxes = output_kwargs["images_kwargs"].pop("bboxes", None)
+        num_image_tokens = output_kwargs["images_kwargs"].pop("num_image_tokens", 64)
+        first_image_token_id = output_kwargs["images_kwargs"].pop("first_image_token_id", None)
+        add_eos_token = output_kwargs["text_kwargs"].pop("add_eos_token", False)
 
         add_special_tokens = output_kwargs["text_kwargs"]["add_special_tokens"]
         padding = output_kwargs["text_kwargs"]["padding"]
