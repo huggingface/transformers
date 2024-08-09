@@ -76,7 +76,8 @@ class VivitTubeletEmbeddings(nn.Module):
 
         x = self.projection(pixel_values)
         # out_batch_size, out_num_channels, out_num_frames, out_height, out_width = x.shape
-        x = self.projection(pixel_values).flatten(2).transpose(1, 2)
+        # flattens time and space dimensions, transposes to (out_batch_size, flat_tokens, out_num_channels)
+        x = x.flatten(2).transpose(1, 2)
         return x
 
 

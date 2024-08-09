@@ -175,7 +175,7 @@ if __name__ == "__main__":
     # This env. variable is set in workflow file (under the job `send_results`).
     ci_event = os.environ["CI_EVENT"]
 
-    title = f"🤗 Results of the {ci_event} tests."
+    title = f"🤗 Results of the {ci_event} - {os.getenv('CI_TEST_JOB')}."
 
     if setup_failed:
         Message.error_out(

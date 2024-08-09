@@ -754,7 +754,7 @@ class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 model(**inputs)[0]
 
-    @unittest.skip("FineModel relies on codebook idx and does not return same logits")
+    @unittest.skip(reason="FineModel relies on codebook idx and does not return same logits")
     def test_inputs_embeds_matches_input_ids(self):
         pass
 
@@ -826,7 +826,7 @@ class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
         # resizing tokens_embeddings of a ModuleList
         original_config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         if not self.test_resize_embeddings:
-            return
+            self.skipTest(reason="test_resize_embeddings is False")
 
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
@@ -877,7 +877,7 @@ class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
         # resizing tokens_embeddings of a ModuleList
         original_config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         if not self.test_resize_embeddings:
-            return
+            self.skipTest(reason="test_resize_embeddings is False")
 
         original_config.tie_word_embeddings = False
 
@@ -931,7 +931,7 @@ class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
     def test_flash_attn_2_inference_equivalence(self):
         for model_class in self.all_model_classes:
             if not model_class._supports_flash_attn_2:
-                return
+                self.skipTest(reason="Model does not support flash_attention_2")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
@@ -988,7 +988,7 @@ class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         for model_class in self.all_model_classes:
             if not model_class._supports_flash_attn_2:
-                return
+                self.skipTest(reason="Model does not support flash_attention_2")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)

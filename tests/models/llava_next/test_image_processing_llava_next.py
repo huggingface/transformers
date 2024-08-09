@@ -197,7 +197,9 @@ class LlavaNextImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         expected_output_image_shape = (7, 1445, 3, 18, 18)
         self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
-    @unittest.skip("LlavaNextImageProcessor doesn't treat 4 channel PIL and numpy consistently yet")  # FIXME Amy
+    @unittest.skip(
+        reason="LlavaNextImageProcessor doesn't treat 4 channel PIL and numpy consistently yet"
+    )  # FIXME Amy
     def test_call_numpy_4_channels(self):
         pass
 

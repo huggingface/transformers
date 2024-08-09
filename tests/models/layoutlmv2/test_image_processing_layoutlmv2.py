@@ -41,6 +41,7 @@ class LayoutLMv2ImageProcessingTester(unittest.TestCase):
         size=None,
         apply_ocr=True,
     ):
+        super().__init__()
         size = size if size is not None else {"height": 18, "width": 18}
         self.parent = parent
         self.batch_size = batch_size
@@ -96,7 +97,7 @@ class LayoutLMv2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
         image_processor = self.image_processing_class.from_dict(self.image_processor_dict, size=42)
         self.assertEqual(image_processor.size, {"height": 42, "width": 42})
 
-    @unittest.skip("Tesseract version is not correct in ci. @Arthur FIXME")
+    @unittest.skip(reason="Tesseract version is not correct in ci. @Arthur FIXME")
     def test_layoutlmv2_integration_test(self):
         # with apply_OCR = True
         image_processing = LayoutLMv2ImageProcessor()

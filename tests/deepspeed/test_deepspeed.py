@@ -108,13 +108,13 @@ def require_deepspeed_aio(test_case):
     Decorator marking a test that requires deepspeed aio (nvme)
     """
     if not is_deepspeed_available():
-        return unittest.skip("test requires deepspeed")(test_case)
+        return unittest.skip(reason="test requires deepspeed")(test_case)
 
     import deepspeed
     from deepspeed.ops.aio import AsyncIOBuilder
 
     if not deepspeed.ops.__compatible_ops__[AsyncIOBuilder.NAME]:
-        return unittest.skip("test requires deepspeed async-io")(test_case)
+        return unittest.skip(reason="test requires deepspeed async-io")(test_case)
     else:
         return test_case
 
@@ -545,6 +545,7 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
             ds_config_zero3_dict = self.get_config_dict(ZERO3)
             ds_config_zero3_dict["zero_optimization"]["offload_optimizer"] = nvme_config
             ds_config_zero3_dict["zero_optimization"]["offload_param"] = nvme_config
+            ds_config_zero3_dict["zero_optimization"]["stage3_gather_16bit_weights_on_model_save"] = True
             trainer = get_regression_trainer(local_rank=0, fp16=True, deepspeed=ds_config_zero3_dict)
             with CaptureLogger(deepspeed_logger) as cl:
                 trainer.train()
@@ -643,7 +644,7 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
             # print(trainer.model.b.item())
             # need to investigate at some point
             if (stage == ZERO3 and dtype == FP16) or (dtype == BF16):
-                return
+                self.skipTest(reason="When using zero3/fp16 or any/bf16 the optimizer seems run oddly")
 
             # it's enough that train didn't fail for this test, but we must check that
             # optimizer/scheduler didn't run (since if it did this test isn't testing the right thing)
@@ -707,6 +708,31 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
 
         # Relative difference. See the note above how to get identical loss on a small bs
         self.assertTrue((no_grad_accum_loss - yes_grad_accum_loss) / (no_grad_accum_loss + 1e-15) <= 1e-3)
+
+    def test_missed_zero3_init(self):
+        from transformers import Trainer  # noqa
+
+        with mockenv_context(**self.dist_env_1_gpu):
+            model = AutoModel.from_pretrained(T5_TINY)
+            training_args = TrainingArguments(
+                output_dir="./test_missed_zero3_init",
+                deepspeed=self.get_config_dict(ZERO3),
+            )
+            with self.assertRaises(
+                ValueError, msg="Model was not initialized with `Zero-3` despite being configured."
+            ):
+                _ = Trainer(
+                    model=model,
+                    args=training_args,
+                )
+            # Now do it properly, triggered from our `TrainingArguments` earlier
+            model = AutoModel.from_pretrained(T5_TINY)
+            trainer = Trainer(
+                model=model,
+                args=training_args,
+            )
+            assert trainer.is_deepspeed_enabled
+            assert model._transformers_zero3_init_used
 
     def check_saved_checkpoints_deepspeed(self, output_dir, freq, total, stage, dtype):
         # adapted from TrainerIntegrationCommon.check_saved_checkpoints
@@ -795,7 +821,7 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
         # ToDo: Currently, hf_optim + hf_scheduler resumes with the correct states and
         # also has same losses for few steps but then slowly diverges. Need to figure it out.
         if optim == HF_OPTIM and scheduler == HF_SCHEDULER:
-            return
+            self.skipTest(reason="hf_optim + hf_scheduler resumes with the correct states but slowly diverges")
 
         output_dir = self.get_auto_remove_tmp_dir("./xxx", after=False)
         ds_config_dict = self.get_config_dict(stage)
@@ -1113,7 +1139,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
     @require_torch_multi_accelerator
     def test_inference(self, dtype):
         if dtype == "bf16" and not is_torch_bf16_available_on_device(torch_device):
-            self.skipTest("test requires bfloat16 hardware support")
+            self.skipTest(reason="test requires bfloat16 hardware support")
 
         # this is just inference, so no optimizer should be loaded
         # it only works for z3 (makes no sense with z1-z2)
