@@ -513,6 +513,13 @@ class PvtImageProcessor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
+class Qwen2VLImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 class RTDetrImageProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 

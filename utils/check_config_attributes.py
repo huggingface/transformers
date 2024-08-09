@@ -43,6 +43,7 @@ SPECIAL_CASES_TO_ALLOW = {
     ],
     "Qwen2Config": ["use_sliding_window"],
     "Qwen2MoeConfig": ["use_sliding_window"],
+    "Qwen2VLConfig": ["use_sliding_window"],
     "Gemma2Config": ["tie_word_embeddings"],
     # used to compute the property `self.chunk_length`
     "EncodecConfig": ["overlap"],
