@@ -168,48 +168,9 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
         # We call this after having initialized the backend tokenizer because we update it.
         super().__init__(**kwargs)
-
-        # Set the splitting mode for special tokens for the tokenizer to be used throughout the class.
         self._tokenizer.encode_special_tokens = self.split_special_tokens
 
-        # The following logic will be replace with a single add_tokens once a fix is pushed to tokenizers
-        # allows converting a slow -> fast, non-legacy: if the `tokenizer.json` does not have all the added tokens
-        # uses the information stored in `added_tokens_decoder`.
-        # this is costly for fast tokenizers as we re-compute the regex again. But not all tokens are added tokens
-        # Use hash to speed up the very slow operation `token not in added_tokens_decoder`.
-        added_tokens_decoder_hash = {hash(repr(token)) for token in self.added_tokens_decoder}
-        tokens_to_add = [
-            token
-            for index, token in sorted(added_tokens_decoder.items(), key=lambda x: x[0])
-            if hash(repr(token)) not in added_tokens_decoder_hash
-        ]
-        encoder = list(self.added_tokens_encoder.keys()) + [str(token) for token in tokens_to_add]
-        # if some of the special tokens are strings, we check if we don't already have a token
-        tokens_to_add += [
-            token for token in self.all_special_tokens_extended if token not in encoder and token not in tokens_to_add
-        ]
-
-        if len(tokens_to_add) > 0:
-            # super hack: if a token.special is set, tokenizer ignores it for now so FIXME @ArthurZ
-            # Accumulate added tokens into batches of special/non-special tokens, because calling add_tokens() for
-            # individual tokens would repeatedly rebuild a trie, which can be slow.
-            is_last_special = None
-            tokens = []
-            special_tokens = self.all_special_tokens
-            for token in tokens_to_add:
-                is_special = (
-                    (token.special or str(token) in special_tokens)
-                    if isinstance(token, AddedToken)
-                    else str(token) in special_tokens
-                )
-                if is_last_special is None or is_last_special == is_special:
-                    tokens.append(token)
-                else:
-                    self._add_tokens(tokens, special_tokens=is_last_special)
-                    tokens = [token]
-                is_last_special = is_special
-            if tokens:
-                self._add_tokens(tokens, special_tokens=is_last_special)
+        self._add_tokens(list(added_tokens_decoder.values()))
 
     @property
     def is_fast(self) -> bool:
@@ -825,6 +786,11 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                     if special_tokens_map is not None:
                         tokens = [special_tokens_map.get(token, token) for token in tokens]
                     post_processor["special_tokens"][key]["tokens"] = tokens
+                    for token in tokens:
+                        token_id =tokenizer.token_to_id(token)
+                        if token_id is None:
+                            raise ValueError("Attempted to set a token in the post processor that does not exist in the mapping")
+
                     post_processor["special_tokens"][key]["ids"] = [tokenizer.token_to_id(token) for token in tokens]
 
             for special_token in ["cls", "sep"]:
@@ -833,6 +799,8 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                     if special_tokens_map is not None and token in special_tokens_map:
                         token = special_tokens_map[token]
                     token_id = tokenizer.token_to_id(token)
+                    if token_id is None:
+                        raise ValueError("Attempted to set a token in the post processor that does not exist in the mapping")
                     post_processor[special_token] = [token, token_id]
 
             trained_tokenizer_json["post_processor"] = post_processor

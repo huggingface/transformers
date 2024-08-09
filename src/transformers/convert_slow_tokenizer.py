@@ -602,33 +602,10 @@ class SpmConverter(Converter):
             for id, p in enumerate(proto.pieces)
             if p.type in [3, 4]
         ]
-        tokens_to_add = [
+        tokenizer.add_tokens([
             AddedToken(token, normalized=False, special=special)
             for id, token, special in sorted(spm_added_tokens, key=lambda x: x[0])
-        ]
-
-        if len(tokens_to_add) > 0:
-            # super hack: if a token.special is set, tokenizer ignores it for now so FIXME @ArthurZ
-            # Accumulate added tokens into batches of special/non-special tokens, because calling add_tokens() for
-            # individual tokens would repeatedly rebuild a trie, which can be slow.
-            is_last_special = None
-            tokens = []
-            for token in tokens_to_add:
-                is_special = token.special
-                if is_last_special is None or is_last_special == is_special:
-                    tokens.append(token)
-                else:
-                    if is_last_special:
-                        tokenizer.add_special_tokens(tokens)
-                    else:
-                        tokenizer.add_tokens(tokens)
-                    tokens = [token]
-                is_last_special = is_special
-            if tokens:
-                if is_last_special:
-                    tokenizer.add_special_tokens(tokens)
-                else:
-                    tokenizer.add_tokens(tokens)
+        ])
 
         return tokenizer
 
