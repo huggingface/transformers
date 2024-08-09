@@ -136,20 +136,24 @@ class Qwen2VLProcessor(ProcessorMixin):
 
         if image_grid_thw is not None:
             merge_length = self.image_processor.merge_size**2
+            index = 0
             for i in range(len(text)):
-                for grid_thw in image_grid_thw:
+                while "<|image_pad|>" in text[i]:
                     text[i] = text[i].replace(
-                        "<|image_pad|>", "<|placeholder|>" * (grid_thw.prod() // merge_length), 1
+                        "<|image_pad|>", "<|placeholder|>" * (image_grid_thw[index].prod() // merge_length), 1
                     )
+                    index += 1
                 text[i] = text[i].replace("<|placeholder|>", "<|image_pad|>")
 
         if video_grid_thw is not None:
             merge_length = self.image_processor.merge_size**2
+            index = 0
             for i in range(len(text)):
-                for grid_thw in video_grid_thw:
+                while "<|video_pad|>" in text[i]:
                     text[i] = text[i].replace(
-                        "<|video_pad|>", "<|placeholder|>" * (grid_thw.prod() // merge_length), 1
+                        "<|video_pad|>", "<|placeholder|>" * (video_grid_thw[index].prod() // merge_length), 1
                     )
+                    index += 1
                 text[i] = text[i].replace("<|placeholder|>", "<|video_pad|>")
 
         text_inputs = self.tokenizer(
