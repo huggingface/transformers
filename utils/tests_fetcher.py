@@ -51,6 +51,7 @@ python utils/tests_fetcher.py --diff_with_last_commit
 
 import argparse
 import collections
+import glob
 import importlib.util
 import json
 import os
@@ -58,7 +59,7 @@ import re
 import tempfile
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Tuple, Union
 
 from git import Repo
 
@@ -968,36 +969,19 @@ def create_module_to_test_map(
     # This is to avoid them being excluded when a module has many impacted tests: the directly related test files should
     # always be included!
     def filter_tests(tests, module=""):
-        return [
-            t
-            for t in tests
-            if not t.startswith("tests/models/")
-            or Path(t).parts[2] in IMPORTANT_MODELS
-            # at this point, `t` is of the form `tests/models/my_model`, and we check if `models/my_model`
-            # (i.e. `parts[1:3]`) is in `module`.
-            or "/".join(Path(t).parts[1:3]) in module
-        ]
+        filtered_tests = []
+        for t in tests:
+            if (
+                not t.startswith("tests/models/")
+                or Path(t).parts[2] in IMPORTANT_MODELS
+                or "/".join(Path(t).parts[1:3]) in module
+            ):
+                filtered_tests += [t]
 
     return {
         module: (filter_tests(tests, module=module) if has_many_models(tests) else tests)
         for module, tests in test_map.items()
     }
-
-
-def check_imports_all_exist():
-    """
-    Isn't used per se by the test fetcher but might be used later as a quality check. Putting this here for now so the
-    code is not lost. This checks all imports in a given file do exist.
-    """
-    cache = {}
-    all_modules = list(PATH_TO_TRANFORMERS.glob("**/*.py")) + list(PATH_TO_TESTS.glob("**/*.py"))
-    all_modules = [str(mod.relative_to(PATH_TO_REPO)) for mod in all_modules]
-    direct_deps = {m: get_module_dependencies(m, cache=cache) for m in all_modules}
-
-    for module, deps in direct_deps.items():
-        for dep in deps:
-            if not (PATH_TO_REPO / dep).is_file():
-                print(f"{module} has dependency on {dep} which does not exist.")
 
 
 def _print_list(l) -> str:
@@ -1007,51 +991,10 @@ def _print_list(l) -> str:
     return "\n".join([f"- {f}" for f in l])
 
 
-def create_json_map(test_files_to_run: List[str], json_output_file: str):
-    """
-    Creates a map from a list of tests to run to easily split them by category, when running parallelism of slow tests.
-
-    Args:
-        test_files_to_run (`List[str]`): The list of tests to run.
-        json_output_file (`str`): The path where to store the built json map.
-    """
-    if json_output_file is None:
-        return
-
-    test_map = {}
-    for test_file in test_files_to_run:
-        # `test_file` is a path to a test folder/file, starting with `tests/`. For example,
-        #   - `tests/models/bert/test_modeling_bert.py` or `tests/models/bert`
-        #   - `tests/trainer/test_trainer.py` or `tests/trainer`
-        #   - `tests/test_modeling_common.py`
-        names = test_file.split(os.path.sep)
-        if names[1] == "models":
-            # take the part like `models/bert` for modeling tests
-            key = os.path.sep.join(names[1:3])
-        elif len(names) > 2 or not test_file.endswith(".py"):
-            # test folders under `tests` or python files under them
-            # take the part like tokenization, `pipeline`, etc. for other test categories
-            key = os.path.sep.join(names[1:2])
-        else:
-            # common test files directly under `tests/`
-            key = "common"
-
-        if key not in test_map:
-            test_map[key] = []
-        test_map[key].append(test_file)
-
-    # sort the keys & values
-    keys = sorted(test_map.keys())
-    test_map = {k: " ".join(sorted(test_map[k])) for k in keys}
-    with open(json_output_file, "w", encoding="UTF-8") as fp:
-        json.dump(test_map, fp, ensure_ascii=False)
-
-
 def infer_tests_to_run(
     output_file: str,
     diff_with_last_commit: bool = False,
     filter_models: bool = True,
-    json_output_file: Optional[str] = None,
 ):
     """
     The main function called by the test fetcher. Determines the tests to run from the diff.
@@ -1071,9 +1014,6 @@ def infer_tests_to_run(
         filter_models (`bool`, *optional*, defaults to `True`):
             Whether or not to filter the tests to core models only, when a file modified results in a lot of model
             tests.
-        json_output_file (`str`, *optional*):
-            The path where to store the json file mapping categories of tests to tests to run (used for parallelism or
-            the slow tests).
     """
     modified_files = get_modified_python_files(diff_with_last_commit=diff_with_last_commit)
     print(f"\n### MODIFIED FILES ###\n{_print_list(modified_files)}")
@@ -1090,22 +1030,22 @@ def infer_tests_to_run(
     print(f"\n### IMPACTED FILES ###\n{_print_list(impacted_files)}")
 
     model_impacted = {"/".join(x.split("/")[:3]) for x in impacted_files if x.startswith("tests/models/")}
-
     # Grab the corresponding test files:
-    if any(x in modified_files for x in ["setup.py", ".circleci/create_circleci_config.py"]):
-        test_files_to_run = ["tests", "examples"]
-        repo_utils_launch = True
-    elif not filter_models and len(model_impacted) >= NUM_MODELS_TO_TRIGGER_FULL_CI:
-        print(
-            f"More than {NUM_MODELS_TO_TRIGGER_FULL_CI - 1} models are impacted and `filter_models=False`. CI is configured to test everything."
+    if (
+        any(x in modified_files for x in ["setup.py", ".circleci/create_circleci_config.py"])
+        or not filter_models
+        and len(model_impacted) >= NUM_MODELS_TO_TRIGGER_FULL_CI
+    ):
+        test_files_to_run = glob.glob("tests/**/test_**.py", recursive=True) + glob.glob(
+            "examples/**/*.py", recursive=True
         )
-        test_files_to_run = ["tests", "examples"]
-        repo_utils_launch = True
+        if len(model_impacted) >= NUM_MODELS_TO_TRIGGER_FULL_CI:
+            print(
+                f"More than {NUM_MODELS_TO_TRIGGER_FULL_CI - 1} models are impacted and `filter_models=False`. CI is configured to test everything."
+            )
     else:
         # All modified tests need to be run.
-        test_files_to_run = [
-            f for f in modified_files if f.startswith("tests") and f.split(os.path.sep)[-1].startswith("test")
-        ]
+        test_files_to_run = [f for f in modified_files if f.startswith("tests") and "/test_" in f]
         impacted_files = get_impacted_files_from_tiny_model_summary(diff_with_last_commit=diff_with_last_commit)
 
         # Then we grab the corresponding test files.
@@ -1121,37 +1061,9 @@ def infer_tests_to_run(
         # Make sure we did not end up with a test file that was removed
         test_files_to_run = [f for f in test_files_to_run if (PATH_TO_REPO / f).exists()]
 
-        repo_utils_launch = any(f.split(os.path.sep)[0] == "utils" for f in modified_files)
-
-    if repo_utils_launch:
-        repo_util_file = Path(output_file).parent / "test_repo_utils.txt"
-        with open(repo_util_file, "w", encoding="utf-8") as f:
-            f.write("tests/repo_utils")
-
-    examples_tests_to_run = [f for f in test_files_to_run if f.startswith("examples")]
-    test_files_to_run = [f for f in test_files_to_run if not f.startswith("examples")]
     print(f"\n### TEST TO RUN ###\n{_print_list(test_files_to_run)}")
-    if len(test_files_to_run) > 0:
-        with open(output_file, "w", encoding="utf-8") as f:
-            f.write(" ".join(test_files_to_run))
 
-        # Create a map that maps test categories to test files, i.e. `models/bert` -> [...test_modeling_bert.py, ...]
-
-        # Get all test directories (and some common test files) under `tests` and `tests/models` if `test_files_to_run`
-        # contains `tests` (i.e. when `setup.py` is changed).
-        if "tests" in test_files_to_run:
-            test_files_to_run = get_all_tests()
-
-        create_json_map(test_files_to_run, json_output_file)
-
-    print(f"\n### EXAMPLES TEST TO RUN ###\n{_print_list(examples_tests_to_run)}")
-    if len(examples_tests_to_run) > 0:
-        # We use `all` in the case `commit_flags["test_all"]` as well as in `create_circleci_config.py` for processing
-        if examples_tests_to_run == ["examples"]:
-            examples_tests_to_run = ["all"]
-        example_file = Path(output_file).parent / "examples_test_list.txt"
-        with open(example_file, "w", encoding="utf-8") as f:
-            f.write(" ".join(examples_tests_to_run))
+    create_test_list_from_filter(test_files_to_run, out_path="test_preparation/")
 
     doctest_list = get_doctest_files()
 
@@ -1215,6 +1127,35 @@ def parse_commit_message(commit_message: str) -> Dict[str, bool]:
         return {"skip": False, "no_filter": False, "test_all": False}
 
 
+JOB_TO_TEST_FILE = {
+    "torch_and_tf": r"tests/models/.*/test_modeling_(?=tf_|[^flax]).*",
+    "torch_and_flax": r"tests/models/.*/test_modeling_(?=flax_|[^tf]).*",
+    "tf": r"tests/models/.*/test_modeling_tf_.*",
+    "torch": r"tests/models/.*/test_modeling_[^flax_|^tf_)].*",
+    "tokenization": r"tests/models/.*/test_tokenization.*",
+    "examples_torch": r"examples/pytorch/.*test_.*",
+    "examples_tensorflow": r"examples/tensorflow/.*test_.*",
+    "examples_flax": r"examples/flax/.*test.*",
+    "exotic_models": r"tests/models/.*(?=layoutlmv|nat|deta|udop|nougat).*",
+    "custom_tokenizers": r"tests/models/.*/test_tokenization_(?=bert_japanese|openai|clip).*",
+    "repo_utils": r"tests/repo_utils/test.*",
+    "pipeline_tf": r"tests/models/.*/test_modeling_tf_.*",
+    "pipeline_torch": r"tests/models/.*/test_modeling__[^flax_|^tf_)].*",
+    "hub": r"tests/models/.*/test_modeling_[^flax_|^tf_)].*",
+    "onnx": r"tests/models/.*/test_modeling_(?=tf_|[^flax]).*",
+}
+
+
+def create_test_list_from_filter(full_test_list, out_path):
+    all_test_files = "\n".join(full_test_list)
+    for job_name, filter in JOB_TO_TEST_FILE.items():
+        file_name = os.path.join(out_path, f"{job_name}_test_list.txt")
+        files_to_test = list(re.findall(filter, all_test_files))
+        print(job_name, file_name)
+        with open(file_name, "w") as f:
+            f.write("\n".join(files_to_test))
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -1271,25 +1212,9 @@ if __name__ == "__main__":
             print("main branch detected, fetching tests against last commit.")
             diff_with_last_commit = True
 
-        if not commit_flags["test_all"]:
-            try:
-                infer_tests_to_run(
-                    args.output_file,
-                    diff_with_last_commit=diff_with_last_commit,
-                    json_output_file=args.json_output_file,
-                    filter_models=(not (commit_flags["no_filter"] or is_main_branch)),
-                )
-                filter_tests(args.output_file, ["repo_utils"])
-            except Exception as e:
-                print(f"\nError when trying to grab the relevant tests: {e}\n\nRunning all tests.")
-                commit_flags["test_all"] = True
-
-        if commit_flags["test_all"]:
-            with open(args.output_file, "w", encoding="utf-8") as f:
-                f.write("tests")
-            example_file = Path(args.output_file).parent / "examples_test_list.txt"
-            with open(example_file, "w", encoding="utf-8") as f:
-                f.write("all")
-
-            test_files_to_run = get_all_tests()
-            create_json_map(test_files_to_run, args.json_output_file)
+        infer_tests_to_run(
+            args.output_file,
+            diff_with_last_commit=diff_with_last_commit,
+            filter_models=(not (commit_flags["no_filter"] or is_main_branch)),
+        )
+        filter_tests(args.output_file, ["repo_utils"])
