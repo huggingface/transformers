@@ -1902,7 +1902,7 @@ class TrainingArguments:
                 warnings.warn("`--xla_fsdp_grad_ckpt` is useful only when `--xla` is set to true.")
 
         # accelerate integration for FSDP
-        if len(self.fsdp) > 0 and not self.fsdp_config["xla"]:
+        if len(self.fsdp) > 0 and is_accelerate_available("0.28.0"):
             os.environ["ACCELERATE_USE_FSDP"] = "true"
             from accelerate.utils.constants import (
                 FSDP_AUTO_WRAP_POLICY,
@@ -1968,7 +1968,9 @@ class TrainingArguments:
             # - must be run very last in arg parsing, since it will use a lot of these settings.
             # - must be run before the model is created.
             if not is_accelerate_available():
-                raise ValueError("--deepspeed requires Accelerate to be installed: `pip install accelerate`.")
+                raise ValueError(
+                    f"--deepspeed requires Accelerate to be installed: `pip install 'accelerate>={ACCELERATE_MIN_VERSION}'`."
+                )
             from transformers.integrations.deepspeed import HfTrainerDeepSpeedConfig
 
             # will be used later by the Trainer
@@ -2102,7 +2104,7 @@ class TrainingArguments:
             if not is_accelerate_available():
                 raise ImportError(
                     f"Using the `Trainer` with `PyTorch` requires `accelerate>={ACCELERATE_MIN_VERSION}`: "
-                    "Please run `pip install transformers[torch]` or `pip install accelerate -U`"
+                    "Please run `pip install transformers[torch]` or `pip install 'accelerate>={ACCELERATE_MIN_VERSION}'`"
                 )
         # We delay the init of `PartialState` to the end for clarity
         accelerator_state_kwargs = {"enabled": True, "use_configured_state": False}
