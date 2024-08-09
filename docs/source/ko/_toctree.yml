@@ -153,8 +153,8 @@
     title: (번역중) Quanto
   - local: in_translation
     title: (번역중) EETQ
-  - local: in_translation
-    title: (번역중) HQQ
+  - local: quantization/hqq
+    title: HQQ
   - local: in_translation
     title: (번역중) Optimum
   - local: in_translation
