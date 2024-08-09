@@ -323,6 +323,7 @@ class VisionSpdaAttention(nn.Module):
 
 
 QWEN2_VL_VISION_ATTENTION_CLASSES = {
+    "eager": VisionSpdaAttention,
     "flash_attention_2": VisionFlashAttention2,
     "sdpa": VisionSpdaAttention,
 }
@@ -1077,7 +1078,7 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
                 past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
             )
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            position_ids = cache_position.view(1, 1, -1).expand(3, inputs_embeds.shape[0], -1)
 
         causal_mask = self._update_causal_mask(
             attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
@@ -1473,18 +1474,32 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel):
         Example:
 
         ```python
+        >>> from PIL import Image
+        >>> import requests
         >>> from transformers import AutoProcessor, Qwen2VLForConditionalGeneration
 
-        >>> model = Qwen2VLForConditionalGeneration.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
-        >>> processor = AutoProcessor.from_pretrained(PATH_TO_CONVERTED_TOKENIZER)
+        >>> model = Qwen2VLForConditionalGeneration.from_pretrained("Qwen/Qwen2-VL-7B-Instruct")
+        >>> processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-7B-Instruct")
 
-        >>> messages = [{"role": "user", "content": "Hey, are you conscious? Can you talk to me?"}]
-        >>> text, vision_infos= processor.apply_chat_template(messages1, tokenize=False, add_generation_prompt=True,add_vision_id=False)
-        >>> inputs = processor(text=[text], vision_infos=[vision_infos])
+        >>> messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image"},
+                    {"type": "text", "text": "What is shown in this image?"},
+                ],
+            },
+        ]
+        >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> text = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+        >>> inputs = processor(text=[text], images=[image], vision_infos=[vision_infos])
 
         >>> # Generate
         >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        "The image shows a street scene with a red stop sign in the foreground. In the background, there is a large red gate with Chinese characters ..."
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1574,13 +1589,13 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel):
             elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
                 input_ids = input_ids[:, cache_position]
 
+        rope_deltas = kwargs.get("rope_deltas", None)
         if attention_mask is not None and position_ids is None:
             if cache_position is None or (cache_position is not None and cache_position[0] == 0):
                 position_ids, rope_deltas = self.get_rope_index(
                     input_ids, image_grid_thw, video_grid_thw, attention_mask
                 )
             else:
-                rope_deltas = kwargs.get("rope_deltas", None)
                 B, L = input_ids.shape
                 delta = (
                     cache_position[0] + rope_deltas if cache_position is not None and rope_deltas is not None else 0

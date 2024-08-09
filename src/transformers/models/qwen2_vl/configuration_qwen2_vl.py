@@ -180,6 +180,7 @@ class Qwen2VLConfig(PretrainedConfig):
         elif vision_config is None:
             self.vision_config = Qwen2VLVisionConfig()
         self.vision_config.hidden_size = hidden_size
+        self.vision_config._attn_implementation = self._attn_implementation
 
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
