@@ -168,6 +168,8 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
         # We call this after having initialized the backend tokenizer because we update it.
         super().__init__(**kwargs)
+        self._tokenizer.encode_special_tokens = self.split_special_tokens
+
         self._add_tokens(list(added_tokens_decoder.values()))
 
     @property
