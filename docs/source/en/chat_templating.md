@@ -391,15 +391,6 @@ the temperature in France should certainly be displayed in Celsius.
 
 Next, let's append the model's tool call to the conversation.
 
-<Tip>
-
-Some model architectures, notably Mistral/Mixtral, also require a `tool_call_id` here, which should be
-9 randomly-generated alphanumeric characters, and assigned to the `tool_call_id` key of the tool call
-dictionary. The same key should also be assigned to the `id` key of the tool response dictionary below, so 
-that tool calls can be matched to tool responses.
-
-</Tip>
-
 ```python
 tool_call = {"name": "get_current_temperature", "arguments": {"location": "Paris, France", "unit": "celsius"}}
 messages.append({"role": "assistant", "tool_calls": [{"type": "function", "function": tool_call}]})
@@ -413,6 +404,27 @@ that result directly.
 ```python
 messages.append({"role": "tool", "name": "get_current_temperature", "content": "22.0"})
 ```
+
+<Tip>
+
+Some model architectures, notably Mistral/Mixtral, also require a `tool_call_id` here, which should be
+9 randomly-generated alphanumeric characters, and assigned to the `id` key of the tool call
+dictionary. The same key should also be assigned to the `tool_call_id` key of the tool response dictionary below, so 
+that tool calls can be matched to tool responses. So, for Mistral/Mixtral models, the code above would be:
+
+```python
+tool_call_id = "9Ae3bDc2F"  # Random ID, 9 alphanumeric characters
+tool_call = {"name": "get_current_temperature", "arguments": {"location": "Paris, France", "unit": "celsius"}}
+messages.append({"role": "assistant", "tool_calls": [{"type": "function", "id": tool_call_id, "function": tool_call}]})
+```
+
+and
+
+```python
+messages.append({"role": "tool", "tool_call_id": tool_call_id, "name": "get_current_temperature", "content": "22.0"})
+```
+
+</Tip>
 
 Finally, let's let the assistant read the function outputs and continue chatting with the user:
 
