@@ -134,7 +134,7 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
     if "vocab_size" not in parsed_parameters["config"]:
         tokenizer_parameters = parsed_parameters["tokenizer"]
         if "tokens" in tokenizer_parameters:
-            parsed_parameters["config"]["vocab_size"] = len(parsed_parameters["tokenizer"]["tokens"])
+            parsed_parameters["config"]["vocab_size"] = len(tokenizer_parameters["tokens"])
         else:
             logger.warning(
                 "Can't find a way to retrieve missing config vocab_size from tokenizer parameters. "
