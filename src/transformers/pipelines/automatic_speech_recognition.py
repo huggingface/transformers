@@ -501,6 +501,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                     else:
                         generate_kwargs["num_frames"] = num_frames
 
+            generate_kwargs = self._ensure_tensor_on_device(generate_kwargs, inputs.device)
             tokens = self.model.generate(
                 inputs=inputs,
                 attention_mask=attention_mask,
