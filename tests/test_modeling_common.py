@@ -2776,7 +2776,6 @@ class ModelTesterMixin:
 
     def test_inputs_embeds_matches_input_ids(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
         for model_class in self.all_model_classes:
             if model_class.__name__ not in get_values(MODEL_MAPPING_NAMES):
                 continue
@@ -2821,16 +2820,29 @@ class ModelTesterMixin:
 
     def test_inputs_embeds_matches_input_ids_with_generate(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model_found = False  # flag to see if we found at least one model
         for model_class in self.all_model_classes:
             if model_class.__name__ not in get_values(MODEL_FOR_CAUSAL_LM_MAPPING_NAMES):
                 continue
+            model_found = True
             model = model_class(config)
             model.to(torch_device)
             model.eval()
 
             model_forward_args = inspect.signature(model.forward).parameters
-            if "inputs_embeds" not in model_forward_args:
-                self.skipTest(reason="This model doesn't use `inputs_embeds`")
+
+            required_args = ["inputs_embeds", "input_ids", "attention_mask", "position_ids"]
+            missing_args = [arg for arg in required_args if arg not in model_forward_args]
+
+            if missing_args:
+                self.skipTest(reason=f"This model is missing required arguments: {', '.join(missing_args)}")
+
+            has_inputs_embeds_forwarding = "inputs_embeds" in set(
+                inspect.signature(model.prepare_inputs_for_generation).parameters.keys()
+            )
+
+            if not has_inputs_embeds_forwarding:
+                self.skipTest(reason="This model doesn't have forwarding of `inputs_embeds` in its `generate()`.")
 
             inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
             pad_token_id = config.pad_token_id if config.pad_token_id is not None else 1
@@ -2865,6 +2877,8 @@ class ModelTesterMixin:
                     max_new_tokens=2,
                 )
             self.assertTrue(torch.allclose(out_embeds, out_ids))
+        if not model_found:
+            self.skipTest(reason="This model doesn't have a model class to test generate() on.")
 
     @require_torch_multi_gpu
     def test_multi_gpu_data_parallel_forward(self):
