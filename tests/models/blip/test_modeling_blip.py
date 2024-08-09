@@ -1106,6 +1106,7 @@ class BlipTextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
 @require_torch
 class BlipTextImageModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (BlipForConditionalGeneration,) if is_torch_available() else ()
+    all_generative_model_classes = (BlipForConditionalGeneration,) if is_torch_available() else ()
     fx_compatible = False
     test_head_masking = False
     test_pruning = False
@@ -1115,6 +1116,17 @@ class BlipTextImageModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = BlipTextImageModelsModelTester(self)
+
+    def test_greedy_generation(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_generative_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            out = model.generate(**inputs_dict, min_new_tokens=20, max_new_tokens=20)
+            self.assertTrue(out.shape[1] == inputs_dict["input_ids"].shape[1] + 19)
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
