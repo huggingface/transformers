@@ -56,7 +56,7 @@ chat = [
 "You are a helpful and intelligent AI assistant who responds to user queries."
 와 같은 간단한 프롬프트를 사용하는 것도 가능합니다.
 
-채팅을 시작했다면 대화를 이어나가는 가장 빠른 방법은 [`TextGenerationPipeline`]를 사용하는 것입니다. 
+채팅을 시작했다면 대화를 이어 나가는 가장 빠른 방법은 [`TextGenerationPipeline`]를 사용하는 것입니다. 
 한번 `LLaMA-3`를 사용하여 이를 시연해 보겠습니다. 
 우선 `LLaMA-3`를 사용하기 위해서는 승인이 필요합니다. [권한 신청](https://huggingface.co/meta-llama/Meta-Llama-3-8B-Instruct)을 하고 Hugging Face 계정으로 로그인한 후에 사용할 수 있습니다. 
 또한 우리는 `device_map="auto"`를 사용합니다. GPU 메모리가 충분하다면 로드될 것입니다. 
