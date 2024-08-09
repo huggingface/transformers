@@ -171,7 +171,7 @@ class OmDetTurboProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         input_classes = ["class1", "class2"]
         image_input = self.prepare_image_inputs()
 
-        input_processor = processor(images=image_input, text=input_tasks, classes=input_classes, return_tensors="pt")
+        input_processor = processor(images=image_input, text=input_classes, task=input_tasks, return_tensors="pt")
 
         assert torch.is_tensor(input_processor["pixel_values"])
         for key in self.text_input_keys:
@@ -203,8 +203,7 @@ class OmDetTurboProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         input_tasks = "task"
         input_classes = ["class1", "class2"]
         image_input = self.prepare_image_inputs()
-
-        inputs = processor(images=image_input, text=input_tasks, classes=input_classes, return_tensors="pt")
+        inputs = processor(images=image_input, text=input_classes, task=input_tasks, return_tensors="pt")
 
         self.assertListEqual(list(inputs.keys()), self.input_keys)
 
@@ -220,8 +219,8 @@ class OmDetTurboProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.skip_processor_without_typed_kwargs(processor)
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()
+        inputs = processor(images=image_input, text=[input_str], task=input_str, return_tensors="pt")
 
-        inputs = processor(text=input_str, images=image_input, classes=[input_str], return_tensors="pt")
         self.assertEqual(len(inputs["tasks"]["input_ids"][0]), 117)
 
     @require_torch
@@ -234,11 +233,10 @@ class OmDetTurboProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
         self.skip_processor_without_typed_kwargs(processor)
-
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()
+        inputs = processor(images=image_input, text=[input_str], task=input_str)
 
-        inputs = processor(text=input_str, images=image_input, classes=[input_str])
         self.assertEqual(len(inputs["pixel_values"][0][0]), 234)
 
     @require_vision
@@ -253,10 +251,8 @@ class OmDetTurboProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.skip_processor_without_typed_kwargs(processor)
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()
+        inputs = processor(images=image_input, text=[input_str], task=input_str, return_tensors="pt", max_length=112)
 
-        inputs = processor(
-            text=input_str, images=image_input, classes=[input_str], return_tensors="pt", max_length=112
-        )
         self.assertEqual(len(inputs["tasks"]["input_ids"][0]), 112)
 
     @require_torch
@@ -273,7 +269,7 @@ class OmDetTurboProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()
 
-        inputs = processor(text=input_str, images=image_input, classes=[input_str], size=[224, 224])
+        inputs = processor(images=image_input, text=[input_str], task=input_str, size=[224, 224])
         self.assertEqual(len(inputs["pixel_values"][0][0]), 224)
 
     @require_torch
@@ -290,9 +286,9 @@ class OmDetTurboProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()
         inputs = processor(
-            text=input_str,
             images=image_input,
-            classes=[input_str],
+            text=[input_str],
+            task=input_str,
             return_tensors="pt",
             size={"height": 214, "width": 214},
             padding="max_length",
@@ -316,9 +312,9 @@ class OmDetTurboProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         input_str = ["lower newer", "upper older longer string"]
         image_input = self.prepare_image_inputs() * 2
         inputs = processor(
-            text=input_str,
             images=image_input,
-            classes=[input_str],
+            text=[input_str],
+            task=input_str,
             return_tensors="pt",
             size={"height": 214, "width": 214},
             padding="longest",
@@ -347,10 +343,10 @@ class OmDetTurboProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         all_kwargs = {
             "common_kwargs": {"return_tensors": "pt"},
             "images_kwargs": {"size": {"height": 214, "width": 214}},
-            "text_kwargs": {"padding": "max_length", "max_length": 76},
+            "text_kwargs": {"padding": "max_length", "max_length": 76, "task": input_str},
         }
 
-        inputs = processor(text=input_str, images=image_input, classes=[input_str], **all_kwargs)
+        inputs = processor(images=image_input, text=[input_str], **all_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
 
         self.assertEqual(inputs["pixel_values"].shape[2], 214)
@@ -375,10 +371,10 @@ class OmDetTurboProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         all_kwargs = {
             "common_kwargs": {"return_tensors": "pt"},
             "images_kwargs": {"size": {"height": 214, "width": 214}},
-            "text_kwargs": {"padding": "max_length", "max_length": 76},
+            "text_kwargs": {"padding": "max_length", "max_length": 76, "task": input_str},
         }
 
-        inputs = processor(text=input_str, images=image_input, classes=[input_str], **all_kwargs)
+        inputs = processor(images=image_input, text=[input_str], **all_kwargs)
         self.assertEqual(inputs["pixel_values"].shape[2], 214)
 
         self.assertEqual(len(inputs["tasks"]["input_ids"][0]), 76)

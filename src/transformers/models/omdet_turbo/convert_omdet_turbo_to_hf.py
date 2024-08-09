@@ -242,7 +242,7 @@ def run_test(model, processor):
 
     classes = ["cat", "remote"]
     task = "Detect {}.".format(",".join(classes))
-    inputs = processor(image, text=task, classes=classes, return_tensors="pt")
+    inputs = processor(image, text=classes, classes=task, return_tensors="pt")
 
     # Running forward
     with torch.no_grad():

@@ -562,7 +562,7 @@ class OmDetTurboModelIntegrationTests(unittest.TestCase):
         processor = self.default_processor
         image = prepare_img()
         classes, task = prepare_text()
-        encoding = processor(images=image, text=task, classes=classes, return_tensors="pt").to(torch_device)
+        encoding = processor(images=image, text=classes, task=task, return_tensors="pt").to(torch_device)
 
         with torch.no_grad():
             outputs = model(**encoding)
@@ -601,7 +601,7 @@ class OmDetTurboModelIntegrationTests(unittest.TestCase):
         processor = self.default_processor
         image = prepare_img()
         classes, task = prepare_text()
-        encoding = processor(images=image, text=task, classes=classes, return_tensors="pt")
+        encoding = processor(images=image, text=classes, task=task, return_tensors="pt")
         # 1. run model on CPU
         model = OmDetTurboForObjectDetection.from_pretrained("yonigozlan/omdet-turbo-tiny")
 

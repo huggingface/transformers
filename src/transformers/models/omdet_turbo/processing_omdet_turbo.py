@@ -16,24 +16,49 @@
 Processor class for OmDet-Turbo.
 """
 
-from typing import List, Tuple, Union
-
-
-try:
-    from typing import Unpack
-except ImportError:
-    from typing_extensions import Unpack
-
+import sys
+from typing import List, Optional, Tuple, Union
 
 from ...image_transforms import center_to_corners_format
 from ...image_utils import ImageInput
-from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, TextKwargs
 from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
 from ...utils import (
     TensorType,
     is_torch_available,
     is_torchvision_available,
 )
+
+
+if sys.version_info >= (3, 11):
+    from typing import Unpack
+else:
+    from typing_extensions import Unpack
+
+
+class OmDetTurboTextKwargs(TextKwargs, total=False):
+    task: Optional[Union[str, List[str], TextInput, PreTokenizedInput]]
+
+
+class OmDetTurboProcessorKwargs(ProcessingKwargs, total=False):
+    text_kwargs: OmDetTurboTextKwargs
+    _defaults = {
+        "text_kwargs": {
+            "add_special_tokens": True,
+            "padding": "max_length",
+            "truncation": True,
+            "max_length": 77,
+            "stride": 0,
+            "return_overflowing_tokens": False,
+            "return_special_tokens_mask": False,
+            "return_offsets_mapping": False,
+            "return_token_type_ids": False,
+            "return_length": False,
+            "verbose": True,
+            "task": None,
+        },
+        "images_kwargs": {},
+    }
 
 
 if is_torch_available():
@@ -71,25 +96,6 @@ def compute_score(boxes):
     return scores, classes
 
 
-class OmDetTurboProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "add_special_tokens": True,
-            "padding": "max_length",
-            "truncation": True,
-            "max_length": 77,
-            "stride": 0,
-            "return_overflowing_tokens": False,
-            "return_special_tokens_mask": False,
-            "return_offsets_mapping": False,
-            "return_token_type_ids": False,
-            "return_length": False,
-            "verbose": True,
-        },
-        "images_kwargs": {},
-    }
-
-
 class OmDetTurboProcessor(ProcessorMixin):
     r"""
     Constructs a OmDet-Turbo processor which wraps a Deformable DETR image processor and an AutoTokenizer into a
@@ -116,8 +122,7 @@ class OmDetTurboProcessor(ProcessorMixin):
     def __call__(
         self,
         images: ImageInput = None,
-        text: Union[str, List[str], TextInput, PreTokenizedInput] = None,
-        classes: Union[List[str], List[List[str]]] = None,
+        text: Union[List[str], List[List[str]]] = None,
         audio=None,
         videos=None,
         **kwargs: Unpack[OmDetTurboProcessorKwargs],
@@ -131,21 +136,16 @@ class OmDetTurboProcessor(ProcessorMixin):
         Args:
             images (`ImageInput`):
                Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255.
-            text (`Union[str, List[str], TextInput, PreTokenizedInput]`):
-                The grounded text used to guide open vocabulary detection. Expects a single string or a list of strings.
-                Examples: "Detect a cat, a dog, and a bird.", "Detect everything."
-            classes (`Union[List[str], List[List[str]]]`):
+            text (`Union[List[str], List[List[str]]]`):
                 The classes used to limit the scope of the open vocabulary detection. Expects a list of strings or a list
                 of list of strings.
                 Examples: ["cat", "dog", "bird"].
+            task (`Union[str, List[str], TextInput, PreTokenizedInput]`):
+                The grounded text used to guide open vocabulary detection. Expects a single string or a list of strings.
+                Examples: "Detect a cat, a dog, and a bird.", "Detect everything."
         """
-        if images is None or text is None or classes is None:
-            raise ValueError("You have to specify `images`, `text` and `classes`.")
-
-        if isinstance(text, str):
-            text = [text]
-        if isinstance(classes[0], str):
-            classes = [classes]
+        if images is None or text is None:
+            raise ValueError("You have to specify `images`, `text`.")
 
         # error when using `tokenizer_init_kwargs=self.tokenizer.init_kwargs` in _merge_kwargs` as
         # some init_kwargs are not defined in the forward method of the tokenizer e.g "padding_side"
@@ -155,8 +155,20 @@ class OmDetTurboProcessor(ProcessorMixin):
             **kwargs,
         )
 
+        if not isinstance(text[0], (list, tuple)):
+            text = [text]
+
+        task = output_kwargs["text_kwargs"].pop("task", None)
+        if task is None:
+            task = ["Detect {}".format(", ".join(text_single)) for text_single in text]
+
+        elif not isinstance(task, (list, tuple)):
+            task = [task]
+
+        classes = text
+
         encoding_image_processor = self.image_processor(images, **output_kwargs["images_kwargs"])
-        tasks_encoding = self.tokenizer(text=text, **output_kwargs["text_kwargs"])
+        tasks_encoding = self.tokenizer(text=task, **output_kwargs["text_kwargs"])
 
         classes_structure = torch.tensor([len(class_single) for class_single in classes], dtype=torch.long)
         classes_flattened = [class_single for class_batch in classes for class_single in class_batch]
