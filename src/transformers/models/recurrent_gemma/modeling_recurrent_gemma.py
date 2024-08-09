@@ -818,6 +818,7 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
@@ -858,6 +859,7 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
         output_hidden_states = True
         outputs = self.model(
             input_ids=input_ids,
+            position_ids=position_ids,
             cache_position=cache_position,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
