@@ -656,3 +656,32 @@ class BridgeTowerModelTrainingTest(unittest.TestCase):
             for name, param in model.named_parameters():
                 if self._is_layer_used(model_class, name):
                     self.assertIsNotNone(param.grad, f"Gradients should not be None - got {param.grad} for {name}")
+
+    @slow
+    def test_inference_interpolate_pos_encoding(self):
+        # ViT models have an `interpolate_pos_encoding` argument in their forward method,
+        # allowing to interpolate the pre-trained position embeddings in order to use
+        # the model on higher resolutions. The DINO model by Facebook AI leverages this
+        # to visualize self-attention on higher resolution images.
+        model_name = "BridgeTower/bridgetower-base"
+        model = BridgeTowerModel.from_pretrained(model_name).to(torch_device)
+
+        image_processor = BridgeTowerProcessor.from_pretrained(model_name)
+
+        image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+        inputs = image_processor(text="what's in the image", images=image, return_tensors="pt").to(torch_device)
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(**inputs, interpolate_pos_encoding=True)
+
+        # verify the logits
+        expected_shape = torch.Size((1, 325, 768))
+
+        self.assertEqual(outputs.image_features.shape, expected_shape)
+
+        expected_slice = torch.tensor(
+            [[0.3433, 0.4557, -0.5287], [-0.7111, 0.6576, -1.0850], [-0.2122, 0.2021, -0.0536]]
+        ).to(torch_device)
+
+        self.assertTrue(torch.allclose(outputs.image_features[0, :3, :3], expected_slice, atol=1e-4))
