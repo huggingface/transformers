@@ -1063,8 +1063,6 @@ class T5EncoderOnlyModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_with_token_classification_head(*config_and_inputs)
 
-    # `T5EncoderOnlyModelTest` is not working well with slow tokenizers (for some models) and we don't want to touch the file
-    # `src/transformers/data/processors/squad.py` (where this test fails for this model)
     def is_pipeline_test_to_skip(
         self,
         pipeline_test_case_name,
@@ -1077,6 +1075,9 @@ class T5EncoderOnlyModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
     ):
         if tokenizer_name is None:
             return True
+
+        # `T5EncoderOnlyModelTest` is not working well with slow tokenizers (for some models) and we don't want to touch the file
+        # `src/transformers/data/processors/squad.py` (where this test fails for this model)
         if pipeline_test_case_name == "TokenClassificationPipelineTests" and not tokenizer_name.endswith("Fast"):
             return True
 
