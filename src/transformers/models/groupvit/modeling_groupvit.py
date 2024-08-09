@@ -425,6 +425,7 @@ class GroupViTTextEmbeddings(nn.Module):
     def __init__(self, config: GroupViTTextConfig):
         super().__init__()
         embed_dim = config.hidden_size
+        self.max_position_embeddings = config.max_position_embeddings
 
         self.token_embedding = nn.Embedding(config.vocab_size, embed_dim)
         self.position_embedding = nn.Embedding(config.max_position_embeddings, embed_dim)
@@ -441,6 +442,12 @@ class GroupViTTextEmbeddings(nn.Module):
         inputs_embeds: Optional[torch.FloatTensor] = None,
     ) -> torch.Tensor:
         seq_length = input_ids.shape[-1] if input_ids is not None else inputs_embeds.shape[-2]
+
+        if seq_length > self.max_position_embeddings:
+            raise ValueError(
+                f"Sequence length must be less than max_position_embeddings (got `sequence length`: "
+                f"{seq_length} and max_position_embeddings: {self.max_position_embeddings}"
+            )
 
         if position_ids is None:
             position_ids = self.position_ids[:, :seq_length]
