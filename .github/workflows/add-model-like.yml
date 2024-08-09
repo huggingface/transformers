@@ -23,7 +23,7 @@ jobs:
           sudo apt -y update && sudo apt install -y libsndfile1-dev
 
       - name: Load cached virtual environment
-        uses: actions/cache@v2
+        uses: actions/cache@v4
         id: cache
         with:
           path: ~/venv/
