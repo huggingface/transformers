@@ -81,7 +81,14 @@ For dataset, make sure it provides labels in the same format as [CPPE-5](https:/
 
 Note that zero-shot inference output is not the same output format as object-detection output. In order to compute the evaluation metric performance, we have to modify the output little bit.
 
-Note that standard GPU usage for float16 is 10.2GB
+| Train method | Batch size | freeze_text_backbone | freeze_backbone | precision | GPU Memory Usage |
+|--------------|------------|----------------------|-----------------|-----------|------------------|
+| trainer      | 1          | Y                    | Y               | fp16      | 14.839 GB        |
+| trainer      | 2          | Y                    | Y               | fp16      | 21.889 GB        |
+| trainer      | 1          | Y                    | Y               | fp32      | 16.301GB         |
+| no_trainer   | 1          | Y                    | Y               | fp32      | 20.949 GB        |
+| no_trainer   | 1          | Y                    | N               | fp32      | 21.691 GB        |
+| no_trainer   | 1          | N                    | N               | fp32      | 22.577 GB        |
 
 ## PyTorch version, no Trainer
 

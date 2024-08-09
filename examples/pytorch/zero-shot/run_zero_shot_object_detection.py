@@ -60,7 +60,6 @@ class ModelOutput:
     pred_boxes: torch.Tensor
 
 
-
 class ZeroShotTrainer(Trainer):
     def _get_input_by_name(self):
         """Simple getattr function for getting input by name"""
@@ -300,7 +299,7 @@ def compute_metrics(
     # Collect predictions in the required format for metric computation,
     # model produce boxes in YOLO format, then processor convert them to Pascal VOC format
     for batch, target_sizes, input_ids in zip(predictions, image_sizes, inputs):
-        batch_logits, batch_boxes = batch[2], batch[3]
+        batch_logits, batch_boxes = batch[1], batch[2]
         output = ModelOutput(logits=torch.tensor(batch_logits), pred_boxes=torch.tensor(batch_boxes))
         post_processed_output = processor.post_process_grounded_object_detection(
             output, input_ids, box_threshold=box_threshold, text_threshold=text_threshold, target_sizes=target_sizes
@@ -589,8 +588,8 @@ def main():
         random_text_prompt=True,
     )
 
-    dataset["train"] = dataset["test"].with_transform(train_transform_batch)
-    dataset["validation"] = dataset["test"].with_transform(validation_transform_batch)
+    dataset["train"] = dataset["train"].with_transform(train_transform_batch)
+    dataset["validation"] = dataset["validation"].with_transform(validation_transform_batch)
     dataset["test"] = dataset["test"].with_transform(validation_transform_batch)
 
     # ------------------------------------------------------------------------------------------------
