@@ -420,12 +420,17 @@ def is_mambapy_available():
     return False
 
 
-def is_torch_mps_available():
+def is_torch_mps_available(min_version=None):
     if is_torch_available():
         import torch
 
         if hasattr(torch.backends, "mps"):
-            return torch.backends.mps.is_available() and torch.backends.mps.is_built()
+            if min_version is not None:
+                flag = version.parse(_torch_version) >= version.parse(min_version)
+                return torch.backends.mps.is_available() and torch.backends.mps.is_built() and flag
+            else:
+                return torch.backends.mps.is_available() and torch.backends.mps.is_built()
+
     return False
 
 
