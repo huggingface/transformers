@@ -17,17 +17,17 @@
 import warnings
 
 from ...utils import logging
-from .image_processing_vit import ViTImageProcessor
+from .image_processing_propainter import ProPainterImageProcessor
 
 
 logger = logging.get_logger(__name__)
 
 
-class ViTFeatureExtractor(ViTImageProcessor):
+class ProPainterFeatureExtractor(ProPainterImageProcessor):
     def __init__(self, *args, **kwargs) -> None:
         warnings.warn(
-            "The class ViTFeatureExtractor is deprecated and will be removed in version 5 of Transformers. Please"
-            " use ViTImageProcessor instead.",
+            "The class ProPainterFeatureExtractor is deprecated and will be removed in version 5 of Transformers. Please"
+            " use ProPainterImageProcessor instead.",
             FutureWarning,
         )
         super().__init__(*args, **kwargs)

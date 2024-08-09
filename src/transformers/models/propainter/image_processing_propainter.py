@@ -40,7 +40,7 @@ from ...utils import TensorType, logging
 logger = logging.get_logger(__name__)
 
 
-class ViTImageProcessor(BaseImageProcessor):
+class ProPainterImageProcessor(BaseImageProcessor):
     r"""
     Constructs a ViT image processor.
 

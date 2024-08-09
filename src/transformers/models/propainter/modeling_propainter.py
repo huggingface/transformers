@@ -34,8 +34,6 @@ from torch.nn.functional import normalize
 from ...activations import ACT2FN
 from ...modeling_outputs import (
     BaseModelOutput,
-    BaseModelOutputWithPooling,
-    ImageClassifierOutput,
     MaskedImageModelingOutput,
 )
 from ...modeling_utils import PreTrainedModel
@@ -57,7 +55,7 @@ _CONFIG_FOR_DOC = "ProPainterConfig"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "ruffy369/propainter"
-_EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
+_EXPECTED_OUTPUT_SHAPE = [None,None,None] #****************************TO FILL
 
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "ruffy369/propainter"
@@ -72,12 +70,12 @@ class ProPainterEmbeddings(nn.Module):
     def __init__(self, config: ProPainterConfig, use_mask_token: bool = False) -> None:
         super().__init__()
 
-        self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
-        self.mask_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size)) if use_mask_token else None
-        self.patch_embeddings = ProPainterPatchEmbeddings(config)
-        num_patches = self.patch_embeddings.num_patches
-        self.position_embeddings = nn.Parameter(torch.randn(1, num_patches + 1, config.hidden_size))
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        # self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
+        # self.mask_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size)) if use_mask_token else None
+        # self.patch_embeddings = ProPainterPatchEmbeddings(config)
+        # num_patches = self.patch_embeddings.num_patches
+        # self.position_embeddings = nn.Parameter(torch.randn(1, num_patches + 1, config.hidden_size))
+        # self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.config = config
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
@@ -363,55 +361,55 @@ class ProPainterLayer(nn.Module):
 
 
 # Copied from transformers.models.vit.modeling_vit.ViTEncoder with ViT->ProPainter
-class ProPainterEncoder(nn.Module):
-    def __init__(self, config: ProPainterConfig) -> None:
-        super().__init__()
-        self.config = config
-        self.layer = nn.ModuleList([ProPainterLayer(config) for _ in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
+# class ProPainterEncoder(nn.Module):
+#     def __init__(self, config: ProPainterConfig) -> None:
+#         super().__init__()
+#         self.config = config
+#         self.layer = nn.ModuleList([ProPainterLayer(config) for _ in range(config.num_hidden_layers)])
+#         self.gradient_checkpointing = False
 
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
-        output_hidden_states: bool = False,
-        return_dict: bool = True,
-    ) -> Union[tuple, BaseModelOutput]:
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attentions = () if output_attentions else None
+#     def forward(
+#         self,
+#         hidden_states: torch.Tensor,
+#         head_mask: Optional[torch.Tensor] = None,
+#         output_attentions: bool = False,
+#         output_hidden_states: bool = False,
+#         return_dict: bool = True,
+#     ) -> Union[tuple, BaseModelOutput]:
+#         all_hidden_states = () if output_hidden_states else None
+#         all_self_attentions = () if output_attentions else None
 
-        for i, layer_module in enumerate(self.layer):
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
+#         for i, layer_module in enumerate(self.layer):
+#             if output_hidden_states:
+#                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            layer_head_mask = head_mask[i] if head_mask is not None else None
+#             layer_head_mask = head_mask[i] if head_mask is not None else None
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                    layer_head_mask,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions)
+#             if self.gradient_checkpointing and self.training:
+#                 layer_outputs = self._gradient_checkpointing_func(
+#                     layer_module.__call__,
+#                     hidden_states,
+#                     layer_head_mask,
+#                     output_attentions,
+#                 )
+#             else:
+#                 layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions)
 
-            hidden_states = layer_outputs[0]
+#             hidden_states = layer_outputs[0]
 
-            if output_attentions:
-                all_self_attentions = all_self_attentions + (layer_outputs[1],)
+#             if output_attentions:
+#                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
 
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
+#         if output_hidden_states:
+#             all_hidden_states = all_hidden_states + (hidden_states,)
 
-        if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
-        return BaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
-        )
+#         if not return_dict:
+#             return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
+#         return BaseModelOutput(
+#             last_hidden_state=hidden_states,
+#             hidden_states=all_hidden_states,
+#             attentions=all_self_attentions,
+#         )
 
 ############################***************####################ALL MODULES TO ADDDDDDDDDDDDDd################**********##########################################
 
@@ -2141,18 +2139,18 @@ class ProPainterPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        elif isinstance(module, ProPainterEmbeddings):
-            module.position_embeddings.data = nn.init.trunc_normal_(
-                module.position_embeddings.data.to(torch.float32),
-                mean=0.0,
-                std=self.config.initializer_range,
-            ).to(module.position_embeddings.dtype)
+        # elif isinstance(module, ProPainterEmbeddings):
+        #     module.position_embeddings.data = nn.init.trunc_normal_(
+        #         module.position_embeddings.data.to(torch.float32),
+        #         mean=0.0,
+        #         std=self.config.initializer_range,
+        #     ).to(module.position_embeddings.dtype)
 
-            module.cls_token.data = nn.init.trunc_normal_(
-                module.cls_token.data.to(torch.float32),
-                mean=0.0,
-                std=self.config.initializer_range,
-            ).to(module.cls_token.dtype)
+        #     module.cls_token.data = nn.init.trunc_normal_(
+        #         module.cls_token.data.to(torch.float32),
+        #         mean=0.0,
+        #         std=self.config.initializer_range,
+        #     ).to(module.cls_token.dtype)
 
 
 PROPAINTER_START_DOCSTRING = r"""
@@ -2197,15 +2195,14 @@ PROPAINTER_INPUTS_DOCSTRING = r"""
 )
 # Copied from transformers.models.vit.modeling_vit.ViTModel with VIT->PROPAINTER,ViT->ProPainter
 class ProPainterModel(ProPainterPreTrainedModel):
-    def __init__(self, config: ProPainterConfig, add_pooling_layer: bool = True, use_mask_token: bool = False):
+    def __init__(self, config: ProPainterConfig):
         super().__init__(config)
         self.config = config
 
-        self.embeddings = ProPainterEmbeddings(config, use_mask_token=use_mask_token)
-        self.encoder = ProPainterEncoder(config)
-
-        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.pooler = ProPainterPooler(config) if add_pooling_layer else None
+        self.embeddings = ProPainterEmbeddings(config)
+        # self.encoder = ProPainterEncoder()
+        #############look into it
+        # self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -2224,7 +2221,7 @@ class ProPainterModel(ProPainterPreTrainedModel):
     @add_start_docstrings_to_model_forward(PROPAINTER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutputWithPooling,
+        output_type=BaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="vision",
         expected_output=_EXPECTED_OUTPUT_SHAPE,
@@ -2238,7 +2235,7 @@ class ProPainterModel(ProPainterPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+    ) -> Union[Tuple, BaseModelOutput]:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`, *optional*):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
@@ -2283,7 +2280,7 @@ class ProPainterModel(ProPainterPreTrainedModel):
             head_outputs = (sequence_output, pooled_output) if pooled_output is not None else (sequence_output,)
             return head_outputs + encoder_outputs[1:]
 
-        return BaseModelOutputWithPooling(
+        return BaseModelOutput(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
             hidden_states=encoder_outputs.hidden_states,
@@ -2304,7 +2301,7 @@ class ProPainterModel(ProPainterPreTrainedModel):
     PROPAINTER_START_DOCSTRING,
 )
 
-class ProPainterForVideoInPainting(ProPainterPreTrainedModel):
+class ProPainterModelForVideoInPainting(ProPainterPreTrainedModel):
     def __init__(self, config: ProPainterConfig) -> None:
         super().__init__(config)
 
@@ -2323,6 +2320,12 @@ class ProPainterForVideoInPainting(ProPainterPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(PROPAINTER_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+        checkpoint=_IMAGE_CLASS_CHECKPOINT,
+        output_type=MaskedImageModelingOutput,
+        config_class=_CONFIG_FOR_DOC,
+        expected_output=_EXPECTED_OUTPUT_SHAPE,
+    )
     @replace_return_docstrings(output_type=MaskedImageModelingOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -2434,7 +2437,7 @@ class ProPainterForVideoInPainting(ProPainterPreTrainedModel):
     PROPAINTER_START_DOCSTRING,
 )
 # Copied from transformers.models.vit.modeling_vit.ViTForImageClassification with VIT->PROPAINTER,ViT->ProPainter,vit->propainter
-class ProPainterForVideoOutPainting(ProPainterPreTrainedModel):
+class ProPainterModelForVideoOutPainting(ProPainterPreTrainedModel):
     def __init__(self, config: ProPainterConfig) -> None:
         super().__init__(config)
 
@@ -2450,9 +2453,9 @@ class ProPainterForVideoOutPainting(ProPainterPreTrainedModel):
     @add_start_docstrings_to_model_forward(PROPAINTER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
-        output_type=ImageClassifierOutput,
+        output_type=MaskedImageModelingOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
+        expected_output=_EXPECTED_OUTPUT_SHAPE,
     )
     def forward(
         self,
@@ -2463,7 +2466,7 @@ class ProPainterForVideoOutPainting(ProPainterPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[tuple, ImageClassifierOutput]:
+    ) -> Union[tuple, MaskedImageModelingOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
@@ -2514,7 +2517,7 @@ class ProPainterForVideoOutPainting(ProPainterPreTrainedModel):
             output = (logits,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
-        return ImageClassifierOutput(
+        return MaskedImageModelingOutput(
             loss=loss,
             logits=logits,
             hidden_states=outputs.hidden_states,

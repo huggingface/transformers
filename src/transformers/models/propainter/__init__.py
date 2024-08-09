@@ -53,6 +53,8 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
+        from .feature_extraction_propainter import ProPainterFeatureExtractor
+        from .image_processing_propainter import ProPainterImageProcessor
 
     try:
         if not is_torch_available():
