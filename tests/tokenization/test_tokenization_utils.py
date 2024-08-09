@@ -263,7 +263,7 @@ class TokenizerUtilsTest(unittest.TestCase):
         self.assertEqual(decoded_flat, "[PAD]")
         self.assertEqual(decoded_list, "[PAD]")
 
-        last_item_id = tokenizer_f.vocab_size-1
+        last_item_id = tokenizer_f.vocab_size - 1
         decoded_flat = tokenizer_f.decode(last_item_id)
         decoded_list = tokenizer_f.decode([last_item_id])
 
@@ -288,7 +288,7 @@ class TokenizerUtilsTest(unittest.TestCase):
         self.assertEqual(decoded_flat, "[PAD]")
         self.assertEqual(decoded_list, "[PAD]")
 
-        last_item_id = tokenizer_s.vocab_size-1
+        last_item_id = tokenizer_s.vocab_size - 1
         decoded_flat = tokenizer_s.decode(last_item_id)
         decoded_list = tokenizer_s.decode([last_item_id])
 
