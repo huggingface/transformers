@@ -46,6 +46,13 @@ def _is_package_available(pkg_name: str, return_version: bool = False) -> Union[
         try:
             # Primary method to get the package version
             package_version = importlib.metadata.version(pkg_name)
+            # Check if the package can be imported
+            try:
+                importlib.import_module(pkg_name)
+            except ImportError:
+                # If the package can't be imported, it's not available
+                logger.warning(f"Detected {pkg_name} version {package_version} but failed to import.")
+                package_exists = False
         except importlib.metadata.PackageNotFoundError:
             # Fallback method: Only for "torch" and versions containing "dev"
             if pkg_name == "torch":
