@@ -98,7 +98,7 @@ Below you can find the list of the models we benchmarked.
 - [google/vit-base-patch16-224](https://huggingface.co/google/vit-base-patch16-224)
 - [microsoft/beit-base-patch16-224-pt22k-ft22k](https://huggingface.co/microsoft/beit-base-patch16-224-pt22k-ft22k)
 - [facebook/convnext-large-224](https://huggingface.co/facebook/convnext-large-224)
-- [microsoft/resnet-50](https://huggingface.co/)
+- [microsoft/resnet-50](https://huggingface.co/microsoft/resnet-50)
 
 **Image Segmentation** 
 - [nvidia/segformer-b0-finetuned-ade-512-512](https://huggingface.co/nvidia/segformer-b0-finetuned-ade-512-512)
