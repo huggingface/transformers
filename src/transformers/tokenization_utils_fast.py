@@ -20,7 +20,6 @@ see tokenization_utils.py
 import copy
 import json
 import os
-import warnings
 from collections import defaultdict
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -888,7 +887,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         ):
             return
 
-        warnings.warn(
+        logger.warn(
             "Warning overwriting the original postProcessor in order to update `bos_token` or `eos_token`. "
             "Reload the tokenizer without these parameters if that is not desired"
         )
