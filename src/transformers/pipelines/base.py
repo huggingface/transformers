@@ -33,6 +33,7 @@ from ..feature_extraction_utils import PreTrainedFeatureExtractor
 from ..image_processing_utils import BaseImageProcessor
 from ..modelcard import ModelCard
 from ..models.auto.configuration_auto import AutoConfig
+from ..processing_utils import ProcessorMixin
 from ..tokenization_utils import PreTrainedTokenizer
 from ..utils import (
     ModelOutput,
@@ -714,6 +715,7 @@ def build_pipeline_init_args(
     has_tokenizer: bool = False,
     has_feature_extractor: bool = False,
     has_image_processor: bool = False,
+    has_processor: bool = False,
     supports_binary_output: bool = True,
 ) -> str:
     docstring = r"""
@@ -736,6 +738,11 @@ def build_pipeline_init_args(
         image_processor ([`BaseImageProcessor`]):
             The image processor that will be used by the pipeline to encode data for the model. This object inherits from
             [`BaseImageProcessor`]."""
+    if has_processor:
+        docstring += r"""
+        processor ([`ProcessorMixin`]):
+            The processor that will be used by the pipeline to encode data for the model. This object inherits from
+            [`ProcessorMixin`]."""
     docstring += r"""
         modelcard (`str` or [`ModelCard`], *optional*):
             Model card attributed to the model for this pipeline.
@@ -772,7 +779,11 @@ def build_pipeline_init_args(
 
 
 PIPELINE_INIT_ARGS = build_pipeline_init_args(
-    has_tokenizer=True, has_feature_extractor=True, has_image_processor=True, supports_binary_output=True
+    has_tokenizer=True,
+    has_feature_extractor=True,
+    has_image_processor=True,
+    has_processor=True,
+    supports_binary_output=True,
 )
 
 
@@ -811,6 +822,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         tokenizer: Optional[PreTrainedTokenizer] = None,
         feature_extractor: Optional[PreTrainedFeatureExtractor] = None,
         image_processor: Optional[BaseImageProcessor] = None,
+        processor: Optional[ProcessorMixin] = None,
         modelcard: Optional[ModelCard] = None,
         framework: Optional[str] = None,
         task: str = "",
@@ -828,6 +840,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         self.tokenizer = tokenizer
         self.feature_extractor = feature_extractor
         self.image_processor = image_processor
+        self.processor = processor
         self.modelcard = modelcard
         self.framework = framework
 
@@ -992,6 +1005,9 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
 
         if self.image_processor is not None:
             self.image_processor.save_pretrained(save_directory, **kwargs)
+
+        if self.processor is not None:
+            self.processor.save_pretrained(save_directory, **kwargs)
 
         if self.modelcard is not None:
             self.modelcard.save_pretrained(save_directory)
@@ -1185,7 +1201,14 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
             logger.info("Disabling tokenizer parallelism, we're using DataLoader multithreading already")
             os.environ["TOKENIZERS_PARALLELISM"] = "false"
         # TODO hack by collating feature_extractor and image_processor
-        feature_extractor = self.feature_extractor if self.feature_extractor is not None else self.image_processor
+        if self.feature_extractor is not None:
+            feature_extractor = self.feature_extractor
+        elif self.image_processor is not None:
+            feature_extractor = self.image_processor
+        elif self.processor is not None:
+            feature_extractor = self.processor
+        else:
+            feature_extractor = None
         collate_fn = no_collate_fn if batch_size == 1 else pad_collate_fn(self.tokenizer, feature_extractor)
         dataloader = DataLoader(dataset, num_workers=num_workers, batch_size=batch_size, collate_fn=collate_fn)
         model_iterator = PipelineIterator(dataloader, self.forward, forward_params, loader_batch_size=batch_size)

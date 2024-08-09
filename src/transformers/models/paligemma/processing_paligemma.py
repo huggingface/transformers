@@ -17,6 +17,7 @@ Processor class for PaliGemma.
 """
 
 import logging
+import warnings
 from typing import List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
@@ -70,6 +71,11 @@ def build_string_from_input(prompt, bos_token, image_seq_len, image_token):
         image_seq_len (`int`): The length of the image sequence.
         image_token (`str`): The image token.
     """
+    if image_token in prompt:
+        warnings.warn(
+            f"The image token {image_token} is already present in the prompt. This may lead to unexpected behavior."
+        )
+        prompt = prompt.replace(image_token, "")
     return f"{image_token * image_seq_len}{bos_token}{prompt}\n"
 
 
@@ -299,6 +305,20 @@ class PaliGemmaProcessor(ProcessorMixin):
         the docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)
+
+    def post_process_image_text_to_text(self, generated_outputs):
+        """
+        Post-process the output of the model to decode the text.
+
+        Args:
+            generated_outputs (`torch.Tensor` or `np.ndarray`):
+                The output of the model `generate` function. The output is expected to be a tensor of shape `(batch_size, sequence_length)`
+                or `(sequence_length,)`.
+
+        Returns:
+            `List[str]`: The decoded text.
+        """
+        return self.tokenizer.batch_decode(generated_outputs, skip_special_tokens=True)
 
     @property
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.model_input_names with CLIP->PaliGemma

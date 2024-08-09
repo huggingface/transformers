@@ -40,6 +40,7 @@ from .pipelines.test_pipelines_fill_mask import FillMaskPipelineTests
 from .pipelines.test_pipelines_image_classification import ImageClassificationPipelineTests
 from .pipelines.test_pipelines_image_feature_extraction import ImageFeatureExtractionPipelineTests
 from .pipelines.test_pipelines_image_segmentation import ImageSegmentationPipelineTests
+from .pipelines.test_pipelines_image_text_to_text import ImageTextToTextPipeline
 from .pipelines.test_pipelines_image_to_image import ImageToImagePipelineTests
 from .pipelines.test_pipelines_image_to_text import ImageToTextPipelineTests
 from .pipelines.test_pipelines_mask_generation import MaskGenerationPipelineTests
@@ -73,6 +74,7 @@ pipeline_test_mapping = {
     "image-segmentation": {"test": ImageSegmentationPipelineTests},
     "image-to-image": {"test": ImageToImagePipelineTests},
     "image-to-text": {"test": ImageToTextPipelineTests},
+    "image-text-to-text": {"test": ImageTextToTextPipeline},
     "mask-generation": {"test": MaskGenerationPipelineTests},
     "object-detection": {"test": ObjectDetectionPipelineTests},
     "question-answering": {"test": QAPipelineTests},

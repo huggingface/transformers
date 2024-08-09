@@ -16,13 +16,14 @@
 Processor class for IDEFICS.
 """
 
+import warnings
 from typing import Callable, List, Optional, Union
 from urllib.parse import urlparse
 
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, TextInput, TruncationStrategy
-from ...utils import is_tf_available, is_torch_available
+from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
+from ...utils import TensorType, is_tf_available, is_torch_available
 
 
 if is_torch_available():
@@ -201,15 +202,18 @@ class IdeficsProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        prompts: Union[List[TextInput], List[List[TextInput]]],
-        padding: Union[bool, str, PaddingStrategy] = "longest",
+        images=None,
+        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
+        return_tensors: Optional[Union[str, TensorType]] = "pt",
+        prompts: Optional[Union[List[TextInput], List[List[TextInput]]]] = None,
         transform: Callable = None,
         add_eos_token=False,
         add_end_of_utterance_token=None,
         debug=False,
-        return_tensors="pt",
+        **kwargs,
     ) -> BatchEncoding:
         """This method takes batched or non-batched prompts made of text and images and converts them into prompts that
         the model was trained on and prepares the image pixel values for the model to process.
@@ -317,12 +321,35 @@ class IdeficsProcessor(ProcessorMixin):
         In order to help debug prompt generation enable `debug=True` which will show you what's happening.
 
         """
+        legacy = kwargs.pop("legacy", True)
+        if legacy:
+            warnings.warn(
+                "The use of legacy will be deprecated in the future. Please use the new processing behavior by setting legacy=False."
+            )
+            if prompts is None:
+                # if the user didn't specify prompts=prompts in the call, we assume they want to use the old behavior with prompts as a first argument
+                prompts = images
+        elif prompts is None and (images is not None and text is not None):
+            # Assuming image-text-to-text behavior: one prompt for all images
+            # Check if batched images are provided
+            if not isinstance(images, (list, tuple)):
+                images = [images]
+            if not isinstance(text, (list, tuple)):
+                text = [text] * len(images)
+            # Check if batched text is provided
+            print("images: ", images)
+            print("text: ", text)
+            if isinstance(text, (list, tuple)) and len(text) != len(images):
+                raise ValueError(
+                    "When using the image-text-to-text behavior, the number of prompts should be the same as the number of images."
+                )
+            prompts = list(zip(images, text))
 
         # if the value isn't overriden by the user, check if the tokenizer was trained with this token and then use it
         if add_end_of_utterance_token is None:
             add_end_of_utterance_token = self.tokenizer_was_trained_with_end_of_utterance_token
         # turn non-batched prompts into batched
-        if not any(isinstance(i, list) for i in prompts):
+        if not any(isinstance(i, (list, tuple)) for i in prompts):
             prompts = [prompts]
 
         fake_token = "<fake_token_around_image>"
@@ -485,6 +512,20 @@ class IdeficsProcessor(ProcessorMixin):
         the docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)
+
+    def post_process_image_text_to_text(self, generated_outputs):
+        """
+        Post-process the output of the model to decode the text.
+
+        Args:
+            generated_outputs (`torch.Tensor` or `np.ndarray`):
+                The output of the model `generate` function. The output is expected to be a tensor of shape `(batch_size, sequence_length)`
+                or `(sequence_length,)`.
+
+        Returns:
+            `List[str]`: The decoded text.
+        """
+        return self.tokenizer.batch_decode(generated_outputs, skip_special_tokens=True)
 
     @property
     def model_input_names(self):

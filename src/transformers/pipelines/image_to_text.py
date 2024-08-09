@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import warnings
 from typing import List, Union
 
 from ..utils import (
@@ -96,7 +97,7 @@ class ImageToTextPipeline(Pipeline):
 
     def __call__(self, images: Union[str, List[str], "Image.Image", List["Image.Image"]], **kwargs):
         """
-        Assign labels to the image(s) passed as inputs.
+        Generate text based on the image(s) passed as inputs.
 
         Args:
             images (`str`, `List[str]`, `PIL.Image` or `List[PIL.Image]`):
@@ -128,6 +129,12 @@ class ImageToTextPipeline(Pipeline):
         image = load_image(image, timeout=timeout)
 
         if prompt is not None:
+            warnings.warn(
+                "Passing `prompt` to the `image-to-text` pipeline is deprecated and will be removed in version 4.45"
+                " of 🤗 Transformers. Use the `image-text-to-text` pipeline instead",
+                FutureWarning,
+            )
+
             if not isinstance(prompt, str):
                 raise ValueError(
                     f"Received an invalid text input, got - {type(prompt)} - but expected a single string. "
