@@ -505,3 +505,21 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             output_train = model(**inputs_batched, output_hidden_states=True)
         self.assertTrue((output_train.hidden_states[0][0, -1414:, ...] == 0).all().item())
+
+        with self.assertLogs("transformers", level="WARNING") as logs:
+            model.padding_side = "left"
+            model.train()
+            model(**inputs_batched, output_hidden_states=True)
+
+            self.assertIn(
+                "Padding side is set to 'left' but the model is in training mode. For training", logs.output[0]
+            )
+
+        with self.assertLogs("transformers", level="WARNING") as logs:
+            model.padding_side = "right"
+            model.eval()
+            model(**inputs_batched, output_hidden_states=True)
+
+            self.assertIn(
+                "Padding side is set to 'right' but the model is in inference mode. For correct", logs.output[0]
+            )
