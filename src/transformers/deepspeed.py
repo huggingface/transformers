@@ -38,4 +38,5 @@ from .integrations.deepspeed import (  # noqa
     is_deepspeed_zero3_enabled,
     set_hf_deepspeed_config,
     unset_hf_deepspeed_config,
+    is_deepspeed_sp_enabled,
 )

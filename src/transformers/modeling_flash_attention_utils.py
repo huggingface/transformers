@@ -22,6 +22,12 @@ import torch.nn.functional as F
 
 from .utils import is_flash_attn_2_available, is_flash_attn_greater_or_equal
 
+from .integrations.deepspeed import is_deepspeed_available, is_deepspeed_sp_enabled #DeepSpeed seq parallelism (aka Ulysses)
+
+if is_deepspeed_available():
+    from deepspeed.sequence.layer import _SeqAllToAll
+    from deepspeed.utils import groups as ds_comm_groups
+
 
 if is_flash_attn_2_available():
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
@@ -220,6 +226,14 @@ def _flash_attention_forward(
         deterministic (`bool`, *optional*):
             Determines if the deterministic option introduced in flash_attn>=2.4.1 is enabled.
     """
+    if is_deepspeed_sp_enabled():
+        spg = ds_comm_groups._get_sequence_parallel_group()
+        #qkv tensors are of shape (batch_size, seq_len, num_heads, head_dim)
+        #Gather on seq_len dimension, scatter on num_heads dimension
+        query_states = _SeqAllToAll.apply(spg, query_states, 2, 1)
+        key_states = _SeqAllToAll.apply(spg, key_states, 2, 1)
+        value_states = _SeqAllToAll.apply(spg, value_states, 2, 1)
+
     if not use_top_left_mask:
         causal = is_causal
     else:
@@ -297,5 +311,9 @@ def _flash_attention_forward(
         attn_output = flash_attn_func(
             query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=causal, **flash_kwargs
         )
+
+    if is_deepspeed_sp_enabled():
+        #Gather on num_heads dimension, scatter on seq_len dimension
+        attn_output = _SeqAllToAll.apply(spg, attn_output, 1, 2)
 
     return attn_output
