@@ -44,6 +44,7 @@ from .utils.import_utils import (
     requires_backends,
 )
 
+
 if is_vision_available():
     import PIL
 
@@ -459,7 +460,9 @@ def resize(
         # so we need to add it back if necessary.
         resized_image = np.expand_dims(resized_image, axis=-1) if resized_image.ndim == 2 else resized_image
         # The image is always in channels last format after converting from a PIL image
-        resized_image = to_channel_dimension_format(resized_image, data_format, input_channel_dim=ChannelDimension.LAST)
+        resized_image = to_channel_dimension_format(
+            resized_image, data_format, input_channel_dim=ChannelDimension.LAST
+        )
         # If an image was rescaled to be in the range [0, 255] before converting to a PIL image, then we need to
         # rescale it back to the original range.
         resized_image = rescale(resized_image, 1 / 255) if do_rescale else resized_image

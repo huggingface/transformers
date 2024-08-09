@@ -29,6 +29,7 @@ from ...test_modeling_common import (
 )
 from ...test_pipeline_mixin import PipelineTesterMixin
 
+
 if is_torch_available():
     import torch
     from torch import nn
