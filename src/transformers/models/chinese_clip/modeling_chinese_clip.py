@@ -33,7 +33,6 @@ from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
     ModelOutput,
-    add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
@@ -1091,11 +1090,7 @@ class ChineseCLIPVisionTransformer(nn.Module):
         )
 
 
-@add_start_docstrings(
-    "The text model from CHINESE_CLIP without any head or projection on top.",
-    CHINESE_CLIP_START_DOCSTRING,
-)
-class ChineseCLIPTextModel(ChineseCLIPPreTrainedModel):
+class ChineseCLIPTextTransformer(nn.Module):
     """
 
     The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
@@ -1111,7 +1106,7 @@ class ChineseCLIPTextModel(ChineseCLIPPreTrainedModel):
     config_class = ChineseCLIPTextConfig
     _no_split_modules = ["ChineseCLIPTextEmbeddings"]
 
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config, add_pooling_layer=False):
         super().__init__(config)
         self.config = config
 
@@ -1119,9 +1114,6 @@ class ChineseCLIPTextModel(ChineseCLIPPreTrainedModel):
         self.encoder = ChineseCLIPTextEncoder(config)
 
         self.pooler = ChineseCLIPTextPooler(config) if add_pooling_layer else None
-
-        # Initialize weights and apply final processing
-        self.post_init()
 
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings
@@ -1138,11 +1130,7 @@ class ChineseCLIPTextModel(ChineseCLIPPreTrainedModel):
             self.encoder.layer[layer].attention.prune_heads(heads)
 
     @add_start_docstrings_to_model_forward(CHINESE_CLIP_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutputWithPoolingAndCrossAttentions,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=ChineseCLIPTextConfig)
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1160,24 +1148,7 @@ class ChineseCLIPTextModel(ChineseCLIPPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
         r"""
-        encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
-            the model is configured as a decoder.
-        encoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
-            the cross-attention if the model is configured as a decoder. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-        past_key_values (`tuple(tuple(torch.FloatTensor))` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
-            Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
-
-            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
-            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
-        use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-            `past_key_values`).
+        Returns:
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1275,6 +1246,84 @@ class ChineseCLIPTextModel(ChineseCLIPPreTrainedModel):
 
 
 @add_start_docstrings(
+    """The text model from CHINESE_CLIP without any head or projection on top.""",
+    CHINESE_CLIP_START_DOCSTRING,
+)
+class ChineseCLIPTextModel(ChineseCLIPPreTrainedModel):
+    config_class = ChineseCLIPTextConfig
+    main_input_name = "input_ids"
+    _no_split_modules = ["ChineseCLIPTextEmbeddings", "ChineseCLIPTextAttention"]
+
+    def __init__(self, config: ChineseCLIPTextConfig, add_pooling_layer=True):
+        super().__init__(config)
+        self.text_model = ChineseCLIPTextTransformer(config, add_pooling_layer)
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_input_embeddings(self) -> nn.Module:
+        return self.text_model.embeddings.word_embeddings
+
+    def set_input_embeddings(self, value):
+        self.text_model.embeddings.word_embeddings = value
+
+    def _prune_heads(self, heads_to_prune):
+        return self.text_model._prune_heads(heads_to_prune)
+
+    @add_start_docstrings_to_model_forward(CHINESE_CLIP_TEXT_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=ChineseCLIPTextConfig)
+    def forward(
+        self,
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        token_type_ids: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        encoder_hidden_states: Optional[torch.Tensor] = None,
+        encoder_attention_mask: Optional[torch.Tensor] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+        r"""
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import AutoTokenizer, ChineseCLIPTextModel
+
+        >>> model = ChineseCLIPTextModel.from_pretrained("OFA-Sys/chinese-clip-vit-base-patch16")
+        >>> tokenizer = AutoTokenizer.from_pretrained("OFA-Sys/chinese-clip-vit-base-patch16")
+        >>> prompt = "Hello, world!"
+        >>> inputs = tokenizer(prompt, return_tensors="pt")
+
+        >>> outputs = model(**inputs)
+        ```"""
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        return self.text_model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+
+@add_start_docstrings(
     """The vision model from CHINESE_CLIP without any head or projection on top.""",
     CHINESE_CLIP_START_DOCSTRING,
 )
@@ -1359,7 +1408,7 @@ class ChineseCLIPModel(ChineseCLIPPreTrainedModel):
         self.text_embed_dim = text_config.hidden_size
         self.vision_embed_dim = vision_config.hidden_size
 
-        self.text_model = ChineseCLIPTextModel(text_config, add_pooling_layer=False)
+        self.text_model = ChineseCLIPTextTransformer(text_config, add_pooling_layer=False)
         self.vision_model = ChineseCLIPVisionTransformer(vision_config)
 
         self.visual_projection = nn.Linear(self.vision_embed_dim, self.projection_dim, bias=False)

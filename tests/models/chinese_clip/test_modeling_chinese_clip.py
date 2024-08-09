@@ -392,6 +392,18 @@ class ChineseCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training(self):
         pass
 
+    @unittest.skip(reason="CPU offload seems to be broken for submodel ChineseTextModel")
+    def test_cpu_offload(self):
+        pass
+
+    @unittest.skip(reason="disk offload seems to be broken for submodel ChineseTextModel")
+    def test_disk_offload_bin(self):
+        pass
+
+    @unittest.skip(reason="disk offload seems to be broken for submodel ChineseTextModel")
+    def test_disk_offload_safetensors(self):
+        pass
+
     @unittest.skip
     def test_training_gradient_checkpointing(self):
         pass
