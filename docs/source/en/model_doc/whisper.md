@@ -90,6 +90,8 @@ As an example, the following codesnippet enables SDPA and `torch.compile` for up
 >>> # Load the Whisper model with SDPA attention
 >>> processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
 >>> model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en", attn_implementation="sdpa")
+>>> device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+>>> model = model.to(device)
 
 >>> # Enable static cache and compile the forward pass
 >>> model.generation_config.cache_implementation = "static"
