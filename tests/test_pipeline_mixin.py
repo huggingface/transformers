@@ -338,9 +338,9 @@ class PipelineTesterMixin:
 
         if TRANSFORMERS_TINY_MODEL_PATH != "hf-internal-testing":
             repo_id = os.path.join(TRANSFORMERS_TINY_MODEL_PATH, model_type, repo_name)
-        
+
         # -------------------- Load model --------------------
-            
+
         # TODO: We should check if a model file is on the Hub repo. instead.
         try:
             model = model_architecture.from_pretrained(repo_id, revision=commit)
@@ -352,7 +352,7 @@ class PipelineTesterMixin:
             self.skipTest(f"Could not find or load the model from {repo_id} with {model_architecture}.")
 
         # -------------------- Load tokenizer --------------------
-            
+
         tokenizer = None
         if tokenizer_name is not None:
             try:
@@ -366,7 +366,7 @@ class PipelineTesterMixin:
                 self.skipTest(f"Could not load the tokenizer from {repo_id} with {tokenizer_name}.")
 
         # -------------------- Load processors --------------------
-                
+
         processors = {}
         for key, name in zip(
             ["image_processor", "feature_extractor", "processor"],
