@@ -31,7 +31,7 @@ import torch.utils.checkpoint
 from torch.nn import CrossEntropyLoss, LayerNorm
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, StaticCache
+from ...cache_utils import Cache, StaticCache
 from ...modeling_attn_mask_utils import (
     AttentionMaskConverter,
 )
