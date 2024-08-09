@@ -804,8 +804,6 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                     post_processor[special_token] = [token, token_id]
 
             trained_tokenizer_json["post_processor"] = post_processor
-            import pdb;pdb.set_trace()
-            print(json.dumps(trained_tokenizer_json["post_processor"]))
             tokenizer = TokenizerFast.from_str(json.dumps(trained_tokenizer_json))
 
         kwargs = self.init_kwargs.copy()
