@@ -10,7 +10,6 @@ docs/source/en/bertology.md
 docs/source/en/big_models.md
 docs/source/en/community.md
 docs/source/en/contributing.md
-docs/source/en/create_a_model.md
 docs/source/en/custom_models.md
 docs/source/en/debugging.md
 docs/source/en/fast_tokenizers.md
@@ -288,7 +287,6 @@ docs/source/en/perf_train_gpu_many.md
 docs/source/en/perf_train_gpu_one.md
 docs/source/en/perf_train_special.md
 docs/source/en/perf_train_tpu_tf.md
-docs/source/en/performance.md
 docs/source/en/perplexity.md
 docs/source/en/philosophy.md
 docs/source/en/pipeline_webserver.md
