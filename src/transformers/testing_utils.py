@@ -76,6 +76,7 @@ from .utils import (
     is_g2p_en_available,
     is_galore_torch_available,
     is_gguf_available,
+    is_grokadamw_available,
     is_ipex_available,
     is_jieba_available,
     is_jinja_available,
@@ -356,6 +357,13 @@ def require_lomo(test_case):
     https://github.com/OpenLMLab/LOMO
     """
     return unittest.skipUnless(is_lomo_available(), "test requires LOMO")(test_case)
+
+
+def require_grokadamw(test_case):
+    """
+    Decorator marking a test that requires GrokAdamW. These tests are skipped when GrokAdamW isn't installed.
+    """
+    return unittest.skipUnless(is_grokadamw_available(), "test requires GrokAdamW")(test_case)
 
 
 def require_cv2(test_case):
