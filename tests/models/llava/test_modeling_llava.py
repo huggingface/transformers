@@ -30,6 +30,7 @@ from transformers import (
 from transformers.testing_utils import (
     require_bitsandbytes,
     require_torch,
+    require_torch_fp16,
     require_torch_gpu,
     require_vision,
     slow,
@@ -185,6 +186,11 @@ class LlavaForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase
     def setUp(self):
         self.model_tester = LlavaVisionText2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=LlavaConfig, has_text_modality=False)
+
+    @require_torch_fp16
+    def test_llava_model_fp16_forward(self):
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        self.model_tester.create_and_check_llava_model_fp16_forward(config, **inputs)
 
     @unittest.skip(
         reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
