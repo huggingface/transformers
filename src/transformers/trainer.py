@@ -100,6 +100,7 @@ from .trainer_pt_utils import (
     get_model_param_count,
     get_module_class_from_name,
     get_parameter_names,
+    is_deepspeed_zero3_enabled,
     nested_concat,
     nested_detach,
     nested_numpify,
@@ -161,9 +162,11 @@ from .utils import (
     is_sagemaker_mp_enabled,
     is_torch_compile_available,
     is_torch_mlu_available,
+    is_torch_mps_available,
     is_torch_neuroncore_available,
     is_torch_npu_available,
     is_torch_xla_available,
+    is_torch_xpu_available,
     logging,
     strtobool,
 )
@@ -222,11 +225,6 @@ if is_accelerate_available():
         DistributedDataParallelKwargs,
         DistributedType,
         GradientAccumulationPlugin,
-        is_mlu_available,
-        is_mps_available,
-        is_npu_available,
-        is_torch_version,
-        is_xpu_available,
         load_fsdp_model,
         load_fsdp_optimizer,
         save_fsdp_model,
@@ -434,6 +432,15 @@ class Trainer:
                     FutureWarning,
                 )
             self.model_init = model_init
+
+        # Will reach this branch if the user has
+        # 1. Used `.from_pretrained` or `.from_config` to initialize their model
+        # 2. Did not configure Zero-3 via `TrainingArguments` or `accelerate launch` beforehand
+        # New models init such as `MyModel()` will not hit this step
+        if is_deepspeed_zero3_enabled() and not getattr(model, "_transformers_zero3_init_used", True):
+            raise ValueError(
+                "Model was not initialized with `Zero-3` despite being configured for DeepSpeed Zero-3. Please re-initialize your model via `Model.from_pretrained(...)` or `Model.from_config(...)` after creating your `TrainingArguments`!"
+            )
 
         if model.__class__.__name__ in MODEL_MAPPING_NAMES:
             raise ValueError(
@@ -3322,13 +3329,13 @@ class Trainer:
             self.args.torch_empty_cache_steps is not None
             and self.state.global_step % self.args.torch_empty_cache_steps == 0
         ):
-            if is_xpu_available():
+            if is_torch_xpu_available():
                 torch.xpu.empty_cache()
-            elif is_mlu_available():
+            elif is_torch_mlu_available():
                 torch.mlu.empty_cache()
-            elif is_npu_available():
+            elif is_torch_npu_available():
                 torch.npu.empty_cache()
-            elif is_torch_version(">=", "2.0") and is_mps_available():
+            elif is_torch_mps_available(min_version="2.0"):
                 torch.mps.empty_cache()
             else:
                 torch.cuda.empty_cache()
