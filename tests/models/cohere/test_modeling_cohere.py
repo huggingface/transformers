@@ -291,14 +291,6 @@ class CohereModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         self.model_tester = CohereModelTester(self)
         self.config_tester = ConfigTester(self, config_class=CohereConfig, hidden_size=37)
 
-    @unittest.skip("Failing. Issue opened in #31351")
-    def test_initialization(self):
-        super().test_initialization()
-
-    @unittest.skip("Failing. Issue opened in #31351")
-    def test_fast_init_context_manager(self):
-        super().test_fast_init_context_manager()
-
     def test_config(self):
         self.config_tester.run_common_tests()
 

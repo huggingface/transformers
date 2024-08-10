@@ -451,7 +451,7 @@ class OwlViTMLP(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPEncoderLayer with CLIP->OwlViT
+# Copied from transformers.models.altclip.modeling_altclip.AltCLIPEncoderLayer with AltCLIP->OwlViT
 class OwlViTEncoderLayer(nn.Module):
     def __init__(self, config: OwlViTConfig):
         super().__init__()
@@ -998,13 +998,13 @@ class OwlViTModel(OwlViTPreTrainedModel):
         super().__init__(config)
 
         if not isinstance(config.text_config, OwlViTTextConfig):
-            raise ValueError(
+            raise TypeError(
                 "config.text_config is expected to be of type OwlViTTextConfig but is of type"
                 f" {type(config.text_config)}."
             )
 
         if not isinstance(config.vision_config, OwlViTVisionConfig):
-            raise ValueError(
+            raise TypeError(
                 "config.vision_config is expected to be of type OwlViTVisionConfig but is of type"
                 f" {type(config.vision_config)}."
             )
@@ -1257,7 +1257,7 @@ class OwlViTClassPredictionHead(nn.Module):
             if query_mask.ndim > 1:
                 query_mask = torch.unsqueeze(query_mask, dim=-2)
 
-            pred_logits = torch.where(query_mask == 0, -1e6, pred_logits)
+            pred_logits = torch.where(query_mask == 0, torch.finfo(pred_logits.dtype).min, pred_logits)
             pred_logits = pred_logits.to(torch.float32)
 
         return (pred_logits, image_class_embeds)

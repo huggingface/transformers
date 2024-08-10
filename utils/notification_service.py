@@ -520,6 +520,39 @@ class Message:
         if len(new_failure_blocks) > 0:
             blocks.extend(new_failure_blocks)
 
+        # To save the list of new model failures
+        extra_blocks = self.get_new_model_failure_blocks(to_truncate=False)
+        if extra_blocks:
+            failure_text = extra_blocks[-1]["text"]["text"]
+            file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/new_model_failures.txt")
+            with open(file_path, "w", encoding="UTF-8") as fp:
+                fp.write(failure_text)
+
+            # upload results to Hub dataset
+            file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/new_model_failures.txt")
+            commit_info = api.upload_file(
+                path_or_fileobj=file_path,
+                path_in_repo=f"{datetime.datetime.today().strftime('%Y-%m-%d')}/ci_results_{job_name}/new_model_failures.txt",
+                repo_id="hf-internal-testing/transformers_daily_ci",
+                repo_type="dataset",
+                token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
+            )
+            url = f"https://huggingface.co/datasets/hf-internal-testing/transformers_daily_ci/raw/{commit_info.oid}/{datetime.datetime.today().strftime('%Y-%m-%d')}/ci_results_{job_name}/new_model_failures.txt"
+
+            block = {
+                "type": "section",
+                "text": {
+                    "type": "plain_text",
+                    "text": "bonjour",
+                },
+                "accessory": {
+                    "type": "button",
+                    "text": {"type": "plain_text", "text": "Check New model failures"},
+                    "url": url,
+                },
+            }
+            blocks.append(block)
+
         return json.dumps(blocks)
 
     @staticmethod
@@ -641,7 +674,7 @@ class Message:
 
     def get_new_model_failure_blocks(self, with_header=True, to_truncate=True):
         if self.prev_ci_artifacts is None:
-            return {}
+            return []
 
         sorted_dict = sorted(self.model_results.items(), key=lambda t: t[0])
 
@@ -765,13 +798,6 @@ class Message:
 
             time.sleep(1)
 
-        # To save the list of new model failures
-        blocks = self.get_new_model_failure_blocks(to_truncate=False)
-        failure_text = blocks[-1]["text"]["text"]
-        file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/new_model_failures.txt")
-        with open(file_path, "w", encoding="UTF-8") as fp:
-            fp.write(failure_text)
-
 
 def retrieve_artifact(artifact_path: str, gpu: Optional[str]):
     if gpu not in [None, "single", "multi"]:
@@ -891,7 +917,7 @@ if __name__ == "__main__":
     # To find the PR number in a commit title, for example, `Add AwesomeFormer model (#99999)`
     pr_number_re = re.compile(r"\(#(\d+)\)$")
 
-    title = f"🤗 Results of the {ci_event} tests."
+    title = f"🤗 Results of {ci_event} - {os.getenv('CI_TEST_JOB')}."
     # Add Commit/PR title with a link for push CI
     # (check the title in 2 env. variables - depending on the CI is triggered via `push` or `workflow_run` event)
     ci_title_push = os.environ.get("CI_TITLE_PUSH")

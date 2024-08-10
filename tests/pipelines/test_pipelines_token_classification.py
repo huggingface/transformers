@@ -56,8 +56,8 @@ class TokenClassificationPipelineTests(unittest.TestCase):
             config: model for config, model in tf_model_mapping.items() if config.__name__ not in _TO_SKIP
         }
 
-    def get_test_pipeline(self, model, tokenizer, processor):
-        token_classifier = TokenClassificationPipeline(model=model, tokenizer=tokenizer)
+    def get_test_pipeline(self, model, tokenizer, processor, torch_dtype="float32"):
+        token_classifier = TokenClassificationPipeline(model=model, tokenizer=tokenizer, torch_dtype=torch_dtype)
         return token_classifier, ["A simple string", "A simple string that is quite a bit longer"]
 
     def run_pipeline_test(self, token_classifier, _):

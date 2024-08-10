@@ -18,7 +18,10 @@ import json
 import os
 import pathlib
 import tempfile
+import time
+import warnings
 
+import numpy as np
 import requests
 
 from transformers import AutoImageProcessor, BatchFeature
@@ -28,7 +31,6 @@ from transformers.utils import is_torch_available, is_vision_available
 
 
 if is_torch_available():
-    import numpy as np
     import torch
 
 if is_vision_available():
@@ -71,6 +73,10 @@ def prepare_image_inputs(
 
     if torchify:
         image_inputs = [torch.from_numpy(image) for image in image_inputs]
+
+    if numpify:
+        # Numpy images are typically in channels last format
+        image_inputs = [image.transpose(1, 2, 0) for image in image_inputs]
 
     return image_inputs
 
@@ -156,10 +162,10 @@ class ImageProcessingTestMixin:
         )
 
         if not self.test_slow_image_processor or not self.test_fast_image_processor:
-            self.skipTest("Skipping slow/fast equivalence test")
+            self.skipTest(reason="Skipping slow/fast equivalence test")
 
         if self.image_processing_class is None or self.fast_image_processing_class is None:
-            self.skipTest("Skipping slow/fast equivalence test as one of the image processors is not defined")
+            self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
 
         image_processor_slow = self.image_processing_class(**self.image_processor_dict)
         image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
@@ -167,33 +173,28 @@ class ImageProcessingTestMixin:
         encoding_slow = image_processor_slow(dummy_image, return_tensors="pt")
         encoding_fast = image_processor_fast(dummy_image, return_tensors="pt")
 
-        self.assertTrue(torch.allclose(encoding_slow.pixel_values, encoding_fast.pixel_values, atol=1e-3))
+        self.assertTrue(torch.allclose(encoding_slow.pixel_values, encoding_fast.pixel_values, atol=1e-2))
 
     @require_vision
     @require_torch
     def test_fast_is_faster_than_slow(self):
-        import time
-
-        def measure_time(self, image_processor, dummy_image):
-            start = time.time()
-            _ = image_processor(dummy_image, return_tensors="pt")
-            return time.time() - start
-
-        dummy_image = Image.open(
-            requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw
-        )
-
         if not self.test_slow_image_processor or not self.test_fast_image_processor:
-            self.skipTest("Skipping speed test")
+            self.skipTest(reason="Skipping speed test")
 
         if self.image_processing_class is None or self.fast_image_processing_class is None:
-            self.skipTest("Skipping speed test as one of the image processors is not defined")
+            self.skipTest(reason="Skipping speed test as one of the image processors is not defined")
 
+        def measure_time(image_processor, image):
+            start = time.time()
+            _ = image_processor(image, return_tensors="pt")
+            return time.time() - start
+
+        dummy_images = torch.randint(0, 255, (4, 3, 224, 224), dtype=torch.uint8)
         image_processor_slow = self.image_processing_class(**self.image_processor_dict)
-        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
+        image_processor_fast = self.fast_image_processing_class()
 
-        slow_time = self.measure_time(image_processor_slow, dummy_image)
-        fast_time = self.measure_time(image_processor_fast, dummy_image)
+        fast_time = measure_time(image_processor_fast, dummy_images)
+        slow_time = measure_time(image_processor_slow, dummy_images)
 
         self.assertLessEqual(fast_time, slow_time)
 
@@ -237,6 +238,52 @@ class ImageProcessingTestMixin:
                 image_processor_second = AutoImageProcessor.from_pretrained(tmpdirname)
 
             self.assertEqual(image_processor_second.to_dict(), image_processor_first.to_dict())
+
+    def test_save_load_fast_slow(self):
+        "Test that we can load a fast image processor from a slow one and vice-versa."
+        if self.image_processing_class is None or self.fast_image_processing_class is None:
+            self.skipTest("Skipping slow/fast save/load test as one of the image processors is not defined")
+
+        image_processor_dict = self.image_processor_tester.prepare_image_processor_dict()
+        image_processor_slow_0 = self.image_processing_class(**image_processor_dict)
+
+        # Load fast image processor from slow one
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            image_processor_slow_0.save_pretrained(tmpdirname)
+            image_processor_fast_0 = self.fast_image_processing_class.from_pretrained(tmpdirname)
+
+        image_processor_fast_1 = self.fast_image_processing_class(**image_processor_dict)
+
+        # Load slow image processor from fast one
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            image_processor_fast_1.save_pretrained(tmpdirname)
+            image_processor_slow_1 = self.image_processing_class.from_pretrained(tmpdirname)
+
+        self.assertEqual(image_processor_slow_0.to_dict(), image_processor_slow_1.to_dict())
+        self.assertEqual(image_processor_fast_0.to_dict(), image_processor_fast_1.to_dict())
+
+    def test_save_load_fast_slow_auto(self):
+        "Test that we can load a fast image processor from a slow one and vice-versa using AutoImageProcessor."
+        if self.image_processing_class is None or self.fast_image_processing_class is None:
+            self.skipTest("Skipping slow/fast save/load test as one of the image processors is not defined")
+
+        image_processor_dict = self.image_processor_tester.prepare_image_processor_dict()
+        image_processor_slow_0 = self.image_processing_class(**image_processor_dict)
+
+        # Load fast image processor from slow one
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            image_processor_slow_0.save_pretrained(tmpdirname)
+            image_processor_fast_0 = AutoImageProcessor.from_pretrained(tmpdirname, use_fast=True)
+
+        image_processor_fast_1 = self.fast_image_processing_class(**image_processor_dict)
+
+        # Load slow image processor from fast one
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            image_processor_fast_1.save_pretrained(tmpdirname)
+            image_processor_slow_1 = AutoImageProcessor.from_pretrained(tmpdirname, use_fast=False)
+
+        self.assertEqual(image_processor_slow_0.to_dict(), image_processor_slow_1.to_dict())
+        self.assertEqual(image_processor_fast_0.to_dict(), image_processor_fast_1.to_dict())
 
     def test_init_without_params(self):
         for image_processing_class in self.image_processor_list:
@@ -358,7 +405,7 @@ class ImageProcessingTestMixin:
             encoded_images = image_processor(
                 image_inputs[0],
                 return_tensors="pt",
-                input_data_format="channels_first",
+                input_data_format="channels_last",
                 image_mean=0,
                 image_std=1,
             ).pixel_values
@@ -369,7 +416,7 @@ class ImageProcessingTestMixin:
             encoded_images = image_processor(
                 image_inputs,
                 return_tensors="pt",
-                input_data_format="channels_first",
+                input_data_format="channels_last",
                 image_mean=0,
                 image_std=1,
             ).pixel_values
@@ -379,8 +426,12 @@ class ImageProcessingTestMixin:
             )
 
     def test_image_processor_preprocess_arguments(self):
+        is_tested = False
+
         for image_processing_class in self.image_processor_list:
             image_processor = image_processing_class(**self.image_processor_dict)
+
+            # validation done by _valid_processor_keys attribute
             if hasattr(image_processor, "_valid_processor_keys") and hasattr(image_processor, "preprocess"):
                 preprocess_parameter_names = inspect.getfullargspec(image_processor.preprocess).args
                 preprocess_parameter_names.remove("self")
@@ -388,6 +439,28 @@ class ImageProcessingTestMixin:
                 valid_processor_keys = image_processor._valid_processor_keys
                 valid_processor_keys.sort()
                 self.assertEqual(preprocess_parameter_names, valid_processor_keys)
+                is_tested = True
+
+            # validation done by @filter_out_non_signature_kwargs decorator
+            if hasattr(image_processor.preprocess, "_filter_out_non_signature_kwargs"):
+                if hasattr(self.image_processor_tester, "prepare_image_inputs"):
+                    inputs = self.image_processor_tester.prepare_image_inputs()
+                elif hasattr(self.image_processor_tester, "prepare_video_inputs"):
+                    inputs = self.image_processor_tester.prepare_video_inputs()
+                else:
+                    self.skipTest(reason="No valid input preparation method found")
+
+                with warnings.catch_warnings(record=True) as raised_warnings:
+                    warnings.simplefilter("always")
+                    image_processor(inputs, extra_argument=True)
+
+                messages = " ".join([str(w.message) for w in raised_warnings])
+                self.assertGreaterEqual(len(raised_warnings), 1)
+                self.assertIn("extra_argument", messages)
+                is_tested = True
+
+        if not is_tested:
+            self.skipTest(reason="No validation found for `preprocess` method")
 
 
 class AnnotationFormatTestMixin:

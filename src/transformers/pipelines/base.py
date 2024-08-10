@@ -90,6 +90,9 @@ def _pad(items, key, padding_value, padding_side):
         # Others include `attention_mask` etc...
         shape = items[0][key].shape
         dim = len(shape)
+        if dim == 1:
+            # We have a list of 1-dim torch tensors, which can be stacked without padding
+            return torch.cat([item[key] for item in items], dim=0)
         if key in ["pixel_values", "image"]:
             # This is probable image so padding shouldn't be necessary
             # B, C, H, W
@@ -215,7 +218,7 @@ def infer_framework_load_model(
     If both frameworks are installed and available for `model`, PyTorch is selected.
 
     Args:
-        model (`str`, [`PreTrainedModel`] or [`TFPreTrainedModel`]):
+        model (`str`, [`PreTrainedModel`] or [`TFPreTrainedModel]`):
             The model to infer the framework from. If `str`, a checkpoint name. The model to infer the framewrok from.
         config ([`AutoConfig`]):
             The config associated with the model to help using the correct class
@@ -319,7 +322,7 @@ def infer_framework_from_model(
     If both frameworks are installed and available for `model`, PyTorch is selected.
 
     Args:
-        model (`str`, [`PreTrainedModel`] or [`TFPreTrainedModel`]):
+        model (`str`, [`PreTrainedModel`] or [`TFPreTrainedModel]`):
             The model to infer the framework from. If `str`, a checkpoint name. The model to infer the framewrok from.
         model_classes (dictionary `str` to `type`, *optional*):
             A mapping framework to class.
@@ -346,7 +349,7 @@ def get_framework(model, revision: Optional[str] = None):
     Select framework (TensorFlow or PyTorch) to use.
 
     Args:
-        model (`str`, [`PreTrainedModel`] or [`TFPreTrainedModel`]):
+        model (`str`, [`PreTrainedModel`] or [`TFPreTrainedModel]`):
             If both frameworks are installed, picks the one corresponding to the model passed (either a model class or
             the model name). If no specific model is provided, defaults to using PyTorch.
     """
@@ -382,7 +385,7 @@ def get_default_model_and_revision(
     Select a default model to use for a given task. Defaults to pytorch if ambiguous.
 
     Args:
-        targeted_task (`Dict` ):
+        targeted_task (`Dict`):
            Dictionary representing the given task, that should contain default models
 
         framework (`str`, None)
@@ -843,6 +846,17 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
                 device = next(iter(hf_device_map.values()))
             else:
                 device = -1
+                if (
+                    is_torch_mlu_available()
+                    or is_torch_cuda_available()
+                    or is_torch_npu_available()
+                    or is_torch_xpu_available(check_device=True)
+                    or is_torch_mps_available()
+                ):
+                    logger.warning(
+                        "Hardware accelerator e.g. GPU is available in the environment, but no `device` argument"
+                        " is passed to the `Pipeline` object. Model will be on CPU."
+                    )
 
         if is_torch_available() and self.framework == "pt":
             if device == -1 and self.model.device is not None:

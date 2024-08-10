@@ -141,7 +141,7 @@ class SeamlessM4TTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             ],
         )
 
-    @unittest.skip("This fails currently and is a blocker. No idea why TODO @ylacombe")
+    @unittest.skip(reason="This fails currently and is a blocker. No idea why TODO @ylacombe")
     def test_maximum_encoding_length_single_input(self):
         tokenizers = self.get_tokenizers(do_lower_case=False, model_max_length=100)
         for tokenizer in tokenizers:
@@ -244,7 +244,7 @@ class SeamlessM4TTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     self.assertEqual(len(overflowing_tokens), 2 + stride)
                     self.assertEqual(overflowing_tokens, sequence[-(2 + stride) :])
 
-    @unittest.skip("By defaults, uses pad_to_multiple_of which breaks the test")
+    @unittest.skip(reason="By defaults, uses pad_to_multiple_of which breaks the test")
     def test_maximum_encoding_length_pair_input(self):
         pass
 
@@ -253,7 +253,7 @@ class SeamlessM4TTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 if tokenizer.pad_token is None:
-                    self.skipTest("No padding token.")
+                    self.skipTest(reason="No padding token.")
                 else:
                     empty_tokens = tokenizer("", padding=True, pad_to_multiple_of=8)
                     normal_tokens = tokenizer("This is a sample input", padding=True, pad_to_multiple_of=8)
@@ -286,7 +286,7 @@ class SeamlessM4TTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     @require_torch
     def test_prepare_seq2seq_batch(self):
         if not self.test_seq2seq:
-            return
+            self.skipTest(reason="test_seq2seq is set to False")
 
         tokenizers = self.get_tokenizers()
         for tokenizer in tokenizers:
@@ -316,7 +316,7 @@ class SeamlessM4TTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                         pad_to_multiple_of=None,
                     )
                 except NotImplementedError:
-                    return
+                    self.skipTest(reason="Encountered NotImplementedError when calling prepare_seq2seq_batch")
                 self.assertEqual(batch.input_ids.shape[1], 3)
                 self.assertEqual(batch.labels.shape[1], 10)
 
@@ -343,7 +343,7 @@ class SeamlessM4TTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertEqual(batch_encoder_only.attention_mask.shape[1], 4)
                 self.assertNotIn("decoder_input_ids", batch_encoder_only)
 
-    @unittest.skip("Unfortunately way too slow to build a BPE with SentencePiece.")
+    @unittest.skip(reason="Unfortunately way too slow to build a BPE with SentencePiece.")
     def test_save_slow_from_fast_and_reload_fast(self):
         pass
 
@@ -390,7 +390,7 @@ class SeamlessM4TTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_training_new_tokenizer(self):
         # This feature only exists for fast tokenizers
         if not self.test_rust_tokenizer:
-            return
+            self.skipTest(reason="test_rust_tokenizer is set to False")
 
         tokenizer = self.get_rust_tokenizer()
         new_tokenizer = tokenizer.train_new_from_iterator(SMALL_TRAINING_CORPUS, 100)
@@ -425,11 +425,11 @@ class SeamlessM4TTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.assertDictEqual(tokenizer.special_tokens_map, new_tokenizer.special_tokens_map)
 
-    @unittest.skip("Fails because of the hack of adding <unk> in _tokenize")
+    @unittest.skip(reason="Fails because of the hack of adding <unk> in _tokenize")
     def test_pickle_subword_regularization_tokenizer(self):
         pass
 
-    @unittest.skip("Fails because of the hack of adding <unk> in _tokenize")
+    @unittest.skip(reason="Fails because of the hack of adding <unk> in _tokenize")
     def test_subword_regularization_tokenizer(self):
         pass
 

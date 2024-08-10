@@ -353,7 +353,7 @@ class XGLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         model = XGLMModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
-    @unittest.skip("Does not work on the tiny model as we keep hitting edge cases.")
+    @unittest.skip(reason="Does not work on the tiny model as we keep hitting edge cases.")
     def test_model_parallelism(self):
         super().test_model_parallelism()
 

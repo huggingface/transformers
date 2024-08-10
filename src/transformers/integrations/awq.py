@@ -199,7 +199,7 @@ def get_modules_to_fuse(model, quantization_config):
             The quantization configuration to use.
     """
     if not isinstance(model, PreTrainedModel):
-        raise ValueError(f"The model should be an instance of `PreTrainedModel`, got {model.__class__.__name__}")
+        raise TypeError(f"The model should be an instance of `PreTrainedModel`, got {model.__class__.__name__}")
 
     # Always default to `quantization_config.modules_to_fuse`
     if quantization_config.modules_to_fuse is not None:

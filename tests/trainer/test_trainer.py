@@ -132,6 +132,7 @@ if is_torch_available():
 
 # for version specific tests in TrainerIntegrationTest
 require_accelerate_version_min_0_28 = partial(require_accelerate, min_version="0.28")
+require_accelerate_version_min_0_30 = partial(require_accelerate, min_version="0.30")
 GRAD_ACCUM_KWARGS_VERSION_AVAILABLE = is_accelerate_available("0.28")
 if is_accelerate_available():
     from accelerate import Accelerator
@@ -1652,6 +1653,84 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertTrue(galore_peak_memory < upper_bound_pm)
         self.assertTrue(lower_bound_pm < galore_peak_memory)
 
+    @require_galore_torch
+    @require_torch_gpu
+    def test_galore_lr_display_without_scheduler(self):
+        config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
+        tiny_llama = LlamaForCausalLM(config)
+        x = torch.randint(0, 100, (128,))
+        train_dataset = RepeatDataset(x)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            learning_rate = 1e-9
+            num_steps = 10
+
+            # Trainer without inf/nan filter
+            args = TrainingArguments(
+                tmpdir,
+                learning_rate=learning_rate,
+                logging_steps=5,
+                optim="galore_adamw",
+                optim_target_modules=[r".*attn.*", r".*mlp.*"],
+            )
+            trainer = Trainer(tiny_llama, args, train_dataset=train_dataset)
+            trainer.create_optimizer_and_scheduler(num_training_steps=num_steps)
+
+            # reflects displayed lr in trainer
+            self.assertEqual(trainer.get_learning_rates(), [learning_rate, learning_rate])
+
+    @require_galore_torch
+    @require_torch_gpu
+    def test_galore_lr_display_with_scheduler(self):
+        config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
+        tiny_llama = LlamaForCausalLM(config)
+        x = torch.randint(0, 100, (128,))
+        train_dataset = RepeatDataset(x)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            learning_rate = 2e-4
+            num_train_epochs = 2
+            num_warmup_steps = 5
+
+            # Trainer without inf/nan filter
+            args = TrainingArguments(
+                tmpdir,
+                num_train_epochs=num_train_epochs,
+                learning_rate=learning_rate,
+                warmup_steps=num_warmup_steps,
+                lr_scheduler_type="cosine",
+                logging_steps=1,
+                optim="galore_adamw",
+                optim_target_modules=[r".*attn.*", r".*mlp.*"],
+            )
+            trainer = Trainer(tiny_llama, args, train_dataset=train_dataset)
+
+            # creating log history of trainer, results don't matter
+            trainer.train()
+            logs = trainer.state.log_history[1:][:-1]
+
+            # reach given learning rate peak and end with 0 lr
+            self.assertTrue(logs[num_warmup_steps - 2]["learning_rate"] == learning_rate)
+            self.assertTrue(logs[-1]["learning_rate"] == 0)
+
+            # increasing and decreasing pattern of lrs
+            increasing_lrs = [
+                logs[i]["learning_rate"] < logs[i + 1]["learning_rate"]
+                for i in range(len(logs))
+                if i < num_warmup_steps - 2
+            ]
+            decreasing_lrs = [
+                logs[i]["learning_rate"] > logs[i + 1]["learning_rate"]
+                for i in range(len(logs) - 1)
+                if i >= num_warmup_steps - 2
+            ]
+
+            self.assertTrue(all(increasing_lrs))
+            self.assertTrue(all(decreasing_lrs))
+
+            # warm up steps << total steps
+            self.assertTrue(len(decreasing_lrs) > len(increasing_lrs))
+
     @require_torch_multi_accelerator
     def test_data_is_not_parallelized_when_model_is_parallel(self):
         model = RegressionModel()
@@ -3066,7 +3145,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertAlmostEqual(metrics["eval_loss"], original_eval_loss)
         torchdynamo.reset()
 
-    @unittest.skip("torch 2.0.0 gives `ModuleNotFoundError: No module named 'torchdynamo'`.")
+    @unittest.skip(reason="torch 2.0.0 gives `ModuleNotFoundError: No module named 'torchdynamo'`.")
     @require_torch_non_multi_gpu
     @require_torchdynamo
     def test_torchdynamo_memory(self):
@@ -3565,6 +3644,17 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 self.assertIn("torch_dtype", args_dict)
                 self.assertEqual(args_dict["torch_dtype"], dtype)
 
+    @require_accelerate_version_min_0_30
+    def test_eval_use_gather_object(self):
+        train_dataset = RegressionDataset()
+        eval_dataset = RegressionDataset()
+        model = RegressionDictModel()
+        args = TrainingArguments("./regression", report_to="none", eval_use_gather_object=True)
+        trainer = Trainer(model, args, train_dataset=train_dataset, eval_dataset=eval_dataset)
+        trainer.train()
+        _ = trainer.evaluate()
+        _ = trainer.predict(eval_dataset)
+
 
 @require_torch
 @is_staging_test
@@ -3649,47 +3739,60 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
 
     def test_push_to_hub_with_saves_each_epoch(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
-            trainer = get_regression_trainer(
-                output_dir=os.path.join(tmp_dir, "test-trainer-epoch"),
-                push_to_hub=True,
-                hub_token=self._token,
-                # To avoid any flakiness if the training goes faster than the uploads.
-                hub_always_push=True,
-                save_strategy="epoch",
-            )
-            trainer.train()
+            with self.assertLogs(level="WARNING") as logs:
+                trainer = get_regression_trainer(
+                    output_dir=os.path.join(tmp_dir, "test-trainer-epoch"),
+                    push_to_hub=True,
+                    hub_token=self._token,
+                    # To avoid any flakiness if the training goes faster than the uploads.
+                    hub_always_push=True,
+                    save_strategy="epoch",
+                )
+                trainer.train()
 
         commits = list_repo_commits(f"{USER}/test-trainer-epoch", token=self._token)
         commits = [c.title for c in commits]
         self.assertIn("initial commit", commits)
-        for i in range(1, 4):
-            self.assertIn(f"Training in progress, epoch {i}", commits)
+        self.assertIn("Training in progress, epoch 1", commits)
+        self.assertIn("Training in progress, epoch 2", commits)
+        # Epochs 3 and 4 are not guaranteed to be present (empty commits)
+        self.assertTrue(any("Skipping to prevent empty commit." in record.message for record in logs.records))
 
     def test_push_to_hub_with_saves_each_n_steps(self):
         num_gpus = max(1, backend_device_count(torch_device))
         if num_gpus > 2:
-            return
+            self.skipTest(reason="More than 2 GPUs available")
 
         with tempfile.TemporaryDirectory() as tmp_dir:
-            trainer = get_regression_trainer(
-                output_dir=os.path.join(tmp_dir, "test-trainer-step"),
-                push_to_hub=True,
-                hub_token=self._token,
-                # To avoid any flakiness if the training goes faster than the uploads.
-                hub_always_push=True,
-                save_strategy="steps",
-                save_steps=5,
-            )
-            trainer.train()
+            with self.assertLogs(level="WARNING") as logs:
+                trainer = get_regression_trainer(
+                    output_dir=os.path.join(tmp_dir, "test-trainer-step"),
+                    push_to_hub=True,
+                    hub_token=self._token,
+                    # To avoid any flakiness if the training goes faster than the uploads.
+                    hub_always_push=True,
+                    save_strategy="steps",
+                    save_steps=5,
+                )
+                trainer.train()
 
         commits = list_repo_commits(f"{USER}/test-trainer-step", token=self._token)
         commits = [c.title for c in commits]
         self.assertIn("initial commit", commits)
 
+        # Some commits are skipped if nothing has changed
+        # We expect 1 commit per 5 epochs + 1 commit at the end
+        nb_empty_commits = len(
+            [record for record in logs.records if "Skipping to prevent empty commit." in record.message]
+        )
+        nb_epoch_commits = len([commit for commit in commits if "Training in progress, step" in commit])
+
         # max_steps depend on the number of available GPUs
         max_steps = math.ceil(trainer.args.num_train_epochs * len(trainer.get_train_dataloader()))
-        for i in range(5, max_steps, 5):
-            self.assertIn(f"Training in progress, step {i}", commits)
+        nb_expected_commits = len(range(5, max_steps, 5))
+
+        # '>=' since final commit might be an empty commit as well (not deterministic)
+        self.assertGreaterEqual(nb_empty_commits + nb_epoch_commits, nb_expected_commits)
 
     @require_tensorboard
     def test_push_to_hub_with_tensorboard_logs(self):

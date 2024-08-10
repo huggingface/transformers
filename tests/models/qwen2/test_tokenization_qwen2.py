@@ -136,14 +136,14 @@ class Qwen2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         input_bpe_tokens = [75, 78, 86, 260, 259, 260, 220, 77, 68, 86, 260, 220, 15, 16, 15, 266, 270, 267]
         self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
 
-    @unittest.skip("We disable the test of pretokenization as it is not reversible.")
+    @unittest.skip(reason="We disable the test of pretokenization as it is not reversible.")
     def test_pretokenized_inputs(self):
         # the test case in parent class uses str.split to "pretokenize",
         # which eats the whitespaces, which, in turn, is not reversible.
         # the results, by nature, should be different.
         pass
 
-    @unittest.skip("We disable the test of clean up tokenization spaces as it is not applicable.")
+    @unittest.skip(reason="We disable the test of clean up tokenization spaces as it is not applicable.")
     def test_clean_up_tokenization_spaces(self):
         # it only tests bert-base-uncased and clean_up_tokenization_spaces is not applicable to this tokenizer
         pass
@@ -169,7 +169,7 @@ class Qwen2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_slow_tokenizer_token_with_number_sign(self):
         if not self.test_slow_tokenizer:
-            return
+            self.skipTest(reason="test_slow_tokenizer is set to False")
 
         sequence = " ###"
         token_ids = [268, 269]
@@ -180,7 +180,7 @@ class Qwen2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_slow_tokenizer_decode_spaces_between_special_tokens_default(self):
         # Qwen2Tokenizer changes the default `spaces_between_special_tokens` in `decode` to False
         if not self.test_slow_tokenizer:
-            return
+            self.skipTest(reason="test_slow_tokenizer is set to False")
 
         # tokenizer has a special token: `"<|endfotext|>"` as eos, but it is not `legacy_added_tokens`
         # special tokens in `spaces_between_special_tokens` means spaces between `legacy_added_tokens`

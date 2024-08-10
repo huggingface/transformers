@@ -15,7 +15,7 @@
       title: Préparation des données
     - local: in_translation
       title: Fine-tune un modèle pré-entraîné
-    - local: in_translation
+    - local: run_scripts_fr
       title: Entraînement avec un script
     - local: in_translation
       title: Entraînement distribué avec 🤗 Accelerate

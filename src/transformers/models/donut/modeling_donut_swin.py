@@ -35,6 +35,7 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
+    torch_int,
 )
 from .configuration_donut_swin import DonutSwinConfig
 
@@ -562,8 +563,10 @@ class DonutSwinLayer(nn.Module):
     def set_shift_and_window_size(self, input_resolution):
         if min(input_resolution) <= self.window_size:
             # if window size is larger than input resolution, we don't partition windows
-            self.shift_size = 0
-            self.window_size = min(input_resolution)
+            self.shift_size = torch_int(0)
+            self.window_size = (
+                torch.min(torch.tensor(input_resolution)) if torch.jit.is_tracing() else min(input_resolution)
+            )
 
     def get_attn_mask(self, height, width, dtype, device):
         if self.shift_size > 0:

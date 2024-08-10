@@ -476,7 +476,7 @@ class FlaxNoRepeatNGramLogitsProcessor(FlaxLogitsProcessor):
     def get_previous_ngrams(self, input_ids: jnp.ndarray, vocab_size: int, cur_len: int):
         """
         get a matrix of size (batch_size,) + (vocab_size,)*n (for n-grams) that
-        represent the n-grams that occured previously.
+        represent the n-grams that occurred previously.
         The BCOO representation allow to store only the few non-zero entries, instead of the full (huge) matrix
         """
         batch_size, seq_len = input_ids.shape

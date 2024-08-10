@@ -246,15 +246,15 @@ class GroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
 
     def setUp(self):
         self.model_tester = GroundingDinoModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=GroundingDinoConfig, has_text_modality=False)
+        self.config_tester = ConfigTester(
+            self,
+            config_class=GroundingDinoConfig,
+            has_text_modality=False,
+            common_properties=["d_model", "encoder_attention_heads", "decoder_attention_heads"],
+        )
 
     def test_config(self):
-        # we don't test common_properties and arguments_init as these don't apply for Grounding DINO
-        self.config_tester.create_and_test_config_to_json_string()
-        self.config_tester.create_and_test_config_to_json_file()
-        self.config_tester.create_and_test_config_from_and_save_pretrained()
-        self.config_tester.create_and_test_config_with_num_labels()
-        self.config_tester.check_config_can_be_init_without_params()
+        self.config_tester.run_common_tests()
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

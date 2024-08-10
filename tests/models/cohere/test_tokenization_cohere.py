@@ -51,7 +51,7 @@ class CohereTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_torch_encode_plus_sent_to_model(self):
         super().test_torch_encode_plus_sent_to_model()
 
-    @unittest.skip("This needs a slow tokenizer. Cohere does not have one!")
+    @unittest.skip(reason="This needs a slow tokenizer. Cohere does not have one!")
     def test_encode_decode_with_spaces(self):
         return
 
