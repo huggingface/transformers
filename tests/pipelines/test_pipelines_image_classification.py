@@ -55,7 +55,7 @@ class ImageClassificationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING
     tf_model_mapping = TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING
 
-    def get_test_pipeline(self, model, tokenizer, processor, torch_dtype="float32"):
+    def get_test_pipeline(self, model, processor, torch_dtype="float32"):
         image_classifier = ImageClassificationPipeline(
             model=model, image_processor=processor, top_k=2, torch_dtype=torch_dtype
         )

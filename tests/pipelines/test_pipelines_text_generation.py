@@ -320,7 +320,7 @@ class TextGenerationPipelineTests(unittest.TestCase):
             ],
         )
 
-    def get_test_pipeline(self, model, tokenizer, processor, torch_dtype="float32"):
+    def get_test_pipeline(self, model, tokenizer, torch_dtype="float32"):
         text_generator = TextGenerationPipeline(model=model, tokenizer=tokenizer, torch_dtype=torch_dtype)
         return text_generator, ["This is a test", "Another test"]
 
