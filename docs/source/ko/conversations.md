@@ -154,7 +154,7 @@ But, hey, that's what makes art, art, right? (laughs)
 양자화는 파라미터당 메모리 사용량을 8비트, 4비트, 또는 그 이하로 줄이는 데 사용됩니다. 
 이 주제에 대해서는 아래의 [메모리 고려사항](#memory-considerations) 챕터에서 더 자세히 다룰 예정입니다.
 
-### 그럼 어떤 채팅 모델이 최고야?[[but-which-chat-model-is-best?]]
+### 그렇다면 어떤 채팅 모델이 가장 좋을까요?[[but-which-chat-model-is-best?]]
 모델의 크기 외에도 고려할 점이 많습니다. 
 이를 한눈에 살펴보려면 **리더보드**를 참고하는 것이 좋습니다. 
 가장 인기 있는 리더보드 두 가지는 [OpenLLM Leaderboard](https://huggingface.co/spaces/HuggingFaceH4/open_llm_leaderboard)와 [LMSys Chatbot Arena Leaderboard](https://chat.lmsys.org/?leaderboard)입니다. 
