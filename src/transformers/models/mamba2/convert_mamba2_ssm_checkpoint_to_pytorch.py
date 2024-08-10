@@ -76,7 +76,9 @@ def convert_mamba2_checkpoint_file_to_huggingface_model_file(
     # Load and save config based on name
     config_path = mamba2_checkpoint_path
     config_path = (
-        path.join(config_path, "params.json") if path.isfile(path.join(config_path, "params.json")) else path.join(config_path, "config.json")
+        path.join(config_path, "params.json")
+        if path.isfile(path.join(config_path, "params.json"))
+        else path.join(config_path, "config.json")
     )
     with open(config_path, "r", encoding="utf-8") as json_file:
         config = json.load(json_file)
