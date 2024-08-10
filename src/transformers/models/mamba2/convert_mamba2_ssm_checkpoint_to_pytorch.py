@@ -59,7 +59,7 @@ def convert_ssm_config_to_hf_config(config_ssm: Dict) -> Tuple[Mamba2Config, boo
 def load_state_dict_from_safetensors(mamba2_checkpoint_path: str) -> Dict[str, torch.Tensor]:
     # Load weights and config from paths
     original_state_dict = {}
-    with safe_open(mamba2_checkpoint_path + "/consolidated.safetensors", framework="pt") as f:
+    with safe_open(path.join(mamba2_checkpoint_path, "consolidated.safetensors"), framework="pt") as f:
         for k in f.keys():
             newk = k.removeprefix("model.")
             original_state_dict[newk] = f.get_tensor(k).clone()
@@ -67,7 +67,7 @@ def load_state_dict_from_safetensors(mamba2_checkpoint_path: str) -> Dict[str, t
 
 
 def load_state_dict_from_torch(mamba2_checkpoint_path: str) -> Dict[str, torch.Tensor]:
-    return torch.load(mamba2_checkpoint_path + "/pytorch_model.bin", map_location="cpu")
+    return torch.load(path.join(mamba2_checkpoint_path, "pytorch_model.bin"), map_location="cpu")
 
 
 def convert_mamba2_checkpoint_file_to_huggingface_model_file(
@@ -76,7 +76,7 @@ def convert_mamba2_checkpoint_file_to_huggingface_model_file(
     # Load and save config based on name
     config_path = mamba2_checkpoint_path
     config_path = (
-        config_path + "/params.json" if path.isfile(config_path + "/params.json") else config_path + "/config.json"
+        path.join(config_path, "params.json") if path.isfile(path.join(config_path, "params.json")) else path.join(config_path, "config.json")
     )
     with open(config_path, "r", encoding="utf-8") as json_file:
         config = json.load(json_file)
@@ -93,7 +93,7 @@ def convert_mamba2_checkpoint_file_to_huggingface_model_file(
 
     # Save new model to pytorch_dump_path
     dtype = torch.float32 if precision == "fp32" else (torch.bfloat16 if precision == "bf16" else torch.float16)
-    save_model(hf_model.to(dtype), output_dir + "/model.safetensors", metadata={"format": "pt"})
+    save_model(hf_model.to(dtype), path.join(output_dir, "model.safetensors"), metadata={"format": "pt"})
 
     # Load and save tokenizer
     if tokenizer_model_path is not None and not is_not_codestral:
