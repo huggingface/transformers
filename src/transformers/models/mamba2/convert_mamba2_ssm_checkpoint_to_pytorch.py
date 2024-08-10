@@ -59,7 +59,7 @@ def convert_ssm_config_to_hf_config(config_ssm: Dict) -> Tuple[Mamba2Config, boo
 def load_state_dict_from_safetensors(mamba2_checkpoint_path: str) -> Dict[str, torch.Tensor]:
     # Load weights and config from paths
     original_state_dict = {}
-    with safe_open(mamba2_checkpoint_path, framework="pt") as f:
+    with safe_open(mamba2_checkpoint_path + "/consolidated.safetensors", framework="pt") as f:
         for k in f.keys():
             newk = k.removeprefix("model.")
             original_state_dict[newk] = f.get_tensor(k).clone()
@@ -110,10 +110,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "-i",
-        "--mamba2_checkpoint_file",
+        "--mamba2_checkpoint_directory",
         type=str,
         required=True,
-        help="Path to a `pytorch_model.bin` or `.safetensors` mamba2_ssm checkpoint file to be converted.",
+        help="Path to a directory containing the `pytorch_model.bin` or `.safetensors` mamba2_ssm checkpoint file to be converted.",
     )
     parser.add_argument(
         "-p",
