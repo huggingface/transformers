@@ -149,6 +149,10 @@ class ProPainterConfig(PretrainedConfig):
         neighbor_length=10,
         subvideo_length=80,
         raft_optical_flow_iter=20,
+        corr_levels=4,
+        corr_radius=4,
+        dropout=0,
+        initializer_range=0.02,
         
         **kwargs,
     ):
@@ -194,3 +198,7 @@ class ProPainterConfig(PretrainedConfig):
         self.neighbor_length = neighbor_length
         self.subvideo_length = subvideo_length
         self.raft_optical_flow_iter = raft_optical_flow_iter
+        self.corr_levels = corr_levels
+        self.corr_radius = corr_radius
+        self.dropout = dropout
+        self.initializer_range = initializer_range

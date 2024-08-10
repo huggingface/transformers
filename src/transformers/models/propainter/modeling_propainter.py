@@ -56,7 +56,7 @@ _CONFIG_FOR_DOC = "ProPainterConfig"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "ruffy369/propainter"
-_EXPECTED_OUTPUT_SHAPE = [None,None,None] #****************************TO FILL
+_EXPECTED_OUTPUT_SHAPE = [80, 240, 432, 3] #****************************TO FILL
 
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "ruffy369/propainter"
@@ -712,27 +712,17 @@ class ProPainterRaftOpticalFlow(nn.Module):
         super(ProPainterRaftOpticalFlow, self).__init__()
         self.config = config
 
-        if config.small:
-            self.hidden_dim = hdim = 96
-            self.context_dim = cdim = 64
-            config.corr_levels = 4
-            config.corr_radius = 3
+        
+        self.hidden_dim = hdim = 128
+        self.context_dim = cdim = 128
+        # config.corr_levels = 4
+        # config.corr_radius = 4
 
-        else:
-            self.hidden_dim = hdim = 128
-            self.context_dim = cdim = 128
-            config.corr_levels = 4
-            config.corr_radius = 4
-
-        if 'dropout' not in config._get_kwconfig():
-            config.dropout = 0
-
-        if 'alternate_corr' not in config._get_kwconfig():
-            config.alternate_corr = False
+        # config.dropout = 0
         
         # feature network, context network, and update block
-        self.fnet = ProPainterBasicEncoder(output_dim=256, norm_fn='instance', dropout=config.dropout)
-        self.cnet = ProPainterBasicEncoder(output_dim=hdim+cdim, norm_fn='batch', dropout=config.dropout)
+        self.fnet = ProPainterBasicEncoder(output_dim=256, norm_fn='instance', dropout=self.config.dropout)
+        self.cnet = ProPainterBasicEncoder(output_dim=hdim+cdim, norm_fn='batch', dropout=self.config.dropout)
         self.update_block = ProPainterBasicUpdateBlock(self.config, hidden_dim=hdim)
 
 
@@ -891,9 +881,9 @@ class ProPainterEdgeDetection(nn.Module):
         edge = torch.sigmoid(edge)
         return edge
 
-class ProPainterBidirectionalPropagation(nn.Module):
+class ProPainterBidirectionalPropagationFlowComplete(nn.Module):
     def __init__(self, channel):
-        super(ProPainterBidirectionalPropagation, self).__init__()
+        super(ProPainterBidirectionalPropagationFlowComplete, self).__init__()
         modules = ['backward_', 'forward_']
         self.deform_align = nn.ModuleDict()
         self.backbone = nn.ModuleDict()
@@ -971,6 +961,126 @@ class ProPainterBidirectionalPropagation(nn.Module):
 
         return torch.stack(outputs, dim=1) + x
 
+class ProPainterBidirectionalPropagationInPaint(nn.Module):
+    def __init__(self, channel, learnable=True):
+        super(ProPainterBidirectionalPropagationInPaint, self).__init__()
+        self.deform_align = nn.ModuleDict()
+        self.backbone = nn.ModuleDict()
+        self.channel = channel
+        self.prop_list = ['backward_1', 'forward_1']
+        self.learnable = learnable
+
+        if self.learnable:
+            for i, module in enumerate(self.prop_list):
+                self.deform_align[module] = ProPainterDeformableAlignment(
+                    channel, channel, 3, padding=1, deform_groups=16)
+
+                self.backbone[module] = nn.Sequential(
+                    nn.Conv2d(2*channel+2, channel, 3, 1, 1),
+                    nn.LeakyReLU(negative_slope=0.2, inplace=True),
+                    nn.Conv2d(channel, channel, 3, 1, 1),
+                )
+
+            self.fuse = nn.Sequential(
+                    nn.Conv2d(2*channel+2, channel, 3, 1, 1),
+                    nn.LeakyReLU(negative_slope=0.2, inplace=True),
+                    nn.Conv2d(channel, channel, 3, 1, 1),
+                ) 
+            
+    def binary_mask(self, mask, th=0.1):
+        mask[mask>th] = 1
+        mask[mask<=th] = 0
+        # return mask.float()
+        return mask.to(mask)
+
+    def forward(self, x, flows_forward, flows_backward, mask, interpolation='bilinear'):
+        """
+        x shape : [b, t, c, h, w]
+        return [b, t, c, h, w]
+        """
+
+        # For backward warping
+        # pred_flows_forward for backward feature propagation
+        # pred_flows_backward for forward feature propagation
+        b, t, c, h, w = x.shape
+        feats, masks = {}, {}
+        feats['input'] = [x[:, i, :, :, :] for i in range(0, t)]
+        masks['input'] = [mask[:, i, :, :, :] for i in range(0, t)]
+
+        prop_list = ['backward_1', 'forward_1']
+        cache_list = ['input'] +  prop_list
+
+        for p_i, module_name in enumerate(prop_list):
+            feats[module_name] = []
+            masks[module_name] = []
+
+            if 'backward' in module_name:
+                frame_idx = range(0, t)
+                frame_idx = frame_idx[::-1]
+                flow_idx = frame_idx
+                flows_for_prop = flows_forward
+                flows_for_check = flows_backward
+            else:
+                frame_idx = range(0, t)
+                flow_idx = range(-1, t - 1)
+                flows_for_prop = flows_backward
+                flows_for_check = flows_forward
+
+            for i, idx in enumerate(frame_idx):
+                feat_current = feats[cache_list[p_i]][idx]
+                mask_current = masks[cache_list[p_i]][idx]
+
+                if i == 0:
+                    feat_prop = feat_current
+                    mask_prop = mask_current
+                else:
+                    flow_prop = flows_for_prop[:, flow_idx[i], :, :, :]
+                    flow_check = flows_for_check[:, flow_idx[i], :, :, :]
+                    flow_vaild_mask = fbConsistencyCheck(flow_prop, flow_check)
+                    feat_warped = flow_warp(feat_prop, flow_prop.permute(0, 2, 3, 1), interpolation)
+
+                    if self.learnable:
+                        cond = torch.cat([feat_current, feat_warped, flow_prop, flow_vaild_mask, mask_current], dim=1)
+                        feat_prop = self.deform_align[module_name](feat_prop, cond, flow_prop)
+                        mask_prop = mask_current
+                    else:
+                        mask_prop_valid = flow_warp(mask_prop, flow_prop.permute(0, 2, 3, 1))
+                        mask_prop_valid = self.binary_mask(mask_prop_valid)
+
+                        union_vaild_mask = self.binary_mask(mask_current*flow_vaild_mask*(1-mask_prop_valid))
+                        feat_prop = union_vaild_mask * feat_warped + (1-union_vaild_mask) * feat_current
+                        # update mask
+                        mask_prop = self.binary_mask(mask_current*(1-(flow_vaild_mask*(1-mask_prop_valid))))
+                
+                # refine
+                if self.learnable:
+                    feat = torch.cat([feat_current, feat_prop, mask_current], dim=1)
+                    feat_prop = feat_prop + self.backbone[module_name](feat)
+                    # feat_prop = self.backbone[module_name](feat_prop)
+
+                feats[module_name].append(feat_prop)
+                masks[module_name].append(mask_prop)
+
+            # end for
+            if 'backward' in module_name:
+                feats[module_name] = feats[module_name][::-1]
+                masks[module_name] = masks[module_name][::-1]
+
+        outputs_b = torch.stack(feats['backward_1'], dim=1).view(-1, c, h, w)
+        outputs_f = torch.stack(feats['forward_1'], dim=1).view(-1, c, h, w)
+
+        if self.learnable:
+            mask_in = mask.view(-1, 2, h, w)
+            masks_b, masks_f = None, None
+            outputs = self.fuse(torch.cat([outputs_b, outputs_f, mask_in], dim=1)) + x.view(-1, c, h, w)
+        else:
+            masks_b = torch.stack(masks['backward_1'], dim=1)
+            masks_f = torch.stack(masks['forward_1'], dim=1)
+            outputs = outputs_f
+
+        return outputs_b.view(b, -1, c, h, w), outputs_f.view(b, -1, c, h, w), \
+               outputs.view(b, -1, c, h, w), masks_f
+
 class ProPainterDeconv(nn.Module):
     def __init__(self,
                  input_channel,
@@ -1046,6 +1156,43 @@ class ProPainterModulatedDeformConv2d(nn.Module):
     def forward(self, x, offset, mask):
         pass
 
+class ProPainterDeformableAlignment(ProPainterModulatedDeformConv2d):
+    """Second-order deformable alignment module."""
+    def __init__(self, *args, **kwargs):
+        # self.max_residue_magnitude = kwargs.pop('max_residue_magnitude', 10)
+        self.max_residue_magnitude = kwargs.pop('max_residue_magnitude', 3)
+
+        super(ProPainterDeformableAlignment, self).__init__(*args, **kwargs)
+
+        self.conv_offset = nn.Sequential(
+            nn.Conv2d(2*self.out_channels + 2 + 1 + 2, self.out_channels, 3, 1, 1),
+            nn.LeakyReLU(negative_slope=0.1, inplace=True),
+            nn.Conv2d(self.out_channels, self.out_channels, 3, 1, 1),
+            nn.LeakyReLU(negative_slope=0.1, inplace=True),
+            nn.Conv2d(self.out_channels, self.out_channels, 3, 1, 1),
+            nn.LeakyReLU(negative_slope=0.1, inplace=True),
+            nn.Conv2d(self.out_channels, 27 * self.deform_groups, 3, 1, 1),
+        )
+        self.init_offset()
+
+    def init_offset(self):
+        constant_init(self.conv_offset[-1], val=0, bias=0)
+
+    def forward(self, x, cond_feat, flow):
+        out = self.conv_offset(cond_feat)
+        o1, o2, mask = torch.chunk(out, 3, dim=1)
+
+        # offset
+        offset = self.max_residue_magnitude * torch.tanh(torch.cat((o1, o2), dim=1))
+        offset = offset + flow.flip(1).repeat(1, offset.size(1) // 2, 1, 1)
+
+        # mask
+        mask = torch.sigmoid(mask)
+
+        return torchvision.ops.deform_conv2d(x, offset, self.weight, self.bias, 
+                                             self.stride, self.padding,
+                                             self.dilation, mask)
+
 class ProPainterSecondOrderDeformableAlignment(ProPainterModulatedDeformConv2d):
     """Second-order deformable alignment module."""
     def __init__(self, *args, **kwargs):
@@ -1117,7 +1264,7 @@ class ProPainterRecurrentFlowCompleteNet(nn.Module):
         )
 
         # feature propagation module
-        self.feat_prop_module = ProPainterBidirectionalPropagation(128)
+        self.feat_prop_module = ProPainterBidirectionalPropagationFlowComplete(128)
 
         self.decoder2 = nn.Sequential(
             nn.Conv2d(128, 128, 3, 1, 1),
@@ -1699,8 +1846,8 @@ class ProPainterInpaintGenerator(ProPainterBaseNetwork):
         self.max_pool = nn.MaxPool2d(kernel_size, stride, padding)
 
         # feature propagation module
-        self.img_prop_module = ProPainterBidirectionalPropagation(3, learnable=False)
-        self.feat_prop_module = ProPainterBidirectionalPropagation(128, learnable=True)
+        self.img_prop_module = ProPainterBidirectionalPropagationInPaint(3, learnable=False)
+        self.feat_prop_module = ProPainterBidirectionalPropagationInPaint(128, learnable=True)
         
         
         depths = 8
@@ -2211,10 +2358,10 @@ class ProPainterModel(ProPainterPreTrainedModel):
     def __init__(self, config: ProPainterConfig):
         super().__init__(config)
         self.config = config
-        self.optical_flow_model = ProPainterRaftOpticalFlow()
+        self.optical_flow_model = ProPainterRaftOpticalFlow(config)
         self.flow_completion_net = ProPainterRecurrentFlowCompleteNet()
         self.propainter_inpaint_generator = ProPainterInpaintGenerator()
-        self.embeddings = ProPainterEmbeddings(config)
+        # self.embeddings = ProPainterEmbeddings(config)
         # self.encoder = ProPainterEncoder()
         #############look into it
         # self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -2222,8 +2369,8 @@ class ProPainterModel(ProPainterPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self) -> ProPainterPatchEmbeddings:
-        return self.embeddings.patch_embeddings
+    # def get_input_embeddings(self) -> ProPainterPatchEmbeddings:
+    #     return self.embeddings.patch_embeddings
     
     def _get_ref_index(mid_neighbor_id, neighbor_ids, length, ref_stride=10, ref_num=-1):
         ref_index = []
