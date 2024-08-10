@@ -122,8 +122,8 @@ if __name__ == "__main__":
         type=str,
         default="bf16",
         required=True,
-        choices=["fp32", "bf16"],
-        help="The precision the model will be saved in. Select from fp32 or bf16.",
+        choices=["fp32", "fp16", "bf16"],
+        help="The precision the model will be saved in. Select from fp32, fp16 or bf16.",
     )
     parser.add_argument(
         "-o", "--output_dir", type=str, required=True, help="Path to directory to save the converted output model to."
