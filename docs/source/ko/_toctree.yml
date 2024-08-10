@@ -280,7 +280,7 @@
       title: (번역중) Tokenizer
     - local: in_translation
       title: (번역중) Trainer
-    - local: DeepSpeed
+    - local: deepspeed
       title: DeepSpeed
     - local: in_translation
       title: (번역중) Feature Extractor
