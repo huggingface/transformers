@@ -16,8 +16,8 @@
 
 import argparse
 import json
-from os import listdir, path
-from typing import Dict, Optional
+from os import path
+from typing import Dict, Optional, Tuple
 
 import torch
 from safetensors import safe_open
@@ -26,19 +26,25 @@ from safetensors.torch import save_model
 from transformers import AutoTokenizer, LlamaTokenizerFast, Mamba2Config, Mamba2ForCausalLM
 
 
-def convert_ssm_config_to_hf_config(config_ssm: Dict) -> Mamba2Config:
+def convert_ssm_config_to_hf_config(config_ssm: Dict) -> Tuple[Mamba2Config, bool]:
     """Convert a Mamba2Config from mamba_ssm to a Mamba2Config from here."""
     hf_config = Mamba2Config()
 
+    # Flag for codestral model
+    is_not_codestral = "dim" not in config_ssm
+
     # Set important values from config and recalculate other resulting entries
-    hf_config.hidden_size = config_ssm["d_model"] if "d_model" in config_ssm else config_ssm["dim"]
+    hf_config.hidden_size = config_ssm["d_model"] if is_not_codestral else config_ssm["dim"]
     hf_config.num_heads = (hf_config.hidden_size * hf_config.expand) // hf_config.head_dim
-    hf_config.num_hidden_layers = config_ssm["n_layer"] if "n_layer" in config_ssm else config_ssm["n_layers"]
+    hf_config.num_hidden_layers = config_ssm["n_layer"] if is_not_codestral else config_ssm["n_layers"]
     hf_config.n_groups = config_ssm.get("n_groups", 1)
     hf_config.residual_in_fp32 = config_ssm["residual_in_fp32"]
     hf_config.tie_word_embeddings = config_ssm["tie_embeddings"]
-    hf_config.pad_token_id = hf_config.bos_token_id = hf_config.eos_token_id = 0
     hf_config.norm_before_gate = False
+
+    # codestral uses its own tokenizer with separate eos/bos/pad tokens
+    if is_not_codestral:
+        hf_config.pad_token_id = hf_config.bos_token_id = hf_config.eos_token_id = 0
 
     # Padded vocab size, mostly of 16 but 32 is also very common in different models
     vocab_size = config_ssm["vocab_size"]
@@ -47,7 +53,7 @@ def convert_ssm_config_to_hf_config(config_ssm: Dict) -> Mamba2Config:
         vocab_size += pad_vocab_size_multiple - (vocab_size % pad_vocab_size_multiple)
     hf_config.vocab_size = vocab_size
 
-    return hf_config
+    return hf_config, is_not_codestral
 
 
 def load_state_dict_from_safetensors(mamba2_checkpoint_path: str) -> Dict[str, torch.Tensor]:
@@ -74,18 +80,11 @@ def convert_mamba2_checkpoint_file_to_huggingface_model_file(
     )
     with open(config_path, "r", encoding="utf-8") as json_file:
         config = json.load(json_file)
-    hf_config = convert_ssm_config_to_hf_config(config)
+    hf_config, is_not_codestral = convert_ssm_config_to_hf_config(config)
     hf_config.save_pretrained(output_dir)
 
-    # Check the type of the state dict it was saved in
-    is_safetensors = False
-    for file_name in listdir(mamba2_checkpoint_path):
-        if file_name.endswith(".safetensors"):
-            is_safetensors = True
-            break
-
     # Load state dict of the original model
-    state_dict_load_function = load_state_dict_from_safetensors if is_safetensors else load_state_dict_from_torch
+    state_dict_load_function = load_state_dict_from_torch if is_not_codestral else load_state_dict_from_safetensors
     original_state_dict = state_dict_load_function(mamba2_checkpoint_path)
 
     # Load and transfer to hf model
@@ -97,7 +96,7 @@ def convert_mamba2_checkpoint_file_to_huggingface_model_file(
     save_model(hf_model.to(dtype), output_dir + "/model.safetensors", metadata={"format": "pt"})
 
     # Load and save tokenizer
-    if tokenizer_model_path is not None:
+    if tokenizer_model_path is not None and not is_not_codestral:
         tokenizer_class = LlamaTokenizerFast
         tokenizer = tokenizer_class(tokenizer_model_path, legacy=False, from_slow=True)
     else:
