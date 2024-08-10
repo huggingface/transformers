@@ -249,7 +249,7 @@ class ProPainterAttention(nn.Module):
     def __init__(self, config: ProPainterConfig) -> None:
         super().__init__()
         self.attention = ProPainterSelfAttention(config)
-        self.output = ProPainterSelfOutput(config)
+        # self.output = ProPainterSelfOutput(config)
         self.pruned_heads = set()
 
     def prune_heads(self, heads: Set[int]) -> None:
@@ -263,7 +263,7 @@ class ProPainterAttention(nn.Module):
         self.attention.query = prune_linear_layer(self.attention.query, index)
         self.attention.key = prune_linear_layer(self.attention.key, index)
         self.attention.value = prune_linear_layer(self.attention.value, index)
-        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
+        # self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
 
         # Update hyper params and store pruned heads
         self.attention.num_attention_heads = self.attention.num_attention_heads - len(heads)
@@ -278,10 +278,10 @@ class ProPainterAttention(nn.Module):
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
         self_outputs = self.attention(hidden_states, head_mask, output_attentions)
 
-        attention_output = self.output(self_outputs[0], hidden_states)
+        # attention_output = self.output(self_outputs[0], hidden_states)
 
-        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
-        return outputs
+        # outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
+        return None
 
 
 
@@ -766,7 +766,7 @@ class ProPainterRaftOpticalFlow(nn.Module):
         cdim = self.context_dim
 
         # run the feature network
-        with autocast(enabled=self.config.mixed_precision):
+        with autocast(enabled=False):
             fmap1, fmap2 = self.fnet([image1, image2])
 
         fmap1 = fmap1.float()
@@ -776,7 +776,7 @@ class ProPainterRaftOpticalFlow(nn.Module):
         corr_fn = ProPainterCorrBlock(fmap1, fmap2, radius=self.config.corr_radius)
 
         # run the context network
-        with autocast(enabled=self.config.mixed_precision):
+        with autocast(enabled=False):
             cnet = self.cnet(image1)
             net, inp = torch.split(cnet, [hdim, cdim], dim=1)
             net = torch.tanh(net)
@@ -792,7 +792,7 @@ class ProPainterRaftOpticalFlow(nn.Module):
             corr = corr_fn(coords1) # index correlation volume
 
             flow = coords1 - coords0
-            with autocast(enabled=self.config.mixed_precision):
+            with autocast(enabled=False):
                 net, up_mask, delta_flow = self.update_block(net, inp, corr, flow)
 
             # F(t+1) = F(t) + \Delta(t)
@@ -815,8 +815,8 @@ class ProPainterRaftOpticalFlow(nn.Module):
         gtlf_1 = gt_local_frames[:, :-1, :, :, :].reshape(-1, c, h, w)
         gtlf_2 = gt_local_frames[:, 1:, :, :, :].reshape(-1, c, h, w)
 
-        _, gt_flows_forward = self._forward(gtlf_1, gtlf_2, iters=iters, test_mode=True)
-        _, gt_flows_backward = self._forward(gtlf_2, gtlf_1, iters=iters, test_mode=True)
+        _, gt_flows_forward = self._forward(gtlf_1, gtlf_2, iters=iters)
+        _, gt_flows_backward = self._forward(gtlf_2, gtlf_1, iters=iters)
 
         
         gt_flows_forward = gt_flows_forward.view(b, l_t-1, 2, h, w)
@@ -960,6 +960,63 @@ class ProPainterBidirectionalPropagationFlowComplete(nn.Module):
             outputs.append(self.fusion(align_feats))
 
         return torch.stack(outputs, dim=1) + x
+
+def flow_warp(x,
+              flow,
+              interpolation='bilinear',
+              padding_mode='zeros',
+              align_corners=True):
+    """Warp an image or a feature map with optical flow.
+    Args:
+        x (Tensor): Tensor with size (n, c, h, w).
+        flow (Tensor): Tensor with size (n, h, w, 2). The last dimension is
+            a two-channel, denoting the width and height relative offsets.
+            Note that the values are not normalized to [-1, 1].
+        interpolation (str): Interpolation mode: 'nearest' or 'bilinear'.
+            Default: 'bilinear'.
+        padding_mode (str): Padding mode: 'zeros' or 'border' or 'reflection'.
+            Default: 'zeros'.
+        align_corners (bool): Whether align corners. Default: True.
+    Returns:
+        Tensor: Warped image or feature map.
+    """
+    if x.size()[-2:] != flow.size()[1:3]:
+        raise ValueError(f'The spatial sizes of input ({x.size()[-2:]}) and '
+                         f'flow ({flow.size()[1:3]}) are not the same.')
+    _, _, h, w = x.size()
+    # create mesh grid
+    device = flow.device
+    grid_y, grid_x = torch.meshgrid(torch.arange(0, h, device=device), torch.arange(0, w, device=device))
+    grid = torch.stack((grid_x, grid_y), 2).type_as(x)  # (w, h, 2)
+    grid.requires_grad = False
+
+    grid_flow = grid + flow
+    # scale grid_flow to [-1,1]
+    grid_flow_x = 2.0 * grid_flow[:, :, :, 0] / max(w - 1, 1) - 1.0
+    grid_flow_y = 2.0 * grid_flow[:, :, :, 1] / max(h - 1, 1) - 1.0
+    grid_flow = torch.stack((grid_flow_x, grid_flow_y), dim=3)
+    output = F.grid_sample(x,
+                           grid_flow,
+                           mode=interpolation,
+                           padding_mode=padding_mode,
+                           align_corners=align_corners)
+    return output
+
+def length_sq(x):
+    return torch.sum(torch.square(x), dim=1, keepdim=True)
+
+
+def fbConsistencyCheck(flow_fw, flow_bw, alpha1=0.01, alpha2=0.5):
+    flow_bw_warped = flow_warp(flow_bw, flow_fw.permute(0, 2, 3, 1))  # wb(wf(x))
+    flow_diff_fw = flow_fw + flow_bw_warped  # wf + wb(wf(x))
+
+    mag_sq_fw = length_sq(flow_fw) + length_sq(flow_bw_warped)  # |wf| + |wb(wf(x))|
+    occ_thresh_fw = alpha1 * mag_sq_fw + alpha2
+
+    # fb_valid_fw = (length_sq(flow_diff_fw) < occ_thresh_fw).float()
+    fb_valid_fw = (length_sq(flow_diff_fw) < occ_thresh_fw).to(flow_fw)
+    return fb_valid_fw
+
 
 class ProPainterBidirectionalPropagationInPaint(nn.Module):
     def __init__(self, channel, learnable=True):
@@ -2372,7 +2429,7 @@ class ProPainterModel(ProPainterPreTrainedModel):
     # def get_input_embeddings(self) -> ProPainterPatchEmbeddings:
     #     return self.embeddings.patch_embeddings
     
-    def _get_ref_index(mid_neighbor_id, neighbor_ids, length, ref_stride=10, ref_num=-1):
+    def _get_ref_index(self,mid_neighbor_id, neighbor_ids, length, ref_stride=10, ref_num=-1):
         ref_index = []
         if ref_num == -1:
             for i in range(0, length, ref_stride):
@@ -2612,7 +2669,7 @@ class ProPainterModel(ProPainterPreTrainedModel):
                     comp_frames[idx] = comp_frames[idx].astype(np.uint8)
 
         return BaseModelOutput(
-            last_hidden_state=None,
+            last_hidden_state=comp_frames,
             hidden_states=None,
             attentions=None,
         )

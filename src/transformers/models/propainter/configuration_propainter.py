@@ -153,6 +153,7 @@ class ProPainterConfig(PretrainedConfig):
         corr_radius=4,
         dropout=0,
         initializer_range=0.02,
+        raft_iter=20,
         
         **kwargs,
     ):
@@ -202,3 +203,4 @@ class ProPainterConfig(PretrainedConfig):
         self.corr_radius = corr_radius
         self.dropout = dropout
         self.initializer_range = initializer_range
+        self.raft_iter = raft_iter
