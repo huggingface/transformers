@@ -171,7 +171,7 @@ LMSys 리더보드에는 독점 모델도 포함되어 있으니,
 다행히도 [domain-specific leaderboards](https://huggingface.co/blog/leaderboard-medicalllm)가 점차 등장하고 있어, 특정 도메인에 최고의 모델을 쉽게 찾을 수 있을 것입니다. 
 
 
-## 파이프라인 내부는 어떻게 되어있는가?[[what-happens-inside-the-pipeline?]]
+## 파이프라인 내부는 어떻게 되어있는가?[[what-happens-inside-the-pipeline]]
 위의 빠른 시작에서는 고수준(High-Level) 파이프라인을 사용하였습니다.
 이는 간편한 방법이지만, 유연성은 떨어집니다.
 이제 더 저수준(Low-Level) 접근 방식을 통해 대화에 포함된 각 단계를 살펴보겠습니다. 
