@@ -1182,7 +1182,7 @@ class CLIPModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_interpolate_pos_encoding(self):
-        # ViT models have an `interpolate_pos_encoding` argument in their forward method,
+        # CLIP models have an `interpolate_pos_encoding` argument in their forward method,
         # allowing to interpolate the pre-trained position embeddings in order to use
         # the model on higher resolutions. The DINO model by Facebook AI leverages this
         # to visualize self-attention on higher resolution images.
