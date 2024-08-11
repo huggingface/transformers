@@ -2244,25 +2244,16 @@ class Trainer:
                 total_batched_samples += 1
 
                 if self.args.include_num_input_tokens_seen:
-                    main_input_name = self._get_input_by_name()
-                    if main_input_name not in inputs:
-                        logger.warning(
-                            "Tried to track the number of tokens seen, however the current model is "
-                            "not configured properly to know what item is the input. To fix this, add "
-                            "a `main_input_name` attribute to the model class you are using."
-                        )
-                    else:
-                        self.state.num_input_tokens_seen += (
-                            torch.sum(
-                                self.accelerator.gather(
-                                    torch.tensor(
-                                        inputs[main_input_name].numel(), device=self.args.device, dtype=torch.int64
-                                    )
-                                )
+                    selected_inputs = self._select_inputs_for_validation(inputs)
+                    self.state.num_input_tokens_seen += (
+                        torch.sum(
+                            self.accelerator.gather(
+                                torch.tensor(selected_inputs, device=self.args.device, dtype=torch.int64)
                             )
-                            .cpu()
-                            .item()
                         )
+                        .cpu()
+                        .item()
+                    )
                 if rng_to_sync:
                     self._load_rng_state(resume_from_checkpoint)
                     rng_to_sync = False
@@ -3245,9 +3236,10 @@ class Trainer:
         self.state.log_history.append(output)
         self.control = self.callback_handler.on_log(self.args, self.state, self.control, logs)
 
-    def _get_input_by_name(self) -> str:
+    def _select_inputs_for_validation(self, inputs):
         """Simple getattr function for getting input by name"""
-        return getattr(self.model, "main_input_name", "input_ids")
+        main_input_name = getattr(self.model, "main_input_name", "input_ids")
+        return inputs[main_input_name]
 
     def _prepare_input(self, data: Union[torch.Tensor, Any]) -> Union[torch.Tensor, Any]:
         """
@@ -3866,8 +3858,8 @@ class Trainer:
 
             # Prediction step
             losses, logits, labels = self.prediction_step(model, inputs, prediction_loss_only, ignore_keys=ignore_keys)
-            main_input_name = self._get_input_by_name()
-            inputs_decode = self._prepare_input(inputs[main_input_name]) if args.include_inputs_for_metrics else None
+            selected_inputs = self._select_inputs_for_validation(inputs)
+            inputs_decode = self._prepare_input(selected_inputs) if args.include_inputs_for_metrics else None
 
             if is_torch_xla_available():
                 xm.mark_step()
@@ -4456,8 +4448,8 @@ class Trainer:
 
         for step, inputs in enumerate(dataloader):
             loss, logits, labels = self.prediction_step(model, inputs, prediction_loss_only, ignore_keys=ignore_keys)
-            main_input_name = self._get_input_by_name()
-            inputs_decode = self._prepare_input(inputs[main_input_name]) if args.include_inputs_for_metrics else None
+            selected_inputs = self._select_inputs_for_validation(inputs)
+            inputs_decode = self._prepare_input(selected_inputs) if args.include_inputs_for_metrics else None
 
             if loss is not None:
                 losses = loss.repeat(batch_size)

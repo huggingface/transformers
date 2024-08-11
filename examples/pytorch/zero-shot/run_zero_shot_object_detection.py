@@ -61,9 +61,8 @@ class ModelOutput:
 
 
 class ZeroShotTrainer(Trainer):
-    def _get_input_by_name(self):
-        """Simple getattr function for getting input by name"""
-        return getattr(self.model, "input_ids", "input_ids")
+    def _select_inputs_for_validation(inputs):
+        return inputs["input_ids"]
 
 
 def format_image_annotations_as_coco(
