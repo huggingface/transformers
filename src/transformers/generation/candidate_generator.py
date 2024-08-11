@@ -171,6 +171,9 @@ class AssistedCandidateGenerator(CandidateGenerator):
                     "Please pass in `min_length` into `.generate()` instead"
                 )
 
+        # We need to roll back the cache in assisted generation, only DynamicCache is supported
+        self.generation_config.cache_implementation = None
+
     def get_candidates(self, input_ids: torch.LongTensor) -> Tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
         """
         Fetches the candidates to be tried for the current input.

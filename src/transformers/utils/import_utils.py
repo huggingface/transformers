@@ -297,6 +297,10 @@ def is_torch_available():
     return _torch_available
 
 
+def is_accelerate_available(min_version: str = ACCELERATE_MIN_VERSION):
+    return _accelerate_available and version.parse(_accelerate_version) >= version.parse(min_version)
+
+
 def is_torch_deterministic():
     """
     Check whether pytorch uses deterministic algorithms by looking if torch.set_deterministic_debug_mode() is set to 1 or 2"
@@ -382,6 +386,21 @@ def is_mamba_ssm_available():
             return False
         else:
             return _is_package_available("mamba_ssm")
+    return False
+
+
+def is_mamba_2_ssm_available():
+    if is_torch_available():
+        import torch
+
+        if not torch.cuda.is_available():
+            return False
+        else:
+            if _is_package_available("mamba_ssm"):
+                import mamba_ssm
+
+                if version.parse(mamba_ssm.__version__) >= version.parse("2.0.4"):
+                    return True
     return False
 
 
@@ -677,7 +696,7 @@ def is_torchdynamo_compiling():
         import torch
 
         return torch.compiler.is_compiling()
-    except AttributeError:
+    except Exception:
         try:
             import torch._dynamo as dynamo  # noqa: F401
 
@@ -868,10 +887,6 @@ def is_protobuf_available():
     if importlib.util.find_spec("google") is None:
         return False
     return importlib.util.find_spec("google.protobuf") is not None
-
-
-def is_accelerate_available(min_version: str = ACCELERATE_MIN_VERSION):
-    return _accelerate_available and version.parse(_accelerate_version) >= version.parse(min_version)
 
 
 def is_fsdp_available(min_version: str = FSDP_MIN_VERSION):
@@ -1605,7 +1620,7 @@ def direct_transformers_import(path: str, file="__init__.py") -> ModuleType:
 
     Args:
         path (`str`): The path to the source file
-        file (`str`, optional): The file to join with the path. Defaults to "__init__.py".
+        file (`str`, *optional*): The file to join with the path. Defaults to "__init__.py".
 
     Returns:
         `ModuleType`: The resulting imported module
