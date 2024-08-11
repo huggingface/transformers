@@ -434,17 +434,18 @@ class GGUFPhi3Converter(LlamaConverter):
 
         tokenizer.add_special_tokens(
             [
+                AddedToken("</s>", rstrip=True, lstrip=False, single_word=False, normalized=False, special=True),
                 AddedToken("<|endoftext|>", normalized=False, special=True),
-                AddedToken("<|assistant|>", normalized=False, special=True),
-                AddedToken("<|placeholder1|>", normalized=False, special=True),
-                AddedToken("<|placeholder2|>", normalized=False, special=True),
-                AddedToken("<|placeholder3|>", normalized=False, special=True),
-                AddedToken("<|placeholder4|>", normalized=False, special=True),
-                AddedToken("<|system|>", normalized=False, special=True),
-                AddedToken("<|end|>", normalized=False, special=True),
-                AddedToken("<|placeholder5|>", normalized=False, special=True),
-                AddedToken("<|placeholder6|>", normalized=False, special=True),
-                AddedToken("<|user|>", normalized=False, special=True)
+                AddedToken("<|assistant|>", rstrip=True, normalized=False, special=True),
+                AddedToken("<|placeholder1|>", rstrip=True, normalized=False, special=True),
+                AddedToken("<|placeholder2|>", rstrip=True, normalized=False, special=True),
+                AddedToken("<|placeholder3|>", rstrip=True, normalized=False, special=True),
+                AddedToken("<|placeholder4|>", rstrip=True, normalized=False, special=True),
+                AddedToken("<|system|>", rstrip=True, normalized=False, special=True),
+                AddedToken("<|end|>", rstrip=True, normalized=False, special=True),
+                AddedToken("<|placeholder5|>", rstrip=True, normalized=False, special=True),
+                AddedToken("<|placeholder6|>", rstrip=True, normalized=False, special=True),
+                AddedToken("<|user|>", rstrip=True, normalized=False, special=True)
             ]
         )
 
