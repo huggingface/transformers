@@ -82,7 +82,6 @@ class Blip2ForConditionalGenerationModelOutput(ModelOutput):
 
 
 @dataclass
-# Copied from transformers.models.clip.modeling_clip.CLIPOutput with CLIP->Blip2ImageTextMatchingModel
 class Blip2ImageTextMatchingModelOutput(ModelOutput):
     """
     Args:
@@ -95,13 +94,13 @@ class Blip2ImageTextMatchingModelOutput(ModelOutput):
             The scaled dot product scores between `text_embeds` and `image_embeds`. This represents the text-image
             similarity scores.
         text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The text embeddings obtained by applying the projection layer to the pooled output of [`Blip2ImageTextMatchingModelTextModel`].
+            The text embeddings obtained by applying the projection layer to the pooled output.
         image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The image embeddings obtained by applying the projection layer to the pooled output of [`Blip2ImageTextMatchingModelVisionModel`].
+            The image embeddings obtained by applying the projection layer to the pooled output.
         text_model_output (`BaseModelOutputWithPooling`):
-            The output of the [`Blip2ImageTextMatchingModelTextModel`].
+            The output of the [`Blip2QFormerModel`].
         vision_model_output (`BaseModelOutputWithPooling`):
-            The output of the [`Blip2ImageTextMatchingModelVisionModel`].
+            The output of the [`Blip2VisionModel`].
     """
 
     loss: Optional[torch.FloatTensor] = None
