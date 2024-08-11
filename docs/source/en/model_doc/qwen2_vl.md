@@ -73,7 +73,7 @@ conversation = [
 text_prompt = processor.apply_chat_template(conversation, add_generation_prompt=True)
 # Excepted output: '<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>Describe this image.<|im_end|>\n<|im_start|>assistant\n'
 
-inputs = processor(text=[text_prompt], images=[image],videos=video, padding=True, return_tensors="pt")
+inputs = processor(text=[text_prompt], images=[image], padding=True, return_tensors="pt")
 inputs = inputs.to('cuda')
 
 # Inference: Generation of the output
@@ -127,7 +127,7 @@ conversation = [
 text_prompt = processor.apply_chat_template(conversation, add_generation_prompt=True)
 # Excepted output: '<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n<|im_start|>user\n<|vision_start|><|video_pad|><|vision_end|>What happened in the video?<|im_end|>\n<|im_start|>assistant\n'
 
-inputs = processor(text=[text_prompt], images=[image],videos=video, padding=True, return_tensors="pt")
+inputs = processor(text=[text_prompt], videos=[video], padding=True, return_tensors="pt")
 inputs = inputs.to('cuda')
 
 # Inference: Generation of the output
