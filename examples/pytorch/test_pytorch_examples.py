@@ -50,6 +50,7 @@ SRC_DIRS = [
         "semantic-segmentation",
         "object-detection",
         "instance-segmentation",
+        "zero-shot",
     ]
 ]
 sys.path.extend(SRC_DIRS)
@@ -76,6 +77,7 @@ if SRC_DIRS is not None:
     import run_swag
     import run_translation
     import run_wav2vec2_pretraining_no_trainer
+    import run_zero_shot_object_detection
 
 
 logging.basicConfig(level=logging.DEBUG)
@@ -678,3 +680,31 @@ class ExamplesTests(TestCasePlus):
             run_instance_segmentation.main()
             result = get_results(tmp_dir)
             self.assertGreaterEqual(result["test_map"], 0.1)
+
+    @patch.dict(os.environ, {"WANDB_DISABLED": "true"})
+    def test_zero_shotrun_object_detection(self):
+        tmp_dir = self.get_auto_remove_tmp_dir()
+        testargs = f"""
+            run_zero_shot_object_detection.py
+            --model_name_or_path IDEA-Research/grounding-dino-tiny
+            --output_dir {tmp_dir}
+            --dataset_name qubvel-hf/cppe-5-sample
+            --do_train
+            --do_eval
+            --remove_unused_columns False
+            --overwrite_output_dir True
+            --eval_do_concat_batches False
+            --max_steps 10
+            --learning_rate=5e-5
+            --per_device_train_batch_size=1
+            --per_device_eval_batch_size=1
+            --seed 32
+        """.split()
+
+        if is_torch_fp16_available_on_device(torch_device):
+            testargs.append("--fp16")
+
+        with patch.object(sys, "argv", testargs):
+            run_zero_shot_object_detection.main()
+            result = get_results(tmp_dir)
+            self.assertGreaterEqual(result["test_map"], 0.01)
