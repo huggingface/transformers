@@ -253,7 +253,6 @@ class TrieTest(unittest.TestCase):
         trie.add("Hello 友達")
         self.assertEqual(trie.data, {"H": {"e": {"l": {"l": {"o": {" ": {"友": {"達": {"": 1}}}}}}}}})
         trie.add("Hello")
-        trie.data
         self.assertEqual(trie.data, {"H": {"e": {"l": {"l": {"o": {"": 1, " ": {"友": {"達": {"": 1}}}}}}}}})
 
     def test_trie_split(self):
