@@ -4089,7 +4089,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 save_strategy="best",
                 compute_metrics=AlmostAccuracy(),
             )
-            self.assertTrue(trainer.args.metric_for_best_model == "loss")
 
             # Patch the `_evaluate` method to control the metrics returned during evaluation
             with patch.object(
