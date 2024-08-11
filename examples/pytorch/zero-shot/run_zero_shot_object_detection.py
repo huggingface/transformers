@@ -61,7 +61,7 @@ class ModelOutput:
 
 
 class ZeroShotTrainer(Trainer):
-    def _select_inputs_for_validation(inputs):
+    def _select_inputs_for_validation(self, inputs):
         return inputs["input_ids"]
 
 
