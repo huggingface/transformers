@@ -40,10 +40,10 @@ _import_structure = {
         "deepspeed_load_checkpoint",
         "deepspeed_optim_sched",
         "is_deepspeed_available",
+        "is_deepspeed_sp_enabled",
         "is_deepspeed_zero3_enabled",
         "set_hf_deepspeed_config",
         "unset_hf_deepspeed_config",
-        "is_deepspeed_sp_enabled",
     ],
     "eetq": ["replace_with_eetq_linear"],
     "fbgemm_fp8": ["FbgemmFp8Linear", "replace_with_fbgemm_fp8_linear"],
@@ -123,10 +123,10 @@ if TYPE_CHECKING:
         deepspeed_load_checkpoint,
         deepspeed_optim_sched,
         is_deepspeed_available,
+        is_deepspeed_sp_enabled,
         is_deepspeed_zero3_enabled,
         set_hf_deepspeed_config,
         unset_hf_deepspeed_config,
-        is_deepspeed_sp_enabled,
     )
     from .eetq import replace_with_eetq_linear
     from .fbgemm_fp8 import FbgemmFp8Linear, replace_with_fbgemm_fp8_linear
