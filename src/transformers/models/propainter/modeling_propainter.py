@@ -2340,7 +2340,7 @@ class ProPainterPreTrainedModel(PreTrainedModel):
     base_model_prefix = "propainter"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["ProPainterEmbeddings", "ProPainterLayer"]
+    # _no_split_modules = ["ProPainterEmbeddings", "ProPainterLayer"]
     _supports_sdpa = True
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
@@ -2417,7 +2417,7 @@ class ProPainterModel(ProPainterPreTrainedModel):
         self.config = config
         self.optical_flow_model = ProPainterRaftOpticalFlow(config)
         self.flow_completion_net = ProPainterRecurrentFlowCompleteNet()
-        self.propainter_inpaint_generator = ProPainterInpaintGenerator()
+        self.inpaint_generator = ProPainterInpaintGenerator()
         # self.embeddings = ProPainterEmbeddings(config)
         # self.encoder = ProPainterEncoder()
         #############look into it
@@ -2601,7 +2601,7 @@ class ProPainterModel(ProPainterPreTrainedModel):
 
                     b, t, _, _, _ = masks_dilated[:, s_f:e_f].size()
                     pred_flows_bi_sub = (pred_flows_bi[0][:, s_f:e_f-1], pred_flows_bi[1][:, s_f:e_f-1])
-                    prop_imgs_sub, updated_local_masks_sub = self.propainter_inpaint_generator.img_propagation(masked_frames[:, s_f:e_f], 
+                    prop_imgs_sub, updated_local_masks_sub = self.inpaint_generator.img_propagation(masked_frames[:, s_f:e_f], 
                                                                         pred_flows_bi_sub, 
                                                                         masks_dilated[:, s_f:e_f], 
                                                                         'nearest')
@@ -2617,7 +2617,7 @@ class ProPainterModel(ProPainterPreTrainedModel):
                 updated_masks = torch.cat(updated_masks, dim=1)
             else:
                 b, t, _, _, _ = masks_dilated.size()
-                prop_imgs, updated_local_masks = self.propainter_inpaint_generator.img_propagation(masked_frames, pred_flows_bi, masks_dilated, 'nearest')
+                prop_imgs, updated_local_masks = self.inpaint_generator.img_propagation(masked_frames, pred_flows_bi, masks_dilated, 'nearest')
                 updated_frames = pixel_values * (1 - masks_dilated) + prop_imgs.view(b, t, 3, h, w) * masks_dilated
                 updated_masks = updated_local_masks.view(b, t, 1, h, w)
                 torch.cuda.empty_cache()
@@ -2649,7 +2649,7 @@ class ProPainterModel(ProPainterPreTrainedModel):
                 l_t = len(neighbor_ids)
                 
                 # pred_img = selected_imgs # results of image propagation
-                pred_img = self.propainter_inpaint_generator(selected_imgs, selected_pred_flows_bi, selected_masks, selected_update_masks, l_t)
+                pred_img = self.inpaint_generator(selected_imgs, selected_pred_flows_bi, selected_masks, selected_update_masks, l_t)
                 
                 pred_img = pred_img.view(-1, 3, h, w)
 
