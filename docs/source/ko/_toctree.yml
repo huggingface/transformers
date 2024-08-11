@@ -266,8 +266,8 @@
   title: (번역중) 개념 가이드
 - sections:
   - sections:
-    - local: in_translation
-      title: (번역중) Agents and Tools
+    - local: main_classes/agent
+      title: 에이전트와 도구
     - local: in_translation
       title: (번역중) Auto Classes
     - local: in_translation
