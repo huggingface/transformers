@@ -4041,6 +4041,75 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             reloaded_tokenizer(test_sentence, padding="max_length").input_ids,
         )
 
+    def test_save_best_checkpoint(self):
+        freq = int(64 / self.batch_size)
+        total = int(self.n_epochs * 64 / self.batch_size)
+
+        # Case 1: Metric name provided.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            trainer = get_regression_trainer(
+                a=1.5,
+                b=2.5,
+                output_dir=tmpdir,
+                learning_rate=0.1,
+                eval_strategy="epoch",
+                save_strategy="best",
+                metric_for_best_model="accuracy",
+                compute_metrics=AlmostAccuracy(),
+            )
+            self.assertTrue(trainer.args.metric_for_best_model == "accuracy")
+
+            # Patch the `_evaluate` method to control the metrics returned during evaluation
+            with patch.object(
+                trainer,
+                "_evaluate",
+                side_effect=[
+                    {"eval_loss": 0.03, "eval_accuracy": 0.60, "epoch": 1.0},
+                    {"eval_loss": 0.02, "eval_accuracy": 0.65, "epoch": 2.0},
+                    {"eval_loss": 0.01, "eval_accuracy": 0.64, "epoch": 3.0},
+                ],
+            ):
+                trainer.train()
+
+                self.assertEqual(len(os.listdir(tmpdir)), 2)
+                self.check_saved_checkpoints(
+                    output_dir=tmpdir,
+                    freq=freq,
+                    total=total,
+                )
+
+        # Case 2: Metric name not provided, default to loss.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            trainer = get_regression_trainer(
+                a=1.5,
+                b=2.5,
+                output_dir=tmpdir,
+                learning_rate=0.1,
+                eval_strategy="epoch",
+                save_strategy="best",
+                compute_metrics=AlmostAccuracy(),
+            )
+            self.assertTrue(trainer.args.metric_for_best_model == "loss")
+
+            # Patch the `_evaluate` method to control the metrics returned during evaluation
+            with patch.object(
+                trainer,
+                "_evaluate",
+                side_effect=[
+                    {"eval_loss": 0.03, "eval_accuracy": 0.60, "epoch": 1.0},
+                    {"eval_loss": 0.02, "eval_accuracy": 0.65, "epoch": 2.0},
+                    {"eval_loss": 0.01, "eval_accuracy": 0.64, "epoch": 3.0},
+                ],
+            ):
+                trainer.train()
+
+                self.assertEqual(len(os.listdir(tmpdir)), 3)
+                self.check_saved_checkpoints(
+                    output_dir=tmpdir,
+                    freq=freq,
+                    total=total,
+                )
+
 
 @require_torch
 @is_staging_test
