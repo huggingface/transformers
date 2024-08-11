@@ -219,7 +219,7 @@ print("Decoded output:\n", decoded_output)
 4. 모델에서 응답을 [생성](https://huggingface.co/docs/transformers/en/llm_tutorial)합니다.
 5. 모델이 출력한 토큰을 다시 문자열로 디코딩합니다.
 
-## 성능, 메모리와 하드웨어[[performance,-memory-and-hardware]]
+## 성능, 메모리와 하드웨어[[performance-memory-and-hardware]]
 이제 대부분의 머신 러닝 작업이 GPU에서 실행된다는 것을 아실 겁니다. 
 다소 느리기는 해도 CPU에서 채팅 모델이나 언어 모델로부터 텍스트를 생성하는 것도 가능합니다. 
 하지만 모델을 GPU 메모리에 올려놓을 수만 있다면, GPU를 사용하는 것이 일반적으로 더 선호되는 방식입니다.
