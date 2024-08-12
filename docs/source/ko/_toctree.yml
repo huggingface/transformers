@@ -145,8 +145,8 @@
     title: bitsandbytes
   - local: in_translation
     title: (번역중) GPTQ
-  - local: in_translation
-    title: (번역중) AWQ
+  - local: quantization/awq
+    title: AWQ
   - local: in_translation
     title: (번역중) AQLM
   - local: in_translation
