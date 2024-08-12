@@ -17,6 +17,7 @@ Processor class for IDEFICS2.
 """
 
 import sys
+import warnings
 from typing import TYPE_CHECKING, List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
@@ -149,7 +150,7 @@ class Idefics2Processor(ProcessorMixin):
         ...     "<image>In this image, we see",
         ...     "bla bla bla<image>",
         ... ]
-        >>> outputs = processor(text=text, images=images, return_tensors="pt", padding=True)
+        >>> outputs = processor(images=images, text=text, return_tensors="pt", padding=True)
         >>> input_ids = outputs.input_ids
         >>> input_tokens = processor.tokenizer.batch_decode(input_ids)
         >>> print(input_tokens)
@@ -169,6 +170,24 @@ class Idefics2Processor(ProcessorMixin):
                 `<fake_token_around_image>` + `<image>` * `image_seq_len` * <fake_token_around_image>`.
 
         """
+        if text is None and images is None:
+            raise ValueError("You must provide either `text` or `images`.")
+        # check if images and text inputs are reversed for BC
+        if (
+            text is not None
+            and not isinstance(text[0], str)
+            or images is not None
+            and not (
+                is_image_or_image_url(images)
+                or is_image_or_image_url(images[0])
+                or (isinstance(images[0], list) and is_image_or_image_url(images[0][0]))
+            )
+        ):
+            warnings.warn(
+                "It looks like you are passing the inputs in the wrong order. You should pass the images input first and the text input second."
+                "Images and text inputs will be swapped."
+            )
+            images, text = text, images
 
         output_kwargs = self._merge_kwargs(
             Idefics2ProcessorKwargs,
