@@ -11,7 +11,7 @@ rendered properly in your Markdown viewer.
 
 # TorchAO
 
-[TorchAO](https://github.com/pytorch/ao) is an architecture optimization library for PyTorch, it provides high performance dtypes, optimization techniques and kernels for inference and training.
+[TorchAO](https://github.com/pytorch/ao) is an architecture optimization library for PyTorch, it provides high performance dtypes, optimization techniques and kernels for inference and training, featuring composability with native PyTorch features like `torch.compile`, FSDP etc.. Some benchmark numbers can be found [here](https://github.com/pytorch/ao/tree/main?tab=readme-ov-file#without-intrusive-code-changes)
 
 Before you begin, make sure the following libraries are installed with their latest version:
 
@@ -32,6 +32,11 @@ quantized_model = AutoModelForCausalLM.from_pretrained(model_name, device_map="a
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 input_text = "What are we having for dinner?"
 input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
+
+# compile the quantizd model to get speedup
+import torchao
+torchao.quantization.utils.recommended_inductor_config_setter()
+quantized_model = torch.compile(quantized_model, mode="max-autotune")
 
 output = quantized_model.generate(**input_ids, max_new_tokens=10)
 print(tokenizer.decode(output[0], skip_special_tokens=True))

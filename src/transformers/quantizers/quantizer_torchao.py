@@ -32,9 +32,7 @@ if is_torch_available():
     import torch
 
 if is_torchao_available():
-    from torchao.quantization import (
-        quantize_,
-    )
+    from torchao.quantization import quantize_
 
 logger = logging.get_logger(__name__)
 
