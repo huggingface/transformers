@@ -1763,20 +1763,27 @@ class Kosmos2_5PreTrainedModel(PreTrainedModel):
             module.segment_emb.weight.data.normal_(std=std)
 
 
-# Pix2StructVisionModel -> Kosmos2_5VisionModel
 class Kosmos2_5VisionModel(Kosmos2_5PreTrainedModel):
     config_class = Kosmos2_5VisionConfig
 
+    # Copied from transformers.models.pix2struct.modeling_pix2struct.Pix2StructVisionModel.__init__ with Pix2Struct->Kosmos2_5
     def __init__(self, config: Kosmos2_5VisionConfig):
         super().__init__(config)
         self.config = config
+
         self.embeddings = Kosmos2_5VisionEmbeddings(config)
         self.encoder = Kosmos2_5VisionEncoder(config)
+
         self.layernorm = Kosmos2_5LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    # Copied from transformers.models.pix2struct.modeling_pix2struct.Pix2StructVisionModel.get_input_embeddings
     def get_input_embeddings(self):
         return self.embeddings.patch_projection
 
+    # Copied from transformers.models.pix2struct.modeling_pix2struct.Pix2StructVisionModel._prune_heads
     def _prune_heads(self, heads_to_prune: Dict[int, List[int]]) -> None:
         """
         Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
@@ -1785,6 +1792,7 @@ class Kosmos2_5VisionModel(Kosmos2_5PreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
+    # Similar to transformers.models.pix2struct.modeling_pix2struct.Pix2StructVisionModel.forward without docstring
     def forward(
         self,
         flattened_patches: Optional[torch.Tensor] = None,

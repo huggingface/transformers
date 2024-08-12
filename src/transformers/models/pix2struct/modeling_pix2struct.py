@@ -522,7 +522,7 @@ class Pix2StructVisionModel(Pix2StructPreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["Pix2StructVisionLayer"]
 
-    def __init__(self, config: Pix2StructConfig):
+    def __init__(self, config: Pix2StructVisionConfig):
         super().__init__(config)
         self.config = config
 
