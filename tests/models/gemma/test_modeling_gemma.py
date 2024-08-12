@@ -321,7 +321,7 @@ class GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     _torch_compile_test_ckpt = "google/gemma-2b"
 
     # used in `test_torch_compile_for_training`
-    _torch_compile_train_cls = GemmaForCausalLM
+    _torch_compile_train_cls = GemmaForCausalLM if is_torch_available() else None
 
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146
     def is_pipeline_test_to_skip(
