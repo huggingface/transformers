@@ -656,6 +656,11 @@ _import_structure = {
         "Qwen2Config",
         "Qwen2Tokenizer",
     ],
+    "models.qwen2_audio": [
+        "Qwen2AudioConfig",
+        "Qwen2AudioEncoderConfig",
+        "Qwen2AudioProcessor",
+    ],
     "models.qwen2_moe": ["Qwen2MoeConfig"],
     "models.rag": ["RagConfig", "RagRetriever", "RagTokenizer"],
     "models.recurrent_gemma": ["RecurrentGemmaConfig"],
@@ -2986,6 +2991,13 @@ else:
             "Qwen2ForTokenClassification",
             "Qwen2Model",
             "Qwen2PreTrainedModel",
+        ]
+    )
+    _import_structure["models.qwen2_audio"].extend(
+        [
+            "Qwen2AudioEncoder",
+            "Qwen2AudioForConditionalGeneration",
+            "Qwen2AudioPreTrainedModel",
         ]
     )
     _import_structure["models.qwen2_moe"].extend(
@@ -5387,6 +5399,11 @@ if TYPE_CHECKING:
     from .models.pvt import PvtConfig
     from .models.pvt_v2 import PvtV2Config
     from .models.qwen2 import Qwen2Config, Qwen2Tokenizer
+    from .models.qwen2_audio import (
+        Qwen2AudioConfig,
+        Qwen2AudioEncoderConfig,
+        Qwen2AudioProcessor,
+    )
     from .models.qwen2_moe import Qwen2MoeConfig
     from .models.rag import RagConfig, RagRetriever, RagTokenizer
     from .models.recurrent_gemma import RecurrentGemmaConfig
@@ -7403,6 +7420,11 @@ if TYPE_CHECKING:
             Qwen2ForTokenClassification,
             Qwen2Model,
             Qwen2PreTrainedModel,
+        )
+        from .models.qwen2_audio import (
+            Qwen2AudioEncoder,
+            Qwen2AudioForConditionalGeneration,
+            Qwen2AudioPreTrainedModel,
         )
         from .models.qwen2_moe import (
             Qwen2MoeForCausalLM,
