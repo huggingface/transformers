@@ -595,6 +595,8 @@ GIT_INPUTS_DOCSTRING = r"""
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
+        interpolate_pos_encoding (`bool`, *optional*, defaults `False`):
+            Whether to interpolate the pre-trained position encodings.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
@@ -958,6 +960,8 @@ GIT_VISION_INPUTS_DOCSTRING = r"""
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
+        interpolate_pos_encoding (`bool`, *optional*, defaults `False`):
+            Whether to interpolate the pre-trained position encodings.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
@@ -982,6 +986,7 @@ class GitVisionTransformer(nn.Module):
         pixel_values: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        interpolate_pos_encoding: Optional[bool] = False,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutput]:
         r"""
@@ -997,7 +1002,7 @@ class GitVisionTransformer(nn.Module):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
-        hidden_states = self.embeddings(pixel_values)
+        hidden_states = self.embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
         hidden_states = self.pre_layrnorm(hidden_states)
 
         encoder_outputs = self.encoder(
@@ -1046,6 +1051,7 @@ class GitVisionModel(GitPreTrainedModel):
         pixel_values: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutput]:
         r"""
@@ -1075,6 +1081,7 @@ class GitVisionModel(GitPreTrainedModel):
             pixel_values=pixel_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            interpolate_pos_encoding=interpolate_pos_encoding,
             return_dict=return_dict,
         )
 
@@ -1201,6 +1208,7 @@ class GitModel(GitPreTrainedModel):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPooling]:
         r"""
@@ -1269,13 +1277,17 @@ class GitModel(GitPreTrainedModel):
         if pixel_values is not None:
             if pixel_values.ndim == 4:
                 # here we assume pixel_values is of shape (batch_size, num_channels, height, width)
-                visual_features = self.image_encoder(pixel_values).last_hidden_state
+                visual_features = self.image_encoder(
+                    pixel_values, interpolate_pos_encoding=interpolate_pos_encoding
+                ).last_hidden_state
 
             elif pixel_values.ndim == 5:
                 # here we assume pixel_values is of shape (batch_size, num_frames, num_channels, height, width)
                 visual_features = []
                 for frame_idx in range(pixel_values.shape[1]):
-                    visual_features_frame = self.image_encoder(pixel_values[:, frame_idx, :, :]).last_hidden_state
+                    visual_features_frame = self.image_encoder(
+                        pixel_values[:, frame_idx, :, :], interpolate_pos_encoding=interpolate_pos_encoding
+                    ).last_hidden_state
                     visual_features_frame += self.img_temperal_embedding[frame_idx]
                     visual_features.append(visual_features_frame)
 
@@ -1392,6 +1404,7 @@ class GitForCausalLM(GitPreTrainedModel):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], CausalLMOutputWithPast]:
         r"""
@@ -1545,6 +1558,7 @@ class GitForCausalLM(GitPreTrainedModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            interpolate_pos_encoding=interpolate_pos_encoding,
             return_dict=return_dict,
         )
 
