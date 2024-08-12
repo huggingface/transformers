@@ -27,7 +27,7 @@ from collections import OrderedDict
 from functools import lru_cache
 from itertools import chain
 from types import ModuleType
-from typing import Any, Tuple, Union
+from typing import Any, Optional, Tuple, Union
 
 from packaging import version
 
