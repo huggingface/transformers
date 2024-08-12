@@ -454,6 +454,7 @@ class TrainingSummary:
         metric_mapping = infer_metric_tags_from_eval_results(self.eval_results)
 
         metadata = {}
+        metadata = _insert_value(metadata, "library_name", "transformers")
         metadata = _insert_values_as_list(metadata, "language", self.language)
         metadata = _insert_value(metadata, "license", self.license)
         if self.finetuned_from is not None and isinstance(self.finetuned_from, str) and len(self.finetuned_from) > 0:
@@ -603,9 +604,6 @@ class TrainingSummary:
             tags = [tags, "generated_from_trainer"]
         elif "generated_from_trainer" not in tags:
             tags.append("generated_from_trainer")
-
-        if "transformers" not in tags:
-            tags.append("transformers")
 
         _, eval_lines, eval_results = parse_log_history(trainer.state.log_history)
         hyperparameters = extract_hyperparameters_from_trainer(trainer)
