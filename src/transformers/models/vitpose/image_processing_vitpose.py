@@ -472,7 +472,7 @@ class ViTPoseImageProcessor(BaseImageProcessor):
 
         # since the number of boxes can differ per image, the image processor takes a list
         # rather than a numpy array of boxes
-        # it currently create pixel_values of shape (batch_size*num_persons, num_channels, height, width)
+        # it currently creates pixel_values of shape (batch_size*num_persons, num_channels, height, width)
 
         if self.do_rescale:
             images = [
