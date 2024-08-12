@@ -174,43 +174,6 @@ An increasing sequence: one, two, three, four, five, six, seven, eight, nine, te
 ```
 
 
-## KV Cache Quantization
-
-The `generate()` method supports caching keys and values to enhance efficiency and avoid re-computations. However the key and value
-cache can occupy a large portion of memory, becoming a bottleneck for long-context generation, especially for Large Language Models.
-Quantizing the cache when using `generate()` can significantly reduce memory requirements at the cost of speed.
-
-KV Cache quantization in `transformers` is largely inspired by the paper [KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache]
-(https://arxiv.org/abs/2402.02750) and currently supports `quanto` and `HQQ` as backends. For more information on the inner workings see the paper.
-
-To enable quantization of the key-value cache, one needs to indicate `cache_implementation="quantized"` in the `generation_config`.
-Quantization related arguments should be passed to the `generation_config` either as a `dict` or an instance of a [`QuantizedCacheConfig`] class.
-One has to indicate which quantization backend to use in the [`QuantizedCacheConfig`], the default is `quanto`.
-
-<Tip warning={true}>
-
-Cache quantization can be detrimental if the context length is short and there is enough GPU VRAM available to run without cache quantization.
-
-</Tip>
-
-
-```python
->>> import torch
->>> from transformers import AutoTokenizer, AutoModelForCausalLM
-
->>> tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
->>> model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-chat-hf", torch_dtype=torch.float16).to("cuda:0")
->>> inputs = tokenizer("I like rock music because", return_tensors="pt").to(model.device)
-
->>> out = model.generate(**inputs, do_sample=False, max_new_tokens=20, cache_implementation="quantized", cache_config={"nbits": 4, "backend": "quanto"})
->>> print(tokenizer.batch_decode(out, skip_special_tokens=True)[0])
-I like rock music because it's loud and energetic. It's a great way to express myself and rel
-
->>> out = model.generate(**inputs, do_sample=False, max_new_tokens=20)
->>> print(tokenizer.batch_decode(out, skip_special_tokens=True)[0])
-I like rock music because it's loud and energetic. I like to listen to it when I'm feeling
-```
-
 ## Watermarking
 
 The `generate()` supports watermarking the generated text by randomly marking a portion of tokens as "green".
@@ -262,9 +225,20 @@ array([True, True])
 ## Decoding strategies
 
 Certain combinations of the `generate()` parameters, and ultimately `generation_config`, can be used to enable specific
-decoding strategies. If you are new to this concept, we recommend reading [this blog post that illustrates how common decoding strategies work](https://huggingface.co/blog/how-to-generate).
+decoding strategies. If you are new to this concept, we recommend reading
+[this blog post that illustrates how common decoding strategies work](https://huggingface.co/blog/how-to-generate).
 
 Here, we'll show some of the parameters that control the decoding strategies and illustrate how you can use them.
+
+<Tip>
+
+Selecting a given decoding strategy is not the only way you can influence the outcome of `generate()` with your model.
+The decoding strategies act based (mostly) on the logits, the distribution of probabilities for the next token, and
+thus selecting a good logits manipulation strategy can go a long way! In other words, manipulating the logits is another
+dimension you can act upon, in addition to selecting a decoding strategy. Popular logits manipulation strategies include
+`top_p`, `min_p`, and `repetition_penalty` -- you can check the full list in the [`GenerationConfig`] class.
+
+</Tip>
 
 ### Greedy Search
 

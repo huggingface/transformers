@@ -1844,6 +1844,59 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             )
             assert isinstance(pred_ids, expected_output_type)
 
+    @require_flash_attn
+    @require_torch_gpu
+    @pytest.mark.flash_attn_test
+    @slow
+    def test_flash_attn_2_generate_reuse_cache(self):
+        max_new_tokens = 2
+        for model_class in self.all_generative_model_classes:
+            if not model_class._supports_flash_attn_2:
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+            dummy_input = inputs_dict[model_class.main_input_name][..., :10]
+            if dummy_input.dtype in [torch.float32, torch.bfloat16]:
+                dummy_input = dummy_input.to(torch.float16)
+
+            # make sure that all models have enough positions for generation
+            if hasattr(config, "max_position_embeddings"):
+                config.max_position_embeddings = dummy_input.shape[1] * 2 + max_new_tokens * 2 + 1
+
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                model = model_class.from_pretrained(
+                    tmpdirname,
+                    torch_dtype=torch.float16,
+                    attn_implementation="flash_attention_2",
+                    low_cpu_mem_usage=True,
+                ).to(torch_device)
+
+                # run generate once to get filled cache
+                output = model.generate(
+                    dummy_input,
+                    max_new_tokens=max_new_tokens,
+                    do_sample=False,
+                    use_cache=True,
+                    return_dict_in_generate=True,
+                )
+                past_key_values = output.past_key_values
+
+                # Try to continue generation from where we left, given that we have more than 1 new token to process
+                # e.g. this can happen in speculative decoding when feeding candidate tokens back to target model
+                _ = model.generate(
+                    dummy_input,
+                    decoder_input_ids=output.sequences,
+                    max_new_tokens=max_new_tokens,
+                    do_sample=False,
+                    use_cache=True,
+                    past_key_values=past_key_values,
+                )
+
 
 @require_torch
 @require_torchaudio
@@ -3386,6 +3439,66 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         # assert re-ordered generations match those from eager
         assert (eager_generated_ids[permutation_idx, :] == static_generated_ids).all()
 
+    @slow
+    def test_tiny_static_generation_long_form(self):
+        import torch._dynamo.config
+
+        # only permit 4 compilations: 2 prefill steps and 2 decoding steps (1 for each of conditioned/not conditioned)
+        torch._dynamo.config.cache_size_limit = 4
+
+        processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
+        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
+        model.to(torch_device)
+
+        dataset = load_dataset("distil-whisper/meanwhile", "default")["test"]
+        dataset = dataset.cast_column("audio", Audio(sampling_rate=16000))
+        input_speech = [audio["array"] for audio in dataset[2:4]["audio"]]
+
+        inputs = processor(
+            input_speech,
+            return_tensors="pt",
+            padding="longest",
+            truncation=False,
+            return_attention_mask=True,
+            sampling_rate=16_000,
+        )
+        inputs = inputs.to(torch_device)
+
+        gen_kwargs = {
+            "return_timestamps": True,
+            "no_speech_threshold": 0.6,
+            "temperature": (0.0, 0.2, 0.4, 0.6, 0.8, 1.0),
+            "compression_ratio_threshold": 1.35,
+            "condition_on_prev_tokens": True,  # conditioning on prev tokens introduces a recompile on the second time step
+            "logprob_threshold": -1.0,
+            "num_beams": 1,
+        }
+
+        set_seed(42)
+        eager_generated_ids = model.generate(**inputs, **gen_kwargs)
+
+        # compile the forward pass and assert equivalence
+        model.generation_config.cache_implementation = "static"
+        model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
+
+        set_seed(42)
+        static_generated_ids = model.generate(**inputs, **gen_kwargs)
+        assert (eager_generated_ids == static_generated_ids).all()
+
+        # check the compiled graph can be re-used and that the cache is correctly reset
+        # reverse the ordering of the input features
+        input_features = inputs.input_features
+        permutation_idx = (
+            torch.arange(input_features.shape[0], 0, step=-1, dtype=torch.long, device=input_features.device) - 1
+        )
+        input_features = input_features[permutation_idx, ...]
+        attention_mask = inputs.attention_mask[permutation_idx, ...]
+
+        set_seed(42)
+        static_generated_ids = model.generate(input_features, attention_mask=attention_mask, **gen_kwargs)
+        # assert re-ordered generations match those from eager
+        assert (eager_generated_ids[permutation_idx, :] == static_generated_ids).all()
+
 
 def prepare_whisper_encoder_inputs_dict(config, input_features, head_mask=None):
     if head_mask is None:
@@ -3998,12 +4111,23 @@ class WhisperStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin,
         # generate only works with input ids for whisper
         pass
 
+    @unittest.skip(reason="Generate needs input ids")
+    def test_inputs_embeds_matches_input_ids_with_generate(self):
+        # generate only works with input ids for whisper
+        pass
+
     @unittest.skip(reason="Decoder can't keep attention grads")
     def test_retain_grad_hidden_states_attentions(self):
         return
 
     @unittest.skip(reason="The model doesn't support fast init from base")
     def test_save_load_fast_init_from_base(self):
+        pass
+
+    @unittest.skip(
+        reason="FA2 testing suite needs to be refactored to be compatible with WhisperDecoder for that test"
+    )
+    def test_flash_attn_2_generate_reuse_cache(self):
         pass
 
     @unittest.skip(

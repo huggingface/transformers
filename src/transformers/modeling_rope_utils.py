@@ -150,7 +150,7 @@ def _compute_dynamic_ntk_parameters(
     attention_factor = 1.0  # Unused in this type of RoPE
 
     # seq_len: default to max_position_embeddings, e.g. at init time
-    seq_len = seq_len if seq_len is not None else max_position_embeddings
+    seq_len = seq_len if seq_len is not None and seq_len > max_position_embeddings else max_position_embeddings
 
     # Compute the inverse frequencies
     base = base * ((factor * seq_len / max_position_embeddings) - (factor - 1)) ** (dim / (dim - 2))
@@ -210,7 +210,7 @@ def _compute_yarn_parameters(
         high = math.ceil(find_correction_dim(high_rot, dim, base, max_position_embeddings))
         return max(low, 0), min(high, dim - 1)
 
-    def linear_ramp_mask(min, max, dim):
+    def linear_ramp_factor(min, max, dim):
         if min == max:
             max += 0.001  # Prevent singularity
 
@@ -218,6 +218,8 @@ def _compute_yarn_parameters(
         ramp_func = torch.clamp(linear_func, 0, 1)
         return ramp_func
 
+    # Note on variable naming: "interpolation" comes from the original technique, where we interpolate the position IDs
+    # to expand the possible context length. In other words, interpolation = apply scaling factor.
     pos_freqs = base ** (torch.arange(0, dim, 2).float().to(device) / dim)
     inv_freq_extrapolation = 1.0 / pos_freqs
     inv_freq_interpolation = 1.0 / (factor * pos_freqs)
@@ -225,8 +227,11 @@ def _compute_yarn_parameters(
     low, high = find_correction_range(beta_fast, beta_slow, dim, base, max_position_embeddings)
 
     # Get n-dimensional rotational scaling corrected for extrapolation
-    inv_freq_mask = 1 - linear_ramp_mask(low, high, dim // 2).float().to(device)
-    inv_freq = inv_freq_interpolation * (1 - inv_freq_mask) + inv_freq_extrapolation * inv_freq_mask
+    inv_freq_extrapolation_factor = 1 - linear_ramp_factor(low, high, dim // 2).float().to(device)
+    inv_freq = (
+        inv_freq_interpolation * (1 - inv_freq_extrapolation_factor)
+        + inv_freq_extrapolation * inv_freq_extrapolation_factor
+    )
 
     return inv_freq, attention_factor
 
@@ -328,14 +333,14 @@ def _compute_llama3_parameters(
     wavelen = 2 * math.pi / inv_freq
     # wavelen < high_freq_wavelen: do nothing
     # wavelen > low_freq_wavelen: divide by factor
-    inv_freq_new = torch.where(wavelen > low_freq_wavelen, inv_freq / factor, inv_freq)
+    inv_freq_llama = torch.where(wavelen > low_freq_wavelen, inv_freq / factor, inv_freq)
     # otherwise: interpolate between the two, using a smooth factor
     smooth_factor = (old_context_len / wavelen - low_freq_factor) / (high_freq_factor - low_freq_factor)
-    smoothed_inv_freq = (1 - smooth_factor) * inv_freq_new / factor + smooth_factor * inv_freq_new
+    smoothed_inv_freq = (1 - smooth_factor) * inv_freq_llama / factor + smooth_factor * inv_freq_llama
     is_medium_freq = ~(wavelen < high_freq_wavelen) * ~(wavelen > low_freq_wavelen)
-    inv_freq_new = torch.where(is_medium_freq, smoothed_inv_freq, inv_freq_new)
+    inv_freq_llama = torch.where(is_medium_freq, smoothed_inv_freq, inv_freq_llama)
 
-    return inv_freq, attention_factor
+    return inv_freq_llama, attention_factor
 
 
 # This maps the "rope_type" string field in rope config to the corresponding function to compute the RoPE parameters

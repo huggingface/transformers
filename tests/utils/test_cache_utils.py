@@ -15,12 +15,14 @@
 
 import unittest
 
+from packaging import version
 from parameterized import parameterized
 
 from transformers import set_seed
 from transformers.testing_utils import (
     is_torch_available,
     require_auto_gptq,
+    require_read_token,
     require_torch,
     require_torch_gpu,
     slow,
@@ -32,9 +34,11 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        AutoConfig,
         AutoModelForCausalLM,
         AutoTokenizer,
         DynamicCache,
+        GenerationConfig,
         GPT2LMHeadModel,
         LlamaConfig,
         SinkCache,
@@ -164,6 +168,68 @@ class CacheTest(unittest.TestCase):
         self.assertTrue(cached_keys.shape == (1, 1, 10, 128))
         self.assertTrue(cached_values.shape == (1, 1, 10, 128))
 
+    @slow
+    @require_read_token
+    def test_static_cache_exportability(self):
+        """
+        Tests that static cache works with `torch.export()`
+        """
+        import torch
+
+        if version.parse(torch.__version__) < version.parse("2.3"):
+            self.skipTest(reason="This test requires torch >= 2.3 to run.")
+
+        device = "cpu"
+        dtype = torch.float32
+        max_batch_size = 1
+
+        config = AutoConfig.from_pretrained(
+            "google/gemma-2b",
+            torch_dtype=dtype,
+            use_cache=True,
+        )
+        m = AutoModelForCausalLM.from_pretrained(
+            "google/gemma-2b",
+            config=config,
+            torch_dtype=dtype,
+            attn_implementation="sdpa",  # Export and ExecuTorch only works for SdpaAttention
+        ).to(device)
+        tokenizer = AutoTokenizer.from_pretrained("google/gemma-2b")
+        inputs = tokenizer(["The best color is"], return_tensors="pt").to(device)["input_ids"]
+
+        class ExportatibleModelWithStaticCache(torch.nn.Module):
+            def __init__(self, config, model):
+                super().__init__()
+                self.config = config
+                self.model = model
+                self.static_cache = StaticCache(
+                    config=config, max_batch_size=max_batch_size, max_cache_len=config.max_length, device=device
+                )
+
+            def forward(self, tokens: torch.Tensor, input_pos: torch.Tensor):
+                outs = self.model(
+                    input_ids=tokens,
+                    attention_mask=None,
+                    position_ids=input_pos.unsqueeze(0),
+                    cache_position=input_pos,
+                    past_key_values=self.static_cache,
+                    use_cache=True,
+                )
+                return outs.logits
+
+        set_seed(0)
+        with torch.no_grad():
+            import torch.export._trace
+            from torch.export import ExportedProgram
+
+            model = ExportatibleModelWithStaticCache(config, m)
+            # Due to issue https://github.com/pytorch/pytorch/issues/128394, we need to switch to use an internal
+            # export API and pre_dispatch=False. Switch to use the public API once the issue is included in 2.4.1+ release.
+            exported_program = torch.export._trace._export(
+                model, args=(inputs,), kwargs={"input_pos": torch.arange(1)}, pre_dispatch=False, strict=True
+            )
+            self.assertTrue(isinstance(exported_program, ExportedProgram))
+
 
 @require_torch_gpu
 @slow
@@ -230,6 +296,30 @@ class CacheIntegrationTest(unittest.TestCase):
         expected_text = [
             "The best color is the one that makes you feel good.\nThe best color is the one that makes you feel good",
             "The best color is the one that suits you.\nThe best color is the one that suits you. The",
+        ]
+        self.assertListEqual(decoded, expected_text)
+
+    def test_hybrid_cache_n_sequences(self):
+        tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-9b")
+        model = AutoModelForCausalLM.from_pretrained(
+            "google/gemma-2-9b",
+            device_map="auto",
+            torch_dtype=torch.bfloat16,
+            attn_implementation="eager",
+        )
+
+        inputs = tokenizer(["Hello I am doing"], return_tensors="pt").to(model.device)
+
+        gen_out = model.generate(
+            **inputs,
+            do_sample=False,
+            max_new_tokens=20,
+            num_return_sequences=2,
+        )
+        decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
+        expected_text = [
+            "Hello I am doing a project on the 1918 flu pandemic and I am trying to find out how many",
+            "Hello I am doing a project on the 1918 flu pandemic and I am trying to find out how many",
         ]
         self.assertListEqual(decoded, expected_text)
 
@@ -455,3 +545,54 @@ class CacheIntegrationTest(unittest.TestCase):
     @unittest.skip(reason="TODO @gante static cache's does not support beam search yet")
     def test_static_cache_beam_search(self):
         pass
+
+    @require_torch_gpu
+    def test_offloaded_cache_equivalent_to_dynamic_cache(self):
+        """Tests that OffloadedCache produces the same result as the default DynamicCache"""
+        model_name = "microsoft/Phi-3-mini-4k-instruct"
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        model = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", torch_dtype=torch.float16)
+        device = model.device
+        input_text = "Fun fact:"
+        inputs = tokenizer(input_text, return_tensors="pt").to(device)
+        common = {
+            "num_beams": 4,
+            "num_beam_groups": 2,
+            "num_return_sequences": 4,
+            "diversity_penalty": 1.0,
+            "max_new_tokens": 20,
+            "early_stopping": True,
+        }
+        original = GenerationConfig(**common)
+        offloaded = GenerationConfig(cache_implementation="offloaded", **common)
+        original_outputs = model.generate(generation_config=original, **inputs)
+        offloaded_outputs = model.generate(generation_config=offloaded, **inputs)
+        for original_output, offloaded_output in zip(original_outputs, offloaded_outputs):
+            assert torch.all(original_output == offloaded_output).item()
+
+    @require_torch_gpu
+    def test_offloaded_cache_uses_less_memory_than_dynamic_cache(self):
+        """Tests that OffloadedCache uses less memory than the default DynamicCache"""
+        model_name = "microsoft/Phi-3-mini-4k-instruct"
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        model = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", torch_dtype=torch.float16)
+        device = model.device
+        input_text = "Fun fact:"
+        inputs = tokenizer(input_text, return_tensors="pt").to(device)
+        common = {
+            "num_beams": 4,
+            "num_beam_groups": 2,
+            "num_return_sequences": 4,
+            "diversity_penalty": 1.0,
+            "max_new_tokens": 20,
+            "early_stopping": True,
+        }
+        original = GenerationConfig(**common)
+        offloaded = GenerationConfig(cache_implementation="offloaded", **common)
+        torch.cuda.reset_peak_memory_stats(device)
+        model.generate(generation_config=original, **inputs)
+        original_peak_memory = torch.cuda.max_memory_allocated(device)
+        torch.cuda.reset_peak_memory_stats(device)
+        model.generate(generation_config=offloaded, **inputs)
+        offloaded_peak_memory = torch.cuda.max_memory_allocated(device)
+        assert offloaded_peak_memory < original_peak_memory
