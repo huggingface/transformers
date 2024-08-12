@@ -14,16 +14,23 @@
 
 from typing import TYPE_CHECKING
 
+from ...file_utils import _LazyModule, is_tokenizers_available, is_torch_available
 from ...utils import (
     OptionalDependencyNotAvailable,
-    _LazyModule,
-    is_torch_available,
 )
 
 
 _import_structure = {
     "configuration_mamba2": ["Mamba2Config", "Mamba2OnnxConfig"],
 }
+
+try:
+    if not is_tokenizers_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["tokenization_mamba2_fast"] = ["Mamba2TokenizerFast"]
 
 try:
     if not is_torch_available():
@@ -40,6 +47,14 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_mamba2 import Mamba2Config, Mamba2OnnxConfig
+
+    try:
+        if not is_tokenizers_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .tokenization_mamba2_fast import Mamba2TokenizerFast
 
     try:
         if not is_torch_available():

@@ -23,7 +23,37 @@ import torch
 from safetensors import safe_open
 from safetensors.torch import save_model
 
-from transformers import AutoTokenizer, LlamaTokenizerFast, Mamba2Config, Mamba2ForCausalLM
+from transformers import LlamaTokenizerFast, Mamba2Config, Mamba2ForCausalLM, Mamba2TokenizerFast
+
+
+_MAMBA2_MODELS_DICT = {
+    "codestral": {
+        "hidden_size": "dim",
+        "num_hidden_layers": "n_layers",
+        "n_groups": "n_groups",
+        "residual_in_fp32": "residual_in_fp32",
+        "tie_word_embeddings": "tie_embeddings",
+        "norm_before_gate": False,
+        "vocab_size": "vocab_size",
+        "pad_vocab_size_multiple": "pad_vocab_size_multiple",
+        "bos_token_id": 0,
+        "pad_token_id": 1,
+        "eos_token_id": 2,
+    },
+    "base": {
+        "hidden_size": "d_model",
+        "num_hidden_layers": "n_layer",
+        "n_groups": "ngroups",
+        "residual_in_fp32": "residual_in_fp32",
+        "tie_word_embeddings": "tie_embeddings",
+        "norm_before_gate": False,
+        "vocab_size": "vocab_size",
+        "pad_vocab_size_multiple": "pad_vocab_size_multiple",
+        "bos_token_id": 0,
+        "pad_token_id": 0,
+        "eos_token_id": 0,
+    },
+}
 
 
 def convert_ssm_config_to_hf_config(config_ssm: Dict) -> Tuple[Mamba2Config, bool]:
@@ -33,22 +63,25 @@ def convert_ssm_config_to_hf_config(config_ssm: Dict) -> Tuple[Mamba2Config, boo
     # Flag for codestral model
     is_not_codestral = "dim" not in config_ssm
 
-    # Set important values from config and recalculate other resulting entries
-    hf_config.hidden_size = config_ssm["d_model"] if is_not_codestral else config_ssm["dim"]
-    hf_config.num_heads = (hf_config.hidden_size * hf_config.expand) // hf_config.head_dim
-    hf_config.num_hidden_layers = config_ssm["n_layer"] if is_not_codestral else config_ssm["n_layers"]
-    hf_config.n_groups = config_ssm.get("n_groups", 1)
-    hf_config.residual_in_fp32 = config_ssm["residual_in_fp32"]
-    hf_config.tie_word_embeddings = config_ssm["tie_embeddings"]
-    hf_config.norm_before_gate = False
+    # Switch to a different dict depending on model type
+    config_key = "base" if is_not_codestral else "codestral"
+    config_dict = _MAMBA2_MODELS_DICT[config_key]
 
-    # codestral uses its own tokenizer with separate eos/bos/pad tokens
-    if is_not_codestral:
-        hf_config.pad_token_id = hf_config.bos_token_id = hf_config.eos_token_id = 0
+    # Set important values from config and recalculate other resulting entries
+    hf_config.hidden_size = config_ssm[config_dict["hidden_size"]]
+    hf_config.num_heads = (hf_config.hidden_size * hf_config.expand) // hf_config.head_dim
+    hf_config.num_hidden_layers = config_ssm[config_dict["num_hidden_layers"]]
+    hf_config.n_groups = config_ssm.get(config_dict["n_groups"], 1)
+    hf_config.residual_in_fp32 = config_ssm[config_dict["residual_in_fp32"]]
+    hf_config.tie_word_embeddings = config_ssm[config_dict["tie_word_embeddings"]]
+    hf_config.norm_before_gate = config_dict["norm_before_gate"]
+    hf_config.bos_token_id = config_dict["bos_token_id"]
+    hf_config.pad_token_id = config_dict["pad_token_id"]
+    hf_config.eos_token_id = config_dict["eos_token_id"]
 
     # Padded vocab size, mostly of 16 but 32 is also very common in different models
-    vocab_size = config_ssm["vocab_size"]
-    pad_vocab_size_multiple = config_ssm["pad_vocab_size_multiple"]
+    vocab_size = config_ssm[config_dict["vocab_size"]]
+    pad_vocab_size_multiple = config_ssm[config_dict["pad_vocab_size_multiple"]]
     if (vocab_size % pad_vocab_size_multiple) != 0:
         vocab_size += pad_vocab_size_multiple - (vocab_size % pad_vocab_size_multiple)
     hf_config.vocab_size = vocab_size
@@ -102,9 +135,7 @@ def convert_mamba2_checkpoint_file_to_huggingface_model_file(
         tokenizer_class = LlamaTokenizerFast
         tokenizer = tokenizer_class(tokenizer_model_path, legacy=False, from_slow=True)
     else:
-        tokenizer = AutoTokenizer.from_pretrained("state-spaces/mamba-130m-hf")
-        # TODO: how to correctly overwrite padding side so it is saved as is
-        tokenizer.padding_side = "left"
+        tokenizer = Mamba2TokenizerFast.from_pretrained("state-spaces/mamba-130m-hf")
     tokenizer.save_pretrained(output_dir)
 
 
