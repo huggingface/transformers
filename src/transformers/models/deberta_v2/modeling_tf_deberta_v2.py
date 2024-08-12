@@ -548,9 +548,9 @@ def make_log_bucket_position(relative_pos, bucket_size, max_position):
     abs_pos = tf.where((relative_pos < mid) & (relative_pos > -mid), mid - 1, tf.math.abs(relative_pos))
     log_pos = (
         tf.math.ceil(
-            tf.cast(tf.math.log(abs_pos / mid), tf.float32) / tf.math.log((max_position - 1) / mid) * (mid - 1)
+            tf.cast(tf.math.log(abs_pos / mid), tf.float32) / tf.cast(tf.math.log((max_position - 1) / mid), tf.float32) * tf.cast(mid - 1, tf.float32)  # in graph mode
         )
-        + mid
+        + tf.cast(mid, tf.float32)
     )
     bucket_pos = tf.cast(
         tf.where(abs_pos <= mid, tf.cast(relative_pos, tf.float32), log_pos * tf.cast(sign, tf.float32)), tf.int32
