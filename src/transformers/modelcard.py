@@ -604,6 +604,9 @@ class TrainingSummary:
         elif "generated_from_trainer" not in tags:
             tags.append("generated_from_trainer")
 
+        if "transformers" not in tags:
+            tags.append("transformers")
+
         _, eval_lines, eval_results = parse_log_history(trainer.state.log_history)
         hyperparameters = extract_hyperparameters_from_trainer(trainer)
 
