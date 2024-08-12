@@ -84,6 +84,7 @@ from . import (
     ernie,
     esm,
     falcon,
+    falcon_mamba,
     fastspeech2_conformer,
     flaubert,
     flava,
