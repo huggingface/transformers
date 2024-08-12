@@ -370,6 +370,8 @@
         title: ESM
       - local: model_doc/falcon
         title: Falcon
+      - local: model_doc/falcon_mamba
+        title: FalconMamba
       - local: model_doc/fastspeech2_conformer
         title: FastSpeech2Conformer
       - local: model_doc/flan-t5
