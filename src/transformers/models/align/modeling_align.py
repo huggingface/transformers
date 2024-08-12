@@ -1245,7 +1245,7 @@ class AlignTextModel(AlignPreTrainedModel):
         >>> model = AlignTextModel.from_pretrained("kakaobrain/align-base")
         >>> tokenizer = AutoTokenizer.from_pretrained("kakaobrain/align-base")
 
-        >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
+        >>> inputs = tokenizer(text=["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
 
         >>> outputs = model(**inputs)
         >>> last_hidden_state = outputs.last_hidden_state
@@ -1470,7 +1470,7 @@ class AlignModel(AlignPreTrainedModel):
         >>> model = AlignModel.from_pretrained("kakaobrain/align-base")
         >>> tokenizer = AutoTokenizer.from_pretrained("kakaobrain/align-base")
 
-        >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
+        >>> inputs = tokenizer(text=["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
         >>> text_features = model.get_text_features(**inputs)
         ```"""
         # Use ALIGN model's config for some fields (if specified) instead of those of vision & text components.
@@ -1575,7 +1575,7 @@ class AlignModel(AlignPreTrainedModel):
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> inputs = processor(
-        ...     text=["a photo of a cat", "a photo of a dog"], images=image, return_tensors="pt", padding=True
+        ...     images=image, text=["a photo of a cat", "a photo of a dog"], return_tensors="pt", padding=True
         ... )
 
         >>> outputs = model(**inputs)

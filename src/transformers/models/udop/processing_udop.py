@@ -17,6 +17,7 @@ Processor class for UDOP.
 """
 
 import sys
+import warnings
 from typing import List, Optional, Union
 
 from ...image_processing_utils import BatchFeature
@@ -108,12 +109,18 @@ class UdopProcessor(ProcessorMixin):
         Please refer to the docstring of the above two methods for more information.
         """
         # verify input
-
         output_kwargs = self._merge_kwargs(
             UdopProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
+        if "text_pair " not in output_kwargs["text_kwargs"]:
+            warnings.warn(
+                "No `text_pair` kwarg was detected. The use of `text_pair` as an argument without specifying it explicitely as `text_pair=` will be deprecated in future versions."
+            )
+            # for BC
+            if audio is not None:
+                output_kwargs["text_kwargs"]["text_pair"] = audio
 
         boxes = output_kwargs["text_kwargs"].pop("boxes", None)
         word_labels = output_kwargs["text_kwargs"].pop("word_labels", None)
