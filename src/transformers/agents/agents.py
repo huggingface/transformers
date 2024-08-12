@@ -507,7 +507,9 @@ class Agent:
             tool_name (`str`): Name of the Tool to execute (should be one from self.toolbox).
             arguments (Dict[str, str]): Arguments passed to the Tool.
         """
-        available_tools = {**self.toolbox.tools, **self.managed_agents}
+        available_tools = self.toolbox.tools
+        if self.managed_agents is not None:
+            available_tools = {**available_tools, **self.managed_agents}
         if tool_name not in available_tools:
             error_msg = f"Error: unknown tool {tool_name}, should be instead one of {list(available_tools.keys())}."
             self.logger.error(error_msg, exc_info=1)
@@ -656,8 +658,6 @@ class CodeAgent(Agent):
         self.log_code_action(code_action)
         try:
             available_tools = {**BASE_PYTHON_TOOLS.copy(), **self.toolbox.tools}
-            if self.managed_agents is not None:
-                available_tools = {**available_tools, **self.managed_agents}
             output = self.python_evaluator(
                 code_action,
                 static_tools=available_tools,
@@ -1102,12 +1102,15 @@ class ReactCodeAgent(ReactAgent):
         # Execute
         self.log_code_action(code_action)
         try:
+            static_tools = {
+                **BASE_PYTHON_TOOLS.copy(),
+                **self.toolbox.tools,
+            }
+            if self.managed_agents is not None:
+                static_tools = {**static_tools, **self.managed_agents}
             result = self.python_evaluator(
                 code_action,
-                static_tools={
-                    **BASE_PYTHON_TOOLS.copy(),
-                    **self.toolbox.tools,
-                },
+                static_tools=static_tools,
                 custom_tools=self.custom_tools,
                 state=self.state,
                 authorized_imports=self.authorized_imports,
@@ -1151,7 +1154,7 @@ Put all these in your final_answer, everything that you do not pass as an argume
 And even if your task resolution is not successful, please return as much context as possible, so that your manager can act upon this feedback.
 <<additional_prompting>>"""
         if self.additional_prompting:
-            full_task = full_task.replace("\n<<additional_prompting>>", self.additional_prompting)
+            full_task = full_task.replace("\n<<additional_prompting>>", self.additional_prompting).strip()
         else:
-            full_task = full_task.replace("\n<<additional_prompting>>", "")
+            full_task = full_task.replace("\n<<additional_prompting>>", "").strip()
         return self.agent.run(full_task)
