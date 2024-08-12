@@ -849,4 +849,4 @@ class CLIPSegModelIntegrationTest(unittest.TestCase):
 
         self.assertTrue(
             torch.allclose(outputs.vision_model_output.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4)
-            )
+        )
