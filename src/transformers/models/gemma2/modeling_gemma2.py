@@ -381,8 +381,8 @@ class Gemma2FlashAttention2(Gemma2Attention):
 
         if attention_mask is not None:
             seq_len = attention_mask.shape[1]
-            key_states = key_states[:, :, :seq_len]
-            value_states = value_states[:, :, :seq_len]
+            key_states = key_states[:, :, -seq_len:]
+            value_states = value_states[:, :, -seq_len:]
 
         # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor the KV cache
         # to be able to avoid many of these transpose/reshape/view.
