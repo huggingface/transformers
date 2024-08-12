@@ -36,7 +36,7 @@ from transformers.testing_utils import TOKEN, USER, is_staging_test, require_tok
 from transformers.tokenization_utils import ExtensionsTrie, Trie
 
 
-sys.path.append(str(Path(__file__).parent.parent / "utils"))
+sys.path.append(str(Path(__file__).parent.parent.parent / "utils"))
 
 from test_module.custom_tokenization import CustomTokenizer  # noqa E402
 
