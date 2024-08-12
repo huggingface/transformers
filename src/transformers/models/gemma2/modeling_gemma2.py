@@ -572,8 +572,7 @@ class Gemma2DecoderLayer(nn.Module):
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         if self.is_sliding and attention_mask is not None:  # efficient SDPA and no padding
             if self.config._attn_implementation == "flash_attention_2":
-                if past_key_value is not None:
-                    # when decoding
+                if past_key_value is not None:  # when decoding
                     attention_mask = attention_mask[:, -self.sliding_window :]
             else:
                 min_dtype = torch.finfo(hidden_states.dtype).min
@@ -583,7 +582,6 @@ class Gemma2DecoderLayer(nn.Module):
                 attention_mask = torch.where(sliding_window_mask, min_dtype, attention_mask)
                 if attention_mask.shape[-1] <= 1:  # when decoding
                     attention_mask = attention_mask[:, :, :, -self.sliding_window :]
-
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)
