@@ -657,7 +657,7 @@ NEW_BERT_CONSTANT = "value"
 
     def test_find_base_model_checkpoint(self):
         self.assertEqual(find_base_model_checkpoint("bert"), "google-bert/bert-base-uncased")
-        self.assertEqual(find_base_model_checkpoint("gpt2"), "gpt2")
+        self.assertEqual(find_base_model_checkpoint("gpt2"), "openai-community/gpt2")
 
     def test_retrieve_model_classes(self):
         gpt_classes = {k: set(v) for k, v in retrieve_model_classes("gpt2").items()}
