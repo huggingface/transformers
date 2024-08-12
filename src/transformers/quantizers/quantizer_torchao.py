@@ -134,7 +134,7 @@ class TorchAoHfQuantizer(HfQuantizer):
         if any((key + "." in param_name) or (key == param_name) for key in self.modules_to_not_convert):
             return False
         elif param_device == "cpu" and self.offload:
-            # if we have offload, we don't quantize the weight since we can't put it to the quantized weight to the meta device
+            # We don't quantize weights that we offload
             return False
         else:
             # we only quantize the weight of nn.Linear
