@@ -318,7 +318,7 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     _torch_compile_test_ckpt = "meta-llama/Llama-2-7b-hf"
 
     # used in `test_torch_compile_for_training`
-    _torch_compile_train_cls = LlamaForCausalLM
+    _torch_compile_train_cls = LlamaForCausalLM if is_torch_available() else None
 
     def setUp(self):
         self.model_tester = LlamaModelTester(self)
