@@ -330,10 +330,10 @@ QWEN2_VL_VISION_ATTENTION_CLASSES = {
 
 
 class Qwen2VLVisionBlock(nn.Module):
-    def __init__(self, config, norm_layer: nn.Module = partial(LayerNorm, eps=1e-6)) -> None:
+    def __init__(self, config) -> None:
         super().__init__()
-        self.norm1 = norm_layer(config.embed_dim)
-        self.norm2 = norm_layer(config.embed_dim)
+        self.norm1 = LayerNorm(config.embed_dim, eps=1e-6)
+        self.norm2 = LayerNorm(config.embed_dim, eps=1e-6)
         mlp_hidden_dim = int(config.embed_dim * config.mlp_ratio)
 
         self.attn = QWEN2_VL_VISION_ATTENTION_CLASSES[config._attn_implementation](
