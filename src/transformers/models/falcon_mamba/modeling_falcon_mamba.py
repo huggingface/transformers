@@ -150,7 +150,6 @@ class FalconMambaMixer(nn.Module):
                     " https://github.com/Dao-AILab/causal-conv1d. For the mamba.py backend, follow https://github.com/alxndrTL/mamba.py."
                 )
 
-    # Ignore copy
     def cuda_kernels_forward(
         self,
         hidden_states: torch.Tensor,
@@ -255,7 +254,6 @@ class FalconMambaMixer(nn.Module):
             contextualized_states = self.out_proj(scan_outputs.transpose(1, 2))
         return contextualized_states
 
-    # Ignore copy
     def slow_forward(
         self,
         input_states,
@@ -587,14 +585,8 @@ class FalconMambaModel(FalconMambaPreTrainedModel):
         self.gradient_checkpointing = False
         self.norm_f = FalconMambaRMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
         # Initialize weights and apply final processing
-        self._register_load_state_dict_pre_hook(self.load_hook)
         self.post_init()
 
-    def load_hook(self, state_dict, prefix, *args):
-        for k in state_dict:
-            if "embedding." in k:
-                state_dict[k.replace("embedding.", "embeddings.")] = state_dict.pop(k)
-                break
 
     def get_input_embeddings(self):
         return self.embeddings

@@ -22,7 +22,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_falcon_mamba": ["FalconMambaConfig", "FalconMambaOnnxConfig"],
+    "configuration_falcon_mamba": ["FalconMambaConfig"],
 }
 
 try:
