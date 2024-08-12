@@ -534,12 +534,39 @@ class Idefics3Encoder(nn.Module):
         )
 
 
-class Idefics3VisionTransformer(nn.Module):
+IDEFICS3_VISION_START_DOCSTRING = r"""
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Parameters:
+        config ([`Idefics3VisionConfig`]):
+            Model configuration class with all the parameters of the model. Initializing with a config file does not
+            load the weights associated with the model, only the configuration. Check out the
+            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+@add_start_docstrings(
+    "The Idefics3 Vision Transformer Model outputting raw image embedding.",
+    IDEFICS3_VISION_START_DOCSTRING,
+)
+class Idefics3VisionTransformer(PreTrainedModel):
+    config_class = Idefics3VisionConfig
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["Idefics3VisionAttention"]
+    _skip_keys_device_placement = "past_key_values"
+    _supports_flash_attn_2 = True
+    _supports_cache_class = True
+
     def __init__(self, config: Idefics3VisionConfig):
-        super().__init__()
+        super().__init__(config)
         embed_dim = config.hidden_size
 
-        self.config = config
         self.embeddings = Idefics3VisionEmbeddings(config)
         self.encoder = Idefics3Encoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
@@ -715,30 +742,6 @@ class Idefics3PreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
-    @classmethod
-    def _autoset_attn_implementation(
-        cls,
-        config,
-        use_flash_attention_2: bool = False,
-        torch_dtype: Optional[torch.dtype] = None,
-        device_map: Optional[Union[str, Dict[str, int]]] = None,
-        check_device_map: bool = True,
-        **kwargs,
-    ):
-        """
-        Overrides the method in `PreTrainedModel` to update the vision config with the correct attention implementation
-        """
-        config = super()._autoset_attn_implementation(
-            config=config,
-            use_flash_attention_2=use_flash_attention_2,
-            torch_dtype=torch_dtype,
-            device_map=device_map,
-            check_device_map=check_device_map,
-            **kwargs,
-        )
-        config.vision_config._attn_implementation = config._attn_implementation
-        return config
-
 
 IDEFICS3_INPUTS_DOCSTRING = r"""
     Args:
@@ -820,7 +823,7 @@ class Idefics3Model(Idefics3PreTrainedModel):
         self.padding_idx = self.config.text_config.pad_token_id
         self.vocab_size = self.config.text_config.vocab_size
 
-        self.vision_model = Idefics3VisionTransformer(config.vision_config)
+        self.vision_model = Idefics3VisionTransformer._from_config(config.vision_config, attn_implementation=config._attn_implementation)
         self.connector = Idefics3Connector(config)
         self.text_model = AutoModel.from_config(config.text_config, attn_implementation=config._attn_implementation)
 
