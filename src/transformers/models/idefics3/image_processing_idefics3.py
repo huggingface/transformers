@@ -714,9 +714,9 @@ class Idefics3ImageProcessor(BaseImageProcessor):
                     "Idefics3's image processing pipeline is optimized to process PIL images, but you passed a different type of image. "
                     "This might lead to inconsistent results"
                 )
-            if input_data_format is None:
-                # We assume that all images have the same channel dimension format.
-                input_data_format = infer_channel_dimension_format(images_list[0][0])
+                if input_data_format is None:
+                    # We assume that all images have the same channel dimension format.
+                    input_data_format = infer_channel_dimension_format(images_list[0][0])
 
 
         validate_preprocess_arguments(
