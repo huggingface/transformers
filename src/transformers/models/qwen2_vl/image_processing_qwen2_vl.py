@@ -337,8 +337,8 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
 
     def preprocess(
         self,
-        images: Union[ImageInput, VideoInput],
-        is_video: bool = False,
+        images: ImageInput,
+        videos: VideoInput = None,
         do_resize: bool = None,
         size: Dict[str, int] = None,
         resample: PILImageResampling = None,
@@ -357,6 +357,9 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
             images (`ImageInput`):
                 Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
                 passing in images with pixel values between 0 and 1, set `do_rescale=False`.
+            videos (`VideoInput`):
+                Video to preprocess. Expects a single or batch of videos with pixel values ranging from 0 to 255. If
+                passing in videos with pixel values between 0 and 1, set `do_rescale=False`.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
             size (`Dict[str, int]`, *optional*, defaults to `self.size`):
@@ -408,9 +411,12 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
         image_std = image_std if image_std is not None else self.image_std
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
 
-        images = make_batched_videos(images) if is_video else make_batched_images(images)
+        if images is not None:
+            images = make_batched_images(images)
+        if videos is not None:
+            videos = make_batched_videos(videos)
 
-        if not is_video and not valid_images(images):
+        if images is not None and not valid_images(images):
             raise ValueError(
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
@@ -426,29 +432,48 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
             resample=resample,
         )
 
-        pixel_values, vision_grid_thws = [], []
-        for image in images:
-            patches, image_grid_thw = self._preprocess(
-                image,
-                do_resize=do_resize,
-                resample=resample,
-                do_rescale=do_rescale,
-                rescale_factor=rescale_factor,
-                do_normalize=do_normalize,
-                image_mean=image_mean,
-                image_std=image_std,
-                data_format=data_format,
-                do_convert_rgb=do_convert_rgb,
-                input_data_format=input_data_format,
-            )
-            pixel_values.extend(patches)
-            vision_grid_thws.append(image_grid_thw)
-        pixel_values = np.array(pixel_values)
-        vision_grid_thws = np.array(vision_grid_thws)
-
-        if is_video:
-            data = {"pixel_values_videos": pixel_values, "video_grid_thw": vision_grid_thws}
-        else:
+        if images is not None:
+            pixel_values, vision_grid_thws = [], []
+            for image in images:
+                patches, image_grid_thw = self._preprocess(
+                    image,
+                    do_resize=do_resize,
+                    resample=resample,
+                    do_rescale=do_rescale,
+                    rescale_factor=rescale_factor,
+                    do_normalize=do_normalize,
+                    image_mean=image_mean,
+                    image_std=image_std,
+                    data_format=data_format,
+                    do_convert_rgb=do_convert_rgb,
+                    input_data_format=input_data_format,
+                )
+                pixel_values.extend(patches)
+                vision_grid_thws.append(image_grid_thw)
+            pixel_values = np.array(pixel_values)
+            vision_grid_thws = np.array(vision_grid_thws)
             data = {"pixel_values": pixel_values, "image_grid_thw": vision_grid_thws}
+
+        if videos is not None:
+            pixel_values, vision_grid_thws = [], []
+            for video in videos:
+                patches, video_grid_thw = self._preprocess(
+                    video,
+                    do_resize=do_resize,
+                    resample=resample,
+                    do_rescale=do_rescale,
+                    rescale_factor=rescale_factor,
+                    do_normalize=do_normalize,
+                    image_mean=image_mean,
+                    image_std=image_std,
+                    data_format=data_format,
+                    do_convert_rgb=do_convert_rgb,
+                    input_data_format=input_data_format,
+                )
+                pixel_values.extend(patches)
+                vision_grid_thws.append(video_grid_thw)
+            pixel_values = np.array(pixel_values)
+            vision_grid_thws = np.array(vision_grid_thws)
+            data = {"pixel_values_videos": pixel_values, "video_grid_thw": vision_grid_thws}
 
         return BatchFeature(data=data, tensor_type=return_tensors)

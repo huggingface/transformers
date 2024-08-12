@@ -118,14 +118,14 @@ class Qwen2VLProcessor(ProcessorMixin):
             - **video_grid_thw** -- List of video 3D grid in LLM. Returned when `videos` is not `None`.
         """
         if images is not None:
-            image_inputs = self.image_processor(images, return_tensors=return_tensors)
+            image_inputs = self.image_processor(images=images, videos=None, return_tensors=return_tensors)
             image_grid_thw = image_inputs["image_grid_thw"]
         else:
             image_inputs = {}
             image_grid_thw = None
 
         if videos is not None:
-            videos_inputs = self.image_processor(videos, is_video=True, return_tensors=return_tensors)
+            videos_inputs = self.image_processor(images=None, videos=videos, return_tensors=return_tensors)
             video_grid_thw = videos_inputs["video_grid_thw"]
         else:
             videos_inputs = {}
