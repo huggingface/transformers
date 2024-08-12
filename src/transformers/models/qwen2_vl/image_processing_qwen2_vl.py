@@ -76,7 +76,7 @@ def make_batched_images(images) -> List[List[ImageInput]]:
     elif is_valid_image(images):
         return [images]
 
-    raise ValueError(f"Could not make batched video from {images}")
+    raise ValueError(f"Could not make batched images from {images}")
 
 
 def make_batched_videos(videos) -> List[VideoInput]:
