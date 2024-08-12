@@ -825,83 +825,6 @@ class Kosmos2_5VisionEncoder(nn.Module):
         )
 
 
-# Pix2StructVisionModel -> Kosmos2_5VisionModel
-class Kosmos2_5VisionModel(PreTrainedModel):
-    _no_split_modules = ["Kosmos2_5VisionEmbeddings", "Kosmos2_5VisionLayer", "Kosmos2_5LayerNorm"]
-    _supports_flash_attn_2 = True
-    _supports_sdpa = True
-
-    def __init__(self, config: Kosmos2_5VisionConfig):
-        super().__init__(config)
-        self.config = config
-        self.embeddings = Kosmos2_5VisionEmbeddings(config)
-        self.encoder = Kosmos2_5VisionEncoder(config)
-        self.layernorm = Kosmos2_5LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-
-    def get_input_embeddings(self):
-        return self.embeddings.patch_projection
-
-    def _prune_heads(self, heads_to_prune: Dict[int, List[int]]) -> None:
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
-
-    def forward(
-        self,
-        flattened_patches: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        if flattened_patches is None:
-            raise ValueError("You have to specify flattened_patches")
-
-        if attention_mask is None:
-            # check where `flattened_patches` is not 0
-            attention_mask = (flattened_patches.sum(dim=-1) != 0).float()
-
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
-
-        embedding_output = self.embeddings(flattened_patches)
-
-        encoder_outputs = self.encoder(
-            embedding_output,
-            attention_mask=attention_mask,
-            head_mask=head_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-        sequence_output = encoder_outputs[0]
-        sequence_output = self.layernorm(sequence_output)
-
-        if not return_dict:
-            head_outputs = (sequence_output,)
-            return head_outputs + encoder_outputs[1:]
-
-        return BaseModelOutput(
-            last_hidden_state=sequence_output,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
-        )
-
-
 # Copied from transformers.models.kosmos2.modeling_kosmos2.Kosmos2TextSinusoidalPositionalEmbedding with Kosmos2->Kosmos2_5
 class Kosmos2_5TextSinusoidalPositionalEmbedding(nn.Module):
     """This module produces sinusoidal positional embeddings of any length."""
@@ -1752,7 +1675,7 @@ class Kosmos2_5PreTrainedModel(PreTrainedModel):
 
     config_class = Kosmos2_5Config
     supports_gradient_checkpointing = True
-    _no_split_modules = ["Kosmos2_5VisionEncoder", "Kosmos2_5TextBlock"]
+    _no_split_modules = ["Kosmos2_5VisionLayer", "Kosmos2_5TextBlock"]
     _supports_flash_attn_2 = True
     _supports_sdpa = True
 
@@ -1838,6 +1761,81 @@ class Kosmos2_5PreTrainedModel(PreTrainedModel):
             if module.embed_tokens.padding_idx is not None:
                 module.embed_tokens.weight.data[module.embed_tokens.padding_idx].zero_()
             module.segment_emb.weight.data.normal_(std=std)
+
+
+# Pix2StructVisionModel -> Kosmos2_5VisionModel
+class Kosmos2_5VisionModel(Kosmos2_5PreTrainedModel):
+    config_class = Kosmos2_5VisionConfig
+
+    def __init__(self, config: Kosmos2_5VisionConfig):
+        super().__init__(config)
+        self.config = config
+        self.embeddings = Kosmos2_5VisionEmbeddings(config)
+        self.encoder = Kosmos2_5VisionEncoder(config)
+        self.layernorm = Kosmos2_5LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+
+    def get_input_embeddings(self):
+        return self.embeddings.patch_projection
+
+    def _prune_heads(self, heads_to_prune: Dict[int, List[int]]) -> None:
+        """
+        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
+        class PreTrainedModel
+        """
+        for layer, heads in heads_to_prune.items():
+            self.encoder.layer[layer].attention.prune_heads(heads)
+
+    def forward(
+        self,
+        flattened_patches: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if flattened_patches is None:
+            raise ValueError("You have to specify flattened_patches")
+
+        if attention_mask is None:
+            # check where `flattened_patches` is not 0
+            attention_mask = (flattened_patches.sum(dim=-1) != 0).float()
+
+        # Prepare head mask if needed
+        # 1.0 in head_mask indicate we keep the head
+        # attention_probs has shape bsz x n_heads x N x N
+        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
+        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
+        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
+
+        embedding_output = self.embeddings(flattened_patches)
+
+        encoder_outputs = self.encoder(
+            embedding_output,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        sequence_output = encoder_outputs[0]
+        sequence_output = self.layernorm(sequence_output)
+
+        if not return_dict:
+            head_outputs = (sequence_output,)
+            return head_outputs + encoder_outputs[1:]
+
+        return BaseModelOutput(
+            last_hidden_state=sequence_output,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
+        )
 
 
 class Kosmos2_5TextModel(Kosmos2_5PreTrainedModel):
