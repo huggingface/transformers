@@ -28,6 +28,7 @@ from ...image_utils import (
     PILImageResampling,
     get_image_size,
     infer_channel_dimension_format,
+    is_pil_image,
     is_scaled_image,
     is_valid_image,
     to_numpy_array,
@@ -60,10 +61,6 @@ def _resize_output_size_rescale_to_max_len(
             Minimum size of the output image.
         max_len (`int`, *optional*, defaults to the maximum size of the image):
             Maximum size of the output image.
-        size (`Dict[str, int]`):
-            Size of the output image containing the keys "shortest_edge" and "longest_edge".
-        input_data_format (`ChannelDimension` or `str`):
-            The channel dimension format of the input image.
 
     Returns:
         The output size of the image after resizing.
@@ -101,10 +98,6 @@ def _resize_output_size_scale_below_upper_bound(
             Width of the input image.
         max_len (`Dict[str, int]`, *optional*, defaults to the maximum size of the image):
             Defines the maximum dimensions of the image.
-        size (`Dict[str, int]`):
-            Size of the output image containing the keys "shortest_edge" and "longest_edge".
-        input_data_format (`ChannelDimension` or `str`):
-            The channel dimension format of the input image.
 
     Returns:
         The output size of the image after resizing.
@@ -494,8 +487,8 @@ class Idefics3ImageProcessor(BaseImageProcessor):
         data_format: Optional[Union[str, ChannelDimension]] = None,
     ):
         """
-        Split an image into 4 equal sub-images, and the concatenate that sequence with the original image.
-        That means that a single image becomes a sequence of 5 images.
+        Split an image into squares of side max_image_size and the original image resized to max_image_size.
+        That means that a single image becomes a sequence of images.
         This is a "trick" to spend more compute on each image with no changes in the vision encoder.
 
         Args:
@@ -536,6 +529,7 @@ class Idefics3ImageProcessor(BaseImageProcessor):
         )
         return padded_image
 
+    # Copied from transformers.models.idefics2.image_processing_idefics2.pad
     def pad(
         self,
         images: List[np.ndarray],
@@ -714,6 +708,17 @@ class Idefics3ImageProcessor(BaseImageProcessor):
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
 
+        for img in images_list[0]:
+            if not is_pil_image(img):
+                logger.warning_once(
+                    "Idefics3's image processing pipeline is optimized to process PIL images, but you passed a different type of image. "
+                    "This might lead to inconsistent results"
+                )
+            if input_data_format is None:
+                # We assume that all images have the same channel dimension format.
+                input_data_format = infer_channel_dimension_format(images_list[0][0])
+
+
         validate_preprocess_arguments(
             do_rescale=do_rescale,
             rescale_factor=rescale_factor,
@@ -758,7 +763,7 @@ class Idefics3ImageProcessor(BaseImageProcessor):
                     width = int(height * aspect_ratio)
                     width = math.ceil(width / self.vision_encoder_max_size) * self.vision_encoder_max_size
                 new_size = {"height": height, "width": width}
-                new_images.append(self.resize(img, size=new_size, resample=resample))
+                new_images.append(self.resize(img, size=new_size, resample=resample, input_data_format=input_data_format))
             new_images_list.append(new_images)
         images_list = new_images_list
         del new_images_list

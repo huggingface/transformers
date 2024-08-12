@@ -139,7 +139,8 @@ class Idefics3Config(PretrainedConfig):
 
     Args:
         use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should cache the key/value pairs of the attention mechanism.
+            Whether or not the model should cache the key/value pairs of the attention mechanism. Only
+            relevant if `config.is_decoder=True`.
         image_token_id (`int`, *optional*, defaults to 128257):
             The id of the "image" token.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):

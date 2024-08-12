@@ -126,6 +126,7 @@ class Idefics3CausalLMOutputWithPast(ModelOutput):
     image_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
+# Copied from transformers.models.idefics2.modeling_idefics2.Idefics2VisionEmbeddings
 class Idefics3VisionEmbeddings(nn.Module):
     """
     This is a modified version of `siglip.modelign_siglip.SiglipVisionEmbeddings` to enable images of variable
