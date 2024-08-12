@@ -1509,12 +1509,12 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.model.embed_tokens(input_ids)
-            if pixel_values is not None and input_ids.shape[1] != 1 and pixel_values.size(0) > 0:
+            if pixel_values is not None:
                 pixel_values = pixel_values.type(self.visual.get_dtype())
                 image_embeds = self.visual(pixel_values, grid_thw=image_grid_thw).to(inputs_embeds.device)
                 image_mask = input_ids == self.config.image_token_id
                 inputs_embeds[image_mask] = image_embeds
-            if pixel_values_videos is not None and input_ids.shape[1] != 1 and pixel_values_videos.size(0) > 0:
+            if pixel_values_videos is not None:
                 pixel_values_videos = pixel_values_videos.type(self.visual.get_dtype())
                 video_embeds = self.visual(pixel_values_videos, grid_thw=video_grid_thw).to(inputs_embeds.device)
                 video_mask = input_ids == self.config.video_token_id
@@ -1607,6 +1607,10 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel):
                     .unsqueeze(0)
                     .expand(3, -1, -1)
                 )
+
+        if cache_position[0] != 0:
+            pixel_values = None
+            pixel_values_videos = None
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and cache_position[0] == 0:
