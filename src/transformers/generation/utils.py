@@ -2968,6 +2968,7 @@ class GenerationMixin:
         unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
         model_kwargs = self._get_initial_cache_position(input_ids, model_kwargs)
 
+        finish_position = None # the position where the sequence is finished (for multi-gpu)
         while self._has_unfinished_sequences(
             this_peer_finished, synced_gpus, device=input_ids.device, cur_len=cur_len, max_length=max_length
         ):
@@ -2982,7 +2983,7 @@ class GenerationMixin:
             outputs = self(**model_inputs, return_dict=True)
 
             if synced_gpus and this_peer_finished:
-                continue  # don't waste resources running the code we don't need
+                finish_position = finish_position or input_ids.shape[-1]
 
             # Clone is needed to avoid keeping a hanging ref to outputs.logits which may be very large for first iteration
             # (the clone itself is always small)
@@ -3045,6 +3046,9 @@ class GenerationMixin:
 
         if streamer is not None:
             streamer.end()
+
+        if finish_position is not None:
+            input_ids = input_ids[:, : finish_position]
 
         if return_dict_in_generate:
             if self.config.is_encoder_decoder:
