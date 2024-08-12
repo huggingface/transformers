@@ -420,7 +420,7 @@ def is_mambapy_available():
     return False
 
 
-def is_torch_mps_available(min_version=None):
+def is_torch_mps_available(min_version: Optional[str] = None):
     if is_torch_available():
         import torch
 
