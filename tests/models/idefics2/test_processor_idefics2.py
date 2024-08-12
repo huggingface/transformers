@@ -383,7 +383,6 @@ class Idefics2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
 
         self.assertEqual(inputs["pixel_values"].shape[3], 214)
-
         self.assertEqual(len(inputs["input_ids"][0]), 21)
 
     @require_torch
@@ -410,9 +409,7 @@ class Idefics2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         inputs = processor(text=input_str, images=image_input, **all_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
-
         self.assertEqual(inputs["pixel_values"].shape[3], 214)
-
         self.assertEqual(len(inputs["input_ids"][0]), 76)
 
     @require_torch
@@ -439,5 +436,4 @@ class Idefics2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         inputs = processor(text=input_str, images=image_input, **all_kwargs)
         self.assertEqual(inputs["pixel_values"].shape[3], 214)
-
         self.assertEqual(len(inputs["input_ids"][0]), 76)

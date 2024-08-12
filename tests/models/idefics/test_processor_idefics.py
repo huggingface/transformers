@@ -235,7 +235,6 @@ class IdeficsProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(len(inputs["input_ids"][0]), 117)
 
     def test_image_processor_defaults_preserved_by_image_kwargs(self):
-        self.skipTest(reason="IdeficsImageProcessor kwargs are different from usual image processors")
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor", image_size=234)
@@ -269,7 +268,6 @@ class IdeficsProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(len(inputs["input_ids"][0]), 112)
 
     def test_kwargs_overrides_default_image_processor_kwargs(self):
-        self.skipTest(reason="IdeficsImageProcessor kwargs are different from usual image processors")
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor", image_size=234)
@@ -301,10 +299,12 @@ class IdeficsProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             text=input_str,
             images=image_input,
             return_tensors="pt",
+            image_size=214,
             padding="max_length",
             max_length=76,
         )
 
+        self.assertEqual(inputs["pixel_values"].shape[3], 214)
         self.assertEqual(len(inputs["input_ids"][0]), 76)
 
     @require_torch
@@ -324,10 +324,12 @@ class IdeficsProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             text=input_str,
             images=image_input,
             return_tensors="pt",
+            image_size=214,
             padding="longest",
             max_length=76,
         )
 
+        self.assertEqual(inputs["pixel_values"].shape[3], 214)
         self.assertEqual(len(inputs["input_ids"][0]), 8)
 
     @require_torch
@@ -347,12 +349,13 @@ class IdeficsProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # Define the kwargs for each modality
         all_kwargs = {
             "common_kwargs": {"return_tensors": "pt"},
+            "images_kwargs": {"image_size": 214},
             "text_kwargs": {"padding": "max_length", "max_length": 76},
         }
 
         inputs = processor(text=input_str, images=image_input, **all_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
-
+        self.assertEqual(inputs["pixel_values"].shape[3], 214)
         self.assertEqual(len(inputs["input_ids"][0]), 76)
 
     @require_torch
@@ -372,9 +375,10 @@ class IdeficsProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # Define the kwargs for each modality
         all_kwargs = {
             "common_kwargs": {"return_tensors": "pt"},
+            "images_kwargs": {"image_size": 214},
             "text_kwargs": {"padding": "max_length", "max_length": 76},
         }
 
         inputs = processor(text=input_str, images=image_input, **all_kwargs)
-
+        self.assertEqual(inputs["pixel_values"].shape[3], 214)
         self.assertEqual(len(inputs["input_ids"][0]), 76)

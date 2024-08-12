@@ -18,7 +18,7 @@ Processor class for IDEFICS.
 
 import sys
 import warnings
-from typing import Callable, List, Optional, Union
+from typing import Callable, Dict, List, Optional, Union
 from urllib.parse import urlparse
 
 from ...feature_extraction_utils import BatchFeature
@@ -44,6 +44,9 @@ IMAGE_TOKEN = "<image>"
 
 class IdeficsImagesKwargs(ImagesKwargs, total=False):
     transform: Optional[Callable]
+    image_size: Optional[Dict[str, int]]
+    image_mean: Optional[Union[float, List[float]]]
+    image_std: Optional[Union[float, List[float]]]
 
 
 class IdeficsTextKwargs(TextKwargs, total=False):
@@ -61,6 +64,7 @@ class IdeficsProcessorKwargs(ProcessingKwargs, total=False):
             "add_eos_token": False,
         },
         "images_kwargs": {},
+        "common_kwargs": {"return_tensors": "pt"},
     }
 
 
