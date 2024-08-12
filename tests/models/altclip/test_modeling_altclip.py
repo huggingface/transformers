@@ -614,12 +614,17 @@ class AltCLIPModelIntegrationTest(unittest.TestCase):
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
         inputs = image_processor(text="what's in the image", images=image, return_tensors="pt").to(torch_device)
 
+        # interpolate_pos_encodiung false should return value error
+        with self.assertRaises(ValueError, msg="doesn't match model"):
+            with torch.no_grad():
+                model(**inputs, interpolate_pos_encoding=False)
+
         # forward pass
         with torch.no_grad():
             outputs = model(**inputs, interpolate_pos_encoding=True)
 
         # verify the logits
-        expected_shape = torch.Size((1, 257, 1024))
+        expected_shape = torch.Size((1, 145, 1024))
         print("nilesh ")
         print(outputs.vision_model_output.last_hidden_state.shape)
         print(outputs.vision_model_output.last_hidden_state[0, :3, :3])
