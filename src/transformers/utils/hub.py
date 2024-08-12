@@ -660,7 +660,14 @@ def has_file(
             proxies=proxies,
             timeout=10,
         )
-    except (OfflineModeIsEnabled, requests.exceptions.ConnectionError):
+    except (requests.exceptions.SSLError, requests.exceptions.ProxyError):
+        # Actually raise for those subclasses of ConnectionError
+        raise
+    except (
+        requests.exceptions.ConnectionError,
+        requests.exceptions.Timeout,
+        OfflineModeIsEnabled,
+    ):
         return has_file_in_cache
 
     try:
@@ -686,16 +693,7 @@ def has_file(
         ) from e
     except EntryNotFoundError:
         return False  # File does not exist
-    except (requests.exceptions.SSLError, requests.exceptions.ProxyError) as e:
-        logger.error(e)
-        # Actually raise for those subclasses of ConnectionError
-        raise e
-    except (
-        requests.HTTPError,
-        requests.exceptions.ConnectionError,
-        requests.exceptions.Timeout,
-        OfflineModeIsEnabled,
-    ):
+    except requests.HTTPError:
         # Any authentication/authorization error will be caught here => default to cache
         return has_file_in_cache
 
