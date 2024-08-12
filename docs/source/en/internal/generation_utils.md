@@ -421,4 +421,3 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
 
 [[autodoc]] WatermarkDetector
     - __call__
-
