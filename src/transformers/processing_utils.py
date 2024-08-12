@@ -544,6 +544,7 @@ class ProcessorMixin(PushToHubMixin):
                 token=kwargs.get("token"),
             )
 
+        # Checking `processor_dict` instead of self.to_dict() as `chat_template` is not removed from self.to_dict()
         if set(processor_dict.keys()) == {"processor_class"}:
             return []
         return [output_processor_file]

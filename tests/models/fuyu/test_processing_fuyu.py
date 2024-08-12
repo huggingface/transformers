@@ -13,11 +13,13 @@ from ...test_processing_common import ProcessorTesterMixin
 if is_vision_available():
     from PIL import Image
 
+if is_vision_available() and is_torch_available():
     from transformers import AutoProcessor, FuyuImageProcessor, FuyuProcessor
-    from transformers.models.fuyu.processing_fuyu import construct_full_unpacked_stream, full_unpacked_stream_to_tensor
 
 if is_torch_available():
     import torch
+
+    from transformers.models.fuyu.processing_fuyu import construct_full_unpacked_stream, full_unpacked_stream_to_tensor
 
 
 @require_torch
@@ -175,6 +177,7 @@ class FuyuProcessingTest(ProcessorTesterMixin, unittest.TestCase):
     @require_vision
     @require_torch
     def test_kwargs_overrides_default_tokenizer_kwargs(self):
+        # rewrite as Fuyu supports tokenizer kwargs only when image is None.
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor")
@@ -221,6 +224,7 @@ class FuyuProcessingTest(ProcessorTesterMixin, unittest.TestCase):
     @require_torch
     @require_vision
     def test_structured_kwargs_nested(self):
+        # rewrite as Fuyu image processor does not return pixel values
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor")
@@ -249,6 +253,7 @@ class FuyuProcessingTest(ProcessorTesterMixin, unittest.TestCase):
     @require_torch
     @require_vision
     def test_structured_kwargs_nested_from_dict(self):
+        # rewrite as Fuyu image processor does not return pixel values
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
 
@@ -276,6 +281,7 @@ class FuyuProcessingTest(ProcessorTesterMixin, unittest.TestCase):
     @require_torch
     @require_vision
     def test_unstructured_kwargs(self):
+        # rewrite as Fuyu supports tokenizer kwargs only when image is None.
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor")
@@ -302,6 +308,7 @@ class FuyuProcessingTest(ProcessorTesterMixin, unittest.TestCase):
     @require_torch
     @require_vision
     def test_unstructured_kwargs_batched(self):
+        # rewrite as Fuyu supports tokenizer kwargs only when image is None.
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor")

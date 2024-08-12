@@ -545,7 +545,8 @@ class FuyuProcessor(ProcessorMixin):
         # --- Preprocess images using self.image_processor ---
 
         # FIXME - We hard code "pt" here because the rest of the processing assumes torch tensors
-        image_encoding = self.image_processor.preprocess(images, return_tensors="pt")
+        output_kwargs["images_kwargs"]["return_tensors"] = "pt"
+        image_encoding = self.image_processor.preprocess(images, **output_kwargs["images_kwargs"])
         batch_images = image_encoding["images"]
         image_unpadded_heights = image_encoding["image_unpadded_heights"]
         image_unpadded_widths = image_encoding["image_unpadded_widths"]
