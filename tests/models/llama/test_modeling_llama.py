@@ -317,6 +317,9 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     # used in `test_torch_compile`
     _torch_compile_test_ckpt = "meta-llama/Llama-2-7b-hf"
 
+    # used in `test_torch_compile_for_training`
+    _torch_compile_train_cls = LlamaForCausalLM
+
     def setUp(self):
         self.model_tester = LlamaModelTester(self)
         self.config_tester = ConfigTester(self, config_class=LlamaConfig, hidden_size=37)
