@@ -54,7 +54,7 @@ class Qwen2VLProcessor(ProcessorMixin):
     image_processor_class = "Qwen2VLImageProcessor"
     tokenizer_class = ("Qwen2Tokenizer", "Qwen2TokenizerFast")
 
-    def __init__(self, image_processor=None, tokenizer=None, chat_template=None):
+    def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     def __call__(
