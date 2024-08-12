@@ -572,7 +572,6 @@ FALCONMAMBA_INPUTS_DOCSTRING = r"""
     "The bare FALCONMAMBA Model transformer outputting raw hidden-states without any specific head on top.",
     FALCONMAMBA_START_DOCSTRING,
 )
-# Copied from transformers.models.mamba.modeling_mamba.MambaModel with MAMBA->FALCONMAMBA,Mamba->FalconMamba
 class FalconMambaModel(FalconMambaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -587,7 +586,6 @@ class FalconMambaModel(FalconMambaPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-
     def get_input_embeddings(self):
         return self.embeddings
 
@@ -600,7 +598,6 @@ class FalconMambaModel(FalconMambaPreTrainedModel):
         output_type=FalconMambaOutput,
         config_class=_CONFIG_FOR_DOC,
     )
-    # Ignore copy
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,

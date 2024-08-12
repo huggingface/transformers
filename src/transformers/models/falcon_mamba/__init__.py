@@ -39,7 +39,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_falcon_mamba import FalconMambaConfig, FalconMambaOnnxConfig
+    from .configuration_falcon_mamba import FalconMambaConfig
 
     try:
         if not is_torch_available():
