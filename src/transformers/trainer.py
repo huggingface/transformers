@@ -436,8 +436,13 @@ class Trainer:
         # Will reach this branch if the user has
         # 1. Used `.from_pretrained` or `.from_config` to initialize their model
         # 2. Did not configure Zero-3 via `TrainingArguments` or `accelerate launch` beforehand
+        # 3. Also not using quantization
         # New models init such as `MyModel()` will not hit this step
-        if is_deepspeed_zero3_enabled() and not getattr(model, "_transformers_zero3_init_used", True):
+        if (
+            not (hasattr(model, "hf_quantizer") and model.hf_quantizer.is_trainable)
+            and is_deepspeed_zero3_enabled()
+            and not getattr(model, "_transformers_zero3_init_used", True)
+        ):
             raise ValueError(
                 "Model was not initialized with `Zero-3` despite being configured for DeepSpeed Zero-3. Please re-initialize your model via `Model.from_pretrained(...)` or `Model.from_config(...)` after creating your `TrainingArguments`!"
             )

@@ -42,9 +42,11 @@ from transformers.testing_utils import (
     backend_device_count,
     execute_subprocess_async,
     mockenv_context,
+    require_bitsandbytes,
     require_deepspeed,
     require_optuna,
     require_torch_accelerator,
+    require_torch_gpu,
     require_torch_multi_accelerator,
     slow,
     torch_device,
@@ -733,6 +735,25 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
             )
             assert trainer.is_deepspeed_enabled
             assert model._transformers_zero3_init_used
+
+    @require_torch_gpu
+    @require_bitsandbytes
+    def test_missed_zero3_init_quantized(self):
+        from transformers import Trainer  # noqa
+
+        with mockenv_context(**self.dist_env_1_gpu):
+            model = AutoModel.from_pretrained(T5_TINY, load_in_4bit=True)
+            training_args = TrainingArguments(
+                output_dir="./test_missed_zero3_init",
+                deepspeed=self.get_config_dict(ZERO3),
+            )
+            # with self.assertRaises(
+            #     ValueError, msg="Model was not initialized with `Zero-3` despite being configured."
+            # ):
+            _ = Trainer(
+                model=model,
+                args=training_args,
+            )
 
     def check_saved_checkpoints_deepspeed(self, output_dir, freq, total, stage, dtype):
         # adapted from TrainerIntegrationCommon.check_saved_checkpoints
