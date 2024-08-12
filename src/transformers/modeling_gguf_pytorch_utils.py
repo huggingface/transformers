@@ -24,7 +24,6 @@ from .integrations import (
     GGUF_TENSOR_MAPPING,
     GGUF_TOKENIZER_MAPPING,
     _gguf_parse_value,
-    load_dequant_gguf_tensor,
 )
 from .utils import is_torch_available
 from .utils.logging import get_logger
@@ -72,7 +71,7 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
             and only loads the metadata in memory.
     """
     try:
-        from gguf import GGUFReader
+        from gguf import GGUFReader, dequantize
     except (ImportError, ModuleNotFoundError):
         logger.error(
             "Loading a GGUF checkpoint in PyTorch, requires both PyTorch and GGUF to be installed. Please see "
@@ -142,12 +141,9 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
                         tensor_name_mapping, GGUF_TO_TRANSFORMERS_MAPPING["tensors"][tensor_name_mapping]
                     )
 
-            shape = tensor.shape
             name = tensor.name
 
-            weights = load_dequant_gguf_tensor(
-                shape=shape, ggml_type=tensor.tensor_type, data=tensor.data, n_bytes=int(tensor.n_bytes)
-            )
+            weights = dequantize(tensor.data, tensor.tensor_type)
 
             if architecture == "llama" and (".attn_k." in name or ".attn_q." in name):
                 num_heads = parsed_parameters["config"]["num_attention_heads"]
