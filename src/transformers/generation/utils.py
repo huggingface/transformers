@@ -2408,7 +2408,7 @@ class GenerationMixin:
         if lm_head is None:
             raise ValueError("DoLa is not supported for models that don't have output embeddings.")
 
-        finish_position = None # the position where the sequence is finished (for multi-gpu)
+        finish_position = None  # the position where the sequence is finished (for multi-gpu)
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             # prepare model inputs
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
@@ -2487,7 +2487,7 @@ class GenerationMixin:
             streamer.end()
 
         if finish_position is not None:
-            input_ids = input_ids[:, : finish_position]
+            input_ids = input_ids[:, :finish_position]
 
         if return_dict_in_generate:
             return GenerateDecoderOnlyOutput(
@@ -2575,7 +2575,7 @@ class GenerationMixin:
         model_kwargs = self._get_initial_cache_position(input_ids, model_kwargs)
 
         this_peer_finished = False
-        finish_position = None # the position where the sequence is finished (for multi-gpu)
+        finish_position = None  # the position where the sequence is finished (for multi-gpu)
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             # if the first step in the loop, encode all the prefix and obtain: (1) past_key_values;
             # (2) last_hidden_states; (3) logit_for_next_step; (4) update model kwargs for the next step
@@ -2848,7 +2848,7 @@ class GenerationMixin:
             streamer.end()
 
         if finish_position is not None:
-            input_ids = input_ids[:, : finish_position]
+            input_ids = input_ids[:, :finish_position]
 
         if return_dict_in_generate:
             # Contrastive search works by forward looking at the next token, so we need to exclude it from
@@ -2975,7 +2975,7 @@ class GenerationMixin:
         unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
         model_kwargs = self._get_initial_cache_position(input_ids, model_kwargs)
 
-        finish_position = None # the position where the sequence is finished (for multi-gpu)
+        finish_position = None  # the position where the sequence is finished (for multi-gpu)
         while self._has_unfinished_sequences(
             this_peer_finished, synced_gpus, device=input_ids.device, cur_len=cur_len, max_length=max_length
         ):
@@ -3055,7 +3055,7 @@ class GenerationMixin:
             streamer.end()
 
         if finish_position is not None:
-            input_ids = input_ids[:, : finish_position]
+            input_ids = input_ids[:, :finish_position]
 
         if return_dict_in_generate:
             if self.config.is_encoder_decoder:
@@ -3208,7 +3208,7 @@ class GenerationMixin:
         this_peer_finished = False
 
         decoder_prompt_len = input_ids.shape[-1]  # record the prompt length of decoder
-        finish_position = None # the position where the sequence is finished (for multi-gpu)
+        finish_position = None  # the position where the sequence is finished (for multi-gpu)
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
@@ -3363,7 +3363,7 @@ class GenerationMixin:
         )
 
         if finish_position is not None:
-            input_ids = input_ids[:, : finish_position]
+            input_ids = input_ids[:, :finish_position]
 
         if return_dict_in_generate:
             if not output_scores:
@@ -3489,7 +3489,7 @@ class GenerationMixin:
         this_peer_finished = False
 
         decoder_prompt_len = input_ids.shape[-1]  # record the prompt length of decoder
-        finish_position = None # the position where the sequence is finished (for multi-gpu)
+        finish_position = None  # the position where the sequence is finished (for multi-gpu)
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             # predicted tokens in cur_len step
             current_tokens = torch.zeros(batch_size * num_beams, dtype=input_ids.dtype, device=device)
@@ -3653,8 +3653,8 @@ class GenerationMixin:
         )
 
         if finish_position is not None:
-            input_ids = input_ids[:, : finish_position]
-        
+            input_ids = input_ids[:, :finish_position]
+
         if return_dict_in_generate:
             if not output_scores:
                 sequence_outputs["sequence_scores"] = None
@@ -3779,7 +3779,7 @@ class GenerationMixin:
         this_peer_finished = False
 
         decoder_prompt_len = input_ids.shape[-1]  # record the prompt length of decoder
-        finish_position = None # the position where the sequence is finished (for multi-gpu)
+        finish_position = None  # the position where the sequence is finished (for multi-gpu)
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
@@ -3896,7 +3896,7 @@ class GenerationMixin:
         )
 
         if finish_position is not None:
-            input_ids = input_ids[:, : finish_position]
+            input_ids = input_ids[:, :finish_position]
 
         if return_dict_in_generate:
             if not output_scores:
@@ -4019,7 +4019,7 @@ class GenerationMixin:
                 start_from_empty_dynamic_cache = True
 
         this_peer_finished = False
-        finish_position = None # the position where the sequence is finished (for multi-gpu)
+        finish_position = None  # the position where the sequence is finished (for multi-gpu)
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             cur_len = input_ids.shape[-1]
 
@@ -4187,9 +4187,9 @@ class GenerationMixin:
             candidate_generator.assistant_model.generation_config.num_assistant_tokens = (
                 candidate_generator.num_assistant_tokens
             )
-        
+
         if finish_position is not None:
-            input_ids = input_ids[:, : finish_position]
+            input_ids = input_ids[:, :finish_position]
 
         if return_dict_in_generate:
             if self.config.is_encoder_decoder:
