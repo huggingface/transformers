@@ -95,8 +95,12 @@ class Qwen2AudioProcessor(ProcessorMixin):
 
         if audios is not None:
             audio_inputs = self.feature_extractor(
-                audios, sampling_rate=sampling_rate, return_attention_mask=True, padding="max_length",
-                device=device, **kwargs
+                audios,
+                sampling_rate=sampling_rate,
+                return_attention_mask=True,
+                padding="max_length",
+                device=device,
+                **kwargs,
             )
             audio_inputs["feature_attention_mask"] = audio_inputs.pop(
                 "attention_mask"
