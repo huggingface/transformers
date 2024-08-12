@@ -21,7 +21,6 @@
 
 import math
 from dataclasses import dataclass
-from functools import partial
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
