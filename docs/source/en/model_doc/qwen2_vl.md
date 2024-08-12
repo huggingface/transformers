@@ -87,7 +87,6 @@ print(output_text)
 # Video
 def fetch_video(ele: Dict, nframe_factor=2):
     if isinstance(ele['video'], str):
-        # TODO: support http url
         def round_by_factor(number: int, factor: int) -> int:
             return round(number / factor) * factor
 
@@ -204,7 +203,13 @@ conversation4 = [
 conversations = [conversation1, conversation2, conversation3, conversation4]
 # Preparation for batch inference
 texts = [processor.apply_chat_template(msg, add_generation_prompt=True) for msg in conversations]
-inputs = processor(text=texts, mages=[image1,image2,image3,image4,image5],videos=[video], padding=True, return_tensors="pt")
+inputs = processor(
+    text=texts,
+    images=[image1, image2, image3, image4, image5],
+    videos=[video],
+    padding=True,
+    return_tensors="pt",
+)
 inputs = inputs.to('cuda')
 
 # Batch Inference
@@ -216,7 +221,7 @@ print(output_text)
 
 ### Usage Tips
 
-#### About Image Resolution
+#### Image Resolution for performance boost
 
 The model supports a wide range of resolution inputs. By default, it uses the native resolution for input, but higher resolutions can enhance performance at the cost of more computation. Users can set the minimum and maximum number of pixels to achieve an optimal configuration for their needs.
 
@@ -230,7 +235,7 @@ processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-7B-Instruct", min_pixel
 
 
 
-#### About Multiple Image Inputs
+#### Multiple Image Inputs
 
 By default, images and video content are directly included in the conversation. When handling multiple images, it's helpful to add labels to the images and videos for better reference. Users can control this behavior with the following settings:
 
@@ -281,7 +286,7 @@ prompt_with_id = processor.apply_chat_template(conversation, add_generation_prom
 
 ```
 
-#### We strongly recommend using Flash-Attention 2 to speed up generation
+#### Flash-Attention 2 to speed up generation
 
 First, make sure to install the latest version of Flash Attention 2:
 

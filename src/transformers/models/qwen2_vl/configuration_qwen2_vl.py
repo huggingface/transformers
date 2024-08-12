@@ -34,7 +34,7 @@ class Qwen2VLVisionConfig(PretrainedConfig):
         hidden_size=3584,
         mlp_ratio=4,
         num_heads=16,
-        in_chans=3,
+        in_channels=3,
         patch_size=14,
         spatial_merge_size=2,
         temporal_patch_size=2,
@@ -48,7 +48,7 @@ class Qwen2VLVisionConfig(PretrainedConfig):
         self.hidden_size = hidden_size
         self.mlp_ratio = mlp_ratio
         self.num_heads = num_heads
-        self.in_chans = in_chans
+        self.in_channels = in_channels
         self.patch_size = patch_size
         self.spatial_merge_size = spatial_merge_size
         self.temporal_patch_size = temporal_patch_size

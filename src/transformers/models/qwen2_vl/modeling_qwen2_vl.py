@@ -232,7 +232,7 @@ class PatchEmbed(nn.Module):
         self,
         patch_size: int = 14,
         temporal_patch_size: int = 2,
-        in_chans: int = 3,
+        in_channels: int = 3,
         embed_dim: int = 1152,
     ) -> None:
         super().__init__()
@@ -241,7 +241,7 @@ class PatchEmbed(nn.Module):
         self.embed_dim = embed_dim
 
         kernel_size = [temporal_patch_size, patch_size, patch_size]
-        self.proj = nn.Conv3d(in_chans, embed_dim, kernel_size=kernel_size, stride=kernel_size, bias=False)
+        self.proj = nn.Conv3d(in_channels, embed_dim, kernel_size=kernel_size, stride=kernel_size, bias=False)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         seqlen = x.shape[0]
@@ -355,7 +355,7 @@ class Qwen2VisionTransformer(nn.Module):
         self.patch_embed = PatchEmbed(
             patch_size=config.patch_size,
             temporal_patch_size=config.temporal_patch_size,
-            in_chans=config.in_chans,
+            in_channels=config.in_channels,
             embed_dim=config.embed_dim,
         )
 
