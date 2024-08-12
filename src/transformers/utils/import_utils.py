@@ -87,7 +87,7 @@ FORCE_TF_AVAILABLE = os.environ.get("FORCE_TF_AVAILABLE", "AUTO").upper()
 # This is the version of torch required to run torch.fx features and torch.onnx with dictionary inputs.
 TORCH_FX_REQUIRED_VERSION = version.parse("1.10")
 
-ACCELERATE_MIN_VERSION = "0.21.0"
+ACCELERATE_MIN_VERSION = "0.26.0"
 FSDP_MIN_VERSION = "1.12.0"
 XLA_FSDPV2_MIN_VERSION = "2.2.0"
 
