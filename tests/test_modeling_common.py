@@ -4703,7 +4703,6 @@ class ModelTesterMixin:
         for i in range(n_iter):
             _ = model.generate(**input_ids, do_sample=False)
 
-
     @slow
     @require_torch_gpu
     def test_torch_compile_for_training(self):
@@ -4725,10 +4724,14 @@ class ModelTesterMixin:
         model = cls(config).to(torch_device)
 
         inputs = {
-            "input_ids": torch.randint(low=1, high=model.config.vocab_size, size=(batch_size, seq_len), device=torch_device),
+            "input_ids": torch.randint(
+                low=1, high=model.config.vocab_size, size=(batch_size, seq_len), device=torch_device
+            ),
             "attention_mask": torch.ones((batch_size, seq_len), dtype=torch.int64, device=torch_device),
             "position_ids": torch.arange(0, seq_len, device=torch_device).unsqueeze(0),
-            "labels": torch.randint(low=1, high=model.config.vocab_size, size=(batch_size, seq_len), device=torch_device),
+            "labels": torch.randint(
+                low=1, high=model.config.vocab_size, size=(batch_size, seq_len), device=torch_device
+            ),
         }
 
         # eager backward
@@ -4748,13 +4751,7 @@ class ModelTesterMixin:
         loss.backward()
         # check grad matches
         for name, param in model._orig_mod.named_parameters():
-            torch.testing.assert_close(
-                param.grad.detach().cpu(),
-                params[name],
-                rtol=1e-4,
-                atol=1e-4
-            )
-
+            torch.testing.assert_close(param.grad.detach().cpu(), params[name], rtol=1e-4, atol=1e-4)
 
     @slow
     @require_torch_gpu  # Testing cuda graphs.
