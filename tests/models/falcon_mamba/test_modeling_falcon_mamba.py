@@ -20,7 +20,6 @@ from typing import Dict, List, Tuple
 from unittest.util import safe_repr
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, FalconMambaConfig, is_torch_available
-from transformers.cache_utils import MambaCache
 from transformers.testing_utils import (
     require_bitsandbytes,
     require_torch,
@@ -43,6 +42,7 @@ if is_torch_available():
         FalconMambaForCausalLM,
         FalconMambaModel,
     )
+    from transformers.cache_utils import MambaCache
     from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_0
 else:
     is_torch_greater_or_equal_than_2_0 = False
