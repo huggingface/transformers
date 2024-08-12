@@ -82,6 +82,25 @@ out = model.generate(input_ids, max_new_tokens=10)
 print(tokenizer.batch_decode(out))
 ```
 
+You can also play with the instruction fine-tuned model:
+
+```python 
+from transformers import FalconMambaForCausalLM, AutoTokenizer
+import torch
+
+tokenizer = AutoTokenizer.from_pretrained("tiiuae/falcon-mamba-7b-instruct")
+model = FalconMambaForCausalLM.from_pretrained("tiiuae/falcon-mamba-7b-instruct")
+
+# We use the tokenizer's chat template to format each message - see https://huggingface.co/docs/transformers/main/en/chat_templating
+messages = [
+    {"role": "user", "content": "How many helicopters can a human eat in one sitting?"},
+]
+input_ids = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True).input_ids
+
+outputs = model.generate(input_ids)
+print(tokenizer.decode(outputs[0]))
+```
+
 ## FalconMambaConfig
 
 [[autodoc]] FalconMambaConfig
