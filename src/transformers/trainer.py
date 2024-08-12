@@ -2373,7 +2373,7 @@ class Trainer:
                     break
             if step < 0:
                 logger.warning(
-                    "There seems to be not a single sample in your epoch_iterator, stopping training at step"
+                    "There seems not to be a single sample in your epoch_iterator, stopping training at step"
                     f" {self.state.global_step}! This is expected if you're using an IterableDataset and set"
                     f" num_steps ({max_steps}) higher than the number of available samples."
                 )
