@@ -471,6 +471,10 @@ class GitModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     def test_greedy_generate_dict_outputs_use_cache(self):
         pass
 
+    @unittest.skip(reason="GitForCausalLM does not support inputs_embeds in generate method")
+    def test_inputs_embeds_matches_input_ids_with_generate(self):
+        pass
+
 
 @require_torch
 @require_vision
