@@ -143,6 +143,7 @@ class OmDetTurboProcessor(ProcessorMixin):
             task (`Union[str, List[str], TextInput, PreTokenizedInput]`):
                 The grounded text used to guide open vocabulary detection. Expects a single string or a list of strings.
                 Examples: "Detect a cat, a dog, and a bird.", "Detect everything."
+                When not provided, the default task is "Detect [class1], [class2], [class3]" etc.
         """
         if images is None or text is None:
             raise ValueError("You have to specify `images`, `text`.")
@@ -160,8 +161,7 @@ class OmDetTurboProcessor(ProcessorMixin):
 
         task = output_kwargs["text_kwargs"].pop("task", None)
         if task is None:
-            task = ["Detect {}".format(", ".join(text_single)) for text_single in text]
-
+            task = ["Detect {}.".format(",".join(text_single)) for text_single in text]
         elif not isinstance(task, (list, tuple)):
             task = [task]
 
@@ -276,7 +276,7 @@ class OmDetTurboProcessor(ProcessorMixin):
     def post_process_grounded_object_detection(
         self,
         outputs,
-        classes: List[str],
+        classes: Union[List[str], List[List[str]]],
         score_threshold: float = 0.3,
         nms_threshold: float = 0.5,
         target_sizes: Union[TensorType, List[Tuple]] = None,
@@ -289,7 +289,7 @@ class OmDetTurboProcessor(ProcessorMixin):
         Args:
             outputs ([`OmDetTurboObjectDetectionOutput`]):
                 Raw outputs of the model.
-            classes (list[str]): The input classes names.
+            classes (Union[List[str], List[List[str]]]): The input classes names.
             score_threshold (float): Only return detections with a confidence score exceeding this
                 threshold.
             nms_threshold (float):  The threshold to use for box non-maximum suppression. Value in [0, 1].
@@ -300,6 +300,9 @@ class OmDetTurboProcessor(ProcessorMixin):
             `List[Dict]`: A list of dictionaries, each dictionary containing the scores, classes and boxes for an image
             in the batch as predicted by the model.
         """
+        if isinstance(classes[0], str):
+            classes = [classes]
+
         boxes_logits = outputs.decoder_coord_logits
         scores_logits = outputs.decoder_class_logits
         scores, predicted_classes = compute_score(scores_logits)

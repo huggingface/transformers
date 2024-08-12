@@ -1621,14 +1621,14 @@ class OmDetTurboForObjectDetection(OmDetTurboPreTrainedModel):
         >>> image = Image.open(requests.get(url, stream=True).raw)
         >>> classes = ["cat", "remote"]
         >>> task = "Detect {}.".format(",".join(classes))
-        >>> inputs = processor(image, text=task, classes=classes, return_tensors="pt")
+        >>> inputs = processor(image, text=classes, task=task, return_tensors="pt")
 
         >>> outputs = model(**inputs)
 
         >>> # convert outputs (bounding boxes and class logits)
         >>> results = processor.post_process_grounded_object_detection(
         ...     outputs,
-        ...     classes=[classes],
+        ...     classes=classes,
         ...     target_sizes=[image.size[::-1]],
         ...     score_threshold=0.3,
         ...     nms_threshold=0.3,

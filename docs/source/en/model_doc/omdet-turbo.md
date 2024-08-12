@@ -33,9 +33,9 @@ The original code can be found [here](https://github.com/om-ai-lab/OmDet).
 
 ## Usage tips
 
-One specificity of OmDet-Turbo compared to other zero-shot object detection models, such as [Grounding DINO](grounding-dino), is the decoupled classes and prompt embedding structure that allows caching of text embeddings. This means that the user needs to provide both text and classes as inputs, where text is the grounded text used to guide open-vocabulary detection, and classes is a list of the objects we want to detect. This approach limits the scope of the open-vocabulary detection and makes the decoding process faster.
+One specificity of OmDet-Turbo compared to other zero-shot object detection models, such as [Grounding DINO](grounding-dino), is the decoupled classes and prompt embedding structure that allows caching of text embeddings. This means that the model needs both classes and task as inputs, where classes is a list of objects we want to detect and task is the grounded text used to guide open-vocabulary detection. This approach limits the scope of the open-vocabulary detection and makes the decoding process faster.
 
-[`OmDetTurboProcessor`] is used to prepare the text, classes, and image triplet. To process the results from the model, one can use post_process_grounded_object_detection from [`OmDetTurboProcessor`]. Notably, this function takes in the input classes, as unlike other zero-shot object detection models, the decoupling of classes and prompt embeddings means that no decoding of the predicted class embeddings is needed in the post-processing step, and the predicted classes can be matched to the inputted ones directly.
+[`OmDetTurboProcessor`] is used to prepare the classes, task and image triplet. The task input is optional, and when not provided, it will default to `"Detect [class1], [class2], [class3], ..."` . To process the results from the model, one can use post_process_grounded_object_detection from [`OmDetTurboProcessor`]. Notably, this function takes in the input classes, as unlike other zero-shot object detection models, the decoupling of classes and task embeddings means that no decoding of the predicted class embeddings is needed in the post-processing step, and the predicted classes can be matched to the inputted ones directly.
 
 ## Usage example
 
@@ -55,15 +55,14 @@ model = OmDetTurboForObjectDetection.from_pretrained("omlab/omdet-turbo-tiny")
 url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 image = Image.open(requests.get(url, stream=True).raw)
 classes = ["cat", "remote"]
-task = "Detect {}.".format(",".join(classes))
-inputs = processor(image, text=task, classes=classes, return_tensors="pt")
+inputs = processor(image, text=classes, return_tensors="pt")
 
 outputs = model(**inputs)
 
 # convert outputs (bounding boxes and class logits)
 results = processor.post_process_grounded_object_detection(
     outputs,
-    classes=[classes],
+    classes=classes,
     target_sizes=[image.size[::-1]],
     score_threshold=0.3,
     nms_threshold=0.3,
@@ -100,15 +99,15 @@ image1 = Image.open(BytesIO(requests.get(url).content)).convert("RGB")
 image2 = Image.open(BytesIO(requests.get(url2).content)).convert("RGB")
 image3 = Image.open(BytesIO(requests.get(url3).content)).convert("RGB")
 classes1 = ["cat", "remote"]
-prompt1 = "Detect {}.".format(",".join(classes1))
+task1 = "Detect {}.".format(",".join(classes1))
 classes2 = ["boat"]
-prompt2 = "Detect all the boat in the image."
+task2 = "Detect all the boat in the image."
 classes3 = ["statue", "trees"]
-prompt3 = "Focus on the foreground, detect statue and trees."
+task3 = "Focus on the foreground, detect statue and trees."
 inputs = processor(
     images=[image1, image2, image3],
-    text=[prompt1, prompt2, prompt3],
-    classes=[classes1, classes2, classes3],
+    text=[classes1, classes2, classes3],
+    task=[task1, task2, task3],
     return_tensors="pt",
 )
 
