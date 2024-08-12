@@ -566,6 +566,7 @@ class Gemma2DecoderLayer(nn.Module):
         cache_position: Optional[torch.LongTensor] = None,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         if self.is_sliding and attention_mask is not None:  # efficient SDPA and no padding
+            # Flash-attn is a 2D tensor
             if self.config._attn_implementation == "flash_attention_2":
                 if past_key_value is not None:  # when decoding
                     attention_mask = attention_mask[:, -self.sliding_window :]
