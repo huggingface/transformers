@@ -428,7 +428,7 @@ def is_torch_mps_available(min_version=None):
             backend_available = torch.backends.mps.is_available() and torch.backends.mps.is_built()
             if min_version is not None:
                 flag = version.parse(_torch_version) >= version.parse(min_version)
-                backend_available = backend_available and  flag
+                backend_available = backend_available and flag
             return backend_available
     return False
 
