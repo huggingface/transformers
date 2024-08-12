@@ -412,7 +412,7 @@ VITPOSE_BACKBONE_START_DOCSTRING = r"""
     behavior.
 
     Parameters:
-        config ([`ViTPoseConfig`]): Model configuration class with all the parameters of the model.
+        config ([`ViTPoseBackboneConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
