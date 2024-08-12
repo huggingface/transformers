@@ -101,8 +101,8 @@ class TFDebertaXSoftmax(keras.layers.Layer):
 
     def call(self, inputs: tf.Tensor, mask: tf.Tensor):
         rmask = tf.logical_not(tf.cast(mask, tf.bool))
-        output = tf.where(rmask, tf.cast(float("-inf"), dtype=self.compute_dtype), inputs)  # mixed precision # float("-inf")
-        output = stable_softmax(tf.cast(output, dtype=tf.float32), self.axis)  # mixed precision # output
+        output = tf.where(rmask, tf.cast(float("-inf"), dtype=self.compute_dtype), inputs)
+        output = stable_softmax(tf.cast(output, dtype=tf.float32), self.axis)
         output = tf.where(rmask, 0.0, output)
         return output
 
@@ -129,14 +129,13 @@ class TFDebertaStableDropout(keras.layers.Layer):
             - tf.compat.v1.distributions.Bernoulli(probs=1.0 - self.drop_prob).sample(sample_shape=shape_list(inputs)),
             tf.bool,
         )
-        scale = tf.convert_to_tensor(1.0 / (1 - self.drop_prob), dtype=self.compute_dtype)  # mixed precision # dtype=tf.float32)
-
+        scale = tf.convert_to_tensor(1.0 / (1 - self.drop_prob), dtype=self.compute_dtype)
         if self.drop_prob > 0:
-            inputs = tf.where(mask, tf.cast(0.0, dtype=self.compute_dtype), inputs) * scale  # mixed precision # 0.0
+            inputs = tf.where(mask, tf.cast(0.0, dtype=self.compute_dtype), inputs) * scale
 
         def grad(upstream):
             if self.drop_prob > 0:
-                return tf.where(mask, tf.cast(0.0, dtype=self.compute_dtype), upstream) * scale  # mixed precision # 0.0
+                return tf.where(mask, tf.cast(0.0, dtype=self.compute_dtype), upstream) * scale
             else:
                 return upstream
 
@@ -702,9 +701,9 @@ class TFDebertaDisentangledSelfAttention(keras.layers.Layer):
             ws = tf.split(
                 tf.transpose(self.in_proj.weight[0]), num_or_size_splits=self.num_attention_heads * 3, axis=0
             )
-            qkvw = tf.TensorArray(dtype=self.dtype, size=3)  # mixed precision # tf.float32
+            qkvw = tf.TensorArray(dtype=self.dtype, size=3)
             for k in tf.range(3):
-                qkvw_inside = tf.TensorArray(dtype=self.dtype, size=self.num_attention_heads)  # mixed precision # tf.float32
+                qkvw_inside = tf.TensorArray(dtype=self.dtype, size=self.num_attention_heads)
                 for i in tf.range(self.num_attention_heads):
                     qkvw_inside = qkvw_inside.write(i, ws[i * 3 + k])
                 qkvw = qkvw.write(k, qkvw_inside.concat())
@@ -796,8 +795,7 @@ class TFDebertaDisentangledSelfAttention(keras.layers.Layer):
         if "p2c" in self.pos_att_type:
             pos_query_layer = self.pos_q_proj(rel_embeddings)
             pos_query_layer = self.transpose_for_scores(pos_query_layer)
-            pos_query_layer /= tf.math.sqrt(tf.cast(shape_list(pos_query_layer)[-1] * scale_factor, dtype=tf.float32))
-            pos_query_layer /= tf.math.sqrt(tf.cast(shape_list(pos_query_layer)[-1] * scale_factor, dtype=self.compute_dtype))  # mixed precision # tf.float32
+            pos_query_layer /= tf.math.sqrt(tf.cast(shape_list(pos_query_layer)[-1] * scale_factor, dtype=self.compute_dtype))
             if shape_list(query_layer)[-2] != shape_list(key_layer)[-2]:
                 r_pos = build_relative_position(shape_list(key_layer)[-2], shape_list(key_layer)[-2])
             else:
