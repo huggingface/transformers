@@ -34,7 +34,7 @@ Tips:
 - The model predicts much better results if input 2D points and/or input bounding boxes are provided
 - You can prompt multiple points for the same image, and predict a single mask. 
 - Fine-tuning the model is not supported yet
-- According to the paper, textual input should be also supported. However, at this time of writing this seems to be not supported according to [the official repository](https://github.com/facebookresearch/segment-anything/issues/4#issuecomment-1497626844). 
+- According to the paper, textual input should be also supported. However, at this time of writing this seems not to be supported according to [the official repository](https://github.com/facebookresearch/segment-anything/issues/4#issuecomment-1497626844). 
 
 
 This model was contributed by [ybelkada](https://huggingface.co/ybelkada) and [ArthurZ](https://huggingface.co/ArthurZ).

@@ -1,5 +1,5 @@
 absl-py==1.0.0
-aiohttp==3.9.4
+aiohttp==3.10.2
 aiosignal==1.2.0
 alembic==1.7.7
 appdirs==1.4.4
@@ -205,7 +205,7 @@ tensorboard==2.8.0
 tensorboard-data-server==0.6.1
 tensorboard-plugin-wit==1.8.1
 tensorboardX==2.5
-tensorflow==2.11.1
+tensorflow==2.12.1
 tensorflow-io-gcs-filesystem==0.24.0
 termcolor==1.1.0
 text-unidecode==1.3
