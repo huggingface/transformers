@@ -747,9 +747,7 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
                 output_dir="./test_missed_zero3_init",
                 deepspeed=self.get_config_dict(ZERO3),
             )
-            # with self.assertRaises(
-            #     ValueError, msg="Model was not initialized with `Zero-3` despite being configured."
-            # ):
+            # Shouldn't raise an error in this case
             _ = Trainer(
                 model=model,
                 args=training_args,
