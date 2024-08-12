@@ -114,7 +114,7 @@ class ZeroShotAudioClassificationPipeline(Pipeline):
             audio = ffmpeg_read(audio, self.feature_extractor.sampling_rate)
 
         if not isinstance(audio, np.ndarray):
-            raise ValueError("We expect a numpy ndarray as input")
+            raise TypeError("We expect a numpy ndarray as input")
         if len(audio.shape) != 1:
             raise ValueError("We expect a single channel audio input for ZeroShotAudioClassificationPipeline")
 

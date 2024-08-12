@@ -59,7 +59,7 @@ if is_torch_available():
         ImageGPTForCausalImageModeling,
         SpeechEncoderDecoderModel,
     )
-    from transformers.cache_utils import DynamicCache, EncoderDecoderCache, QuantoQuantizedCache
+    from transformers.cache_utils import DynamicCache, EncoderDecoderCache, QuantoQuantizedCache, StaticCache
     from transformers.generation import (
         BeamSampleDecoderOnlyOutput,
         BeamSampleEncoderDecoderOutput,
@@ -77,6 +77,7 @@ if is_torch_available():
         MaxLengthCriteria,
         MinLengthLogitsProcessor,
         PhrasalConstraint,
+        PromptLookupCandidateGenerator,
         SampleDecoderOnlyOutput,
         SampleEncoderDecoderOutput,
         StoppingCriteria,
@@ -1095,7 +1096,6 @@ class GenerationTesterMixin:
             if any(
                 model_name in model_class.__name__.lower()
                 for model_name in [
-                    "bloom",
                     "ctrl",
                     "gptbigcode",
                     "transo_xl",
@@ -1371,6 +1371,34 @@ class GenerationTesterMixin:
             output_assisted = model.generate(input_ids, attention_mask=attention_mask, **generation_kwargs)
 
             self._check_outputs(output_assisted, input_ids, model.config, use_cache=True)
+
+    def test_prompt_lookup_decoding_stops_at_eos(self):
+        # This test ensures that the prompt lookup generation stops at eos token and does not suggest more tokens
+        # (see https://github.com/huggingface/transformers/pull/31301)
+
+        # The main idea is to have an ngram (unigram in our case) that is repeated twice in the input ids.
+        # First time at the very end, so input ends with the unigrams, and second any arbitrary location.
+        # Also, we need an EOS token which will be injected just after the arbitrary located ngram.
+        # We verify that PLD will not copy and propose candidated that contain an EOS token, even if there are overlapping ngrams
+        # in input ids. Otherwise a proposed EOS along with the trailing (ngrams-1) tokens might be accepted by the target model.
+        # That seems as if the model "generated" and EOS but didn't stop from user's perspective
+
+        input_ids = torch.randint(1, 50, (1, 10), device=torch_device)  # generate inputs in range from 1-50
+        arbitrary_ngram = 51  # this is the arbitrary ngram, specifically chosen OOV to prevent flaky tests
+        input_ids[:, 3] = arbitrary_ngram  # set pre-eos to arbitrary_ngram which is for sure not present in inputs
+        input_ids[:, -1] = arbitrary_ngram  # put arbitrary_ngram in the end for the necessary match to happen
+
+        eos_token_id = torch.tensor([0], device=torch_device)
+        input_ids[:, 4] = eos_token_id  # inject eos-token-id in input ids so that it is located after arbitrary_ngram
+
+        # init cand geenerator with max_matching_ngram_size=1 to match per-token
+        candidate_generator = PromptLookupCandidateGenerator(
+            eos_token_id=eos_token_id, num_output_tokens=4, max_matching_ngram_size=1
+        )
+        output_prompt_lookup = candidate_generator.get_candidates(input_ids)[0]
+
+        # PLD shouldn't propose any new tokens based on eos-match
+        self.assertTrue(output_prompt_lookup.shape[-1] == 10)
 
     def test_generate_with_head_masking(self):
         """Test designed for encoder-decoder models to ensure the attention head masking is used."""
@@ -1741,6 +1769,53 @@ class GenerationTesterMixin:
                         )
                     )
 
+    def test_generate_with_static_cache(self):
+        """
+        Tests if StaticCache works if we set attn_implementation=static when generation.
+        This doesn't test if generation quality is good, but tests that models with
+        self._supports_static_cache don't throw an error when generating and return
+        a StaticCache object at the end.
+        """
+        for model_class in self.all_generative_model_classes:
+            if not model_class._supports_static_cache:
+                self.skipTest(reason="This model does not support the static cache format")
+
+            config, input_ids, attention_mask = self._get_input_ids_and_config()
+            if config.is_encoder_decoder:
+                self.skipTest(reason="This model is encoder-decoder and has Encoder-Decoder Cache")
+
+            config.use_cache = True
+            config.is_decoder = True
+            batch_size, seq_length = input_ids.shape
+            max_new_tokens = 20
+
+            model = model_class(config).to(torch_device).eval()
+            generation_kwargs = {
+                "max_length": None,
+                "max_new_tokens": max_new_tokens,
+                "cache_implementation": "static",
+                "return_dict_in_generate": True,  # Required to return `past_key_values`
+            }
+
+            max_cache_len = seq_length + max_new_tokens
+            head_dim = (
+                model.config.head_dim
+                if hasattr(model.config, "head_dim")
+                else model.config.hidden_size // model.config.num_attention_heads
+            )
+            num_key_value_heads = (
+                model.config.num_attention_heads
+                if getattr(config, "num_key_value_heads", None) is None
+                else model.config.num_key_value_heads
+            )
+            num_hidden_layers = config.num_hidden_layers
+            results = model.generate(input_ids, attention_mask=attention_mask, **generation_kwargs)
+
+            cache_shape = (batch_size, num_key_value_heads, max_cache_len, head_dim)
+            self.assertTrue(isinstance(results.past_key_values, StaticCache))
+            self.assertTrue(len(results.past_key_values.key_cache) == num_hidden_layers)
+            self.assertTrue(results.past_key_values.key_cache[0].shape == cache_shape)
+
     @require_quanto
     def test_generate_with_quant_cache(self):
         for model_class in self.all_generative_model_classes:
@@ -1773,6 +1848,58 @@ class GenerationTesterMixin:
             generation_kwargs["cache_config"] = {"nbits": 60, "q_group_size": 8, "residual_length": 128}
             with self.assertRaises(ValueError):
                 model.generate(input_ids, attention_mask=attention_mask, **generation_kwargs)
+
+    @require_torch_gpu
+    @slow
+    @is_flaky()  # compilation may result in equivalent (!= same) FP ops, causing the argmax in `generate` to be flaky
+    def test_generate_compile_fullgraph(self):
+        """
+        Tests that `.generate` is compatible with torch.compile without graph breaks, keeping the same results.
+        ⚠️ Runs two sequential generations to ensure the cache doesn't get stuck after the first compiled run! ⚠️
+        """
+        for model_class in self.all_generative_model_classes:
+            if not model_class._supports_static_cache:
+                self.skipTest("This model doesn't support static cache")
+            # TODO (joao) -- fix and enable me :)
+            if any(model_name in model_class.__name__.lower() for model_name in ["whisper"]):
+                self.skipTest("whisper model end-to-end generate compile not yet supported")
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            # TODO (joao) -- fix and enable me :)
+            if config.is_encoder_decoder:
+                self.skipTest("Encoder-decoder model end-to-end generate compile not yet supported")
+
+            model = model_class(config).to(torch_device)
+            input_ids = inputs_dict["input_ids"].to(torch_device)
+            # creates two sets of *different* inputs with the same shape
+            half_batch_size = input_ids.shape[0] // 2
+            input_ids_sets = [input_ids[:half_batch_size, :], input_ids[half_batch_size : half_batch_size * 2, :]]
+            self.assertTrue(input_ids_sets[0].shape == input_ids_sets[1].shape)
+
+            generation_kwargs = {
+                "do_sample": False,
+                "max_new_tokens": 10,
+            }
+
+            for model_inputs in input_ids_sets:
+                # dynamic cache
+                output_dynamic = model.generate(model_inputs, **generation_kwargs)
+
+                # eager static cache
+                torch.compiler.reset()
+                model.generation_config.cache_implementation = "static"
+                output_static = model.generate(model_inputs, **generation_kwargs)
+                self.assertListEqual(output_dynamic.tolist(), output_static.tolist())
+
+                # compiled static cache (removes the cache initialized in the previous check, to confirm we can
+                # initialize the cache in full compiled mode)
+                model._cache = None
+                torch.compiler.reset()
+                generation_config = copy.deepcopy(model.generation_config)
+                generation_config.update(**generation_kwargs)
+                compiled_generate = torch.compile(model.generate, fullgraph=True, mode="reduce-overhead")
+                output_compiled = compiled_generate(model_inputs, generation_config=generation_config)
+                self.assertListEqual(output_dynamic.tolist(), output_compiled.tolist())
 
     def _check_outputs(self, output, input_ids, config, use_cache=False, num_return_sequences=1):
         batch_size, seq_length = input_ids.shape
@@ -1849,7 +1976,7 @@ class GenerationTesterMixin:
         # 2. Some old models still return `output.past_key_values` even without `use_cache=True`
         # 3. TODO (joao): A few models have different formats/types, skipping those until the cache refactor is
         # complete
-        models_without_standard_cache = ("bloom", "ctrl", "fsmt", "gptbigcode", "mega", "reformer", "jamba", "mamba")
+        models_without_standard_cache = ("ctrl", "fsmt", "gptbigcode", "mega", "reformer", "jamba", "mamba")
         has_standard_cache = not any(
             model_name in config.__class__.__name__.lower() for model_name in models_without_standard_cache
         )
@@ -3195,6 +3322,40 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
             max_new_tokens=20,
         )
         self.assertTrue(input_length <= out.shape[-1] <= input_length + 20)
+
+    def test_special_tokens_fall_back_to_model_default(self):
+        # PT-only test: TF doesn't support assisted decoding yet.
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM").to(
+            torch_device
+        )
+        test_bos_id = 50
+
+        # Sanity-check: the model has a BOS token set, and the first generated token is a BOS token
+        gen_output = model.generate()
+        self.assertTrue(model.generation_config.bos_token_id is not None)
+        self.assertTrue(model.generation_config.bos_token_id == gen_output[0, 0])
+
+        # If we pass a generation config **with** a BOS token, `generate` will use it
+        generation_config = GenerationConfig(bos_token_id=test_bos_id)
+        gen_output = model.generate(generation_config=generation_config)
+        self.assertFalse(model.generation_config.bos_token_id == gen_output[0, 0])
+        self.assertTrue(generation_config.bos_token_id == gen_output[0, 0])
+        self.assertTrue(test_bos_id == gen_output[0, 0])
+
+        # If we pass a generation config **without** a BOS token, `generate` will fetch the BOS token from
+        # `model.generation_config`
+        generation_config = GenerationConfig(bos_token_id=None)
+        gen_output = model.generate(generation_config=generation_config)
+        self.assertTrue(model.generation_config.bos_token_id == gen_output[0, 0])
+        self.assertFalse(test_bos_id == gen_output[0, 0])
+        self.assertTrue(generation_config.bos_token_id is None)
+
+        # Changing `model.generation_config` will affect fallback behavior
+        model.generation_config.bos_token_id = test_bos_id
+        gen_output = model.generate(generation_config=generation_config)
+        self.assertTrue(model.generation_config.bos_token_id == gen_output[0, 0])
+        self.assertTrue(test_bos_id == gen_output[0, 0])
+        self.assertTrue(generation_config.bos_token_id is None)
 
 
 @require_torch
