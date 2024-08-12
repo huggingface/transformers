@@ -14,8 +14,9 @@
 """Image processor class for ImageBind."""
 
 import math
+import warnings
 from fractions import Fraction
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -25,6 +26,7 @@ from ...image_transforms import (
     get_resize_output_image_size,
     resize,
     to_channel_dimension_format,
+    to_pil_image,
 )
 from ...image_utils import (
     OPENAI_CLIP_MEAN,
@@ -33,6 +35,7 @@ from ...image_utils import (
     ImageInput,
     PILImageResampling,
     VideoInput,
+    get_image_size,
     infer_channel_dimension_format,
     is_scaled_image,
     is_valid_image,
@@ -42,7 +45,7 @@ from ...image_utils import (
     validate_kwargs,
     validate_preprocess_arguments,
 )
-from ...utils import TensorType, is_vision_available, logging
+from ...utils import TensorType, is_torch_available, is_vision_available, logging, requires_backends
 
 
 logger = logging.get_logger(__name__)
@@ -50,6 +53,9 @@ logger = logging.get_logger(__name__)
 
 if is_vision_available():
     import PIL
+
+if is_torch_available():
+    import torch
 
 
 # Copy from models.video_llava.image_processing_video_llava.make_batched_videos
@@ -117,6 +123,151 @@ def uniform_temporal_subsample(video: VideoInput, num_samples: int) -> VideoInpu
     indices = np.clip(indices, 0, num_frames - 1).astype(int)
 
     return [video[i] for i in indices]
+
+
+# Adapted from https://github.com/facebookresearch/pytorchvideo/blob/1fadaef40dd393ca09680f55582399f4679fc9b7/pytorchvideo/transforms/functional.py#L92
+def video_resize(
+    frames: List[np.ndarray],
+    size: Tuple[int, int] = 224,
+    resampling: PILImageResampling = PILImageResampling.BILINEAR,
+    data_format: Optional[Union[str, ChannelDimension]] = None,
+    input_data_format: Optional[Union[str, ChannelDimension]] = None,
+) -> np.ndarray:
+    """
+    Determines the shorter spatial dim of the video (i.e. width or height) and scales
+    it to the given size. To maintain aspect ratio, the longer side is then scaled
+    accordingly.
+    Args:
+        image (np.ndarray): A video tensor of shape (C, T, H, W) and type numpy.float32.
+        size (int): The size the shorter side is scaled to.
+        resample (str): Algorithm used for upsampling,
+            options: nearest' | 'linear' | 'bilinear' | 'bicubic' | 'trilinear' | 'area'
+        data_format (`str` or `ChannelDimension`, *optional*):
+            The channel dimension format of the image. If not provided, it will be the same as the input image.
+        input_data_format (`ChannelDimension` or `str`, *optional*):
+            The channel dimension format of the input image. If not provided, it will be inferred.
+    Returns:
+        An image-like numpy array with scaled spatial dims.
+    """  # noqa
+    requires_backends(video_resize, ["torch"])
+
+    # channel-first
+    frames = [
+        to_channel_dimension_format(frame, ChannelDimension.FIRST, input_channel_dim=input_data_format)
+        for frame in frames
+    ]
+    # stack, to torch and reshape to num_channels, num_frames, height, width
+    video = np.stack(frames)
+    video = torch.from_numpy(video).contiguous()
+
+    data_format = input_data_format if data_format is None else data_format
+    video = torch.nn.functional.interpolate(video, size=size, mode=resampling.name.lower(), align_corners=False)
+    frames = list(video.numpy())
+    frames = [
+        to_channel_dimension_format(frame, data_format, input_channel_dim=ChannelDimension.FIRST) for frame in frames
+    ]
+
+    return frames
+
+
+# Same as in image_transformers.py but taking offsets like int(math.ceil((orig_height - crop_height) / 2))
+def modified_center_crop(
+    image: np.ndarray,
+    size: Tuple[int, int],
+    data_format: Optional[Union[str, ChannelDimension]] = None,
+    input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    return_numpy: Optional[bool] = None,
+) -> np.ndarray:
+    """
+    Crops the `image` to the specified `size` using a center crop. Note that if the image is too small to be cropped to
+    the size given, it will be padded (so the returned result will always be of size `size`).
+
+    Args:
+        image (`np.ndarray`):
+            The image to crop.
+        size (`Tuple[int, int]`):
+            The target size for the cropped image.
+        data_format (`str` or `ChannelDimension`, *optional*):
+            The channel dimension format for the output image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+            If unset, will use the inferred format of the input image.
+        input_data_format (`str` or `ChannelDimension`, *optional*):
+            The channel dimension format for the input image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+            If unset, will use the inferred format of the input image.
+        return_numpy (`bool`, *optional*):
+            Whether or not to return the cropped image as a numpy array. Used for backwards compatibility with the
+            previous ImageFeatureExtractionMixin method.
+                - Unset: will return the same type as the input image.
+                - `True`: will return a numpy array.
+                - `False`: will return a `PIL.Image.Image` object.
+    Returns:
+        `np.ndarray`: The cropped image.
+    """
+    requires_backends(modified_center_crop, ["vision"])
+
+    if return_numpy is not None:
+        warnings.warn("return_numpy is deprecated and will be removed in v.4.33", FutureWarning)
+
+    return_numpy = True if return_numpy is None else return_numpy
+
+    if not isinstance(image, np.ndarray):
+        raise TypeError(f"Input image must be of type np.ndarray, got {type(image)}")
+
+    if not isinstance(size, Iterable) or len(size) != 2:
+        raise ValueError("size must have 2 elements representing the height and width of the output image")
+
+    if input_data_format is None:
+        input_data_format = infer_channel_dimension_format(image)
+    output_data_format = data_format if data_format is not None else input_data_format
+
+    # We perform the crop in (C, H, W) format and then convert to the output format
+    image = to_channel_dimension_format(image, ChannelDimension.FIRST, input_data_format)
+
+    orig_height, orig_width = get_image_size(image, ChannelDimension.FIRST)
+    crop_height, crop_width = size
+    crop_height, crop_width = int(crop_height), int(crop_width)
+
+    # In case size is odd, (image_shape[0] + size[0]) // 2 won't give the proper result.
+    top = int(math.ceil((orig_height - crop_height) / 2))
+    bottom = top + crop_height
+    # In case size is odd, (image_shape[1] + size[1]) // 2 won't give the proper result.
+    left = int(math.ceil((orig_width - crop_width) / 2))
+    right = left + crop_width
+
+    # Check if cropped area is within image boundaries
+    if top >= 0 and bottom <= orig_height and left >= 0 and right <= orig_width:
+        image = image[..., top:bottom, left:right]
+        image = to_channel_dimension_format(image, output_data_format, ChannelDimension.FIRST)
+        return image
+
+    # Otherwise, we may need to pad if the image is too small. Oh joy...
+    new_height = max(crop_height, orig_height)
+    new_width = max(crop_width, orig_width)
+    new_shape = image.shape[:-2] + (new_height, new_width)
+    new_image = np.zeros_like(image, shape=new_shape)
+
+    # If the image is too small, pad it with zeros
+    top_pad = math.ceil((new_height - orig_height) / 2)
+    bottom_pad = top_pad + orig_height
+    left_pad = math.ceil((new_width - orig_width) / 2)
+    right_pad = left_pad + orig_width
+    new_image[..., top_pad:bottom_pad, left_pad:right_pad] = image
+
+    top += top_pad
+    bottom += top_pad
+    left += left_pad
+    right += left_pad
+
+    new_image = new_image[..., max(0, top) : min(new_height, bottom), max(0, left) : min(new_width, right)]
+    new_image = to_channel_dimension_format(new_image, output_data_format, ChannelDimension.FIRST)
+
+    if not return_numpy:
+        new_image = to_pil_image(new_image)
+
+    return new_image
 
 
 class ImageBindImageProcessor(BaseImageProcessor):
@@ -242,6 +393,38 @@ class ImageBindImageProcessor(BaseImageProcessor):
             # `shortest_edge` key.
             delattr(self, "use_square_size")
 
+    def video_resize(
+        self,
+        frames: List[np.ndarray],
+        size: Dict[str, int],
+        resampling: PILImageResampling = PILImageResampling.BILINEAR,
+        data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    ) -> List[np.ndarray]:
+        default_to_square = True
+        if "shortest_edge" in size:
+            size = size["shortest_edge"]
+            default_to_square = False
+        elif "height" in size and "width" in size:
+            size = (size["height"], size["width"])
+        else:
+            raise ValueError("Size must contain either 'shortest_edge' or 'height' and 'width'.")
+
+        output_size = get_resize_output_image_size(
+            frames[0],
+            size=size,
+            default_to_square=default_to_square,
+            input_data_format=input_data_format,
+        )
+
+        return video_resize(
+            frames=frames,
+            size=output_size,
+            resampling=resampling,
+            data_format=data_format,
+            input_data_format=input_data_format,
+        )
+
     # Copied from models.clip.image_processing_clip.CLIPImageProcessor.resize
     def resize(
         self,
@@ -327,10 +510,49 @@ class ImageBindImageProcessor(BaseImageProcessor):
 
         return all_clips
 
-    # Copied from models.clip.image_processing_clip.CLIPImageProcessor.preprocess with preprocess->_preprocess_image
+    def center_crop(
+        self,
+        image: np.ndarray,
+        size: Dict[str, int],
+        data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        **kwargs,
+    ) -> np.ndarray:
+        """
+        Center crop an image to `(size["height"], size["width"])`. If the input size is smaller than `crop_size` along
+        any edge, the image is padded with 0's and then center cropped.
+
+        Args:
+            image (`np.ndarray`):
+                Image to center crop.
+            size (`Dict[str, int]`):
+                Size of the output image.
+            data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format for the output image. If unset, the channel dimension format of the input
+                image is used. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format for the input image. If unset, the channel dimension format is inferred
+                from the input image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+        """
+        size = get_size_dict(size)
+        if "height" not in size or "width" not in size:
+            raise ValueError(f"The size dictionary must have keys 'height' and 'width'. Got {size.keys()}")
+        return modified_center_crop(
+            image,
+            size=(size["height"], size["width"]),
+            data_format=data_format,
+            input_data_format=input_data_format,
+            **kwargs,
+        )
+
     def _preprocess_image(
         self,
         images: ImageInput,
+        is_video: bool = False,
         do_resize: bool = None,
         size: Dict[str, int] = None,
         resample: PILImageResampling = None,
@@ -375,10 +597,15 @@ class ImageBindImageProcessor(BaseImageProcessor):
             input_data_format = infer_channel_dimension_format(images[0])
 
         if do_resize:
-            images = [
-                self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
-                for image in images
-            ]
+            if is_video:
+                images = self.video_resize(
+                    frames=images, size=size, resampling=resample, input_data_format=input_data_format
+                )
+            else:
+                images = [
+                    self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
+                    for image in images
+                ]
 
         if do_center_crop:
             images = [
@@ -403,7 +630,6 @@ class ImageBindImageProcessor(BaseImageProcessor):
 
         return images
 
-    # Ignore copy
     def preprocess(
         self,
         images: Optional[ImageInput] = None,
@@ -565,6 +791,7 @@ class ImageBindImageProcessor(BaseImageProcessor):
                     _pixel_values = [
                         self._preprocess_image(
                             images=clip,
+                            is_video=True,
                             do_resize=do_resize,
                             size=size,
                             resample=PILImageResampling.BILINEAR,
@@ -601,7 +828,7 @@ class ImageBindImageProcessor(BaseImageProcessor):
                         )
                     ]
 
-                # Avoid List[List[List[np.ndarray]]]
+                # Avoid List[List[List[np.ndarray]]] for performance reasons
                 _pixel_values = np.stack(_pixel_values)
                 # Make it shape (num_chunks, num_channels, num_frames_per_chunk, height, width)
                 _pixel_values = np.swapaxes(_pixel_values, 1, 2)
