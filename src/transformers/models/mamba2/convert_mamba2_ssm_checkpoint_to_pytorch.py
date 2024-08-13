@@ -192,7 +192,7 @@ if __name__ == "__main__":
         type=str,
         default=None,
         required=False,
-        help="Path to a tokenizer file.",
+        help="Path to a `codestral` tokenizer file.",
     )
     args = parser.parse_args()
 
