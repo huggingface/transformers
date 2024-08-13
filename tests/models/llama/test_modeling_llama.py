@@ -22,7 +22,7 @@ import pytest
 from packaging import version
 from parameterized import parameterized
 
-from transformers import LlamaConfig, StaticCache, is_torch_available, set_seed
+from transformers import AutoTokenizer, LlamaConfig, StaticCache, is_torch_available, set_seed
 from transformers.testing_utils import (
     require_bitsandbytes,
     require_flash_attn,
@@ -526,6 +526,60 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         torch.testing.assert_close(old_cos_long, new_cos_long)
         torch.testing.assert_close(old_sin_long, new_sin_long)
 
+    def test_model_loading_old_rope_configs(self):
+        def _reinitialize_config(base_config, new_kwargs):
+            # Reinitialize the config with the new kwargs, forcing the config to go through its __init__ validation
+            # steps.
+            base_config_dict = base_config.to_dict()
+            new_config = LlamaConfig.from_dict(config_dict={**base_config_dict, **new_kwargs})
+            return new_config
+
+        # from untouched config -> ✅
+        base_config, model_inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        original_model = LlamaForCausalLM(base_config).to(torch_device)
+        original_model(**model_inputs)
+
+        # from a config with the expected rope configuration -> ✅
+        config = _reinitialize_config(base_config, {"rope_scaling": {"rope_type": "linear", "factor": 10.0}})
+        original_model = LlamaForCausalLM(config).to(torch_device)
+        original_model(**model_inputs)
+
+        # from a config with the old rope configuration ('type' instead of 'rope_type')  -> ✅ we gracefully handle BC
+        config = _reinitialize_config(base_config, {"rope_scaling": {"type": "linear", "factor": 10.0}})
+        original_model = LlamaForCausalLM(config).to(torch_device)
+        original_model(**model_inputs)
+
+        # from a config with both 'type' and 'rope_type'  -> ✅ they can coexist (and both are present in the config)
+        config = _reinitialize_config(
+            base_config, {"rope_scaling": {"type": "linear", "rope_type": "linear", "factor": 10.0}}
+        )
+        self.assertTrue(config.rope_scaling["type"] == "linear")
+        self.assertTrue(config.rope_scaling["rope_type"] == "linear")
+        original_model = LlamaForCausalLM(config).to(torch_device)
+        original_model(**model_inputs)
+
+        # from a config with parameters in a bad range ('factor' should be >= 1.0) -> ⚠️ throws a warning
+        with self.assertLogs("transformers.modeling_rope_utils", level="WARNING") as logs:
+            config = _reinitialize_config(base_config, {"rope_scaling": {"rope_type": "linear", "factor": -999.0}})
+            original_model = LlamaForCausalLM(config).to(torch_device)
+            original_model(**model_inputs)
+            self.assertEqual(len(logs.output), 1)
+            self.assertIn("factor field", logs.output[0])
+
+        # from a config with unknown parameters ('foo' isn't a rope option) -> ⚠️ throws a warning
+        with self.assertLogs("transformers.modeling_rope_utils", level="WARNING") as logs:
+            config = _reinitialize_config(
+                base_config, {"rope_scaling": {"rope_type": "linear", "factor": 10.0, "foo": "bar"}}
+            )
+            original_model = LlamaForCausalLM(config).to(torch_device)
+            original_model(**model_inputs)
+            self.assertEqual(len(logs.output), 1)
+            self.assertIn("Unrecognized keys", logs.output[0])
+
+        # from a config with specific rope type but missing one of its mandatory parameters -> ❌ throws exception
+        with self.assertRaises(KeyError):
+            config = _reinitialize_config(base_config, {"rope_scaling": {"rope_type": "linear"}})  # missing "factor"
+
     @require_flash_attn
     @require_torch_gpu
     @require_bitsandbytes
@@ -663,6 +717,34 @@ class LlamaIntegrationTest(unittest.TestCase):
         if is_torch_available() and torch.cuda.is_available():
             # 8 is for A100 / A10 and 7 for T4
             cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
+
+    @slow
+    @require_read_token
+    def test_llama_3_1_hard(self):
+        """
+        An integration test for llama 3.1. It tests against a long output to ensure the subtle numerical differences
+        from llama 3.1.'s RoPE can be detected
+        """
+        EXPECTED_TEXT = (
+            "Tell me about the french revolution. The french revolution was a period of radical social and political "
+            "upheaval in France that lasted from 1789 until 1799. It was a time of great change and upheaval, marked "
+            "by the overthrow of the monarchy, the rise of the middle class, and the eventual establishment of the "
+            "First French Republic.\nThe revolution began in 1789 with the Estates-General, a representative "
+            "assembly that had not met since 1614. The Third Estate, which represented the common people, "
+            "demanded greater representation and eventually broke away to form the National Assembly. This marked "
+            "the beginning of the end of the absolute monarchy and the rise of the middle class.\n"
+        )
+
+        tokenizer = AutoTokenizer.from_pretrained("meta-llama/Meta-Llama-3.1-8B-Instruct")
+        model = LlamaForCausalLM.from_pretrained(
+            "meta-llama/Meta-Llama-3.1-8B-Instruct", device_map="auto", torch_dtype=torch.bfloat16
+        )
+        input_text = ["Tell me about the french revolution."]
+        model_inputs = tokenizer(input_text, return_tensors="pt").to(model.device)
+
+        generated_ids = model.generate(**model_inputs, max_new_tokens=128, do_sample=False)
+        generated_text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+        self.assertEqual(generated_text, EXPECTED_TEXT)
 
     @slow
     @require_read_token

@@ -116,7 +116,7 @@ VITPOSE_INPUTS_DOCSTRING = r"""
             This corresponds to the dataset index used during training, e.g. index 0 refers to COCO.
 
         flip_pairs (`torch.tensor`, *optional*):
-            Pairs of keypoints which are mirrored (for example, left ear -- right ear).
+            Whether to mirror pairs of keypoints (for example, left ear -- right ear).
 
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned

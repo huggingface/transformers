@@ -1569,6 +1569,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
     def __init__(self, **kwargs):
         # inputs and kwargs for saving and re-loading (see ``from_pretrained`` and ``save_pretrained``)
         self.init_inputs = ()
+        for key in kwargs:
+            if hasattr(self, key) and callable(getattr(self, key)):
+                raise AttributeError(f"{key} conflicts with the method {key} in {self.__class__.__name__}")
+
         self.init_kwargs = copy.deepcopy(kwargs)
         self.name_or_path = kwargs.pop("name_or_path", "")
         self._processor_class = kwargs.pop("processor_class", None)
@@ -1592,6 +1596,14 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             )
 
         self.model_input_names = kwargs.pop("model_input_names", self.model_input_names)
+
+        if "clean_up_tokenization_spaces" not in kwargs:
+            warnings.warn(
+                "`clean_up_tokenization_spaces` was not set. It will be set to `True` by default. This "
+                "behavior will be depracted in transformers v4.45, and will be then set to `False` by default. "
+                "For more details check this issue: https://github.com/huggingface/transformers/issues/31884",
+                FutureWarning,
+            )
 
         # By default, cleaning tokenization spaces for both fast and slow tokenizers
         self.clean_up_tokenization_spaces = kwargs.pop("clean_up_tokenization_spaces", True)
@@ -1704,8 +1716,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         """
         Converts a list of dictionaries with `"role"` and `"content"` keys to a list of token
         ids. This method is intended for use with chat models, and will read the tokenizer's chat_template attribute to
-        determine the format and control tokens to use when converting. When chat_template is None, it will fall back
-        to the default_chat_template specified at the class level.
+        determine the format and control tokens to use when converting.
 
         Args:
             conversation (Union[List[Dict[str, str]], List[List[Dict[str, str]]]]): A list of dicts
@@ -1948,7 +1959,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 return self._rendered_blocks or self._generation_indices
 
             @contextmanager
-            def activate_tracker(self, rendered_blocks: list[int], generation_indices: list[int]):
+            def activate_tracker(self, rendered_blocks: List[int], generation_indices: List[int]):
                 try:
                     if self.is_active():
                         raise ValueError("AssistantTracker should not be reused before closed")
@@ -1986,22 +1997,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         Returns:
             `str`: The chat template string.
         """
-        using_default_template = False
         # First, handle the cases when the model has a dict of multiple templates
-        if isinstance(self.chat_template, dict) or (
-            self.chat_template is None and isinstance(self.default_chat_template, dict)
-        ):
-            if self.chat_template is not None:
-                template_dict = self.chat_template
-                using_default_dict = False
-            else:
-                template_dict = self.default_chat_template
-                using_default_dict = True
+        if isinstance(self.chat_template, dict):
+            template_dict = self.chat_template
             if chat_template is not None and chat_template in template_dict:
                 # The user can pass the name of a template to the chat template argument instead of an entire template
                 chat_template = template_dict[chat_template]
-                if using_default_dict:
-                    using_default_template = True
             elif chat_template is None:
                 if tools is not None and "tool_use" in template_dict:
                     chat_template = template_dict["tool_use"]
@@ -2013,43 +2014,22 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                         "template or the name of the template you wish to use to the `chat_template` argument. Available "
                         f"template names are {sorted(template_dict.keys())}."
                     )
-                if using_default_dict:
-                    using_default_template = True
 
         elif chat_template is None:
             # These are the cases when the model has a single template
-            # priority: `chat_template` argument > `tokenizer.chat_template` > `tokenizer.default_chat_template
+            # priority: `chat_template` argument > `tokenizer.chat_template`
             if self.chat_template is not None:
                 chat_template = self.chat_template
-            else:
-                chat_template = self.default_chat_template
-                using_default_template = True
 
-        if using_default_template:
-            logger.warning_once(
-                "No chat template is set for this tokenizer, falling back to a default class-level template. This is "
-                "very error-prone, because models are often trained with templates different from the class default! "
-                "Default chat templates are a legacy feature and will be removed in Transformers v4.43, at which "
-                "point any code depending on them will stop working. We recommend setting a valid chat template before "
-                "then to ensure that this model continues working without issues."
-            )
+            else:
+                raise ValueError(
+                    "Cannot use apply_chat_template() because tokenizer.chat_template is not set and no template "
+                    "argument was passed! For information about writing templates and setting the "
+                    "tokenizer.chat_template attribute, please see the documentation at "
+                    "https://huggingface.co/docs/transformers/main/en/chat_templating"
+                )
 
         return chat_template
-
-    @property
-    def default_chat_template(self):
-        """
-        This template formats inputs in the standard ChatML format. See
-        https://github.com/openai/openai-python/blob/main/chatml.md
-        """
-        return (
-            "{% for message in messages %}"
-            "{{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}"
-            "{% endfor %}"
-            "{% if add_generation_prompt %}"
-            "{{ '<|im_start|>assistant\n' }}"
-            "{% endif %}"
-        )
 
     @classmethod
     def from_pretrained(
@@ -2695,6 +2675,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             tokenizer_config.pop("name_or_path")
             tokenizer_config.pop("special_tokens_map_file", None)
             tokenizer_config.pop("tokenizer_file", None)
+        if "device_map" in tokenizer_config:
+            tokenizer_config.pop("device_map")
 
         with open(tokenizer_config_file, "w", encoding="utf-8") as f:
             out_str = json.dumps(tokenizer_config, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
@@ -3232,7 +3214,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         </Tip>
 
         Args:
-            text (`str`, `List[str]` or `List[int]` (the latter only for not-fast tokenizers)):
+            text (`str`, `List[str]` or (for non-fast tokenizers) `List[int]`):
                 The first sequence to be encoded. This can be a string, a list of strings (tokenized string using the
                 `tokenize` method) or a list of integers (tokenized string ids using the `convert_tokens_to_ids`
                 method).

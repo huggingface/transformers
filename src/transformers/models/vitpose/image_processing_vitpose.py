@@ -32,8 +32,11 @@ from ...image_utils import (
     to_numpy_array,
     valid_images,
 )
-from ...utils import TensorType, is_scipy_available, is_vision_available, logging
+from ...utils import TensorType, is_scipy_available, is_torch_available, is_vision_available, logging
 
+
+if is_torch_available():
+    import torch
 
 if is_vision_available():
     import PIL
@@ -53,17 +56,16 @@ def coco_to_pascal_voc(bboxes: np.ndarray) -> np.ndarray:
     to (top_left_x, top_left_y, bottom_right_x, bottom_right_y).
 
     Args:
-        bboxes (`ndarray` of shape `(batch_size, 4)):
+        bboxes (`np.ndarray` of shape `(batch_size, 4)):
             Bounding boxes in COCO format.
 
     Returns:
         `np.ndarray` of shape `(batch_size, 4) in Pascal VOC format.
     """
-    bbox_xyxy = bboxes.copy()
-    bbox_xyxy[:, 2] = bbox_xyxy[:, 2] + bbox_xyxy[:, 0] - 1
-    bbox_xyxy[:, 3] = bbox_xyxy[:, 3] + bbox_xyxy[:, 1] - 1
+    bboxes[:, 2] = bboxes[:, 2] + bboxes[:, 0] - 1
+    bboxes[:, 3] = bboxes[:, 3] + bboxes[:, 1] - 1
 
-    return bbox_xyxy
+    return bboxes
 
 
 def _get_max_preds(heatmaps):
@@ -76,13 +78,13 @@ def _get_max_preds(heatmaps):
     Returns:
         tuple: A tuple containing aggregated results.
 
-        - preds (np.ndarray[N, K, 2]):
+        - coords (np.ndarray[N, K, 2]):
             Predicted keypoint location.
         - scores (np.ndarray[N, K, 1]):
             Scores (confidence) of the keypoints.
     """
     if not isinstance(heatmaps, np.ndarray):
-        raise ValueError("Heatmaps should be numpy.ndarray")
+        raise ValueError("Heatmaps should be np.ndarray")
     if heatmaps.ndim != 4:
         raise ValueError("Heatmaps should be 4-dimensional")
 
@@ -120,6 +122,8 @@ def post_dark_udp(coords, batch_heatmaps, kernel=3):
         `np.ndarray` of shape `(num_persons, num_keypoints, 2)` ):
             Refined coordinates.
     """
+    if not isinstance(coords, np.ndarray):
+        coords = coords.cpu().numpy()
     if not isinstance(batch_heatmaps, np.ndarray):
         batch_heatmaps = batch_heatmaps.cpu().numpy()
     batch_size, num_keypoints, height, width = batch_heatmaps.shape
@@ -181,7 +185,7 @@ def transform_preds(coords, center, scale, output_size):
             Center of the bounding box (x, y).
         scale (`np.ndarray[2,]`):
             Scale of the bounding box wrt [width, height].
-        output_size (`np.ndarray[2,] or `List(2,)`):
+        output_size (`np.ndarray[2,]):
             Size of the destination heatmaps in (height, width) format.
 
     Returns:
@@ -468,7 +472,7 @@ class ViTPoseImageProcessor(BaseImageProcessor):
 
         # since the number of boxes can differ per image, the image processor takes a list
         # rather than a numpy array of boxes
-        # it currently create pixel_values of shape (batch_size*num_persons, num_channels, height, width)
+        # it currently creates pixel_values of shape (batch_size*num_persons, num_channels, height, width)
 
         if self.do_rescale:
             images = [
@@ -525,9 +529,9 @@ class ViTPoseImageProcessor(BaseImageProcessor):
 
         batch_size, _, height, width = heatmaps.shape
 
-        preds, scores = _get_max_preds(heatmaps)
+        coords, scores = _get_max_preds(heatmaps)
 
-        preds = post_dark_udp(preds, heatmaps, kernel=kernel)
+        preds = post_dark_udp(coords, heatmaps, kernel=kernel)
 
         # Transform back to the image
         for i in range(batch_size):
@@ -546,6 +550,9 @@ class ViTPoseImageProcessor(BaseImageProcessor):
                 Bounding boxes.
             kernel_size (`int`, *optional*, defaults to 11):
                 Gaussian kernel size (K) for modulation.
+        Returns:
+            `List[Dict]`: A list of dictionaries, each dictionary containing the keypoints and boxes for an image
+            in the batch as predicted by the model.
         """
 
         # First compute centers and scales for each bounding box
@@ -568,12 +575,11 @@ class ViTPoseImageProcessor(BaseImageProcessor):
         all_boxes[:, 2:4] = scales[:, 0:2]
         all_boxes[:, 4] = np.prod(scales * 200.0, axis=1)
 
-        poses = all_preds
+        poses = torch.Tensor(all_preds)
 
-        bboxes = np.array(boxes)
-        bboxes_xyxy = coco_to_pascal_voc(bboxes)
+        bboxes_xyxy = torch.Tensor(coco_to_pascal_voc(all_boxes))
 
-        pose_results = []
+        pose_results: List[Dict[str, torch.Tensor]] = []
         for pose, bbox_xyxy in zip(poses, bboxes_xyxy):
             pose_result = {}
             pose_result["keypoints"] = pose

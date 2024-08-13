@@ -18,19 +18,20 @@ import unittest
 
 import numpy as np
 
-from transformers.testing_utils import require_cv2, require_torch, require_vision
+from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+
+
+if is_torch_available():
+    import torch
 
 
 if is_vision_available():
     from PIL import Image
 
     from transformers import ViTPoseImageProcessor
-
-if is_torch_available():
-    import torch
 
 
 class ViTPoseImageProcessingTester(unittest.TestCase):
@@ -93,11 +94,11 @@ class ViTPoseImageProcessingTester(unittest.TestCase):
 
 @require_torch
 @require_vision
-@require_cv2
 class ViTPoseImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = ViTPoseImageProcessor if is_vision_available() else None
 
     def setUp(self):
+        super().setUp()
         self.image_processor_tester = ViTPoseImageProcessingTester(self)
 
     @property
@@ -198,14 +199,13 @@ class ViTPoseImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         # create random numpy tensors
         self.image_processor_tester.num_channels = 4
         image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
-
         # Test not batched input
         boxes = [[[0, 0, 1, 1], [0.5, 0.5, 0.5, 0.5]]]
         encoded_images = image_processor(
             image_inputs[0],
             boxes=boxes,
             return_tensors="pt",
-            input_data_format="channels_first",
+            input_data_format="channels_last",
             image_mean=0,
             image_std=1,
         ).pixel_values
@@ -218,7 +218,7 @@ class ViTPoseImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             image_inputs,
             boxes=boxes,
             return_tensors="pt",
-            input_data_format="channels_first",
+            input_data_format="channels_last",
             image_mean=0,
             image_std=1,
         ).pixel_values

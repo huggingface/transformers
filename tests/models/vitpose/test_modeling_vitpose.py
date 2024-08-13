@@ -17,6 +17,8 @@
 import inspect
 import unittest
 
+import requests
+
 from transformers import ViTPoseBackboneConfig, ViTPoseConfig
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
@@ -217,9 +219,10 @@ class ViTPoseModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertIsNotNone(model)
 
 
-# We will verify our results on an image of cute cats
+# We will verify our results on an image of people in house
 def prepare_img():
-    image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+    url = "http://images.cocodataset.org/val2017/000000000139.jpg"
+    image = Image.open(requests.get(url, stream=True).raw)
     return image
 
 
@@ -232,7 +235,7 @@ class ViTPoseModelIntegrationTest(unittest.TestCase):
         return ViTPoseImageProcessor.from_pretrained("nielsr/vitpose-base-simple") if is_vision_available() else None
 
     @slow
-    def test_inference(self):
+    def test_inference_pose_estimation(self):
         image_processor = self.default_image_processor
         # TODO update organization
         model = ViTPoseForPoseEstimation.from_pretrained("nielsr/vitpose-base-simple")
@@ -247,9 +250,30 @@ class ViTPoseModelIntegrationTest(unittest.TestCase):
 
         assert heatmaps.shape == (2, 17, 64, 48)
 
-        expected_slice = torch.tensor([[0.0003, 0.0003, 0.0003], [0.0005, 0.0007, 0.0007], [0.0006, 0.0007, 0.0007]])
+        expected_slice = torch.tensor(
+            [
+                [9.9330e-06, 9.9330e-06, 9.9330e-06],
+                [9.9330e-06, 9.9330e-06, 9.9330e-06],
+                [9.9330e-06, 9.9330e-06, 9.9330e-06],
+            ]
+        )
 
         assert torch.allclose(heatmaps[0, 0, :3, :3], expected_slice, atol=1e-4)
+
+        pose_results = image_processor.post_process_pose_estimation(outputs, boxes=boxes)
+
+        expected_bbox = torch.tensor([439.3250, 226.6150, 438.9719, 226.4776, 22320.4219, 0.0000]).to(torch_device)
+        expected_keypoints = torch.tensor(
+            [
+                [3.9813e02, 1.8184e02, 8.7529e-01],
+                [3.9828e02, 1.7981e02, 8.4315e-01],
+                [3.9596e02, 1.7948e02, 9.2678e-01],
+            ]
+        ).to(torch_device)
+
+        self.assertEqual(len(pose_results), 2)
+        self.assertTrue(torch.allclose(pose_results[0]["bbox"], expected_bbox, atol=1e-4))
+        self.assertTrue(torch.allclose(pose_results[0]["keypoints"], expected_keypoints, atol=1e-4))
 
     @slow
     def test_batched_inference(self):
