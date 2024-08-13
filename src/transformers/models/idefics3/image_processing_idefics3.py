@@ -291,7 +291,11 @@ def to_pil_image(
     return PIL.Image.fromarray(image, mode=image_mode)
 
 
-def convert_to_rgb(image: ImageInput, palette: Optional[PIL.ImagePalette.ImagePalette] = None, input_data_format: Optional[Union[str, ChannelDimension]] = None,) -> ImageInput:
+def convert_to_rgb(
+    image: ImageInput,
+    palette: Optional[PIL.ImagePalette.ImagePalette] = None,
+    input_data_format: Optional[Union[str, ChannelDimension]] = None,
+) -> ImageInput:
     """
     Converts an image to RGB format. Only converts if the image is of type PIL.Image.Image, otherwise returns the image
     as is.
@@ -815,7 +819,7 @@ class Idefics3ImageProcessor(BaseImageProcessor):
         # for size=(10, 364) -> rescaled_size=(364, 364)
         # for size=(11, 365) -> rescaled_size=(364, 364*2)
         new_images_list = []
-        if 'longest_edge' in max_image_size:
+        if "longest_edge" in max_image_size:
             vision_encoder_max_size = max_image_size["longest_edge"]
         elif isinstance(max_image_size, int):
             vision_encoder_max_size = max_image_size
@@ -873,7 +877,8 @@ class Idefics3ImageProcessor(BaseImageProcessor):
 
         if do_convert_rgb:
             images_list = [
-                [convert_to_rgb(image, palette, input_data_format=input_data_format) for image in images] for images, palette in zip(images_list, palettes)
+                [convert_to_rgb(image, palette, input_data_format=input_data_format) for image in images]
+                for images, palette in zip(images_list, palettes)
             ]
 
         if is_scaled_image(images_list[0][0]) and do_rescale:

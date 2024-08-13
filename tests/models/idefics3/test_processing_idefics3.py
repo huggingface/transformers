@@ -14,6 +14,7 @@
 # limitations under the License.
 
 from io import BytesIO
+import unittest
 
 import requests
 
@@ -30,7 +31,7 @@ if is_vision_available():
 
 @require_torch
 @require_vision
-class Idefics3ProcessorTest(ProcessorTesterMixin):
+class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def setUp(self):
         self.processor = Idefics3Processor.from_pretrained("HuggingFaceM4/Idefics3-8B-Llama3", image_seq_len=2)
         self.image1 = Image.open(

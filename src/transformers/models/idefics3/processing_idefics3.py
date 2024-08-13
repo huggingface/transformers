@@ -219,22 +219,6 @@ class Idefics3Processor(ProcessorMixin):
         """
         if text is None and images is None:
             raise ValueError("You must provide either `text` or `images`.")
-        # check if images and text inputs are reversed for BC
-        if (
-            text is not None
-            and not isinstance(text[0], str)
-            or images is not None
-            and not (
-                is_image_or_image_url(images)
-                or is_image_or_image_url(images[0])
-                or (isinstance(images[0], list) and is_image_or_image_url(images[0][0]))
-            )
-        ):
-            warnings.warn(
-                "It looks like you are passing the inputs in the wrong order. You should pass the images input first and the text input second."
-                "Images and text inputs will be swapped."
-            )
-            images, text = text, images
 
         output_kwargs = self._merge_kwargs(
             Idefics3ProcessorKwargs,
