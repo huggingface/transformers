@@ -445,11 +445,11 @@ class PretrainedConfig(PushToHubMixin):
             if hasattr(self, parameter_name) and getattr(self, parameter_name) != default_value:
                 non_default_generation_parameters[parameter_name] = getattr(self, parameter_name)
         if len(non_default_generation_parameters) > 0:
-            logger.warning(
-                "Some non-default generation parameters are set in the model config. These should go into a "
-                "GenerationConfig file (https://huggingface.co/docs/transformers/generation_strategies#save-a-custom-decoding-strategy-with-your-model) "
-                "instead. This warning will be raised to an exception in v4.41.\n"
-                f"Non-default generation parameters: {str(non_default_generation_parameters)}"
+            raise ValueError(
+                "Some non-default generation parameters are set in the model config. These should go into either a) "
+                "`model.generation_config` (as opposed to `model.config`); OR b) a GenerationConfig file "
+                "(https://huggingface.co/docs/transformers/generation_strategies#save-a-custom-decoding-strategy-with-your-model) "
+                f"\nNon-default generation parameters: {str(non_default_generation_parameters)}"
             )
 
         os.makedirs(save_directory, exist_ok=True)

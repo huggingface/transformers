@@ -76,7 +76,6 @@ from .logits_process import (
     ExponentialDecayLengthPenalty,
     ForcedBOSTokenLogitsProcessor,
     ForcedEOSTokenLogitsProcessor,
-    ForceTokensLogitsProcessor,
     HammingDiversityLogitsProcessor,
     InfNanRemoveLogitsProcessor,
     LogitNormalization,
@@ -876,9 +875,6 @@ class GenerationMixin:
                 if (input_ids_seq_length > 1 or generation_config.forced_bos_token_id is None)
                 else begin_index + 1
             )
-            if generation_config.forced_decoder_ids is not None:
-                # generation starts after the last token that is forced
-                begin_index += generation_config.forced_decoder_ids[-1][0]
             processors.append(
                 SuppressTokensAtBeginLogitsProcessor(
                     generation_config.begin_suppress_tokens,
@@ -887,12 +883,11 @@ class GenerationMixin:
                 )
             )
         if generation_config.forced_decoder_ids is not None:
-            # TODO(Sanchit): deprecate in v4.40 by removing this logic
-            warnings.warn(
-                "You have explicitly specified `forced_decoder_ids`. This functionality has been deprecated and will throw an error in v4.40. Please remove the `forced_decoder_ids` argument in favour of `input_ids` or `decoder_input_ids` respectively.",
-                FutureWarning,
+            # TODO (sanchit): move this exception to GenerationConfig.validate() when TF & FLAX are aligned with PT
+            raise ValueError(
+                "You have explicitly specified `forced_decoder_ids`. Please remove the `forced_decoder_ids` argument "
+                "in favour of `input_ids` or `decoder_input_ids` respectively.",
             )
-            processors.append(ForceTokensLogitsProcessor(generation_config.forced_decoder_ids, _has_warned=True))
         if generation_config.watermarking_config is not None:
             processors.append(
                 WatermarkLogitsProcessor(
@@ -2233,13 +2228,6 @@ class GenerationMixin:
             input_ids[batch_idx] = self.generate(trimmed_ids.unsqueeze(0), generation_config=generation_config)
 
         return input_ids
-
-    def contrastive_search(self, *args, **kwargs):
-        logger.warning_once(
-            "Calling `contrastive_search` directly is deprecated and will be removed in v4.41. Use `generate` or a "
-            "custom generation loop instead.",
-        )
-        return self._contrastive_search(*args, **kwargs)
 
     def _dola_decoding(
         self,
