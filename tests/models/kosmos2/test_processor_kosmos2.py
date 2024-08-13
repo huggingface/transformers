@@ -61,7 +61,7 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
 
-        image_processor = CLIPImageProcessor()
+        image_processor = CLIPImageProcessor(do_center_crop=False)
 
         # We have a SentencePiece fixture for testing
         slow_tokenizer = XLMRobertaTokenizer(SAMPLE_VOCAB)
@@ -491,7 +491,7 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @require_vision
     @require_torch
     def test_kwargs_overrides_default_tokenizer_kwargs(self):
-        # rewrite as Kosmos-2 supports custom padding only when image is None.
+        # Rewrite as Kosmos-2 supports custom padding only when image is None.
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor")
@@ -510,12 +510,13 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             max_length=112,
             padding="max_length",
         )
+
         self.assertEqual(len(inputs["input_ids"][0]), 112)
 
     @require_torch
     @require_vision
     def test_structured_kwargs_nested(self):
-        # rewrite to test only image_processor kwargs
+        # Rewrite to test only image_processor kwargs
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor")
@@ -530,7 +531,7 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # Define the kwargs for each modality
         all_kwargs = {
             "common_kwargs": {"return_tensors": "pt"},
-            "images_kwargs": {"crop_size": {"height": 214, "width": 214}},
+            "images_kwargs": {"size": {"height": 214, "width": 214}},
         }
 
         inputs = processor(text=input_str, images=image_input, **all_kwargs)
@@ -541,7 +542,7 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @require_torch
     @require_vision
     def test_structured_kwargs_nested_from_dict(self):
-        # rewrite to test only image_processor kwargs
+        # Rewrite to test only image_processor kwargs
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
 
@@ -556,7 +557,7 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # Define the kwargs for each modality
         all_kwargs = {
             "common_kwargs": {"return_tensors": "pt"},
-            "images_kwargs": {"crop_size": {"height": 214, "width": 214}},
+            "images_kwargs": {"size": {"height": 214, "width": 214}},
         }
 
         inputs = processor(text=input_str, images=image_input, **all_kwargs)
@@ -565,7 +566,7 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @require_vision
     @require_torch
     def test_tokenizer_defaults_preserved_by_kwargs(self):
-        # rewrite as Kosmos-2 supports custom padding only when image is None.
+        # Rewrite as Kosmos-2 supports custom padding only when image is None.
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor")
@@ -583,7 +584,7 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @require_torch
     @require_vision
     def test_unstructured_kwargs(self):
-        # rewrite as Kosmos-2 supports custom padding only when image is None.
+        # Rewrite as Kosmos-2 supports custom padding only when image is None.
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor")
@@ -608,7 +609,7 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @require_torch
     @require_vision
     def test_unstructured_kwargs_batched(self):
-        # rewrite as Kosmos-2 supports custom padding only when image is None.
+        # Rewrite as Kosmos-2 supports custom padding only when image is None.
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor")
@@ -624,11 +625,9 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             text=input_str,
             images=image_input,
             return_tensors="pt",
-            crop_size={"height": 214, "width": 214},
+            size={"height": 214, "width": 214},
             padding="longest",
             max_length=76,
         )
-
-        # self.assertEqual(inputs["pixel_values"].shape[2], 214)
 
         self.assertEqual(len(inputs["input_ids"][0]), 10)

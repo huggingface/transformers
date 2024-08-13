@@ -193,7 +193,7 @@ class InstructBlipProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @require_torch
     @require_vision
     def test_image_processor_defaults_preserved_by_image_kwargs(self):
-        # rewrite as instructblip needs a qformer_tokenizer
+        # Rewrite as InstructBlip needs a qformer_tokenizer
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor", size=(234, 234))
@@ -206,14 +206,14 @@ class InstructBlipProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()
-
         inputs = processor(text=input_str, images=image_input)
+
         self.assertEqual(len(inputs["pixel_values"][0][0]), 234)
 
     @require_torch
     @require_vision
     def test_kwargs_overrides_default_image_processor_kwargs(self):
-        # rewrite as instructblip needs a qformer_tokenizer
+        # Rewrite as InstructBlip needs a qformer_tokenizer
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor", size=(234, 234))
@@ -227,14 +227,14 @@ class InstructBlipProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()
-
         inputs = processor(text=input_str, images=image_input, size=[224, 224])
+
         self.assertEqual(len(inputs["pixel_values"][0][0]), 224)
 
     @require_vision
     @require_torch
     def test_kwargs_overrides_default_tokenizer_kwargs(self):
-        # rewrite as instructblip needs a qformer_tokenizer
+        # Rewrite as InstructBlip needs a qformer_tokenizer
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor")
@@ -249,16 +249,16 @@ class InstructBlipProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.skip_processor_without_typed_kwargs(processor)
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()
-
         inputs = processor(
             text=input_str, images=image_input, return_tensors="pt", max_length=112, padding="max_length"
         )
+
         self.assertEqual(len(inputs["input_ids"][0]), 112)
 
     @require_torch
     @require_vision
     def test_structured_kwargs_nested(self):
-        # rewrite as instructblip needs a qformer_tokenizer
+        # Rewrite as InstructBlip needs a qformer_tokenizer
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor")
@@ -281,18 +281,16 @@ class InstructBlipProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "images_kwargs": {"size": {"height": 214, "width": 214}},
             "text_kwargs": {"padding": "max_length", "max_length": 76},
         }
-
         inputs = processor(text=input_str, images=image_input, **all_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
 
         self.assertEqual(inputs["pixel_values"].shape[2], 214)
-
         self.assertEqual(len(inputs["input_ids"][0]), 76)
 
     @require_torch
     @require_vision
     def test_structured_kwargs_nested_from_dict(self):
-        # rewrite as instructblip needs a qformer_tokenizer
+        # Rewrite as InstructBlip needs a qformer_tokenizer
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
 
@@ -315,16 +313,15 @@ class InstructBlipProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "images_kwargs": {"size": {"height": 214, "width": 214}},
             "text_kwargs": {"padding": "max_length", "max_length": 76},
         }
-
         inputs = processor(text=input_str, images=image_input, **all_kwargs)
-        self.assertEqual(inputs["pixel_values"].shape[2], 214)
 
+        self.assertEqual(inputs["pixel_values"].shape[2], 214)
         self.assertEqual(len(inputs["input_ids"][0]), 76)
 
     @require_vision
     @require_torch
     def test_tokenizer_defaults_preserved_by_kwargs(self):
-        # rewrite as instructblip needs a qformer_tokenizer
+        # Rewrite as InstructBlip needs a qformer_tokenizer
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor")
@@ -339,14 +336,14 @@ class InstructBlipProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.skip_processor_without_typed_kwargs(processor)
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()
-
         inputs = processor(text=input_str, images=image_input, return_tensors="pt")
+
         self.assertEqual(len(inputs["input_ids"][0]), 117)
 
     @require_torch
     @require_vision
     def test_unstructured_kwargs(self):
-        # rewrite as instructblip needs a qformer_tokenizer
+        # Rewrite as InstructBlip needs a qformer_tokenizer
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor")
@@ -377,7 +374,7 @@ class InstructBlipProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @require_torch
     @require_vision
     def test_unstructured_kwargs_batched(self):
-        # rewrite as instructblip needs a qformer_tokenizer
+        # Rewrite as InstructBlip needs a qformer_tokenizer
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor")

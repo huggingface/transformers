@@ -173,14 +173,13 @@ class Kosmos2Processor(ProcessorMixin):
         if images is None and text is None:
             raise ValueError("You have to specify either images or text.")
 
-        # Temporary fix for "paddding_side" in init_kwargs
-        _ = self.tokenizer.init_kwargs.pop("padding_side", None)
-
         output_kwargs = self._merge_kwargs(
             Kosmos2ProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
+        # Temporary fix for "paddding_side" in init_kwargs
+        _ = output_kwargs["text_kwargs"].pop("padding_side", None)
 
         bboxes = output_kwargs["images_kwargs"].pop("bboxes", None)
         num_image_tokens = output_kwargs["images_kwargs"].pop("num_image_tokens", 64)
