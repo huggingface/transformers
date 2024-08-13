@@ -88,10 +88,10 @@ class Idefics3BaseModelOutputWithPast(ModelOutput):
 
 
 @dataclass
-# Copied from transformers.models.idefics.modeling_idefics.IdeficsCausalLMOutputWithPast with Idefics->Idefics3
 class Idefics3CausalLMOutputWithPast(ModelOutput):
     """
-    Base class for Idefics3 causal language model (or autoregressive) outputs.
+    Base class for Idefics causal language model (or autoregressive) outputs.
+
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
             Language modeling loss (for next-token prediction).
@@ -100,20 +100,24 @@ class Idefics3CausalLMOutputWithPast(ModelOutput):
         past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
             `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
+
             Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
             `past_key_values` input) to speed up sequential decoding.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+
             Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
         attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
+
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
         image_hidden_states (`tuple(torch.FloatTensor)`, *optional*):
             Tuple of `torch.FloatTensor` (one for the output of the image embeddings, `(batch_size, num_images,
             sequence_length, hidden_size)`.
+
             image_hidden_states of the model produced by the vision encoder
     """
 
@@ -125,7 +129,6 @@ class Idefics3CausalLMOutputWithPast(ModelOutput):
     image_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
-# Copied from transformers.models.idefics2.modeling_idefics2.Idefics2VisionEmbeddings
 class Idefics3VisionEmbeddings(nn.Module):
     """
     This is a modified version of `siglip.modelign_siglip.SiglipVisionEmbeddings` to enable images of variable
@@ -553,7 +556,6 @@ IDEFICS3_VISION_START_DOCSTRING = r"""
 """
 
 
-# Copied from transformers.models.idefics2.modeling_idefics2.Idefics2VisionTransformer
 @add_start_docstrings(
     "The Idefics3 Vision Transformer Model outputting raw image embedding.",
     IDEFICS3_VISION_START_DOCSTRING,
@@ -669,6 +671,9 @@ class Idefics3RMSNorm(nn.Module):
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
         return self.weight * hidden_states.to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
 class Idefics3Connector(nn.Module):

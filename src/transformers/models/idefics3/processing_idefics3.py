@@ -17,7 +17,6 @@ Processor class for Idefics3.
 """
 
 import sys
-import warnings
 from typing import TYPE_CHECKING, List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
@@ -46,7 +45,7 @@ def is_image_or_image_url(elem):
     return is_url(elem) or is_valid_image(elem)
 
 
-def _prompt_split_image(image_seq_len, image_rows, image_cols, fake_token_around_image, image_token):
+def _prompt_split_image(image_seq_len, image_rows, image_cols, fake_token_around_image, image_token, global_img_token):
     """Prompt with expanded image tokens for when the image is split into patches."""
     text_split_images = ""
     for n_h in range(image_rows):
@@ -58,31 +57,42 @@ def _prompt_split_image(image_seq_len, image_rows, image_cols, fake_token_around
 
     text_split_images += (
         f"\n{fake_token_around_image}"
-        + "<global-img>"
+        + f"{global_img_token}"
         + f"{image_token}" * image_seq_len
         + f"{fake_token_around_image}"
     )
     return text_split_images
 
 
-def _prompt_single_image(image_seq_len, fake_token_around_image, image_token):
+def _prompt_single_image(image_seq_len, fake_token_around_image, image_token, global_img_token):
     """Prompt with expanded image tokens for a single image."""
     return (
-        f"{fake_token_around_image}" + "<global-img>" + f"{image_token}" * image_seq_len + f"{fake_token_around_image}"
+        f"{fake_token_around_image}"
+        + f"{global_img_token}"
+        + f"{image_token}" * image_seq_len
+        + f"{fake_token_around_image}"
     )
 
 
-def get_image_prompt_string(image_rows, image_cols, image_seq_len, fake_token_around_image, image_token):
+def get_image_prompt_string(
+    image_rows, image_cols, image_seq_len, fake_token_around_image, image_token, global_img_token
+):
     if image_rows == 0 and image_cols == 0:
         return _prompt_single_image(
-            image_seq_len, fake_token_around_image=fake_token_around_image, image_token=image_token
+            image_seq_len,
+            fake_token_around_image=fake_token_around_image,
+            image_token=image_token,
+            global_img_token=global_img_token,
         )
-    return _prompt_split_image(image_seq_len, image_rows, image_cols, fake_token_around_image, image_token)
+    return _prompt_split_image(
+        image_seq_len, image_rows, image_cols, fake_token_around_image, image_token, global_img_token
+    )
 
 
 class Idefics3ImagesKwargs(ImagesKwargs, total=False):
     image_seq_len: Optional[int]
     return_row_col_info: Optional[bool]
+    max_image_size: Optional[dict[str, int]]
 
 
 class Idefics3ProcessorKwargs(ProcessingKwargs, total=False):
@@ -95,7 +105,6 @@ class Idefics3ProcessorKwargs(ProcessingKwargs, total=False):
             "is_split_into_words": False,
         },
         "images_kwargs": {
-            "image_seq_len": 169,
             "return_row_col_info": True,
         },
     }
@@ -113,6 +122,10 @@ class Idefics3Processor(ProcessorMixin):
             An instance of [`Idefics3ImageProcessor`]. The image processor is a required input.
         tokenizer (`PreTrainedTokenizerBase`, *optional*):
             An instance of [`PreTrainedTokenizerBase`]. This should correspond with the model's text model. The tokenizer is a required input.
+        image_seq_len (`int`, *optional*, defaults to 169):
+            The length of the image sequence i.e. the number of <image> tokens per image in the input.
+            This parameter is used to build the string from the input prompt and image tokens and should match the
+            value the model used. It is computed as: image_seq_len = int(((image_size // patch_size) ** 2) / (scale_factor**2))
         chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
             in a chat into a tokenizable string.
     """
@@ -121,7 +134,7 @@ class Idefics3Processor(ProcessorMixin):
     image_processor_class = "Idefics3ImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
-    def __init__(self, image_processor, tokenizer=None, chat_template: str = None, **kwargs):
+    def __init__(self, image_processor, tokenizer=None, image_seq_len: int = 169, chat_template: str = None, **kwargs):
         if image_processor is None:
             raise ValueError("You need to specify an `image_processor`.")
         if tokenizer is None:
@@ -130,9 +143,16 @@ class Idefics3Processor(ProcessorMixin):
         self.fake_image_token = AddedToken("<fake_token_around_image>", normalized=False, special=True)
         self.image_token = AddedToken("<image>", normalized=False, special=True)
         self.end_of_utterance_token = AddedToken("<end_of_utterance>", normalized=False, special=True)
+        self.global_img_token = "<global-img>"
+        self.global_img_token_id = tokenizer.convert_tokens_to_ids(self.global_img_token)
+        self.image_seq_len = image_seq_len
 
         tokens_to_add = {
-            "additional_special_tokens": [self.fake_image_token, self.image_token, self.end_of_utterance_token]
+            "additional_special_tokens": [
+                self.fake_image_token,
+                self.image_token,
+                self.end_of_utterance_token,
+            ]
         }
         tokenizer.add_special_tokens(tokens_to_add)
 
@@ -168,7 +188,7 @@ class Idefics3Processor(ProcessorMixin):
         >>> from transformers import Idefics3Processor
         >>> from transformers.image_utils import load_image
 
-        >>> processor = Idefics3Processor.from_pretrained("HuggingFaceM4/Idefics3-8B-Llama3", image_seq_len=2)
+        >>> processor = Idefics3Processor.from_pretrained("HuggingFaceM4/Idefics3-8B-Llama3")
         >>> processor.image_processor.do_image_splitting = False  # Force as False to simplify the example
 
         >>> url1 = "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
@@ -201,6 +221,7 @@ class Idefics3Processor(ProcessorMixin):
                 `<fake_token_around_image>` + `<row_x_col_y>` + `<image>` * `image_seq_len` * <fake_token_around_image>`.
             image_seq_len (`int`, *optional*):
                 The length of the image sequence. If not provided, the default value of 169 is used.
+                image_seq_len should be equal to int(((image_size // patch_size) ** 2) / (scale_factor**2))
             padding (`Union[bool, str, PaddingStrategy]`, *optional*, defaults to `False`):
                 Padding strategy applied to the input ids. See [`PreTrainedTokenizerFast.pad`] for more information.
             truncation (`Union[bool, str, TruncationStrategy]`, *optional*):
@@ -226,10 +247,11 @@ class Idefics3Processor(ProcessorMixin):
             **kwargs,
         )
 
-        # Temporary fix for "paddding_side" in init_kwargs
+        # Temporary fix for "padding_side" in init_kwargs
         _ = output_kwargs["text_kwargs"].pop("padding_side", None)
 
         image_seq_len = output_kwargs["images_kwargs"].pop("image_seq_len", None)
+        image_seq_len = image_seq_len if image_seq_len is not None else self.image_seq_len
 
         n_images_in_text = []
         n_images_in_images = []
@@ -277,6 +299,7 @@ class Idefics3Processor(ProcessorMixin):
 
             fake_image_token = self.fake_image_token.content
             image_token = self.image_token.content
+            global_img_token = self.global_img_token
 
             prompt_strings = []
             for sample, sample_rows, sample_cols in zip(text, image_rows, image_cols):
@@ -291,10 +314,13 @@ class Idefics3Processor(ProcessorMixin):
                         image_seq_len,
                         image_token=image_token,
                         fake_token_around_image=fake_image_token,
+                        global_img_token=global_img_token,
                     )
                     image_prompt_strings.append(image_prompt_string)
 
                 split_sample = sample.split(image_token)
+                if len(split_sample) == 0:
+                    raise ValueError("The image token should be present in the text.")
 
                 # Place in the image prompt strings where the image tokens are
                 sample = split_sample[0]

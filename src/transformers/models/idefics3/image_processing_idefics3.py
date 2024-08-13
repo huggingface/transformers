@@ -248,7 +248,6 @@ def make_pixel_mask(
     return mask
 
 
-# Copied from transformers.image_transforms.to_pil_image
 def to_pil_image(
     image: Union[np.ndarray, "PIL.Image.Image", "torch.Tensor", "tf.Tensor", "jnp.ndarray"],
     do_rescale: Optional[bool] = None,
@@ -589,7 +588,6 @@ class Idefics3ImageProcessor(BaseImageProcessor):
         )
         return padded_image
 
-    # Copied from transformers.models.idefics2.image_processing_idefics2.pad
     def pad(
         self,
         images: List[np.ndarray],
@@ -643,7 +641,6 @@ class Idefics3ImageProcessor(BaseImageProcessor):
                 return np.zeros((n_channels, *size), dtype=np.uint8)
             elif input_data_format == ChannelDimension.LAST:
                 return np.zeros((*size, n_channels), dtype=np.uint8)
-            raise ValueError("Invalid channel dimension format.")
 
         padded_images_list = [
             [empty_image(pad_size, data_format) for _ in range(max_num_images)] for _ in range(batch_size)
@@ -685,6 +682,7 @@ class Idefics3ImageProcessor(BaseImageProcessor):
         return_row_col_info: bool = False,
         input_data_format: Optional[ChannelDimension] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
+        crop_size: Optional[Dict[str, int]] = None,
     ):
         """
         Preprocess a batch of images.
@@ -740,7 +738,12 @@ class Idefics3ImageProcessor(BaseImageProcessor):
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
+            crop_size (`Dict[str, int]`, *optional*):
+                This parameter is not used in this method. It is only present for compatibility.
         """
+        if crop_size is not None:
+            logger.warning("crop_size is not used in Idefics3ImageProcessor.preprocess.")
+
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = size if size is not None else self.size
         resample = resample if resample is not None else self.resample

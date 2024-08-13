@@ -51,12 +51,11 @@ class Idefics3VisionText2TextModelTester:
         parent,
         is_training=True,
         batch_size=2,
+        scale_factor=2,
         num_images=2,
-        seq_length=10,
         vision_config={
-            "image_size": 12,
-            "patch_size": 12,
-            "num_channels": 3,
+            "image_size": 16,
+            "patch_size": 4,
             "hidden_size": 32,
             "num_hidden_layers": 2,
             "num_attention_heads": 4,
@@ -64,15 +63,6 @@ class Idefics3VisionText2TextModelTester:
             "dropout": 0.1,
             "attention_dropout": 0.1,
             "initializer_range": 0.02,
-        },
-        perceiver_config={
-            "hidden_act": "silu",
-            "resampler_n_latents": 2,
-            "resampler_depth": 2,
-            "resampler_n_heads": 2,
-            "num_key_value_heads": 1,
-            "resampler_head_dim": 12,
-            "attention_dropout": 0.0,
         },
         text_config={
             "vocab_size": 100,
@@ -85,10 +75,10 @@ class Idefics3VisionText2TextModelTester:
             "max_position_embeddings": 256,
             "initializer_range": 0.02,
             "rms_norm_eps": 1e-6,
-            "pad_token_id": 0,  # None in the original configuration_mistral, we set it to the unk_token_id
-            "bos_token_id": 1,
-            "eos_token_id": 2,
-            "image_token_id": 32_001,
+            "pad_token_id": 2,
+            "bos_token_id": 0,
+            "eos_token_id": 1,
+            "image_token_id": 57,
             "tie_word_embeddings": False,
             "rope_theta": 10000.0,
             "sliding_window": 32,
@@ -96,14 +86,17 @@ class Idefics3VisionText2TextModelTester:
         },
         use_cache=False,
         tie_word_embeddings=False,
-        image_token_id=99,
+        image_token_id=57,
     ):
         self.parent = parent
         self.is_training = is_training
         self.batch_size = batch_size
         self.num_images = num_images
-        self.num_channels = 3
-        self.seq_length = seq_length
+        self.scale_factor = scale_factor
+        self.seq_length = (
+            int(((vision_config["image_size"] // vision_config["patch_size"]) ** 2) / (self.scale_factor**2))
+            * self.num_images
+        )
         self.use_cache = use_cache
         self.image_token_id = image_token_id
         self.tie_word_embeddings = tie_word_embeddings
@@ -114,7 +107,6 @@ class Idefics3VisionText2TextModelTester:
         self.hidden_size = text_config["hidden_size"]
 
         self.vision_config = vision_config
-        self.perceiver_config = perceiver_config
         self.text_config = text_config
 
     def get_config(self):
@@ -123,9 +115,9 @@ class Idefics3VisionText2TextModelTester:
             image_token_id=self.image_token_id,
             tie_word_embeddings=self.tie_word_embeddings,
             vision_config=self.vision_config,
-            perceiver_config=self.perceiver_config,
             text_config=self.text_config,
             vocab_size=self.vocab_size,
+            scale_factor=self.scale_factor,
         )
 
     def prepare_config_and_inputs(self):
@@ -133,7 +125,7 @@ class Idefics3VisionText2TextModelTester:
             [
                 self.batch_size,
                 self.num_images,
-                self.vision_config["num_channels"],
+                3,  # Idefics3ImageProcessor always generates RGB pixel values
                 self.vision_config["image_size"],
                 self.vision_config["image_size"],
             ]
@@ -148,7 +140,7 @@ class Idefics3VisionText2TextModelTester:
         input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 2) + 1
 
         # For simplicity just set the last n tokens to the image token
-        n_image_tokens_per_batch = self.num_images * self.perceiver_config["resampler_n_latents"]
+        n_image_tokens_per_batch = self.seq_length
         input_ids[:, -n_image_tokens_per_batch:] = self.image_token_id
         attention_mask = input_ids.ne(1).to(torch_device)
         inputs_dict = {
@@ -227,7 +219,7 @@ class Idefics3ModelTest(ModelTesterMixin, unittest.TestCase):
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
             # Input ids should be clamped to the maximum size of the vocabulary - 1 and the image token should be the last token
             inputs_dict["input_ids"].clamp_(max=model_vocab_size - 15 - 2)
-            n_images = self.model_tester.num_images * self.model_tester.perceiver_config["resampler_n_latents"]
+            n_images = self.model_tester.num_images * self.model_tester.seq_length
             model.image_token_id = model_vocab_size - 15 - 1
             inputs_dict["input_ids"][:, -n_images:] = model.image_token_id
 
@@ -311,7 +303,7 @@ class Idefics3ModelTest(ModelTesterMixin, unittest.TestCase):
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
             # Input ids should be clamped to the maximum size of the vocabulary - 1 and the image token should be the last token
             inputs_dict["input_ids"].clamp_(max=model_vocab_size - 15 - 2)
-            n_images = self.model_tester.num_images * self.model_tester.perceiver_config["resampler_n_latents"]
+            n_images = self.model_tester.num_images * self.model_tester.seq_length
             model.image_token_id = model_vocab_size - 15 - 1
             inputs_dict["input_ids"][:, -n_images:] = model.image_token_id
 
@@ -379,7 +371,7 @@ class Idefics3ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
             # Input ids should be clamped to the maximum size of the vocabulary - 1 and the image token should be the last token
             inputs_dict["input_ids"].clamp_(max=model_vocab_size - 15 - 2)
-            n_images = self.model_tester.num_images * self.model_tester.perceiver_config["resampler_n_latents"]
+            n_images = self.model_tester.num_images * self.model_tester.seq_length
             model.model.image_token_id = model_vocab_size - 15 - 1
             inputs_dict["input_ids"][:, -n_images:] = model.model.image_token_id
 
@@ -456,7 +448,7 @@ class Idefics3ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
             # Input ids should be clamped to the maximum size of the vocabulary - 1 and the image token should be the last token
             inputs_dict["input_ids"].clamp_(max=model_vocab_size - 15 - 2)
-            n_images = self.model_tester.num_images * self.model_tester.perceiver_config["resampler_n_latents"]
+            n_images = self.model_tester.num_images * self.model_tester.seq_length
             model.model.image_token_id = model_vocab_size - 15 - 1
             inputs_dict["input_ids"][:, -n_images:] = model.model.image_token_id
 
@@ -467,7 +459,7 @@ class Idefics3ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
 @require_torch
 class Idefics3ForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.processor = AutoProcessor.from_pretrained("HuggingFaceM4/Idefics3-8B-Llama3-base")
+        self.processor = AutoProcessor.from_pretrained("HuggingFaceM4/Idefics3-8B-Llama3")
         self.image1 = Image.open(
             BytesIO(
                 requests.get(
@@ -493,7 +485,7 @@ class Idefics3ForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     def test_integration_test(self):
         model = Idefics3ForConditionalGeneration.from_pretrained(
-            "HuggingFaceM4/Idefics3-8B-Llama3-base",
+            "HuggingFaceM4/Idefics3-8B-Llama3",
             torch_dtype=torch.bfloat16,
             device_map="auto",
         )
@@ -517,7 +509,7 @@ class Idefics3ForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_integration_test_4bit(self):
         # Let' s make sure we test the preprocessing to replace what is used
         model = Idefics3ForConditionalGeneration.from_pretrained(
-            "HuggingFaceM4/Idefics3-8B-Llama3-base", load_in_4bit=True, device_map="auto"
+            "HuggingFaceM4/Idefics3-8B-Llama3", load_in_4bit=True, device_map="auto"
         )
 
         # Create pixel inputs
