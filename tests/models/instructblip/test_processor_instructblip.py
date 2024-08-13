@@ -240,8 +240,6 @@ class InstructBlipProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_processor = self.get_component("image_processor")
         tokenizer = self.get_component("tokenizer", max_length=117)
         qformer_tokenizer = self.get_qformer_tokenizer(max_length=117)
-        if not tokenizer.pad_token:
-            tokenizer.pad_token = "[TEST_PAD]"
         if not qformer_tokenizer.pad_token:
             qformer_tokenizer.pad_token = "[TEST_PAD]"
 
@@ -266,8 +264,6 @@ class InstructBlipProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_processor = self.get_component("image_processor")
         tokenizer = self.get_component("tokenizer")
         qformer_tokenizer = self.get_qformer_tokenizer()
-        if not tokenizer.pad_token:
-            tokenizer.pad_token = "[TEST_PAD]"
         if not qformer_tokenizer.pad_token:
             qformer_tokenizer.pad_token = "[TEST_PAD]"
 
@@ -303,9 +299,6 @@ class InstructBlipProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_processor = self.get_component("image_processor")
         tokenizer = self.get_component("tokenizer")
         qformer_tokenizer = self.get_qformer_tokenizer()
-
-        if not tokenizer.pad_token:
-            tokenizer.pad_token = "[TEST_PAD]"
         if not qformer_tokenizer.pad_token:
             qformer_tokenizer.pad_token = "[TEST_PAD]"
 
@@ -337,9 +330,6 @@ class InstructBlipProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_processor = self.get_component("image_processor")
         tokenizer = self.get_component("tokenizer", max_length=117, padding="max_length")
         qformer_tokenizer = self.get_qformer_tokenizer(max_length=117, padding="max_length")
-
-        if not tokenizer.pad_token:
-            tokenizer.pad_token = "[TEST_PAD]"
         if not qformer_tokenizer.pad_token:
             qformer_tokenizer.pad_token = "[TEST_PAD]"
 
@@ -362,9 +352,6 @@ class InstructBlipProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_processor = self.get_component("image_processor")
         tokenizer = self.get_component("tokenizer")
         qformer_tokenizer = self.get_qformer_tokenizer()
-
-        if not tokenizer.pad_token:
-            tokenizer.pad_token = "[TEST_PAD]"
         if not qformer_tokenizer.pad_token:
             qformer_tokenizer.pad_token = "[TEST_PAD]"
 
@@ -395,11 +382,7 @@ class InstructBlipProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor")
         tokenizer = self.get_component("tokenizer")
-
         qformer_tokenizer = self.get_qformer_tokenizer()
-
-        if not tokenizer.pad_token:
-            tokenizer.pad_token = "[TEST_PAD]"
         if not qformer_tokenizer.pad_token:
             qformer_tokenizer.pad_token = "[TEST_PAD]"
 
