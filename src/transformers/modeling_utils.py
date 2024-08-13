@@ -2746,7 +2746,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if module_map:
             filename_to_tensors = logging.tqdm(filename_to_tensors, desc="Saving checkpoint shards")
         for shard_file, tensors in filename_to_tensors:
-            shard = {tensor: state_dict[tensor] for tensor in tensors}
+            shard = {tensor: state_dict[tensor].contiguous() for tensor in tensors}
             # remake shard with onloaded parameters if necessary
             if module_map:
                 if accelerate_version < version.parse("0.31"):
@@ -3034,7 +3034,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             > Parameters for big model inference
 
             low_cpu_mem_usage(`bool`, *optional*):
-                Tries to not use more than 1x model size in CPU memory (including peak memory) while loading the model.
+                Tries not to use more than 1x model size in CPU memory (including peak memory) while loading the model.
                 Generally should be combined with a `device_map` (such as `"auto"`) for best results.
                 This is an experimental feature and a subject to change at any moment.
                 </Tip>
