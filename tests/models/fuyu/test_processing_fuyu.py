@@ -4,7 +4,14 @@ import unittest
 
 import requests
 
-from transformers import AutoTokenizer, is_torch_available, is_vision_available
+from transformers import (
+    AutoProcessor,
+    AutoTokenizer,
+    FuyuImageProcessor,
+    FuyuProcessor,
+    is_torch_available,
+    is_vision_available,
+)
 from transformers.testing_utils import require_torch, require_vision
 
 from ...test_processing_common import ProcessorTesterMixin
@@ -18,9 +25,6 @@ if is_torch_available():
     import torch
 
     from transformers.models.fuyu.processing_fuyu import construct_full_unpacked_stream, full_unpacked_stream_to_tensor
-
-if is_vision_available() and is_torch_available():
-    from transformers import AutoProcessor, FuyuImageProcessor, FuyuProcessor
 
 
 @require_torch
