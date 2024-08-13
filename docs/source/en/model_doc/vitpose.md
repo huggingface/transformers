@@ -24,6 +24,55 @@ The abstract from the paper is the following:
 This model was contributed by [nielsr](https://huggingface.co/nielsr) and [sangbumchoi](https://github.com/SangbumChoi).
 The original code can be found [here](https://github.com/ViTAE-Transformer/ViTPose).
 
+## Usage Tips
+
+The current model utilizes a 2-step inference pipeline. The first step involves placing a bounding box around the region corresponding to the person. After that, the second step uses ViTPose to predict the keypoints.
+
+```py
+>>> import torch
+>>> import requests
+
+>>> from PIL import Image
+>>> from transformers import ViTPoseImageProcessor, ViTPoseForPoseEstimation
+
+>>> url = 'http://images.cocodataset.org/val2017/000000000139.jpg' 
+>>> image = Image.open(requests.get(url, stream=True).raw)
+
+>>> image_processor = ViTPoseImageProcessor.from_pretrained("nielsr/vitpose-base-simple")
+>>> model = ViTPoseForPoseEstimation.from_pretrained("nielsr/vitpose-base-simple")
+
+>>> boxes = [[[412.8, 157.61, 53.05, 138.01], [384.43, 172.21, 15.12, 35.74]]]
+
+>>> pixel_values = image_processor(image, boxes=boxes, return_tensors="pt").pixel_values
+
+>>> with torch.no_grad():
+...     outputs = model(pixel_values)
+
+>>> pose_results = image_processor.post_process_pose_estimation(outputs, boxes=boxes[0])
+
+>>> for pose_result in pose_results:
+...     for keypoint in pose_result['keypoints']:
+...         x, y, score = keypoint
+...         print(f"coordinate : [{x}, {y}], score : {score}")
+coordinate : [428.25335693359375, 170.24496459960938], score : 0.8717536330223083
+coordinate : [429.13037109375, 167.39605712890625], score : 0.8820509910583496
+coordinate : [428.23681640625, 167.72825622558594], score : 0.7663289308547974
+coordinate : [433.1866455078125, 167.2566680908203], score : 0.933370053768158
+coordinate : [440.34075927734375, 166.58522033691406], score : 0.8911094069480896
+coordinate : [439.90283203125, 177.54049682617188], score : 0.9118685722351074
+coordinate : [445.50372314453125, 178.04055786132812], score : 0.751734733581543
+coordinate : [436.45819091796875, 199.42474365234375], score : 0.8745120167732239
+coordinate : [433.68255615234375, 200.17333984375], score : 0.5155676603317261
+coordinate : [430.5008544921875, 218.7760009765625], score : 0.8757728338241577
+coordinate : [420.5921630859375, 213.15621948242188], score : 0.9036439657211304
+coordinate : [445.17218017578125, 222.87921142578125], score : 0.8029380440711975
+coordinate : [452.07672119140625, 222.17730712890625], score : 0.8517846465110779
+coordinate : [441.92657470703125, 255.0374755859375], score : 0.8607744574546814
+coordinate : [451.2308349609375, 254.36398315429688], score : 0.8495950698852539
+coordinate : [443.9051513671875, 287.5822448730469], score : 0.703719437122345
+coordinate : [455.88482666015625, 285.6434631347656], score : 0.8391701579093933
+```
+
 
 ## ViTPoseImageProcessor
 

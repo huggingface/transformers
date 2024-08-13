@@ -578,7 +578,6 @@ def box_to_center_and_scale(
     elif width < aspect_ratio * height:
         width = height * aspect_ratio
 
-    # pixel std is 200.0
     scale = np.array([width / pixel_std, height / pixel_std], dtype=np.float32)
     scale = scale * padding
 
