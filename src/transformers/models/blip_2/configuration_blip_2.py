@@ -269,6 +269,9 @@ class Blip2Config(PretrainedConfig):
             The number of query tokens passed through the Transformer.
         image_text_hidden_size (`int`, *optional*, defaults to 256):
             Dimentionality of the hidden state of the image-text fusion layer.
+
+        image_token_index (`int`, *optional*):
+            Token index of special image token.
         kwargs (*optional*):
             Dictionary of keyword arguments.
 
@@ -311,6 +314,7 @@ class Blip2Config(PretrainedConfig):
         text_config=None,
         num_query_tokens=32,
         image_text_hidden_size=256,
+        image_token_index=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -337,6 +341,7 @@ class Blip2Config(PretrainedConfig):
 
         self.num_query_tokens = num_query_tokens
         self.image_text_hidden_size = image_text_hidden_size
+        self.image_token_index = image_token_index
         self.qformer_config.encoder_hidden_size = self.vision_config.hidden_size
         self.use_decoder_only_language_model = self.text_config.model_type in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
         self.initializer_factor = 1.0
