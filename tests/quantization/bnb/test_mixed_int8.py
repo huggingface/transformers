@@ -85,9 +85,9 @@ if is_bitsandbytes_available():
     def setUpModule():
         global device
         if hasattr(bnb, "features") and "multi_backend" in bnb.features:
-            device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+            device = "cuda" if torch.cuda.is_available() else "cpu"  # TODO: how to add "xpu" ?
         else:
-            device = torch.device("cuda:0")
+            device = "cuda"
 
 
 @require_bitsandbytes
@@ -877,7 +877,7 @@ class MixedInt8TestTraining(BaseMixedInt8Test):
         batch = self.tokenizer("Test batch ", return_tensors="pt").to(device)
 
         # Step 4: Check if the gradient is not None
-        with torch.cuda.amp.autocast():
+        with torch.autocast(device):
             out = model.forward(**batch)
             out.logits.norm().backward()
 
