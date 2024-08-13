@@ -122,101 +122,30 @@ Pass the prepared inputs through the model:
 ```py
 >>> import torch
 
->>> with torch.no_grad():
+>>> with torch.no_grad():   
 ...     outputs = model(pixel_values)
+...     outputs_flip = model(pixel_values=torch.flip(inputs.pixel_values, dims=[3]))
 ```
 
-Let's post-process and visualize the results. 
+<Tip>
+According to the [original implementation](https://github.com/isl-org/ZoeDepth/blob/edb6daf45458569e24f50250ef1ed08c015f17a7/zoedepth/models/depth_model.py#L131) ZoeDepth model performs inference on both the original and flipped images by default and averages out the results. The `post_process_depth_estimation` function will handle this for us by passing the flipped outputs to the optional `outputs_flip` argument.
+</Tip>
 
-We need to pad and then resize the outputs so that predicted depth map has the same dimension as the original image. After resizing we will remove the padded regions from the depth. 
+Let's post-process the results to remove any padding and resize the depth map to match the original image size. The `post_process_depth_estimation` outputs a list of dicts containing the `"predicted_depth"` and the `"depth"` image visualization.
 
 ```py
->>> import numpy as np
->>> import torch.nn.functional as F
-
->>> predicted_depth = outputs.predicted_depth.unsqueeze(dim=1)
->>> height, width = pixel_values.shape[2:]
-
->>> height_padding_factor = width_padding_factor = 3
->>> pad_h = int(np.sqrt(height/2) * height_padding_factor)
->>> pad_w = int(np.sqrt(width/2) * width_padding_factor)
-
->>> if predicted_depth.shape[-2:] != pixel_values.shape[-2:]:
->>>    predicted_depth = F.interpolate(predicted_depth, size= (height, width), mode='bicubic', align_corners=False)
-
->>> if pad_h > 0:
-     predicted_depth = predicted_depth[:, :, pad_h:-pad_h,:]
->>> if pad_w > 0:
-     predicted_depth = predicted_depth[:, :, :, pad_w:-pad_w]
+>>> post_processed_output = image_processor.post_process_depth_estimation(
+...     outputs,
+...     source_size=[image.size[::-1]],
+...     outputs_flip=outputs_flip,
+...     normalize=True,
+... )
+>>> depth = post_processed_output[0]["depth"]
 ```
 
-We can now visualize the results (the function below is taken from the [GaussianObject](https://github.com/GaussianObject/GaussianObject/blob/ad6629efadb57902d5f8bc0fa562258029a4bdf1/pred_monodepth.py#L11) framework).
-
-```py
-import matplotlib
-
-def colorize(value, vmin=None, vmax=None, cmap='gray_r', invalid_val=-99, invalid_mask=None, background_color=(128, 128, 128, 255), gamma_corrected=False, value_transform=None):
-    """Converts a depth map to a color image.
-
-    Args:
-        value (torch.Tensor, numpy.ndarray): Input depth map. Shape: (H, W) or (1, H, W) or (1, 1, H, W). All singular dimensions are squeezed
-        vmin (float, optional): vmin-valued entries are mapped to start color of cmap. If None, value.min() is used. Defaults to None.
-        vmax (float, optional):  vmax-valued entries are mapped to end color of cmap. If None, value.max() is used. Defaults to None.
-        cmap (str, optional): matplotlib colormap to use. Defaults to 'magma_r'.
-        invalid_val (int, optional): Specifies value of invalid pixels that should be colored as 'background_color'. Defaults to -99.
-        invalid_mask (numpy.ndarray, optional): Boolean mask for invalid regions. Defaults to None.
-        background_color (tuple[int], optional): 4-tuple RGB color to give to invalid pixels. Defaults to (128, 128, 128, 255).
-        gamma_corrected (bool, optional): Apply gamma correction to colored image. Defaults to False.
-        value_transform (Callable, optional): Apply transform function to valid pixels before coloring. Defaults to None.
-
-    Returns:
-        numpy.ndarray, dtype - uint8: Colored depth map. Shape: (H, W, 4)
-    """
-    if isinstance(value, torch.Tensor):
-        value = value.detach().cpu().numpy()
-
-    value = value.squeeze()
-    if invalid_mask is None:
-        invalid_mask = value == invalid_val
-    mask = np.logical_not(invalid_mask)
-
-    # normalize
-    vmin = np.percentile(value[mask],2) if vmin is None else vmin
-    vmax = np.percentile(value[mask],85) if vmax is None else vmax
-    if vmin != vmax:
-        value = (value - vmin) / (vmax - vmin)  # vmin..vmax
-    else:
-        # Avoid 0-division
-        value = value * 0.
-
-    # squeeze last dim if it exists
-    # grey out the invalid values
-
-    value[invalid_mask] = np.nan
-    cmapper = matplotlib.colormaps.get_cmap(cmap)
-    if value_transform:
-        value = value_transform(value)
-        # value = value / value.max()
-    value = cmapper(value, bytes=True)  # (nxmx4)
-
-    # img = value[:, :, :]
-    img = value[...]
-    img[invalid_mask] = background_color
-
-    #     return img.transpose((2, 0, 1))
-    if gamma_corrected:
-        # gamma correction
-        img = img / 255
-        img = np.power(img, 2.2)
-        img = img * 255
-        img = img.astype(np.uint8)
-    return img
-
->>> result = colorize(predicted_depth.cpu().squeeze().numpy())
->>> Image.fromarray(result)
-```
-
-
+<Tip>
+Due to ZoeDepth's dynamic padding of the input image during inference we need to pass the original image size (`image.size[::-1]`) as input to the `post_process_depth_estimation` function to get the final depth map with the same dimensions as the original image.
+</Tip>
 
 <div class="flex justify-center">
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/depth-visualization-zoe.png" alt="Depth estimation visualization"/>

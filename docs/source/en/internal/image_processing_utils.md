@@ -27,6 +27,8 @@ Most of those are only useful if you are studying the code of the image processo
 
 [[autodoc]] image_transforms.center_to_corners_format
 
+[[autodoc]] image_transforms.colorize_depth
+
 [[autodoc]] image_transforms.corners_to_center_format
 
 [[autodoc]] image_transforms.id_to_rgb
