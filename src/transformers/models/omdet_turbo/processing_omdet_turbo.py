@@ -19,10 +19,11 @@ Processor class for OmDet-Turbo.
 import sys
 from typing import List, Optional, Tuple, Union
 
+from ...feature_extraction_utils import BatchFeature
 from ...image_transforms import center_to_corners_format
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, TextKwargs
-from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import (
     TensorType,
     is_torch_available,
@@ -126,7 +127,7 @@ class OmDetTurboProcessor(ProcessorMixin):
         audio=None,
         videos=None,
         **kwargs: Unpack[OmDetTurboProcessorKwargs],
-    ) -> BatchEncoding:
+    ) -> BatchFeature:
         """
         This method uses [*DetrImageProcessor.__call__*] method to prepare image(s) for the model, and
         [*CLIPTokenizerFast.__call__*] to prepare text for the model.
@@ -171,9 +172,11 @@ class OmDetTurboProcessor(ProcessorMixin):
         classes_structure = torch.tensor([len(class_single) for class_single in classes], dtype=torch.long)
         classes_flattened = [class_single for class_batch in classes for class_single in class_batch]
         classes_encoding = self.tokenizer(text=classes_flattened, **output_kwargs["text_kwargs"])
-        classes_encoding.update({"structure": classes_structure})
 
-        encoding = BatchEncoding({"tasks": tasks_encoding, "classes": classes_encoding})
+        encoding = BatchFeature()
+        encoding.update({f"tasks_{key}": value for key, value in tasks_encoding.items()})
+        encoding.update({f"classes_{key}": value for key, value in classes_encoding.items()})
+        encoding.update({"structure": classes_structure})
         encoding.update(encoding_image_processor)
 
         return encoding

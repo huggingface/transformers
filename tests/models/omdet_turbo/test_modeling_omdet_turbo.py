@@ -19,6 +19,7 @@ import unittest
 import requests
 
 from transformers import OmDetTurboConfig, is_torch_available, is_vision_available
+from transformers.feature_extraction_utils import BatchFeature
 from transformers.file_utils import cached_property
 from transformers.testing_utils import (
     require_timm,
@@ -28,7 +29,6 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.tokenization_utils_base import BatchEncoding
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
@@ -113,12 +113,19 @@ class OmDetTurboModelTester:
         attention_mask_tasks = torch.ones_like(input_ids_tasks, device=torch_device)
         attention_mask_classes = torch.ones_like(input_ids_classes, device=torch_device)
         structure_classes = torch.ones(self.batch_size, dtype=torch.long, device=torch_device) * self.num_classes
-        classes_encoding = BatchEncoding(
-            {"input_ids": input_ids_classes, "attention_mask": attention_mask_classes, "structure": structure_classes}
+        encoding = BatchFeature()
+        encoding.update(
+            {
+                "pixel_values": pixel_values,
+                "classes_input_ids": input_ids_classes,
+                "classes_attention_mask": attention_mask_classes,
+                "tasks_input_ids": input_ids_tasks,
+                "tasks_attention_mask": attention_mask_tasks,
+                "structure": structure_classes,
+            }
         )
-        task_encoding = BatchEncoding({"input_ids": input_ids_tasks, "attention_mask": attention_mask_tasks})
         config = self.get_config()
-        return config, pixel_values, classes_encoding, task_encoding
+        return config, encoding
 
     def get_config(self):
         text_backbone = {
@@ -167,16 +174,15 @@ class OmDetTurboModelTester:
         )
 
     def prepare_config_and_inputs_for_common(self):
-        config, pixel_values, classes_encoding, task_encodings = self.prepare_config_and_inputs()
-        inputs_dict = {"pixel_values": pixel_values, "classes": classes_encoding, "tasks": task_encodings}
+        config, inputs_dict = self.prepare_config_and_inputs()
         return config, inputs_dict
 
-    def create_and_check_object_detection_head_model(self, config, pixel_values, classes, tasks):
+    def create_and_check_object_detection_head_model(self, config, inputs_dict):
         model = OmDetTurboForObjectDetection(config=config)
         model.to(torch_device)
         model.eval()
 
-        result = model(pixel_values=pixel_values, classes=classes, tasks=tasks)
+        result = model(**inputs_dict)
 
         self.parent.assertEqual(result.decoder_coord_logits.shape, (self.batch_size, self.num_queries, 4))
         self.parent.assertEqual(
@@ -216,8 +222,8 @@ class OmDetTurboModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         self.config_tester.run_common_tests()
 
     def test_object_detection_head_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_object_detection_head_model(*config_and_inputs)
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_object_detection_head_model(config, inputs_dict)
 
     @unittest.skip(reason="OmDet-Turbo does not use inputs_embeds")
     def test_inputs_embeds(self):

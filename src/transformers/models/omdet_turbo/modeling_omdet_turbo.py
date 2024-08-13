@@ -1212,18 +1212,20 @@ class OmDetTurboPreTrainedModel(PreTrainedModel):
                 module.bias.data.zero_()
 
     @staticmethod
-    def _get_cache_key_at_index(inputs, index):
-        input_ids = inputs["input_ids"][index]
-        input_mask = inputs["attention_mask"][index]
+    def _get_cache_key_at_index(inputs, index, inputs_type="classes"):
+        if inputs_type not in ["classes", "tasks"]:
+            raise ValueError("inputs_type should be either 'classes' or 'tasks'")
+        input_ids = inputs[f"{inputs_type}_input_ids"][index]
+        input_mask = inputs[f"{inputs_type}_attention_mask"][index]
         cache_key = tuple(input_ids[input_mask != 0].tolist())
         return cache_key
 
-    def get_cached_class_emb(self, classes):
+    def get_cached_class_emb(self, inputs):
         not_cached_index = []
         not_cached_classes = []
         total_embs = []
-        for idx, _ in enumerate(classes["input_ids"]):
-            cache_key = self._get_cache_key_at_index(classes, idx)
+        for idx, _ in enumerate(inputs["classes_input_ids"]):
+            cache_key = self._get_cache_key_at_index(inputs, idx, inputs_type="classes")
             if self.language_cache_class.has(cache_key):
                 total_embs.append(self.language_cache_class.get(cache_key))
             else:
@@ -1238,7 +1240,7 @@ class OmDetTurboPreTrainedModel(PreTrainedModel):
         )
 
         if not_cached_classes:
-            not_cached_classes_ids = torch.stack([classes["input_ids"][idx] for idx in not_cached_index])
+            not_cached_classes_ids = torch.stack([inputs["classes_input_ids"][idx] for idx in not_cached_index])
             embeddings = self.language_backbone(not_cached_classes_ids, encode_type="class")
             for idx, emb in enumerate(embeddings):
                 idx_to_put = not_cached_index[idx]
@@ -1248,13 +1250,13 @@ class OmDetTurboPreTrainedModel(PreTrainedModel):
         total_class_embs = torch.stack(total_embs).to(self.device)
         return total_class_embs
 
-    def get_cached_task_emb(self, batched_tasks):
+    def get_cached_task_emb(self, inputs):
         not_cached_index = []
         not_cached_tasks = []
         total_task_features = []
         total_task_masks = []
-        for idx, _ in enumerate(batched_tasks["input_ids"]):
-            cache_key = self._get_cache_key_at_index(batched_tasks, idx)
+        for idx, _ in enumerate(inputs["tasks_input_ids"]):
+            cache_key = self._get_cache_key_at_index(inputs, idx, inputs_type="tasks")
             if self.language_cache_prompt.has(cache_key):
                 task_feature, task_mask = self.language_cache_prompt.get(cache_key)
                 total_task_features.append(task_feature)
@@ -1271,8 +1273,8 @@ class OmDetTurboPreTrainedModel(PreTrainedModel):
             )
         )
         if not_cached_tasks:
-            not_cached_index_ids = torch.stack([batched_tasks["input_ids"][idx] for idx in not_cached_index])
-            not_cached_mask = torch.stack([batched_tasks["attention_mask"][idx] for idx in not_cached_index])
+            not_cached_index_ids = torch.stack([inputs["tasks_input_ids"][idx] for idx in not_cached_index])
+            not_cached_mask = torch.stack([inputs["tasks_attention_mask"][idx] for idx in not_cached_index])
             embeddings, masks = self.language_backbone(not_cached_index_ids, mask=not_cached_mask, encode_type="task")
 
             for idx in range(embeddings.shape[1]):
@@ -1296,9 +1298,9 @@ class OmDetTurboPreTrainedModel(PreTrainedModel):
 
         return total_task_features, total_task_masks
 
-    def get_language_embedding(self, batched_classes, batched_tasks):
-        structure = batched_classes["structure"]
-        batched_classes_embeddings = self.get_cached_class_emb(batched_classes)
+    def get_language_embedding(self, inputs):
+        structure = inputs["structure"]
+        batched_classes_embeddings = self.get_cached_class_emb(inputs)
         # regroup class embeddings using saved structure
         max_class_size = torch.max(structure)
         class_embeddings_regrouped = []
@@ -1311,7 +1313,7 @@ class OmDetTurboPreTrainedModel(PreTrainedModel):
             start += size
         class_embeddings = torch.cat(class_embeddings_regrouped, dim=1)
 
-        task_embeddings, task_mask = self.get_cached_task_emb(batched_tasks)
+        task_embeddings, task_mask = self.get_cached_task_emb(inputs)
 
         return class_embeddings, task_embeddings, task_mask
 
@@ -1596,8 +1598,11 @@ class OmDetTurboForObjectDetection(OmDetTurboPreTrainedModel):
     def forward(
         self,
         pixel_values: Tensor,
-        classes: Tensor,
-        tasks: Tensor,
+        classes_input_ids: Tensor,
+        classes_attention_mask: Tensor,
+        tasks_input_ids: Tensor,
+        tasks_attention_mask: Tensor,
+        structure: Tensor,
         labels: Optional[Tensor] = None,
         output_attentions=None,
         output_hidden_states=None,
@@ -1658,7 +1663,15 @@ class OmDetTurboForObjectDetection(OmDetTurboPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        class_features, task_features, task_mask = self.get_language_embedding(classes, tasks)
+        class_features, task_features, task_mask = self.get_language_embedding(
+            {
+                "classes_input_ids": classes_input_ids,
+                "classes_attention_mask": classes_attention_mask,
+                "tasks_input_ids": tasks_input_ids,
+                "tasks_attention_mask": tasks_attention_mask,
+                "structure": structure,
+            }
+        )
         encoder_last_hidden_state = encoder_outputs.last_hidden_state if return_dict else encoder_outputs[0]
         decoder_outputs = self.decoder(
             encoder_last_hidden_state,

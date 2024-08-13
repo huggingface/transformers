@@ -54,8 +54,15 @@ class OmDetTurboProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = OmDetTurboProcessor(image_processor, tokenizer)
         processor.save_pretrained(self.tmpdirname)
 
-        self.input_keys = ["tasks", "classes", "pixel_values", "pixel_mask"]
-        self.text_input_keys = ["input_ids", "attention_mask"]
+        self.input_keys = [
+            "tasks_input_ids",
+            "tasks_attention_mask",
+            "classes_input_ids",
+            "classes_attention_mask",
+            "structure",
+            "pixel_values",
+            "pixel_mask",
+        ]
 
         self.batch_size = 5
         self.num_queries = 5
@@ -173,10 +180,8 @@ class OmDetTurboProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         input_processor = processor(images=image_input, text=input_classes, task=input_tasks, return_tensors="pt")
 
-        assert torch.is_tensor(input_processor["pixel_values"])
-        for key in self.text_input_keys:
-            assert torch.is_tensor(input_processor["tasks"][key])
-            assert torch.is_tensor(input_processor["classes"][key])
+        for key in self.input_keys:
+            assert torch.is_tensor(input_processor[key])
         # test if it raises when no input is passed
         with pytest.raises(ValueError):
             processor()
@@ -222,8 +227,8 @@ class OmDetTurboProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_input = self.prepare_image_inputs()
         inputs = processor(images=image_input, text=[input_str], task=input_str, return_tensors="pt")
 
-        self.assertEqual(len(inputs["tasks"]["input_ids"][0]), 117)
-        self.assertEqual(len(inputs["classes"]["input_ids"][0]), 117)
+        self.assertEqual(len(inputs["tasks_input_ids"][0]), 117)
+        self.assertEqual(len(inputs["classes_input_ids"][0]), 117)
 
     @require_vision
     @require_torch
@@ -240,8 +245,8 @@ class OmDetTurboProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_input = self.prepare_image_inputs()
         inputs = processor(images=image_input, text=[input_str], task=input_str, return_tensors="pt", max_length=112)
 
-        self.assertEqual(len(inputs["tasks"]["input_ids"][0]), 112)
-        self.assertEqual(len(inputs["classes"]["input_ids"][0]), 112)
+        self.assertEqual(len(inputs["tasks_input_ids"][0]), 112)
+        self.assertEqual(len(inputs["classes_input_ids"][0]), 112)
 
     @require_torch
     @require_vision
@@ -268,8 +273,8 @@ class OmDetTurboProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
 
         self.assertEqual(inputs["pixel_values"].shape[2], 214)
-        self.assertEqual(len(inputs["tasks"]["input_ids"][0]), 76)
-        self.assertEqual(len(inputs["classes"]["input_ids"][0]), 76)
+        self.assertEqual(len(inputs["tasks_input_ids"][0]), 76)
+        self.assertEqual(len(inputs["classes_input_ids"][0]), 76)
 
     @require_torch
     @require_vision
@@ -297,8 +302,8 @@ class OmDetTurboProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertEqual(inputs["pixel_values"].shape[2], 214)
 
-        self.assertEqual(len(inputs["tasks"]["input_ids"][0]), 6)
-        self.assertEqual(len(inputs["classes"]["input_ids"][0]), 6)
+        self.assertEqual(len(inputs["tasks_input_ids"][0]), 6)
+        self.assertEqual(len(inputs["classes_input_ids"][0]), 6)
 
     @require_torch
     @require_vision
@@ -327,8 +332,8 @@ class OmDetTurboProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertEqual(inputs["pixel_values"].shape[2], 214)
 
-        self.assertEqual(len(inputs["tasks"]["input_ids"][0]), 76)
-        self.assertEqual(len(inputs["classes"]["input_ids"][0]), 76)
+        self.assertEqual(len(inputs["tasks_input_ids"][0]), 76)
+        self.assertEqual(len(inputs["classes_input_ids"][0]), 76)
 
     @require_torch
     @require_vision
@@ -355,5 +360,5 @@ class OmDetTurboProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         inputs = processor(images=image_input, text=[input_str], **all_kwargs)
         self.assertEqual(inputs["pixel_values"].shape[2], 214)
 
-        self.assertEqual(len(inputs["tasks"]["input_ids"][0]), 76)
-        self.assertEqual(len(inputs["classes"]["input_ids"][0]), 76)
+        self.assertEqual(len(inputs["tasks_input_ids"][0]), 76)
+        self.assertEqual(len(inputs["classes_input_ids"][0]), 76)
