@@ -61,6 +61,8 @@ class ProcessorTesterMixin:
 
         component_class = processor_class_from_name(component_class_name)
         component = component_class.from_pretrained(self.tmpdirname, **kwargs)  # noqa
+        if attribute == "tokenizer" and not component.pad_token:
+            component.pad_token = "[TEST_PAD]"
 
         return component
 
@@ -126,7 +128,7 @@ class ProcessorTesterMixin:
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor")
-        tokenizer = self.get_component("tokenizer", max_length=117)
+        tokenizer = self.get_component("tokenizer", max_length=117, padding="max_length")
 
         processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
         self.skip_processor_without_typed_kwargs(processor)
@@ -141,8 +143,8 @@ class ProcessorTesterMixin:
     def test_image_processor_defaults_preserved_by_image_kwargs(self):
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-        image_processor = self.get_component("image_processor", crop_size=(234, 234))
-        tokenizer = self.get_component("tokenizer", max_length=117)
+        image_processor = self.get_component("image_processor", size=(234, 234))
+        tokenizer = self.get_component("tokenizer", max_length=117, padding="max_length")
 
         processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
         self.skip_processor_without_typed_kwargs(processor)
@@ -159,14 +161,16 @@ class ProcessorTesterMixin:
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor")
-        tokenizer = self.get_component("tokenizer", max_length=117)
+        tokenizer = self.get_component("tokenizer", padding="longest")
 
         processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
         self.skip_processor_without_typed_kwargs(processor)
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()
 
-        inputs = processor(text=input_str, images=image_input, return_tensors="pt", max_length=112)
+        inputs = processor(
+            text=input_str, images=image_input, return_tensors="pt", max_length=112, padding="max_length"
+        )
         self.assertEqual(len(inputs["input_ids"][0]), 112)
 
     @require_torch
@@ -174,8 +178,8 @@ class ProcessorTesterMixin:
     def test_kwargs_overrides_default_image_processor_kwargs(self):
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-        image_processor = self.get_component("image_processor", crop_size=(234, 234))
-        tokenizer = self.get_component("tokenizer", max_length=117)
+        image_processor = self.get_component("image_processor", size=(234, 234))
+        tokenizer = self.get_component("tokenizer", max_length=117, padding="max_length")
 
         processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
         self.skip_processor_without_typed_kwargs(processor)
@@ -183,7 +187,7 @@ class ProcessorTesterMixin:
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()
 
-        inputs = processor(text=input_str, images=image_input, crop_size=[224, 224])
+        inputs = processor(text=input_str, images=image_input, size=[224, 224])
         self.assertEqual(len(inputs["pixel_values"][0][0]), 224)
 
     @require_torch
@@ -203,7 +207,7 @@ class ProcessorTesterMixin:
             text=input_str,
             images=image_input,
             return_tensors="pt",
-            crop_size={"height": 214, "width": 214},
+            size={"height": 214, "width": 214},
             padding="max_length",
             max_length=76,
         )
@@ -228,7 +232,7 @@ class ProcessorTesterMixin:
             text=input_str,
             images=image_input,
             return_tensors="pt",
-            crop_size={"height": 214, "width": 214},
+            size={"height": 214, "width": 214},
             padding="longest",
             max_length=76,
         )
@@ -254,8 +258,8 @@ class ProcessorTesterMixin:
             _ = processor(
                 text=input_str,
                 images=image_input,
-                images_kwargs={"crop_size": {"height": 222, "width": 222}},
-                crop_size={"height": 214, "width": 214},
+                images_kwargs={"size": {"height": 222, "width": 222}},
+                size={"height": 214, "width": 214},
             )
 
     @require_torch
@@ -275,7 +279,7 @@ class ProcessorTesterMixin:
         # Define the kwargs for each modality
         all_kwargs = {
             "common_kwargs": {"return_tensors": "pt"},
-            "images_kwargs": {"crop_size": {"height": 214, "width": 214}},
+            "images_kwargs": {"size": {"height": 214, "width": 214}},
             "text_kwargs": {"padding": "max_length", "max_length": 76},
         }
 
@@ -303,7 +307,7 @@ class ProcessorTesterMixin:
         # Define the kwargs for each modality
         all_kwargs = {
             "common_kwargs": {"return_tensors": "pt"},
-            "images_kwargs": {"crop_size": {"height": 214, "width": 214}},
+            "images_kwargs": {"size": {"height": 214, "width": 214}},
             "text_kwargs": {"padding": "max_length", "max_length": 76},
         }
 
