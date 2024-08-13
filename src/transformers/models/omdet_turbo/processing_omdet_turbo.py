@@ -148,8 +148,6 @@ class OmDetTurboProcessor(ProcessorMixin):
         if images is None or text is None:
             raise ValueError("You have to specify `images`, `text`.")
 
-        # error when using `tokenizer_init_kwargs=self.tokenizer.init_kwargs` in _merge_kwargs` as
-        # some init_kwargs are not defined in the forward method of the tokenizer e.g "padding_side"
         output_kwargs = self._merge_kwargs(
             OmDetTurboProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,

@@ -210,6 +210,7 @@ class OmDetTurboProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @require_vision
     @require_torch
     def test_tokenizer_defaults_preserved_by_kwargs(self):
+        # Rewrite as OmDet-Turbo processor outputs "input_ids" for both tasks and classes.
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor")
@@ -222,26 +223,12 @@ class OmDetTurboProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         inputs = processor(images=image_input, text=[input_str], task=input_str, return_tensors="pt")
 
         self.assertEqual(len(inputs["tasks"]["input_ids"][0]), 117)
-
-    @require_torch
-    @require_vision
-    def test_image_processor_defaults_preserved_by_image_kwargs(self):
-        if "image_processor" not in self.processor_class.attributes:
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-        image_processor = self.get_component("image_processor", size=(234, 234))
-        tokenizer = self.get_component("tokenizer", max_length=117)
-
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
-        self.skip_processor_without_typed_kwargs(processor)
-        input_str = "lower newer"
-        image_input = self.prepare_image_inputs()
-        inputs = processor(images=image_input, text=[input_str], task=input_str)
-
-        self.assertEqual(len(inputs["pixel_values"][0][0]), 234)
+        self.assertEqual(len(inputs["classes"]["input_ids"][0]), 117)
 
     @require_vision
     @require_torch
     def test_kwargs_overrides_default_tokenizer_kwargs(self):
+        # Rewrite as OmDet-Turbo processor outputs "input_ids" for both tasks and classes.
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor")
@@ -254,27 +241,12 @@ class OmDetTurboProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         inputs = processor(images=image_input, text=[input_str], task=input_str, return_tensors="pt", max_length=112)
 
         self.assertEqual(len(inputs["tasks"]["input_ids"][0]), 112)
-
-    @require_torch
-    @require_vision
-    def test_kwargs_overrides_default_image_processor_kwargs(self):
-        if "image_processor" not in self.processor_class.attributes:
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-        image_processor = self.get_component("image_processor", size=(234, 234))
-        tokenizer = self.get_component("tokenizer", max_length=117)
-
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
-        self.skip_processor_without_typed_kwargs(processor)
-
-        input_str = "lower newer"
-        image_input = self.prepare_image_inputs()
-
-        inputs = processor(images=image_input, text=[input_str], task=input_str, size=[224, 224])
-        self.assertEqual(len(inputs["pixel_values"][0][0]), 224)
+        self.assertEqual(len(inputs["classes"]["input_ids"][0]), 112)
 
     @require_torch
     @require_vision
     def test_unstructured_kwargs(self):
+        # Rewrite as OmDet-Turbo processor outputs "input_ids" for both tasks and classes.
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor")
@@ -297,10 +269,12 @@ class OmDetTurboProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertEqual(inputs["pixel_values"].shape[2], 214)
         self.assertEqual(len(inputs["tasks"]["input_ids"][0]), 76)
+        self.assertEqual(len(inputs["classes"]["input_ids"][0]), 76)
 
     @require_torch
     @require_vision
     def test_unstructured_kwargs_batched(self):
+        # Rewrite as OmDet-Turbo processor outputs "input_ids" for both tasks and classes.
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor")
@@ -324,10 +298,12 @@ class OmDetTurboProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(inputs["pixel_values"].shape[2], 214)
 
         self.assertEqual(len(inputs["tasks"]["input_ids"][0]), 6)
+        self.assertEqual(len(inputs["classes"]["input_ids"][0]), 6)
 
     @require_torch
     @require_vision
     def test_structured_kwargs_nested(self):
+        # Rewrite as OmDet-Turbo processor outputs "input_ids" for both tasks and classes.
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor")
@@ -352,10 +328,12 @@ class OmDetTurboProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(inputs["pixel_values"].shape[2], 214)
 
         self.assertEqual(len(inputs["tasks"]["input_ids"][0]), 76)
+        self.assertEqual(len(inputs["classes"]["input_ids"][0]), 76)
 
     @require_torch
     @require_vision
     def test_structured_kwargs_nested_from_dict(self):
+        # Rewrite as OmDet-Turbo processor outputs "input_ids" for both tasks and classes.
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
 
@@ -378,3 +356,4 @@ class OmDetTurboProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(inputs["pixel_values"].shape[2], 214)
 
         self.assertEqual(len(inputs["tasks"]["input_ids"][0]), 76)
+        self.assertEqual(len(inputs["classes"]["input_ids"][0]), 76)
