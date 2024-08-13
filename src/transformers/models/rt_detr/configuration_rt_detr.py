@@ -55,7 +55,7 @@ class RTDetrConfig(PretrainedConfig):
         use_timm_backbone (`bool`, *optional*, defaults to `False`):
             Whether to load `backbone` from the timm library. If `False`, the backbone is loaded from the transformers
             library.
-        freeze_backbone_batch_norm (`bool`, *optional*, defaults to `True`):
+        freeze_backbone_batch_norms (`bool`, *optional*, defaults to `True`):
             Whether to freeze the batch normalization layers in the backbone.
         backbone_kwargs (`dict`, *optional*):
             Keyword arguments to be passed to AutoBackbone when loading from a checkpoint
