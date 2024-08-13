@@ -2048,6 +2048,7 @@ class Kosmos2_5Model(Kosmos2_5PreTrainedModel):
     """,
     KOSMOS2_5_START_DOCSTRING,
 )
+# Copied from transformers.models.kosmos2.modeling_kosmos2.Kosmos2TextForCausalLM with KOSMOS-2->KOSMOS-2.5,KOSMOS2->KOSMOS2_5,Kosmos2->Kosmos2_5
 class Kosmos2_5TextForCausalLM(Kosmos2_5PreTrainedModel):
     config_class = Kosmos2_5TextConfig
     _tied_weights_keys = ["lm_head.weight"]
@@ -2140,8 +2141,7 @@ class Kosmos2_5TextForCausalLM(Kosmos2_5PreTrainedModel):
             # Flatten the tokens
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(
-                shift_logits.view(batch_size * seq_length, vocab_size),
-                shift_labels.view(batch_size * seq_length),
+                shift_logits.view(batch_size * seq_length, vocab_size), shift_labels.view(batch_size * seq_length)
             )
 
         if not return_dict:
@@ -2193,11 +2193,7 @@ class Kosmos2_5TextForCausalLM(Kosmos2_5PreTrainedModel):
             image_embeds_position_mask = torch.cat(
                 (
                     image_embeds_position_mask,
-                    torch.zeros(
-                        size=(batch_size, seq_len - mask_len),
-                        dtype=torch.bool,
-                        device=input_ids.device,
-                    ),
+                    torch.zeros(size=(batch_size, seq_len - mask_len), dtype=torch.bool, device=input_ids.device),
                 ),
                 dim=1,
             )
