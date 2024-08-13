@@ -318,10 +318,8 @@ class ConfigTestUtils(unittest.TestCase):
     def test_saving_config_with_custom_generation_kwargs_raises_exception(self):
         config = BertConfig(min_length=3)  # `min_length = 3` is a non-default generation kwarg
         with tempfile.TemporaryDirectory() as tmp_dir:
-            with self.assertRaises(ValueError)
+            with self.assertRaises(ValueError):
                 config.save_pretrained(tmp_dir)
-            self.assertEqual(len(logs.output), 1)
-            self.assertIn("min_length", logs.output[0])
 
     def test_has_non_default_generation_parameters(self):
         config = BertConfig()
