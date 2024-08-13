@@ -15,11 +15,13 @@
 """CLVP model configuration"""
 
 import os
-from typing import TYPE_CHECKING, Union
+from typing import Union
 
+try:
+    from typing import Self
+except ImportError:
+    from typing_extensions import Self
 
-if TYPE_CHECKING:
-    pass
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -134,7 +136,7 @@ class ClvpEncoderConfig(PretrainedConfig):
     @classmethod
     def from_pretrained(
         cls, pretrained_model_name_or_path: Union[str, os.PathLike], config_type: str = "text_config", **kwargs
-    ) -> "PretrainedConfig":
+    ) -> Self:
         cls._set_token_in_kwargs(kwargs)
 
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)

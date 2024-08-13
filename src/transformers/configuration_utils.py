@@ -22,6 +22,11 @@ import re
 import warnings
 from typing import Any, Dict, List, Optional, Tuple, Union
 
+try:
+    from typing import Self
+except ImportError:
+    from typing_extensions import Self
+
 from packaging import version
 
 from . import __version__
@@ -452,7 +457,7 @@ class PretrainedConfig(PushToHubMixin):
         token: Optional[Union[str, bool]] = None,
         revision: str = "main",
         **kwargs,
-    ) -> "PretrainedConfig":
+    ) -> Self:
         r"""
         Instantiate a [`PretrainedConfig`] (or a derived class) from a pretrained model configuration.
 
@@ -678,7 +683,7 @@ class PretrainedConfig(PushToHubMixin):
         return config_dict, kwargs
 
     @classmethod
-    def from_dict(cls, config_dict: Dict[str, Any], **kwargs) -> "PretrainedConfig":
+    def from_dict(cls, config_dict: Dict[str, Any], **kwargs) -> Self:
         """
         Instantiates a [`PretrainedConfig`] from a Python dictionary of parameters.
 
