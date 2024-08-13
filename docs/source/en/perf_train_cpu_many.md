@@ -288,10 +288,12 @@ set the same CPU and memory amounts for both the resource limits and requests.
 After the PyTorchJob spec has been updated with values appropriate for your cluster and training job, it can be deployed
 to the cluster using:
 ```bash
-kubectl create -f pytorchjob.yaml
+export NAMESPACE=<specify your namespace>
+
+kubectl create -f pytorchjob.yaml -n ${NAMESPACE}
 ```
 
-The `kubectl get pods` command can then be used to list the pods in your namespace. You should see
+The `kubectl get pods -n ${NAMESPACE}` command can then be used to list the pods in your namespace. You should see
 the worker pods for the PyTorchJob that was just deployed. At first, they will probably have a status of "Pending" as
 the containers get pulled and created, then the status should change to "Running".
 ```
@@ -304,13 +306,13 @@ transformers-pytorchjob-worker-3                         1/1     Running        
 ...
 ```
 
-The logs for worker can be viewed using `kubectl logs <pod name>`. Add `-f` to stream the logs, for example:
+The logs for worker can be viewed using `kubectl logs <pod name> -n ${NAMESPACE}`. Add `-f` to stream the logs, for example:
 ```bash
-kubectl logs transformers-pytorchjob-worker-0 -f
+kubectl logs transformers-pytorchjob-worker-0 -n ${NAMESPACE} -f
 ```
 
 After the training job completes, the trained model can be copied from the PVC or storage location. When you are done
-with the job, the PyTorchJob resource can be deleted from the cluster using `kubectl delete -f pytorchjob.yaml`.
+with the job, the PyTorchJob resource can be deleted from the cluster using `kubectl delete -f pytorchjob.yaml -n ${NAMESPACE}`.
 
 ## Summary
 
