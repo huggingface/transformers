@@ -1549,7 +1549,7 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
         prompt = "Question: which city is this? Answer:"
         inputs = processor(images=image, text=prompt, return_tensors="pt").to(0, dtype=torch.float16)
 
-        predictions = model.generate(**inputs)
+        predictions = model.generate(**inputs, max_new_tokens=11)
         generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[0].strip()
 
         # Test output

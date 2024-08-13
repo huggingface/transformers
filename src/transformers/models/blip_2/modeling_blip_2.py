@@ -401,7 +401,13 @@ class Blip2PreTrainedModel(PreTrainedModel):
     config_class = Blip2Config
     base_model_prefix = "blip"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["Blip2Attention", "T5Block", "OPTDecoderLayer"]
+    _no_split_modules = [
+        "Blip2Attention",
+        "Blip2QFormerMultiHeadAttention",
+        "Blip2TextEmbeddings",
+        "T5Block",
+        "OPTDecoderLayer",
+    ]
     _skip_keys_device_placement = "past_key_values"
     _keep_in_fp32_modules = ["wo"]
 
