@@ -440,10 +440,7 @@ class PretrainedConfig(PushToHubMixin):
         if os.path.isfile(save_directory):
             raise AssertionError(f"Provided path ({save_directory}) should be a directory, not a file")
 
-        non_default_generation_parameters = {}
-        for parameter_name, default_value in self._get_generation_defaults().items():
-            if hasattr(self, parameter_name) and getattr(self, parameter_name) != default_value:
-                non_default_generation_parameters[parameter_name] = getattr(self, parameter_name)
+        non_default_generation_parameters = self._get_non_default_generation_parameters()
         if len(non_default_generation_parameters) > 0:
             raise ValueError(
                 "Some non-default generation parameters are set in the model config. These should go into either a) "
@@ -1078,14 +1075,29 @@ class PretrainedConfig(PushToHubMixin):
             "begin_suppress_tokens": None,
         }
 
+    def _get_non_default_generation_parameters(self) -> Dict[str, Any]:
+        """
+        Gets the non-default generation parameters on the PretrainedConfig instance
+        """
+        non_default_generation_parameters = {}
+        default_config = self.__class__()
+        for parameter_name, default_value in self._get_generation_defaults().items():
+            if hasattr(self, parameter_name):
+                # Two cases in which is okay for the model config to hold generation config parameters:
+                # 1. The parameter is set to a default generation value (from `generate`'s perspective, it's the same
+                # as if nothing is set)
+                is_default_generation_value = getattr(self, parameter_name) == default_value
+                # 2. The parameter is set as default in the model config (BC support for models like BART)
+                is_default_in_config = getattr(self, parameter_name) == getattr(default_config, parameter_name)
+                if not (is_default_generation_value or is_default_in_config):
+                    non_default_generation_parameters[parameter_name] = getattr(self, parameter_name)
+        return non_default_generation_parameters
+
     def _has_non_default_generation_parameters(self) -> bool:
         """
         Whether or not this instance holds non-default generation parameters.
         """
-        for parameter_name, default_value in self._get_generation_defaults().items():
-            if hasattr(self, parameter_name) and getattr(self, parameter_name) != default_value:
-                return True
-        return False
+        return len(self._get_non_default_generation_parameters()) > 0
 
 
 def get_configuration_file(configuration_files: List[str]) -> str:
