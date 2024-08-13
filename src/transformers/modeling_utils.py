@@ -699,7 +699,7 @@ def _load_state_dict_into_model(
     found_beta = False
     warning_msg = "This model "
     if pretrained_model_name_or_path is not None:
-        warning_msg += f"({pretrained_model_name_or_path}) "
+        warning_msg += f"(`{pretrained_model_name_or_path}`) "
     warning_msg += "contains parameters that have been renamed internally (a few are listed below but more are present in the model):\n"
     for key in state_dict.keys():
         new_key = None
@@ -866,7 +866,7 @@ def _load_state_dict_into_meta_model(
     found_beta = False
     warning_msg = "This model "
     if pretrained_model_name_or_path is not None:
-        warning_msg += f"({pretrained_model_name_or_path}) "
+        warning_msg += f"(`{pretrained_model_name_or_path}`) "
     warning_msg += "contains parameters that have been renamed internally (a few are listed below but more are present in the model):\n"
     is_quantized = hf_quantizer is not None
     for key in state_dict.keys():
@@ -884,6 +884,11 @@ def _load_state_dict_into_meta_model(
         if new_key:
             old_keys.append(key)
             new_keys.append(new_key)
+    if renamed_keys:
+        for old_key, new_key in renamed_keys.items():
+            warning_msg += f"* `{old_key}` -> `{new_key}`\n"
+        warning_msg += "If you are using a model from the Hub, consider submitting a PR to adjust these weights and help future users."
+        logger.info_once(warning_msg)
     for old_key, new_key in zip(old_keys, new_keys):
         state_dict[new_key] = state_dict.pop(old_key)
 
