@@ -1599,14 +1599,17 @@ class ModelUtilsTest(TestCasePlus):
         for p1, p2 in zip(model.parameters(), new_model.parameters()):
             self.assertTrue(torch.equal(p1, p2))
 
-    def test_modifying_model_config_causes_warning_saving_generation_config(self):
+    def test_modifying_model_config_gets_moved_to_generation_config(self):
+        """
+        Calling `model.save_pretrained` should move the changes made to `generate` parameterization in the model config
+        to the generation config.
+        """
         model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
-        model.config.top_k = 1
+        model.config.repetition_penalty = 3.0
         with tempfile.TemporaryDirectory() as tmp_dir:
-            with self.assertLogs("transformers.modeling_utils", level="WARNING") as logs:
-                model.save_pretrained(tmp_dir)
-            self.assertEqual(len(logs.output), 1)
-            self.assertIn("Your generation config was originally created from the model config", logs.output[0])
+            model.save_pretrained(tmp_dir)
+            self.assertTrue(model.config.repetition_penalty != 3.0)
+            self.assertTrue(model.generation_config.repetition_penalty == 3.0)
 
     @require_safetensors
     def test_model_from_pretrained_from_mlx(self):
