@@ -130,6 +130,10 @@ class RTDetrConfig(PretrainedConfig):
             based on the predictions from the previous layer.
         is_encoder_decoder (`bool`, *optional*, defaults to `True`):
             Whether the architecture has an encoder decoder structure.
+        losses (`List[str]`, *optional*, defaults to `['labels_vfl', 'boxes']`):
+            Losses to be used in the object detection loss. Possible values for labels are:
+            `labels_cross_entropy`, `labels_focal`, `labels_binary_cross_entropy`, `labels_vfl`.
+            For boxes, the possible value is `boxes`.
         matcher_alpha (`float`, *optional*, defaults to 0.25):
             Parameter alpha used by the Hungarian Matcher.
         matcher_gamma (`float`, *optional*, defaults to 2.0):
@@ -142,10 +146,6 @@ class RTDetrConfig(PretrainedConfig):
             The relative weight of the giou loss of used by the Hungarian Matcher.
         use_focal_loss (`bool`, *optional*, defaults to `True`):
             Parameter informing if focal focal should be used in HungarianMatcher to compute class cost.
-        losses (`List[str]`, *optional*, defaults to `["labels_vfl", "boxes"]`):
-            Losses to be used in the object detection loss. Possible values for labels are:
-            `labels_cross_entropy`, `labels_focal`, `labels_binary_cross_entropy`, `labels_vfl`.
-            For boxes, the possible value is `boxes`.
         auxiliary_loss (`bool`, *optional*, defaults to `True`):
             Whether auxiliary decoding losses (loss at each decoder layer) are to be used.
         focal_loss_alpha (`float`, *optional*, defaults to 0.75):
@@ -154,16 +154,16 @@ class RTDetrConfig(PretrainedConfig):
             Parameter gamma used to compute the focal loss.
         weight_loss_vfl (`float`, *optional*, defaults to 1.0):
             Relative weight of the varifocal loss in the object detection loss.
+        weight_loss_bbox (`float`, *optional*, defaults to 5.0):
+            Relative weight of the L1 bounding box loss in the object detection loss.
+        weight_loss_giou (`float`, *optional*, defaults to 2.0):
+            Relative weight of the generalized IoU loss in the object detection loss.
         weight_loss_cross_entropy (`float`, *optional*, defaults to 1.0):
             Relative weight of the labels cross-entropy loss in the object detection loss.
         weight_loss_binary_cross_entropy (`float`, *optional*, defaults to 1.0):
             Relative weight of the labels binary cross-entropy loss in the object detection loss.
         weight_loss_focal (`float`, *optional*, defaults to 1.0):
             Relative weight of the labels focal loss in the object detection loss.
-        weight_loss_bbox (`float`, *optional*, defaults to 5.0):
-            Relative weight of the L1 bounding box loss in the object detection loss.
-        weight_loss_giou (`float`, *optional*, defaults to 2.0):
-            Relative weight of the generalized IoU loss in the object detection loss.
         eos_coefficient (`float`, *optional*, defaults to 0.0001):
             Relative classification weight of the 'no-object' class in the object detection loss.
 
