@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import unittest
 from io import BytesIO
 
 import requests
@@ -22,6 +21,8 @@ from transformers import Idefics3Processor
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_vision_available
 
+from ...test_processing_common import ProcessorTesterMixin
+
 
 if is_vision_available():
     from PIL import Image
@@ -29,7 +30,7 @@ if is_vision_available():
 
 @require_torch
 @require_vision
-class Idefics3ProcessorTest(unittest.TestCase):
+class Idefics3ProcessorTest(ProcessorTesterMixin):
     def setUp(self):
         self.processor = Idefics3Processor.from_pretrained("HuggingFaceM4/Idefics3-8B-Llama3", image_seq_len=2)
         self.image1 = Image.open(

@@ -16,18 +16,24 @@
 Processor class for Idefics3.
 """
 
+import sys
+import warnings
 from typing import TYPE_CHECKING, List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image, load_image
-from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import AddedToken, BatchEncoding, PaddingStrategy, TextInput, TruncationStrategy
-from ...utils import TensorType, logging
+from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin
+from ...tokenization_utils_base import AddedToken, BatchEncoding, TextInput
+from ...utils import logging
 
 
 if TYPE_CHECKING:
     from ...tokenization_utils_base import PreTokenizedInput
 
+if sys.version_info >= (3, 11):
+    from typing import Unpack
+else:
+    from typing_extensions import Unpack
 
 logger = logging.get_logger(__name__)
 
@@ -73,6 +79,25 @@ def get_image_prompt_string(image_rows, image_cols, image_seq_len, fake_token_ar
         )
     return _prompt_split_image(image_seq_len, image_rows, image_cols, fake_token_around_image, image_token)
 
+class Idefics3ImagesKwargs(ImagesKwargs, total=False):
+    image_seq_len: Optional[int]
+    return_row_col_info: Optional[bool]
+
+
+class Idefics3ProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: Idefics3ImagesKwargs
+
+    _defaults = {
+        "text_kwargs": {
+            "add_special_tokens": True,
+            "padding": False,
+            "is_split_into_words": False,
+        },
+        "images_kwargs": {
+            "image_seq_len": 169,
+            "return_row_col_info": True,
+        },
+    }
 
 class Idefics3Processor(ProcessorMixin):
     r"""
@@ -125,15 +150,11 @@ class Idefics3Processor(ProcessorMixin):
 
     def __call__(
         self,
-        text: Union[TextInput, "PreTokenizedInput", List[TextInput], List["PreTokenizedInput"]] = None,
         images: Union[ImageInput, List[ImageInput], List[List[ImageInput]]] = None,
-        image_seq_len: int = 169,
-        padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = None,
-        max_length: Optional[int] = None,
-        is_split_into_words: bool = False,
-        add_special_tokens: bool = True,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        text: Union[TextInput, "PreTokenizedInput", List[TextInput], List["PreTokenizedInput"]] = None,
+        audio=None,
+        videos=None,
+        **kwargs: Unpack[Idefics3ProcessorKwargs],
     ) -> BatchEncoding:
         """
         Processes the input prompts and returns a BatchEncoding.
@@ -158,7 +179,7 @@ class Idefics3Processor(ProcessorMixin):
         ...     "<image>In this image, we see",
         ...     "bla bla bla<image>",
         ... ]
-        >>> outputs = processor(text=text, images=images, return_tensors="pt", padding=True)
+        >>> outputs = processor(images=images, text=text, return_tensors="pt", padding=True)
         >>> input_ids = outputs.input_ids
         >>> input_tokens = processor.tokenizer.batch_decode(input_ids)
         >>> print(input_tokens)
@@ -166,16 +187,16 @@ class Idefics3Processor(ProcessorMixin):
         ```
 
         Args:
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`, *optional*):
+                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
+                tensor. If is of type `List[ImageInput]`, it's assumed that this is for a single prompt i.e. of batch size 1.
             text (`Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]`, *optional*):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
 
                 Wherever an image token, `<image>` is encountered it is expanded to
-                `<fake_token_around_image>` + `<image>` * `image_seq_len` * <fake_token_around_image>`.
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`, *optional*):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. If is of type `List[ImageInput]`, it's assumed that this is for a single prompt i.e. of batch size 1.
+                `<fake_token_around_image>` + `<row_x_col_y>` + `<image>` * `image_seq_len` * <fake_token_around_image>`.
             image_seq_len (`int`, *optional*):
                 The length of the image sequence. If not provided, the default value of 169 is used.
             padding (`Union[bool, str, PaddingStrategy]`, *optional*, defaults to `False`):
@@ -194,6 +215,36 @@ class Idefics3Processor(ProcessorMixin):
                 If set, will return tensors of a particular framework. See [`PreTrainedTokenizerFast.__call__`] for more
                 information.
         """
+        if text is None and images is None:
+            raise ValueError("You must provide either `text` or `images`.")
+        # check if images and text inputs are reversed for BC
+        if (
+            text is not None
+            and not isinstance(text[0], str)
+            or images is not None
+            and not (
+                is_image_or_image_url(images)
+                or is_image_or_image_url(images[0])
+                or (isinstance(images[0], list) and is_image_or_image_url(images[0][0]))
+            )
+        ):
+            warnings.warn(
+                "It looks like you are passing the inputs in the wrong order. You should pass the images input first and the text input second."
+                "Images and text inputs will be swapped."
+            )
+            images, text = text, images
+
+        output_kwargs = self._merge_kwargs(
+            Idefics3ProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
+
+        # Temporary fix for "paddding_side" in init_kwargs
+        _ = output_kwargs['text_kwargs'].pop("padding_side", None)
+
+        image_seq_len = output_kwargs["images_kwargs"].pop("image_seq_len", None)
+
         n_images_in_text = []
         n_images_in_images = []
         inputs = BatchFeature()
@@ -226,7 +277,7 @@ class Idefics3Processor(ProcessorMixin):
             images = new_images
             del new_images
 
-            image_inputs = self.image_processor(images, return_tensors=return_tensors, return_row_col_info=True)
+            image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
             inputs.update(image_inputs)
 
         if text is not None:
@@ -265,15 +316,7 @@ class Idefics3Processor(ProcessorMixin):
                     sample += image_prompt_string + split_sample[i + 1]
                 prompt_strings.append(sample)
 
-            text_inputs = self.tokenizer(
-                text=prompt_strings,
-                add_special_tokens=add_special_tokens,
-                padding=padding,
-                truncation=truncation,
-                max_length=max_length,
-                is_split_into_words=is_split_into_words,
-                return_tensors=return_tensors,
-            )
+            text_inputs = self.tokenizer(text=prompt_strings, **output_kwargs["text_kwargs"])
             inputs.update(text_inputs)
 
             if n_images_in_images != n_images_in_text:

@@ -14,9 +14,8 @@
 # limitations under the License.
 """PyTorch Idefics3 model."""
 
-import math
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -25,7 +24,7 @@ from torch.nn import CrossEntropyLoss
 
 from ... import PreTrainedModel
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache
+from ...cache_utils import Cache
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutput, ModelOutput
 from ...utils import (

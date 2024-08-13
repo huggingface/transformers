@@ -18,8 +18,10 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 
+from transformers.utils.import_utils import is_flax_available, is_tf_available, is_torch_available
+
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
-from ...image_transforms import PaddingMode, pad, rescale, resize, to_channel_dimension_format
+from ...image_transforms import PaddingMode, pad, rescale, to_channel_dimension_format
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -28,11 +30,10 @@ from ...image_utils import (
     PILImageResampling,
     get_image_size,
     infer_channel_dimension_format,
-    is_pil_image,
-    is_torch_tensor,
     is_jax_tensor,
-    is_tf_tensor,
     is_scaled_image,
+    is_tf_tensor,
+    is_torch_tensor,
     is_valid_image,
     to_numpy_array,
     valid_images,
@@ -40,6 +41,15 @@ from ...image_utils import (
 )
 from ...utils import TensorType, is_vision_available, logging
 
+
+if is_torch_available():
+    import torch
+
+if is_tf_available():
+    import tensorflow as tf
+
+if is_flax_available():
+    import jax.numpy as jnp
 
 logger = logging.get_logger(__name__)
 
@@ -753,7 +763,7 @@ class Idefics3ImageProcessor(BaseImageProcessor):
         palettes = [image[0].getpalette() if isinstance(image[0], Image.Image) and image[0].mode == 'P' else None for image in images_list] # save the palettes for conversion to RGB
         # All transformations expect numpy arrays.
         images_list = [[to_numpy_array(image) for image in images] for images in images_list]
-        
+
         new_images_list = []
         for images in images_list:
             new_images = []
