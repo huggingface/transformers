@@ -27,7 +27,7 @@ from collections import OrderedDict
 from functools import lru_cache
 from itertools import chain
 from types import ModuleType
-from typing import Any, Tuple, Union
+from typing import Any, Optional, Tuple, Union
 
 from packaging import version
 
@@ -101,6 +101,7 @@ _eetq_available = _is_package_available("eetq")
 _fbgemm_gpu_available = _is_package_available("fbgemm_gpu")
 _galore_torch_available = _is_package_available("galore_torch")
 _lomo_available = _is_package_available("lomo_optim")
+_grokadamw_available = _is_package_available("grokadamw")
 # `importlib.metadata.version` doesn't work with `bs4` but `beautifulsoup4`. For `importlib.util.find_spec`, reversed.
 _bs4_available = importlib.util.find_spec("bs4") is not None
 _coloredlogs_available = _is_package_available("coloredlogs")
@@ -353,6 +354,10 @@ def is_lomo_available():
     return _lomo_available
 
 
+def is_grokadamw_available():
+    return _grokadamw_available
+
+
 def is_pyctcdecode_available():
     return _pyctcdecode_available
 
@@ -420,12 +425,16 @@ def is_mambapy_available():
     return False
 
 
-def is_torch_mps_available():
+def is_torch_mps_available(min_version: Optional[str] = None):
     if is_torch_available():
         import torch
 
         if hasattr(torch.backends, "mps"):
-            return torch.backends.mps.is_available() and torch.backends.mps.is_built()
+            backend_available = torch.backends.mps.is_available() and torch.backends.mps.is_built()
+            if min_version is not None:
+                flag = version.parse(_torch_version) >= version.parse(min_version)
+                backend_available = backend_available and flag
+            return backend_available
     return False
 
 
