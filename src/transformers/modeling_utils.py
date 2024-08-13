@@ -33,6 +33,11 @@ from threading import Thread
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 from zipfile import is_zipfile
 
+try:
+    from typing import Self
+except ImportError:
+    from typing_extensions import Self
+
 import torch
 from huggingface_hub import split_torch_state_dict_into_shards
 from packaging import version
@@ -2934,7 +2939,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         revision: str = "main",
         use_safetensors: bool = None,
         **kwargs,
-    ) -> "PreTrainedModel":
+    ) -> Self:
         r"""
         Instantiate a pretrained pytorch model from a pre-trained model configuration.
 
