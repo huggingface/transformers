@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Templates for Chat Models
+# Chat Templates
 
 ## Introduction
 
@@ -235,13 +235,14 @@ The sun.</s>
 From here, just continue training like you would with a standard language modelling task, using the `formatted_chat` column.
 
 <Tip>
-If you format text with `apply_chat_template(tokenize=False)` and then tokenize it in a separate step, you should set the argument
-`add_special_tokens=False`. If you use `apply_chat_template(tokenize=True)`, you don't need to worry about this!
 
 By default, some tokenizers add special tokens like `<bos>` and `<eos>` to text they tokenize. Chat templates should 
-always include all of the special tokens they need, and so adding extra special tokens with
-the default `add_special_tokens=True` can result in incorrect or duplicated special tokens, which will hurt model
-performance.
+already include all the special tokens they need, and so additional special tokens will often be incorrect or 
+duplicated, which will hurt model performance.
+
+Therefore, if you format text with `apply_chat_template(tokenize=False)`, you should set the argument
+`add_special_tokens=False` when you tokenize that text later. If you use `apply_chat_template(tokenize=True)`, you don't need to worry about this!
+
 </Tip>
 
 ## Advanced: Extra inputs to chat templates
@@ -325,7 +326,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 checkpoint = "NousResearch/Hermes-2-Pro-Llama-3-8B"
 
-tokenizer = AutoTokenizer.from_pretrained(checkpoint, revision="pr/13")
+tokenizer = AutoTokenizer.from_pretrained(checkpoint)
 model = AutoModelForCausalLM.from_pretrained(checkpoint, torch_dtype=torch.bfloat16, device_map="auto")
 ```
 
@@ -370,7 +371,7 @@ messages = [
 Now, let's apply the chat template and generate a response:
 
 ```python
-inputs = tokenizer.apply_chat_template(messages, chat_template="tool_use", tools=tools, add_generation_prompt=True, return_dict=True, return_tensors="pt")
+inputs = tokenizer.apply_chat_template(messages, tools=tools, add_generation_prompt=True, return_dict=True, return_tensors="pt")
 inputs = {k: v.to(model.device) for k, v in inputs.items()}
 out = model.generate(**inputs, max_new_tokens=128)
 print(tokenizer.decode(out[0][len(inputs["input_ids"][0]):]))
@@ -388,29 +389,47 @@ The model has called the function with valid arguments, in the format requested 
 inferred that we're most likely referring to the Paris in France, and it remembered that, as the home of SI units,
 the temperature in France should certainly be displayed in Celsius.
 
-Let's append the model's tool call to the conversation. Note that we generate a random `tool_call_id` here. These IDs
-are not used by all models, but they allow models to issue multiple tool calls at once and keep track of which response
-corresponds to which call. You can generate them any way you like, but they should be unique within each chat.
+Next, let's append the model's tool call to the conversation.
 
 ```python
-tool_call_id = "vAHdf3"  # Random ID, should be unique for each tool call
 tool_call = {"name": "get_current_temperature", "arguments": {"location": "Paris, France", "unit": "celsius"}}
-messages.append({"role": "assistant", "tool_calls": [{"id": tool_call_id, "type": "function", "function": tool_call}]})
+messages.append({"role": "assistant", "tool_calls": [{"type": "function", "function": tool_call}]})
 ```
 
 
 Now that we've added the tool call to the conversation, we can call the function and append the result to the
 conversation. Since we're just using a dummy function for this example that always returns 22.0, we can just append 
-that result directly. Again, note the `tool_call_id` - this should match the ID used in the tool call above.
+that result directly.
+
+```python
+messages.append({"role": "tool", "name": "get_current_temperature", "content": "22.0"})
+```
+
+<Tip>
+
+Some model architectures, notably Mistral/Mixtral, also require a `tool_call_id` here, which should be
+9 randomly-generated alphanumeric characters, and assigned to the `id` key of the tool call
+dictionary. The same key should also be assigned to the `tool_call_id` key of the tool response dictionary below, so 
+that tool calls can be matched to tool responses. So, for Mistral/Mixtral models, the code above would be:
+
+```python
+tool_call_id = "9Ae3bDc2F"  # Random ID, 9 alphanumeric characters
+tool_call = {"name": "get_current_temperature", "arguments": {"location": "Paris, France", "unit": "celsius"}}
+messages.append({"role": "assistant", "tool_calls": [{"type": "function", "id": tool_call_id, "function": tool_call}]})
+```
+
+and
 
 ```python
 messages.append({"role": "tool", "tool_call_id": tool_call_id, "name": "get_current_temperature", "content": "22.0"})
 ```
 
+</Tip>
+
 Finally, let's let the assistant read the function outputs and continue chatting with the user:
 
 ```python
-inputs = tokenizer.apply_chat_template(messages, chat_template="tool_use", tools=tools, add_generation_prompt=True, return_dict=True, return_tensors="pt")
+inputs = tokenizer.apply_chat_template(messages, tools=tools, add_generation_prompt=True, return_dict=True, return_tensors="pt")
 inputs = {k: v.to(model.device) for k, v in inputs.items()}
 out = model.generate(**inputs, max_new_tokens=128)
 print(tokenizer.decode(out[0][len(inputs["input_ids"][0]):]))
@@ -425,14 +444,6 @@ The current temperature in Paris, France is 22.0 ° Celsius.<|im_end|>
 Although this was a simple demo with dummy tools and a single call, the same technique works with 
 multiple real tools and longer conversations. This can be a powerful way to extend the capabilities of conversational
 agents with real-time information, computational tools like calculators, or access to large databases.
-
-<Tip>
-Not all of the tool-calling features shown above are used by all models. Some use tool call IDs, others simply use the function name and
-match tool calls to results using the ordering, and there are several models that use neither and only issue one tool 
-call at a time to avoid confusion. If you want your code to be compatible across as many models as possible, we 
-recommend structuring your tools calls like we've shown here, and returning tool results in the order that
-they were issued by the model. The chat templates on each model should handle the rest.
-</Tip>
 
 ### Understanding tool schemas
 
@@ -856,3 +867,24 @@ all implementations of Jinja:
 - Replace `True`, `False` and `None`, which are Python-specific, with `true`, `false` and `none`.
 - Directly rendering a dict or list may give different results in other implementations (for example, string entries
   might change from single-quoted to double-quoted). Adding the `tojson` filter can help to ensure consistency here.
+
+### Writing and debugging larger templates
+
+When this feature was introduced, most templates were quite small, the Jinja equivalent of a "one-liner" script. 
+However, with new models and features like tool-use and RAG, some templates can be 100 lines long or more. When
+writing templates like these, it's a good idea to write them in a separate file, using a text editor. You can easily 
+extract a chat template to a file:
+
+```python
+open("template.jinja", "w").write(tokenizer.chat_template)
+```
+
+Or load the edited template back into the tokenizer:
+
+```python
+tokenizer.chat_template = open("template.jinja").read()
+```
+
+As an added bonus, when you write a long, multi-line template in a separate file, line numbers in that file will
+exactly correspond to line numbers in template parsing or execution errors. This will make it much easier to
+identify the source of issues.
