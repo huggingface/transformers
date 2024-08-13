@@ -1844,6 +1844,7 @@ class Kosmos2_5VisionModel(Kosmos2_5PreTrainedModel):
         )
 
 
+# Copied from transformers.models.kosmos2.modeling_kosmos2.Kosmos2TextModel with KOSMOS2->KOSMOS2_5,Kosmos2->Kosmos2_5
 class Kosmos2_5TextModel(Kosmos2_5PreTrainedModel):
     config_class = Kosmos2_5TextConfig
 
@@ -1860,10 +1861,7 @@ class Kosmos2_5TextModel(Kosmos2_5PreTrainedModel):
         self.model.embed_tokens = value
 
     @add_start_docstrings_to_model_forward(KOSMOS2_5_TEXT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(
-        output_type=BaseModelOutputWithPastAndCrossAttentions,
-        config_class=Kosmos2_5TextConfig,
-    )
+    @replace_return_docstrings(output_type=BaseModelOutputWithPastAndCrossAttentions, config_class=Kosmos2_5TextConfig)
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
