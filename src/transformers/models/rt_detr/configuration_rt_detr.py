@@ -130,9 +130,9 @@ class RTDetrConfig(PretrainedConfig):
             based on the predictions from the previous layer.
         is_encoder_decoder (`bool`, *optional*, defaults to `True`):
             Whether the architecture has an encoder decoder structure.
-        losses (`List[str]`, *optional*, defaults to `['labels_vfl', 'boxes']`):
+        losses (`List[str]`, *optional*, defaults to `['labels_varifocal', 'boxes']`):
             Losses to be used in the object detection loss. Possible values for labels are:
-            `labels_cross_entropy`, `labels_focal`, `labels_binary_cross_entropy`, `labels_vfl`.
+            `labels_varifocal`, `labels_focal`, `labels_cross_entropy`, `labels_binary_cross_entropy`.
             For boxes, the possible value is `boxes`.
         matcher_alpha (`float`, *optional*, defaults to 0.25):
             Parameter alpha used by the Hungarian Matcher.
@@ -145,7 +145,7 @@ class RTDetrConfig(PretrainedConfig):
         matcher_giou_cost (`float`, *optional*, defaults to 2.0):
             The relative weight of the giou loss of used by the Hungarian Matcher.
         use_focal_loss (`bool`, *optional*, defaults to `True`):
-            Parameter informing if focal focal should be used in HungarianMatcher to compute class cost.
+            Parameter informing if focal loss should be used in HungarianMatcher to compute class cost.
         auxiliary_loss (`bool`, *optional*, defaults to `True`):
             Whether auxiliary decoding losses (loss at each decoder layer) are to be used.
         focal_loss_alpha (`float`, *optional*, defaults to 0.75):
@@ -237,7 +237,7 @@ class RTDetrConfig(PretrainedConfig):
         with_box_refine=True,
         is_encoder_decoder=True,
         # Loss
-        losses=["labels_vfl", "boxes"],
+        losses=["labels_varifocal", "boxes"],
         matcher_alpha=0.25,
         matcher_gamma=2.0,
         matcher_class_cost=2.0,

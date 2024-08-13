@@ -1973,7 +1973,8 @@ class RTDetrLoss(nn.Module):
             Module able to compute a matching between targets and proposals.
         losses_weight_dict (`Dict`):
             Dictionary relating each loss with its weights. These losses are configured in RTDetrConf as
-            `weight_loss_vfl`, `weight_loss_bbox`, `weight_loss_giou`
+            `weight_loss_vfl`, `weight_loss_cross_entropy`, `labels_binary_cross_entropy`, `weight_loss_focal`,
+            `weight_loss_bbox`, `weight_loss_giou`.
         losses (`List[str]`):
             List of all the losses to be applied. See `get_loss` for a list of all available losses.
         alpha (`float`):
@@ -1990,7 +1991,7 @@ class RTDetrLoss(nn.Module):
         self.matcher = RTDetrHungarianMatcher(config)
         self.num_classes = config.num_labels
         self.losses_weight_dict = {
-            "labels_vfl": config.weight_loss_vfl,
+            "labels_varifocal": config.weight_loss_vfl,
             "labels_cross_entropy": config.weight_loss_cross_entropy,
             "labels_binary_cross_entropy": config.weight_loss_binary_cross_entropy,
             "labels_focal": config.weight_loss_focal,
@@ -1998,7 +1999,13 @@ class RTDetrLoss(nn.Module):
             "giou": config.weight_loss_giou,
         }
 
-        loss_names = ["labels_vfl", "labels_cross_entropy", "labels_binary_cross_entropy", "labels_focal", "boxes"]
+        loss_names = [
+            "labels_varifocal",
+            "labels_cross_entropy",
+            "labels_binary_cross_entropy",
+            "labels_focal",
+            "boxes",
+        ]
         not_matched_losses = set(config.losses) - set(loss_names)
         if not_matched_losses:
             raise ValueError(
@@ -2014,11 +2021,11 @@ class RTDetrLoss(nn.Module):
             self.register_buffer("class_weights", class_weights)
 
         # for multi-label classification with focal loss
-        if "labels_focal" in self.losses or "labels_vfl" in self.losses:
+        if "labels_focal" in self.losses or "labels_varifocal" in self.losses:
             self.alpha = config.focal_loss_alpha
             self.gamma = config.focal_loss_gamma
 
-    def loss_labels_vfl(self, outputs, targets, indices, num_boxes):
+    def loss_labels_varifocal(self, outputs, targets, indices, num_boxes):
         if "pred_boxes" not in outputs:
             raise KeyError("No predicted boxes found in outputs")
         if "logits" not in outputs:
@@ -2047,7 +2054,7 @@ class RTDetrLoss(nn.Module):
 
         loss = F.binary_cross_entropy_with_logits(src_logits, target_score, weight=weight, reduction="none")
         loss = loss.mean(1).sum() * src_logits.shape[1] / num_boxes
-        return {"labels_vfl": loss}
+        return {"labels_varifocal": loss}
 
     def loss_labels_cross_entropy(self, outputs, targets, indices, num_boxes):
         """Classification loss (NLL)
@@ -2159,7 +2166,7 @@ class RTDetrLoss(nn.Module):
             "labels_cross_entropy": self.loss_labels_cross_entropy,
             "labels_binary_cross_entropy": self.loss_labels_binary_cross_entropy,
             "labels_focal": self.loss_labels_focal,
-            "labels_vfl": self.loss_labels_vfl,
+            "labels_varifocal": self.loss_labels_varifocal,
         }
         if loss not in loss_map:
             raise ValueError(f"Loss {loss} not supported")
@@ -2213,7 +2220,7 @@ class RTDetrLoss(nn.Module):
         losses = {}
         for loss in self.losses:
             l_dict = self.get_loss(loss, outputs, targets, indices, num_boxes)
-            l_dict = {k: l_dict[k] * self.losses_weight_dict[k] for k in l_dict if k in self.losses_weight_dict}
+            l_dict = {k: l_dict[k] * self.losses_weight_dict[k] for k in l_dict}
             losses.update(l_dict)
 
         # In case of auxiliary losses, we repeat this process with the output of each intermediate layer.
