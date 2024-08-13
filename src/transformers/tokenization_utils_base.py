@@ -4072,8 +4072,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             `str`: The cleaned-up string.
         """
         out_string = (
-            out_string.replace(" '", "'")
-            .replace(" ' ", "'")
+            out_string.replace(" ' ", "'")
             .replace(" n't", "n't")
             .replace(" 'm ", "'m ")
             .replace(" 's ", "'s ")
