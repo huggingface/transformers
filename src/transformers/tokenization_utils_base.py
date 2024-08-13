@@ -4072,16 +4072,16 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             `str`: The cleaned-up string.
         """
         out_string = (
-            out_string.replace(" .", ".")
+            out_string.replace(" ' ", "'")
+            .replace(" n't", "n't")
+            .replace(" 'm ", "'m ")
+            .replace(" 's ", "'s ")
+            .replace(" 've ", "'ve ")
+            .replace(" 're ", "'re ")
+            .replace(" .", ".")
             .replace(" ?", "?")
             .replace(" !", "!")
             .replace(" ,", ",")
-            .replace(" ' ", "'")
-            .replace(" n't", "n't")
-            .replace(" 'm", "'m")
-            .replace(" 's", "'s")
-            .replace(" 've", "'ve")
-            .replace(" 're", "'re")
         )
         return out_string
 
