@@ -795,7 +795,9 @@ class TFDebertaDisentangledSelfAttention(keras.layers.Layer):
         if "p2c" in self.pos_att_type:
             pos_query_layer = self.pos_q_proj(rel_embeddings)
             pos_query_layer = self.transpose_for_scores(pos_query_layer)
-            pos_query_layer /= tf.math.sqrt(tf.cast(shape_list(pos_query_layer)[-1] * scale_factor, dtype=self.compute_dtype))
+            pos_query_layer /= tf.math.sqrt(
+                tf.cast(shape_list(pos_query_layer)[-1] * scale_factor, dtype=self.compute_dtype)
+            )
             if shape_list(query_layer)[-2] != shape_list(key_layer)[-2]:
                 r_pos = build_relative_position(shape_list(key_layer)[-2], shape_list(key_layer)[-2])
             else:
