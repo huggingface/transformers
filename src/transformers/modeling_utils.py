@@ -105,7 +105,6 @@ from .utils.quantization_config import BitsAndBytesConfig, QuantizationMethod
 
 XLA_USE_BF16 = os.environ.get("XLA_USE_BF16", "0").upper()
 XLA_DOWNCAST_BF16 = os.environ.get("XLA_DOWNCAST_BF16", "0").upper()
-PARAM_RENAME_WARNING = "A parameter name that contains `{}` will be renamed internally to `{}`. Please use a different name to suppress this warning."
 
 
 if is_accelerate_available():
@@ -689,21 +688,41 @@ def _find_identical(tensors: List[Set[str]], state_dict: Dict[str, torch.Tensor]
     return shared_tensors, identical
 
 
-def _load_state_dict_into_model(model_to_load, state_dict, start_prefix, assign_to_params_buffers=False):
+def _load_state_dict_into_model(
+    model_to_load, state_dict, start_prefix, assign_to_params_buffers=False, pretrained_model_name_or_path=None
+):
     # Convert old format to new format if needed from a PyTorch state_dict
     old_keys = []
     new_keys = []
+    renamed_keys = {}
+    found_gamma = False
+    found_beta = False
+    warning_msg = "This model "
+    if pretrained_model_name_or_path is not None:
+        warning_msg += f"({pretrained_model_name_or_path}) "
+    warning_msg += "contains parameters that have been renamed internally (a few are listed below but more are present in the model):\n"
     for key in state_dict.keys():
         new_key = None
         if "gamma" in key:
-            logger.warning(PARAM_RENAME_WARNING.format("gamma", "weight"))
+            # We add only the first key as an example
+            if not found_gamma:
+                renamed_keys[key] = key.replace("gamma", "weight")
+            found_gamma = True
             new_key = key.replace("gamma", "weight")
         if "beta" in key:
-            logger.warning(PARAM_RENAME_WARNING.format("beta", "bias"))
+            # We add only the first key as an example
+            if not found_beta:
+                renamed_keys[key] = key.replace("beta", "bias")
+            found_beta = True
             new_key = key.replace("beta", "bias")
         if new_key:
             old_keys.append(key)
             new_keys.append(new_key)
+    if renamed_keys:
+        for old_key, new_key in renamed_keys.items():
+            warning_msg += f"* `{old_key}` -> `{new_key}`\n"
+        warning_msg += "If you are using a model from the Hub, consider submitting a PR to adjust these weights and help future users."
+        logger.info_once(warning_msg)
     for old_key, new_key in zip(old_keys, new_keys):
         state_dict[new_key] = state_dict.pop(old_key)
 
@@ -819,6 +838,7 @@ def _load_state_dict_into_meta_model(
     is_safetensors=False,
     keep_in_fp32_modules=None,
     unexpected_keys=None,  # passing `unexpected` for cleanup from quantization items
+    pretrained_model_name_or_path=None,  # for flagging the user when the model contains renamed keys
 ):
     """
     This is somewhat similar to `_load_state_dict_into_model`, but deals with a model that has some or all of its
@@ -841,14 +861,25 @@ def _load_state_dict_into_meta_model(
 
     old_keys = []
     new_keys = []
+    renamed_keys = {}
+    found_gamma = False
+    found_beta = False
+    warning_msg = "This model "
+    if pretrained_model_name_or_path is not None:
+        warning_msg += f"({pretrained_model_name_or_path}) "
+    warning_msg += "contains parameters that have been renamed internally (a few are listed below but more are present in the model):\n"
     is_quantized = hf_quantizer is not None
     for key in state_dict.keys():
         new_key = None
         if "gamma" in key:
-            logger.warning(PARAM_RENAME_WARNING.format("gamma", "weight"))
+            if not found_gamma:
+                renamed_keys[key] = key.replace("gamma", "weight")
+            found_gamma = True
             new_key = key.replace("gamma", "weight")
         if "beta" in key:
-            logger.warning(PARAM_RENAME_WARNING.format("beta", "bias"))
+            if not found_beta:
+                renamed_keys[key] = key.replace("beta", "bias")
+            found_beta = True
             new_key = key.replace("beta", "bias")
         if new_key:
             old_keys.append(key)
@@ -4352,6 +4383,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     is_safetensors=is_safetensors,
                     keep_in_fp32_modules=keep_in_fp32_modules,
                     unexpected_keys=unexpected_keys,
+                    pretrained_model_name_or_path=pretrained_model_name_or_path,
                 )
             else:
                 # Sharded checkpoint or whole but low_cpu_mem_usage==True
@@ -4359,7 +4391,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     model_to_load, state_dict, start_prefix
                 )
                 error_msgs = _load_state_dict_into_model(
-                    model_to_load, state_dict, start_prefix, assign_to_params_buffers
+                    model_to_load, state_dict, start_prefix, assign_to_params_buffers, pretrained_model_name_or_path
                 )
 
         else:
@@ -4429,6 +4461,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             is_safetensors=is_safetensors,
                             keep_in_fp32_modules=keep_in_fp32_modules,
                             unexpected_keys=unexpected_keys,
+                            pretrained_model_name_or_path=pretrained_model_name_or_path,
                         )
                         error_msgs += new_error_msgs
                 else:
@@ -4541,7 +4574,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     @staticmethod
     def _load_pretrained_model_low_mem(
-        model, loaded_state_dict_keys, resolved_archive_file, start_prefix="", hf_quantizer=None
+        model,
+        loaded_state_dict_keys,
+        resolved_archive_file,
+        start_prefix="",
+        hf_quantizer=None,
+        pretrained_model_name_or_path=None,
     ):
         """
         This is an experimental function that loads the model using ~1.x model size CPU memory
@@ -4571,6 +4609,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             start_prefix,
             expected_keys=expected_keys,
             hf_quantizer=hf_quantizer,
+            pretrained_model_name_or_path=pretrained_model_name_or_path,
         )
         return error_msgs
 
