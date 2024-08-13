@@ -208,7 +208,7 @@ class Kosmos2_5VisionConfig(PretrainedConfig):
         attention_dropout=0.0,
         seq_len=4096,
         initializer_factor=1.0,
-        initializer_range=1e-10,
+        initializer_range=0.02,
         **kwargs,
     ):
         super().__init__(**kwargs)
