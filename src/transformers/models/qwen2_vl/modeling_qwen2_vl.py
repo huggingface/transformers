@@ -266,10 +266,10 @@ class PatchMerger(nn.Module):
 
 
 class VisionMlp(nn.Module):
-    def __init__(self, dim: int, hidden_dim: int) -> None:
+    def __init__(self, dim: int, hidden_dim: int, hidden_act: str) -> None:
         super().__init__()
         self.fc1 = nn.Linear(dim, hidden_dim)
-        self.act = ACT2FN["quick_gelu"]
+        self.act = ACT2FN[hidden_act]
         self.fc2 = nn.Linear(hidden_dim, dim)
 
     def forward(self, x) -> torch.Tensor:
@@ -338,7 +338,7 @@ class Qwen2VLVisionBlock(nn.Module):
         self.attn = QWEN2_VL_VISION_ATTENTION_CLASSES[config._attn_implementation](
             config.embed_dim, num_heads=config.num_heads
         )
-        self.mlp = VisionMlp(dim=config.embed_dim, hidden_dim=mlp_hidden_dim)
+        self.mlp = VisionMlp(dim=config.embed_dim, hidden_dim=mlp_hidden_dim, hidden_act=config.hidden_act)
 
     def forward(self, x, cu_seqlens, rotary_pos_emb) -> torch.Tensor:
         x = x + self.attn(self.norm1(x), cu_seqlens=cu_seqlens, rotary_pos_emb=rotary_pos_emb)

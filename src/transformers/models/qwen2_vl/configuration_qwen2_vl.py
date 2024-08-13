@@ -32,13 +32,14 @@ class Qwen2VLVisionConfig(PretrainedConfig):
         depth=32,
         embed_dim=1280,
         hidden_size=3584,
+        hidden_act="quick_gelu",
         mlp_ratio=4,
         num_heads=16,
         in_channels=3,
         patch_size=14,
         spatial_merge_size=2,
         temporal_patch_size=2,
-        attn_implementation="sdpa",
+        _attn_implementation="sdpa",
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -46,13 +47,14 @@ class Qwen2VLVisionConfig(PretrainedConfig):
         self.depth = depth
         self.embed_dim = embed_dim
         self.hidden_size = hidden_size
+        self.hidden_act = hidden_act
         self.mlp_ratio = mlp_ratio
         self.num_heads = num_heads
         self.in_channels = in_channels
         self.patch_size = patch_size
         self.spatial_merge_size = spatial_merge_size
         self.temporal_patch_size = temporal_patch_size
-        self._attn_implementation = attn_implementation
+        self._attn_implementation = _attn_implementation
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
@@ -180,7 +182,6 @@ class Qwen2VLConfig(PretrainedConfig):
         elif vision_config is None:
             self.vision_config = Qwen2VLVisionConfig()
         self.vision_config.hidden_size = hidden_size
-        self.vision_config._attn_implementation = self._attn_implementation
 
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings

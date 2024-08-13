@@ -81,10 +81,9 @@ class Qwen2VLVisionText2TextModelTester:
         tie_word_embeddings=True,
         is_training=True,
         vision_config={
-            "model_type": "dfn",
-            "pos_type": "2drope",
             "depth": 2,
             "embed_dim": 32,
+            "hidden_act": "quick_gelu",
             "mlp_ratio": 4,
             "num_heads": 4,
             "patch_size": 14,
