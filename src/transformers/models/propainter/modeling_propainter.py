@@ -15,6 +15,7 @@
 """PyTorch ProPainter model."""
 
 import collections.abc
+import itertools
 import math
 import numpy as np
 from typing import Dict, List, Optional, Set, Tuple, Union
@@ -37,7 +38,7 @@ from ...modeling_outputs import (
     BaseModelOutput,
     MaskedImageModelingOutput,
 )
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel,TORCH_INIT_FUNCTIONS
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
     add_code_sample_docstrings,
@@ -63,124 +64,124 @@ _IMAGE_CLASS_CHECKPOINT = "ruffy369/propainter"
 
 
 # Copied from transformers.models.vit.modeling_vit.ViTEmbeddings with ViT->ProPainter
-class ProPainterEmbeddings(nn.Module):
-    """
-    Construct the CLS token, position and patch embeddings. Optionally, also the mask token.
-    """
+# class ProPainterEmbeddings(nn.Module):
+#     """
+#     Construct the CLS token, position and patch embeddings. Optionally, also the mask token.
+#     """
 
-    def __init__(self, config: ProPainterConfig, use_mask_token: bool = False) -> None:
-        super().__init__()
+#     def __init__(self, config: ProPainterConfig, use_mask_token: bool = False) -> None:
+#         super().__init__()
 
-        # self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
-        # self.mask_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size)) if use_mask_token else None
-        # self.patch_embeddings = ProPainterPatchEmbeddings(config)
-        # num_patches = self.patch_embeddings.num_patches
-        # self.position_embeddings = nn.Parameter(torch.randn(1, num_patches + 1, config.hidden_size))
-        # self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.config = config
+#         # self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
+#         # self.mask_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size)) if use_mask_token else None
+#         # self.patch_embeddings = ProPainterPatchEmbeddings(config)
+#         # num_patches = self.patch_embeddings.num_patches
+#         # self.position_embeddings = nn.Parameter(torch.randn(1, num_patches + 1, config.hidden_size))
+#         # self.dropout = nn.Dropout(config.hidden_dropout_prob)
+#         self.config = config
 
-    def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
-        """
-        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher
-        resolution images.
+#     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
+#         """
+#         This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher
+#         resolution images.
 
-        Source:
-        https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174
-        """
+#         Source:
+#         https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174
+#         """
 
-        num_patches = embeddings.shape[1] - 1
-        num_positions = self.position_embeddings.shape[1] - 1
-        if num_patches == num_positions and height == width:
-            return self.position_embeddings
-        class_pos_embed = self.position_embeddings[:, 0]
-        patch_pos_embed = self.position_embeddings[:, 1:]
-        dim = embeddings.shape[-1]
-        h0 = height // self.config.patch_size
-        w0 = width // self.config.patch_size
-        # we add a small number to avoid floating point error in the interpolation
-        # see discussion at https://github.com/facebookresearch/dino/issues/8
-        h0, w0 = h0 + 0.1, w0 + 0.1
-        patch_pos_embed = patch_pos_embed.reshape(1, int(math.sqrt(num_positions)), int(math.sqrt(num_positions)), dim)
-        patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
-        patch_pos_embed = nn.functional.interpolate(
-            patch_pos_embed,
-            scale_factor=(h0 / math.sqrt(num_positions), w0 / math.sqrt(num_positions)),
-            mode="bicubic",
-            align_corners=False,
-        )
-        assert int(h0) == patch_pos_embed.shape[-2] and int(w0) == patch_pos_embed.shape[-1]
-        patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
-        return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1)
+#         num_patches = embeddings.shape[1] - 1
+#         num_positions = self.position_embeddings.shape[1] - 1
+#         if num_patches == num_positions and height == width:
+#             return self.position_embeddings
+#         class_pos_embed = self.position_embeddings[:, 0]
+#         patch_pos_embed = self.position_embeddings[:, 1:]
+#         dim = embeddings.shape[-1]
+#         h0 = height // self.config.patch_size
+#         w0 = width // self.config.patch_size
+#         # we add a small number to avoid floating point error in the interpolation
+#         # see discussion at https://github.com/facebookresearch/dino/issues/8
+#         h0, w0 = h0 + 0.1, w0 + 0.1
+#         patch_pos_embed = patch_pos_embed.reshape(1, int(math.sqrt(num_positions)), int(math.sqrt(num_positions)), dim)
+#         patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
+#         patch_pos_embed = nn.functional.interpolate(
+#             patch_pos_embed,
+#             scale_factor=(h0 / math.sqrt(num_positions), w0 / math.sqrt(num_positions)),
+#             mode="bicubic",
+#             align_corners=False,
+#         )
+#         assert int(h0) == patch_pos_embed.shape[-2] and int(w0) == patch_pos_embed.shape[-1]
+#         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
+#         return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1)
 
-    def forward(
-        self,
-        pixel_values: torch.Tensor,
-        bool_masked_pos: Optional[torch.BoolTensor] = None,
-        interpolate_pos_encoding: bool = False,
-    ) -> torch.Tensor:
-        batch_size, num_channels, height, width = pixel_values.shape
-        embeddings = self.patch_embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
+#     def forward(
+#         self,
+#         pixel_values: torch.Tensor,
+#         bool_masked_pos: Optional[torch.BoolTensor] = None,
+#         interpolate_pos_encoding: bool = False,
+#     ) -> torch.Tensor:
+#         batch_size, num_channels, height, width = pixel_values.shape
+#         embeddings = self.patch_embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
 
-        if bool_masked_pos is not None:
-            seq_length = embeddings.shape[1]
-            mask_tokens = self.mask_token.expand(batch_size, seq_length, -1)
-            # replace the masked visual tokens by mask_tokens
-            mask = bool_masked_pos.unsqueeze(-1).type_as(mask_tokens)
-            embeddings = embeddings * (1.0 - mask) + mask_tokens * mask
+#         if bool_masked_pos is not None:
+#             seq_length = embeddings.shape[1]
+#             mask_tokens = self.mask_token.expand(batch_size, seq_length, -1)
+#             # replace the masked visual tokens by mask_tokens
+#             mask = bool_masked_pos.unsqueeze(-1).type_as(mask_tokens)
+#             embeddings = embeddings * (1.0 - mask) + mask_tokens * mask
 
-        # add the [CLS] token to the embedded patch tokens
-        cls_tokens = self.cls_token.expand(batch_size, -1, -1)
-        embeddings = torch.cat((cls_tokens, embeddings), dim=1)
+#         # add the [CLS] token to the embedded patch tokens
+#         cls_tokens = self.cls_token.expand(batch_size, -1, -1)
+#         embeddings = torch.cat((cls_tokens, embeddings), dim=1)
 
-        # add positional encoding to each token
-        if interpolate_pos_encoding:
-            embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
-        else:
-            embeddings = embeddings + self.position_embeddings
+#         # add positional encoding to each token
+#         if interpolate_pos_encoding:
+#             embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
+#         else:
+#             embeddings = embeddings + self.position_embeddings
 
-        embeddings = self.dropout(embeddings)
+#         embeddings = self.dropout(embeddings)
 
-        return embeddings
+#         return embeddings
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTPatchEmbeddings with ViT->ProPainter
-class ProPainterPatchEmbeddings(nn.Module):
-    """
-    This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
-    `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
-    Transformer.
-    """
+# # Copied from transformers.models.vit.modeling_vit.ViTPatchEmbeddings with ViT->ProPainter
+# class ProPainterPatchEmbeddings(nn.Module):
+#     """
+#     This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
+#     `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
+#     Transformer.
+#     """
 
-    def __init__(self, config):
-        super().__init__()
-        image_size, patch_size = config.image_size, config.patch_size
-        num_channels, hidden_size = config.num_channels, config.hidden_size
+#     def __init__(self, config):
+#         super().__init__()
+#         image_size, patch_size = config.image_size, config.patch_size
+#         num_channels, hidden_size = config.num_channels, config.hidden_size
 
-        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
-        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.num_patches = num_patches
+#         image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
+#         patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
+#         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+#         self.image_size = image_size
+#         self.patch_size = patch_size
+#         self.num_channels = num_channels
+#         self.num_patches = num_patches
 
-        self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
+#         self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
 
-    def forward(self, pixel_values: torch.Tensor, interpolate_pos_encoding: bool = False) -> torch.Tensor:
-        batch_size, num_channels, height, width = pixel_values.shape
-        if num_channels != self.num_channels:
-            raise ValueError(
-                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
-                f" Expected {self.num_channels} but got {num_channels}."
-            )
-        if not interpolate_pos_encoding:
-            if height != self.image_size[0] or width != self.image_size[1]:
-                raise ValueError(
-                    f"Input image size ({height}*{width}) doesn't match model"
-                    f" ({self.image_size[0]}*{self.image_size[1]})."
-                )
-        embeddings = self.projection(pixel_values).flatten(2).transpose(1, 2)
-        return embeddings
+#     def forward(self, pixel_values: torch.Tensor, interpolate_pos_encoding: bool = False) -> torch.Tensor:
+#         batch_size, num_channels, height, width = pixel_values.shape
+#         if num_channels != self.num_channels:
+#             raise ValueError(
+#                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
+#                 f" Expected {self.num_channels} but got {num_channels}."
+#             )
+#         if not interpolate_pos_encoding:
+#             if height != self.image_size[0] or width != self.image_size[1]:
+#                 raise ValueError(
+#                     f"Input image size ({height}*{width}) doesn't match model"
+#                     f" ({self.image_size[0]}*{self.image_size[1]})."
+#                 )
+#         embeddings = self.projection(pixel_values).flatten(2).transpose(1, 2)
+#         return embeddings
 
 
 # Copied from transformers.models.vit.modeling_vit.ViTSelfAttention with ViT->ProPainter
@@ -416,33 +417,35 @@ class ProPainterLayer(nn.Module):
 
 ##################################################ProPainterRaftOpticalFlow MODULES STARTS HERE######################################################
 
+
+#made transformers compliant
 class ProPainterResidualBlock(nn.Module):
-    def __init__(self, in_planes, planes, norm_fn='group', stride=1):
+    def __init__(self, in_channels, channels, norm_fn='group', stride=1):
         super(ProPainterResidualBlock, self).__init__()
   
-        self.conv1 = nn.Conv2d(in_planes, planes, kernel_size=3, padding=1, stride=stride)
-        self.conv2 = nn.Conv2d(planes, planes, kernel_size=3, padding=1)
+        self.conv1 = nn.Conv2d(in_channels, channels, kernel_size=3, padding=1, stride=stride)
+        self.conv2 = nn.Conv2d(channels, channels, kernel_size=3, padding=1)
         self.relu = nn.ReLU(inplace=True)
 
-        num_groups = planes // 8
+        num_groups = channels // 8
 
         if norm_fn == 'group':
-            self.norm1 = nn.GroupNorm(num_groups=num_groups, num_channels=planes)
-            self.norm2 = nn.GroupNorm(num_groups=num_groups, num_channels=planes)
+            self.norm1 = nn.GroupNorm(num_groups=num_groups, num_channels=channels)
+            self.norm2 = nn.GroupNorm(num_groups=num_groups, num_channels=channels)
             if not stride == 1:
-                self.norm3 = nn.GroupNorm(num_groups=num_groups, num_channels=planes)
+                self.norm3 = nn.GroupNorm(num_groups=num_groups, num_channels=channels)
         
         elif norm_fn == 'batch':
-            self.norm1 = nn.BatchNorm2d(planes)
-            self.norm2 = nn.BatchNorm2d(planes)
+            self.norm1 = nn.BatchNorm2d(channels)
+            self.norm2 = nn.BatchNorm2d(channels)
             if not stride == 1:
-                self.norm3 = nn.BatchNorm2d(planes)
+                self.norm3 = nn.BatchNorm2d(channels)
         
         elif norm_fn == 'instance':
-            self.norm1 = nn.InstanceNorm2d(planes)
-            self.norm2 = nn.InstanceNorm2d(planes)
+            self.norm1 = nn.InstanceNorm2d(channels)
+            self.norm2 = nn.InstanceNorm2d(channels)
             if not stride == 1:
-                self.norm3 = nn.InstanceNorm2d(planes)
+                self.norm3 = nn.InstanceNorm2d(channels)
 
         elif norm_fn == 'none':
             self.norm1 = nn.Sequential()
@@ -455,43 +458,46 @@ class ProPainterResidualBlock(nn.Module):
         
         else:    
             self.downsample = nn.Sequential(
-                nn.Conv2d(in_planes, planes, kernel_size=1, stride=stride), self.norm3)
+                nn.Conv2d(in_channels, channels, kernel_size=1, stride=stride), self.norm3)
 
 
-    def forward(self, x):
-        y = x
-        y = self.relu(self.norm1(self.conv1(y)))
-        y = self.relu(self.norm2(self.conv2(y)))
+    def forward(self, hidden_states):
+        residual = hidden_states
+        residual = self.relu(self.norm1(self.conv1(residual)))
+        residual = self.relu(self.norm2(self.conv2(residual)))
 
         if self.downsample is not None:
-            x = self.downsample(x)
+            hidden_states = self.downsample(hidden_states)
 
-        return self.relu(x+y)
+        hidden_states = self.relu(hidden_states+residual)
+        return hidden_states
 
 class ProPainterBasicEncoder(nn.Module):
     def __init__(self, output_dim=128, norm_fn='batch', dropout=0.0):
         super(ProPainterBasicEncoder, self).__init__()
-        self.norm_fn = norm_fn
 
-        if self.norm_fn == 'group':
+        if norm_fn == 'group':
             self.norm1 = nn.GroupNorm(num_groups=8, num_channels=64)
             
-        elif self.norm_fn == 'batch':
+        elif norm_fn == 'batch':
             self.norm1 = nn.BatchNorm2d(64)
 
-        elif self.norm_fn == 'instance':
+        elif norm_fn == 'instance':
             self.norm1 = nn.InstanceNorm2d(64)
 
-        elif self.norm_fn == 'none':
+        elif norm_fn == 'none':
             self.norm1 = nn.Sequential()
 
         self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3)
         self.relu1 = nn.ReLU(inplace=True)
 
-        self.in_planes = 64
-        self.layer1 = self._make_layer(64,  stride=1)
-        self.layer2 = self._make_layer(96, stride=2)
-        self.layer3 = self._make_layer(128, stride=2)
+        in_channels = (64,64,96)
+        channels = (64,96,128)
+        strides = (1,2,2)
+
+        self.resblocks = [[ProPainterResidualBlock(in_channel, channel, norm_fn, stride),ProPainterResidualBlock(channel, channel, norm_fn, stride=1)] for in_channel,channel,stride in zip(in_channels,channels,strides)]
+        #using itertools makes flattening a little faster :)
+        self.resblocks = nn.ModuleList(list(itertools.chain.from_iterable(self.resblocks))) 
 
         # output convolution
         self.conv2 = nn.Conv2d(128, output_dim, kernel_size=1)
@@ -509,60 +515,50 @@ class ProPainterBasicEncoder(nn.Module):
                 if m.bias is not None:
                     nn.init.constant_(m.bias, 0)
 
-    def _make_layer(self, dim, stride=1):
-        layer1 = ProPainterResidualBlock(self.in_planes, dim, self.norm_fn, stride=stride)
-        layer2 = ProPainterResidualBlock(dim, dim, self.norm_fn, stride=1)
-        layers = (layer1, layer2)
-        
-        self.in_planes = dim
-        return nn.Sequential(*layers)
-
-
-    def forward(self, x):
+    def forward(self, image):
 
         # if input is list, combine batch dimension
-        is_list = isinstance(x, tuple) or isinstance(x, list)
+        is_list = isinstance(image, tuple) or isinstance(image, list)
         if is_list:
-            batch_dim = x[0].shape[0]
-            x = torch.cat(x, dim=0)
+            batch_dim = image[0].shape[0]
+            image = torch.cat(image, dim=0)
 
-        x = self.conv1(x)
-        x = self.norm1(x)
-        x = self.relu1(x)
+        hidden_states = self.conv1(image)
+        hidden_states = self.norm1(hidden_states)
+        hidden_states = self.relu1(hidden_states)
 
-        x = self.layer1(x)
-        x = self.layer2(x)
-        x = self.layer3(x)
+        for resblock in self.resblocks:
+            hidden_states = resblock(hidden_states)
 
-        x = self.conv2(x)
+        hidden_states = self.conv2(hidden_states)
 
         if self.training and self.dropout is not None:
-            x = self.dropout(x)
+            hidden_states = self.dropout(hidden_states)
 
         if is_list:
-            x = torch.split(x, [batch_dim, batch_dim], dim=0)
+            hidden_states = torch.split(hidden_states, [batch_dim, batch_dim], dim=0)
 
-        return x
+        return hidden_states
 
 class ProPainterBasicMotionEncoder(nn.Module):
     def __init__(self, config):
         super(ProPainterBasicMotionEncoder, self).__init__()
-        cor_planes = config.corr_levels * (2*config.corr_radius + 1)**2
-        self.convc1 = nn.Conv2d(cor_planes, 256, 1, padding=0)
-        self.convc2 = nn.Conv2d(256, 192, 3, padding=1)
-        self.convf1 = nn.Conv2d(2, 128, 7, padding=3)
-        self.convf2 = nn.Conv2d(128, 64, 3, padding=1)
+        corr_planes = config.corr_levels * (2*config.corr_radius + 1)**2
+        self.conv_corr1 = nn.Conv2d(corr_planes, 256, 1, padding=0)
+        self.conv_corr2 = nn.Conv2d(256, 192, 3, padding=1)
+        self.conv_flow1 = nn.Conv2d(2, 128, 7, padding=3)
+        self.conv_flow2 = nn.Conv2d(128, 64, 3, padding=1)
         self.conv = nn.Conv2d(64+192, 128-2, 3, padding=1)
 
     def forward(self, flow, corr):
-        cor = F.relu(self.convc1(corr))
-        cor = F.relu(self.convc2(cor))
-        flo = F.relu(self.convf1(flow))
-        flo = F.relu(self.convf2(flo))
+        hidden_states_corr = F.relu(self.conv_corr1(corr))
+        hidden_states_corr = F.relu(self.conv_corr2(hidden_states_corr))
+        hidden_states_flow = F.relu(self.conv_flow1(flow))
+        hidden_states_flow = F.relu(self.conv_flow2(hidden_states_flow))
 
-        cor_flo = torch.cat([cor, flo], dim=1)
-        out = F.relu(self.conv(cor_flo))
-        return torch.cat([out, flow], dim=1)
+        hidden_states = torch.cat([hidden_states_corr, hidden_states_flow], dim=1)
+        hidden_states = F.relu(self.conv(hidden_states))
+        return torch.cat([hidden_states, flow], dim=1)
 
 class ProPainterSepConvGRU(nn.Module):
     def __init__(self, hidden_dim=128, input_dim=192+128):
@@ -576,22 +572,22 @@ class ProPainterSepConvGRU(nn.Module):
         self.convq2 = nn.Conv2d(hidden_dim+input_dim, hidden_dim, (5,1), padding=(2,0))
 
 
-    def forward(self, h, x):
+    def forward(self, hidden_states, motion_features):
         # horizontal
-        hx = torch.cat([h, x], dim=1)
-        z = torch.sigmoid(self.convz1(hx))
-        r = torch.sigmoid(self.convr1(hx))
-        q = torch.tanh(self.convq1(torch.cat([r*h, x], dim=1)))        
-        h = (1-z) * h + z * q
+        hidden_states_motion_features = torch.cat([hidden_states, motion_features], dim=1)
+        z = torch.sigmoid(self.convz1(hidden_states_motion_features))
+        r = torch.sigmoid(self.convr1(hidden_states_motion_features))
+        q = torch.tanh(self.convq1(torch.cat([r*hidden_states, motion_features], dim=1)))        
+        hidden_states = (1-z) * hidden_states + z * q
 
         # vertical
-        hx = torch.cat([h, x], dim=1)
-        z = torch.sigmoid(self.convz2(hx))
-        r = torch.sigmoid(self.convr2(hx))
-        q = torch.tanh(self.convq2(torch.cat([r*h, x], dim=1)))       
-        h = (1-z) * h + z * q
+        hidden_states_motion_features = torch.cat([hidden_states, motion_features], dim=1)
+        z = torch.sigmoid(self.convz2(hidden_states_motion_features))
+        r = torch.sigmoid(self.convr2(hidden_states_motion_features))
+        q = torch.tanh(self.convq2(torch.cat([r*hidden_states, motion_features], dim=1)))       
+        hidden_states = (1-z) * hidden_states + z * q
 
-        return h
+        return hidden_states
 
 class ProPainterFlowHead(nn.Module):
     def __init__(self, input_dim=128, hidden_dim=256):
@@ -600,8 +596,8 @@ class ProPainterFlowHead(nn.Module):
         self.conv2 = nn.Conv2d(hidden_dim, 2, 3, padding=1)
         self.relu = nn.ReLU(inplace=True)
 
-    def forward(self, x):
-        return self.conv2(self.relu(self.conv1(x)))
+    def forward(self, hidden_states):
+        return self.conv2(self.relu(self.conv1(hidden_states)))
 
 class ProPainterBasicUpdateBlock(nn.Module):
     def __init__(self, config, hidden_dim=128, input_dim=128):
@@ -616,7 +612,7 @@ class ProPainterBasicUpdateBlock(nn.Module):
             nn.ReLU(inplace=True),
             nn.Conv2d(256, 64*9, 1, padding=0))
 
-    def forward(self, net, inp, corr, flow, upsample=True):
+    def forward(self, net, inp, corr, flow):
         motion_features = self.encoder(flow, corr)
         inp = torch.cat([inp, motion_features], dim=1)
 
@@ -628,13 +624,13 @@ class ProPainterBasicUpdateBlock(nn.Module):
         return net, mask, delta_flow
 
 
-def coords_grid(batch, ht, wd):
-    coords = torch.meshgrid(torch.arange(ht), torch.arange(wd))
+def coords_grid(batch, height, width):
+    coords = torch.meshgrid(torch.arange(height), torch.arange(width))
     coords = torch.stack(coords[::-1], dim=0).float()
     return coords[None].repeat(batch, 1, 1, 1)
 
 
-def bilinear_sampler(img, coords, mode='bilinear', mask=False):
+def sample_point(img, coords):
     """ Wrapper for grid_sample, uses pixel coordinates """
     H, W = img.shape[-2:]
     xgrid, ygrid = coords.split([1,1], dim=-1)
@@ -643,10 +639,6 @@ def bilinear_sampler(img, coords, mode='bilinear', mask=False):
 
     grid = torch.cat([xgrid, ygrid], dim=-1)
     img = F.grid_sample(img, grid, align_corners=True)
-
-    if mask:
-        mask = (xgrid > -1) & (ygrid > -1) & (xgrid < 1) & (ygrid < 1)
-        return img, mask.float()
 
     return img
 
@@ -660,32 +652,32 @@ class ProPainterCorrBlock:
         # all pairs correlation
         corr = ProPainterCorrBlock.corr(fmap1, fmap2)
 
-        batch, h1, w1, dim, h2, w2 = corr.shape
-        corr = corr.reshape(batch*h1*w1, dim, h2, w2)
+        batch, height1, width1, dim, height2, width2 = corr.shape
+        corr = corr.reshape(batch*height1*width1, dim, height2, width2)
 
         self.corr_pyramid.append(corr)
-        for i in range(self.num_levels-1):
+        for _ in range(self.num_levels-1):
             corr = F.avg_pool2d(corr, 2, stride=2)
             self.corr_pyramid.append(corr)
 
     def __call__(self, coords):
-        r = self.radius
+        radius = self.radius
         coords = coords.permute(0, 2, 3, 1)
-        batch, h1, w1, _ = coords.shape
+        batch, height1, width1, _ = coords.shape
 
         out_pyramid = []
         for i in range(self.num_levels):
             corr = self.corr_pyramid[i]
-            dx = torch.linspace(-r, r, 2*r+1)
-            dy = torch.linspace(-r, r, 2*r+1)
+            dx = torch.linspace(-radius, radius, 2*radius+1)
+            dy = torch.linspace(-radius, radius, 2*radius+1)
             delta = torch.stack(torch.meshgrid(dy, dx), axis=-1).to(coords.device)
 
-            centroid_lvl = coords.reshape(batch*h1*w1, 1, 1, 2) / 2**i
-            delta_lvl = delta.view(1, 2*r+1, 2*r+1, 2)
+            centroid_lvl = coords.reshape(batch*height1*width1, 1, 1, 2) / 2**i
+            delta_lvl = delta.view(1, 2*radius+1, 2*radius+1, 2)
             coords_lvl = centroid_lvl + delta_lvl
 
-            corr = bilinear_sampler(corr, coords_lvl)
-            corr = corr.view(batch, h1, w1, -1)
+            corr = sample_point(corr, coords_lvl)
+            corr = corr.view(batch, height1, width1, -1)
             out_pyramid.append(corr)
 
         out = torch.cat(out_pyramid, dim=-1)
@@ -693,37 +685,25 @@ class ProPainterCorrBlock:
 
     @staticmethod
     def corr(fmap1, fmap2):
-        batch, dim, ht, wd = fmap1.shape
-        fmap1 = fmap1.view(batch, dim, ht*wd)
-        fmap2 = fmap2.view(batch, dim, ht*wd)
+        batch, dim, height, width = fmap1.shape
+        fmap1 = fmap1.view(batch, dim, height*width)
+        fmap2 = fmap2.view(batch, dim, height*width)
 
         corr = torch.matmul(fmap1.transpose(1,2), fmap2)
-        corr = corr.view(batch, ht, wd, 1, ht, wd)
+        corr = corr.view(batch, height, width, 1, height, width)
         return corr  / torch.sqrt(torch.tensor(dim).float())
-
-
-def upflow8(flow, mode='bilinear'):
-    new_size = (8 * flow.shape[2], 8 * flow.shape[3])
-    return  8 * F.interpolate(flow, size=new_size, mode=mode, align_corners=True)
 
 
 class ProPainterRaftOpticalFlow(nn.Module):
     def __init__(self, config):
         super(ProPainterRaftOpticalFlow, self).__init__()
         self.config = config
-
+        self.hidden_dim = 128
+        self.context_dim = 128
         
-        self.hidden_dim = hdim = 128
-        self.context_dim = cdim = 128
-        # config.corr_levels = 4
-        # config.corr_radius = 4
-
-        # config.dropout = 0
-        
-        # feature network, context network, and update block
-        self.fnet = ProPainterBasicEncoder(output_dim=256, norm_fn='instance', dropout=self.config.dropout)
-        self.cnet = ProPainterBasicEncoder(output_dim=hdim+cdim, norm_fn='batch', dropout=self.config.dropout)
-        self.update_block = ProPainterBasicUpdateBlock(self.config, hidden_dim=hdim)
+        self.feature_network = ProPainterBasicEncoder(output_dim=256, norm_fn='instance', dropout=self.config.dropout)
+        self.context_network = ProPainterBasicEncoder(output_dim=self.hidden_dim+self.context_dim, norm_fn='batch', dropout=self.config.dropout)
+        self.update_block = ProPainterBasicUpdateBlock(self.config, hidden_dim=self.hidden_dim)
 
 
     def freeze_bn(self):
@@ -731,11 +711,11 @@ class ProPainterRaftOpticalFlow(nn.Module):
             if isinstance(m, nn.BatchNorm2d):
                 m.eval()
 
-    def initialize_flow(self, img):
+    def initialize_flow(self, image):
         """ Flow is represented as difference between two coordinate grids flow = coords1 - coords0"""
-        N, C, H, W = img.shape
-        coords0 = coords_grid(N, H//8, W//8).to(img.device)
-        coords1 = coords_grid(N, H//8, W//8).to(img.device)
+        N, _, H, W = image.shape
+        coords0 = coords_grid(N, H//8, W//8).to(image.device)
+        coords1 = coords_grid(N, H//8, W//8).to(image.device)
 
         # optical flow computed as difference: flow = coords1 - coords0
         return coords0, coords1
@@ -756,18 +736,12 @@ class ProPainterRaftOpticalFlow(nn.Module):
     def _forward(self, image1, image2, iters=12, flow_init=None):
         """ Estimate optical flow between pair of frames """
 
-        # image1 = 2 * (image1 / 255.0) - 1.0
-        # image2 = 2 * (image2 / 255.0) - 1.0
-
         image1 = image1.contiguous()
         image2 = image2.contiguous()
 
-        hdim = self.hidden_dim
-        cdim = self.context_dim
-
         # run the feature network
         with autocast(enabled=False):
-            fmap1, fmap2 = self.fnet([image1, image2])
+            fmap1, fmap2 = self.feature_network([image1, image2])
 
         fmap1 = fmap1.float()
         fmap2 = fmap2.float()
@@ -777,8 +751,8 @@ class ProPainterRaftOpticalFlow(nn.Module):
 
         # run the context network
         with autocast(enabled=False):
-            cnet = self.cnet(image1)
-            net, inp = torch.split(cnet, [hdim, cdim], dim=1)
+            context_network_out = self.context_network(image1)
+            net, inp = torch.split(context_network_out, [self.hidden_dim, self.context_dim], dim=1)
             net = torch.tanh(net)
             inp = torch.relu(inp)
 
@@ -800,7 +774,8 @@ class ProPainterRaftOpticalFlow(nn.Module):
 
             # upsample predictions
             if up_mask is None:
-                flow_up = upflow8(coords1 - coords0)
+                new_size = (8 * (coords1 - coords0).shape[2], 8 * (coords1 - coords0).shape[3])
+                flow_up =   8 * F.interpolate((coords1 - coords0), size=new_size, mode='bilinear', align_corners=True)
             else:
                 flow_up = self.upsample_flow(coords1 - coords0, up_mask)
 
@@ -808,19 +783,17 @@ class ProPainterRaftOpticalFlow(nn.Module):
         return coords1 - coords0, flow_up
 
     def forward(self, gt_local_frames, iters=20):
-        b, l_t, c, h, w = gt_local_frames.size()
-        # print(gt_local_frames.shape)
+        batch_size, temporal_length, channel, height, width = gt_local_frames.size()
 
-        # with torch.no_grad():
-        gtlf_1 = gt_local_frames[:, :-1, :, :, :].reshape(-1, c, h, w)
-        gtlf_2 = gt_local_frames[:, 1:, :, :, :].reshape(-1, c, h, w)
+        gt_local_frames_1 = gt_local_frames[:, :-1, :, :, :].reshape(-1, channel, height, width)
+        gt_local_frames_2 = gt_local_frames[:, 1:, :, :, :].reshape(-1, channel, height, width)
 
-        _, gt_flows_forward = self._forward(gtlf_1, gtlf_2, iters=iters)
-        _, gt_flows_backward = self._forward(gtlf_2, gtlf_1, iters=iters)
+        _, gt_flows_forward = self._forward(gt_local_frames_1, gt_local_frames_2, iters=iters)
+        _, gt_flows_backward = self._forward(gt_local_frames_2, gt_local_frames_1, iters=iters)
 
         
-        gt_flows_forward = gt_flows_forward.view(b, l_t-1, 2, h, w)
-        gt_flows_backward = gt_flows_backward.view(b, l_t-1, 2, h, w)
+        gt_flows_forward = gt_flows_forward.view(batch_size, temporal_length-1, 2, height, width)
+        gt_flows_backward = gt_flows_backward.view(batch_size, temporal_length-1, 2, height, width)
 
         return gt_flows_forward, gt_flows_backward
 
@@ -841,42 +814,42 @@ class ProPainterP3DBlock(nn.Module):
         )
         self.use_residual = use_residual
 
-    def forward(self, feats):
-        feat1 = self.conv1(feats)
-        feat2 = self.conv2(feat1)
+    def forward(self, masked_features):
+        features1 = self.conv1(masked_features)
+        features2 = self.conv2(features1)
         if self.use_residual:
-            output = feats + feat2
+            output = masked_features + features2
         else:
-            output = feat2
+            output = features2
         return output
 
 
 class ProPainterEdgeDetection(nn.Module):
-    def __init__(self, in_ch=2, out_ch=1, mid_ch=16):
+    def __init__(self, in_channel=2, out_channel=1, intermediate_channel=16):
         super().__init__()
         self.projection = nn.Sequential(
-            nn.Conv2d(in_ch, mid_ch, 3, 1, 1),
+            nn.Conv2d(in_channel, intermediate_channel, 3, 1, 1),
             nn.LeakyReLU(0.2, inplace=True)
         )
 
-        self.mid_layer_1 = nn.Sequential(
-            nn.Conv2d(mid_ch, mid_ch, 3, 1, 1),
+        self.intermediate_layer_1 = nn.Sequential(
+            nn.Conv2d(intermediate_channel, intermediate_channel, 3, 1, 1),
             nn.LeakyReLU(0.2, inplace=True)
         )
 
-        self.mid_layer_2 = nn.Sequential(
-            nn.Conv2d(mid_ch, mid_ch, 3, 1, 1)
+        self.intermediate_layer_2 = nn.Sequential(
+            nn.Conv2d(intermediate_channel, intermediate_channel, 3, 1, 1)
         )        
 
-        self.l_relu = nn.LeakyReLU(0.01, inplace=True)
+        self.relu = nn.LeakyReLU(0.01, inplace=True)
 
-        self.out_layer = nn.Conv2d(mid_ch, out_ch, 1, 1, 0)
+        self.out_layer = nn.Conv2d(intermediate_channel, out_channel, 1, 1, 0)
 
     def forward(self, flow):
         flow = self.projection(flow)
-        edge = self.mid_layer_1(flow)
-        edge = self.mid_layer_2(edge)
-        edge = self.l_relu(flow + edge)
+        edge = self.intermediate_layer_1(flow)
+        edge = self.intermediate_layer_2(edge)
+        edge = self.relu(flow + edge)
         edge = self.out_layer(edge)
         edge = torch.sigmoid(edge)
         return edge
@@ -901,74 +874,74 @@ class ProPainterBidirectionalPropagationFlowComplete(nn.Module):
 
         self.fusion = nn.Conv2d(2 * channel, channel, 1, 1, 0)
 
-    def forward(self, x):
+    def forward(self, hidden_states):
         """
-        x shape : [b, t, c, h, w]
-        return [b, t, c, h, w]
+        hidden_states shape : [batch, timesteps, channel, height, width]
+        return [batch, timesteps, channel, height, width]
         """
-        b, t, c, h, w = x.shape
-        feats = {}
-        feats['spatial'] = [x[:, i, :, :, :] for i in range(0, t)]
+        batch, timesteps, _, height, width = hidden_states.shape
+        features = {}
+        features['spatial'] = [hidden_states[:, i, :, :, :] for i in range(0, timesteps)]
 
         for module_name in ['backward_', 'forward_']:
 
-            feats[module_name] = []
+            features[module_name] = []
 
-            frame_idx = range(0, t)
-            mapping_idx = list(range(0, len(feats['spatial'])))
+            frame_idx = range(0, timesteps)
+            mapping_idx = list(range(0, len(features['spatial'])))
             mapping_idx += mapping_idx[::-1]
 
             if 'backward' in module_name:
                 frame_idx = frame_idx[::-1]
 
-            feat_prop = x.new_zeros(b, self.channel, h, w)
+            feature_propagation = hidden_states.new_zeros(batch, self.channel, height, width)
             for i, idx in enumerate(frame_idx):
-                feat_current = feats['spatial'][mapping_idx[idx]]
+                feat_current = features['spatial'][mapping_idx[idx]]
                 if i > 0:
-                    cond_n1 = feat_prop
+                    cond_n1 = feature_propagation
 
                     # initialize second-order features
-                    feat_n2 = torch.zeros_like(feat_prop)
+                    feat_n2 = torch.zeros_like(feature_propagation)
                     cond_n2 = torch.zeros_like(cond_n1)
                     if i > 1:  # second-order features
-                        feat_n2 = feats[module_name][-2]
+                        feat_n2 = features[module_name][-2]
                         cond_n2 = feat_n2
 
                     cond = torch.cat([cond_n1, feat_current, cond_n2], dim=1) # condition information, cond(flow warped 1st/2nd feature)
-                    feat_prop = torch.cat([feat_prop, feat_n2], dim=1) # two order feat_prop -1 & -2
-                    feat_prop = self.deform_align[module_name](feat_prop, cond)
+                    feature_propagation = torch.cat([feature_propagation, feat_n2], dim=1) # two order feature_propagation -1 & -2
+                    feature_propagation = self.deform_align[module_name](feature_propagation, cond)
 
                 # fuse current features
                 feat = [feat_current] + \
-                    [feats[k][idx] for k in feats if k not in ['spatial', module_name]] \
-                    + [feat_prop]
+                    [features[k][idx] for k in features if k not in ['spatial', module_name]] \
+                    + [feature_propagation]
 
                 feat = torch.cat(feat, dim=1)
                 # embed current features
-                feat_prop = feat_prop + self.backbone[module_name](feat)
+                feature_propagation = feature_propagation + self.backbone[module_name](feat)
 
-                feats[module_name].append(feat_prop)
+                features[module_name].append(feature_propagation)
 
             # end for
             if 'backward' in module_name:
-                feats[module_name] = feats[module_name][::-1]
+                features[module_name] = features[module_name][::-1]
 
         outputs = []
-        for i in range(0, t):
-            align_feats = [feats[k].pop(0) for k in feats if k != 'spatial']
+        for i in range(0, timesteps):
+            align_feats = [features[k].pop(0) for k in features if k != 'spatial']
             align_feats = torch.cat(align_feats, dim=1)
             outputs.append(self.fusion(align_feats))
 
-        return torch.stack(outputs, dim=1) + x
+        return torch.stack(outputs, dim=1) + hidden_states
 
-def flow_warp(x,
+def flow_warp(features,
               flow,
               interpolation='bilinear',
               padding_mode='zeros',
               align_corners=True):
     """Warp an image or a feature map with optical flow.
     Args:
-        x (Tensor): Tensor with size (n, c, h, w).
+        features (Tensor): Tensor with size (n, c, h, w).
         flow (Tensor): Tensor with size (n, h, w, 2). The last dimension is
             a two-channel, denoting the width and height relative offsets.
             Note that the values are not normalized to [-1, 1].
@@ -980,42 +953,37 @@ def flow_warp(x,
     Returns:
         Tensor: Warped image or feature map.
     """
-    if x.size()[-2:] != flow.size()[1:3]:
-        raise ValueError(f'The spatial sizes of input ({x.size()[-2:]}) and '
+    if features.size()[-2:] != flow.size()[1:3]:
+        raise ValueError(f'The spatial sizes of input ({features.size()[-2:]}) and '
                          f'flow ({flow.size()[1:3]}) are not the same.')
-    _, _, h, w = x.size()
+    _, _, height, width = features.size()
     # create mesh grid
     device = flow.device
-    grid_y, grid_x = torch.meshgrid(torch.arange(0, h, device=device), torch.arange(0, w, device=device))
-    grid = torch.stack((grid_x, grid_y), 2).type_as(x)  # (w, h, 2)
+    grid_y, grid_x = torch.meshgrid(torch.arange(0, height, device=device), torch.arange(0, width, device=device))
+    grid = torch.stack((grid_x, grid_y), 2).type_as(features)  # (width, height, 2)
     grid.requires_grad = False
 
     grid_flow = grid + flow
     # scale grid_flow to [-1,1]
-    grid_flow_x = 2.0 * grid_flow[:, :, :, 0] / max(w - 1, 1) - 1.0
-    grid_flow_y = 2.0 * grid_flow[:, :, :, 1] / max(h - 1, 1) - 1.0
+    grid_flow_x = 2.0 * grid_flow[:, :, :, 0] / max(width - 1, 1) - 1.0
+    grid_flow_y = 2.0 * grid_flow[:, :, :, 1] / max(height - 1, 1) - 1.0
     grid_flow = torch.stack((grid_flow_x, grid_flow_y), dim=3)
-    output = F.grid_sample(x,
+    output = F.grid_sample(features,
                            grid_flow,
                            mode=interpolation,
                            padding_mode=padding_mode,
                            align_corners=align_corners)
     return output
 
-def length_sq(x):
-    return torch.sum(torch.square(x), dim=1, keepdim=True)
+def fbConsistencyCheck(flow_forward, flow_backward, alpha1=0.01, alpha2=0.5):
+    flow_backward_warped = flow_warp(flow_backward, flow_forward.permute(0, 2, 3, 1))
+    flow_diff_forward = flow_forward + flow_backward_warped
 
+    normalized_forward = torch.norm(flow_forward, p=2, dim=1, keepdim=True)**2 + torch.norm(flow_backward_warped, p=2, dim=1, keepdim=True)**2  # |wf| + |wb(wf(x))|
+    occ_thresh_forward = alpha1 * normalized_forward + alpha2
 
-def fbConsistencyCheck(flow_fw, flow_bw, alpha1=0.01, alpha2=0.5):
-    flow_bw_warped = flow_warp(flow_bw, flow_fw.permute(0, 2, 3, 1))  # wb(wf(x))
-    flow_diff_fw = flow_fw + flow_bw_warped  # wf + wb(wf(x))
-
-    mag_sq_fw = length_sq(flow_fw) + length_sq(flow_bw_warped)  # |wf| + |wb(wf(x))|
-    occ_thresh_fw = alpha1 * mag_sq_fw + alpha2
-
-    # fb_valid_fw = (length_sq(flow_diff_fw) < occ_thresh_fw).float()
-    fb_valid_fw = (length_sq(flow_diff_fw) < occ_thresh_fw).to(flow_fw)
-    return fb_valid_fw
+    fb_valid_forward = (torch.norm(flow_diff_forward, p=2, dim=1, keepdim=True)**2 < occ_thresh_forward).to(flow_forward)
+    return fb_valid_forward
 
 
 class ProPainterBidirectionalPropagationInPaint(nn.Module):
@@ -1024,11 +992,11 @@ class ProPainterBidirectionalPropagationInPaint(nn.Module):
         self.deform_align = nn.ModuleDict()
         self.backbone = nn.ModuleDict()
         self.channel = channel
-        self.prop_list = ['backward_1', 'forward_1']
+        self.propagation_list = ['backward_1', 'forward_1']
         self.learnable = learnable
 
         if self.learnable:
-            for i, module in enumerate(self.prop_list):
+            for module in range(self.propagation_list):
                 self.deform_align[module] = ProPainterDeformableAlignment(
                     channel, channel, 3, padding=1, deform_groups=16)
 
@@ -1045,46 +1013,41 @@ class ProPainterBidirectionalPropagationInPaint(nn.Module):
                 ) 
             
     def binary_mask(self, mask, th=0.1):
-        mask[mask>th] = 1
-        mask[mask<=th] = 0
-        # return mask.float()
-        return mask.to(mask)
+        return torch.where(mask > th, 1, 0).to(mask)
 
-    def forward(self, x, flows_forward, flows_backward, mask, interpolation='bilinear'):
+    def forward(self, masked_frames, flows_forward, flows_backward, mask, interpolation='bilinear'):
         """
-        x shape : [b, t, c, h, w]
-        return [b, t, c, h, w]
+        masked_frames shape : [batch, timesteps, channel, height, width]
+        return [batch, timesteps, channel, height, width]
         """
 
-        # For backward warping
-        # pred_flows_forward for backward feature propagation
-        # pred_flows_backward for forward feature propagation
-        b, t, c, h, w = x.shape
-        feats, masks = {}, {}
-        feats['input'] = [x[:, i, :, :, :] for i in range(0, t)]
-        masks['input'] = [mask[:, i, :, :, :] for i in range(0, t)]
+        # For backward warping, pred_flows_forward for backward feature propagation, pred_flows_backward for forward feature propagation
+        batch, timesteps, channel, height, width = masked_frames.shape
+        features, masks = {}, {}
+        features['input'] = [masked_frames[:, i, :, :, :] for i in range(0, timesteps)]
+        masks['input'] = [mask[:, i, :, :, :] for i in range(0, timesteps)]
 
-        prop_list = ['backward_1', 'forward_1']
-        cache_list = ['input'] +  prop_list
+        propagation_list = ['backward_1', 'forward_1']
+        cache_list = ['input'] +  propagation_list
 
-        for p_i, module_name in enumerate(prop_list):
-            feats[module_name] = []
+        for p_i, module_name in enumerate(propagation_list):
+            features[module_name] = []
             masks[module_name] = []
 
             if 'backward' in module_name:
-                frame_idx = range(0, t)
+                frame_idx = range(0, timesteps)
                 frame_idx = frame_idx[::-1]
                 flow_idx = frame_idx
                 flows_for_prop = flows_forward
                 flows_for_check = flows_backward
             else:
-                frame_idx = range(0, t)
-                flow_idx = range(-1, t - 1)
+                frame_idx = range(0, timesteps)
+                flow_idx = range(-1, timesteps - 1)
                 flows_for_prop = flows_backward
                 flows_for_check = flows_forward
 
             for i, idx in enumerate(frame_idx):
-                feat_current = feats[cache_list[p_i]][idx]
+                feat_current = features[cache_list[p_i]][idx]
                 mask_current = masks[cache_list[p_i]][idx]
 
                 if i == 0:
@@ -1113,30 +1076,28 @@ class ProPainterBidirectionalPropagationInPaint(nn.Module):
                 if self.learnable:
                     feat = torch.cat([feat_current, feat_prop, mask_current], dim=1)
                     feat_prop = feat_prop + self.backbone[module_name](feat)
-                    # feat_prop = self.backbone[module_name](feat_prop)
 
-                feats[module_name].append(feat_prop)
+                features[module_name].append(feat_prop)
                 masks[module_name].append(mask_prop)
 
             # end for
             if 'backward' in module_name:
-                feats[module_name] = feats[module_name][::-1]
+                features[module_name] = features[module_name][::-1]
                 masks[module_name] = masks[module_name][::-1]
 
-        outputs_b = torch.stack(feats['backward_1'], dim=1).view(-1, c, h, w)
-        outputs_f = torch.stack(feats['forward_1'], dim=1).view(-1, c, h, w)
+        outputs_b = torch.stack(features['backward_1'], dim=1).view(-1, channel, height, width)
+        outputs_f = torch.stack(features['forward_1'], dim=1).view(-1, channel, height, width)
 
         if self.learnable:
-            mask_in = mask.view(-1, 2, h, w)
-            masks_b, masks_f = None, None
-            outputs = self.fuse(torch.cat([outputs_b, outputs_f, mask_in], dim=1)) + x.view(-1, c, h, w)
+            mask_in = mask.view(-1, 2, height, width)
+            masks_f = None
+            outputs = self.fuse(torch.cat([outputs_b, outputs_f, mask_in], dim=1)) + masked_frames.view(-1, channel, height, width)
         else:
-            masks_b = torch.stack(masks['backward_1'], dim=1)
             masks_f = torch.stack(masks['forward_1'], dim=1)
             outputs = outputs_f
 
-        return outputs_b.view(b, -1, c, h, w), outputs_f.view(b, -1, c, h, w), \
-               outputs.view(b, -1, c, h, w), masks_f
+        return outputs_b.view(batch, -1, channel, height, width), outputs_f.view(batch, -1, channel, height, width), \
+               outputs.view(batch, -1, channel, height, width), masks_f
 
 class ProPainterDeconv(nn.Module):
     def __init__(self,
@@ -1151,18 +1112,12 @@ class ProPainterDeconv(nn.Module):
                               stride=1,
                               padding=padding)
 
-    def forward(self, x):
-        x = F.interpolate(x,
+    def forward(self, hidden_states):
+        hidden_states = F.interpolate(hidden_states,
                           scale_factor=2,
                           mode='bilinear',
                           align_corners=True)
-        return self.conv(x)
-
-def constant_init(module, val, bias=0):
-    if hasattr(module, 'weight') and module.weight is not None:
-        nn.init.constant_(module.weight, val)
-    if hasattr(module, 'bias') and module.bias is not None:
-        nn.init.constant_(module.bias, bias)
+        return self.conv(hidden_states)
 
 class ProPainterModulatedDeformConv2d(nn.Module):
     def __init__(self,
@@ -1195,28 +1150,13 @@ class ProPainterModulatedDeformConv2d(nn.Module):
             self.bias = nn.Parameter(torch.Tensor(out_channels))
         else:
             self.register_parameter('bias', None)
-        self.init_weights()
 
-    def init_weights(self):
-        n = self.in_channels
-        for k in self.kernel_size:
-            n *= k
-        stdv = 1. / math.sqrt(n)
-        self.weight.data.uniform_(-stdv, stdv)
-        if self.bias is not None:
-            self.bias.data.zero_()
-
-        if hasattr(self, 'conv_offset'):
-            self.conv_offset.weight.data.zero_()
-            self.conv_offset.bias.data.zero_()
-
-    def forward(self, x, offset, mask):
+    def forward(self, hidden_states, offset, mask):
         pass
 
 class ProPainterDeformableAlignment(ProPainterModulatedDeformConv2d):
     """Second-order deformable alignment module."""
     def __init__(self, *args, **kwargs):
-        # self.max_residue_magnitude = kwargs.pop('max_residue_magnitude', 10)
         self.max_residue_magnitude = kwargs.pop('max_residue_magnitude', 3)
 
         super(ProPainterDeformableAlignment, self).__init__(*args, **kwargs)
@@ -1230,23 +1170,19 @@ class ProPainterDeformableAlignment(ProPainterModulatedDeformConv2d):
             nn.LeakyReLU(negative_slope=0.1, inplace=True),
             nn.Conv2d(self.out_channels, 27 * self.deform_groups, 3, 1, 1),
         )
-        self.init_offset()
 
-    def init_offset(self):
-        constant_init(self.conv_offset[-1], val=0, bias=0)
-
-    def forward(self, x, cond_feat, flow):
-        out = self.conv_offset(cond_feat)
-        o1, o2, mask = torch.chunk(out, 3, dim=1)
+    def forward(self, features_propagation, cond_features, flow):
+        output = self.conv_offset(cond_features)
+        output1, output2, mask = torch.chunk(output, 3, dim=1)
 
         # offset
-        offset = self.max_residue_magnitude * torch.tanh(torch.cat((o1, o2), dim=1))
+        offset = self.max_residue_magnitude * torch.tanh(torch.cat((output1, output2), dim=1))
         offset = offset + flow.flip(1).repeat(1, offset.size(1) // 2, 1, 1)
 
         # mask
         mask = torch.sigmoid(mask)
 
-        return torchvision.ops.deform_conv2d(x, offset, self.weight, self.bias, 
+        return torchvision.ops.deform_conv2d(features_propagation, offset, self.weight, self.bias, 
                                              self.stride, self.padding,
                                              self.dilation, mask)
 
@@ -1266,30 +1202,26 @@ class ProPainterSecondOrderDeformableAlignment(ProPainterModulatedDeformConv2d):
             nn.LeakyReLU(negative_slope=0.1, inplace=True),
             nn.Conv2d(self.out_channels, 27 * self.deform_groups, 3, 1, 1),
         )
-        self.init_offset()
 
-    def init_offset(self):
-        constant_init(self.conv_offset[-1], val=0, bias=0)
-
-    def forward(self, x, extra_feat):
-        out = self.conv_offset(extra_feat)
-        o1, o2, mask = torch.chunk(out, 3, dim=1)
+    def forward(self, features, extra_features):
+        output = self.conv_offset(extra_features)
+        output1, output2, mask = torch.chunk(output, 3, dim=1)
 
         # offset
-        offset = self.max_residue_magnitude * torch.tanh(torch.cat((o1, o2), dim=1))
+        offset = self.max_residue_magnitude * torch.tanh(torch.cat((output1, output2), dim=1))
         offset_1, offset_2 = torch.chunk(offset, 2, dim=1)
         offset = torch.cat([offset_1, offset_2], dim=1)
 
         # mask
         mask = torch.sigmoid(mask)
 
-        return torchvision.ops.deform_conv2d(x, offset, self.weight, self.bias, 
+        return torchvision.ops.deform_conv2d(features, offset, self.weight, self.bias, 
                                              self.stride, self.padding,
                                              self.dilation, mask)
 
 
 class ProPainterRecurrentFlowCompleteNet(nn.Module):
-    def __init__(self, model_path=None):
+    def __init__(self):
         super().__init__()
         self.downsample = nn.Sequential(
                         nn.Conv3d(3, 32, kernel_size=(1, 5, 5), stride=(1, 2, 2), 
@@ -1311,7 +1243,7 @@ class ProPainterRecurrentFlowCompleteNet(nn.Module):
             nn.LeakyReLU(0.2, inplace=True)
         ) # 8x
 
-        self.mid_dilation = nn.Sequential(
+        self.intermediate_dilation = nn.Sequential(
             nn.Conv3d(128, 128, (1, 3, 3), (1, 1, 1), padding=(0, 3, 3), dilation=(1, 3, 3)), # p = d*(k-1)/2
             nn.LeakyReLU(0.2, inplace=True),
             nn.Conv3d(128, 128, (1, 3, 3), (1, 1, 1), padding=(0, 2, 2), dilation=(1, 2, 2)),
@@ -1321,7 +1253,7 @@ class ProPainterRecurrentFlowCompleteNet(nn.Module):
         )
 
         # feature propagation module
-        self.feat_prop_module = ProPainterBidirectionalPropagationFlowComplete(128)
+        self.feature_propagation_module = ProPainterBidirectionalPropagationFlowComplete(128)
 
         self.decoder2 = nn.Sequential(
             nn.Conv2d(128, 128, 3, 1, 1),
@@ -1344,55 +1276,42 @@ class ProPainterRecurrentFlowCompleteNet(nn.Module):
         )
 
         # edge loss
-        self.edgeDetector = ProPainterEdgeDetection(in_ch=2, out_ch=1, mid_ch=16)
-
-        # Need to initial the weights of MSDeformAttn specifically
-        for m in self.modules():
-            if isinstance(m, ProPainterSecondOrderDeformableAlignment):
-                m.init_offset()
-
-        if model_path is not None:
-            print('Pretrained flow completion model has loaded...')
-            ckpt = torch.load(model_path, map_location='cpu')
-            self.load_state_dict(ckpt, strict=True)
-
+        self.edgeDetector = ProPainterEdgeDetection(in_channel=2, out_channel=1, intermediate_channel=16)
 
     def forward(self, masked_flows, masks):
-        # masked_flows: b t-1 2 h w
-        # masks: b t-1 2 h w
-        b, t, _, h, w = masked_flows.size()
+        batch, timesteps, _, height, width = masked_flows.size()
         masked_flows = masked_flows.permute(0,2,1,3,4)
         masks = masks.permute(0,2,1,3,4)
 
         inputs = torch.cat((masked_flows, masks), dim=1)
         
-        x = self.downsample(inputs)
+        downsample_inputs = self.downsample(inputs)
 
-        feat_e1 = self.encoder1(x)
-        feat_e2 = self.encoder2(feat_e1) # b c t h w
-        feat_mid = self.mid_dilation(feat_e2) # b c t h w
-        feat_mid = feat_mid.permute(0,2,1,3,4) # b t c h w
+        features_enc1 = self.encoder1(downsample_inputs)
+        features_enc2 = self.encoder2(features_enc1) # batch channel timesteps height width
+        features_intermediate = self.intermediate_dilation(features_enc2) # batch channel timesteps height width
+        features_intermediate = features_intermediate.permute(0,2,1,3,4) # batch timesteps channel height width
 
-        feat_prop = self.feat_prop_module(feat_mid)
-        feat_prop = feat_prop.view(-1, 128, h//8, w//8) # b*t c h w
+        features_prop = self.feature_propagation_module(features_intermediate)
+        features_prop = features_prop.view(-1, 128, height//8, width//8) # batch*timesteps channel height width
 
-        _, c, _, h_f, w_f = feat_e1.shape
-        feat_e1 = feat_e1.permute(0,2,1,3,4).contiguous().view(-1, c, h_f, w_f) # b*t c h w
-        feat_d2 = self.decoder2(feat_prop) + feat_e1
+        _, c, _, h_f, w_f = features_enc1.shape
+        features_enc1 = features_enc1.permute(0,2,1,3,4).contiguous().view(-1, c, h_f, w_f) # batch*timesteps channel height width
+        features_dec2 = self.decoder2(features_prop) + features_enc1
 
-        _, c, _, h_f, w_f = x.shape
-        x = x.permute(0,2,1,3,4).contiguous().view(-1, c, h_f, w_f) # b*t c h w
+        _, c, _, h_f, w_f = downsample_inputs.shape
+        downsample_inputs = downsample_inputs.permute(0,2,1,3,4).contiguous().view(-1, c, h_f, w_f) # batch*timesteps channel height width
 
-        feat_d1 = self.decoder1(feat_d2)
+        features_dec1 = self.decoder1(features_dec2)
 
-        flow = self.upsample(feat_d1)
+        flow = self.upsample(features_dec1)
         if self.training:
             edge = self.edgeDetector(flow)
-            edge = edge.view(b, t, 1, h, w)
+            edge = edge.view(batch, timesteps, 1, height, width)
         else:
             edge = None
 
-        flow = flow.view(b, t, 2, h, w)
+        flow = flow.view(batch, timesteps, 2, height, width)
 
         return flow, edge
         
@@ -1400,8 +1319,8 @@ class ProPainterRecurrentFlowCompleteNet(nn.Module):
     def forward_bidirect_flow(self, masked_flows_bi, masks):
         """
         Args:
-            masked_flows_bi: [masked_flows_f, masked_flows_b] | (b t-1 2 h w), (b t-1 2 h w)
-            masks: b t 1 h w
+            masked_flows_bi: [masked_flows_f, masked_flows_b] | (batch, timesteps-1, 2, height, width), (batch, timesteps-1, 2, height, width)
+            masks: batch, timesteps, 1, height, width
         """
         masks_forward = masks[:, :-1, ...].contiguous()
         masks_backward = masks[:, 1:, ...].contiguous()
@@ -1411,7 +1330,6 @@ class ProPainterRecurrentFlowCompleteNet(nn.Module):
         masked_flows_backward = masked_flows_bi[1] * (1-masks_backward)
         
         # -- completion --
-        # forward
         pred_flows_forward, pred_edges_forward = self.forward(masked_flows_forward, masks_forward)
 
         # backward
@@ -1436,103 +1354,103 @@ class ProPainterRecurrentFlowCompleteNet(nn.Module):
 
 #########################################################RECURRENT FLOW NETWORK FINISH#####################################################
 
-class ProPainterBaseNetwork(nn.Module):
-    def __init__(self):
-        super(ProPainterBaseNetwork, self).__init__()
+# class ProPainterBaseNetwork(nn.Module):
+#     def __init__(self):
+#         super(ProPainterBaseNetwork, self).__init__()
 
-    def print_network(self):
-        if isinstance(self, list):
-            self = self[0]
-        num_params = 0
-        for param in self.parameters():
-            num_params += param.numel()
-        print(
-            'Network [%s] was created. Total number of parameters: %.1f million. '
-            'To see the architecture, do print(network).' %
-            (type(self).__name__, num_params / 1000000))
+    # def print_network(self):
+    #     if isinstance(self, list):
+    #         self = self[0]
+    #     num_params = 0
+    #     for param in self.parameters():
+    #         num_params += param.numel()
+    #     print(
+    #         'Network [%s] was created. Total number of parameters: %.1f million. '
+    #         'To see the architecture, do print(network).' %
+    #         (type(self).__name__, num_params / 1000000))
 
-    def init_weights(self, init_type='normal', gain=0.02):
-        '''
-        initialize network's weights
-        init_type: normal | xavier | kaiming | orthogonal
-        https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix/blob/9451e70673400885567d08a9e97ade2524c700d0/models/networks.py#L39
-        '''
-        def init_func(m):
-            classname = m.__class__.__name__
-            if classname.find('InstanceNorm2d') != -1:
-                if hasattr(m, 'weight') and m.weight is not None:
-                    nn.init.constant_(m.weight.data, 1.0)
-                if hasattr(m, 'bias') and m.bias is not None:
-                    nn.init.constant_(m.bias.data, 0.0)
-            elif hasattr(m, 'weight') and (classname.find('Conv') != -1
-                                           or classname.find('Linear') != -1):
-                if init_type == 'normal':
-                    nn.init.normal_(m.weight.data, 0.0, gain)
-                elif init_type == 'xavier':
-                    nn.init.xavier_normal_(m.weight.data, gain=gain)
-                elif init_type == 'xavier_uniform':
-                    nn.init.xavier_uniform_(m.weight.data, gain=1.0)
-                elif init_type == 'kaiming':
-                    nn.init.kaiming_normal_(m.weight.data, a=0, mode='fan_in')
-                elif init_type == 'orthogonal':
-                    nn.init.orthogonal_(m.weight.data, gain=gain)
-                elif init_type == 'none':  # uses pytorch's default init method
-                    m.reset_parameters()
-                else:
-                    raise NotImplementedError(
-                        'initialization method [%s] is not implemented' %
-                        init_type)
-                if hasattr(m, 'bias') and m.bias is not None:
-                    nn.init.constant_(m.bias.data, 0.0)
+    # def init_weights(self, init_type='normal', gain=0.02):
+    #     '''
+    #     initialize network's weights
+    #     init_type: normal | xavier | kaiming | orthogonal
+    #     https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix/blob/9451e70673400885567d08a9e97ade2524c700d0/models/networks.py#L39
+    #     '''
+    #     def init_func(m):
+    #         classname = m.__class__.__name__
+    #         if classname.find('InstanceNorm2d') != -1:
+    #             if hasattr(m, 'weight') and m.weight is not None:
+    #                 nn.init.constant_(m.weight.data, 1.0)
+    #             if hasattr(m, 'bias') and m.bias is not None:
+    #                 nn.init.constant_(m.bias.data, 0.0)
+    #         elif hasattr(m, 'weight') and (classname.find('Conv') != -1
+    #                                        or classname.find('Linear') != -1):
+    #             if init_type == 'normal':
+    #                 nn.init.normal_(m.weight.data, 0.0, gain)
+    #             elif init_type == 'xavier':
+    #                 nn.init.xavier_normal_(m.weight.data, gain=gain)
+    #             elif init_type == 'xavier_uniform':
+    #                 nn.init.xavier_uniform_(m.weight.data, gain=1.0)
+    #             elif init_type == 'kaiming':
+    #                 nn.init.kaiming_normal_(m.weight.data, a=0, mode='fan_in')
+    #             elif init_type == 'orthogonal':
+    #                 nn.init.orthogonal_(m.weight.data, gain=gain)
+    #             elif init_type == 'none':  # uses pytorch's default init method
+    #                 m.reset_parameters()
+    #             else:
+    #                 raise NotImplementedError(
+    #                     'initialization method [%s] is not implemented' %
+    #                     init_type)
+    #             if hasattr(m, 'bias') and m.bias is not None:
+    #                 nn.init.constant_(m.bias.data, 0.0)
 
-        self.apply(init_func)
+    #     self.apply(init_func)
 
-        # propagate to children
-        for m in self.children():
-            if hasattr(m, 'init_weights'):
-                m.init_weights(init_type, gain)
+    #     # propagate to children
+    #     for m in self.children():
+    #         if hasattr(m, 'init_weights'):
+    #             m.init_weights(init_type, gain)
 
 
 class ProPainterEncoder(nn.Module):
     def __init__(self):
         super(ProPainterEncoder, self).__init__()
         self.group = [1, 2, 4, 8, 1]
+        negative_slope = 0.2
         self.layers = nn.ModuleList([
             nn.Conv2d(5, 64, kernel_size=3, stride=2, padding=1),
-            nn.LeakyReLU(0.2, inplace=True),
+            nn.LeakyReLU(negative_slope, inplace=True),
             nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1),
-            nn.LeakyReLU(0.2, inplace=True),
+            nn.LeakyReLU(negative_slope, inplace=True),
             nn.Conv2d(64, 128, kernel_size=3, stride=2, padding=1),
-            nn.LeakyReLU(0.2, inplace=True),
+            nn.LeakyReLU(negative_slope, inplace=True),
             nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1),
-            nn.LeakyReLU(0.2, inplace=True),
+            nn.LeakyReLU(negative_slope, inplace=True),
             nn.Conv2d(256, 384, kernel_size=3, stride=1, padding=1, groups=1),
-            nn.LeakyReLU(0.2, inplace=True),
+            nn.LeakyReLU(negative_slope, inplace=True),
             nn.Conv2d(640, 512, kernel_size=3, stride=1, padding=1, groups=2),
-            nn.LeakyReLU(0.2, inplace=True),
+            nn.LeakyReLU(negative_slope, inplace=True),
             nn.Conv2d(768, 384, kernel_size=3, stride=1, padding=1, groups=4),
-            nn.LeakyReLU(0.2, inplace=True),
+            nn.LeakyReLU(negative_slope, inplace=True),
             nn.Conv2d(640, 256, kernel_size=3, stride=1, padding=1, groups=8),
-            nn.LeakyReLU(0.2, inplace=True),
+            nn.LeakyReLU(negative_slope, inplace=True),
             nn.Conv2d(512, 128, kernel_size=3, stride=1, padding=1, groups=1),
-            nn.LeakyReLU(0.2, inplace=True)
+            nn.LeakyReLU(negative_slope, inplace=True)
         ])
 
-    def forward(self, x):
-        bt, c, _, _ = x.size()
-        # h, w = h//4, w//4
-        out = x
+    def forward(self, masked_inputs):
+        batch, _, _, _ = masked_inputs.size()
+        features = masked_inputs
         for i, layer in enumerate(self.layers):
             if i == 8:
-                x0 = out
-                _, _, h, w = x0.size()
+                x0 = features
+                _, _, height, width = x0.size()
             if i > 8 and i % 2 == 0:
-                g = self.group[(i - 8) // 2]
-                x = x0.view(bt, g, -1, h, w)
-                o = out.view(bt, g, -1, h, w)
-                out = torch.cat([x, o], 2).view(bt, -1, h, w)
-            out = layer(out)
-        return out
+                group = self.group[(i - 8) // 2]
+                masked_inputs = x0.view(batch, group, -1, height, width)
+                feature = features.view(batch, group, -1, height, width)
+                features = torch.cat([masked_inputs, feature], 2).view(batch, -1, height, width)
+            features = layer(features)
+        return features
 
 class ProPainterSoftSplit(nn.Module):
     def __init__(self, channel, hidden, kernel_size, stride, padding):
@@ -1540,7 +1458,7 @@ class ProPainterSoftSplit(nn.Module):
         self.kernel_size = kernel_size
         self.stride = stride
         self.padding = padding
-        self.t2t = nn.Unfold(kernel_size=kernel_size,
+        self.unfold = nn.Unfold(kernel_size=kernel_size,
                              stride=stride,
                              padding=padding)
         c_in = reduce((lambda x, y: x * y), kernel_size) * channel
@@ -1552,7 +1470,7 @@ class ProPainterSoftSplit(nn.Module):
         f_w = int((output_size[1] + 2 * self.padding[1] -
                    (self.kernel_size[1] - 1) - 1) / self.stride[1] + 1)
 
-        feat = self.t2t(x)
+        feat = self.unfold(x)
         feat = feat.permute(0, 2, 1)
         # feat shape [b*t, num_vec, ks*ks*c]
         feat = self.embedding(feat)
@@ -1870,7 +1788,7 @@ class ProPainterTemporalSparseTransformerBlock(nn.Module):
 
         return x
 
-class ProPainterInpaintGenerator(ProPainterBaseNetwork):
+class ProPainterInpaintGenerator():
     def __init__(self, init_weights=True, model_path=None):
         super(ProPainterInpaintGenerator, self).__init__()
         channel = 128
@@ -1904,7 +1822,7 @@ class ProPainterInpaintGenerator(ProPainterBaseNetwork):
 
         # feature propagation module
         self.img_prop_module = ProPainterBidirectionalPropagationInPaint(3, learnable=False)
-        self.feat_prop_module = ProPainterBidirectionalPropagationInPaint(128, learnable=True)
+        self.feature_propagation_module = ProPainterBidirectionalPropagationInPaint(128, learnable=True)
         
         
         depths = 8
@@ -1968,7 +1886,7 @@ class ProPainterInpaintGenerator(ProPainterBaseNetwork):
 
 
         prop_mask_in = torch.cat([ds_mask_in_local, ds_mask_updated_local], dim=2)
-        _, _, local_feat, _ = self.feat_prop_module(local_feat, ds_flows_f, ds_flows_b, prop_mask_in, interpolation)
+        _, _, local_feat, _ = self.feature_propagation_module(local_feat, ds_flows_f, ds_flows_b, prop_mask_in, interpolation)
         enc_feat = torch.cat((local_feat, ref_feat), dim=1)
 
         trans_feat = self.ss(enc_feat.view(-1, c, h, w), b, fold_feat_size)
@@ -2246,7 +2164,7 @@ def spectral_norm(module,
     ProPainterSpectralNorm.apply(module, name, n_power_iterations, dim, eps)
     return module
 
-class ProPainterDiscriminator(ProPainterBaseNetwork):
+class ProPainterDiscriminator():
     def __init__(self,
                  in_channels=3,
                  use_sigmoid=False,
@@ -2353,21 +2271,43 @@ class ProPainterPreTrainedModel(PreTrainedModel):
             ).to(module.weight.dtype)
             if module.bias is not None:
                 module.bias.data.zero_()
+        elif isinstance(module, ProPainterSecondOrderDeformableAlignment):
+            if hasattr(module.conv_offset[-1], 'weight') and module.conv_offset[-1].weight is not None:
+                TORCH_INIT_FUNCTIONS["constant_"](module.conv_offset[-1].weight, 0)
+            if hasattr(module.conv_offset[-1], 'bias') and module.conv_offset[-1].bias is not None:
+                TORCH_INIT_FUNCTIONS["constant_"](module.conv_offset[-1].bias, 0)
+        elif isinstance(module, ProPainterDeformableAlignment):
+            if hasattr(module.conv_offset[-1], 'weight') and module.conv_offset[-1].weight is not None:
+                TORCH_INIT_FUNCTIONS["constant_"](module.conv_offset[-1].weight, 0)
+            if hasattr(module.conv_offset[-1], 'bias') and module.conv_offset[-1].bias is not None:
+                TORCH_INIT_FUNCTIONS["constant_"](module.conv_offset[-1].bias, 0)
+        elif isinstance(module, ProPainterModulatedDeformConv2d):
+            num_channels = module.in_channels
+            for k in module.kernel_size:
+                num_channels *= k
+            stdv = 1. / math.sqrt(num_channels)
+            module.weight.data.uniform_(-stdv, stdv)
+            if module.bias is not None:
+                module.bias.data.zero_()
+            if hasattr(module, 'conv_offset'):
+                module.conv_offset.weight.data.zero_()
+                module.conv_offset.bias.data.zero_()
+        elif isinstance(module, ProPainterInpaintGenerator) or isinstance(module, ProPainterDiscriminator):
+            for child in module.children():
+                classname = child.__class__.__name__
+                if classname.find('InstanceNorm2d') != -1:
+                    if hasattr(child, 'weight') and child.weight is not None:
+                        nn.init.constant_(child.weight.data, 1.0)
+                    if hasattr(child, 'bias') and child.bias is not None:
+                        nn.init.constant_(child.bias.data, 0.0)
+                elif hasattr(child, 'weight') and (classname.find('Conv') != -1
+                                            or classname.find('Linear') != -1):
+                    nn.init.normal_(child.weight.data, 0.0, 0.02)
+                    if hasattr(child, 'bias') and child.bias is not None:
+                        nn.init.constant_(child.bias.data, 0.0)
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        # elif isinstance(module, ProPainterEmbeddings):
-        #     module.position_embeddings.data = nn.init.trunc_normal_(
-        #         module.position_embeddings.data.to(torch.float32),
-        #         mean=0.0,
-        #         std=self.config.initializer_range,
-        #     ).to(module.position_embeddings.dtype)
-
-        #     module.cls_token.data = nn.init.trunc_normal_(
-        #         module.cls_token.data.to(torch.float32),
-        #         mean=0.0,
-        #         std=self.config.initializer_range,
-        #     ).to(module.cls_token.dtype)
 
 
 PROPAINTER_START_DOCSTRING = r"""
