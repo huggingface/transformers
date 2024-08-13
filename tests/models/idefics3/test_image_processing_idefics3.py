@@ -44,7 +44,7 @@ class Idefics3ImageProcessingTester(unittest.TestCase):
         num_images=1,
         image_size=18,
         min_resolution=30,
-        max_resolution=80,
+        max_resolution=40,
         do_resize=True,
         size=None,
         max_image_size=None,
@@ -58,7 +58,8 @@ class Idefics3ImageProcessingTester(unittest.TestCase):
         do_image_splitting=True,
         resample=PILImageResampling.LANCZOS,
     ):
-        size = size if size is not None else {"longest_edge": 182}
+        super().__init__()
+        self.size = size if size is not None else {"longest_edge": max_resolution}
         self.parent = parent
         self.batch_size = batch_size
         self.num_channels = num_channels
@@ -67,10 +68,9 @@ class Idefics3ImageProcessingTester(unittest.TestCase):
         self.min_resolution = min_resolution
         self.max_resolution = max_resolution
         self.do_resize = do_resize
-        self.size = size
         self.resample = resample
         self.do_image_splitting = do_image_splitting
-        self.max_image_size = max_image_size if max_image_size is not None else {"longest_edge": 182}
+        self.max_image_size = max_image_size if max_image_size is not None else {"longest_edge": 20}
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
         self.do_normalize = do_normalize
@@ -84,6 +84,7 @@ class Idefics3ImageProcessingTester(unittest.TestCase):
             "do_convert_rgb": self.do_convert_rgb,
             "do_resize": self.do_resize,
             "size": self.size,
+            "max_image_size": self.max_image_size,
             "do_rescale": self.do_rescale,
             "rescale_factor": self.rescale_factor,
             "do_normalize": self.do_normalize,
@@ -161,7 +162,7 @@ class Idefics3ImageProcessingTester(unittest.TestCase):
 
 @require_torch
 @require_vision
-class Idefics2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
+class Idefics3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = Idefics3ImageProcessor if is_vision_available() else None
 
     def setUp(self):
@@ -211,14 +212,12 @@ class Idefics2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             )
 
     def test_call_numpy_4_channels(self):
+        # Idefics3 always processes images as RGB, so it always returns images with 3 channels
         for image_processing_class in self.image_processor_list:
             # Initialize image_processing
             image_processor_dict = self.image_processor_dict
-            image_processor_dict["image_mean"] = [0.5, 0.5, 0.5, 0.5]
-            image_processor_dict["image_std"] = [0.5, 0.5, 0.5, 0.5]
             image_processing = self.image_processing_class(**image_processor_dict)
             # create random numpy tensors
-            self.image_processor_tester.num_channels = 4
             image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
 
             for sample_images in image_inputs:

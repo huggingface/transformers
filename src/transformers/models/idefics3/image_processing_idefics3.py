@@ -253,7 +253,7 @@ def to_pil_image(
     image: Union[np.ndarray, "PIL.Image.Image", "torch.Tensor", "tf.Tensor", "jnp.ndarray"],
     do_rescale: Optional[bool] = None,
     input_data_format: Optional[Union[str, ChannelDimension]] = None,
-    image_mode: str = "RGB",
+    image_mode: Optional[str] = None,
 ) -> "PIL.Image.Image":
     """
     Converts `image` to a PIL Image. Optionally rescales it and puts the channel dimension back as the last axis if
@@ -274,7 +274,6 @@ def to_pil_image(
     """
     if isinstance(image, PIL.Image.Image):
         return image
-
     # Convert all tensors to numpy arrays before converting to PIL image
     if is_torch_tensor(image) or is_tf_tensor(image):
         image = image.numpy()
@@ -283,13 +282,16 @@ def to_pil_image(
     elif not isinstance(image, np.ndarray):
         raise ValueError("Input image type not supported: {}".format(type(image)))
 
+    # If the channel has been moved to first dim, we put it back at the end.
+    image = to_channel_dimension_format(image, ChannelDimension.LAST, input_data_format)
+
     # If there is a single channel, we squeeze it, as otherwise PIL can't handle it.
     image = np.squeeze(image, axis=-1) if image.shape[-1] == 1 else image
     image = image.astype(np.uint8)
     return PIL.Image.fromarray(image, mode=image_mode)
 
 
-def convert_to_rgb(image: ImageInput, palette: Optional[PIL.ImagePalette.ImagePalette] = None) -> ImageInput:
+def convert_to_rgb(image: ImageInput, palette: Optional[PIL.ImagePalette.ImagePalette] = None, input_data_format: Optional[Union[str, ChannelDimension]] = None,) -> ImageInput:
     """
     Converts an image to RGB format. Only converts if the image is of type PIL.Image.Image, otherwise returns the image
     as is.
@@ -298,10 +300,12 @@ def convert_to_rgb(image: ImageInput, palette: Optional[PIL.ImagePalette.ImagePa
             The image to convert.
         palette (List[int], *optional*):
             The palette to use if given.
+        input_data_format (ChannelDimension or str, *optional*):
+            The channel dimension format of the input image.
     """
     if not isinstance(image, PIL.Image.Image):
         mode = "P" if palette is not None else None
-        image = to_pil_image(image, image_mode=mode)
+        image = to_pil_image(image, image_mode=mode, input_data_format=input_data_format)
         if image.mode == "P" and palette is not None:
             image.putpalette(palette)
 
@@ -398,7 +402,6 @@ class Idefics3ImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         do_pad: bool = True,
-        vision_encoder_max_size: int = 364,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -414,7 +417,6 @@ class Idefics3ImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
         self.do_pad = do_pad
-        self.vision_encoder_max_size = vision_encoder_max_size
 
     def resize(
         self,
@@ -806,10 +808,20 @@ class Idefics3ImageProcessor(BaseImageProcessor):
                 for images in images_list
             ]
 
+        # Resize might already change the channel dimension, so we will recompute it
+        input_data_format = infer_channel_dimension_format(images_list[0][0], num_channels=(1, 3, 4))
+
         # We will resize both height and width of each image to the nearest 364 multiple, disregarding the aspect ratio
         # for size=(10, 364) -> rescaled_size=(364, 364)
         # for size=(11, 365) -> rescaled_size=(364, 364*2)
         new_images_list = []
+        if 'longest_edge' in max_image_size:
+            vision_encoder_max_size = max_image_size["longest_edge"]
+        elif isinstance(max_image_size, int):
+            vision_encoder_max_size = max_image_size
+        else:
+            raise ValueError("Invalid max_image_size, must be a dictionary with key 'longest_edge' or an integer.")
+
         for images in images_list:
             new_images = []
             for img in images:
@@ -819,13 +831,13 @@ class Idefics3ImageProcessor(BaseImageProcessor):
                     height, width, _ = img.shape
                 aspect_ratio = width / height
                 if width >= height:
-                    width = math.ceil(width / self.vision_encoder_max_size) * self.vision_encoder_max_size
+                    width = math.ceil(width / vision_encoder_max_size) * vision_encoder_max_size
                     height = int(width / aspect_ratio)
-                    height = math.ceil(height / self.vision_encoder_max_size) * self.vision_encoder_max_size
+                    height = math.ceil(height / vision_encoder_max_size) * vision_encoder_max_size
                 elif height > width:
-                    height = math.ceil(height / self.vision_encoder_max_size) * self.vision_encoder_max_size
+                    height = math.ceil(height / vision_encoder_max_size) * vision_encoder_max_size
                     width = int(height * aspect_ratio)
-                    width = math.ceil(width / self.vision_encoder_max_size) * self.vision_encoder_max_size
+                    width = math.ceil(width / vision_encoder_max_size) * vision_encoder_max_size
                 new_size = {"height": height, "width": width}
                 new_images.append(
                     self.resize(img, size=new_size, resample=resample, input_data_format=input_data_format)
@@ -861,7 +873,7 @@ class Idefics3ImageProcessor(BaseImageProcessor):
 
         if do_convert_rgb:
             images_list = [
-                [convert_to_rgb(image, palette) for image in images] for images, palette in zip(images_list, palettes)
+                [convert_to_rgb(image, palette, input_data_format=input_data_format) for image in images] for images, palette in zip(images_list, palettes)
             ]
 
         if is_scaled_image(images_list[0][0]) and do_rescale:
@@ -874,10 +886,6 @@ class Idefics3ImageProcessor(BaseImageProcessor):
             for image in images_list:
                 rescaled_images_array.append([rescale(img, rescale_factor) for img in image])
             images_list = rescaled_images_array
-
-        if input_data_format is None:
-            # We assume that all images have the same channel dimension format.
-            input_data_format = infer_channel_dimension_format(images_list[0][0])
 
         if do_normalize:
             images_list = [
