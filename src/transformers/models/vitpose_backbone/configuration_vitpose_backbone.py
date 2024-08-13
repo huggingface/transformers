@@ -35,7 +35,7 @@ class ViTPoseBackboneConfig(BackboneConfigMixin, PretrainedConfig):
     Args:
         image_size (`int`, *optional*, defaults to `[256, 192]`):
             The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to 16):
+        patch_size (`List[int]`, *optional*, defaults to `[16, 16]`):
             The size (resolution) of each patch.
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
@@ -95,7 +95,7 @@ class ViTPoseBackboneConfig(BackboneConfigMixin, PretrainedConfig):
     def __init__(
         self,
         image_size=[256, 192],
-        patch_size=16,
+        patch_size=[16, 16],
         num_channels=3,
         hidden_size=768,
         num_hidden_layers=12,

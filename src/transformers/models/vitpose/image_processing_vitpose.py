@@ -68,7 +68,7 @@ def coco_to_pascal_voc(bboxes: np.ndarray) -> np.ndarray:
     return bboxes
 
 
-def _get_max_preds(heatmaps):
+def get_keypoint_predictions(heatmaps):
     """Get keypoint predictions from score maps.
 
     Args:
@@ -529,7 +529,7 @@ class ViTPoseImageProcessor(BaseImageProcessor):
 
         batch_size, _, height, width = heatmaps.shape
 
-        coords, scores = _get_max_preds(heatmaps)
+        coords, scores = get_keypoint_predictions(heatmaps)
 
         preds = post_dark_udp(coords, heatmaps, kernel=kernel)
 

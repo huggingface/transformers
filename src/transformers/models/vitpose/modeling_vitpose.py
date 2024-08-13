@@ -316,8 +316,8 @@ class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
         # Turn output hidden states in tensor of shape (batch_size, num_channels, height, width)
         sequence_output = outputs.feature_maps[-1] if return_dict else outputs[0][-1]
         batch_size = sequence_output.shape[0]
-        patch_height = self.config.image_size[0] // self.config.patch_size
-        patch_width = self.config.image_size[1] // self.config.patch_size
+        patch_height = self.config.image_size[0] // self.config.patch_size[0]
+        patch_width = self.config.image_size[1] // self.config.patch_size[1]
         sequence_output = (
             sequence_output.permute(0, 2, 1).reshape(batch_size, -1, patch_height, patch_width).contiguous()
         )
