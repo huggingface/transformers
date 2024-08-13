@@ -310,12 +310,12 @@ def colorize_depth(
     """Converts a depth map to a color image.
 
     Args:
-        value (`torch.Tensor` or `numpy.ndarry`):
+        value (`torch.Tensor` or `numpy.ndarray`):
             Input depth map. Shape: (H, W) or (1, H, W) or (1, 1, H, W). All singular dimensions are squeezed
         vmin (`float`, *optional*):
-            vmin-valued entries are mapped to start color of cmap. If None, value.min() is used. Defaults to None.
+            vmin-valued entries are mapped to start color of cmap. If None, value.min() is used.
         vmax (`float`, *optional*):
-            vmax-valued entries are mapped to end color of cmap. If None, value.max() is used. Defaults to None.
+            vmax-valued entries are mapped to end color of cmap. If None, value.max() is used.
         vmin_perc (`float`, *optional*, defaults to `1.0`):
             use the `vmin_perc`-th percentile as `vmin` (outlier rejection).
         vmax_perc (`float`, *optional*, defaults to `99.0`):
@@ -327,19 +327,19 @@ def colorize_depth(
         invalid_val (`int`, *optional*, defaults to `-99`):
             Specifies value of invalid pixels that should be colored as 'background_color'.
         invalid_mask (`numpy.ndarray`, *optional*):
-            Boolean mask for invalid regions. Defaults to None.
+            Boolean mask for invalid regions.
         background_color (`Tuple[int]`, *optional*, defaults to `(128, 128, 128, 255)`):
             4-tuple RGB color to give to invalid pixels.
         gamma_corrected (`bool`, *optional*, defaults to `False`):
             Apply gamma correction to colored image.
         value_transform (Callable, *optional*):
-            Apply transform function to valid pixels before coloring. Defaults to None.
+            Apply transform function to valid pixels before coloring.
         return_numpy (`bool`, *optional*, defaults to `False`):
             Whether or not to return the resized image as a numpy array. If False a `PIL.Image.Image` object is
             returned.
 
     Returns:
-        `numpy.ndarray`, dtype - uint8: Colored depth map. Shape: (H, W, 4)
+        `np.ndarray` or `PIL.Image.Image`: Colored depth map of shape `(H, W, 4)` and dtype `uint8`.
     """
     if is_torch_tensor(value):
         value = value.detach().cpu().numpy()
