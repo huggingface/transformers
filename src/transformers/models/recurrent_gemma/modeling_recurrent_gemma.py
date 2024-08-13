@@ -76,8 +76,10 @@ class RecurrentGemmaRotaryEmbedding(nn.Module):
 
     @torch.no_grad()
     # Copied from transformers.models.gemma.modeling_gemma.GemmaRotaryEmbedding.forward with Gemma->RecurrentGemma
-    def forward(self, x, position_ids, seq_len=None):
+    def forward(self, x, position_ids):
         # x: [bs, num_attention_heads, seq_len, head_size]
+        if position_ids is None:
+            raise ValueError("You have to provide position_ids to Rotary Embeddings")
         self.inv_freq.to(x.device)
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
         position_ids_expanded = position_ids[:, None, :].float()
@@ -183,7 +185,7 @@ class RecurrentGemmaSdpaAttention(nn.Module):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        cos, sin = self.rotary_emb(value_states, position_ids, seq_len=None)
+        cos, sin = self.rotary_emb(value_states, position_ids)
 
         # Partial rotary embedding
         query_rot, query_pass = torch.chunk(query_states, int(1 / self.partial_rotary_factor), dim=-1)
@@ -818,6 +820,7 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
@@ -858,6 +861,7 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
         output_hidden_states = True
         outputs = self.model(
             input_ids=input_ids,
+            position_ids=position_ids,
             cache_position=cache_position,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,

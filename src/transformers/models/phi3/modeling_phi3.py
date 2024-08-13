@@ -138,13 +138,14 @@ class Phi3RotaryEmbedding(nn.Module):
         self.dim = dim
         self.max_position_embeddings = max_position_embeddings
         self.base = base
-
         inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.int64).float() / self.dim))
         self.register_buffer("inv_freq", tensor=inv_freq, persistent=False)
 
     @torch.no_grad()
-    def forward(self, x, position_ids, seq_len=None):
+    def forward(self, x, position_ids):
         # x: [bs, num_attention_heads, seq_len, head_size]
+        if position_ids is None:
+            raise ValueError("You have to provide position_ids to Rotary Embeddings")
         self.inv_freq.to(x.device)
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
         position_ids_expanded = position_ids[:, None, :].float()
@@ -174,7 +175,9 @@ class Phi3SuScaledRotaryEmbedding(Phi3RotaryEmbedding):
         self.original_max_position_embeddings = config.original_max_position_embeddings
 
     @torch.no_grad()
-    def forward(self, x, position_ids, seq_len=None):
+    def forward(self, x, position_ids):
+        if position_ids is None:
+            raise ValueError("You have to provide position_ids to Rotary Embeddings")
         seq_len = torch.max(position_ids) + 1
         if seq_len > self.original_max_position_embeddings:
             ext_factors = torch.tensor(self.long_factor, dtype=torch.float32, device=x.device)
@@ -214,7 +217,9 @@ class Phi3YarnScaledRotaryEmbedding(Phi3RotaryEmbedding):
         self.original_max_position_embeddings = config.original_max_position_embeddings
 
     @torch.no_grad()
-    def forward(self, x, position_ids, seq_len=None):
+    def forward(self, x, position_ids):
+        if position_ids is None:
+            raise ValueError("You have to provide position_ids to Rotary Embeddings")
         seq_len = torch.max(position_ids) + 1
         if seq_len > self.original_max_position_embeddings:
             ext_factors = torch.tensor(self.long_factor, dtype=torch.float32, device=x.device)
@@ -255,7 +260,9 @@ class Phi3LongRoPEScaledRotaryEmbedding(Phi3RotaryEmbedding):
         self.original_max_position_embeddings = config.original_max_position_embeddings
 
     @torch.no_grad()
-    def forward(self, x, position_ids, seq_len=None):
+    def forward(self, x, position_ids):
+        if position_ids is None:
+            raise ValueError("You have to provide position_ids to Rotary Embeddings")
         seq_len = torch.max(position_ids) + 1
         if seq_len > self.original_max_position_embeddings:
             ext_factors = torch.tensor(self.long_factor, dtype=torch.float32, device=x.device)
@@ -439,7 +446,8 @@ class Phi3Attention(nn.Module):
                     "with a layer index."
                 )
             kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
-        cos, sin = self.rotary_emb(value_states, position_ids, seq_len=kv_seq_len)
+
+        cos, sin = self.rotary_emb(value_states, position_ids)
 
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
@@ -535,12 +543,7 @@ class Phi3FlashAttention2(Phi3Attention):
                 )
             kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
 
-        # Because the input can be padded, the absolute sequence length depends on the max position id.
-        rotary_seq_len = (
-            max(kv_seq_len, position_ids[:, -1].max().item() + 1) if position_ids is not None else kv_seq_len
-        )
-
-        cos, sin = self.rotary_emb(value_states, seq_len=rotary_seq_len, position_ids=position_ids)
+        cos, sin = self.rotary_emb(value_states, position_ids)
 
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
@@ -678,10 +681,7 @@ class Phi3SdpaAttention(Phi3Attention):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        kv_seq_len = key_states.shape[-2]
-        if past_key_value is not None:
-            kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
-        cos, sin = self.rotary_emb(value_states, position_ids, seq_len=kv_seq_len)
+        cos, sin = self.rotary_emb(value_states, position_ids)
 
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
