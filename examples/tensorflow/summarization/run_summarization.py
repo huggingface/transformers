@@ -67,7 +67,12 @@ except (LookupError, OSError):
             "Offline mode: run this script without TRANSFORMERS_OFFLINE first to download nltk data files"
         )
     with FileLock(".lock") as lock:
-        punkt_path = os.path.join(nltk.data.find("tokenizers").path, "punkt")
+        try:
+            tokenizers_path = nltk.data.find("tokenizers").path
+        except (LookupError, OSError):
+            tokenizers_path = os.path.join(nltk.data.path[0], "tokenizers")
+            os.makedirs(tokenizers_path, exist_ok=True)
+        punkt_path = os.path.join(tokenizers_path, "punkt")
         if os.path.exists(punkt_path):
             os.remove(punkt_path)
         nltk.download("punkt", quiet=True)
