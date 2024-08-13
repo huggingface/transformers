@@ -52,9 +52,7 @@ def _prompt_split_image(image_seq_len, image_rows, image_cols, fake_token_around
     for n_h in range(image_rows):
         for n_w in range(image_cols):
             text_split_images += (
-                f"{fake_token_around_image}"
-                + f"<row_{n_h + 1}_col_{n_w + 1}>"
-                + f"{image_token}" * image_seq_len
+                f"{fake_token_around_image}" + f"<row_{n_h + 1}_col_{n_w + 1}>" + f"{image_token}" * image_seq_len
             )
         text_split_images += "\n"
 
@@ -69,7 +67,9 @@ def _prompt_split_image(image_seq_len, image_rows, image_cols, fake_token_around
 
 def _prompt_single_image(image_seq_len, fake_token_around_image, image_token):
     """Prompt with expanded image tokens for a single image."""
-    return f"{fake_token_around_image}" + "<global-img>" + f"{image_token}" * image_seq_len + f"{fake_token_around_image}"
+    return (
+        f"{fake_token_around_image}" + "<global-img>" + f"{image_token}" * image_seq_len + f"{fake_token_around_image}"
+    )
 
 
 def get_image_prompt_string(image_rows, image_cols, image_seq_len, fake_token_around_image, image_token):
@@ -78,6 +78,7 @@ def get_image_prompt_string(image_rows, image_cols, image_seq_len, fake_token_ar
             image_seq_len, fake_token_around_image=fake_token_around_image, image_token=image_token
         )
     return _prompt_split_image(image_seq_len, image_rows, image_cols, fake_token_around_image, image_token)
+
 
 class Idefics3ImagesKwargs(ImagesKwargs, total=False):
     image_seq_len: Optional[int]
@@ -98,6 +99,7 @@ class Idefics3ProcessorKwargs(ProcessingKwargs, total=False):
             "return_row_col_info": True,
         },
     }
+
 
 class Idefics3Processor(ProcessorMixin):
     r"""
@@ -241,7 +243,7 @@ class Idefics3Processor(ProcessorMixin):
         )
 
         # Temporary fix for "paddding_side" in init_kwargs
-        _ = output_kwargs['text_kwargs'].pop("padding_side", None)
+        _ = output_kwargs["text_kwargs"].pop("padding_side", None)
 
         image_seq_len = output_kwargs["images_kwargs"].pop("image_seq_len", None)
 
@@ -270,7 +272,7 @@ class Idefics3Processor(ProcessorMixin):
                 new_images.append([])
                 for im in sample:
                     if is_valid_image(im):
-                        new_images[-1].append(im) # already loaded
+                        new_images[-1].append(im)  # already loaded
                     elif isinstance(im, str):
                         new_images[-1].append(load_image(im))
 

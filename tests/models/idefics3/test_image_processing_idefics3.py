@@ -18,6 +18,7 @@ import unittest
 
 import numpy as np
 
+from transformers.image_utils import PILImageResampling
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -27,14 +28,14 @@ from ...test_image_processing_common import ImageProcessingTestMixin
 if is_vision_available():
     from PIL import Image
 
-    from transformers import Idefics2ImageProcessor
+    from transformers import Idefics3ImageProcessor
 
 
 if is_torch_available():
     import torch
 
 
-class Idefics2ImageProcessingTester(unittest.TestCase):
+class Idefics3ImageProcessingTester(unittest.TestCase):
     def __init__(
         self,
         parent,
@@ -43,9 +44,10 @@ class Idefics2ImageProcessingTester(unittest.TestCase):
         num_images=1,
         image_size=18,
         min_resolution=30,
-        max_resolution=400,
+        max_resolution=80,
         do_resize=True,
         size=None,
+        max_image_size=None,
         do_rescale=True,
         rescale_factor=1 / 255,
         do_normalize=True,
@@ -54,8 +56,9 @@ class Idefics2ImageProcessingTester(unittest.TestCase):
         do_convert_rgb=True,
         do_pad=True,
         do_image_splitting=True,
+        resample=PILImageResampling.LANCZOS,
     ):
-        size = size if size is not None else {"longest_edge": 4*364}
+        size = size if size is not None else {"longest_edge": 182}
         self.parent = parent
         self.batch_size = batch_size
         self.num_channels = num_channels
@@ -65,14 +68,16 @@ class Idefics2ImageProcessingTester(unittest.TestCase):
         self.max_resolution = max_resolution
         self.do_resize = do_resize
         self.size = size
+        self.resample = resample
+        self.do_image_splitting = do_image_splitting
+        self.max_image_size = max_image_size if max_image_size is not None else {"longest_edge": 182}
+        self.do_rescale = do_rescale
+        self.rescale_factor = rescale_factor
         self.do_normalize = do_normalize
         self.image_mean = image_mean
         self.image_std = image_std
-        self.do_rescale = do_rescale
-        self.rescale_factor = rescale_factor
         self.do_convert_rgb = do_convert_rgb
         self.do_pad = do_pad
-        self.do_image_splitting = do_image_splitting
 
     def prepare_image_processor_dict(self):
         return {
@@ -90,41 +95,10 @@ class Idefics2ImageProcessingTester(unittest.TestCase):
 
     def get_expected_values(self, image_inputs, batched=False):
         """
-        This function computes the expected height and width when providing images to BridgeTowerImageProcessor,
-        assuming do_resize is set to True with a scalar size and size_divisor.
+        This function computes the expected height and width when providing images to Idefics3ImageProcessor,
+        assuming do_resize is set to True. The expected size in that case the max image size.
         """
-        if not batched:
-            shortest_edge = self.size["shortest_edge"]
-            longest_edge = self.size["longest_edge"]
-            image = image_inputs[0]
-            if isinstance(image, Image.Image):
-                w, h = image.size
-            elif isinstance(image, np.ndarray):
-                h, w = image.shape[0], image.shape[1]
-            else:
-                h, w = image.shape[1], image.shape[2]
-
-            aspect_ratio = w / h
-            if w > h and w >= longest_edge:
-                w = longest_edge
-                h = int(w / aspect_ratio)
-            elif h > w and h >= longest_edge:
-                h = longest_edge
-                w = int(h * aspect_ratio)
-            w = max(w, shortest_edge)
-            h = max(h, shortest_edge)
-            expected_height = h
-            expected_width = w
-        else:
-            expected_values = []
-            for images in image_inputs:
-                for image in images:
-                    expected_height, expected_width = self.get_expected_values([image])
-                    expected_values.append((expected_height, expected_width))
-            expected_height = max(expected_values, key=lambda item: item[0])[0]
-            expected_width = max(expected_values, key=lambda item: item[1])[1]
-
-        return expected_height, expected_width
+        return self.max_image_size["longest_edge"], self.max_image_size["longest_edge"]
 
     def expected_output_image_shape(self, images):
         height, width = self.get_expected_values(images, batched=True)
@@ -188,11 +162,11 @@ class Idefics2ImageProcessingTester(unittest.TestCase):
 @require_torch
 @require_vision
 class Idefics2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_class = Idefics2ImageProcessor if is_vision_available() else None
+    image_processing_class = Idefics3ImageProcessor if is_vision_available() else None
 
     def setUp(self):
         super().setUp()
-        self.image_processor_tester = Idefics2ImageProcessingTester(self)
+        self.image_processor_tester = Idefics3ImageProcessingTester(self)
 
     @property
     def image_processor_dict(self):
@@ -203,6 +177,9 @@ class Idefics2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertTrue(hasattr(image_processing, "do_convert_rgb"))
         self.assertTrue(hasattr(image_processing, "do_resize"))
         self.assertTrue(hasattr(image_processing, "size"))
+        self.assertTrue(hasattr(image_processing, "resample"))
+        self.assertTrue(hasattr(image_processing, "do_image_splitting"))
+        self.assertTrue(hasattr(image_processing, "max_image_size"))
         self.assertTrue(hasattr(image_processing, "do_rescale"))
         self.assertTrue(hasattr(image_processing, "rescale_factor"))
         self.assertTrue(hasattr(image_processing, "do_normalize"))

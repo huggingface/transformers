@@ -390,8 +390,8 @@ class Idefics3SimpleMLP(nn.Module):
         super().__init__()
         self.config = config
 
-        input_size=config.vision_config.hidden_size * (config.scale_factor**2)
-        output_size=config.text_config.hidden_size
+        input_size = config.vision_config.hidden_size * (config.scale_factor**2)
+        output_size = config.text_config.hidden_size
         self.proj = nn.Linear(input_size, output_size, bias=False)
 
     def forward(self, x):
@@ -552,7 +552,8 @@ IDEFICS3_VISION_START_DOCSTRING = r"""
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
-#Copied from transformers.models.idefics2.modeling_idefics2.Idefics2VisionTransformer
+
+# Copied from transformers.models.idefics2.modeling_idefics2.Idefics2VisionTransformer
 @add_start_docstrings(
     "The Idefics3 Vision Transformer Model outputting raw image embedding.",
     IDEFICS3_VISION_START_DOCSTRING,
@@ -823,11 +824,15 @@ class Idefics3Model(Idefics3PreTrainedModel):
         self.padding_idx = self.config.text_config.pad_token_id
         self.vocab_size = self.config.text_config.vocab_size
 
-        self.vision_model = Idefics3VisionTransformer._from_config(config.vision_config, attn_implementation=config._attn_implementation)
+        self.vision_model = Idefics3VisionTransformer._from_config(
+            config.vision_config, attn_implementation=config._attn_implementation
+        )
         self.connector = Idefics3Connector(config)
         self.text_model = AutoModel.from_config(config.text_config, attn_implementation=config._attn_implementation)
 
-        self.image_seq_len = int(((config.vision_config.image_size // config.vision_config.patch_size) ** 2) / (config.scale_factor**2))
+        self.image_seq_len = int(
+            ((config.vision_config.image_size // config.vision_config.patch_size) ** 2) / (config.scale_factor**2)
+        )
         self.image_token_id = self.config.image_token_id
 
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
@@ -884,7 +889,9 @@ class Idefics3Model(Idefics3PreTrainedModel):
         num_images, _, vision_hidden_size = image_hidden_states.shape
         special_image_token_mask = input_ids == self.image_token_id
         new_inputs_embeds = inputs_embeds.clone()
-        reshaped_image_hidden_states = image_hidden_states.view(-1, vision_hidden_size).to(inputs_embeds.dtype) # cast to the dtype of the input_embeds to support quantized models
+        reshaped_image_hidden_states = image_hidden_states.view(-1, vision_hidden_size).to(
+            inputs_embeds.dtype
+        )  # cast to the dtype of the input_embeds to support quantized models
         new_inputs_embeds[special_image_token_mask] = reshaped_image_hidden_states
         return new_inputs_embeds
 

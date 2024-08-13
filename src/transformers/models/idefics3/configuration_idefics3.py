@@ -126,7 +126,6 @@ class Idefics3VisionConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
-
 class Idefics3Config(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Idefics3Model`]. It is used to instantiate a

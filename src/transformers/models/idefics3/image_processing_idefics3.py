@@ -164,13 +164,9 @@ def get_resize_output_image_size(
         height, width = get_image_size(image, channel_dim=input_data_format)
 
     # Find the output size, when rescaling the longest edge to max_len and preserving the aspect ratio
-    height, width = _resize_output_size_rescale_to_max_len(
-        height, width, max_len=resolution_max_side
-    )
+    height, width = _resize_output_size_rescale_to_max_len(height, width, max_len=resolution_max_side)
     # Find the output size when scaling the image to be below the max_image_size
-    height, width = _resize_output_size_scale_below_upper_bound(
-        height, width, max_len=max_image_size
-    )
+    height, width = _resize_output_size_scale_below_upper_bound(height, width, max_len=max_image_size)
     return height, width
 
 
@@ -292,7 +288,8 @@ def to_pil_image(
     image = image.astype(np.uint8)
     return PIL.Image.fromarray(image, mode=image_mode)
 
-def convert_to_rgb(image: ImageInput, palette: Optional[PIL.ImagePalette.ImagePalette]=None) -> ImageInput:
+
+def convert_to_rgb(image: ImageInput, palette: Optional[PIL.ImagePalette.ImagePalette] = None) -> ImageInput:
     """
     Converts an image to RGB format. Only converts if the image is of type PIL.Image.Image, otherwise returns the image
     as is.
@@ -305,7 +302,7 @@ def convert_to_rgb(image: ImageInput, palette: Optional[PIL.ImagePalette.ImagePa
     if not isinstance(image, PIL.Image.Image):
         mode = "P" if palette is not None else None
         image = to_pil_image(image, image_mode=mode)
-        if image.mode=='P' and palette is not None:
+        if image.mode == "P" and palette is not None:
             image.putpalette(palette)
 
     image_rgba = image.convert("RGBA")
@@ -407,7 +404,7 @@ class Idefics3ImageProcessor(BaseImageProcessor):
         super().__init__(**kwargs)
         self.do_convert_rgb = do_convert_rgb
         self.do_resize = do_resize
-        self.size = size if size is not None else {"longest_edge": 4*364}
+        self.size = size if size is not None else {"longest_edge": 4 * 364}
         self.resample = resample
         self.do_image_splitting = do_image_splitting
         self.max_image_size = max_image_size if max_image_size is not None else {"longest_edge": 364}
@@ -457,7 +454,7 @@ class Idefics3ImageProcessor(BaseImageProcessor):
         else:
             image_mode = None
             if image.ndim == 2 or image.shape[-1] == 1:
-                image_mode = 'P'
+                image_mode = "P"
             image = to_pil_image(image, input_data_format=input_data_format, image_mode=image_mode)
 
         resized_image = image.resize((size[1], size[0]), resample=resample)
@@ -465,7 +462,6 @@ class Idefics3ImageProcessor(BaseImageProcessor):
         if resized_array.ndim == 2:
             resized_array = np.expand_dims(resized_array, axis=-1)
         return resized_array
-
 
     def split_image(
         self,
@@ -528,7 +524,13 @@ class Idefics3ImageProcessor(BaseImageProcessor):
                         cropped_image = image.crop((start_x, start_y, end_x, end_y))
                     else:
                         cropped_image = _crop(
-                            image, start_x, start_y, end_x, end_y, input_data_format=input_data_format, data_format=data_format
+                            image,
+                            start_x,
+                            start_y,
+                            end_x,
+                            end_y,
+                            input_data_format=input_data_format,
+                            data_format=data_format,
                         )
                     frames.append(cropped_image)
 
@@ -540,7 +542,7 @@ class Idefics3ImageProcessor(BaseImageProcessor):
                 else:
                     image = self.resize(
                         image,
-                        {'height': global_image_height, 'width': global_image_width},
+                        {"height": global_image_height, "width": global_image_width},
                         resample=resample,
                         input_data_format=input_data_format,
                     )
@@ -553,6 +555,7 @@ class Idefics3ImageProcessor(BaseImageProcessor):
         frames.append(image)
 
         return frames, num_splits_h, num_splits_w
+
     def _pad_image(
         self,
         image: np.ndarray,
@@ -750,7 +753,6 @@ class Idefics3ImageProcessor(BaseImageProcessor):
                 "Idefics3 was trained on splitted image to support high resolution. Setting do_image_splitting=False will degrade the performance."
             )
 
-
         images_list = make_list_of_images(images)
 
         if not valid_images(images_list[0]):
@@ -759,8 +761,10 @@ class Idefics3ImageProcessor(BaseImageProcessor):
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
 
-
-        palettes = [image[0].getpalette() if isinstance(image[0], Image.Image) and image[0].mode == 'P' else None for image in images_list] # save the palettes for conversion to RGB
+        palettes = [
+            image[0].getpalette() if isinstance(image[0], Image.Image) and image[0].mode == "P" else None
+            for image in images_list
+        ]  # save the palettes for conversion to RGB
         # All transformations expect numpy arrays.
         images_list = [[to_numpy_array(image) for image in images] for images in images_list]
 
@@ -778,7 +782,6 @@ class Idefics3ImageProcessor(BaseImageProcessor):
         if input_data_format is None:
             # We assume that all images have the same channel dimension format.
             input_data_format = infer_channel_dimension_format(images_list[0][0], num_channels=(1, 3, 4))
-
 
         validate_preprocess_arguments(
             do_rescale=do_rescale,
@@ -824,7 +827,9 @@ class Idefics3ImageProcessor(BaseImageProcessor):
                     width = int(height * aspect_ratio)
                     width = math.ceil(width / self.vision_encoder_max_size) * self.vision_encoder_max_size
                 new_size = {"height": height, "width": width}
-                new_images.append(self.resize(img, size=new_size, resample=resample, input_data_format=input_data_format))
+                new_images.append(
+                    self.resize(img, size=new_size, resample=resample, input_data_format=input_data_format)
+                )
             new_images_list.append(new_images)
         images_list = new_images_list
         del new_images_list
@@ -855,8 +860,9 @@ class Idefics3ImageProcessor(BaseImageProcessor):
             images_list_cols = [[0] * len(images) for images in images_list]
 
         if do_convert_rgb:
-            images_list = [[convert_to_rgb(image, palette) for image in images] for images, palette in zip(images_list, palettes)]
-
+            images_list = [
+                [convert_to_rgb(image, palette) for image in images] for images, palette in zip(images_list, palettes)
+            ]
 
         if is_scaled_image(images_list[0][0]) and do_rescale:
             logger.warning_once(
