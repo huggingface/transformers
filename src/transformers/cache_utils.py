@@ -977,17 +977,15 @@ class StaticCache(Cache):
     Parameters:
         config (`PretrainedConfig`):
             The configuration file defining the shape-related attributes required to initialize the static cache.
-        batch_size (`int`, *optional*):
+        batch_size (`int`):
             The batch size with which the model will be used. Note that a new instance must be instantiated if a
             smaller batch size is used.
-        max_cache_len (`int`, *optional*):
+        max_cache_len (`int`):
             The maximum sequence length with which the model will be used.
-        device (`torch.device` or `str`, *optional*):
+        device (`torch.device` or `str`):
             The device on which the cache should be initialized. Should be the same as the layer.
         dtype (`torch.dtype`, *optional*, defaults to `torch.float32`):
             The default `dtype` to use when initializing the layer.
-        max_batch_size (`int`, *optional*):
-            Deprecated. Use `batch_size` instead.
 
     Example:
 
@@ -1008,7 +1006,7 @@ class StaticCache(Cache):
         ```
     """
 
-    # TODO (joao): remove `=None` in non-optional arguments in v4.46
+    # TODO (joao): remove `=None` in non-optional arguments in v4.46. Remove from `OBJECTS_TO_IGNORE` as well.
     def __init__(
         self,
         config: PretrainedConfig,
@@ -1148,17 +1146,15 @@ class SlidingWindowCache(StaticCache):
     Parameters:
         config (`PretrainedConfig`):
             The configuration file defining the shape-related attributes required to initialize the static cache.
-        batch_size (`int`, *optional*):
+        batch_size (`int`):
             The batch size with which the model will be used. Note that a new instance must be instantiated if a
             smaller batch size is used.
-        max_cache_len (`int`, *optional*):
+        max_cache_len (`int`):
             The maximum sequence length with which the model will be used.
-        device (`torch.device` or `str`, *optional*):
+        device (`torch.device` or `str`):
             The device on which the cache should be initialized. Should be the same as the layer.
         dtype (`torch.dtype`, *optional*, defaults to `torch.float32`):
             The default `dtype` to use when initializing the layer.
-        max_batch_size (`int`, *optional*):
-            Deprecated. Use `batch_size` instead.
 
     Example:
 
@@ -1179,7 +1175,7 @@ class SlidingWindowCache(StaticCache):
         ```
     """
 
-    # TODO (joao): remove `=None` in non-optional arguments in v4.46
+    # TODO (joao): remove `=None` in non-optional arguments in v4.46. Remove from `OBJECTS_TO_IGNORE` as well.
     def __init__(
         self,
         config: PretrainedConfig,
@@ -1442,17 +1438,15 @@ class HybridCache(Cache):
     Parameters:
         config (`PretrainedConfig):
             The configuration file defining the shape-related attributes required to initialize the static cache.
-        batch_size (`int`, *optional*):
+        batch_size (`int`):
             The batch size with which the model will be used. Note that a new instance must be instantiated if a
             smaller batch size is used.
-        max_cache_len (`int`, *optional*):
+        max_cache_len (`int`):
             The maximum sequence length with which the model will be used.
         device (`torch.device` or `str`, *optional*, defaults to `"cpu"`):
             The device on which the cache should be initialized. Should be the same as the layer.
         dtype (torch.dtype, *optional*, defaults to `torch.float32`):
             The default `dtype` to use when initializing the layer.
-        max_batch_size (`int`, *optional*):
-            Deprecated. Use `batch_size` instead.
 
     Example:
 
@@ -1473,7 +1467,7 @@ class HybridCache(Cache):
         ```
     """
 
-    # TODO (joao): remove `=None` in non-optional arguments in v4.46
+    # TODO (joao): remove `=None` in non-optional arguments in v4.46. Remove from `OBJECTS_TO_IGNORE` as well.
     def __init__(
         self,
         config: PretrainedConfig,
@@ -1616,15 +1610,13 @@ class MambaCache:
     Arguments:
         config (`PretrainedConfig):
             The configuration file defining the shape-related attributes required to initialize the static cache.
-        batch_size (`int`, *optional*):
+        batch_size (`int`):
             The batch size with which the model will be used. Note that a new instance must be instantiated if a
             smaller batch size is used.
         dtype (`torch.dtype`, *optional*, defaults to `torch.float16`):
             The default `dtype` to use when initializing the layer.
         device (`torch.device` or `str`, *optional*):
             The device on which the cache should be initialized. Should be the same as the layer.
-        max_batch_size (`int`, *optional*):
-            Deprecated. Use `batch_size` instead.
 
     Attributes:
         dtype: (`torch.dtype`):
@@ -1657,7 +1649,7 @@ class MambaCache:
         ```
     """
 
-    # TODO (joao): remove `=None` in non-optional arguments in v4.46
+    # TODO (joao): remove `=None` in non-optional arguments in v4.46. Remove from `OBJECTS_TO_IGNORE` as well.
     def __init__(
         self,
         config: PretrainedConfig,
