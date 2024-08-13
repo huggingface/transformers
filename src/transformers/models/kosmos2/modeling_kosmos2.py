@@ -2012,6 +2012,7 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel):
             vision_model_output=vision_model_output,
         )
 
+    @torch.no_grad()
     def generate(
         self,
         pixel_values: Optional[torch.Tensor] = None,

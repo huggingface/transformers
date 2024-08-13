@@ -1905,7 +1905,7 @@ class Kosmos2_5TextModel(Kosmos2_5PreTrainedModel):
 
 @add_start_docstrings(
     """
-    KOSMOS-2 Model for generating text and image features. The model consists of a vision encoder and a language model.
+    KOSMOS-2.5 Model for generating text and image features. The model consists of a vision encoder and a language model.
     """,
     KOSMOS2_5_START_DOCSTRING,
 )
@@ -2002,9 +2002,8 @@ class Kosmos2_5Model(Kosmos2_5PreTrainedModel):
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
             )
-            image_embeds = vision_model_output[0]
             # normalized features
-            image_embeds = nn.functional.normalize(image_embeds, dim=-1)
+            image_embeds = nn.functional.normalize(vision_model_output[0], dim=-1)
             image_embeds, projection_attentions = self.image_to_text_projection(image_embeds)
 
         outputs = self.text_model(
@@ -2023,11 +2022,7 @@ class Kosmos2_5Model(Kosmos2_5PreTrainedModel):
         )
 
         if not return_dict:
-            outputs = outputs + (
-                image_embeds,
-                projection_attentions,
-                vision_model_output,
-            )
+            outputs = outputs + (image_embeds, projection_attentions, vision_model_output)
             return tuple(output for output in outputs if output is not None)
 
         return Kosmos2_5ModelOutput(
@@ -2333,7 +2328,6 @@ class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel):
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
             )
-            image_embeds = vision_model_output[0]
             image_embeds = nn.functional.normalize(vision_model_output[0], dim=-1)
             image_embeds, projection_attentions = self.image_to_text_projection(image_embeds)
 
@@ -2354,11 +2348,7 @@ class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel):
         )
 
         if not return_dict:
-            outputs = lm_outputs + (
-                image_embeds,
-                projection_attentions,
-                vision_model_output,
-            )
+            outputs = lm_outputs + (image_embeds, projection_attentions, vision_model_output)
             return tuple(output for output in outputs if output is not None)
 
         return Kosmos2_5ForConditionalGenerationModelOutput(
@@ -2399,9 +2389,9 @@ class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel):
                 attention_mask=image_attention_mask,
                 output_hidden_states=True,
             )
-
             image_embeds = nn.functional.normalize(vision_model_output[0], dim=-1)
             image_embeds, projection_attentions = self.image_to_text_projection(image_embeds)
+
         output = self.text_model.generate(
             input_ids=input_ids,
             attention_mask=attention_mask,
