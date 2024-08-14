@@ -966,6 +966,8 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel):
     ):
         if input_ids.shape[1] == 0:
             past_len = inputs_embeds.shape[1]
+        elif inputs_embeds is not None:
+            past_len = inputs_embeds.shape[1] + input_ids.shape[1]
         else:
             past_len = input_ids.shape[1]
         if use_cache:
