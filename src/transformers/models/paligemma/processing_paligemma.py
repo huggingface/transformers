@@ -270,11 +270,8 @@ class PaliGemmaProcessor(ProcessorMixin):
             images,
             **kwargs["image_kwargs"],
         )["pixel_values"]
-        output_kwargs = self._merge_kwargs(
-            PaliGemmaProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            **kwargs,
-        )
+        if output_kwargs["text_kwargs"].get("max_length", None) is not None:
+            output_kwargs["text_kwargs"]["max_length"] += self.image_seq_length
         inputs = self.tokenizer(
             input_strings,
             text_pair=suffix,
