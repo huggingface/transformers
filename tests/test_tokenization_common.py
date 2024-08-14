@@ -1161,7 +1161,7 @@ class TokenizerTesterMixin:
             {%- if loop.first %}
                 {%- break %}
             {%- endif %}
-        {%- endfor %}"""
+        {%- endfor %}""".strip()
 
         dummy_conversation = [
             {"role": "system", "content": "1"},
@@ -1169,7 +1169,7 @@ class TokenizerTesterMixin:
             {"role": "assistant", "content": "3"},
         ]
 
-        strftime_template = """{{- strftime("%Y-%m-%d") }}"""
+        strftime_template = """{{- strftime("%Y-%m-%d") }}""".strip()
 
         tokenizers = self.get_tokenizers()
         for tokenizer in tokenizers:
