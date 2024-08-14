@@ -45,9 +45,10 @@ METADATA_FIELDS = ("_from_model_config", "_commit_hash", "_original_object_hash"
 NEEDS_CACHE_CONFIG = {}
 
 if is_torch_available():
-    from ..cache_utils import QuantizedCacheConfig
+    from ..cache_utils import QuantizedCacheConfig, StaticCacheConfig
 
     NEEDS_CACHE_CONFIG["quantized"] = QuantizedCacheConfig
+    NEEDS_CACHE_CONFIG["static"] = StaticCacheConfig
 
 
 class GenerationMode(ExplicitEnum):

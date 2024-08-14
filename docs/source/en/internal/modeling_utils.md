@@ -42,6 +42,9 @@ Most of those are only useful if you are studying the code of the models in the 
 [[autodoc]] modeling_utils.SequenceSummary
     - forward
 
+[[autodoc]] integrations.executorch.TorchExportableModuleWithStaticCache
+    - forward
+
 ## PyTorch Helper Functions
 
 [[autodoc]] pytorch_utils.apply_chunking_to_forward
