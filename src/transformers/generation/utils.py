@@ -1350,19 +1350,18 @@ class GenerationMixin:
         using_model_generation_config = False
         if generation_config is None:
             # legacy: users may modify the model configuration to control generation. To trigger this legacy behavior,
-            # three conditions must be met
+            # the following conditions must be met
             # 1) the generation config must have been created from the model config (`_from_model_config` field);
             # 2) the generation config must have seen no modification since its creation (the hash is the same);
             # 3) the user must have set generation parameters in the model config.
             # NOTE: `torch.compile` can't compile `hash`, this legacy support is disabled with compilation.
             if (
                 not is_torchdynamo_compiling()
-                and self.generation_config._from_model_config
-                and self.generation_config._original_object_hash == hash(self.generation_config)
-                and self.config._has_non_default_generation_parameters()
+                and self.generation_config._from_model_config  # 1)
+                and self.generation_config._original_object_hash == hash(self.generation_config)  # 2)
             ):
                 new_generation_config = GenerationConfig.from_model_config(self.config)
-                if new_generation_config != self.generation_config:
+                if new_generation_config != self.generation_config:  # 3)
                     warnings.warn(
                         "You have modified the pretrained model configuration to control generation. This is a"
                         " deprecated strategy to control generation and will be removed soon, in a future version."

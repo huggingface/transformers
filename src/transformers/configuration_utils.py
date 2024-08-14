@@ -1106,12 +1106,6 @@ class PretrainedConfig(PushToHubMixin):
 
         return non_default_generation_parameters
 
-    def _has_non_default_generation_parameters(self) -> bool:
-        """
-        Whether or not this instance holds non-default generation parameters.
-        """
-        return len(self._get_non_default_generation_parameters()) > 0
-
 
 def get_configuration_file(configuration_files: List[str]) -> str:
     """
