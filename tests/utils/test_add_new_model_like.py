@@ -663,7 +663,13 @@ NEW_BERT_CONSTANT = "value"
     def test_retrieve_model_classes(self):
         gpt_classes = {k: set(v) for k, v in retrieve_model_classes("gpt2").items()}
         expected_gpt_classes = {
-            "pt": {"GPT2ForTokenClassification", "GPT2Model", "GPT2LMHeadModel", "GPT2ForSequenceClassification", "GPT2ForQuestionAnswering"},
+            "pt": {
+                "GPT2ForTokenClassification",
+                "GPT2Model",
+                "GPT2LMHeadModel",
+                "GPT2ForSequenceClassification",
+                "GPT2ForQuestionAnswering",
+            },
             "tf": {"TFGPT2Model", "TFGPT2ForSequenceClassification", "TFGPT2LMHeadModel"},
             "flax": {"FlaxGPT2Model", "FlaxGPT2LMHeadModel"},
         }
