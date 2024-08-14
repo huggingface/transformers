@@ -880,7 +880,7 @@ class ZambaMambaMixer(nn.Module):
             hidden_states = self.act(self.conv1d(hidden_states)[..., :seq_len])  # (b d l)
             if not torch.all(attention_mask==1):
                     hidden_states = hidden_states * attention_mask.unsqueeze(1)
-        
+
         # 3. State Space Model sequence transformation
         # 3.a. Selection:  [batch, seq_len, self.time_step_rank + self.ssm_state_size * 2]
         hidden_states = hidden_states.reshape(
