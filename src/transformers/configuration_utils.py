@@ -287,7 +287,7 @@ class PretrainedConfig(PushToHubMixin):
 
         # Retrocompatibility: Parameters for sequence generation. While we will keep the ability to load these
         # parameters, saving them will be deprecated. In a distant future, we won't need to load them.
-        for parameter_name, default_value in self._get_generation_defaults().items():
+        for parameter_name, default_value in self._get_global_generation_defaults().items():
             setattr(self, parameter_name, kwargs.pop(parameter_name, default_value))
 
         # Fine-tuning task arguments
@@ -1046,7 +1046,7 @@ class PretrainedConfig(PushToHubMixin):
         cls._auto_class = auto_class
 
     @staticmethod
-    def _get_generation_defaults() -> Dict[str, Any]:
+    def _get_global_generation_defaults() -> Dict[str, Any]:
         return {
             "max_length": 20,
             "min_length": 0,
@@ -1087,19 +1087,23 @@ class PretrainedConfig(PushToHubMixin):
         except ValueError:
             default_config = None
 
-        for parameter_name, default_value in self._get_generation_defaults().items():
+        for parameter_name, default_global_value in self._get_global_generation_defaults().items():
             if hasattr(self, parameter_name):
+                is_default_in_config = is_default_generation_value = None
                 # Two cases in which is okay for the model config to hold generation config parameters:
-                # 1. The parameter is set to a default generation value (from `generate`'s perspective, it's the same
-                # as if nothing is set)
-                is_default_generation_value = getattr(self, parameter_name) == default_value
-                # 2. The parameter is set as default in the model config (BC support for models like BART)
+                # 1. If we have a default config, then the instance should hold the same generation defaults
                 if default_config is not None:
                     is_default_in_config = getattr(self, parameter_name) == getattr(default_config, parameter_name)
+                # 2. if we don't have a default config, then the instance should hold the global generation defaults
                 else:
-                    is_default_in_config = False  # we can't confirm that it is okay
-                if not (is_default_generation_value or is_default_in_config):
+                    is_default_generation_value = getattr(self, parameter_name) == default_global_value
+
+                is_non_default = (is_default_in_config is False) or (
+                    is_default_in_config is None and is_default_generation_value is False
+                )
+                if is_non_default:
                     non_default_generation_parameters[parameter_name] = getattr(self, parameter_name)
+
         return non_default_generation_parameters
 
     def _has_non_default_generation_parameters(self) -> bool:

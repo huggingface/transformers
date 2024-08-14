@@ -2578,7 +2578,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         "Moving the following attributes in the config to the generation config: "
                         f"{misplaced_generation_parameters}"
                     )
-                    default_generation_arguments = model_to_save.config._get_generation_defaults()
+                    default_generation_arguments = model_to_save.config._get_global_generation_defaults()
                     for param_name, param_value in misplaced_generation_parameters.items():
                         setattr(model_to_save.generation_config, param_name, param_value)
                         setattr(model_to_save.config, param_name, default_generation_arguments[param_name])
