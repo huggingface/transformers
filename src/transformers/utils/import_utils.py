@@ -27,7 +27,7 @@ from collections import OrderedDict
 from functools import lru_cache
 from itertools import chain
 from types import ModuleType
-from typing import Any, Tuple, Union
+from typing import Any, Optional, Tuple, Union
 
 from packaging import version
 
@@ -101,6 +101,7 @@ _eetq_available = _is_package_available("eetq")
 _fbgemm_gpu_available = _is_package_available("fbgemm_gpu")
 _galore_torch_available = _is_package_available("galore_torch")
 _lomo_available = _is_package_available("lomo_optim")
+_grokadamw_available = _is_package_available("grokadamw")
 # `importlib.metadata.version` doesn't work with `bs4` but `beautifulsoup4`. For `importlib.util.find_spec`, reversed.
 _bs4_available = importlib.util.find_spec("bs4") is not None
 _coloredlogs_available = _is_package_available("coloredlogs")
@@ -297,6 +298,10 @@ def is_torch_available():
     return _torch_available
 
 
+def is_accelerate_available(min_version: str = ACCELERATE_MIN_VERSION):
+    return _accelerate_available and version.parse(_accelerate_version) >= version.parse(min_version)
+
+
 def is_torch_deterministic():
     """
     Check whether pytorch uses deterministic algorithms by looking if torch.set_deterministic_debug_mode() is set to 1 or 2"
@@ -349,6 +354,10 @@ def is_lomo_available():
     return _lomo_available
 
 
+def is_grokadamw_available():
+    return _grokadamw_available
+
+
 def is_pyctcdecode_available():
     return _pyctcdecode_available
 
@@ -385,6 +394,21 @@ def is_mamba_ssm_available():
     return False
 
 
+def is_mamba_2_ssm_available():
+    if is_torch_available():
+        import torch
+
+        if not torch.cuda.is_available():
+            return False
+        else:
+            if _is_package_available("mamba_ssm"):
+                import mamba_ssm
+
+                if version.parse(mamba_ssm.__version__) >= version.parse("2.0.4"):
+                    return True
+    return False
+
+
 def is_causal_conv1d_available():
     if is_torch_available():
         import torch
@@ -401,12 +425,16 @@ def is_mambapy_available():
     return False
 
 
-def is_torch_mps_available():
+def is_torch_mps_available(min_version: Optional[str] = None):
     if is_torch_available():
         import torch
 
         if hasattr(torch.backends, "mps"):
-            return torch.backends.mps.is_available() and torch.backends.mps.is_built()
+            backend_available = torch.backends.mps.is_available() and torch.backends.mps.is_built()
+            if min_version is not None:
+                flag = version.parse(_torch_version) >= version.parse(min_version)
+                backend_available = backend_available and flag
+            return backend_available
     return False
 
 
@@ -649,6 +677,29 @@ def is_torch_mlu_available(check_device=False):
     return hasattr(torch, "mlu") and torch.mlu.is_available()
 
 
+@lru_cache()
+def is_torch_musa_available(check_device=False):
+    "Checks if `torch_musa` is installed and potentially if a MUSA is in the environment"
+    if not _torch_available or importlib.util.find_spec("torch_musa") is None:
+        return False
+
+    import torch
+    import torch_musa  # noqa: F401
+
+    torch_musa_min_version = "0.33.0"
+    if _accelerate_available and version.parse(_accelerate_version) < version.parse(torch_musa_min_version):
+        return False
+
+    if check_device:
+        try:
+            # Will raise a RuntimeError if no MUSA is found
+            _ = torch.musa.device_count()
+            return torch.musa.is_available()
+        except RuntimeError:
+            return False
+    return hasattr(torch, "musa") and torch.musa.is_available()
+
+
 def is_torchdynamo_available():
     if not is_torch_available():
         return False
@@ -677,7 +728,7 @@ def is_torchdynamo_compiling():
         import torch
 
         return torch.compiler.is_compiling()
-    except AttributeError:
+    except Exception:
         try:
             import torch._dynamo as dynamo  # noqa: F401
 
@@ -868,10 +919,6 @@ def is_protobuf_available():
     if importlib.util.find_spec("google") is None:
         return False
     return importlib.util.find_spec("google.protobuf") is not None
-
-
-def is_accelerate_available(min_version: str = ACCELERATE_MIN_VERSION):
-    return _accelerate_available and version.parse(_accelerate_version) >= version.parse(min_version)
 
 
 def is_fsdp_available(min_version: str = FSDP_MIN_VERSION):

@@ -59,6 +59,7 @@ from .quantizers import AutoHfQuantizer, HfQuantizer
 from .quantizers.quantizers_utils import get_module_from_name
 from .safetensors_conversion import auto_conversion
 from .utils import (
+    ACCELERATE_MIN_VERSION,
     ADAPTER_SAFE_WEIGHTS_NAME,
     ADAPTER_WEIGHTS_NAME,
     CONFIG_NAME,
@@ -932,8 +933,6 @@ def _load_state_dict_into_meta_model(
                 )
             )
         ):
-            if is_fsdp_enabled():
-                param_device = "cpu" if is_local_dist_rank_0() else "meta"
             # For backward compatibility with older versions of `accelerate` and for non-quantized params
             set_module_tensor_to_device(model, param_name, param_device, **set_module_kwargs)
         else:
@@ -944,10 +943,7 @@ def _load_state_dict_into_meta_model(
             if is_fsdp_enabled() or is_deepspeed_zero3_enabled():
                 module, tensor_name = get_module_from_name(model, param_name)
                 value = getattr(module, tensor_name)
-                param_to = "cpu"
-                if is_fsdp_enabled() and not is_local_dist_rank_0():
-                    param_to = "meta"
-                value = type(value)(value.data.to(param_to), **value.__dict__)
+                value = type(value)(value.data.to("cpu"), **value.__dict__)
                 setattr(module, tensor_name, value)
             # TODO: consider removing used param_parts from state_dict before return
 
@@ -1454,7 +1450,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             dtype_orig = cls._set_default_torch_dtype(torch_dtype)
 
         config = copy.deepcopy(config)  # We do not want to modify the config inplace in _from_config.
-        config._attn_implementation = kwargs.pop("attn_implementation", None)
+
+        if config._attn_implementation_internal is not None:
+            # In this case, the config has been created with the attn_implementation set by the user, which we
+            # should respect.
+            attn_implementation = config._attn_implementation_internal
+        else:
+            attn_implementation = None
+
+        config._attn_implementation = kwargs.pop("attn_implementation", attn_implementation)
         config = cls._autoset_attn_implementation(
             config,
             use_flash_attention_2=use_flash_attention_2,
@@ -2742,7 +2746,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if module_map:
             filename_to_tensors = logging.tqdm(filename_to_tensors, desc="Saving checkpoint shards")
         for shard_file, tensors in filename_to_tensors:
-            shard = {tensor: state_dict[tensor] for tensor in tensors}
+            shard = {tensor: state_dict[tensor].contiguous() for tensor in tensors}
             # remake shard with onloaded parameters if necessary
             if module_map:
                 if accelerate_version < version.parse("0.31"):
@@ -3030,7 +3034,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             > Parameters for big model inference
 
             low_cpu_mem_usage(`bool`, *optional*):
-                Tries to not use more than 1x model size in CPU memory (including peak memory) while loading the model.
+                Tries not to use more than 1x model size in CPU memory (including peak memory) while loading the model.
                 Generally should be combined with a `device_map` (such as `"auto"`) for best results.
                 This is an experimental feature and a subject to change at any moment.
                 </Tip>
@@ -3291,7 +3295,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
             elif not is_accelerate_available():
                 raise ImportError(
-                    "Using `low_cpu_mem_usage=True` or a `device_map` requires Accelerate: `pip install accelerate`"
+                    f"Using `low_cpu_mem_usage=True` or a `device_map` requires Accelerate: `pip install 'accelerate>={ACCELERATE_MIN_VERSION}'`"
                 )
 
         # handling bnb config from kwargs, remove after `load_in_{4/8}bit` deprecation.
