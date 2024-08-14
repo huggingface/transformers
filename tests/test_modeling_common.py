@@ -4768,11 +4768,7 @@ class ModelTesterMixin:
         if not hasattr(self, "_torch_compile_train_cls"):
             self.skipTest(f"{self.__class__.__name__} doesn't have the attribute `_torch_compile_train_cls`.")
 
-        # prepare config to minimize model to test
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        config.num_hidden_layers = 2
-        config.torch_dtype = torch.float16
-
         cls = self._torch_compile_train_cls
         batch_size = 1
         seq_len = 10
