@@ -677,6 +677,29 @@ def is_torch_mlu_available(check_device=False):
     return hasattr(torch, "mlu") and torch.mlu.is_available()
 
 
+@lru_cache()
+def is_torch_musa_available(check_device=False):
+    "Checks if `torch_musa` is installed and potentially if a MUSA is in the environment"
+    if not _torch_available or importlib.util.find_spec("torch_musa") is None:
+        return False
+
+    import torch
+    import torch_musa  # noqa: F401
+
+    torch_musa_min_version = "0.33.0"
+    if _accelerate_available and version.parse(_accelerate_version) < version.parse(torch_musa_min_version):
+        return False
+
+    if check_device:
+        try:
+            # Will raise a RuntimeError if no MUSA is found
+            _ = torch.musa.device_count()
+            return torch.musa.is_available()
+        except RuntimeError:
+            return False
+    return hasattr(torch, "musa") and torch.musa.is_available()
+
+
 def is_torchdynamo_available():
     if not is_torch_available():
         return False

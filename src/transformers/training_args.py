@@ -49,6 +49,7 @@ from .utils import (
     is_torch_bf16_gpu_available,
     is_torch_mlu_available,
     is_torch_mps_available,
+    is_torch_musa_available,
     is_torch_neuroncore_available,
     is_torch_npu_available,
     is_torch_tf32_available,
@@ -1090,7 +1091,7 @@ class TrainingArguments:
         default=None,
         metadata={
             "help": "The backend to be used for distributed training",
-            "choices": ["nccl", "gloo", "mpi", "ccl", "hccl", "cncl"],
+            "choices": ["nccl", "gloo", "mpi", "ccl", "hccl", "cncl", "mccl"],
         },
     )
     tpu_num_cores: Optional[int] = field(
@@ -2201,6 +2202,9 @@ class TrainingArguments:
             elif is_torch_mlu_available():
                 device = torch.device("mlu:0")
                 torch.mlu.set_device(device)
+            elif is_torch_musa_available():
+                device = torch.device("musa:0")
+                torch.musa.set_device(device)
             elif is_torch_npu_available():
                 device = torch.device("npu:0")
                 torch.npu.set_device(device)
