@@ -255,7 +255,7 @@ class Mamba2Mixer(nn.Module):
         self.A_log = nn.Parameter(torch.log(A))
         self.A_log._no_weight_decay = True
         self.norm = MambaRMSNormGated(
-            self.intermediate_size, eps=self.layer_norm_epsilon, norm_before_gate=config.norm_before_gate
+            self.intermediate_size, eps=self.layer_norm_epsilon, norm_before_gate=self.norm_before_gate
         )
         self.D = nn.Parameter(torch.ones(self.num_heads))
         self.D._no_weight_decay = True
