@@ -2039,17 +2039,34 @@ class GenerationMixin:
                 if generation_config.do_sample
                 else None
             )
-
             # 12. prepare beam search scorer
-            beam_scorer = BeamSearchScorer(
-                batch_size=batch_size,
-                num_beams=generation_config.num_beams,
-                device=inputs_tensor.device,
-                length_penalty=generation_config.length_penalty,
-                do_early_stopping=generation_config.early_stopping,
-                num_beam_hyps_to_keep=generation_config.num_return_sequences,
-                max_length=generation_config.max_length,
-            )
+            if generation_config.beam_search_scorer_class is None:
+                beam_scorer = BeamSearchScorer(
+                    batch_size=batch_size,
+                    num_beams=generation_config.num_beams,
+                    device=inputs_tensor.device,
+                    length_penalty=generation_config.length_penalty,
+                    do_early_stopping=generation_config.early_stopping,
+                    num_beam_hyps_to_keep=generation_config.num_return_sequences,
+                    max_length=generation_config.max_length,
+                )
+            else:
+                args = (
+                    generation_config.beam_search_scorer_args
+                    if generation_config.beam_search_scorer_args is not None
+                    else {}
+                )
+                beam_scorer = generation_config.beam_search_scorer_class(
+                    batch_size=batch_size,
+                    num_beams=generation_config.num_beams,
+                    device=inputs_tensor.device,
+                    length_penalty=generation_config.length_penalty,
+                    do_early_stopping=generation_config.early_stopping,
+                    num_beam_hyps_to_keep=generation_config.num_return_sequences,
+                    num_beam_groups=generation_config.num_beam_groups,
+                    max_length=generation_config.max_length,
+                    **args,
+                )
 
             # 13. interleave input_ids with `num_beams` additional sequences per batch
             input_ids, model_kwargs = self._expand_inputs_for_generation(
@@ -2073,16 +2090,33 @@ class GenerationMixin:
 
         elif generation_mode == GenerationMode.GROUP_BEAM_SEARCH:
             # 11. prepare beam search scorer
-            beam_scorer = BeamSearchScorer(
-                batch_size=batch_size,
-                num_beams=generation_config.num_beams,
-                device=inputs_tensor.device,
-                length_penalty=generation_config.length_penalty,
-                do_early_stopping=generation_config.early_stopping,
-                num_beam_hyps_to_keep=generation_config.num_return_sequences,
-                num_beam_groups=generation_config.num_beam_groups,
-                max_length=generation_config.max_length,
-            )
+            if generation_config.beam_search_scorer_class is None:
+                beam_scorer = BeamSearchScorer(
+                    batch_size=batch_size,
+                    num_beams=generation_config.num_beams,
+                    device=inputs_tensor.device,
+                    length_penalty=generation_config.length_penalty,
+                    do_early_stopping=generation_config.early_stopping,
+                    num_beam_hyps_to_keep=generation_config.num_return_sequences,
+                    max_length=generation_config.max_length,
+                )
+            else:
+                args = (
+                    generation_config.beam_search_scorer_args
+                    if generation_config.beam_search_scorer_args is not None
+                    else {}
+                )
+                beam_scorer = generation_config.beam_search_scorer_class(
+                    batch_size=batch_size,
+                    num_beams=generation_config.num_beams,
+                    device=inputs_tensor.device,
+                    length_penalty=generation_config.length_penalty,
+                    do_early_stopping=generation_config.early_stopping,
+                    num_beam_hyps_to_keep=generation_config.num_return_sequences,
+                    num_beam_groups=generation_config.num_beam_groups,
+                    max_length=generation_config.max_length,
+                    **args,
+                )
             # 12. interleave input_ids with `num_beams` additional sequences per batch
             input_ids, model_kwargs = self._expand_inputs_for_generation(
                 input_ids=input_ids,
