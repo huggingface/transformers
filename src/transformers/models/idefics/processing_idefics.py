@@ -322,14 +322,9 @@ class IdeficsProcessor(ProcessorMixin):
 
         """
         warnings.warn("The order of the arguments in the __call__ function have been changed from previous versions.")
-        legacy = kwargs.pop("legacy", True)
-        if legacy:
-            warnings.warn(
-                "The use of legacy will be deprecated in the future. Please use the new processing behavior by setting legacy=False."
-            )
-            if prompts is None:
-                # if the user didn't specify prompts=prompts in the call, we assume they want to use the old behavior with prompts as a first argument
-                prompts = images
+        if prompts is None:
+            # if the user didn't specify prompts=prompts in the call, we assume they want to use the old behavior with prompts as a first argument
+            prompts = images
         elif prompts is None and (images is not None and text is not None):
             # Assuming image-text-to-text behavior: one prompt for all images
             # Check if batched images are provided

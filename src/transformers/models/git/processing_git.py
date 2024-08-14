@@ -16,17 +16,21 @@
 Image/Text processor class for GIT
 """
 
-import warnings
+import logging
 from typing import List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, _validate_images_text_input_order
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...utils.deprecation import deprecate_kwarg
 
 
 class GitProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {}
+
+
+logger = logging.getLogger(__name__)
 
 
 class GitProcessor(ProcessorMixin):
@@ -51,6 +55,7 @@ class GitProcessor(ProcessorMixin):
         super().__init__(image_processor, tokenizer)
         self.current_processor = self.image_processor
 
+    @deprecate_kwarg(old_name="legacy", version="5.0.0")
     def __call__(
         self,
         images: Optional[ImageInput] = None,
@@ -94,8 +99,9 @@ class GitProcessor(ProcessorMixin):
         """
         legacy = kwargs.pop("legacy", True)
         if legacy:
-            warnings.warn(
-                "The use of legacy will be deprecated in the future. Please use the new processing behavior by setting legacy=False."
+            logger.warning(
+                "Legacy behavior is being used. The new behavior with legacy=False will be enabled in the future."
+                "If both images and text are provided, it will remove the last token (EOS token) of the input_ids and attention_mask tensors."
             )
 
         if text is None and images is None:

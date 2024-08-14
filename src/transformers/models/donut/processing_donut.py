@@ -16,6 +16,7 @@
 Processor class for Donut.
 """
 
+import logging
 import re
 import warnings
 from contextlib import contextmanager
@@ -24,10 +25,14 @@ from typing import List, Optional, Union
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...utils.deprecation import deprecate_kwarg
 
 
 class DonutProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {}
+
+
+logger = logging.getLogger(__name__)
 
 
 class DonutProcessor(ProcessorMixin):
@@ -70,6 +75,7 @@ class DonutProcessor(ProcessorMixin):
         self.current_processor = self.image_processor
         self._in_target_context_manager = False
 
+    @deprecate_kwarg(old_name="legacy", version="5.0.0")
     def __call__(
         self,
         images: ImageInput = None,
@@ -87,8 +93,10 @@ class DonutProcessor(ProcessorMixin):
         # For backward compatibility
         legacy = kwargs.pop("legacy", True)
         if legacy:
-            warnings.warn(
-                "The use of legacy will be deprecated in the future. Please use the new processing behavior by setting legacy=False."
+            logger.warning(
+                "Legacy behavior is being used. The new behavior with legacy=False will be enabled in the future."
+                "If both images and text are provided, it will change the default value of `add_special_tokens` to `False` when calling the tokenizer, "
+                "if `add_special_tokens` is unset, and the tokenized text will be returned in the `decoder_input_ids` key instead of the `labels` key."
             )
 
         if self._in_target_context_manager:
@@ -109,7 +117,7 @@ class DonutProcessor(ProcessorMixin):
             encodings = self.tokenizer(text, **output_kwargs["text_kwargs"])
         elif text is not None:
             if not legacy:
-                output_kwargs["text_kwargs"].update({"add_special_tokens": False})
+                output_kwargs["text_kwargs"].setdefault("add_special_tokens", False)
             encodings = self.tokenizer(text, **output_kwargs["text_kwargs"])
 
         if text is None:
