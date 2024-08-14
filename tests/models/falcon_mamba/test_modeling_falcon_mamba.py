@@ -514,3 +514,13 @@ class FalconMambaIntegrationTests(unittest.TestCase):
         out = tok.batch_decode(out, skip_special_tokens=True)
 
         self.assertListEqual(out, EXPECTED_OUTPUT)
+
+        # We test the same generations with inputs_embeds
+        with torch.no_grad():
+            inputs_embeds = model.get_input_embeddings()(inputs.pop("input_ids"))
+
+        inputs["inputs_embeds"] = inputs_embeds
+        out = model.generate(**inputs, max_new_tokens=20)
+        out = tok.batch_decode(out, skip_special_tokens=True)
+
+        self.assertListEqual(out, EXPECTED_OUTPUT)
