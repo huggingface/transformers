@@ -1080,14 +1080,14 @@ class PretrainedConfig(PushToHubMixin):
         Gets the non-default generation parameters on the PretrainedConfig instance
         """
         non_default_generation_parameters = {}
+        decoder_attribute_name = None
+        default_config = None
 
         # Composite models don't have a default config, use their decoder config as a fallback for default values
         # If no known pattern is matched, then `default_config = None` -> check against the global generation defaults
         try:
             default_config = self.__class__()
         except ValueError:
-            default_config = None
-            decoder_attribute_name = None
             for decoder_attribute_name in ("decoder", "generator", "text_config"):
                 if hasattr(self, decoder_attribute_name):
                     default_config = getattr(self, decoder_attribute_name).__class__()
