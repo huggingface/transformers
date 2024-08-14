@@ -27,6 +27,7 @@ from collections import UserDict
 from collections.abc import Mapping, Sized
 from contextlib import contextmanager
 from dataclasses import dataclass
+from datetime import datetime
 from functools import lru_cache
 from inspect import isfunction
 from typing import TYPE_CHECKING, Any, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union
@@ -1929,6 +1930,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             # We also expose some options like custom indents and separators
             return json.dumps(x, ensure_ascii=ensure_ascii, indent=indent, separators=separators, sort_keys=sort_keys)
 
+        def strftime(format):
+            return datetime.now().strftime(format)
+
         class AssistantTracker(Extension):
             # This extension is used to track the indices of assistant-generated tokens in the rendered chat
             tags = {"generation"}
@@ -1971,9 +1975,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     self._rendered_blocks = None
                     self._generation_indices = None
 
-        jinja_env = ImmutableSandboxedEnvironment(trim_blocks=True, lstrip_blocks=True, extensions=[AssistantTracker])
+        jinja_env = ImmutableSandboxedEnvironment(
+            trim_blocks=True, lstrip_blocks=True, extensions=[AssistantTracker, jinja2.ext.do, jinja2.ext.loopcontrols]
+        )
         jinja_env.filters["tojson"] = tojson
         jinja_env.globals["raise_exception"] = raise_exception
+        jinja_env.globals["strftime"] = strftime
         return jinja_env.from_string(chat_template)
 
     def get_chat_template(self, chat_template: Optional[str] = None, tools: Optional[List[Dict]] = None) -> str:
