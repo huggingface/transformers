@@ -124,6 +124,8 @@ class Blip2Processor(ProcessorMixin):
         # BC for explicit return_tensors
         if "return_tensors" in output_kwargs["common_kwargs"]:
             return_tensors = output_kwargs["common_kwargs"].pop("return_tensors", None)
+        else:
+            return_tensors = None
         if text is not None:
             if isinstance(text, str):
                 text = [text]

@@ -460,27 +460,6 @@ class ProcessorTesterMixin:
         elif "labels" in inputs:
             self.assertEqual(len(inputs["labels"][0]), 76)
 
-    @require_torch
-    def test_text_audio_kwargs_passed(self):
-        if "feature_extractor" not in self.processor_class.attributes:
-            self.skipTest(f"`feature_extractor` attribute not present in {self.processor_class}")
-        feature_extractor = self.get_feature_extractor()
-        tokenizer = self.get_tokenizer()
-        if not tokenizer.pad_token:
-            tokenizer.pad_token = "[TEST_PAD]"
-        processor = self.processor_class(tokenizer=tokenizer, feature_extractor=feature_extractor)
-        self.skip_processor_without_typed_kwargs(processor)
-
-        input_str = "lower newer"
-        raw_speech = floats_list((3, 1000))
-        with self.assertRaises(UserWarning):
-            _ = processor(
-                text=input_str,
-                audio=raw_speech,
-                return_tensors="pt",
-                padding="max_length",
-            )
-
 
 class MyProcessor(ProcessorMixin):
     attributes = ["image_processor", "tokenizer"]

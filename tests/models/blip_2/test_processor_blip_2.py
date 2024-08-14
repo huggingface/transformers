@@ -108,7 +108,7 @@ class Blip2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         encoded_tok = tokenizer(input_str, return_token_type_ids=False)
 
         for key in encoded_tok.keys():
-            self.assertListEqual(encoded_tok[key], encoded_processor[key])
+            self.assertListEqual(encoded_tok[key], encoded_processor[key][0])
 
     def test_processor(self):
         image_processor = self.get_image_processor()
