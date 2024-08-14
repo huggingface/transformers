@@ -61,7 +61,7 @@ TOKEN_POINT_CLOSE_STRING = "<0x03>"  # </point>
 BEGINNING_OF_ANSWER_STRING = "<0x04>"  # <boa>
 
 
-class Blip2ProcessorKwargs(ProcessingKwargs, total=False):
+class FuyuProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "add_special_tokens": True,
@@ -486,7 +486,7 @@ class FuyuProcessor(ProcessorMixin):
         text: Optional[Union[str, List[str], TextInput, PreTokenizedInput]] = None,
         audio=None,
         videos=None,
-        **kwargs: Unpack[Blip2ProcessorKwargs],
+        **kwargs: Unpack[FuyuProcessorKwargs],
     ) -> "FuyuBatchFeature":
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
@@ -532,7 +532,7 @@ class FuyuProcessor(ProcessorMixin):
             images, text = text, images
 
         output_kwargs = self._merge_kwargs(
-            Blip2ProcessorKwargs,
+            FuyuProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
