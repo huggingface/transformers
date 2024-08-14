@@ -843,7 +843,7 @@ NEW_BERT_CONSTANT = "value"
         ]
         expected_model_classes = {
             "pt": set(wav2vec2_classes),
-            "tf": {f"TF{m}" for m in wav2vec2_classes[:1] + ["Wav2Vec2ForSequenceClassification"]},
+            "tf": {f"TF{m}" for m in [wav2vec2_classes[0], wav2vec2_classes[-2]]},
             "flax": {f"Flax{m}" for m in wav2vec2_classes[:2]},
         }
 
