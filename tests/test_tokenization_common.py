@@ -1169,7 +1169,7 @@ class TokenizerTesterMixin:
             {"role": "assistant", "content": "3"},
         ]
 
-        strftime_template = """{{ strftime("%Y-%m-%d") }} """
+        strftime_template = """{{- strftime("%Y-%m-%d") }}"""
 
         tokenizers = self.get_tokenizers()
         for tokenizer in tokenizers:
