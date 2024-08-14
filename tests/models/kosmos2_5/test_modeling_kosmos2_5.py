@@ -657,7 +657,7 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
             max_new_tokens=1024,
         )
         generated_ids = generation_outputs
-        generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)
+        generated_text = processor.batch_decode(generated_ids)
 
         return generated_ids, generated_text
 
