@@ -349,26 +349,28 @@ class IdeficsProcessor(ProcessorMixin):
             if not isinstance(images, (list, tuple)):
                 images = [images]
             if isinstance(text, str):
-                # one prompt for all images instead of one prompt per image
-                text = [text] * len(images)
-            # Check if batched text is provided
+                text = [text]
+            # Check if batched images and text are in the correct format
             if isinstance(text, (list, tuple)) and len(text) != len(images):
                 raise ValueError(
-                    "When using the image-text-to-text behavior, the number of prompts should be the same as the number of images."
+                    "When providing both images and text arguments, the number of text prompts should be the same as the number of images."
+                    "If you want to have several images per prompt, images should be nested as such: images=[[img1, img2], [img3, img4], ...] for text=[prompt1, prompt2, ...]."
                 )
             # Check that only text is present in the prompts
             if not all(isinstance(i, str) for i in text):
                 raise ValueError("When using the image-text-to-text behavior, the prompts should only contain text.")
+            if isinstance(images[0], (list, tuple)):
+                # if nested images, nest text as well
+                text = [[i] for i in text]
             prompts = list(zip(images, text))
-
-        # Temporary fix for "paddding_side" in init_kwargs
-        _ = self.tokenizer.init_kwargs.pop("padding_side", None)
 
         output_kwargs = self._merge_kwargs(
             IdeficsProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
+        # Temporary fix for "paddding_side" in init_kwargs
+        _ = output_kwargs["text_kwargs"].pop("padding_side", None)
 
         add_eos_token = output_kwargs["text_kwargs"].pop("add_eos_token", False)
         add_end_of_utterance_token = output_kwargs["text_kwargs"].pop("add_end_of_utterance_token", None)
