@@ -460,7 +460,6 @@ class ProcessorTesterMixin:
         elif "labels" in inputs:
             self.assertEqual(len(inputs["labels"][0]), 76)
 
-
     @require_torch
     def test_text_audio_kwargs_passed(self):
         if "feature_extractor" not in self.processor_class.attributes:
@@ -476,12 +475,11 @@ class ProcessorTesterMixin:
         raw_speech = floats_list((3, 1000))
         with self.assertRaises(UserWarning):
             _ = processor(
-                    text=input_str,
-                    audio=raw_speech,
-                    return_tensors="pt",
-                    padding="max_length",
-                )
-
+                text=input_str,
+                audio=raw_speech,
+                return_tensors="pt",
+                padding="max_length",
+            )
 
 
 class MyProcessor(ProcessorMixin):
