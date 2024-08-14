@@ -40,7 +40,7 @@ class AltClipProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.model_id = "BAAI/AltCLIP"
         self.tmpdirname = tempfile.mkdtemp()
         image_processor = CLIPImageProcessor()
-        tokenizer = XLMRobertaTokenizer.from_pretrained(self.from_pretrained_id)
+        tokenizer = XLMRobertaTokenizer.from_pretrained(self.model_id)
 
         processor = self.processor_class(image_processor, tokenizer)
 
