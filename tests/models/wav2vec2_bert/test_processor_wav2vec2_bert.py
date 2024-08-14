@@ -59,6 +59,9 @@ class Wav2Vec2BertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         with open(self.feature_extraction_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(feature_extractor_map) + "\n")
 
+        tokenizer = self.get_tokenizer()
+        tokenizer.save_pretrained(self.tmpdirname)
+
     def get_tokenizer(self, **kwargs_init):
         kwargs = self.add_kwargs_tokens_map.copy()
         kwargs.update(kwargs_init)
@@ -125,7 +128,6 @@ class Wav2Vec2BertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = Wav2Vec2BertProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
 
         input_str = "This is a test string"
-
         encoded_processor = processor(text=input_str)
 
         encoded_tok = tokenizer(input_str)
