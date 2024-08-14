@@ -135,6 +135,22 @@ class Wav2Vec2BertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         for key in encoded_tok.keys():
             self.assertListEqual(encoded_tok[key], encoded_processor[key])
 
+    def test_padding_argument_not_ignored(self):
+        # padding, or any other overlap arg between audio extractor and tokenizer
+        # should be passed to both text and audio and not ignored
+
+        feature_extractor = self.get_feature_extractor()
+        tokenizer = self.get_tokenizer()
+
+        processor = Wav2Vec2BertProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        batch_duration_in_seconds = [1, 3, 2, 6]
+        input_features = [np.random.random(16_000 * s) for s in batch_duration_in_seconds]
+
+        # padding = True should not raise an error and will if the audio processor popped its value to None
+        _ = processor(
+            input_features, padding=True, sampling_rate=processor.feature_extractor.sampling_rate, return_tensors="pt"
+        )
+
     def test_tokenizer_decode(self):
         feature_extractor = self.get_feature_extractor()
         tokenizer = self.get_tokenizer()
