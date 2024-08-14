@@ -18,7 +18,7 @@ from ..utils import OptionalDependencyNotAvailable, _LazyModule, is_flax_availab
 
 
 _import_structure = {
-    "configuration_utils": ["GenerationConfig", "GenerationMode", "WatermarkingConfig"],
+    "configuration_utils": ["GenerationConfig", "GenerationMode", "WatermarkingConfig", "GreenRedWatermarkingConfig", "SynthIDTextWatermarkingConfig"],
     "streamers": ["TextIteratorStreamer", "TextStreamer"],
 }
 
@@ -79,6 +79,9 @@ else:
         "UnbatchedClassifierFreeGuidanceLogitsProcessor",
         "WhisperTimeStampLogitsProcessor",
         "WatermarkLogitsProcessor",
+    ]
+    _import_structure["synthid_watermarked_logits_process"] = [
+        "SynthIDTextWatermarkLogitsProcessor",
     ]
     _import_structure["stopping_criteria"] = [
         "MaxNewTokensCriteria",
@@ -179,7 +182,7 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_utils import GenerationConfig, GenerationMode, WatermarkingConfig
+    from .configuration_utils import GenerationConfig, GenerationMode, WatermarkingConfig, GreenRedWatermarkingConfig, SynthIDTextWatermarkingConfig
     from .streamers import TextIteratorStreamer, TextStreamer
 
     try:
@@ -226,6 +229,7 @@ if TYPE_CHECKING:
             WatermarkLogitsProcessor,
             WhisperTimeStampLogitsProcessor,
         )
+        from .synthid_watermarked_logits_process import SynthIDTextWatermarkLogitsProcessor
         from .stopping_criteria import (
             EosTokenCriteria,
             MaxLengthCriteria,
