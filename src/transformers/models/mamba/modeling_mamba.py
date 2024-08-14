@@ -74,6 +74,7 @@ class MambaMixer(nn.Module):
 
     def __init__(self, config: MambaConfig, layer_idx: int):
         super().__init__()
+        self.config = config
         self.hidden_size = config.hidden_size
         self.ssm_state_size = config.state_size
         self.conv_kernel_size = config.conv_kernel
@@ -365,7 +366,7 @@ class MambaPreTrainedModel(PreTrainedModel):
 
     config_class = MambaConfig
     base_model_prefix = "backbone"
-    _no_split_modules = ["MambaBlock"]
+    _no_split_modules = ["MambaBlock", "MambaMixer"]
     supports_gradient_checkpointing = True
     _is_stateful = True
 
