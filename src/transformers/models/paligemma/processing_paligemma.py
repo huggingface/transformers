@@ -270,9 +270,6 @@ class PaliGemmaProcessor(ProcessorMixin):
             images,
             **kwargs["image_kwargs"],
         )["pixel_values"]
-        max_length = output_kwargs.get("max_length", None)
-        if max_length is not None:
-            max_length += self.image_seq_length  # max_length has to account for the image tokens
         output_kwargs = self._merge_kwargs(
             PaliGemmaProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
