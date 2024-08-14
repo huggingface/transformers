@@ -267,8 +267,10 @@ class Bnb4BitTest(Base4bitTest):
 
     def test_device_and_dtype_assignment(self):
         r"""
-        Test whether trying to cast (or assigning a device to) a model after converting it in 8-bit will throw an error.
-        Checks also if other models are casted correctly.
+        Test whether attempting to change the device or cast the dtype of a model 
+        after converting it to 4-bit precision will raise an appropriate error.
+        The test ensures that such operations are prohibited on 4-bit models 
+        to prevent invalid conversions.
         """
         with self.assertRaises(ValueError):
             # Tries with `str`
@@ -283,11 +285,11 @@ class Bnb4BitTest(Base4bitTest):
             self.model_4bit.to(torch.device("cuda:0"))
 
         with self.assertRaises(ValueError):
-            # Tries with a `device`
+            # Tries cast the 4-bit model to float32 using `float()`
             self.model_4bit.float()
 
         with self.assertRaises(ValueError):
-            # Tries with a `device`
+            # Tries to cast the 4-bit model to float16 using `half()`
             self.model_4bit.half()
 
         # Test if we did not break anything
