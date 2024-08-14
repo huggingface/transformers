@@ -1,23 +1,42 @@
 # XLNet
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=xlnet">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-xlnet-blueviolet">
+</a>
+<a href="https://huggingface.co/spaces/docs-demos/xlnet-base-cased">
+<img alt="Spaces" src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue">
+</a>
+</div>
+
 ## نظرة عامة
 
-اقترح نموذج XLNet في [XLNet: Generalized Autoregressive Pretraining for Language Understanding](https://arxiv.org/abs/1906.08237) بواسطة Zhilin Yang، وZihang Dai، وYiming Yang، وJaime Carbonell، وRuslan Salakhutdinov، وQuoc V. Le. XLnet هو امتداد لنموذج Transformer-XL الذي تم تدريبه مسبقًا باستخدام طريقة السياق ثنائي الاتجاه المستندة إلى النمذجة اللغوية السياقية.
+اقترح نموذج XLNet في [XLNet: Generalized Autoregressive Pretraining for Language Understanding](https://arxiv.org/abs/1906.08237) بواسطة Zhilin Yang، Zihang Dai، Yiming Yang، Jaime Carbonell، Ruslan Salakhutdinov،
+Quoc V. Le. XLnet هو امتداد لنموذج Transformer-XL الذي تم تدريبه مسبقًا باستخدام طريقة ذاتية الترجيع لتعلم
+سياقات ثنائية الاتجاه عن طريق تعظيم الاحتمالية المتوقعة عبر جميع ترتيبات ترتيب تسلسل الإدخال.
 
-مقتطف من الورقة البحثية:
+الملخص من الورقة هو ما يلي:
 
-> *مع قدرة النمذجة اللغوية السياقية ثنائية الاتجاه، فإن التدريب المسبق للترميز التلقائي لإزالة التشويش مثل BERT يحقق أداءً أفضل من أساليب التدريب المسبق القائمة على نمذجة اللغة السياقية السياقية. ومع ذلك، فإن BERT، الذي يعتمد على تشويش المدخلات باستخدام الأقنعة، يتجاهل الاعتماد بين المواضع المقنعة ويعاني من عدم الاتساق بين التدريب الدقيق والتدريب المسبق. وفي ضوء هذه المزايا والعيوب، نقترح XLNet، وهي طريقة تدريب مسبق سياقية عامة تتيح (1) تعلم السياقات ثنائية الاتجاه عن طريق تعظيم الاحتمالية المتوقعة على جميع ترتيبات ترتيب العوامل و(2) تتغلب على قيود BERT بفضل صياغتها السياقية. علاوة على ذلك، يدمج XLNet أفكار Transformer-XL، وهو نموذج سياقي سياقي رائد، في التدريب المسبق. ومن الناحية التجريبية، يتفوق XLNet على BERT في 20 مهمة، غالبًا بهامش كبير، بما في ذلك الإجابة على الأسئلة والاستدلال اللغوي الطبيعي وتحليل المشاعر وترتيب المستندات.*
+*مع قدرة نمذجة السياقات ثنائية الاتجاه، فإن التدريب المسبق للترميز التلقائي لإزالة التشويش مثل BERT يحقق
+أداء أفضل من أساليب التدريب المسبق القائمة على نمذجة اللغة ذاتية الترجيع. ومع ذلك، فإن الاعتماد على
+تشويه الإدخال باستخدام الأقنعة، يتجاهل BERT الاعتماد المتبادل بين المواضع المقنعة ويعاني من
+الاختلاف بين التدريب المسبق والضبط الدقيق. في ضوء هذه الإيجابيات والسلبيات، نقترح XLNet، وهي طريقة تدريب مسبق ذاتية الترجيع عامة (1) تمكن من تعلم سياقات ثنائية الاتجاه عن طريق تعظيم الاحتمالية المتوقعة عبر جميع
+ترتيبات ترتيب العوامل و (2) تتغلب على قيود BERT بفضل صيغتها ذاتية الترجيع. علاوة على ذلك، يدمج XLNet الأفكار من Transformer-XL، وهو نموذج ذاتي الترجيع من أحدث طراز، في
+التدريب المسبق. تجريبياً، وبموجب إعدادات التجربة المماثلة، يتفوق XLNet على BERT في 20 مهمة، غالبًا بهامش كبير، بما في ذلك الإجابة على الأسئلة، والاستدلال اللغوي الطبيعي، وتحليل المشاعر، وتصنيف المستندات.
 
-تمت المساهمة بهذا النموذج من قبل [thomwolf](https://huggingface.co/thomwolf). يمكن العثور على الكود الأصلي [هنا](https://github.com/zihangdai/xlnet/).
+تمت المساهمة بهذا النموذج بواسطة [thomwolf](https://huggingface.co/thomwolf). يمكن العثور على الكود الأصلي [هنا](https://github.com/zihangdai/xlnet/).
 
 ## نصائح الاستخدام
 
-- يمكن التحكم في نمط الانتباه المحدد أثناء التدريب ووقت الاختبار باستخدام إدخال `perm_mask`.
-- بسبب صعوبة تدريب نموذج سياقي ذاتي كامل على ترتيب عوامل مختلف، تم تدريب XLNet مسبقًا باستخدام مجموعة فرعية فقط من الرموز المخرجة كهدف يتم تحديدها باستخدام إدخال `target_mapping`.
-- لاستخدام XLNet للترميز التسلسلي (أي ليس في إعداد ثنائي الاتجاه الكامل)، استخدم إدخالات `perm_mask` و`target_mapping` للتحكم في نطاق الانتباه والمخرجات (انظر الأمثلة في *examples/pytorch/text-generation/run_generation.py*).
-- XLNet هو أحد النماذج القليلة التي لا يوجد بها حد لطول التسلسل.
-- XLNet ليس نموذجًا سياقيًا ذاتيًا تقليديًا ولكنه يستخدم استراتيجية تدريب تستند إلى ذلك. فهو يقوم بترتيب الرموز في الجملة، ثم يسمح للنموذج باستخدام الرموز n الأخيرة للتنبؤ بالرمز n+1. نظرًا لأن كل هذا يتم باستخدام قناع، يتم إدخال الجملة بالفعل في النموذج بالترتيب الصحيح، ولكن بدلاً من قناع الرموز n الأولى لـ n+1، يستخدم XLNet قناعًا يقوم بإخفاء الرموز السابقة في بعض الترتيبات المعطاة لـ 1، ...، طول التسلسل.
-- يستخدم XLNet أيضًا نفس آلية التكرار مثل Transformer-XL لبناء الاعتمادية طويلة المدى.
+- يمكن التحكم في نمط الانتباه المحدد في وقت التدريب ووقت الاختبار باستخدام إدخال `perm_mask`.
+- بسبب صعوبة تدريب نموذج ذاتي الترجيع بالكامل على ترتيب عوامل مختلفة، يتم تدريب XLNet مسبقًا
+  باستخدام مجموعة فرعية فقط من الرموز المخرجة كهدف يتم تحديدها باستخدام إدخال `target_mapping`.
+- لاستخدام XLNet للترميز المتسلسل (أي ليس في إعداد ثنائي الاتجاه بالكامل)، استخدم إدخالات `perm_mask` و
+  `target_mapping` للتحكم في فترة الانتباه والمخرجات (انظر الأمثلة في
+  *examples/pytorch/text-generation/run_generation.py*)
+- XLNet هو أحد النماذج القليلة التي ليس لها حد لطول التسلسل.
+- XLNet ليس نموذجًا ذاتي الترجيع تقليديًا ولكنه يستخدم استراتيجية تدريب تستند إلى ذلك. فهو يعيد ترتيب الرموز في الجملة، ثم يسمح للنموذج باستخدام الرموز n الأخيرة للتنبؤ بالرمز n+1. نظرًا لأن كل هذا يتم باستخدام قناع، يتم بالفعل إدخال الجملة في النموذج بالترتيب الصحيح، ولكن بدلاً من إخفاء الرموز n الأولى لـ n+1، يستخدم XLNet قناعًا يخفي الرموز السابقة في بعض الترتيب المعين لـ 1، ..., طول التسلسل.
+- يستخدم XLNet أيضًا نفس آلية التكرار مثل Transformer-XL لبناء تبعيات طويلة المدى.
 
 ## الموارد
 
@@ -78,43 +97,43 @@
 
 [[autodoc]] XLNetModel
 
-- forward
+    - forward
 
 ## XLNetLMHeadModel
 
 [[autodoc]] XLNetLMHeadModel
 
-- forward
+    - forward
 
 ## XLNetForSequenceClassification
 
 [[autodoc]] XLNetForSequenceClassification
 
-- forward
+    - forward
 
 ## XLNetForMultipleChoice
 
 [[autodoc]] XLNetForMultipleChoice
 
-- forward
+    - forward
 
 ## XLNetForTokenClassification
 
 [[autodoc]] XLNetForTokenClassification
 
-- forward
+    - forward
 
 ## XLNetForQuestionAnsweringSimple
 
 [[autodoc]] XLNetForQuestionAnsweringSimple
 
-- forward
+    - forward
 
 ## XLNetForQuestionAnswering
 
 [[autodoc]] XLNetForQuestionAnswering
 
-- forward
+    - forward
 
 </pt>
 <tf>
@@ -123,37 +142,37 @@
 
 [[autodoc]] TFXLNetModel
 
-- call
+    - call
 
 ## TFXLNetLMHeadModel
 
 [[autodoc]] TFXLNetLMHeadModel
 
-- call
+    - call
 
 ## TFXLNetForSequenceClassification
 
 [[autodoc]] TFXLNetForSequenceClassification
 
-- call
+    - call
 
 ## TFLNetForMultipleChoice
 
 [[autodoc]] TFXLNetForMultipleChoice
 
-- call
+    - call
 
 ## TFXLNetForTokenClassification
 
 [[autodoc]] TFXLNetForTokenClassification
 
-- call
+    - call
 
 ## TFXLNetForQuestionAnsweringSimple
 
 [[autodoc]] TFXLNetForQuestionAnsweringSimple
 
-- call
+    - call
 
 </tf>
 </frameworkcontent>
