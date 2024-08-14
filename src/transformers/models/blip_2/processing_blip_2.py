@@ -26,7 +26,16 @@ except ImportError:
 
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin
-from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
+from ...tokenization_utils_base import (
+    AddedToken,
+    BatchEncoding,
+    PreTokenizedInput,
+    TextInput,
+)
+from ...utils import logging
+
+
+logger = logging.get_logger(__name__)
 
 
 class Blip2ProcessorKwargs(ProcessingKwargs, total=False):
@@ -58,18 +67,23 @@ class Blip2Processor(ProcessorMixin):
             An instance of [`BlipImageProcessor`]. The image processor is a required input.
         tokenizer (`AutoTokenizer`):
             An instance of ['PreTrainedTokenizer`]. The tokenizer is a required input.
+        num_query_tokens (`int`, *optional*):
+            Number of tokens used by the Qformer as queries, should be same as in model's config.
     """
 
     attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = []
+    valid_kwargs = ["num_query_tokens"]
     image_processor_class = "BlipImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
-    # Copied from transformers.models.blip.processing_blip.BlipProcessor.__init__
-    def __init__(self, image_processor, tokenizer, **kwargs):
+    def __init__(self, image_processor, tokenizer, num_query_tokens=None, **kwargs):
         tokenizer.return_token_type_ids = False
+        self.current_processor = image_processor
+        self.image_token = AddedToken("<image>", normalized=False, special=True)
+        tokenizer.add_tokens([self.image_token], special_tokens=True)
+        self.num_query_tokens = num_query_tokens
+
         super().__init__(image_processor, tokenizer)
-        self.current_processor = self.image_processor
 
     def __call__(
         self,
@@ -107,9 +121,40 @@ class Blip2Processor(ProcessorMixin):
             **kwargs,
         )
         text_encoding = None
-
+        # BC for explicit return_tensors
+        if "return_tensors" in output_kwargs["common_kwargs"]:
+            return_tensors = output_kwargs["common_kwargs"].pop("return_tensors", None)
         if text is not None:
-            text_encoding = self.tokenizer(text, **output_kwargs["text_kwargs"])
+            if isinstance(text, str):
+                text = [text]
+            elif not isinstance(text, list) and not isinstance(text[0], str):
+                raise ValueError("Invalid input text. Please provide a string, or a list of strings")
+
+            text_encoding = {}
+            _text_encoding = self.tokenizer(text, **output_kwargs["text_kwargs"])
+
+            # if we know how many query tokens, expand text inside processor. We need this hacky manipulation
+            # because BLIP expects image tokens to be at the beginning even before BOS token
+            if self.num_query_tokens is not None:
+                image_tokens = self.image_token.content * self.num_query_tokens
+                image_token_encoding = self.tokenizer([image_tokens], add_special_tokens=False, return_tensors=None)
+                for k in _text_encoding:
+                    text_encoding[k] = [
+                        img_encoding + txt_encoding
+                        for img_encoding, txt_encoding in zip(image_token_encoding[k], _text_encoding[k])
+                    ]
+            else:
+                text_encoding = _text_encoding
+                logger.warning_once(
+                    "Expanding inputs for image tokens in BLIP-2 should be done in processing. "
+                    "Please follow instruction here (https://gist.github.com/zucchini-nlp/e9f20b054fa322f84ac9311d9ab67042) to update your BLIP-2 model. "
+                    "Using processors without these attributes in the config is deprecated and will throw an error in v4.47."
+                )
+
+            # cast to desired return tensors type
+            text_encoding = BatchEncoding(text_encoding, tensor_type=return_tensors)
+        else:
+            text_encoding = None
 
         # add pixel_values encoding. If we also have text_encoding, update image encoding and return it.
         # else, return the text encoding.
