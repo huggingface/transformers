@@ -27,9 +27,9 @@ if is_vision_available():
     from PIL import Image
 
     from transformers import (
+        AutoProcessor,
         PaliGemmaProcessor,
         is_vision_available,
-        AutoProcessor,
     )
 
 
