@@ -1976,7 +1976,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     self._generation_indices = None
 
         jinja_env = ImmutableSandboxedEnvironment(
-            trim_blocks=True, lstrip_blocks=True, extensions=[AssistantTracker, jinja2.ext.do, jinja2.ext.loopcontrols]
+            trim_blocks=True, lstrip_blocks=True, extensions=[AssistantTracker, jinja2.ext.loopcontrols]
         )
         jinja_env.filters["tojson"] = tojson
         jinja_env.globals["raise_exception"] = raise_exception
