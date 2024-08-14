@@ -663,7 +663,6 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
 
     def test_eager(self):
         url = "https://huggingface.co/microsoft/kosmos-2.5/resolve/main/receipt_00008.png"
-        url = "https://huggingface.co/kirp/kosmos2_5/resolve/main/receipt_00008.png"
         image = Image.open(requests.get(url, stream=True).raw)
 
         dtype = torch.bfloat16
@@ -701,7 +700,6 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
 
     def test_sdpa(self):
         url = "https://huggingface.co/microsoft/kosmos-2.5/resolve/main/receipt_00008.png"
-        url = "https://huggingface.co/kirp/kosmos2_5/resolve/main/receipt_00008.png"
         image = Image.open(requests.get(url, stream=True).raw)
 
         dtype = torch.bfloat16
@@ -743,7 +741,6 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
     @slow
     def test_FA2(self):
         url = "https://huggingface.co/microsoft/kosmos-2.5/resolve/main/receipt_00008.png"
-        url = "https://huggingface.co/kirp/kosmos2_5/resolve/main/receipt_00008.png"
         image = Image.open(requests.get(url, stream=True).raw)
 
         dtype = torch.bfloat16
