@@ -155,6 +155,7 @@ class FalconMambaMixer(nn.Module):
         hidden_states: torch.Tensor,
         cache_params: Optional[MambaCache] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
     ):
         # 1. Gated MLP's linear projection
         projected_states = self.in_proj(hidden_states).transpose(1, 2)
@@ -179,6 +180,9 @@ class FalconMambaMixer(nn.Module):
         else:
             hidden_states, gate = projected_states.chunk(2, dim=1)
 
+            if attention_mask is not None:
+                hidden_states = hidden_states * attention_mask.unsqueeze(1)
+
             # 2. Convolution sequence transformation
             conv_weights = self.conv1d.weight.view(self.conv1d.weight.size(0), self.conv1d.weight.size(2))
             if cache_params is not None and cache_position[0] > 0:
@@ -199,6 +203,9 @@ class FalconMambaMixer(nn.Module):
                 hidden_states = causal_conv1d_fn(
                     hidden_states, conv_weights, self.conv1d.bias, activation=self.activation
                 )
+
+            if attention_mask is not None:
+                hidden_states = hidden_states * attention_mask.unsqueeze(1)
 
             # 3. State Space Model sequence transformation
             # 3.a. input varying initialization of time_step, B and C
@@ -259,12 +266,16 @@ class FalconMambaMixer(nn.Module):
         input_states,
         cache_params: Optional[MambaCache] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
     ):
         batch_size, seq_len, _ = input_states.shape
         dtype = input_states.dtype
         # 1. Gated MLP's linear projection
         projected_states = self.in_proj(input_states).transpose(1, 2)  # [batch, 2 * intermediate_size, seq_len]
         hidden_states, gate = projected_states.chunk(2, dim=1)
+
+        if attention_mask is not None:
+            hidden_states = hidden_states * attention_mask.unsqueeze(1)
 
         # 2. Convolution sequence transformation
         if cache_params is not None:
@@ -293,6 +304,9 @@ class FalconMambaMixer(nn.Module):
                 (batch_size, self.intermediate_size, self.ssm_state_size), device=hidden_states.device, dtype=dtype
             )
             hidden_states = self.act(self.conv1d(hidden_states)[..., :seq_len])  # [batch, intermediate_size, seq_len]
+
+        if attention_mask is not None:
+            hidden_states = hidden_states * attention_mask.unsqueeze(1)
 
         # 3. State Space Model sequence transformation
         # 3.a. Selection:  [batch, seq_len, self.time_step_rank + self.ssm_state_size * 2]
@@ -355,10 +369,11 @@ class FalconMambaMixer(nn.Module):
         hidden_states,
         cache_params: Optional[MambaCache] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
     ):
         if is_fast_path_available and "cuda" in self.x_proj.weight.device.type and not torch._dynamo.is_compiling():
-            return self.cuda_kernels_forward(hidden_states, cache_params, cache_position)
-        return self.slow_forward(hidden_states, cache_params, cache_position)
+            return self.cuda_kernels_forward(hidden_states, cache_params, cache_position, attention_mask)
+        return self.slow_forward(hidden_states, cache_params, cache_position, attention_mask)
 
 
 # Copied from transformers.models.mamba.modeling_mamba.MambaRMSNorm with Mamba->FalconMamba
@@ -396,13 +411,16 @@ class FalconMambaBlock(nn.Module):
         hidden_states,
         cache_params: Optional[MambaCache] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
     ):
         residual = hidden_states
         hidden_states = self.norm(hidden_states.to(dtype=self.norm.weight.dtype))
         if self.residual_in_fp32:
             residual = residual.to(torch.float32)
 
-        hidden_states = self.mixer(hidden_states, cache_params=cache_params, cache_position=cache_position)
+        hidden_states = self.mixer(
+            hidden_states, cache_params=cache_params, cache_position=cache_position, attention_mask=attention_mask
+        )
         hidden_states = residual + hidden_states
         return hidden_states
 
@@ -649,10 +667,15 @@ class FalconMambaModel(FalconMambaPreTrainedModel):
         for mixer_block in self.layers:
             if self.gradient_checkpointing and self.training:
                 hidden_states = self._gradient_checkpointing_func(
-                    mixer_block.__call__, hidden_states, cache_params, cache_position
+                    mixer_block.__call__, hidden_states, cache_params, cache_position, attention_mask
                 )
             else:
-                hidden_states = mixer_block(hidden_states, cache_params=cache_params, cache_position=cache_position)
+                hidden_states = mixer_block(
+                    hidden_states,
+                    cache_params=cache_params,
+                    cache_position=cache_position,
+                    attention_mask=attention_mask,
+                )
 
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
@@ -721,6 +744,7 @@ class FalconMambaForCausalLM(FalconMambaPreTrainedModel):
         use_cache=None,
         cache_params: Optional[MambaCache] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
         **kwargs,
     ):
         if use_cache:
@@ -733,6 +757,10 @@ class FalconMambaForCausalLM(FalconMambaPreTrainedModel):
                 )
             if cache_position[0] > 0:
                 input_ids = input_ids[:, -1].unsqueeze(-1)
+
+                if attention_mask is not None:
+                    attention_mask = attention_mask[:, -1].unsqueeze(-1)
+
             else:
                 # we initialize the `cache_position` to full size of `conv_states` at prefill stage
                 # considering padding will be applied when input length is shorter, and truncation
@@ -745,11 +773,17 @@ class FalconMambaForCausalLM(FalconMambaPreTrainedModel):
         else:
             model_inputs = {"input_ids": input_ids.contiguous()}
 
+        # In case cache is not used, manually add a new column in the attention mask
+        if not use_cache and attention_mask is not None and input_ids.shape != attention_mask.shape:
+            padd_length = input_ids.shape[-1] - attention_mask.shape[-1]
+            attention_mask = torch.cat([attention_mask, torch.ones_like(input_ids[:, :padd_length])], dim=-1)
+
         model_inputs.update(
             {
                 "cache_params": cache_params,
                 "use_cache": use_cache,
                 "cache_position": cache_position,
+                "attention_mask": attention_mask,
             }
         )
         return model_inputs
@@ -760,11 +794,10 @@ class FalconMambaForCausalLM(FalconMambaPreTrainedModel):
         output_type=FalconMambaCausalLMOutput,
         config_class=_CONFIG_FOR_DOC,
     )
-    # Ignore copy
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,  # Ignored copy
+        attention_mask: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         cache_params: Optional[MambaCache] = None,
         labels: Optional[torch.LongTensor] = None,
@@ -790,6 +823,7 @@ class FalconMambaForCausalLM(FalconMambaPreTrainedModel):
             return_dict=return_dict,
             use_cache=use_cache,
             cache_position=cache_position,
+            attention_mask=attention_mask,
         )
         hidden_states = falcon_mamba_outputs[0]
 
