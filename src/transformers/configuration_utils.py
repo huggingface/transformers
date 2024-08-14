@@ -1080,7 +1080,13 @@ class PretrainedConfig(PushToHubMixin):
         Gets the non-default generation parameters on the PretrainedConfig instance
         """
         non_default_generation_parameters = {}
-        default_config = self.__class__()
+
+        # Some composite models don't have a default config
+        try:
+            default_config = self.__class__()
+        except ValueError:
+            default_config = None
+
         for parameter_name, default_value in self._get_generation_defaults().items():
             if hasattr(self, parameter_name):
                 # Two cases in which is okay for the model config to hold generation config parameters:
@@ -1088,7 +1094,10 @@ class PretrainedConfig(PushToHubMixin):
                 # as if nothing is set)
                 is_default_generation_value = getattr(self, parameter_name) == default_value
                 # 2. The parameter is set as default in the model config (BC support for models like BART)
-                is_default_in_config = getattr(self, parameter_name) == getattr(default_config, parameter_name)
+                if default_config is not None:
+                    is_default_in_config = getattr(self, parameter_name) == getattr(default_config, parameter_name)
+                else:
+                    is_default_in_config = False
                 if not (is_default_generation_value or is_default_in_config):
                     non_default_generation_parameters[parameter_name] = getattr(self, parameter_name)
         return non_default_generation_parameters
