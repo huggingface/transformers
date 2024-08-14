@@ -2427,7 +2427,6 @@ class TestAttentionImplementation(unittest.TestCase):
             _ = AutoModel.from_pretrained(
                 "hf-internal-testing/tiny-random-GPTBigCodeModel", attn_implementation="flash_attention_2"
             )
-
         self.assertTrue("the package flash_attn seems to be not installed" in str(cm.exception))
 
     def test_not_available_flash_with_config(self):

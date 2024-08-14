@@ -136,6 +136,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                           [ESM](model_doc/esm)                           |       ✅        |         ✅         |      ❌      |
 |              [FairSeq Machine-Translation](model_doc/fsmt)               |       ✅        |         ❌         |      ❌      |
 |                        [Falcon](model_doc/falcon)                        |       ✅        |         ❌         |      ❌      |
+|                  [FalconMamba](model_doc/falcon_mamba)                   |       ✅        |         ❌         |      ❌      |
 |         [FastSpeech2Conformer](model_doc/fastspeech2_conformer)          |       ✅        |         ❌         |      ❌      |
 |                       [FLAN-T5](model_doc/flan-t5)                       |       ✅        |         ✅         |      ✅      |
 |                      [FLAN-UL2](model_doc/flan-ul2)                      |       ✅        |         ✅         |      ✅      |

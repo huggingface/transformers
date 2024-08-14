@@ -2829,9 +2829,13 @@ class ModelTesterMixin:
             model.eval()
 
             model_forward_args = inspect.signature(model.forward).parameters
-            if "inputs_embeds" not in model_forward_args:
-                self.skipTest(reason="This model doesn't use `inputs_embeds`")
-
+            if any(argument not in model_forward_args for argument in ["inputs_embeds", "position_ids"]):
+                self.skipTest(reason="This model doesn't use `inputs_embeds` or `position_ids`.")
+            has_inputs_embeds_forwarding = "inputs_embeds" in set(
+                inspect.signature(model.prepare_inputs_for_generation).parameters.keys()
+            )
+            if not has_inputs_embeds_forwarding:
+                self.skipTest(reason="This model doesn't support `inputs_embeds` passed to `generate`.")
             inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
             pad_token_id = config.pad_token_id if config.pad_token_id is not None else 1
 
@@ -4329,6 +4333,62 @@ class ModelTesterMixin:
                     max_new_tokens=max_new_tokens,
                     do_sample=False,
                     use_cache=True,
+                )
+
+    @require_flash_attn
+    @require_torch_gpu
+    @mark.flash_attn_test
+    @slow
+    def test_flash_attn_2_generate_reuse_cache(self):
+        if not self.has_attentions:
+            self.skipTest(reason="Model architecture does not support attentions")
+
+        max_new_tokens = 2
+        for model_class in self.all_generative_model_classes:
+            if not model_class._supports_flash_attn_2:
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+            dummy_input = inputs_dict[model_class.main_input_name]
+            if dummy_input.dtype in [torch.float32, torch.bfloat16]:
+                dummy_input = dummy_input.to(torch.float16)
+
+            # make sure that all models have enough positions for generation
+            if hasattr(config, "max_position_embeddings"):
+                config.max_position_embeddings = dummy_input.shape[1] * 2 + max_new_tokens * 2 + 1
+
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                model = model_class.from_pretrained(
+                    tmpdirname,
+                    torch_dtype=torch.float16,
+                    attn_implementation="flash_attention_2",
+                    low_cpu_mem_usage=True,
+                ).to(torch_device)
+
+                # run generate once to get filled cache
+                output = model.generate(
+                    dummy_input,
+                    max_new_tokens=max_new_tokens,
+                    do_sample=False,
+                    use_cache=True,
+                    return_dict_in_generate=True,
+                )
+                past_key_values = output.past_key_values
+
+                # Try to continue generation from where we left, given that we have more than 1 new token to process
+                # e.g. this can happen in speculative decoding when feeding candidate tokens back to target model
+                dummy_input_updated = torch.cat([dummy_input, output.sequences], dim=-1)
+                _ = model.generate(
+                    dummy_input_updated,
+                    max_new_tokens=max_new_tokens,
+                    do_sample=False,
+                    use_cache=True,
+                    past_key_values=past_key_values,
                 )
 
     @require_flash_attn
