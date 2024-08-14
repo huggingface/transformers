@@ -136,7 +136,7 @@ class EncodecConv1d(nn.Module):
         """Tiny wrapper around torch.nn.functional.pad, just to allow for reflect padding on small input.
         If this is the case, we insert extra 0 padding to the right before the reflection happens.
         """
-        length = hidden_states.shape[-1]
+        length = int(hidden_states.shape[-1])
         padding_left, padding_right = paddings
         if not mode == "reflect":
             return nn.functional.pad(hidden_states, paddings, mode, value)
