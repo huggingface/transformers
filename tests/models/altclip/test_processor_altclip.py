@@ -14,6 +14,7 @@
 # limitations under the License.
 
 
+import tempfile
 import unittest
 
 import numpy as np
@@ -37,6 +38,7 @@ class AltClipProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_id = "BAAI/AltCLIP"
+        self.tmpdirname = tempfile.mkdtemp()
 
     def get_tokenizer(self, **kwargs):
         return XLMRobertaTokenizer.from_pretrained(self.model_id, **kwargs)
