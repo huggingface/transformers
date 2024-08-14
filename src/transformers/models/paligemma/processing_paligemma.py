@@ -17,8 +17,8 @@ Processor class for PaliGemma.
 """
 
 import logging
+import sys
 from typing import List, Optional, Union
-
 
 if sys.version_info >= (3, 11):
     from typing import Unpack
@@ -91,7 +91,7 @@ class PaliGemmaProcessorKwargs(ProcessingKwargs, total=False):
     image_kwargs: PaliGemmaImagesKwargs
     _defaults = {
         "text_kwargs": {
-            "tokenize_newline_separately": True,  # Not Available in Default
+            "tokenize_newline_separately": True,
             "padding": False,
         },
         "image_kwargs": {
