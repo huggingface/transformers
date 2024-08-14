@@ -83,7 +83,7 @@ class Mamba2Config(PretrainedConfig):
             Whether or not to rescale `out_proj` weights when initializing.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the cache should be used.
-        norm_before_gate (`bool`, *optional*, defaults to `True`):
+        norm_before_gate (`bool`, *optional*, defaults to `False`):
             Option of cuda kernels -whether to normalize before the gate or not.
         rms_norm (`bool`, *optional*, defaults to `True`):
             Whether to use RMS norm or not.
@@ -137,7 +137,7 @@ class Mamba2Config(PretrainedConfig):
         time_step_limit=(0.0, float("inf")),
         rescale_prenorm_residual=False,
         use_cache=True,
-        norm_before_gate=True,
+        norm_before_gate=False,
         rms_norm=True,
         chunk_size=256,
         tie_word_embeddings=False,
