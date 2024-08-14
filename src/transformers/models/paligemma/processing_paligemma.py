@@ -20,10 +20,10 @@ import logging
 from typing import List, Optional, Union
 
 
-try:
+if sys.version_info >= (3, 11):
     from typing import Unpack
-except ImportError:
-    pass
+else:
+    from typing_extensions import Unpack
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, TextKwargs
