@@ -319,7 +319,7 @@ def format_prompt_with_tools(toolbox: Toolbox, prompt_template: str, tool_descri
     return prompt
 
 
-def format_prompt_with_managed_agents_descriptions(prompt_template, managed_agents = None) -> str:
+def format_prompt_with_managed_agents_descriptions(prompt_template, managed_agents=None) -> str:
     if managed_agents is not None:
         managed_agents_descriptions = """You can also give requests to team members.
 Calling a team member works the same as for calling a tool: simply, the only argument you can give in the call is 'request', a long string explaning your request.
@@ -385,8 +385,7 @@ class Agent:
         self.system_prompt = format_prompt_with_tools(
             self._toolbox, self.system_prompt_template, self.tool_description_template
         )
-        if self.managed_agents is not None:
-            self.system_prompt = format_prompt_with_managed_agents_descriptions(self.system_prompt, self.managed_agents)
+        self.system_prompt = format_prompt_with_managed_agents_descriptions(self.system_prompt, self.managed_agents)
         self.prompt = None
         self.logs = []
         self.task = None
@@ -1112,7 +1111,6 @@ class ReactCodeAgent(ReactAgent):
             }
             if self.managed_agents is not None:
                 static_tools = {**static_tools, **self.managed_agents}
-            print("TOOLS:", static_tools)
             result = self.python_evaluator(
                 code_action,
                 static_tools=static_tools,
@@ -1137,8 +1135,8 @@ class ReactCodeAgent(ReactAgent):
         return current_step_logs
 
 
-class ManagedAgent():
-    def __init__(self, agent, name, description, additional_prompting = None):
+class ManagedAgent:
+    def __init__(self, agent, name, description, additional_prompting=None):
         self.agent = agent
         self.name = name
         self.description = description

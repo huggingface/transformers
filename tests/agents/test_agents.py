@@ -20,7 +20,14 @@ import uuid
 import pytest
 
 from transformers.agents.agent_types import AgentText
-from transformers.agents.agents import AgentMaxIterationsError, CodeAgent, ReactCodeAgent, ReactJsonAgent, Toolbox
+from transformers.agents.agents import (
+    AgentMaxIterationsError,
+    CodeAgent,
+    ManagedAgent,
+    ReactCodeAgent,
+    ReactJsonAgent,
+    Toolbox,
+)
 from transformers.agents.default_tools import PythonInterpreterTool
 from transformers.testing_utils import require_torch
 
@@ -235,3 +242,19 @@ Action:
         )
         res = agent.run("ok")
         assert res[0] == 0.5
+
+    def test_init_managed_agent(self):
+        agent = ReactCodeAgent(tools=[], llm_engine=fake_react_code_functiondef)
+        managed_agent = ManagedAgent(agent, name="managed_agent", description="Empty")
+        assert managed_agent.name == "managed_agent"
+        assert managed_agent.description == "Empty"
+
+    def test_agent_description_gets_correctly_inserted_in_system_prompt(self):
+        agent = ReactCodeAgent(tools=[], llm_engine=fake_react_code_functiondef)
+        managed_agent = ManagedAgent(agent, name="managed_agent", description="Empty")
+        manager_agent = ReactCodeAgent(
+            tools=[], llm_engine=fake_react_code_functiondef, managed_agents=[managed_agent]
+        )
+        assert "You can also give requests to team members." not in agent.system_prompt
+        assert "<<managed_agents_descriptions>>" not in agent.system_prompt
+        assert "You can also give requests to team members." in manager_agent.system_prompt
