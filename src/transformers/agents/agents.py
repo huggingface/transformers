@@ -322,12 +322,12 @@ def format_prompt_with_tools(toolbox: Toolbox, prompt_template: str, tool_descri
 def format_prompt_with_managed_agents_descriptions(prompt_template, managed_agents = None) -> str:
     if managed_agents is not None:
         managed_agents_descriptions = """You can also give requests to team members.
-    Calling a team member works the same as for calling a tool: simply, the only argument you can give in the call is a string request.
-    Given that this team member is a real human, you should then be very verbose in your request.
-    Here is a list of the team members that you can call:
+Calling a team member works the same as for calling a tool: simply, the only argument you can give in the call is 'request', a long string explaning your request.
+Given that this team member is a real human, you should be very verbose in your request.
+Here is a list of the team members that you can call:
     """
-        for _, agent in managed_agents.values():
-            managed_agents_descriptions += f"\n- Team member {agent.name}: {agent.description}"
+        for agent in managed_agents.values():
+            managed_agents_descriptions += f"\n- {agent.name}: {agent.description}"
         return prompt_template.replace("<<managed_agents_descriptions>>", managed_agents_descriptions)
     else:
         return prompt_template.replace("<<managed_agents_descriptions>>", "")
@@ -366,7 +366,10 @@ class Agent:
         self.logger = logger
         self.tool_parser = tool_parser
         self.grammar = grammar
-        self.managed_agents = {agent.name: agent for agent in managed_agents}
+
+        self.managed_agents = None
+        if managed_agents is not None:
+            self.managed_agents = {agent.name: agent for agent in managed_agents}
 
         if isinstance(tools, Toolbox):
             self._toolbox = tools
@@ -382,7 +385,8 @@ class Agent:
         self.system_prompt = format_prompt_with_tools(
             self._toolbox, self.system_prompt_template, self.tool_description_template
         )
-        self.system_prompt = format_prompt_with_managed_agents_descriptions(self.system_prompt, self.managed_agents)
+        if self.managed_agents is not None:
+            self.system_prompt = format_prompt_with_managed_agents_descriptions(self.system_prompt, self.managed_agents)
         self.prompt = None
         self.logs = []
         self.task = None
@@ -1108,6 +1112,7 @@ class ReactCodeAgent(ReactAgent):
             }
             if self.managed_agents is not None:
                 static_tools = {**static_tools, **self.managed_agents}
+            print("TOOLS:", static_tools)
             result = self.python_evaluator(
                 code_action,
                 static_tools=static_tools,

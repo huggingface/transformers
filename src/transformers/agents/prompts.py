@@ -354,6 +354,8 @@ Above example were using notional tools that might not exist for you. You only h
 
 You also can perform computations in the Python code that you generate.
 
+<<managed_agents_descriptions>>
+
 Here are the rules you should always follow to solve your task:
 1. Always provide a 'Thought:' sequence, and a 'Code:\n```py' sequence ending with '```<end_action>' sequence, else you will fail.
 2. Use only variables that you have defined!
