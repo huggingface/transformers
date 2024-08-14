@@ -2829,9 +2829,13 @@ class ModelTesterMixin:
             model.eval()
 
             model_forward_args = inspect.signature(model.forward).parameters
-            if "inputs_embeds" not in model_forward_args:
-                self.skipTest(reason="This model doesn't use `inputs_embeds`")
-
+            if any(argument not in model_forward_args for argument in ["inputs_embeds", "position_ids"]):
+                self.skipTest(reason="This model doesn't use `inputs_embeds` or `position_ids`.")
+            has_inputs_embeds_forwarding = "inputs_embeds" in set(
+                inspect.signature(model.prepare_inputs_for_generation).parameters.keys()
+            )
+            if not has_inputs_embeds_forwarding:
+                self.skipTest(reason="This model doesn't support `inputs_embeds` passed to `generate`.")
             inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
             pad_token_id = config.pad_token_id if config.pad_token_id is not None else 1
 

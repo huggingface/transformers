@@ -930,6 +930,7 @@ _import_structure = {
         "is_tokenizers_available",
         "is_torch_available",
         "is_torch_mlu_available",
+        "is_torch_musa_available",
         "is_torch_neuroncore_available",
         "is_torch_npu_available",
         "is_torch_tpu_available",
@@ -948,6 +949,7 @@ _import_structure = {
         "GPTQConfig",
         "HqqConfig",
         "QuantoConfig",
+        "TorchAoConfig",
     ],
 }
 
@@ -5706,6 +5708,7 @@ if TYPE_CHECKING:
         is_tokenizers_available,
         is_torch_available,
         is_torch_mlu_available,
+        is_torch_musa_available,
         is_torch_neuroncore_available,
         is_torch_npu_available,
         is_torch_tpu_available,
@@ -5726,6 +5729,7 @@ if TYPE_CHECKING:
         GPTQConfig,
         HqqConfig,
         QuantoConfig,
+        TorchAoConfig,
     )
 
     try:
