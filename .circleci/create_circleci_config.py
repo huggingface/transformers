@@ -108,6 +108,7 @@ class CircleCIJob:
             {"attach_workspace": {"at": "test_preparation"}},
         ]
         steps.extend([{"run": l} for l in self.install_steps])
+        steps.append({"run": {"name": "Install `datasets@2.21`", "command": 'pip uninstall datasets -y && pip install "datasets @ git+https://github.com/huggingface/datasets@2.21#egg=datasets"'}})
         steps.append({"run": {"name": "Show installed libraries and their size", "command": """du -h -d 1 "$(pip -V | cut -d ' ' -f 4 | sed 's/pip//g')" | grep -vE "dist-info|_distutils_hack|__pycache__" | sort -h | tee installed.txt || true"""}})
         steps.append({"run": {"name": "Show installed libraries and their versions", "command": """pip list --format=freeze | tee installed.txt || true"""}})
 
