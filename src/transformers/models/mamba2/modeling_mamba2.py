@@ -964,9 +964,7 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         **kwargs,
     ):
-        if input_ids.shape[1] == 0:
-            past_len = inputs_embeds.shape[1]
-        elif inputs_embeds is not None:
+        if inputs_embeds is not None:
             past_len = inputs_embeds.shape[1] + input_ids.shape[1]
         else:
             past_len = input_ids.shape[1]
