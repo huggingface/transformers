@@ -1097,7 +1097,7 @@ class PretrainedConfig(PushToHubMixin):
                 if default_config is not None:
                     is_default_in_config = getattr(self, parameter_name) == getattr(default_config, parameter_name)
                 else:
-                    is_default_in_config = False
+                    is_default_in_config = True
                 if not (is_default_generation_value or is_default_in_config):
                     non_default_generation_parameters[parameter_name] = getattr(self, parameter_name)
         return non_default_generation_parameters
