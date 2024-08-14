@@ -775,8 +775,8 @@ class FalconMambaForCausalLM(FalconMambaPreTrainedModel):
 
         # In case cache is not used, manually add a new column in the attention mask
         if not use_cache and attention_mask is not None and input_ids.shape != attention_mask.shape:
-            padd_length = input_ids.shape[-1] - attention_mask.shape[-1]
-            attention_mask = torch.cat([attention_mask, torch.ones_like(input_ids[:, :padd_length])], dim=-1)
+            pad_length = input_ids.shape[-1] - attention_mask.shape[-1]
+            attention_mask = torch.cat([attention_mask, torch.ones_like(input_ids[:, :pad_length])], dim=-1)
 
         model_inputs.update(
             {
