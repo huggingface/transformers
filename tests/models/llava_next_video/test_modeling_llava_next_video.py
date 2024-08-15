@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch Llava-NeXT model."""
+"""Testing suite for the PyTorch Llava-NeXT-Video model."""
 
 import gc
 import unittest
@@ -510,6 +510,24 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             output_train = model(**inputs_batched, output_hidden_states=True)
         self.assertTrue((output_train.hidden_states[0][0, -1482:, ...] == 0).all().item())
+
+        with self.assertLogs("transformers", level="WARNING") as logs:
+            model.padding_side = "left"
+            model.train()
+            model(**inputs_batched, output_hidden_states=True)
+
+            self.assertIn(
+                "Padding side is set to 'left' but the model is in training mode. For training", logs.output[0]
+            )
+
+        with self.assertLogs("transformers", level="WARNING") as logs:
+            model.padding_side = "right"
+            model.eval()
+            model(**inputs_batched, output_hidden_states=True)
+
+            self.assertIn(
+                "Padding side is set to 'right' but the model is in inference mode. For correct", logs.output[0]
+            )
 
     @slow
     @require_bitsandbytes
