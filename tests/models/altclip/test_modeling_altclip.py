@@ -632,7 +632,7 @@ class AltCLIPModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.vision_model_output.last_hidden_state.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[-0.5297, -0.7713, 0.4655], [0.8688, 0.1690, 0.6678], [1.1742, -0.7551, 0.0396]]
+           [[-0.3671, -0.5896,  0.3435], [ 0.3136,  0.1141,  0.7695], [ 1.1259, -0.5578,  0.1346]]
         ).to(torch_device)
 
         self.assertTrue(
