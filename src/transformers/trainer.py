@@ -703,6 +703,7 @@ class Trainer:
             # Tensor axis is just a placeholder where it will not be used in FSDPv2.
             num_devices = xr.global_runtime_device_count()
             xs.set_global_mesh(xs.Mesh(np.array(range(num_devices)), (num_devices, 1), axis_names=("fsdp", "tensor")))
+        self.is_fsdp_xla_v1_enabled = self.is_fsdp_xla_enabled and not self.is_fsdp_xla_v2_enabled
 
     def _activate_neftune(self, model):
         r"""
@@ -2969,7 +2970,7 @@ class Trainer:
     def _save_optimizer_and_scheduler(self, output_dir):
         if is_torch_xla_available():
             xm.rendezvous("saving_optimizer_states")
-            if self.is_fsdp_xla_enabled and not self.is_fsdp_xla_v2_enabled:
+            if self.is_fsdp_xla_v1_enabled:
                 optm = {
                     "optimizer": self.optimizer.state_dict(),
                     "shard_metadata": self.model.get_shard_metadata(),
@@ -3062,14 +3063,14 @@ class Trainer:
         )
         checkpoint_file_exists = (
             glob.glob(os.path.join(checkpoint, f"rank*-of-{self.args.world_size}-{OPTIMIZER_NAME}"))
-            if self.is_fsdp_xla_enabled and not self.is_fsdp_xla_v2_enabled
+            if self.is_fsdp_xla_v1_enabled
             else checkpoint_file_exists
         )
         if checkpoint_file_exists and os.path.isfile(os.path.join(checkpoint, SCHEDULER_NAME)):
             # Load in optimizer and scheduler states
             if is_torch_xla_available():
                 # On TPU we have to take some extra precautions to properly load the states on the right device.
-                if self.is_fsdp_xla_enabled and not self.is_fsdp_xla_v2_enabled:
+                if self.is_fsdp_xla_v1_enabled:
                     optimizer_state = torch.load(
                         os.path.join(
                             checkpoint, f"rank{self.args.process_index}-of-{self.args.world_size}-{OPTIMIZER_NAME}"
@@ -3500,7 +3501,7 @@ class Trainer:
         # They can then be reloaded using `from_pretrained()`
         supported_classes = (PushToHubMixin,)
         xm.rendezvous("saving_checkpoint")
-        if self.is_fsdp_xla_enabled and not self.is_fsdp_xla_v2_enabled:
+        if self.is_fsdp_xla_v1_enabled:
             ckpt = {
                 "model": model.state_dict(),
                 "shard_metadata": model.get_shard_metadata(),
