@@ -906,6 +906,9 @@ class GenerationMixin:
                 )
             )
 
+        # TODO (joao): find a strategy to specify the order of the processors
+        processors = self._merge_criteria_processor_list(processors, logits_processor)
+
         # Processors previously known as `LogitsWarpers`, only applied with sampling strategies
         if generation_config.do_sample:
             # In beam methods, we need to keep at least one non-eos token to explore continuations that might have a
@@ -953,8 +956,6 @@ class GenerationMixin:
                         epsilon=generation_config.eta_cutoff, min_tokens_to_keep=min_tokens_to_keep, device=device
                     )
                 )
-
-        processors = self._merge_criteria_processor_list(processors, logits_processor)
 
         # `LogitNormalization` should always be the last logit processor, when present
         if generation_config.renormalize_logits is True:
