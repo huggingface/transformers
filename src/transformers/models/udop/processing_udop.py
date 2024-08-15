@@ -16,8 +16,8 @@
 Processor class for UDOP.
 """
 
+import logging
 import sys
-import warnings
 from typing import List, Optional, Union
 
 from ...image_processing_utils import BatchFeature
@@ -30,6 +30,9 @@ if sys.version_info >= (3, 11):
     from typing import Unpack
 else:
     from typing_extensions import Unpack
+
+
+logger = logging.get_logger(__name__)
 
 
 class UdopTextKwargs(TextKwargs, total=False):
@@ -114,13 +117,12 @@ class UdopProcessor(ProcessorMixin):
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
-        if "text_pair " not in output_kwargs["text_kwargs"]:
-            warnings.warn(
-                "No `text_pair` kwarg was detected. The use of `text_pair` as an argument without specifying it explicitely as `text_pair=` will be deprecated in future versions."
+        # for BC
+        if "text_pair " not in output_kwargs["text_kwargs"] and audio is not None:
+            logger.warning_once(
+                "The use of `text_pair` as an argument without specifying it explicitely as `text_pair=` will be deprecated in future versions."
             )
-            # for BC
-            if audio is not None:
-                output_kwargs["text_kwargs"]["text_pair"] = audio
+            output_kwargs["text_kwargs"]["text_pair"] = audio
 
         boxes = output_kwargs["text_kwargs"].pop("boxes", None)
         word_labels = output_kwargs["text_kwargs"].pop("word_labels", None)
