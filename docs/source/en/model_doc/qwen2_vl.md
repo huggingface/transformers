@@ -21,13 +21,11 @@ rendered properly in your Markdown viewer.
 
 The Qwen2_VL is a major update to our [Qwen-VL](https://arxiv.org/pdf/2308.12966) model from the Qwen team. 
 
-#### What’s New in Qwen2-VL?
+The [Qwen2_VL](https://qwenlm.github.io/blog/qwen2-vl/) is a major update to our [Qwen-VL](https://arxiv.org/pdf/2308.12966) model from the Qwen team. 
 
-1. Enhanced Image Comprehension: We've significantly improved the model's ability to understand and interpret visual information, setting new benchmarks across key performance metrics.
-2. Advanced Video Understanding: Qwen2-VL now features superior online streaming capabilities, enabling real-time analysis of dynamic video content with remarkable accuracy.
-3. Integrated Visual Agent Functionality: Our model now seamlessly incorporates sophisticated system integration, transforming Qwen2-VL into a powerful visual agent capable of complex reasoning and decision-making.
-4. Expanded Multilingual Support: We've broadened our language capabilities to better serve a diverse global user base, making Qwen2-VL more accessible and effective across different linguistic contexts.
+The abstract from the blog is the following:
 
+*This blog introduces Qwen2-VL, an advanced version of the Qwen-VL model that has undergone significant enhancements over the past year. Key improvements include enhanced image comprehension, advanced video understanding, integrated visual agent functionality, and expanded multilingual support. The model architecture has been optimized for handling arbitrary image resolutions through Naive Dynamic Resolution support and utilizes Multimodal Rotary Position Embedding (M-ROPE) to effectively process both 1D textual and multi-dimensional visual data. This updated model demonstrates competitive performance against leading AI systems like GPT-4o and Claude 3.5 Sonnet in vision-related tasks and ranks highly among open-source models in text capabilities. These advancements make Qwen2-VL a versatile tool for various applications requiring robust multimodal processing and reasoning abilities.*
 
 
 ## Usage example
