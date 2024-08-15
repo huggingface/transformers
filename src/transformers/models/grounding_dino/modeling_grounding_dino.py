@@ -686,7 +686,7 @@ class GroundingDinoTextEnhancerLayer(nn.Module):
             attention_masks = attention_masks.to(dtype=dtype)  # fp16 compatibility
             attention_masks = (1.0 - attention_masks) * torch.finfo(dtype).min
 
-        queries = keys = self.with_pos_embed(hidden_states, position_embeddings)
+        queries = keys = self.with_pos_embed(hidden_states, position_embeddings).to(hidden_states.dtype)
         attention_output, attention_weights = self.self_attn(
             queries=queries,
             keys=keys,
