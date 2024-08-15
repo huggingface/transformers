@@ -358,7 +358,7 @@ class Qwen2VisionTransformer(PreTrainedModel):
     _supports_flash_attn_2 = True
     _supports_sdpa = True
 
-    def __init__(self, config, attn_implementation: str = "sdpa") -> None:
+    def __init__(self, config) -> None:
         super().__init__(config)
         self.spatial_merge_size = config.spatial_merge_size
 
@@ -372,7 +372,7 @@ class Qwen2VisionTransformer(PreTrainedModel):
         head_dim = config.embed_dim // config.num_heads
         self.rotary_pos_emb = VisionRotaryEmbedding(head_dim // 2)
 
-        self.blocks = nn.ModuleList([Qwen2VLVisionBlock(config, attn_implementation) for _ in range(config.depth)])
+        self.blocks = nn.ModuleList([Qwen2VLVisionBlock(config, config._attn_implementation) for _ in range(config.depth)])
         self.merger = PatchMerger(dim=config.hidden_size, context_dim=config.embed_dim)
 
     def get_dtype(self) -> torch.dtype:
