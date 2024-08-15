@@ -132,7 +132,7 @@ class IdeficsProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         prompts = self.prepare_prompts()
 
         # test that all prompts succeeded
-        input_processor = processor(prompts, return_tensors="pt", padding="longest")
+        input_processor = processor(text=prompts, return_tensors="pt", padding="longest")
         for key in self.input_keys:
             assert torch.is_tensor(input_processor[key])
 
@@ -165,8 +165,8 @@ class IdeficsProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         ]
         prompts = [[prompt] for prompt in self.prepare_prompts()[2]]
 
-        max_length = processor(prompts, padding="max_length", truncation=True, max_length=20, return_tensors="pt")
-        longest = processor(prompts, padding="longest", truncation=True, max_length=30, return_tensors="pt")
+        max_length = processor(text=prompts, padding="max_length", truncation=True, max_length=20, return_tensors="pt")
+        longest = processor(text=prompts, padding="longest", truncation=True, max_length=30, return_tensors="pt")
 
         decoded_max_length = processor.tokenizer.decode(max_length["input_ids"][-1])
         decoded_longest = processor.tokenizer.decode(longest["input_ids"][-1])
@@ -193,8 +193,8 @@ class IdeficsProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             ([0] * 10) + ([1] * 10),
         ]
         prompts = [[prompt] for prompt in self.prepare_prompts()[2]]
-        max_length = processor(prompts, padding="max_length", truncation=True, max_length=20)
-        longest = processor(prompts, padding="longest", truncation=True, max_length=30)
+        max_length = processor(text=prompts, padding="max_length", truncation=True, max_length=20)
+        longest = processor(text=prompts, padding="longest", truncation=True, max_length=30)
 
         decoded_max_length = processor.tokenizer.decode(max_length["input_ids"][-1])
         decoded_longest = processor.tokenizer.decode(longest["input_ids"][-1])
@@ -212,7 +212,7 @@ class IdeficsProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = IdeficsProcessor(tokenizer=tokenizer, image_processor=image_processor)
         prompts = self.prepare_prompts()
 
-        inputs = processor(prompts, padding="longest", return_tensors="pt")
+        inputs = processor(text=prompts, padding="longest", return_tensors="pt")
 
         # For now the processor supports only ['pixel_values', 'input_ids', 'attention_mask']
         self.assertSetEqual(set(inputs.keys()), set(self.input_keys))
