@@ -70,6 +70,8 @@ class LlavaOnevisionProcessor(ProcessorMixin):
             in a chat into a tokenizable string.
         image_token (`str`, *optional*, defaults to `"<image>"`):
             Special token used to denote image location.
+        video_token (`str`, *optional*, defaults to `"<video>"`):
+            Special token used to denote video location.
     """
 
     attributes = ["video_processor", "image_processor", "tokenizer"]

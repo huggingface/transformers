@@ -52,6 +52,7 @@ if is_vision_available():
     from PIL import Image
 
 
+# Copied from transformers.models.llava_next_video.image_processing_llava_next_video.make_batched_videos
 def make_batched_videos(videos) -> List[VideoInput]:
     if isinstance(videos, (list, tuple)) and isinstance(videos[0], (list, tuple)) and is_valid_image(videos[0][0]):
         return videos
@@ -68,7 +69,7 @@ def make_batched_videos(videos) -> List[VideoInput]:
     raise ValueError(f"Could not make batched video from {videos}")
 
 
-# Copied from transformers.models.llava_next.image_processing_llava_next.LlavaNextImageProcessor.divide_to_patches
+# Copied from transformers.models.llava_next.image_processing_llava_next.divide_to_patches
 def divide_to_patches(image: np.array, patch_size: int, input_data_format) -> List[np.array]:
     """
     Divides an image into patches of a specified size.
@@ -97,7 +98,7 @@ def divide_to_patches(image: np.array, patch_size: int, input_data_format) -> Li
     return patches
 
 
-# Copied from transformers.models.llava_next.image_processing_llava_next.LlavaNextImageProcessor.expand_to_square
+# Copied from transformers.models.llava_next.image_processing_llava_next.expand_to_square
 def expand_to_square(image: np.array, background_color, input_data_format) -> np.array:
     """
     Expands an image to a square by adding a background color.
@@ -116,7 +117,7 @@ def expand_to_square(image: np.array, background_color, input_data_format) -> np
         return result
 
 
-# Copied from transformers.models.llava_next.image_processing_llava_next.LlavaNextImageProcessor._get_patch_output_size
+# Copied from transformers.models.llava_next.image_processing_llava_next._get_patch_output_size
 def _get_patch_output_size(image, target_resolution, input_data_format):
     original_height, original_width = get_image_size(image, channel_dim=input_data_format)
     target_height, target_width = target_resolution

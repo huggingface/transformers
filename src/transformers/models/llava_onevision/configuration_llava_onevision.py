@@ -59,7 +59,7 @@ class LlavaOnevisionConfig(PretrainedConfig):
             If `"full"`, the full vision features are used.
         vision_feature_layer (`int`, *optional*, defaults to -1):
             The index of the layer to select the vision feature.
-        vision_aspect_ratio (`str`, *optional*, "anyres_max_9"):
+        vision_aspect_ratio (`str`, *optional*, defaults to `"anyres_max_9"`):
             Aspect ratio used when processong image features. The default value is "anyres_max_9".
         image_grid_pinpoints (`List`, *optional*):
             A list of possible resolutions to use for processing high resolution images. Each item in the list should be a tuple or list
