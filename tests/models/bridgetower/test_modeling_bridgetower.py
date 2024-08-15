@@ -686,7 +686,7 @@ class BridgeTowerModelTrainingTest(unittest.TestCase):
         self.assertEqual(outputs.image_features.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[-0.6931,  0.5243, -0.4443], [-2.5986, -0.0715, -0.4051], [-2.5374, -0.0969, -0.4116]]
+            [[-0.6931, 0.5243, -0.4443], [-2.5986, -0.0715, -0.4051], [-2.5374, -0.0969, -0.4116]]
         ).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.image_features[0, :3, :3], expected_slice, atol=1e-4))
