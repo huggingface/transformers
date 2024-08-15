@@ -26,7 +26,7 @@ The abstract from the paper is the following:
 
 <Tip>
 
-- Both relative and absolute depth estimation checkpoints can be found on the hub. The relative models are [here](https://huggingface.co/models?library=transformers&other=relative+depth&sort=trending) and the absolute models are [here](https://huggingface.co/models?library=transformers&other=absolute+depth&sort=trending).
+- Both relative and absolute depth estimation checkpoints can be found on the hub. The relative models are [here](https://huggingface.co/models?library=transformers&other=relative+depth&model_type=depth+anything) and the absolute models are [here](https://huggingface.co/models?library=transformers&other=absolute+depth&model_type=depth+anything). For the difference between both, see the [Monocular depth estimation task guide](../tasks/monocular_depth_estimation).
 
 </Tip>
 
