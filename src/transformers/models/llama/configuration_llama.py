@@ -191,7 +191,10 @@ class LlamaConfig(PretrainedConfig):
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.mlp_bias = mlp_bias
-        self.head_dim = head_dim
+        if head_dim is None:
+            self.head_dim = self.hidden_size // self.num_attention_heads
+        else:
+            self.head_dim = head_dim
 
         # Validate the correctness of rotary position embeddings parameters
         # BC: if there is a 'type' field, move it to 'rope_type'.
