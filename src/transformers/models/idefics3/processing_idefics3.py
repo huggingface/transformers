@@ -18,6 +18,7 @@ Processor class for Idefics3.
 
 import sys
 from typing import TYPE_CHECKING, List, Optional, Union
+import re
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image, load_image
@@ -144,8 +145,9 @@ class Idefics3Processor(ProcessorMixin):
         self.image_token = AddedToken("<image>", normalized=False, special=True)
         self.end_of_utterance_token = AddedToken("<end_of_utterance>", normalized=False, special=True)
         self.global_img_token = "<global-img>"
-        self.global_img_token_id = tokenizer.convert_tokens_to_ids(self.global_img_token)
         self.image_seq_len = image_seq_len
+
+        self._regex_to_remove_extra_special_tokens = re.compile(r'(\n?<global-img>\n?|<row_\d+_col_\d+>\n?)+')
 
         tokens_to_add = {
             "additional_special_tokens": [
@@ -343,14 +345,17 @@ class Idefics3Processor(ProcessorMixin):
         This method forwards all its arguments to Idefics3TokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
         refer to the docstring of this method for more information.
         """
-        return self.tokenizer.batch_decode(*args, **kwargs)
+        batched_decode_output = self.tokenizer.batch_decode(*args, **kwargs)
+        return [self._regex_to_remove_extra_special_tokens.sub("<image>", s) for s in batched_decode_output]
 
     def decode(self, *args, **kwargs):
         """
         This method forwards all its arguments to Idefics3TokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
         the docstring of this method for more information.
         """
-        return self.tokenizer.decode(*args, **kwargs)
+        decode_output = self.tokenizer.decode(*args, **kwargs)
+        return self._regex_to_remove_extra_special_tokens.sub("<image>", decode_output)
+
 
     @property
     def model_input_names(self):
