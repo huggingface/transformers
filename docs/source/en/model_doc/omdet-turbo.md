@@ -82,54 +82,61 @@ for score, class_name, box in zip(
 OmDet-Turbo can perform batched multi-image inference, with support for different text prompts and classes in the same batch:
 
 ```python
-from io import BytesIO
-
-import requests
-from PIL import Image
-
-from transformers import AutoProcessor, OmDetTurboForObjectDetection
-
-processor = AutoProcessor.from_pretrained("omlab/omdet-turbo-tiny")
-model = OmDetTurboForObjectDetection.from_pretrained("omlab/omdet-turbo-tiny")
-
-url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-url2 = "http://images.cocodataset.org/train2017/000000257813.jpg"
-url3 = "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
-image1 = Image.open(BytesIO(requests.get(url).content)).convert("RGB")
-image2 = Image.open(BytesIO(requests.get(url2).content)).convert("RGB")
-image3 = Image.open(BytesIO(requests.get(url3).content)).convert("RGB")
-classes1 = ["cat", "remote"]
-task1 = "Detect {}.".format(",".join(classes1))
-classes2 = ["boat"]
-task2 = "Detect all the boat in the image."
-classes3 = ["statue", "trees"]
-task3 = "Focus on the foreground, detect statue and trees."
-inputs = processor(
-    images=[image1, image2, image3],
-    text=[classes1, classes2, classes3],
-    task=[task1, task2, task3],
-    return_tensors="pt",
-)
-
-outputs = model(**inputs)
-
-# convert outputs (bounding boxes and class logits)
-results = processor.post_process_grounded_object_detection(
-    outputs,
-    classes=[classes1, classes2, classes3],
-    target_sizes=[image1.size[::-1], image2.size[::-1], image3.size[::-1]],
-    score_threshold=0.2,
-    nms_threshold=0.3,
-)
-for i, result in enumerate(results):
-    for score, class_name, box in zip(
-        result["scores"], result["classes"], result["boxes"]
-    ):
-        box = [round(i, 1) for i in box.tolist()]
-        print(
-            f"Detected {class_name} with confidence "
-            f"{round(score.item(), 2)} at location {box} in image {i}"
-        )
+>>> import torch
+>>> import requests
+>>> from io import BytesIO
+>>> from PIL import Image
+>>> from transformers import AutoProcessor, OmDetTurboForObjectDetection
+>>> processor = AutoProcessor.from_pretrained("yonigozlan/omdet-turbo-tiny")
+>>> model = OmDetTurboForObjectDetection.from_pretrained("yonigozlan/omdet-turbo-tiny")
+>>> url1 = "http://images.cocodataset.org/val2017/000000039769.jpg"
+>>> image1 = Image.open(BytesIO(requests.get(url1).content)).convert("RGB")
+>>> classes1 = ["cat", "remote"]
+>>> task1 = "Detect {}.".format(", ".join(classes1))
+>>> url2 = "http://images.cocodataset.org/train2017/000000257813.jpg"
+>>> image2 = Image.open(BytesIO(requests.get(url2).content)).convert("RGB")
+>>> classes2 = ["boat"]
+>>> task2 = "Detect all the boat in the image."
+>>> url3 = "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
+>>> image3 = Image.open(BytesIO(requests.get(url3).content)).convert("RGB")
+>>> classes3 = ["statue", "trees"]
+>>> task3 = "Focus on the foreground, detect statue and trees."
+>>> inputs = processor(
+...     images=[image1, image2, image3],
+...     text=[classes1, classes2, classes3],
+...     task=[task1, task2, task3],
+...     return_tensors="pt",
+... )
+>>> with torch.no_grad():
+...     outputs = model(**inputs)
+>>> # convert outputs (bounding boxes and class logits)
+>>> results = processor.post_process_grounded_object_detection(
+...     outputs,
+...     classes=[classes1, classes2, classes3],
+...     target_sizes=[image1.size[::-1], image2.size[::-1], image3.size[::-1]],
+...     score_threshold=0.2,
+...     nms_threshold=0.3,
+... )
+>>> for i, result in enumerate(results):
+...     for score, class_name, box in zip(
+...         result["scores"], result["classes"], result["boxes"]
+...     ):
+...         box = [round(i, 1) for i in box.tolist()]
+...         print(
+...             f"Detected {class_name} with confidence "
+...             f"{round(score.item(), 2)} at location {box} in image {i}"
+...         )
+Detected remote with confidence 0.77 at location [39.9, 70.4, 176.7, 118.0] in image 0
+Detected cat with confidence 0.72 at location [11.6, 54.2, 314.8, 474.0] in image 0
+Detected remote with confidence 0.56 at location [333.4, 75.8, 370.7, 187.0] in image 0
+Detected cat with confidence 0.55 at location [345.2, 24.0, 639.8, 371.7] in image 0
+Detected boat with confidence 0.3 at location [146.5, 219.7, 209.7, 251.0] in image 1
+Detected boat with confidence 0.27 at location [319.1, 222.1, 403.3, 239.2] in image 1
+Detected boat with confidence 0.21 at location [37.7, 220.2, 84.0, 236.1] in image 1
+Detected statue with confidence 0.73 at location [544.7, 210.2, 651.9, 502.8] in image 2
+Detected trees with confidence 0.25 at location [3.9, 584.3, 391.4, 785.6] in image 2
+Detected trees with confidence 0.25 at location [1.4, 621.2, 118.2, 787.8] in image 2
+Detected statue with confidence 0.2 at location [428.1, 205.5, 767.3, 759.5] in image 2
 
 ```
 

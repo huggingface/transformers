@@ -241,7 +241,7 @@ def run_test(model, processor):
     image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
 
     classes = ["cat", "remote"]
-    task = "Detect {}.".format(",".join(classes))
+    task = "Detect {}.".format(", ".join(classes))
     inputs = processor(image, text=classes, task=task, return_tensors="pt")
 
     # Running forward

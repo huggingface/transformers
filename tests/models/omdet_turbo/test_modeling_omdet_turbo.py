@@ -52,7 +52,7 @@ class OmDetTurboModelTester:
     def __init__(
         self,
         parent,
-        batch_size=2,
+        batch_size=3,
         is_training=False,
         num_channels=3,
         max_text_len=7,
@@ -323,10 +323,11 @@ class OmDetTurboModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
                 config, batched_input = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
             batched_input_prepared = self._prepare_for_class(batched_input, model_class)
             model = model_class(config).to(torch_device).eval()
-
+            batch_size = self.model_tester.batch_size
             single_row_input = {}
             for key, value in batched_input_prepared.items():
-                single_row_input[key] = value
+                single_batch_shape = value.shape[0] // batch_size
+                single_row_input[key] = value[:single_batch_shape]
 
             with torch.no_grad():
                 model_batched_output = model(**batched_input_prepared)
@@ -347,14 +348,7 @@ class OmDetTurboModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
                     if torch.allclose(
                         model_batched_output[key], torch.zeros_like(model_batched_output[key]), atol=1e-6
                     ) and torch.allclose(model_row_output[key], torch.zeros_like(model_row_output[key]), atol=1e-6):
-                        print(f"Skipping {model_name} for key={key} as all elements are close to 0")
                         continue
-                    else:
-                        # print max abs of both tensors
-                        print(
-                            f"Max abs batched tensor: {torch.max(torch.abs(model_batched_output[key])).item()} "
-                            f"Max abs single row tensor: {torch.max(torch.abs(model_row_output[key])).item()}"
-                        )
 
                 recursive_check(model_batched_output[key], model_row_output[key], model_name, key)
 
@@ -550,7 +544,7 @@ def prepare_img():
 
 def prepare_text():
     classes = ["cat", "remote"]
-    task = "Detect {}.".format(",".join(classes))
+    task = "Detect {}.".format(", ".join(classes))
     return classes, task
 
 

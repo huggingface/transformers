@@ -21,7 +21,7 @@ from collections import OrderedDict
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -38,7 +38,7 @@ from ...file_utils import (
     is_torch_cuda_available,
     replace_return_docstrings,
 )
-from ...modeling_outputs import BaseModelOutput
+from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_utils import PreTrainedModel
 from ...utils import is_ninja_available, logging
 from ...utils.backbone_utils import load_backbone
@@ -50,6 +50,32 @@ MultiScaleDeformableAttention = None
 
 logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "OmDetTurboConfig"
+
+
+@dataclass
+class OmDetTurboEncoderOutput(ModelOutput):
+    """
+    Base class for outputs of the OmDetTurboHybridEncoder.
+
+    Args:
+        extracted_states (`Tuple[torch.FloatTensor]`):
+            The extracted states from the Feature Pyramid Network (FPN) and Path Aggregation Network (PAN) of the encoder.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
+
+    extracted_states: Tuple[torch.FloatTensor] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -110,6 +136,12 @@ class OmDetTurboObjectDetectionOutput(ModelOutput):
             The initial reference points.
         intermediate_reference_points (`Tuple[Tuple[torch.FloatTensor]]`):
             The intermediate reference points.
+        encoder_coord_logits (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
+            The predicted coordinates of the objects from the encoder.
+        encoder_class_logits (`Tuple[torch.FloatTensor]`):
+            The predicted class of the objects from the encoder.
+        encoder_extracted_states (`torch.FloatTensor`):
+            The extracted states from the Feature Pyramid Network (FPN) and Path Aggregation Network (PAN) of the encoder.
         decoder_hidden_states (`Optional[Tuple[torch.FloatTensor]]`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of shape
             `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
@@ -126,12 +158,6 @@ class OmDetTurboObjectDetectionOutput(ModelOutput):
             Tuple of tuples of `torch.FloatTensor` (one for attention for each layer) of shape `(batch_size, num_heads,
             sequence_length, sequence_length)`. Attentions weights after the attention softmax, used to compute the
             weighted average in the self-attention, cross-attention and multi-scale deformable attention heads.
-        encoder_coord_logits (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
-            The predicted coordinates of the objects from the encoder.
-        encoder_class_logits (`Tuple[torch.FloatTensor]`):
-            The predicted class of the objects from the encoder.
-        encoder_last_hidden_state (`Optional[torch.FloatTensor]`):
-            Last layer hidden-state of the encoder.
     """
 
     loss: torch.FloatTensor = None
@@ -139,13 +165,13 @@ class OmDetTurboObjectDetectionOutput(ModelOutput):
     decoder_class_logits: torch.FloatTensor = None
     init_reference_points: torch.FloatTensor = None
     intermediate_reference_points: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    encoder_coord_logits: torch.FloatTensor = None
+    encoder_class_logits: Tuple[torch.FloatTensor] = None
+    encoder_extracted_states: torch.FloatTensor = None
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     decoder_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
-    encoder_coord_logits: torch.FloatTensor = None
-    encoder_class_logits: Optional[Tuple[torch.FloatTensor]] = None
-    encoder_last_hidden_state: Optional[torch.FloatTensor] = None
 
 
 # Copied from models.deformable_detr.load_cuda_kernels
@@ -607,7 +633,7 @@ class OmDetTurboMultiheadAttention(nn.Module):
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
 
         if attention_mask is not None:
-            attention_scores = attention_scores + attention_mask.view(attention_scores.shape)
+            attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
         attention_probs = nn.functional.softmax(attention_scores, dim=-1)
@@ -685,10 +711,10 @@ class OmDetTurboEncoderLayer(nn.Module):
         hidden_states, attentions = hidden_states if output_attentions else (hidden_states[0], None)
         hidden_states = self.dropout(hidden_states)
         hidden_states = residual + hidden_states
-        if not self.encoder_normalize_before:
-            hidden_states = self.self_attn_layer_norm(hidden_states)
         if self.encoder_normalize_before:
             hidden_states = self.final_layer_norm(hidden_states)
+        else:
+            hidden_states = self.self_attn_layer_norm(hidden_states)
         residual = hidden_states
         hidden_states = self.activation_fn(self.fc1(hidden_states))
         hidden_states = self.activation_dropout(hidden_states)
@@ -714,7 +740,9 @@ class OmDetTurboEncoder(nn.Module):
 
         self.layers = nn.ModuleList([OmDetTurboEncoderLayer(config) for _ in range(config.encoder_layers)])
 
-    def forward(self, src, src_mask=None, pos_embed=None, output_attentions: bool = False) -> torch.Tensor:
+    def forward(
+        self, src, src_mask=None, pos_embed=None, output_attentions: bool = False
+    ) -> Tuple[Union[torch.Tensor, Tuple[torch.Tensor]]]:
         hidden_states = src
         attention = () if output_attentions else None
         for layer in self.layers:
@@ -895,7 +923,9 @@ class OmDetTurboHybridEncoder(nn.Module):
             fpn_states.append(hidden_states)
         if not return_dict:
             return (fpn_states, encoder_states, all_attentions)
-        return BaseModelOutput(last_hidden_state=fpn_states, hidden_states=encoder_states, attentions=all_attentions)
+        return OmDetTurboEncoderOutput(
+            extracted_states=fpn_states, hidden_states=encoder_states, attentions=all_attentions
+        )
 
 
 class OmDetTurboMLPWithDropout(nn.Module):
@@ -1034,12 +1064,15 @@ class OmDetTurboDeformableTransformerDecoderLayer(nn.Module):
         decoder_embeddings = decoder_embeddings[:, :origin_embedding_len, :]
 
         # cross attention
+        hidden_states = self.with_pos_embed(decoder_embeddings, query_position)
+        reference_points = reference_points.unsqueeze(2)
+        spatial_shapes = torch.tensor(vision_shapes, dtype=torch.int64)
         outputs, cross_attention = self.cross_attn(
-            hidden_states=self.with_pos_embed(decoder_embeddings, query_position),
+            hidden_states=hidden_states,
             attention_mask=padding_mask,
             encoder_hidden_states=vision_features,
-            reference_points=reference_points.unsqueeze(2),
-            spatial_shapes=torch.tensor(vision_shapes, dtype=torch.int64),
+            reference_points=reference_points,
+            spatial_shapes=spatial_shapes,
         )
         decoder_embeddings = decoder_embeddings + self.dropout2(outputs)
         residual = self.norm2(decoder_embeddings)
@@ -1057,7 +1090,7 @@ class OmDetTurboDeformableTransformerDecoderLayer(nn.Module):
         )
 
 
-def _b_cosine(a, b, logit_scale):
+def _cosine_similarity_scaled(a, b, logit_scale):
     a = a / a.norm(dim=2, keepdim=True).clamp_min(1e-12)
     b = b / b.norm(dim=1, keepdim=True).clamp_min(1e-12)
     logit_scale = logit_scale.exp()
@@ -1067,7 +1100,7 @@ def _b_cosine(a, b, logit_scale):
 
 def get_class_similarity(class_distance_type, cls_feature, class_proj, logit_scale):
     if class_distance_type == "cosine":
-        class_logits = _b_cosine(cls_feature, class_proj, logit_scale)
+        class_logits = _cosine_similarity_scaled(cls_feature, class_proj, logit_scale)
     elif class_distance_type == "dot":
         class_logits = torch.bmm(cls_feature, class_proj)
     else:
@@ -1103,7 +1136,7 @@ class OmDetTurboDeformableTransformerDecoder(nn.Module):
         reference_points,
         vision_features,
         vision_shapes,
-        class_feats,
+        class_features,
         task_features,
         bbox_head,
         class_head,
@@ -1112,8 +1145,7 @@ class OmDetTurboDeformableTransformerDecoder(nn.Module):
         output_attentions=None,
         output_hidden_states=None,
     ):
-        logit_scale = torch.ones([]) * np.log(1 / 0.07)
-
+        logit_scale = torch.tensor(1 / 0.07).log()
         output_attentions = output_attentions if output_attentions is not None else self.output_attentions
         output_hidden_states = output_hidden_states if output_hidden_states is not None else self.output_hidden_states
 
@@ -1148,7 +1180,7 @@ class OmDetTurboDeformableTransformerDecoder(nn.Module):
                 all_hidden_states = all_hidden_states + (predicted_class_features,)
 
             refined_bbox = torch.sigmoid(bbox_head[i](predicted_class_features) + _inverse_sigmoid(reference_points))
-            original_class_projected = class_head[i](class_feats).permute(1, 2, 0)
+            original_class_projected = class_head[i](class_features).permute(1, 2, 0)
             if self.training:
                 decoder_class_logits.append(
                     get_class_similarity(
@@ -1220,22 +1252,22 @@ class OmDetTurboPreTrainedModel(PreTrainedModel):
         cache_key = tuple(input_ids[input_mask != 0].tolist())
         return cache_key
 
-    def get_cached_class_emb(self, inputs):
+    def get_cached_class_embeddings(self, inputs):
         not_cached_index = []
         not_cached_classes = []
-        total_embs = []
+        total_embeddings = []
         for idx, _ in enumerate(inputs["classes_input_ids"]):
             cache_key = self._get_cache_key_at_index(inputs, idx, inputs_type="classes")
             if self.language_cache_class.has(cache_key):
-                total_embs.append(self.language_cache_class.get(cache_key))
+                total_embeddings.append(self.language_cache_class.get(cache_key))
             else:
-                total_embs.append(None)
+                total_embeddings.append(None)
                 not_cached_index.append(idx)
                 not_cached_classes.append(cache_key)
 
         logger.info(
             "cached class emb num: {}, not cached num: {}".format(
-                len(total_embs) - len(not_cached_classes), len(not_cached_classes)
+                len(total_embeddings) - len(not_cached_classes), len(not_cached_classes)
             )
         )
 
@@ -1244,13 +1276,13 @@ class OmDetTurboPreTrainedModel(PreTrainedModel):
             embeddings = self.language_backbone(not_cached_classes_ids, encode_type="class")
             for idx, emb in enumerate(embeddings):
                 idx_to_put = not_cached_index[idx]
-                total_embs[idx_to_put] = emb
+                total_embeddings[idx_to_put] = emb
                 self.language_cache_class.put(not_cached_classes[idx], emb)
 
-        total_class_embs = torch.stack(total_embs).to(self.device)
+        total_class_embs = torch.stack(total_embeddings).to(self.device)
         return total_class_embs
 
-    def get_cached_task_emb(self, inputs):
+    def get_cached_task_embeddings(self, inputs):
         not_cached_index = []
         not_cached_tasks = []
         total_task_features = []
@@ -1300,7 +1332,7 @@ class OmDetTurboPreTrainedModel(PreTrainedModel):
 
     def get_language_embedding(self, inputs):
         structure = inputs["structure"]
-        batched_classes_embeddings = self.get_cached_class_emb(inputs)
+        batched_classes_embeddings = self.get_cached_class_embeddings(inputs)
         # regroup class embeddings using saved structure
         max_class_size = torch.max(structure)
         class_embeddings_regrouped = []
@@ -1313,7 +1345,7 @@ class OmDetTurboPreTrainedModel(PreTrainedModel):
             start += size
         class_embeddings = torch.cat(class_embeddings_regrouped, dim=1)
 
-        task_embeddings, task_mask = self.get_cached_task_emb(inputs)
+        task_embeddings, task_mask = self.get_cached_task_embeddings(inputs)
 
         return class_embeddings, task_embeddings, task_mask
 
@@ -1447,7 +1479,7 @@ class OmDetTurboDecoder(OmDetTurboPreTrainedModel):
         return new_vision_features, new_vision_shapes
 
     def _get_decoder_input(
-        self, vision_features, vision_shapes, class_feats, denoise_embeddings=None, denoise_bboxes=None
+        self, vision_features, vision_shapes, class_features, denoise_embeddings=None, denoise_bboxes=None
     ):
         logit_scale = torch.tensor(np.log(1 / 0.07), dtype=torch.float32)
         batch_size = len(vision_features)
@@ -1458,7 +1490,7 @@ class OmDetTurboDecoder(OmDetTurboPreTrainedModel):
             torch.where(valid_mask, vision_features, torch.tensor(0.0, dtype=torch.float32))
         )
 
-        original_class_projected = self.encoder_class_head(class_feats).permute(1, 2, 0)  #
+        original_class_projected = self.encoder_class_head(class_features).permute(1, 2, 0)  #
         encoder_class_similarity = get_class_similarity(
             self.class_distance_type, predicted_class_features, original_class_projected, logit_scale
         )
@@ -1498,7 +1530,7 @@ class OmDetTurboDecoder(OmDetTurboPreTrainedModel):
     def forward(
         self,
         vision_features,
-        class_feats,
+        class_features,
         task_features,
         task_mask,
         output_attentions=None,
@@ -1524,19 +1556,16 @@ class OmDetTurboDecoder(OmDetTurboPreTrainedModel):
         fusion_size = attn_mask_len + task_features.shape[0]
         key_padding_mask = torch.zeros([batch_size, fusion_size], dtype=torch.bool).to(task_features.device)
         key_padding_mask[:, attn_mask_len:] = src_key_mask
-        attention_mask = torch.zeros([batch_size, self.num_head, fusion_size, fusion_size]).to(task_features.device)
-        attention_mask = attention_mask.masked_fill(
-            key_padding_mask.unsqueeze(1).unsqueeze(2).to(torch.bool), float("-inf")
-        )
+        attention_mask = _prepare_4d_attention_mask(~key_padding_mask, dtype=vision_features.dtype)
         decoder_embeddings, reference_points, encoder_bboxes, encoder_class_similarity, init_reference_points = (
-            self._get_decoder_input(vision_features, vision_shapes, class_feats, denoise_embeddings, denoise_bboxes)
+            self._get_decoder_input(vision_features, vision_shapes, class_features, denoise_embeddings, denoise_bboxes)
         )
         decoder_bboxes, decoder_class_logits, attentions, hidden_states = self.decoder(
             decoder_embeddings,
             reference_points,
             vision_features,
             vision_shapes,
-            class_feats,
+            class_features,
             task_features,
             self.decoder_bbox_head,
             self.decoder_class_head,
@@ -1581,7 +1610,7 @@ class OmDetTurboForObjectDetection(OmDetTurboPreTrainedModel):
     def __init__(self, config: OmDetTurboConfig):
         super().__init__(config)
         self.vision_backbone = OmDetTurboVisionBackbone(config)
-        self.language_backbone = OmDetTurboLanguageBackbone(config=config)
+        self.language_backbone = OmDetTurboLanguageBackbone(config)
         self.encoder = OmDetTurboHybridEncoder(config)
         self.decoder = OmDetTurboDecoder(config)
         self.num_queries = config.num_queries
@@ -1625,7 +1654,7 @@ class OmDetTurboForObjectDetection(OmDetTurboPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
         >>> classes = ["cat", "remote"]
-        >>> task = "Detect {}.".format(",".join(classes))
+        >>> task = "Detect {}.".format(", ".join(classes))
         >>> inputs = processor(image, text=classes, task=task, return_tensors="pt")
 
         >>> outputs = model(**inputs)
@@ -1672,9 +1701,9 @@ class OmDetTurboForObjectDetection(OmDetTurboPreTrainedModel):
                 "structure": structure,
             }
         )
-        encoder_last_hidden_state = encoder_outputs.last_hidden_state if return_dict else encoder_outputs[0]
+        encoder_extracted_states = encoder_outputs.extracted_states if return_dict else encoder_outputs[0]
         decoder_outputs = self.decoder(
-            encoder_last_hidden_state,
+            encoder_extracted_states,
             class_features,
             task_features,
             task_mask,
@@ -1692,13 +1721,13 @@ class OmDetTurboForObjectDetection(OmDetTurboPreTrainedModel):
                     decoder_outputs[1],
                     decoder_outputs[4],
                     decoder_outputs[5],
+                    decoder_outputs[2],
+                    decoder_outputs[3],
+                    encoder_outputs[0],
                     decoder_outputs[6],
                     decoder_outputs[7],
                     encoder_outputs[1],
                     encoder_outputs[2],
-                    decoder_outputs[2],
-                    decoder_outputs[3],
-                    encoder_outputs[0],
                 ]
                 if output is not None
             )
@@ -1709,11 +1738,11 @@ class OmDetTurboForObjectDetection(OmDetTurboPreTrainedModel):
             decoder_class_logits=decoder_outputs.decoder_class_logits,
             init_reference_points=decoder_outputs.init_reference_points,
             intermediate_reference_points=decoder_outputs.intermediate_reference_points,
+            encoder_coord_logits=decoder_outputs.encoder_coord_logits,
+            encoder_class_logits=decoder_outputs.encoder_class_logits,
+            encoder_extracted_states=encoder_outputs.extracted_states,
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
-            encoder_coord_logits=decoder_outputs.encoder_coord_logits,
-            encoder_class_logits=decoder_outputs.encoder_class_logits,
-            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
         )
