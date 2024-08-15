@@ -58,7 +58,7 @@ def _compute_default_rope_parameters(
     elif config is not None:
         base = config.rope_theta
         partial_rotary_factor = config.partial_rotary_factor if hasattr(config, "partial_rotary_factor") else 1.0
-        head_dim = config.head_dim if hasattr(config, "head_dim") else config.hidden_size // config.num_attention_heads
+        head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         dim = int(head_dim * partial_rotary_factor)
 
     attention_factor = 1.0  # Unused in this type of RoPE
@@ -144,7 +144,7 @@ def _compute_dynamic_ntk_parameters(
     elif config is not None:
         base = config.rope_theta
         partial_rotary_factor = config.partial_rotary_factor if hasattr(config, "partial_rotary_factor") else 1.0
-        head_dim = config.head_dim if hasattr(config, "head_dim") else config.hidden_size // config.num_attention_heads
+        head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         dim = int(head_dim * partial_rotary_factor)
         max_position_embeddings = config.max_position_embeddings
         factor = config.rope_scaling["factor"]
@@ -187,7 +187,7 @@ def _compute_yarn_parameters(
 
     base = config.rope_theta
     partial_rotary_factor = config.partial_rotary_factor if hasattr(config, "partial_rotary_factor") else 1.0
-    head_dim = config.head_dim if hasattr(config, "head_dim") else config.hidden_size // config.num_attention_heads
+    head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
     dim = int(head_dim * partial_rotary_factor)
     max_position_embeddings = config.max_position_embeddings
     factor = config.rope_scaling["factor"]
@@ -268,7 +268,7 @@ def _compute_longrope_parameters(
 
     base = config.rope_theta
     partial_rotary_factor = config.partial_rotary_factor if hasattr(config, "partial_rotary_factor") else 1.0
-    head_dim = config.head_dim if hasattr(config, "head_dim") else config.hidden_size // config.num_attention_heads
+    head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
     dim = int(head_dim * partial_rotary_factor)
     long_factor = config.rope_scaling["long_factor"]
     short_factor = config.rope_scaling["short_factor"]
@@ -454,7 +454,7 @@ def _validate_longrope_parameters(config: PretrainedConfig):
     _check_received_keys(rope_type, received_keys, required_keys, optional_keys)
 
     partial_rotary_factor = config.partial_rotary_factor if hasattr(config, "partial_rotary_factor") else 1.0
-    head_dim = config.head_dim if hasattr(config, "head_dim") else config.hidden_size // config.num_attention_heads
+    head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
     dim = int(head_dim * partial_rotary_factor)
 
     short_factor = rope_scaling.get("short_factor")
