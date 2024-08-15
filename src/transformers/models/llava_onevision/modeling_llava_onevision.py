@@ -478,6 +478,7 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel):
                 (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Returns:
+            [`~LlavaOnevisionCausalLMOutputWithPast`] (if `return_dict=True`) or a `tuple`.
 
         Example:
 

@@ -45,8 +45,6 @@ class LlavaOnevisionConfig(PretrainedConfig):
             The config object or dictionary of the vision backbone.
         text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `Qwen2Config`):
             The config object or dictionary of the text backbone.
-        ignore_index (`int`, *optional*, defaults to -100):
-            The ignore index for the loss function.
         image_token_index (`int`, *optional*, defaults to 151646):
             The image token index to encode the image prompt.
         video_token_index (`int`, *optional*, defaults to 151647):
@@ -95,7 +93,6 @@ class LlavaOnevisionConfig(PretrainedConfig):
         self,
         vision_config=None,
         text_config=None,
-        ignore_index=-100,
         image_token_index=151646,
         video_token_index=151647,
         projector_hidden_act="gelu",
@@ -106,7 +103,6 @@ class LlavaOnevisionConfig(PretrainedConfig):
         tie_word_embeddings=False,
         **kwargs,
     ):
-        self.ignore_index = ignore_index
         self.image_token_index = image_token_index
         self.video_token_index = video_token_index
         self.projector_hidden_act = projector_hidden_act
