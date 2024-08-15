@@ -244,8 +244,9 @@ class PatchEmbed(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         seqlen = x.shape[0]
+        target_dtype = self.proj.weight.dtype
         x = x.view(seqlen, -1, self.temporal_patch_size, self.patch_size, self.patch_size)
-        x = self.proj(x).view(seqlen, self.embed_dim)
+        x = self.proj(x.to(dtype=target_dtype)).view(seqlen, self.embed_dim)
         return x
 
 
