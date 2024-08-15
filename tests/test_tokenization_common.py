@@ -1154,7 +1154,7 @@ class TokenizerTesterMixin:
                 )  # Check that no error raised
 
     @require_jinja
-    def test_jinja_extensions_are_enabled(self):
+    def test_jinja_loopcontrols(self):
         break_template = """
         {%- for message in messages %}
             {{- message.role + " " + message.content }}
@@ -1169,8 +1169,6 @@ class TokenizerTesterMixin:
             {"role": "assistant", "content": "3"},
         ]
 
-        strftime_template = """{{- strftime("%Y-%m-%d") }}""".strip()
-
         tokenizers = self.get_tokenizers()
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
@@ -1179,9 +1177,23 @@ class TokenizerTesterMixin:
                 )
                 self.assertEqual(break_output, "system 1")  # Loop should break after first iter
 
+    @require_jinja
+    def test_jinja_strftime(self):
+        strftime_template = """{{- strftime("%Y-%m-%d") }}""".strip()
+
+        dummy_conversation = [
+            {"role": "system", "content": "1"},
+            {"role": "user", "content": "2"},
+            {"role": "assistant", "content": "3"},
+        ]
+
+        tokenizers = self.get_tokenizers()
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
                 strftime_output = tokenizer.apply_chat_template(
                     dummy_conversation, chat_template=strftime_template, tokenize=False
                 )
+
                 # Assert that we get a date formatted as expected
                 self.assertEqual(len(strftime_output), 10)
                 self.assertEqual(len(strftime_output.split("-")), 3)
