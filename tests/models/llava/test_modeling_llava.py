@@ -178,6 +178,7 @@ class LlavaForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase
     """
 
     all_model_classes = (LlavaForConditionalGeneration,) if is_torch_available() else ()
+    all_generative_model_classes = (LlavaForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = {"image-to-text": LlavaForConditionalGeneration} if is_torch_available() else {}
     test_pruning = False
     test_head_masking = False
@@ -185,6 +186,17 @@ class LlavaForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase
     def setUp(self):
         self.model_tester = LlavaVisionText2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=LlavaConfig, has_text_modality=False)
+
+    def test_greedy_generation(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_generative_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            out = model.generate(**inputs_dict, min_new_tokens=20, max_new_tokens=20)
+            self.assertTrue(out.shape[1] == inputs_dict["input_ids"].shape[1] + 20)
 
     @unittest.skip(
         reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"

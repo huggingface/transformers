@@ -314,7 +314,7 @@ class Blip2TextModelDecoderOnlyTester:
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
-        max_position_embeddings=20,
+        max_position_embeddings=256,
         eos_token_id=2,
         pad_token_id=1,
         bos_token_id=0,
@@ -436,8 +436,9 @@ class Blip2ForConditionalGenerationDecoderOnlyModelTester:
 
 
 @require_torch
-class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (Blip2ForConditionalGeneration,) if is_torch_available() else ()
+    all_generative_model_classes = (Blip2ForConditionalGeneration,) if is_torch_available() else ()
     fx_compatible = False
     test_head_masking = False
     test_pruning = False
@@ -447,6 +448,17 @@ class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationT
 
     def setUp(self):
         self.model_tester = Blip2ForConditionalGenerationDecoderOnlyModelTester(self)
+
+    def test_greedy_generation(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_generative_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            out = model.generate(**inputs_dict, min_new_tokens=20, max_new_tokens=20)
+            self.assertTrue(out.shape[1] == 21)  # BLIP is special, so should be 21
 
     def test_for_conditional_generation(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
