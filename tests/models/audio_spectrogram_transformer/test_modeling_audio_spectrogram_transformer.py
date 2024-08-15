@@ -47,7 +47,6 @@ class ASTModelTester:
         parent,
         batch_size=13,
         patch_size=2,
-        max_length=24,
         num_mel_bins=16,
         is_training=True,
         use_labels=True,
@@ -68,7 +67,6 @@ class ASTModelTester:
         self.parent = parent
         self.batch_size = batch_size
         self.patch_size = patch_size
-        self.max_length = max_length
         self.num_mel_bins = num_mel_bins
         self.is_training = is_training
         self.use_labels = use_labels
@@ -106,7 +104,6 @@ class ASTModelTester:
     def get_config(self):
         return ASTConfig(
             patch_size=self.patch_size,
-            max_length=self.max_length,
             num_mel_bins=self.num_mel_bins,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
