@@ -70,6 +70,7 @@ PRIVATE_MODELS = [
     "UMT5Stack",
     "Pop2PianoStack",
     "Qwen2AudioEncoder",
+    "Qwen2VisionTransformer",
     "SwitchTransformersStack",
     "TFDPRSpanPredictor",
     "MaskFormerSwinModel",

@@ -39,7 +39,6 @@ class Qwen2VLVisionConfig(PretrainedConfig):
         patch_size=14,
         spatial_merge_size=2,
         temporal_patch_size=2,
-        _attn_implementation="sdpa",
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -54,7 +53,6 @@ class Qwen2VLVisionConfig(PretrainedConfig):
         self.patch_size = patch_size
         self.spatial_merge_size = spatial_merge_size
         self.temporal_patch_size = temporal_patch_size
-        self._attn_implementation = _attn_implementation
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
@@ -181,7 +179,6 @@ class Qwen2VLConfig(PretrainedConfig):
             self.vision_config = Qwen2VLVisionConfig(**vision_config)
         elif vision_config is None:
             self.vision_config = Qwen2VLVisionConfig()
-        self.vision_config.hidden_size = hidden_size
 
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings

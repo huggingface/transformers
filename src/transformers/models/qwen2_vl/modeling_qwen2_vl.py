@@ -329,13 +329,13 @@ QWEN2_VL_VISION_ATTENTION_CLASSES = {
 
 
 class Qwen2VLVisionBlock(nn.Module):
-    def __init__(self, config) -> None:
+    def __init__(self, config, attn_implementation: str = "sdpa") -> None:
         super().__init__()
         self.norm1 = LayerNorm(config.embed_dim, eps=1e-6)
         self.norm2 = LayerNorm(config.embed_dim, eps=1e-6)
         mlp_hidden_dim = int(config.embed_dim * config.mlp_ratio)
 
-        self.attn = QWEN2_VL_VISION_ATTENTION_CLASSES[config._attn_implementation](
+        self.attn = QWEN2_VL_VISION_ATTENTION_CLASSES[attn_implementation](
             config.embed_dim, num_heads=config.num_heads
         )
         self.mlp = VisionMlp(dim=config.embed_dim, hidden_dim=mlp_hidden_dim, hidden_act=config.hidden_act)
@@ -346,9 +346,14 @@ class Qwen2VLVisionBlock(nn.Module):
         return x
 
 
-class Qwen2VisionTransformer(nn.Module):
-    def __init__(self, config) -> None:
-        super().__init__()
+class Qwen2VisionTransformer(PreTrainedModel):
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["Qwen2VLVisionBlock"]
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
+
+    def __init__(self, config, attn_implementation: str = "sdpa") -> None:
+        super().__init__(config)
         self.spatial_merge_size = config.spatial_merge_size
 
         self.patch_embed = PatchEmbed(
@@ -361,7 +366,7 @@ class Qwen2VisionTransformer(nn.Module):
         head_dim = config.embed_dim // config.num_heads
         self.rotary_pos_emb = VisionRotaryEmbedding(head_dim // 2)
 
-        self.blocks = nn.ModuleList([Qwen2VLVisionBlock(config) for _ in range(config.depth)])
+        self.blocks = nn.ModuleList([Qwen2VLVisionBlock(config, attn_implementation) for _ in range(config.depth)])
         self.merger = PatchMerger(dim=config.hidden_size, context_dim=config.embed_dim)
 
     def get_dtype(self) -> torch.dtype:
@@ -1295,7 +1300,9 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel):
 
     def __init__(self, config):
         super().__init__(config)
-        self.visual = Qwen2VisionTransformer(config.vision_config)
+        self.visual = Qwen2VisionTransformer._from_config(
+            config.vision_config, attn_implementation=config._attn_implementation
+        )
         self.model = Qwen2VLModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)

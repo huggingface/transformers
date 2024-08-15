@@ -84,6 +84,7 @@ class Qwen2VLVisionText2TextModelTester:
             "depth": 2,
             "embed_dim": 32,
             "hidden_act": "quick_gelu",
+            "hidden_size": 32,
             "mlp_ratio": 4,
             "num_heads": 4,
             "patch_size": 14,
