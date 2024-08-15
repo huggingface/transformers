@@ -326,7 +326,6 @@ class VisionSpdaAttention(nn.Module):
                 )
             )
         x = torch.cat(attn_outputs, dim=1).transpose(0, 1).reshape(L, -1)
-        x = torch.cat(attn_outputs,dim=1).transpose(0, 1).reshape(L, -1)
         x = self.proj(x)
         return x
 
