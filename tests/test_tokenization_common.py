@@ -1154,7 +1154,7 @@ class TokenizerTesterMixin:
                 )  # Check that no error raised
 
     @require_jinja
-    def test_jinja_extensions(self):
+    def test_jinja_extensions_are_enabled(self):
         break_template = """
         {%- for message in messages %}
             {{- message.role + " " + message.content }}
