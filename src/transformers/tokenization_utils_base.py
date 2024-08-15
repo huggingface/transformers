@@ -1930,7 +1930,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             # We also expose some options like custom indents and separators
             return json.dumps(x, ensure_ascii=ensure_ascii, indent=indent, separators=separators, sort_keys=sort_keys)
 
-        def strftime(format):
+        def strftime_now(format):
             return datetime.now().strftime(format)
 
         class AssistantTracker(Extension):
@@ -1980,7 +1980,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         )
         jinja_env.filters["tojson"] = tojson
         jinja_env.globals["raise_exception"] = raise_exception
-        jinja_env.globals["strftime"] = strftime
+        jinja_env.globals["strftime_now"] = strftime_now
         return jinja_env.from_string(chat_template)
 
     def get_chat_template(self, chat_template: Optional[str] = None, tools: Optional[List[Dict]] = None) -> str:
