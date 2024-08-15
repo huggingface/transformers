@@ -113,7 +113,7 @@ conversation = [
     },
 ]
 prompt = processor.apply_chat_template(conversation, add_generation_prompt=True)
-inputs = processor(prompt, image, return_tensors="pt").to("cuda:0")
+inputs = processor(images-image, text=prompt, return_tensors="pt").to("cuda:0")
 
 # autoregressively complete prompt
 output = model.generate(**inputs, max_new_tokens=100)
@@ -184,7 +184,7 @@ prompt_2 = processor.apply_chat_template(conversation_2, add_generation_prompt=T
 prompts = [prompt_1, prompt_2]
 
 # We can simply feed images in the order they have to be used in the text prompt
-inputs = processor(text=prompts, images=[image_stop, image_cats, image_snowman], padding=True, return_tensors="pt").to(model.device)
+inputs = processor(images=[image_stop, image_cats, image_snowman], text=prompts, padding=True, return_tensors="pt").to(model.device)
 
 # Generate
 generate_ids = model.generate(**inputs, max_new_tokens=30)
@@ -248,7 +248,7 @@ conversation = [
 ]
 
 prompt = processor.apply_chat_template(conversation, add_generation_prompt=True)
-inputs = processor(text=prompt, images=list(video), return_tensors="pt")
+inputs = processor(images=list(video), text=prompt, return_tensors="pt")
 
 out = model.generate(**inputs, max_new_tokens=60)
 processor.batch_decode(out, skip_special_tokens=True, clean_up_tokenization_spaces=True)
@@ -293,6 +293,18 @@ model = LlavaOnevisionForConditionalGeneration.from_pretrained(
 ## LlavaOnevisionConfig
 
 [[autodoc]] LlavaOnevisionConfig
+
+## LlavaOnevisionProcessor
+
+[[autodoc]] LlavaOnevisionProcessor
+
+## LlavaOnevisionImageProcessor
+
+[[autodoc]] LlavaOnevisionImageProcessor
+
+## LlavaOnevisionVideoProcessor
+
+[[autodoc]] LlavaOnevisionVideoProcessor
 
 ## LlavaOnevisionForConditionalGeneration
 

@@ -232,7 +232,7 @@ class LlavaOnevisionPreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
     _supports_cache_class = True
-    _supports_static_cache = True
+    _supports_static_cache = False  # Qwen2 doesn't but llava has no reasons to not support
     _supports_quantized_cache = True
     _supports_sdpa = True
 

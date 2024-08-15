@@ -17,6 +17,7 @@
 import gc
 import unittest
 
+import numpy as np
 import requests
 from huggingface_hub import hf_hub_download
 
@@ -47,7 +48,6 @@ from ...test_modeling_common import (
 if is_torch_available():
     import torch
 
-    from transformers.models.llava_onevision.modeling_llava_onevision import image_size_to_num_patches
 else:
     is_torch_greater_or_equal_than_2_0 = False
 
@@ -66,7 +66,7 @@ class LlavaOnevisionVisionText2TextModelTester:
         vision_feature_select_strategy="full",
         vision_feature_layer=-1,
         text_config={
-            "model_type": "llama",
+            "model_type": "qwen2",
             "seq_length": 7,
             "is_training": True,
             "use_input_mask": True,
@@ -76,6 +76,7 @@ class LlavaOnevisionVisionText2TextModelTester:
             "hidden_size": 32,
             "num_hidden_layers": 2,
             "num_attention_heads": 4,
+            "num_key_value_heads": 4,
             "intermediate_size": 37,
             "hidden_act": "gelu",
             "hidden_dropout_prob": 0.1,
@@ -233,7 +234,6 @@ class LlavaOnevisionForConditionalGenerationModelTest(ModelTesterMixin, Generati
                 if "image_newline" in name or "vision_tower" in name:
                     continue
                 elif param.requires_grad:
-                    print(name, param.data.mean())
                     self.assertIn(
                         ((param.data.mean() * 1e9).round() / 1e9).item(),
                         [0.0, 1.0],
@@ -321,11 +321,19 @@ class LlavaOnevisionForConditionalGenerationModelTest(ModelTesterMixin, Generati
 @require_torch
 class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.processor = AutoProcessor.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf")
-        url = "https://github.com/haotian-liu/LLaVA/blob/1a91fc274d7c35a9b50b3cb29c4247ae5837ce39/images/llava_v1_5_radar.jpg?raw=true"
-        self.image = Image.open(requests.get(url, stream=True).raw)
-
-        self.prompt = "[INST] <image>\nWhat is shown in this image? [/INST]"
+        self.processor = AutoProcessor.from_pretrained(
+            "llava-hf/llava-onevision-qwen2-0.5b-ov-hf", padding_side="left"
+        )
+        image_file = hf_hub_download(
+            repo_id="raushan-testing-hf/images_test", filename="llava_v1_5_radar.jpg", repo_type="dataset"
+        )
+        video_file = hf_hub_download(
+            repo_id="raushan-testing-hf/videos-test", filename="video_demo.npy", repo_type="dataset"
+        )
+        self.image = Image.open(image_file)
+        self.video = np.load(video_file)
+        self.prompt_image = "user\n<image>\nWhat do you see in this image?<|im_end|>\n<|im_start|>assistant\n"
+        self.prompt_video = "user\n<video>\nWhat do you see in this video?<|im_end|>\n<|im_start|>assistant\n"
 
     def tearDown(self):
         gc.collect()
@@ -335,30 +343,13 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test(self):
         model = LlavaOnevisionForConditionalGeneration.from_pretrained(
-            "llava-hf/llava-v1.6-mistral-7b-hf",
-            load_in_4bit=True,
+            "llava-hf/llava-onevision-qwen2-0.5b-ov-hf", device_map=torch_device
         )
 
-        inputs = self.processor(self.prompt, self.image, return_tensors="pt")
-
-        # verify inputs against original implementation
-        filepath = hf_hub_download(
-            repo_id="nielsr/test-image",
-            filename="llava_1_6_input_ids.pt",
-            repo_type="dataset",
-        )
-        original_input_ids = torch.load(filepath, map_location="cpu")
-        # replace -200 by image_token_index (since we use token ID = 32000 for the image token)
-        original_input_ids[original_input_ids == -200] = model.config.image_token_index
-        assert original_input_ids[0].tolist() == inputs.input_ids[0].tolist()
-
-        filepath = hf_hub_download(
-            repo_id="nielsr/test-image",
-            filename="llava_1_6_pixel_values.pt",
-            repo_type="dataset",
-        )
-        original_pixel_values = torch.load(filepath, map_location="cpu")
-        assert torch.allclose(original_pixel_values, inputs.pixel_values.half())
+        inputs = self.processor(images=self.image, text=self.prompt_image, return_tensors="pt").to(torch_device)
+        self.assertTrue(inputs.input_ids.shape[1] == 6567)  # should expand num-image-tokens times
+        self.assertTrue(inputs.pixel_values.shape == torch.Size([1, 10, 3, 384, 384]))
+        self.assertTrue(inputs.image_sizes.tolist() == [[899, 1024]])
 
         # verify single forward pass
         inputs = inputs.to(torch_device)
@@ -366,19 +357,15 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
             output = model(**inputs)
 
         expected_slice = torch.tensor(
-            [
-                [-4.7695, -4.5664, -0.2786],
-                [-10.6250, -10.8906, -2.5254],
-                [-6.7383, -7.2461, -0.6787],
-            ],
+            [[-12.2601, -14.5049, -12.8159], [3.3944, 5.0435, 9.5309], [3.4951, 4.4647, 7.8321]],
             dtype=torch.float32,
             device=torch_device,
         )
-        assert torch.allclose(output.logits[0, :3, :3], expected_slice, atol=1e-3)
+        self.assertTrue(torch.allclose(output.logits[0, :3, :3], expected_slice, atol=1e-3))
 
         # verify generation
         output = model.generate(**inputs, max_new_tokens=100)
-        EXPECTED_DECODED_TEXT = '[INST]  \nWhat is shown in this image? [/INST] The image appears to be a radar chart, which is a type of multi-dimensional plot that displays values for multiple quantitative variables represented on axes starting from the same point. This particular radar chart is showing the performance of various models or systems across different metrics or datasets.\n\nThe chart is divided into several sections, each representing a different model or dataset. The axes represent different metrics or datasets, such as "MMM-Vet," "MMM-Bench," "L'  # fmt: skip
+        EXPECTED_DECODED_TEXT = 'user\n\nWhat do you see in this image?\nassistant\nThe image is a radar chart that compares the performance of different models in a specific task, likely related to natural language processing or machine learning. The chart is divided into several axes, each representing a different model or method. The models are color-coded and labeled with their respective names. The axes are labeled with terms such as "VQA," "GQA," "MQA," "VQAv2," "MM-Vet," "LLaVA-Bench," "LLaVA-1'  # fmt: skip
 
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
@@ -389,22 +376,21 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test_batch(self):
         model = LlavaOnevisionForConditionalGeneration.from_pretrained(
-            "llava-hf/llava-v1.6-mistral-7b-hf", load_in_4bit=True
+            "llava-hf/llava-onevision-qwen2-0.5b-ov-hf", device_map=torch_device
         )
-        url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        cats_image = Image.open(requests.get(url, stream=True).raw)
 
         inputs = self.processor(
-            [self.prompt, self.prompt],
-            images=[self.image, cats_image],
+            text=[self.prompt_image, self.prompt_video],
+            images=self.image,
+            videos=self.video,
             return_tensors="pt",
             padding=True,
         ).to(torch_device)
 
-        # it should not matter whether two images are the same size or not
         output = model.generate(**inputs, max_new_tokens=20)
 
-        EXPECTED_DECODED_TEXT = ['[INST]  \nWhat is shown in this image? [/INST] The image appears to be a radar chart, which is a type of multi-dimensional plot that displays', '[INST]  \nWhat is shown in this image? [/INST] The image shows two cats lying on a pink surface, which appears to be a couch or a cush']  # fmt: skip
+        EXPECTED_DECODED_TEXT = ['user\n\nWhat do you see in this image?\nassistant\nThe image is a radar chart that compares the performance of different models in a specific task, likely related', 'user\n\nWhat do you see in this video?\nassistant\nThe video shows a young child sitting on a bed, wearing glasses and looking at a book. The']  # fmt: skip
+
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
@@ -412,24 +398,64 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
 
     @slow
     @require_bitsandbytes
-    def test_small_model_integration_test_unk_token(self):
+    def test_small_model_integration_test_video(self):
         # related to (#29835)
         model = LlavaOnevisionForConditionalGeneration.from_pretrained(
-            "llava-hf/llava-v1.6-mistral-7b-hf",
-            load_in_4bit=True,
+            "llava-hf/llava-onevision-qwen2-0.5b-ov-hf",
+            device_map=torch_device,
         )
 
-        prompt_with_unk = "[INST] <image>\nWhat is shown in this <unk> image? [/INST]"
-        inputs = self.processor(prompt_with_unk, self.image, return_tensors="pt")
-
-        # verify single forward pass
-        inputs = inputs.to(torch_device)
-        with torch.no_grad():
-            output = model(**inputs)
+        inputs = self.processor(text=self.prompt_video, videos=self.video, return_tensors="pt").to(torch_device)
 
         # verify generation
         output = model.generate(**inputs, max_new_tokens=40)
-        EXPECTED_DECODED_TEXT = '[INST]  \nWhat is shown in this   image? [/INST] The image appears to be a radar chart, which is a type of multi-dimensional plot that displays values for multiple quantitative variables represented on axes starting from the same point. This particular radar chart'  # fmt: skip
+        EXPECTED_DECODED_TEXT = 'user\n\nWhat do you see in this video?\nassistant\nThe video shows a young child sitting on a bed, wearing glasses and looking at a book. The child appears to be engaged with the book, possibly reading or looking at the pages. The room has'  # fmt: skip
+
+        self.assertEqual(
+            self.processor.decode(output[0], skip_special_tokens=True),
+            EXPECTED_DECODED_TEXT,
+        )
+
+    @slow
+    @require_bitsandbytes
+    def test_small_model_integration_test_multi_image(self):
+        # related to (#29835)
+        model = LlavaOnevisionForConditionalGeneration.from_pretrained(
+            "llava-hf/llava-onevision-qwen2-0.5b-ov-hf",
+            device_map=torch_device,
+        )
+
+        url = "https://www.ilankelman.org/stopsigns/australia.jpg"
+        image = Image.open(requests.get(url, stream=True).raw)
+        prompt = (
+            "user\n<image><image>\nWhat is the difference between these images?<|im_end|>\n<|im_start|>assistant\n"
+        )
+        inputs = self.processor(text=prompt, images=[self.image, image], return_tensors="pt").to(torch_device)
+
+        # verify generation
+        output = model.generate(**inputs, max_new_tokens=40)
+        EXPECTED_DECODED_TEXT = "user\n\nWhat is the difference between these images?\nassistant\nThe images you've provided appear to be related to a graphical representation of a radar chart, which is a type of data visualization used to show the distribution of a particular variable across a geographic area. The"  # fmt: skip
+
+        self.assertEqual(
+            self.processor.decode(output[0], skip_special_tokens=True),
+            EXPECTED_DECODED_TEXT,
+        )
+
+    @slow
+    @require_bitsandbytes
+    def test_small_model_integration_test_multi_video(self):
+        # related to (#29835)
+        model = LlavaOnevisionForConditionalGeneration.from_pretrained(
+            "llava-hf/llava-onevision-qwen2-0.5b-ov-hf",
+            device_map=torch_device,
+        )
+
+        prompt = "user\n<video><video>\nAre these videos identical?<|im_end|>\n<|im_start|>assistant\n"
+        inputs = self.processor(text=prompt, videos=[self.video, self.video], return_tensors="pt").to(torch_device)
+
+        # verify generation
+        output = model.generate(**inputs, max_new_tokens=40)
+        EXPECTED_DECODED_TEXT = "user\n\nAre these videos identical?\nassistant\nNo, the video provided is not identical to the one you've asked about. The video shows a child sitting on a bed, reading a book, but it appears to be a different scene with different"  # fmt: skip
 
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
@@ -440,8 +466,7 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test_batch_different_resolutions(self):
         model = LlavaOnevisionForConditionalGeneration.from_pretrained(
-            "llava-hf/llava-v1.6-mistral-7b-hf",
-            load_in_4bit=True,
+            "llava-hf/llava-onevision-qwen2-0.5b-ov-hf", device_map=torch_device
         )
 
         url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -450,42 +475,17 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
         lowres_img = Image.open(requests.get(lowres_url, stream=True).raw)
 
         inputs = self.processor(
-            [self.prompt, self.prompt], images=[lowres_img, cats_image], return_tensors="pt", padding=True
+            text=[self.prompt_image, self.prompt_image],
+            images=[lowres_img, cats_image],
+            return_tensors="pt",
+            padding=True,
         ).to(torch_device)
-        pixel_values = inputs["pixel_values"]
-
-        # verify pixel values are padded correctly with 0 when one image has more num_patches than the other
-        image_num_patches = [
-            image_size_to_num_patches(
-                image_size=imsize,
-                grid_pinpoints=model.config.image_grid_pinpoints,
-                patch_size=model.config.vision_config.image_size,
-            )
-            for imsize in inputs["image_sizes"]
-        ]
-        for pix_val, num_patch in zip(pixel_values, image_num_patches):
-            self.assertTrue(torch.all(pix_val[num_patch:] == 0))  # pad on the right
-            for i in range(num_patch):
-                self.assertFalse(torch.all(pix_val[i : i + 1] == 0))  # no padding expected in any of patches
-
-        # check loss when labels are passed
-        inputs["labels"] = inputs["input_ids"].clone()
-        with torch.no_grad():
-            output = model(**inputs)
-
-        expected_slice = torch.tensor(
-            [[-0.0308, -0.0313, -0.0314], [-0.3064, -0.3013, -0.2986], [-0.1226, -0.1246, -0.1210]],
-            dtype=torch.float32,
-            device=torch_device,
-        )
-        assert torch.allclose(output.logits[0, -3:, -3:], expected_slice, atol=1e-3)
-        assert torch.allclose(output.loss, torch.tensor(6.8619, device=torch_device))
 
         # verify generation
         output = model.generate(**inputs, max_new_tokens=50)
-        EXPECTED_DECODED_TEXT = '[INST]  \nWhat is shown in this image? [/INST] The image shows a forested area with a misty or foggy atmosphere. In the foreground, there is a grassy field with a few deer grazing. The deer are partially obscured by the fog, and the trees in the background'  # fmt: skip
+        EXPECTED_DECODED_TEXT = ['user\n\nWhat do you see in this image?\nassistant\nThe image shows a scene from a wildlife camera, likely a security camera, capturing a moment in a natural setting. It features two deer, one larger and one smaller, grazing on the grass. The environment is foggy, suggesting early morning or late', 'user\n\nWhat do you see in this image?\nassistant\nIn the tranquil setting of this image, two cats are enjoying a peaceful nap on a vibrant pink blanket. The cat on the left, with its gray and black striped fur, is lying on its side, its head comfortably resting on the blanket. Its']  # fmt: skip
         self.assertEqual(
-            self.processor.decode(output[0], skip_special_tokens=True),
+            self.processor.batch_decode(output, skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
         )
 
@@ -493,8 +493,8 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test_batch_matches_single(self):
         model = LlavaOnevisionForConditionalGeneration.from_pretrained(
-            "llava-hf/llava-v1.6-mistral-7b-hf",
-            load_in_4bit=True,
+            "llava-hf/llava-onevision-qwen2-0.5b-ov-hf",
+            device_map=torch_device,
         )
 
         url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -503,51 +503,21 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
         lowres_img = Image.open(requests.get(lowres_url, stream=True).raw)
 
         inputs_batched = self.processor(
-            [self.prompt, self.prompt], images=[lowres_img, cats_image], return_tensors="pt", padding=True
+            text=[self.prompt_image, self.prompt_image],
+            images=[lowres_img, cats_image],
+            return_tensors="pt",
+            padding=True,
         ).to(torch_device)
 
-        inputs_single = self.processor(self.prompt, images=lowres_img, return_tensors="pt", padding=True).to(
-            torch_device
-        )
+        inputs_single = self.processor(
+            text=self.prompt_image, images=lowres_img, return_tensors="pt", padding=True
+        ).to(torch_device)
 
         # verify generation
         output_batched = model.generate(**inputs_batched, max_new_tokens=50)
         output_single = model.generate(**inputs_single, max_new_tokens=50)
+
         self.assertEqual(
             self.processor.decode(output_batched[0], skip_special_tokens=True),
             self.processor.decode(output_single[0], skip_special_tokens=True),
         )
-
-    @slow
-    @require_bitsandbytes
-    def test_padding_side_when_merging_inputs(self):
-        model = LlavaOnevisionForConditionalGeneration.from_pretrained(
-            "llava-hf/llava-v1.6-mistral-7b-hf",
-            load_in_4bit=True,
-        )
-
-        url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        lowres_url = "https://4.img-dpreview.com/files/p/TS560x560~forums/56876524/03975b28741443319e9a94615e35667e"
-        cats_image = Image.open(requests.get(url, stream=True).raw)
-        lowres_img = Image.open(requests.get(lowres_url, stream=True).raw)
-
-        inputs_batched = self.processor(
-            [self.prompt, self.prompt], images=[lowres_img, cats_image], return_tensors="pt", padding=True
-        ).to(torch_device)
-
-        # model is in eval mode by default so we should get pad on the left side
-        # we can check the first hidden-states (aka inputs embeds)
-        # the first element was lo-res image and we expect the first 1414 tokens to be all pads
-        output_eval = model(**inputs_batched, output_hidden_states=True)
-        self.assertTrue((output_eval.hidden_states[0][0, :1414, ...] == 0).all().item())
-
-        # otherwise padding is on the right side, so it's last 1414 tokens
-        self.processor.padding_side = "right"
-        inputs_batched = self.processor(
-            [self.prompt, self.prompt], images=[lowres_img, cats_image], return_tensors="pt", padding=True
-        ).to(torch_device)
-
-        model.train()
-        with torch.no_grad():
-            output_train = model(**inputs_batched, output_hidden_states=True)
-        self.assertTrue((output_train.hidden_states[0][0, -1414:, ...] == 0).all().item())

@@ -34,6 +34,7 @@ from ...processing_utils import (
     ProcessorMixin,
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...utils import to_py_obj
 
 
 class LlavaOnevisionProcessorKwargs(ProcessingKwargs, total=False):
@@ -61,8 +62,8 @@ class LlavaOnevisionProcessor(ProcessorMixin):
             The image processor is a required input.
         tokenizer ([`LlamaTokenizerFast`], *optional*):
             The tokenizer is a required input.
-        patch_size (`int`, *optional*):
-            Patch size from the vision tower.
+        num_image_tokens (`int`, *optional*):
+            Number of image tokens for one imagethat will be returned by vision tower.
         vision_feature_select_strategy (`str`, *optional*):
             The feature selection strategy used to select the vision feature from the vision backbone.
             Shoudl be same as in model's config
@@ -75,7 +76,13 @@ class LlavaOnevisionProcessor(ProcessorMixin):
     """
 
     attributes = ["video_processor", "image_processor", "tokenizer"]
-    valid_kwargs = ["chat_template", "patch_size", "vision_feature_select_strategy", "image_token", "video_token"]
+    valid_kwargs = [
+        "chat_template",
+        "num_image_tokens",
+        "vision_feature_select_strategy",
+        "image_token",
+        "video_token",
+    ]
     video_processor_class = "LlavaOnevisionVideoProcessor"
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
@@ -85,14 +92,14 @@ class LlavaOnevisionProcessor(ProcessorMixin):
         video_processor=None,
         image_processor=None,
         tokenizer=None,
-        patch_size=None,
+        num_image_tokens=None,
         vision_feature_select_strategy=None,
         chat_template=None,
         image_token="<image>",
         video_token="<video>",
         **kwargs: Unpack[LlavaOnevisionProcessorKwargs],
     ):
-        self.patch_size = patch_size
+        self.num_image_tokens = num_image_tokens
         self.vision_feature_select_strategy = vision_feature_select_strategy
         self.image_token = image_token
         self.video_token = video_token
@@ -152,44 +159,46 @@ class LlavaOnevisionProcessor(ProcessorMixin):
         if images is not None:
             image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
 
-            image_sizes = image_inputs["image_sizes"]
+            image_sizes = to_py_obj(image_inputs["image_sizes"])
             height, width = get_image_size(to_numpy_array(image_inputs["pixel_values"][0][0]))
             prompt_strings = []
 
-            for image_size, sample in zip(image_sizes, text):
-                # Replace the image token with the expanded image token sequence
-                orig_height, orig_width = image_size
-                num_image_tokens = self._get_number_of_features(orig_height, orig_width, height, width)
-                if self.vision_feature_select_strategy == "default":
-                    num_image_tokens -= 1
+            for sample in text:
+                while self.image_token in sample:
+                    image_size = image_sizes.pop(0)
+                    orig_height, orig_width = image_size
+                    num_image_tokens = self._get_number_of_features(orig_height, orig_width, height, width)
+                    if self.vision_feature_select_strategy == "default":
+                        num_image_tokens -= 1
 
-                sample = sample.replace(self.image_token, self.image_token * num_image_tokens)
+                    sample = sample.replace(self.image_token, "<placeholder>" * num_image_tokens, 1)
                 prompt_strings.append(sample)
-            text = prompt_strings
+            text = [sample.replace("<placeholder>", self.image_token) for sample in prompt_strings]
 
         if videos is not None:
             video_inputs = self.video_processor(videos, **output_kwargs["videos_kwargs"])
 
-            image_sizes = video_inputs["image_sizes_videos"]
+            image_sizes = to_py_obj(video_inputs["image_sizes_videos"])
             one_video = to_numpy_array(video_inputs["pixel_values_videos"][0])
             height, width = get_image_size(one_video[0])
             num_frames = one_video.shape[0]  # frame dim is always after batch dim
-            num_image_tokens = (height // self.patch_size) * (width // self.patch_size)
+            num_image_tokens = self.num_image_tokens
             prompt_strings = []
 
-            for image_size_list, sample in zip(image_sizes, text):
-                # Replace the image token with the expanded image token sequence
-                orig_height, orig_width = image_size_list[0]
-                num_image_tokens = self._get_number_of_features(orig_height, orig_width, height, width)
-                if self.vision_feature_select_strategy == "default":
-                    num_image_tokens -= 1
+            for sample in text:
+                while self.video_token in sample:
+                    image_size_list = image_sizes.pop(0)
+                    orig_height, orig_width = image_size_list[0]
+                    num_image_tokens = self._get_number_of_features(orig_height, orig_width, height, width)
+                    if self.vision_feature_select_strategy == "default":
+                        num_image_tokens -= 1
 
-                sample = sample.replace(self.video_token, self.video_token * num_image_tokens * num_frames)
+                    sample = sample.replace(self.video_token, "<placeholder>" * num_image_tokens * num_frames, 1)
                 prompt_strings.append(sample)
-            text = prompt_strings
+            text = [sample.replace("<placeholder>", self.video_token) for sample in prompt_strings]
 
         # Padding side can be in TextKwargs but is not accepted by the tokenizer
-        _ = output_kwargs["text_kwargs"].pop("padding_side")
+        _ = output_kwargs["text_kwargs"].pop("padding_side", None)
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
         return BatchFeature(data={**text_inputs, **image_inputs, **video_inputs})
 
@@ -201,14 +210,14 @@ class LlavaOnevisionProcessor(ProcessorMixin):
         )
         scale_height, scale_width = height_best_resolution // height, width_best_resolution // width
 
-        patches_height = height // self.patch_size
-        patches_width = width // self.patch_size
+        patches_height = int(math.sqrt(self.num_image_tokens))
+        patches_width = int(math.sqrt(self.num_image_tokens))
         unpadded_features, newline_features = self._get_unpadded_features(
             orig_height, orig_width, patches_height, patches_width, scale_height, scale_width
         )
 
         # The base patch covers the entire image (no CLS for SigLIP)
-        base_features = patches_height * patches_width
+        base_features = self.num_image_tokens
         num_image_tokens = unpadded_features + newline_features + base_features
         return num_image_tokens
 

@@ -124,7 +124,7 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
         tokenizer=tokenizer,
         video_processor=video_processor,
         image_processor=image_processor,
-        patch_size=14,
+        num_image_tokens=729,
         vision_feature_select_strategy="full",
         chat_template=chat_template,
     )
