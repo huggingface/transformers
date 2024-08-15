@@ -1179,7 +1179,7 @@ class TokenizerTesterMixin:
 
     @require_jinja
     def test_jinja_strftime(self):
-        strftime_template = """{{- strftime("%Y-%m-%d") }}""".strip()
+        strftime_template = """{{- strftime_now("%Y-%m-%d") }}""".strip()
 
         dummy_conversation = [
             {"role": "system", "content": "1"},
