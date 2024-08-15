@@ -106,12 +106,12 @@ Flash Attention 2 is an even faster, optimized version of the previous optimizat
 
 ## Resources
 
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with BEiT.
+A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with LLaVa.
 
 <PipelineTag pipeline="image-to-text"/>
 
 - A [Google Colab demo](https://colab.research.google.com/drive/1qsl6cd2c8gGtEW1xV5io7S8NHh-Cp1TV?usp=sharing) on how to run Llava on a free-tier Google colab instance leveraging 4-bit inference.
-- A [similar notebook](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/LLaVa/Inference_with_LLaVa_for_multimodal_generation.ipynb) showcasing batched inference. 🌎
+- Demo notebooks regarding fine-tuning on custom datasets and batched inference can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/LLaVa/). 🌎
 
 
 ## LlavaConfig

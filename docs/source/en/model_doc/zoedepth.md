@@ -91,6 +91,7 @@ depth = Image.fromarray(formatted)
 
 A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with ZoeDepth.
 
+- [Monocular depth estimation task guide](../tasks/monocular_depth_estimation)
 - A demo notebook regarding inference with ZoeDepth models can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/ZoeDepth). 🌎
 
 ## ZoeDepthConfig
