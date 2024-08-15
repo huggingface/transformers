@@ -824,7 +824,7 @@ class GroundingDinoTextEnhancerLayer(nn.Module):
             attention_masks = attention_masks.to(dtype=dtype)  # fp16 compatibility
             attention_masks = (1.0 - attention_masks) * torch.finfo(dtype).min
 
-        queries = keys = self.with_pos_embed(hidden_states, position_embeddings)
+        queries = keys = self.with_pos_embed(hidden_states, position_embeddings).to(hidden_states.dtype)
         attention_output, attention_weights = self.self_attn(
             queries=queries,
             keys=keys,
@@ -1914,7 +1914,7 @@ class GroundingDinoDecoder(GroundingDinoPreTrainedModel):
                 reference_points_input = reference_points[:, :, None] * valid_ratios[:, None]
             else:
                 raise ValueError("Last dim of reference_points must be 2 or 4, but got {reference_points.shape[-1]}")
-            query_pos = get_sine_pos_embed(reference_points_input[:, :, 0, :], num_pos_feats=self.config.d_model // 2)
+            query_pos = get_sine_pos_embed(reference_points_input[:, :, 0, :], num_pos_feats=self.config.d_model // 2).to(vision_encoder_hidden_states.dtype)
             query_pos = self.reference_points_head(query_pos)
 
             # In original implementation they apply layer norm before outputting intermediate hidden states
