@@ -123,7 +123,7 @@ class LlavaOnevisionImageProcessingTest(ImageProcessingTestMixin, unittest.TestC
     image_processing_class = LlavaOnevisionImageProcessor if is_vision_available() else None
     video_processing_class = LlavaOnevisionVideoProcessor if is_vision_available() else None
 
-    # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTest.setUp with CLIP->LlavaNext
+    # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTest.setUp with CLIP->LlavaOnevision
     def setUp(self):
         super().setUp()
         self.image_processor_tester = LlavaOnevisionImageProcessingTester(self)

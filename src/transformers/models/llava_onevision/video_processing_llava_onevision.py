@@ -52,13 +52,13 @@ if is_vision_available():
     from PIL import Image
 
 
-# Copied from transformers.models.llava_next_video.image_processing_llava_next_video.make_batched_videos
 def make_batched_videos(videos) -> List[VideoInput]:
     if isinstance(videos, (list, tuple)) and isinstance(videos[0], (list, tuple)) and is_valid_image(videos[0][0]):
         return videos
 
     elif isinstance(videos, (list, tuple)) and is_valid_image(videos[0]):
-        if isinstance(videos[0], Image.Image):
+        print(videos[0].shape)
+        if isinstance(videos[0], Image.Image) or len(videos[0].shape) == 3:
             return [videos]
         elif len(videos[0].shape) == 4:
             return [list(video) for video in videos]

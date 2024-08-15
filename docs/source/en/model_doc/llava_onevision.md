@@ -94,9 +94,8 @@ import torch
 from PIL import Image
 import requests
 
-processor = AutoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-7b-si-hf")
-
-model = LlavaOnevisionForConditionalGeneration.from_pretrained("llava-hf/llava-onevision-qwen2-7b-si-hf", torch_dtype=torch.float16, low_cpu_mem_usage=True) 
+processor = AutoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-7b-ov-hf") 
+model = LlavaOnevisionForConditionalGeneration.from_pretrained("llava-hf/llava-onevision-qwen2-7b-ov-hf", torch_dtype=torch.float16, low_cpu_mem_usage=True) 
 model.to("cuda:0")
 
 # prepare image and text prompt, using the appropriate prompt template
@@ -113,12 +112,12 @@ conversation = [
     },
 ]
 prompt = processor.apply_chat_template(conversation, add_generation_prompt=True)
-inputs = processor(images-image, text=prompt, return_tensors="pt").to("cuda:0")
+inputs = processor(images=image, text=prompt, return_tensors="pt").to("cuda:0", torch.float16)
 
 # autoregressively complete prompt
 output = model.generate(**inputs, max_new_tokens=100)
-
 print(processor.decode(output[0], skip_special_tokens=True))
+'user\n\nWhat is shown in this image?\nassistant\nThe image shows a radar chart, also known as a spider chart or a star chart, which is used to compare multiple quantitative variables. Each axis represents a different variable, and the chart is filled with'
 ```
 
 ### Multi image inference
@@ -184,11 +183,12 @@ prompt_2 = processor.apply_chat_template(conversation_2, add_generation_prompt=T
 prompts = [prompt_1, prompt_2]
 
 # We can simply feed images in the order they have to be used in the text prompt
-inputs = processor(images=[image_stop, image_cats, image_snowman], text=prompts, padding=True, return_tensors="pt").to(model.device)
+inputs = processor(images=[image_stop, image_cats, image_snowman], text=prompts, padding=True, return_tensors="pt").to(model.device, torch.float16)
 
 # Generate
 generate_ids = model.generate(**inputs, max_new_tokens=30)
 processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
+['user\n\nWhat is shown in this image?\nassistant\nThere is a red stop sign in the image.\nuser\n\nWhat about this image? How many cats do you see?\nassistant\ntwo', 'user\n\nWhat is shown in this image?\nassistant\n']
 ```
 
 ### Video inference
@@ -248,11 +248,11 @@ conversation = [
 ]
 
 prompt = processor.apply_chat_template(conversation, add_generation_prompt=True)
-inputs = processor(images=list(video), text=prompt, return_tensors="pt")
+inputs = processor(videos=list(video), text=prompt, return_tensors="pt").to("cuda:0", torch.float16)
 
 out = model.generate(**inputs, max_new_tokens=60)
 processor.batch_decode(out, skip_special_tokens=True, clean_up_tokenization_spaces=True)
-
+["user\n\nWhy is this video funny?\nassistant\nThe video appears to be humorous because it shows a young child, who is wearing glasses and holding a book, seemingly reading with a serious and focused expression. The child's glasses are a bit oversized for their face, which adds a comical touch, as it's a common trope to see children wearing"]
 ```
 
 ## Model optimization

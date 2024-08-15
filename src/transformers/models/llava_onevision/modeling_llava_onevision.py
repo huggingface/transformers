@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch Llava-NeXT model."""
+"""PyTorch Llava-Onevision model."""
 
 import math
 from dataclasses import dataclass
@@ -221,7 +221,7 @@ LLAVA_ONEVISION_START_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare LLaMA Model outputting raw hidden-states without any specific head on top.",
+    "The bare LLaVA-Onevision Model outputting raw hidden-states without any specific head on top.",
     LLAVA_ONEVISION_START_DOCSTRING,
 )
 class LlavaOnevisionPreTrainedModel(PreTrainedModel):
@@ -274,8 +274,14 @@ LLAVA_ONEVISION_INPUTS_DOCSTRING = r"""
             The tensors corresponding to the input images. Pixel values can be obtained using
             [`AutoImageProcessor`]. See [`LlavaNextImageProcessor.__call__`] for details. [`LlavaProcessor`] uses
             [`LlavaNextImageProcessor`] for processing images.
+        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, frames, num_channels, image_size, image_size)):
+            The tensors corresponding to the input videos. Pixel values can be obtained using
+            [`LlavaNextVideoProcessor`]. See [`LlavaNextVideoProcessor.__call__`] for details. [`LlavaProcessor`] uses
+            [`LlavaNextVideoProcessor`] for processing videos.
         image_sizes (`torch.LongTensor` of shape `(batch_size, 2)`, *optional*):
             The sizes of the images in the batch, being (height, width) for each image.
+        image_sizes_videos (`torch.LongTensor` of shape `(batch_size, frames, 2)`, *optional*):
+            The sizes of the videos in the batch, being (height, width) for each frame in the video.
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
@@ -485,16 +491,17 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import AutoProcessor, LlavaOnevisionForConditionalGeneration
+        >>> import torch
+        >>> from transformers import LlavaOnevisionProcessor, LlavaOnevisionForConditionalGeneration
 
-        >>> model = LlavaOnevisionForConditionalGeneration.from_pretrained("llava-hf/llava-onevision-qwen2-7b-ov-hf")
-        >>> processor = AutoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-7b-ov-hf")
+        >>> model = LlavaOnevisionForConditionalGeneration.from_pretrained("llava-hf/llava-onevision-qwen2-7b-ov-hf", torch_dtype="float16", device_map="cuda:0")
+        >>> processor = LlavaOnevisionProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-7b-ov-hf")
 
         >>> conversation = [
         ...     {
         ...       "role": "user",
         ...       "content": [
-        ...           {"type": "text", "text": "What are these?"},
+        ...           {"type": "text", "text": "What is shown in this image?"},
         ...           {"type": "image"},
         ...         ],
         ...     },
@@ -503,10 +510,11 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel):
 
         >>> image_file = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> raw_image = Image.open(requests.get(image_file, stream=True).raw)
-        >>> inputs = processor(prompt, raw_image, return_tensors='pt').to(0, torch.float16)
+        >>> inputs = processor(text=prompt, images=raw_image, return_tensors='pt').to(0, torch.float16)
 
-        >>> output = model.generate(**inputs, max_new_tokens=200, do_sample=False)
-        >>> processor.decode(output, skip_special_tokens=True)[0]
+        >>> output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        >>> processor.batch_decode(output, skip_special_tokens=True)[0]
+        "user\n\nWhat is shown in this image?\nassistant\ncat"
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
