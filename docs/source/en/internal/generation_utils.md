@@ -158,9 +158,6 @@ generation.
 [[autodoc]] LogitsProcessorList
     - __call__
 
-[[autodoc]] LogitsWarper
-    - __call__
-
 [[autodoc]] MinLengthLogitsProcessor
     - __call__
 
