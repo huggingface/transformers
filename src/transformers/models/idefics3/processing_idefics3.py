@@ -16,9 +16,9 @@
 Processor class for Idefics3.
 """
 
-import sys
-from typing import TYPE_CHECKING, List, Optional, Union
 import re
+import sys
+from typing import TYPE_CHECKING, Dict, List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image, load_image
@@ -93,7 +93,7 @@ def get_image_prompt_string(
 class Idefics3ImagesKwargs(ImagesKwargs, total=False):
     image_seq_len: Optional[int]
     return_row_col_info: Optional[bool]
-    max_image_size: Optional[dict[str, int]]
+    max_image_size: Optional[Dict[str, int]]
 
 
 class Idefics3ProcessorKwargs(ProcessingKwargs, total=False):
@@ -109,6 +109,9 @@ class Idefics3ProcessorKwargs(ProcessingKwargs, total=False):
             "return_row_col_info": True,
         },
     }
+
+
+Idefics3ProcessorKwargs.__annotations__["images_kwargs"] = Idefics3ImagesKwargs  # python 3.8 compatibility
 
 
 class Idefics3Processor(ProcessorMixin):
@@ -147,7 +150,7 @@ class Idefics3Processor(ProcessorMixin):
         self.global_img_token = "<global-img>"
         self.image_seq_len = image_seq_len
 
-        self._regex_to_remove_extra_special_tokens = re.compile(r'(\n?<global-img>\n?|<row_\d+_col_\d+>\n?)+')
+        self._regex_to_remove_extra_special_tokens = re.compile(r"(\n?<global-img>\n?|<row_\d+_col_\d+>\n?)+")
 
         tokens_to_add = {
             "additional_special_tokens": [
@@ -158,7 +161,7 @@ class Idefics3Processor(ProcessorMixin):
         }
         tokenizer.add_special_tokens(tokens_to_add)
 
-        super().__init__(image_processor, tokenizer, chat_template=chat_template)
+        super().__init__(image_processor, tokenizer, chat_template=chat_template, **kwargs)
 
     def _extract_images_from_prompts(self, prompts):
         prompt_images = []
@@ -355,7 +358,6 @@ class Idefics3Processor(ProcessorMixin):
         """
         decode_output = self.tokenizer.decode(*args, **kwargs)
         return self._regex_to_remove_extra_special_tokens.sub("<image>", decode_output)
-
 
     @property
     def model_input_names(self):

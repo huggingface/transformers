@@ -152,8 +152,6 @@ class Idefics3Config(PretrainedConfig):
             The scale factor for the image encoder.
         pad_token_id (`int`, *optional*, defaults to 128002):
             The id of the padding token.
-        max_position_embeddings (`int`, *optional*, defaults to 131072):
-            The maximum length of the input sequence.
 
     Example:
     ```python
@@ -178,7 +176,6 @@ class Idefics3Config(PretrainedConfig):
         text_config=None,
         scale_factor=2,
         pad_token_id=128_002,
-        max_position_embeddings=131_072,
         **kwargs,
     ):
         self.image_token_id = image_token_id
@@ -199,7 +196,6 @@ class Idefics3Config(PretrainedConfig):
         elif text_config is None:
             logger.info("text_config is None, using default text config")
             text_config = CONFIG_MAPPING["llama"](
-                max_position_embeddings=max_position_embeddings,
                 rms_norm_eps=1e-5,
                 pad_token_id=pad_token_id,
                 tie_word_embeddings=False,

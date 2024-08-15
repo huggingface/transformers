@@ -23,13 +23,10 @@ import requests
 
 from transformers import (
     AutoProcessor,
-    Idefics3Config,
-    Idefics3ForConditionalGeneration,
-    Idefics3Model,
     is_torch_available,
     is_vision_available,
 )
-from transformers.testing_utils import require_bitsandbytes, require_torch, slow, torch_device
+from transformers.testing_utils import require_bitsandbytes, require_torch, require_torch_multi_gpu, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -38,6 +35,12 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 if is_torch_available():
     import torch
+
+    from transformers import (
+        Idefics3Config,
+        Idefics3ForConditionalGeneration,
+        Idefics3Model,
+    )
 else:
     is_torch_greater_or_equal_than_2_0 = False
 
@@ -483,13 +486,13 @@ class Idefics3ForConditionalGenerationIntegrationTest(unittest.TestCase):
         torch.cuda.empty_cache()
 
     @slow
+    @require_torch_multi_gpu
     def test_integration_test(self):
         model = Idefics3ForConditionalGeneration.from_pretrained(
             "HuggingFaceM4/Idefics3-8B-Llama3",
             torch_dtype=torch.bfloat16,
             device_map="auto",
         )
-        model.to(torch_device)
 
         # Create inputs
         text = "<image>In this image, we see"
@@ -500,16 +503,18 @@ class Idefics3ForConditionalGenerationIntegrationTest(unittest.TestCase):
         generated_ids = model.generate(**inputs, max_new_tokens=10)
         generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
 
-        # Batch affects generated text. Single batch output: ['In this image, we see the Statue of Liberty in the foreground and']
-        expected_generated_text = "In this image, we see the Statue of Liberty, the New York City"
+        expected_generated_text = "<image>In this image, we see the Statue of Liberty, which is located on Liberty"
         self.assertEqual(generated_texts[0], expected_generated_text)
 
     @slow
     @require_bitsandbytes
+    @require_torch_multi_gpu
     def test_integration_test_4bit(self):
         # Let' s make sure we test the preprocessing to replace what is used
         model = Idefics3ForConditionalGeneration.from_pretrained(
-            "HuggingFaceM4/Idefics3-8B-Llama3", load_in_4bit=True, device_map="auto"
+            "HuggingFaceM4/Idefics3-8B-Llama3",
+            load_in_4bit=True,
+            device_map="auto",
         )
 
         # Create pixel inputs
@@ -520,5 +525,5 @@ class Idefics3ForConditionalGenerationIntegrationTest(unittest.TestCase):
         generated_ids = model.generate(**inputs, max_new_tokens=10)
         generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
 
-        expected_generated_text = "In this image, we see the Statue of Liberty, the Hudson River,"
+        expected_generated_text = "<image>In this image, we see the Statue of Liberty, trees, buildings, water"
         self.assertEqual(generated_texts[0], expected_generated_text)

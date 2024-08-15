@@ -40,6 +40,22 @@ This model was contributed by [amyeroberts](https://huggingface.co/amyeroberts) 
 The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 
+## Idefics3Config
+
+[[autodoc]] Idefics3Config
+
+
+## Idefics3Model
+
+[[autodoc]] Idefics3Model
+    - forward
+
+## Idefics3ForConditionalGeneration
+
+[[autodoc]] Idefics3ForConditionalGeneration
+    - forward
+
+
 ## Idefics3ImageProcessor
 [[autodoc]] Idefics3ImageProcessor
     - preprocess

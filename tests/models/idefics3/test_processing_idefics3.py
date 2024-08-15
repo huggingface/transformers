@@ -37,39 +37,39 @@ if is_vision_available():
 class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Idefics3Processor
 
-    def setUp(self):
-        self.tmpdirname = tempfile.mkdtemp()
+    @classmethod
+    def setUpClass(cls):
+        cls.tmpdirname = tempfile.mkdtemp()
         processor = Idefics3Processor.from_pretrained("HuggingFaceM4/Idefics3-8B-Llama3", image_seq_len=2)
-        processor.save_pretrained(self.tmpdirname)
-        self.max_image_size = 364
-        self.image1 = Image.open(
+        processor.save_pretrained(cls.tmpdirname)
+        cls.image1 = Image.open(
             BytesIO(
                 requests.get(
                     "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
                 ).content
             )
         )
-        self.image2 = Image.open(
+        cls.image2 = Image.open(
             BytesIO(requests.get("https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg").content)
         )
-        self.image3 = Image.open(
+        cls.image3 = Image.open(
             BytesIO(
                 requests.get(
                     "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg"
                 ).content
             )
         )
-        self.bos_token = processor.tokenizer.bos_token
-        self.image_token = processor.image_token.content
-        self.fake_image_token = processor.fake_image_token.content
-        self.global_img_token = processor.global_img_token
+        cls.bos_token = processor.tokenizer.bos_token
+        cls.image_token = processor.image_token.content
+        cls.fake_image_token = processor.fake_image_token.content
+        cls.global_img_token = processor.global_img_token
 
-        self.bos_token_id = processor.tokenizer.convert_tokens_to_ids(self.bos_token)
-        self.image_token_id = processor.tokenizer.convert_tokens_to_ids(self.image_token)
-        self.fake_image_token_id = processor.tokenizer.convert_tokens_to_ids(self.fake_image_token)
-        self.global_img_token_id = processor.global_img_token_id
-        self.padding_token_id = processor.tokenizer.pad_token_id
-        self.image_seq_len = processor.image_seq_len
+        cls.bos_token_id = processor.tokenizer.convert_tokens_to_ids(cls.bos_token)
+        cls.image_token_id = processor.tokenizer.convert_tokens_to_ids(cls.image_token)
+        cls.fake_image_token_id = processor.tokenizer.convert_tokens_to_ids(cls.fake_image_token)
+        cls.global_img_tokens_id = processor.tokenizer(cls.global_img_token, add_special_tokens=False)["input_ids"]
+        cls.padding_token_id = processor.tokenizer.pad_token_id
+        cls.image_seq_len = processor.image_seq_len
 
     def get_tokenizer(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
@@ -96,14 +96,15 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         ]  # add double newline, as it gets its own token
         text_split_images += (
             [self.fake_image_token_id]
-            + [self.global_img_token_id]
+            + self.global_img_tokens_id
             + [self.image_token_id] * self.image_seq_len
             + [self.fake_image_token_id]
         )
         return text_split_images
 
-    def tearDown(self):
-        shutil.rmtree(self.tmpdirname)
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmpdirname)
 
     def test_process_interleaved_images_prompts_no_image_splitting(self):
         processor = self.get_processor()
@@ -124,7 +125,7 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         # fmt: off
         tokenized_sentence = processor.tokenizer(text_str, add_special_tokens=False)
-        expected_input_ids = [[self.bos_token_id] + [self.fake_image_token_id] + [self.global_img_token_id] + [self.image_token_id] * self.image_seq_len + [self.fake_image_token_id] + tokenized_sentence["input_ids"]]
+        expected_input_ids = [[self.bos_token_id] + [self.fake_image_token_id] + self.global_img_tokens_id + [self.image_token_id] * self.image_seq_len + [self.fake_image_token_id] + tokenized_sentence["input_ids"]]
         self.assertEqual(inputs["input_ids"], expected_input_ids)
         self.assertEqual(inputs["attention_mask"], [[1] * len(expected_input_ids[0])])
         self.assertEqual(inputs["pixel_values"].shape, (1, 1, 3, 1092, 1456))
@@ -147,7 +148,7 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # fmt: off
         tokenized_sentence_1 = processor.tokenizer(text_str_1, add_special_tokens=False)
         tokenized_sentence_2 = processor.tokenizer(text_str_2, add_special_tokens=False)
-        image_tokens = [self.fake_image_token_id] + [self.global_img_token_id] + [self.image_token_id] * self.image_seq_len + [self.fake_image_token_id]
+        image_tokens = [self.fake_image_token_id] + self.global_img_tokens_id + [self.image_token_id] * self.image_seq_len + [self.fake_image_token_id]
         expected_input_ids_1 = [self.bos_token_id] + image_tokens + tokenized_sentence_1["input_ids"]
         expected_input_ids_2 = [self.bos_token_id] + 2 * image_tokens + tokenized_sentence_2["input_ids"]
         # Pad the first input to match the second input
@@ -308,8 +309,10 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_kwargs_overrides_default_image_processor_kwargs(self):
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-        image_processor = self.get_component("image_processor", max_image_size={"longest_edge": 80})
-        tokenizer = self.get_component("tokenizer", max_length=117)
+        image_processor = self.get_component(
+            "image_processor", max_image_size={"longest_edge": 32}, size={"longest_edge": 32}
+        )
+        tokenizer = self.get_component("tokenizer", max_length=117, padding="max_length")
 
         processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
         self.skip_processor_without_typed_kwargs(processor)
@@ -319,7 +322,8 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         inputs = processor(text=input_str, images=image_input)
         self.assertEqual(len(inputs["pixel_values"][0][0]), 3)
-        self.assertEqual(len(inputs["pixel_values"][0][0][0]), 80)
+        self.assertEqual(len(inputs["pixel_values"][0][0][0]), 32)
+        self.assertEqual(len(inputs["input_ids"][0]), 117)
 
     # We need to overwrite this test to adapt it to our processor.
     @require_vision
@@ -354,16 +358,16 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_input = self.prepare_image_inputs()
 
         # Define the kwargs for each modality
-        all_kwargs = {
-            "common_kwargs": {"return_tensors": "pt"},
-            "images_kwargs": {"max_image_size": {"longest_edge": 214}},
-            "text_kwargs": {"padding": "max_length", "max_length": 120},
-        }
-
-        inputs = processor(text=input_str, images=image_input, **all_kwargs)
+        inputs = processor(
+            text=input_str,
+            images=image_input,
+            common_kwargs={"return_tensors": "pt"},
+            images_kwargs={"max_image_size": {"longest_edge": 32}},
+            text_kwargs={"padding": "max_length", "max_length": 120, "truncation": "longest_first"},
+        )
         self.skip_processor_without_typed_kwargs(processor)
 
-        self.assertEqual(inputs["pixel_values"].shape[3], 214)
+        self.assertEqual(inputs["pixel_values"].shape[3], 32)
 
         self.assertEqual(len(inputs["input_ids"][0]), 120)
 
@@ -385,12 +389,12 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # Define the kwargs for each modality
         all_kwargs = {
             "common_kwargs": {"return_tensors": "pt"},
-            "images_kwargs": {"max_image_size": {"longest_edge": 214}},
-            "text_kwargs": {"padding": "max_length", "max_length": 120},
+            "images_kwargs": {"max_image_size": {"longest_edge": 32}},
+            "text_kwargs": {"padding": "max_length", "max_length": 120, "truncation": "longest_first"},
         }
 
         inputs = processor(text=input_str, images=image_input, **all_kwargs)
-        self.assertEqual(inputs["pixel_values"].shape[3], 214)
+        self.assertEqual(inputs["pixel_values"].shape[3], 32)
         self.assertEqual(len(inputs["input_ids"][0]), 120)
 
     # We need to overwrite this test to adapt it to our processor.
@@ -424,19 +428,19 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         input_str = ["<image>lower newer", "<image>upper older longer string"]
         image_input = self.prepare_image_inputs()
-        print(image_input)
         inputs = processor(
             text=input_str,
             images=[image_input, image_input],
             return_tensors="pt",
             padding="longest",
             max_length=76,
-            max_image_size={"longest_edge": 214},
+            truncation=True,
+            max_image_size={"longest_edge": 30},
         )
 
         self.assertEqual(inputs["pixel_values"].shape[2], 3)
-        self.assertEqual(inputs["pixel_values"].shape[3], 214)
-        self.assertEqual(len(inputs["input_ids"][0]), 88)
+        self.assertEqual(inputs["pixel_values"].shape[3], 30)
+        self.assertEqual(len(inputs["input_ids"][0]), 76)
 
     # We need to overwrite this test to adapt it to our processor.
     @require_torch
@@ -456,10 +460,11 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             text=input_str,
             images=image_input,
             return_tensors="pt",
-            max_image_size={"longest_edge": 214},
+            max_image_size={"longest_edge": 32},
             padding="max_length",
             max_length=120,
+            truncation="longest_first",
         )
 
-        self.assertEqual(inputs["pixel_values"].shape[3], 214)
+        self.assertEqual(inputs["pixel_values"].shape[3], 32)
         self.assertEqual(len(inputs["input_ids"][0]), 120)

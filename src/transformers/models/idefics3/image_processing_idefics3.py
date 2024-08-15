@@ -385,8 +385,6 @@ class Idefics3ImageProcessor(BaseImageProcessor):
         do_pad (`bool`, *optional*, defaults to `True`):
             Whether or not to pad the images to the largest height and width in the batch and number of images per
             sample in the batch, such that the returned tensor is of shape (batch_size, max_num_images, num_channels, max_height, max_width).
-        vision_encoder_max_size (`int`, *optional*, defaults to `364`):
-            Maximum size of the images accepted by the vision encoder. The images are split into patches of this size.
     """
 
     model_input_names = ["pixel_values"]
