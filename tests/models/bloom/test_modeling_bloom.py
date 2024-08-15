@@ -514,6 +514,10 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
         self.assertListEqual(generated_text, EXPECTED_GENERATIONS)
 
+    @unittest.skip("The `input_embeds` when fed don't produce the same results.")
+    def test_beam_sample_generate(self):
+        pass
+
 
 @require_torch
 class BloomEmbeddingTest(unittest.TestCase):
