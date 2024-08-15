@@ -16,9 +16,10 @@
 Processor class for UDOP.
 """
 
-import logging
 import sys
 from typing import List, Optional, Union
+
+from transformers import logging
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
