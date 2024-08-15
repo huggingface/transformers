@@ -820,6 +820,8 @@
         title: LLaVA-NeXT
       - local: model_doc/llava-next-video
         title: LLaVa-NeXT-Video
+      - local: model_doc/llava-onevision
+        title: LLaVA-Onevision
       - local: model_doc/lxmert
         title: LXMERT
       - local: model_doc/matcha
