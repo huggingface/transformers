@@ -153,6 +153,7 @@ from .utils import (
     is_bitsandbytes_available,
     is_datasets_available,
     is_galore_torch_available,
+    is_grokadamw_available,
     is_in_notebook,
     is_ipex_available,
     is_lomo_available,
@@ -163,6 +164,7 @@ from .utils import (
     is_torch_compile_available,
     is_torch_mlu_available,
     is_torch_mps_available,
+    is_torch_musa_available,
     is_torch_neuroncore_available,
     is_torch_npu_available,
     is_torch_xla_available,
@@ -1442,6 +1444,23 @@ class Trainer:
                 optimizer_cls = Lomo
 
             optimizer_kwargs.update({"model": model})
+        elif args.optim == OptimizerNames.GROKADAMW:
+            if not is_grokadamw_available():
+                raise ValueError("Please install grokadamw with `pip install grokadamw`")
+
+            from grokadamw import GrokAdamW
+
+            optimizer_cls = GrokAdamW
+            optimizer_kwargs.update(
+                {
+                    "alpha_init": float(optim_args.get("alpha_init", 0.98)),
+                    "lamb": float(optim_args.get("lamb", 2.0)),
+                    "gamma": float(optim_args.get("gamma", 0.1)),
+                    "grokking_signal_decay_rate": float(optim_args.get("grokking_signal_decay_rate", 0.1)),
+                    "gradient_clipping": float(optim_args.get("gradient_clipping", 1.0)),
+                }
+            )
+
         else:
             raise ValueError(f"Trainer cannot instantiate unsupported optimizer: {args.optim}")
         return optimizer_cls, optimizer_kwargs
@@ -2373,7 +2392,7 @@ class Trainer:
                     break
             if step < 0:
                 logger.warning(
-                    "There seems to be not a single sample in your epoch_iterator, stopping training at step"
+                    "There seems not to be a single sample in your epoch_iterator, stopping training at step"
                     f" {self.state.global_step}! This is expected if you're using an IterableDataset and set"
                     f" num_steps ({max_steps}) higher than the number of available samples."
                 )
@@ -2876,6 +2895,17 @@ class Trainer:
                         f"Didn't manage to set back the RNG states of the MLU because of the following error:\n {e}"
                         "\nThis won't yield the same results as if the training had not been interrupted."
                     )
+        if is_torch_musa_available():
+            if self.args.parallel_mode == ParallelMode.DISTRIBUTED:
+                torch.musa.set_rng_state_all(checkpoint_rng_state["musa"])
+            else:
+                try:
+                    torch.musa.set_rng_state(checkpoint_rng_state["musa"])
+                except Exception as e:
+                    logger.info(
+                        f"Didn't manage to set back the RNG states of the MUSA because of the following error:\n {e}"
+                        "\nThis won't yield the same results as if the training had not been interrupted."
+                    )
 
     def _save_checkpoint(self, model, trial, metrics=None):
         # In all cases, including ddp/dp/deepspeed, self.model is always a reference to the model we
@@ -2963,6 +2993,12 @@ class Trainer:
                 rng_states["mlu"] = torch.mlu.random.get_rng_state_all()
             else:
                 rng_states["mlu"] = torch.mlu.random.get_rng_state()
+
+        if is_torch_musa_available():
+            if self.args.parallel_mode == ParallelMode.DISTRIBUTED:
+                rng_states["musa"] = torch.musa.get_rng_state_all()
+            else:
+                rng_states["musa"] = torch.musa.get_rng_state()
 
         # A process can arrive here before the process 0 has a chance to save the model, in which case output_dir may
         # not yet exist.
@@ -3333,6 +3369,8 @@ class Trainer:
                 torch.xpu.empty_cache()
             elif is_torch_mlu_available():
                 torch.mlu.empty_cache()
+            elif is_torch_musa_available():
+                torch.musa.empty_cache()
             elif is_torch_npu_available():
                 torch.npu.empty_cache()
             elif is_torch_mps_available(min_version="2.0"):

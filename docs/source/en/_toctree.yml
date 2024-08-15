@@ -120,7 +120,7 @@
   - local: custom_models
     title: Share a custom model
   - local: chat_templating
-    title: Templates for chat models
+    title: Chat templates
   - local: trainer
     title: Trainer
   - local: sagemaker
@@ -163,6 +163,8 @@
     title: FBGEMM_FP8
   - local: quantization/optimum
     title: Optimum
+  - local: quantization/torchao
+    title: TorchAO
   - local: quantization/contribute
     title: Contribute new quantization method
   title: Quantization Methods
@@ -370,6 +372,8 @@
         title: ESM
       - local: model_doc/falcon
         title: Falcon
+      - local: model_doc/falcon_mamba
+        title: FalconMamba
       - local: model_doc/fastspeech2_conformer
         title: FastSpeech2Conformer
       - local: model_doc/flan-t5
