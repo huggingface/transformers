@@ -996,7 +996,7 @@ class ProPainterBidirectionalPropagationInPaint(nn.Module):
         self.learnable = learnable
 
         if self.learnable:
-            for module in range(self.propagation_list):
+            for _, module in enumerate(self.propagation_list):
                 self.deform_align[module] = ProPainterDeformableAlignment(
                     channel, channel, 3, padding=1, deform_groups=16)
 
@@ -2028,8 +2028,8 @@ class ProPainterSpectralNorm(object):
 
             height, width = weight_mat.size()
             # randomly initialize `u` and `v`
-            u = normalize(weight.new_empty(height).normal_(0, 1), dimension=0, eps=func.eps)
-            v = normalize(weight.new_empty(width).normal_(0, 1), dimension=0, eps=func.eps)
+            u = normalize(weight.new_empty(height).normal_(0, 1), dim=0, eps=func.eps)
+            v = normalize(weight.new_empty(width).normal_(0, 1), dim=0, eps=func.eps)
 
         delattr(module, func.name)
         module.register_parameter(func.name + "_orig", weight)
@@ -2242,27 +2242,18 @@ class ProPainterPreTrainedModel(PreTrainedModel):
             ).to(module.weight.dtype)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, ProPainterSecondOrderDeformableAlignment):
-            if hasattr(module.conv_offset[-1], 'weight') and module.conv_offset[-1].weight is not None:
-                TORCH_INIT_FUNCTIONS["constant_"](module.conv_offset[-1].weight, 0)
-            if hasattr(module.conv_offset[-1], 'bias') and module.conv_offset[-1].bias is not None:
-                TORCH_INIT_FUNCTIONS["constant_"](module.conv_offset[-1].bias, 0)
-        elif isinstance(module, ProPainterDeformableAlignment):
-            if hasattr(module.conv_offset[-1], 'weight') and module.conv_offset[-1].weight is not None:
-                TORCH_INIT_FUNCTIONS["constant_"](module.conv_offset[-1].weight, 0)
-            if hasattr(module.conv_offset[-1], 'bias') and module.conv_offset[-1].bias is not None:
-                TORCH_INIT_FUNCTIONS["constant_"](module.conv_offset[-1].bias, 0)
-        elif isinstance(module, ProPainterModulatedDeformConv2d):
+        elif isinstance(module, ProPainterSecondOrderDeformableAlignment) or isinstance(module, ProPainterDeformableAlignment):
             num_channels = module.in_channels
             for k in module.kernel_size:
                 num_channels *= k
             stdv = 1. / math.sqrt(num_channels)
             module.weight.data.uniform_(-stdv, stdv)
             if module.bias is not None:
-                module.bias.data.zero_()
-            if hasattr(module, 'conv_offset'):
-                module.conv_offset.weight.data.zero_()
-                module.conv_offset.bias.data.zero_()
+                module.bias.data.zero_()     
+            if hasattr(module.conv_offset[-1], 'weight') and module.conv_offset[-1].weight is not None:
+                TORCH_INIT_FUNCTIONS["constant_"](module.conv_offset[-1].weight, 0)
+            if hasattr(module.conv_offset[-1], 'bias') and module.conv_offset[-1].bias is not None:
+                TORCH_INIT_FUNCTIONS["constant_"](module.conv_offset[-1].bias, 0)   
         elif isinstance(module, ProPainterInpaintGenerator) or isinstance(module, ProPainterDiscriminator):
             for child in module.children():
                 classname = child.__class__.__name__
@@ -2321,7 +2312,7 @@ class ProPainterModel(ProPainterPreTrainedModel):
         self.optical_flow_model = ProPainterRaftOpticalFlow(config)
         self.flow_completion_net = ProPainterRecurrentFlowCompleteNet()
         self.inpaint_generator = ProPainterInpaintGenerator()
-
+        self.discriminator = ProPainterDiscriminator(use_sigmoid=self.config.GAN_LOSS != 'hinge')
         # Initialize weights and apply final processing
         self.post_init()
 
