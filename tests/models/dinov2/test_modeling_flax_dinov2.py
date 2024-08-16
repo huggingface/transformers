@@ -235,7 +235,7 @@ class FlaxDinov2ModelIntegrationTest(unittest.TestCase):
             ]
         )
 
-        self.assertTrue(np.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-2))
+        self.assertTrue(np.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
 
     @slow
     def test_inference_image_classification_head_imagenet_1k(self):
