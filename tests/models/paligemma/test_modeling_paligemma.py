@@ -186,7 +186,8 @@ class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, unittest.Test
         self.model_tester = PaliGemmaVisionText2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=PaliGemmaConfig, has_text_modality=False)
 
-    def test_greedy_generation(self):
+    @parameterized.expand([(True,), (False,)])
+    def test_greedy_generation(self, use_cache: bool):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_generative_model_classes:
@@ -194,7 +195,7 @@ class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, unittest.Test
             model.to(torch_device)
             model.eval()
 
-            out = model.generate(**inputs_dict, min_new_tokens=20, max_new_tokens=20)
+            out = model.generate(**inputs_dict, min_new_tokens=20, max_new_tokens=20, use_cache=use_cache)
             self.assertTrue(out.shape[1] == inputs_dict["input_ids"].shape[1] + 20)
 
     @unittest.skip(

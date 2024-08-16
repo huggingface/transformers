@@ -20,6 +20,7 @@ import unittest
 
 import numpy as np
 import requests
+from parameterized import parameterized
 
 from transformers import (
     CONFIG_MAPPING,
@@ -464,7 +465,8 @@ class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, unit
     def setUp(self):
         self.model_tester = InstructBlipForConditionalGenerationDecoderOnlyModelTester(self)
 
-    def test_greedy_generation(self):
+    @parameterized.expand([(True,), (False,)])
+    def test_greedy_generation(self, use_cache: bool):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_generative_model_classes:
@@ -473,7 +475,7 @@ class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, unit
             model.eval()
             model.config.text_config.architectures = ["OptForCausalLM"]
 
-            out = model.generate(**inputs_dict, min_new_tokens=20, max_new_tokens=20)
+            out = model.generate(**inputs_dict, min_new_tokens=20, max_new_tokens=20, use_cache=use_cache)
             self.assertTrue(out.shape[1] == 21)  # BLIP is special, therefore 21
 
     def test_for_conditional_generation(self):
