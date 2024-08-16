@@ -617,9 +617,9 @@ class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         Overriding the test_flash_attn_2_inference_padding_right test as the Zamba model, like Mixtral, doesn't support
         right padding + use cache with FA2
         """
-        self.skipTest("Zamba flash attention does not support right padding")
+        self.skipTest(reason="Zamba flash attention does not support right padding")
 
-    @unittest.skip("Zamba has its own special cache type")
+    @unittest.skip(reason="Zamba has its own special cache type")
     @parameterized.expand([(1, False), (1, True), (4, False)])
     def test_new_cache_format(self, num_beams, do_sample):
         pass
