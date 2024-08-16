@@ -715,7 +715,7 @@ class MambaForCausalLM(MambaPreTrainedModel):
                 input_ids = input_ids[:, -1].unsqueeze(-1)
 
                 if attention_mask is not None:
-                    attention_mask = attention_mask[:, -1].unsqueeze(-1)
+                    attention_mask = None
 
             else:
                 # we initialize the `cache_position` to full size of `conv_states` at prefill stage
