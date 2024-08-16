@@ -53,6 +53,8 @@ class LlamaConfig(PretrainedConfig):
             by meanpooling all the original heads within that group. For more details checkout [this
             paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to
             `num_attention_heads`.
+        head_dim (`int`, *optional*, defaults to 256):
+            The attention head dimension.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
         max_position_embeddings (`int`, *optional*, defaults to 2048):
@@ -147,6 +149,7 @@ class LlamaConfig(PretrainedConfig):
         intermediate_size=11008,
         num_hidden_layers=32,
         num_attention_heads=32,
+        head_dim=None,
         num_key_value_heads=None,
         hidden_act="silu",
         max_position_embeddings=2048,
@@ -171,6 +174,7 @@ class LlamaConfig(PretrainedConfig):
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
+        self.head_dim = head_dim or hidden_size // num_attention_heads
 
         # for backward compatibility
         if num_key_value_heads is None:
