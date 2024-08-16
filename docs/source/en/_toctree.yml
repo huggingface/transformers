@@ -830,6 +830,8 @@
         title: MatCha
       - local: model_doc/mgp-str
         title: MGP-STR
+      - local: model_doc/mplugdocowl
+        title: mPLUGDocOwl
       - local: model_doc/nougat
         title: Nougat
       - local: model_doc/oneformer
