@@ -144,7 +144,7 @@ def convert_zero_shot_to_coco_format(predictions, label2id):
         labels = prediction["labels"]
         for label in labels:
             if label in label2id:
-                torch_label.append(label)
+                torch_label.append(label2id[label])
             else:
                 # Give background class
                 torch_label.append(0)
