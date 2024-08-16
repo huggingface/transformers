@@ -957,7 +957,3 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
             model_inputs["image_sizes"] = image_sizes
 
         return model_inputs
-
-    # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration._reorder_cache
-    def _reorder_cache(self, *args, **kwargs):
-        return self.language_model._reorder_cache(*args, **kwargs)
