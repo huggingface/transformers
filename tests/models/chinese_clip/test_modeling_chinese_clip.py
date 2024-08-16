@@ -772,7 +772,7 @@ class ChineseCLIPModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.vision_model_output.last_hidden_state.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[-0.4035,  0.3008, -0.1223], [-0.1505, -0.2903,  0.0250], [-0.3128, -0.5132,  0.8456]]
+            [[-0.4035, 0.3008, -0.1223], [-0.1505, -0.2903, 0.0250], [-0.3128, -0.5132, 0.8456]]
         ).to(torch_device)
 
         self.assertTrue(

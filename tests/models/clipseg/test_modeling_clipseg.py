@@ -844,9 +844,7 @@ class CLIPSegModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.vision_model_output.last_hidden_state.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[-0.1599,  0.0276, -0.3315],
-            [ 0.2613,  0.1183, -0.5668],
-            [ 0.0244,  0.1978, -0.6078]]
+            [[-0.1599, 0.0276, -0.3315], [0.2613, 0.1183, -0.5668], [0.0244, 0.1978, -0.6078]]
         ).to(torch_device)
 
         self.assertTrue(
