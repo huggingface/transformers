@@ -729,7 +729,9 @@ class ZambaMambaMixer(nn.Module):
                 " https://github.com/Dao-AILab/causal-conv1d. If you want to use the naive implementation, set `use_mamba_kernels=False` in the model config"
             )
 
-    def cuda_kernels_forward(self, hidden_states: torch.Tensor, cache_params: HybridMambaAttentionDynamicCache = None, attention_mask = None):
+    def cuda_kernels_forward(
+        self, hidden_states: torch.Tensor, cache_params: HybridMambaAttentionDynamicCache = None, attention_mask=None
+    ):
         batch_size, seq_len, _ = hidden_states.shape
         use_precomputed_states = cache_params is not None and cache_params.has_previous_state and seq_len == 1
 
@@ -753,13 +755,13 @@ class ZambaMambaMixer(nn.Module):
             )
             hidden_states = hidden_states.unsqueeze(-1)
         else:
-            if not torch.all(attention_mask==1):
+            if not torch.all(attention_mask == 1):
                 hidden_states = hidden_states * attention_mask.unsqueeze(1)
             if cache_params is not None:
                 conv_states = nn.functional.pad(hidden_states, (self.conv_kernel_size - hidden_states.shape[-1], 0))
                 cache_params.conv_states[self.layer_idx].copy_(conv_states)
             hidden_states = causal_conv1d_fn(hidden_states, conv_weights, self.conv1d.bias, activation=self.activation)
-            if not torch.all(attention_mask==1):
+            if not torch.all(attention_mask == 1):
                 hidden_states = hidden_states * attention_mask.unsqueeze(1)
 
         # 3. State Space Model sequence transformation
@@ -826,7 +828,7 @@ class ZambaMambaMixer(nn.Module):
         contextualized_states = self.out_proj(scan_outputs.transpose(1, 2))
         return contextualized_states
 
-    def slow_forward(self, input_states, cache_params: HybridMambaAttentionDynamicCache = None, attention_mask = None):
+    def slow_forward(self, input_states, cache_params: HybridMambaAttentionDynamicCache = None, attention_mask=None):
         batch_size, seq_len, _ = input_states.shape
         dtype = input_states.dtype
         # 1. Gated linear projection
@@ -862,12 +864,12 @@ class ZambaMambaMixer(nn.Module):
                     hidden_states += self.conv1d.bias
                 hidden_states = self.act(hidden_states).to(dtype).unsqueeze(-1)  # (b d 1) : decoding
             else:
-                if not torch.all(attention_mask==1):
+                if not torch.all(attention_mask == 1):
                     hidden_states = hidden_states * attention_mask.unsqueeze(1)
                 conv_state = nn.functional.pad(hidden_states, (self.conv_kernel_size - hidden_states.shape[-1], 0))
                 cache_params.conv_states[self.layer_idx] = conv_state
                 hidden_states = self.act(self.conv1d(hidden_states)[..., :seq_len])  # (b d l)
-                if not torch.all(attention_mask==1):
+                if not torch.all(attention_mask == 1):
                     hidden_states = hidden_states * attention_mask.unsqueeze(1)
         else:
             ssm_state = torch.zeros(
@@ -875,11 +877,11 @@ class ZambaMambaMixer(nn.Module):
                 device=hidden_states.device,
                 dtype=dtype,
             )  # (b h d l)
-            if not torch.all(attention_mask==1):
+            if not torch.all(attention_mask == 1):
                 hidden_states = hidden_states * attention_mask.unsqueeze(1)
             hidden_states = self.act(self.conv1d(hidden_states)[..., :seq_len])  # (b d l)
-            if not torch.all(attention_mask==1):
-                    hidden_states = hidden_states * attention_mask.unsqueeze(1)
+            if not torch.all(attention_mask == 1):
+                hidden_states = hidden_states * attention_mask.unsqueeze(1)
 
         # 3. State Space Model sequence transformation
         # 3.a. Selection:  [batch, seq_len, self.time_step_rank + self.ssm_state_size * 2]
@@ -923,7 +925,7 @@ class ZambaMambaMixer(nn.Module):
         )  # (b l d)
         return contextualized_states
 
-    def forward(self, hidden_states, cache_params: HybridMambaAttentionDynamicCache = None, attention_mask = None):
+    def forward(self, hidden_states, cache_params: HybridMambaAttentionDynamicCache = None, attention_mask=None):
         if self.use_fast_kernels:
             if not is_fast_path_available or "cuda" not in self.x_proj_weight.device.type:
                 raise ValueError(
