@@ -282,7 +282,10 @@ class ProcessorTesterMixin:
         # Define the kwargs for each modality
         all_kwargs = {
             "common_kwargs": {"return_tensors": "pt"},
-            "images_kwargs": {"size": {"height": 214, "width": 214}},
+            "images_kwargs": {
+                "size": {"height": 214, "width": 214},
+                "crop_size": {"height": 214, "width": 214},
+            },
             "text_kwargs": {"padding": "max_length", "max_length": 76},
         }
 
@@ -310,7 +313,10 @@ class ProcessorTesterMixin:
         # Define the kwargs for each modality
         all_kwargs = {
             "common_kwargs": {"return_tensors": "pt"},
-            "images_kwargs": {"size": {"height": 214, "width": 214}},
+            "images_kwargs": {
+                "size": {"height": 214, "width": 214},
+                "crop_size": {"height": 214, "width": 214},
+            },
             "text_kwargs": {"padding": "max_length", "max_length": 76},
         }
 
