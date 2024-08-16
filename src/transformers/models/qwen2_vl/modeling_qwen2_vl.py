@@ -47,7 +47,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from .configuration_qwen2_vl import Qwen2VLConfig
+from .configuration_qwen2_vl import Qwen2VLConfig, Qwen2VLVisionConfig
 
 
 if is_flash_attn_2_available():
@@ -353,84 +353,6 @@ class Qwen2VLVisionBlock(nn.Module):
         x = x + self.attn(self.norm1(x), cu_seqlens=cu_seqlens, rotary_pos_emb=rotary_pos_emb)
         x = x + self.mlp(self.norm2(x))
         return x
-
-
-class Qwen2VisionTransformer(PreTrainedModel):
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["Qwen2VLVisionBlock"]
-    _supports_flash_attn_2 = True
-    _supports_sdpa = True
-
-    def __init__(self, config) -> None:
-        super().__init__(config)
-        self.spatial_merge_size = config.spatial_merge_size
-
-        self.patch_embed = PatchEmbed(
-            patch_size=config.patch_size,
-            temporal_patch_size=config.temporal_patch_size,
-            in_channels=config.in_channels,
-            embed_dim=config.embed_dim,
-        )
-
-        head_dim = config.embed_dim // config.num_heads
-        self.rotary_pos_emb = VisionRotaryEmbedding(head_dim // 2)
-
-        self.blocks = nn.ModuleList(
-            [Qwen2VLVisionBlock(config, config._attn_implementation) for _ in range(config.depth)]
-        )
-        self.merger = PatchMerger(dim=config.hidden_size, context_dim=config.embed_dim)
-
-    def get_dtype(self) -> torch.dtype:
-        return self.blocks[0].mlp.fc2.weight.dtype
-
-    def get_device(self) -> torch.device:
-        return self.blocks[0].mlp.fc2.weight.device
-
-    def rot_pos_emb(self, grid_thw):
-        pos_ids = []
-        for t, h, w in grid_thw:
-            hpos_ids = torch.arange(h).unsqueeze(1).expand(-1, w)
-            wpos_ids = torch.arange(w).unsqueeze(0).expand(h, -1)
-            hpos_ids = (
-                hpos_ids.reshape(
-                    h // self.spatial_merge_size,
-                    self.spatial_merge_size,
-                    w // self.spatial_merge_size,
-                    self.spatial_merge_size,
-                )
-                .permute(0, 2, 1, 3)
-                .flatten()
-            )
-            wpos_ids = (
-                wpos_ids.reshape(
-                    h // self.spatial_merge_size,
-                    self.spatial_merge_size,
-                    w // self.spatial_merge_size,
-                    self.spatial_merge_size,
-                )
-                .permute(0, 2, 1, 3)
-                .flatten()
-            )
-            pos_ids.append(torch.stack([hpos_ids, wpos_ids], dim=-1).repeat(t, 1))
-        pos_ids = torch.cat(pos_ids, dim=0)
-        max_grid_size = grid_thw[:, 1:].max()
-        rotary_pos_emb_full = self.rotary_pos_emb(max_grid_size)
-        rotary_pos_emb = rotary_pos_emb_full[pos_ids].flatten(1)
-        return rotary_pos_emb
-
-    def forward(self, x: torch.Tensor, grid_thw: torch.Tensor) -> torch.Tensor:
-        x = self.patch_embed(x)
-        rotary_pos_emb = self.rot_pos_emb(grid_thw)
-
-        cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
-            dim=0, dtype=torch.int32
-        )
-        cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0)
-
-        for blk in self.blocks:
-            x = blk(x, cu_seqlens=cu_seqlens, rotary_pos_emb=rotary_pos_emb)
-
-        return self.merger(x)
 
 
 # Copied from transformers.models.llama.modeling_llama._prepare_4d_causal_attention_mask_with_cache_position
@@ -1024,6 +946,82 @@ class Qwen2VLPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
+class Qwen2VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
+    config_class = Qwen2VLVisionConfig
+    _no_split_modules = ["Qwen2VLVisionBlock"]
+
+    def __init__(self, config) -> None:
+        super().__init__(config)
+        self.spatial_merge_size = config.spatial_merge_size
+
+        self.patch_embed = PatchEmbed(
+            patch_size=config.patch_size,
+            temporal_patch_size=config.temporal_patch_size,
+            in_channels=config.in_channels,
+            embed_dim=config.embed_dim,
+        )
+
+        head_dim = config.embed_dim // config.num_heads
+        self.rotary_pos_emb = VisionRotaryEmbedding(head_dim // 2)
+
+        self.blocks = nn.ModuleList(
+            [Qwen2VLVisionBlock(config, config._attn_implementation) for _ in range(config.depth)]
+        )
+        self.merger = PatchMerger(dim=config.hidden_size, context_dim=config.embed_dim)
+
+    def get_dtype(self) -> torch.dtype:
+        return self.blocks[0].mlp.fc2.weight.dtype
+
+    def get_device(self) -> torch.device:
+        return self.blocks[0].mlp.fc2.weight.device
+
+    def rot_pos_emb(self, grid_thw):
+        pos_ids = []
+        for t, h, w in grid_thw:
+            hpos_ids = torch.arange(h).unsqueeze(1).expand(-1, w)
+            wpos_ids = torch.arange(w).unsqueeze(0).expand(h, -1)
+            hpos_ids = (
+                hpos_ids.reshape(
+                    h // self.spatial_merge_size,
+                    self.spatial_merge_size,
+                    w // self.spatial_merge_size,
+                    self.spatial_merge_size,
+                )
+                .permute(0, 2, 1, 3)
+                .flatten()
+            )
+            wpos_ids = (
+                wpos_ids.reshape(
+                    h // self.spatial_merge_size,
+                    self.spatial_merge_size,
+                    w // self.spatial_merge_size,
+                    self.spatial_merge_size,
+                )
+                .permute(0, 2, 1, 3)
+                .flatten()
+            )
+            pos_ids.append(torch.stack([hpos_ids, wpos_ids], dim=-1).repeat(t, 1))
+        pos_ids = torch.cat(pos_ids, dim=0)
+        max_grid_size = grid_thw[:, 1:].max()
+        rotary_pos_emb_full = self.rotary_pos_emb(max_grid_size)
+        rotary_pos_emb = rotary_pos_emb_full[pos_ids].flatten(1)
+        return rotary_pos_emb
+
+    def forward(self, x: torch.Tensor, grid_thw: torch.Tensor) -> torch.Tensor:
+        x = self.patch_embed(x)
+        rotary_pos_emb = self.rot_pos_emb(grid_thw)
+
+        cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
+            dim=0, dtype=torch.int32
+        )
+        cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0)
+
+        for blk in self.blocks:
+            x = blk(x, cu_seqlens=cu_seqlens, rotary_pos_emb=rotary_pos_emb)
+
+        return self.merger(x)
+
+
 @add_start_docstrings(
     "The bare Qwen2VL Model outputting raw hidden-states without any specific head on top.",
     QWEN2VL_START_DOCSTRING,
@@ -1311,7 +1309,7 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel):
 
     def __init__(self, config):
         super().__init__(config)
-        self.visual = Qwen2VisionTransformer._from_config(
+        self.visual = Qwen2VisionTransformerPretrainedModel._from_config(
             config.vision_config, attn_implementation=config._attn_implementation
         )
         self.model = Qwen2VLModel(config)
