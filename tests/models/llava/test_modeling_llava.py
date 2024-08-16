@@ -35,6 +35,7 @@ from transformers.testing_utils import (
     require_vision,
     slow,
     torch_device,
+    is_flaky,
 )
 
 from ...test_configuration_common import ConfigTester
@@ -81,7 +82,7 @@ class LlavaVisionText2TextModelTester:
             "initializer_range": 0.02,
             "num_labels": 3,
             "num_choices": 4,
-            "pad_token_id": 0,
+            "pad_token_id": 1,
         },
         is_training=True,
         vision_config={
