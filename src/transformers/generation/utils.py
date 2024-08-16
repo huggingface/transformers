@@ -1478,7 +1478,11 @@ class GenerationMixin:
         order to save memory (because no back and forth `to_legacy_cache` and `from_legacy_cache` will be performed
         for `HybridMambaAttentionDynamicCache`).
         """
-        return self._supports_cache_class and "jamba" not in self.__class__.__name__.lower() and "zamba" not in self.__class__.__name__.lower()
+        return (
+            self._supports_cache_class
+            and "jamba" not in self.__class__.__name__.lower()
+            and "zamba" not in self.__class__.__name__.lower()
+        )
 
     def _prepare_cache_for_generation(
         self,
