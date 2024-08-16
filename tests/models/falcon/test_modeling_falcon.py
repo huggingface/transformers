@@ -581,10 +581,6 @@ class FalconModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
                 self.assertTrue(torch.allclose(res_eager, res_sdpa))
 
-    @unittest.skip("The `input_embeds` when fed don't produce the same results.")
-    def test_beam_sample_generate(self):
-        pass
-
 
 @require_torch
 class FalconLanguageGenerationTest(unittest.TestCase):

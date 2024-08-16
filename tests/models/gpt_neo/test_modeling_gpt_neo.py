@@ -515,10 +515,6 @@ class GPTNeoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         self.assertTrue(torch.all(attn_probs[:, :, 5, 2:6] != 0))
         self.assertTrue(torch.all(attn_probs[:, :, 5, :2] == 0))
 
-    @unittest.skip("The `input_embeds` when fed don't produce the same results.")
-    def test_beam_sample_generate(self):
-        pass
-
 
 @require_torch
 class GPTNeoModelLanguageGenerationTest(unittest.TestCase):

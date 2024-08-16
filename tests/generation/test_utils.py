@@ -654,7 +654,13 @@ class GenerationTesterMixin:
             else:
                 self.assertTrue(output_generate.shape[-1] == self.max_new_tokens + input_ids.shape[-1])
 
-            if "inputs_embeds" in set(inspect.signature(model.prepare_inputs_for_generation).parameters):
+            prepare_inputs_for_generation_args = set(inspect.signature(model.prepare_inputs_for_generation).parameters)
+            # `inputs_embeds` input is well supported when `cache_positions` is used, because it means the modeling
+            # code is up to date with our most recent standards
+            if (
+                "inputs_embeds" in prepare_inputs_for_generation_args
+                and "cache_positions" in prepare_inputs_for_generation_args
+            ):
                 input_embeds = model.get_input_embeddings()(input_ids)
                 beam_kwargs.update({"inputs_embeds": input_embeds})
                 output_generate2 = self._beam_sample_generate(
