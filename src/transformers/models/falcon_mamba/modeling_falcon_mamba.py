@@ -619,14 +619,13 @@ class FalconMambaModel(FalconMambaPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,  # Ignored arg
         inputs_embeds: Optional[torch.LongTensor] = None,
         cache_params: Optional[MambaCache] = None,
         use_cache: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **kwargs,  # `attention_mask` is passed by the tokenizer and we don't want it
+        attention_mask: Optional[torch.LongTensor] = None,  # Ignored arg
     ) -> Union[Tuple, FalconMambaOutput]:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -735,6 +734,13 @@ class FalconMambaForCausalLM(FalconMambaPreTrainedModel):
             and model_kwargs["cache_position"] is not None
         ):
             model_kwargs["cache_position"] = model_kwargs["cache_position"][-1:] + num_new_tokens
+
+        if "attention_mask" in model_kwargs:
+            attention_mask = model_kwargs["attention_mask"]
+            model_kwargs["attention_mask"] = torch.cat(
+                [attention_mask, attention_mask.new_ones((attention_mask.shape[0], 1))], dim=-1
+            )
+
         return model_kwargs
 
     def prepare_inputs_for_generation(
@@ -772,11 +778,6 @@ class FalconMambaForCausalLM(FalconMambaPreTrainedModel):
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
             model_inputs = {"input_ids": input_ids.contiguous()}
-
-        # In case cache is not used, manually update the attention mask
-        if not use_cache and attention_mask is not None and input_ids.shape != attention_mask.shape:
-            past_length = input_ids.shape[-1] - attention_mask.shape[-1]
-            attention_mask = torch.cat([attention_mask, torch.ones_like(input_ids[:, :past_length])], dim=-1)
 
         model_inputs.update(
             {
