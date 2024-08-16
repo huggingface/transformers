@@ -86,7 +86,7 @@ class LlavaNextVisionText2TextModelTester:
             "initializer_range": 0.02,
             "num_labels": 3,
             "num_choices": 4,
-            "pad_token_id": 0,
+            "pad_token_id": 1,
         },
         is_training=True,
         vision_config={
@@ -249,7 +249,13 @@ class LlavaNextForConditionalGenerationModelTest(ModelTesterMixin, unittest.Test
             model.to(torch_device)
             model.eval()
 
-            out = model.generate(**inputs_dict, min_new_tokens=20, max_new_tokens=20, use_cache=use_cache)
+            out = model.generate(
+                **inputs_dict,
+                min_new_tokens=20,
+                max_new_tokens=20,
+                use_cache=use_cache,
+                bad_words_ids=[[config.image_token_index]],
+            )
             self.assertTrue(out.shape[1] == inputs_dict["input_ids"].shape[1] + 20)
 
     @unittest.skip(
