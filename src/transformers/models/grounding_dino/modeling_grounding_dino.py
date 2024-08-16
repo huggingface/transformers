@@ -824,7 +824,7 @@ class GroundingDinoTextEnhancerLayer(nn.Module):
             attention_masks = attention_masks.to(dtype=dtype)  # fp16 compatibility
             attention_masks = (1.0 - attention_masks) * torch.finfo(dtype).min
 
-        queries = keys = self.with_pos_embed(hidden_states, position_embeddings).to(hidden_states.dtype)
+        queries = keys = self.with_pos_embed(hidden_states, position_embeddings)
         attention_output, attention_weights = self.self_attn(
             queries=queries,
             keys=keys,
@@ -1198,7 +1198,7 @@ def get_sine_pos_embed(
         position_embeddings (torch.Tensor): shape: [..., n * hidden_size].
     """
     scale = 2 * math.pi
-    dim_t = torch.arange(num_pos_feats, dtype=torch.float32, device=pos_tensor.device)
+    dim_t = torch.arange(num_pos_feats, dtype=pos_tensor.dtype, device=pos_tensor.device)
     dim_t = temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / num_pos_feats)
 
     def sine_func(x: torch.Tensor):
@@ -1232,7 +1232,7 @@ class GroundingDinoEncoderLayer(nn.Module):
     ) -> Tensor:
         batch_size, seq_length, _ = text_features.shape
         if text_position_embedding is None and text_position_ids is None:
-            text_position_embedding = torch.arange(seq_length, device=text_features.device)
+            text_position_embedding = torch.arange(seq_length, device=text_features.device, dtype=text_features.dtype)
             text_position_embedding = text_position_embedding.float()
             text_position_embedding = text_position_embedding.unsqueeze(0).unsqueeze(-1)
             text_position_embedding = text_position_embedding.repeat(batch_size, 1, 1)
@@ -1241,7 +1241,7 @@ class GroundingDinoEncoderLayer(nn.Module):
             )
         if text_position_ids is not None:
             text_position_embedding = get_sine_pos_embed(
-                text_position_ids[..., None], num_pos_feats=self.d_model, exchange_xy=False
+                text_position_ids[..., None].to(text_features.dtype), num_pos_feats=self.d_model, exchange_xy=False
             )
 
         return text_position_embedding
@@ -1916,7 +1916,7 @@ class GroundingDinoDecoder(GroundingDinoPreTrainedModel):
                 raise ValueError("Last dim of reference_points must be 2 or 4, but got {reference_points.shape[-1]}")
             query_pos = get_sine_pos_embed(
                 reference_points_input[:, :, 0, :], num_pos_feats=self.config.d_model // 2
-            ).to(vision_encoder_hidden_states.dtype)
+            )
             query_pos = self.reference_points_head(query_pos)
 
             # In original implementation they apply layer norm before outputting intermediate hidden states
@@ -2354,7 +2354,7 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
         spatial_shapes = torch.as_tensor(spatial_shapes, dtype=torch.long, device=source_flatten.device)
         level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
         valid_ratios = torch.stack([self.get_valid_ratio(m) for m in masks], 1)
-        valid_ratios = valid_ratios.float()
+        valid_ratios = valid_ratios.to(pixel_values.dtype)
 
         # Fourth, sent source_flatten + mask_flatten + lvl_pos_embed_flatten (backbone + proj layer output) through encoder
         # Also provide spatial_shapes, level_start_index and valid_ratios
