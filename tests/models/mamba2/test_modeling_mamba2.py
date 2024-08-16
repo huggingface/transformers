@@ -227,10 +227,6 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     def test_generate_from_inputs_embeds_decoder_only(self):
         pass
 
-    @unittest.skip(reason="To fix, Mamba 2 cache slicing test case is an edge case")
-    def test_inputs_embeds_matches_input_ids_with_generate(self):
-        pass
-
     def test_model_outputs_equivalence(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
