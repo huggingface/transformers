@@ -822,7 +822,7 @@
         title: Llava
       - local: model_doc/llava_next
         title: LLaVA-NeXT
-      - local: model_doc/llava-next-video
+      - local: model_doc/llava_next_video
         title: LLaVa-NeXT-Video
       - local: model_doc/lxmert
         title: LXMERT
