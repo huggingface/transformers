@@ -180,6 +180,11 @@ model = VideoLlavaForConditionalGeneration.from_pretrained(
 ).to(0)
 ```
 
+## Resources
+
+A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with Video-LLaVa.
+
+- Demo notebooks regarding fine-tuning on custom datasets and inference can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/VideoLLaVa). 🌎
 
 ## VideoLlavaConfig
 

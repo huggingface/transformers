@@ -24,6 +24,12 @@ The abstract from the paper is the following:
 
 *This work presents Depth Anything V2. Without pursuing fancy techniques, we aim to reveal crucial findings to pave the way towards building a powerful monocular depth estimation model. Notably, compared with V1, this version produces much finer and more robust depth predictions through three key practices: 1) replacing all labeled real images with synthetic images, 2) scaling up the capacity of our teacher model, and 3) teaching student models via the bridge of large-scale pseudo-labeled real images. Compared with the latest models built on Stable Diffusion, our models are significantly more efficient (more than 10x faster) and more accurate. We offer models of different scales (ranging from 25M to 1.3B params) to support extensive scenarios. Benefiting from their strong generalization capability, we fine-tune them with metric depth labels to obtain our metric depth models. In addition to our models, considering the limited diversity and frequent noise in current test sets, we construct a versatile evaluation benchmark with precise annotations and diverse scenes to facilitate future research.*
 
+<Tip>
+
+- Both relative and absolute depth estimation checkpoints can be found on the hub. The relative models are [here](https://huggingface.co/models?library=transformers&other=relative+depth&model_type=depth+anything) and the absolute models are [here](https://huggingface.co/models?library=transformers&other=absolute+depth&model_type=depth+anything). For the difference between both, see the [Monocular depth estimation task guide](../tasks/monocular_depth_estimation).
+
+</Tip>
+
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/depth_anything_overview.jpg"
 alt="drawing" width="600"/>
 
@@ -46,7 +52,10 @@ The pipeline allows to use the model in a few lines of code:
 >>> import requests
 
 >>> # load pipe
+>>> # use this for relative depth
 >>> pipe = pipeline(task="depth-estimation", model="depth-anything/Depth-Anything-V2-Small-hf")
+>>> # use this for absolute depth
+>>> # pipe = pipeline(task="depth-estimation", model="depth-anything/Depth-Anything-V2-Metric-Outdoor-Small-hf")
 
 >>> # load image
 >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
@@ -70,8 +79,12 @@ If you want to do the pre- and post-processing yourself, here's how to do that:
 >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 >>> image = Image.open(requests.get(url, stream=True).raw)
 
->>> image_processor = AutoImageProcessor.from_pretrained("depth-anything/Depth-Anything-V2-Small-hf")
->>> model = AutoModelForDepthEstimation.from_pretrained("depth-anything/Depth-Anything-V2-Small-hf")
+>>> # use this for relative depth
+>>> model_id = "depth-anything/Depth-Anything-V2-Small-hf"
+>>> # use this for absolute depth
+>>> # model_id = "depth-anything/Depth-Anything-V2-Metric-Outdoor-Small-hf"
+>>> image_processor = AutoImageProcessor.from_pretrained(model_id)
+>>> model = AutoModelForDepthEstimation.from_pretrained(model_id)
 
 >>> # prepare image for the model
 >>> inputs = image_processor(images=image, return_tensors="pt")
@@ -98,7 +111,7 @@ If you want to do the pre- and post-processing yourself, here's how to do that:
 
 A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with Depth Anything.
 
-- [Monocular depth estimation task guide](../tasks/depth_estimation)
+- [Monocular depth estimation task guide](../tasks/monocular_depth_estimation)
 - [Depth Anything V2 demo](https://huggingface.co/spaces/depth-anything/Depth-Anything-V2).
 - A notebook showcasing inference with [`DepthAnythingForDepthEstimation`] can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/Depth%20Anything/Predicting_depth_in_an_image_with_Depth_Anything.ipynb). 🌎
 - [Core ML conversion of the `small` variant for use on Apple Silicon](https://huggingface.co/apple/coreml-depth-anything-v2-small).

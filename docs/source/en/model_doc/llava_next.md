@@ -263,6 +263,14 @@ model = LlavaNextForConditionalGeneration.from_pretrained(
 ).to(0)
 ```
 
+## Resources
+
+A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with LLaVa-NeXT.
+
+<PipelineTag pipeline="image-to-text"/>
+
+- Demo notebooks regarding fine-tuning on a custom dataset can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/LLaVa-NeXT). 🌎
+
 ## LlavaNextConfig
 
 [[autodoc]] LlavaNextConfig
