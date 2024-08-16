@@ -979,7 +979,7 @@ class StaticCache(Cache):
             The configuration file defining the shape-related attributes required to initialize the static cache.
         batch_size (`int`):
             The batch size with which the model will be used. Note that a new instance must be instantiated if a
-            smaller batch size is used.
+            smaller batch size is used. If you are manually setting the batch size, make sure to take into account the number of beams if you are running beam search
         max_cache_len (`int`):
             The maximum sequence length with which the model will be used.
         device (`torch.device` or `str`):
