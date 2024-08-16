@@ -868,12 +868,12 @@ class ZambaMambaMixer(nn.Module):
                 hidden_states = self.act(hidden_states).to(dtype).unsqueeze(-1)  # (b d 1) : decoding
             else:
                 if attention_mask is not None and not torch.all(attention_mask == 1):
-                    hidden_states = hidden_states * attention_mask[:, -hidden_states.shape[-1]:].unsqueeze(1)
+                    hidden_states = hidden_states * attention_mask[:, -hidden_states.shape[-1] :].unsqueeze(1)
                 conv_state = nn.functional.pad(hidden_states, (self.conv_kernel_size - hidden_states.shape[-1], 0))
                 cache_params.conv_states[self.layer_idx] = conv_state
                 hidden_states = self.act(self.conv1d(hidden_states)[..., :seq_len])  # (b d l)
                 if attention_mask is not None and not torch.all(attention_mask == 1):
-                    hidden_states = hidden_states * attention_mask[:, -hidden_states.shape[-1]:].unsqueeze(1)
+                    hidden_states = hidden_states * attention_mask[:, -hidden_states.shape[-1] :].unsqueeze(1)
         else:
             ssm_state = torch.zeros(
                 (batch_size, self.n_mamba_heads, self.intermediate_size // self.n_mamba_heads, self.ssm_state_size),
