@@ -59,249 +59,6 @@ _CONFIG_FOR_DOC = "ProPainterConfig"
 _CHECKPOINT_FOR_DOC = "ruffy369/propainter"
 _EXPECTED_OUTPUT_SHAPE = [80, 240, 432, 3] #****************************TO FILL
 
-# Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "ruffy369/propainter"
-
-
-# Copied from transformers.models.vit.modeling_vit.ViTEmbeddings with ViT->ProPainter
-# class ProPainterEmbeddings(nn.Module):
-#     """
-#     Construct the CLS token, position and patch embeddings. Optionally, also the mask token.
-#     """
-
-#     def __init__(self, config: ProPainterConfig, use_mask_token: bool = False) -> None:
-#         super().__init__()
-
-#         # self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
-#         # self.mask_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size)) if use_mask_token else None
-#         # self.patch_embeddings = ProPainterPatchEmbeddings(config)
-#         # num_patches = self.patch_embeddings.num_patches
-#         # self.position_embeddings = nn.Parameter(torch.randn(1, num_patches + 1, config.hidden_size))
-#         # self.dropout = nn.Dropout(config.hidden_dropout_prob)
-#         self.config = config
-
-#     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
-#         """
-#         This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher
-#         resolution images.
-
-#         Source:
-#         https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174
-#         """
-
-#         num_patches = embeddings.shape[1] - 1
-#         num_positions = self.position_embeddings.shape[1] - 1
-#         if num_patches == num_positions and height == width:
-#             return self.position_embeddings
-#         class_pos_embed = self.position_embeddings[:, 0]
-#         patch_pos_embed = self.position_embeddings[:, 1:]
-#         dim = embeddings.shape[-1]
-#         h0 = height // self.config.patch_size
-#         w0 = width // self.config.patch_size
-#         # we add a small number to avoid floating point error in the interpolation
-#         # see discussion at https://github.com/facebookresearch/dino/issues/8
-#         h0, w0 = h0 + 0.1, w0 + 0.1
-#         patch_pos_embed = patch_pos_embed.reshape(1, int(math.sqrt(num_positions)), int(math.sqrt(num_positions)), dim)
-#         patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
-#         patch_pos_embed = nn.functional.interpolate(
-#             patch_pos_embed,
-#             scale_factor=(h0 / math.sqrt(num_positions), w0 / math.sqrt(num_positions)),
-#             mode="bicubic",
-#             align_corners=False,
-#         )
-#         assert int(h0) == patch_pos_embed.shape[-2] and int(w0) == patch_pos_embed.shape[-1]
-#         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
-#         return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1)
-
-#     def forward(
-#         self,
-#         pixel_values: torch.Tensor,
-#         bool_masked_pos: Optional[torch.BoolTensor] = None,
-#         interpolate_pos_encoding: bool = False,
-#     ) -> torch.Tensor:
-#         batch_size, num_channels, height, width = pixel_values.shape
-#         embeddings = self.patch_embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
-
-#         if bool_masked_pos is not None:
-#             seq_length = embeddings.shape[1]
-#             mask_tokens = self.mask_token.expand(batch_size, seq_length, -1)
-#             # replace the masked visual tokens by mask_tokens
-#             mask = bool_masked_pos.unsqueeze(-1).type_as(mask_tokens)
-#             embeddings = embeddings * (1.0 - mask) + mask_tokens * mask
-
-#         # add the [CLS] token to the embedded patch tokens
-#         cls_tokens = self.cls_token.expand(batch_size, -1, -1)
-#         embeddings = torch.cat((cls_tokens, embeddings), dim=1)
-
-#         # add positional encoding to each token
-#         if interpolate_pos_encoding:
-#             embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
-#         else:
-#             embeddings = embeddings + self.position_embeddings
-
-#         embeddings = self.dropout(embeddings)
-
-#         return embeddings
-
-
-# # Copied from transformers.models.vit.modeling_vit.ViTPatchEmbeddings with ViT->ProPainter
-# class ProPainterPatchEmbeddings(nn.Module):
-#     """
-#     This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
-#     `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
-#     Transformer.
-#     """
-
-#     def __init__(self, config):
-#         super().__init__()
-#         image_size, patch_size = config.image_size, config.patch_size
-#         num_channels, hidden_size = config.num_channels, config.hidden_size
-
-#         image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
-#         patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
-#         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-#         self.image_size = image_size
-#         self.patch_size = patch_size
-#         self.num_channels = num_channels
-#         self.num_patches = num_patches
-
-#         self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
-
-#     def forward(self, pixel_values: torch.Tensor, interpolate_pos_encoding: bool = False) -> torch.Tensor:
-#         batch_size, num_channels, height, width = pixel_values.shape
-#         if num_channels != self.num_channels:
-#             raise ValueError(
-#                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
-#                 f" Expected {self.num_channels} but got {num_channels}."
-#             )
-#         if not interpolate_pos_encoding:
-#             if height != self.image_size[0] or width != self.image_size[1]:
-#                 raise ValueError(
-#                     f"Input image size ({height}*{width}) doesn't match model"
-#                     f" ({self.image_size[0]}*{self.image_size[1]})."
-#                 )
-#         embeddings = self.projection(pixel_values).flatten(2).transpose(1, 2)
-#         return embeddings
-
-
-# Copied from transformers.models.vit.modeling_vit.ViTSelfAttention with ViT->ProPainter
-class ProPainterSelfAttention(nn.Module):
-    def __init__(self, config: ProPainterConfig) -> None:
-        super().__init__()
-        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
-            raise ValueError(
-                f"The hidden size {config.hidden_size,} is not a multiple of the number of attention "
-                f"heads {config.num_attention_heads}."
-            )
-
-        self.num_attention_heads = config.num_attention_heads
-        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
-        self.all_head_size = self.num_attention_heads * self.attention_head_size
-
-        self.query = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
-        self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
-        self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
-
-        self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
-
-    def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        x = x.view(new_x_shape)
-        return x.permute(0, 2, 1, 3)
-
-    def forward(
-        self, hidden_states, head_mask: Optional[torch.Tensor] = None, output_attentions: bool = False
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
-        mixed_query_layer = self.query(hidden_states)
-
-        key_layer = self.transpose_for_scores(self.key(hidden_states))
-        value_layer = self.transpose_for_scores(self.value(hidden_states))
-        query_layer = self.transpose_for_scores(mixed_query_layer)
-
-        # Take the dot product between "query" and "key" to get the raw attention scores.
-        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
-
-        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
-
-        # Normalize the attention scores to probabilities.
-        attention_probs = nn.functional.softmax(attention_scores, dim=-1)
-
-        # This is actually dropping out entire tokens to attend to, which might
-        # seem a bit unusual, but is taken from the original Transformer paper.
-        attention_probs = self.dropout(attention_probs)
-
-        # Mask heads if we want to
-        if head_mask is not None:
-            attention_probs = attention_probs * head_mask
-
-        context_layer = torch.matmul(attention_probs, value_layer)
-
-        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
-        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-        context_layer = context_layer.view(new_context_layer_shape)
-
-        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
-
-        return outputs
-
-
-# Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->ProPainter
-class ProPainterAttention(nn.Module):
-    def __init__(self, config: ProPainterConfig) -> None:
-        super().__init__()
-        self.attention = ProPainterSelfAttention(config)
-        # self.output = ProPainterSelfOutput(config)
-        self.pruned_heads = set()
-
-    def prune_heads(self, heads: Set[int]) -> None:
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.attention.num_attention_heads, self.attention.attention_head_size, self.pruned_heads
-        )
-
-        # Prune linear layers
-        self.attention.query = prune_linear_layer(self.attention.query, index)
-        self.attention.key = prune_linear_layer(self.attention.key, index)
-        self.attention.value = prune_linear_layer(self.attention.value, index)
-        # self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
-
-        # Update hyper params and store pruned heads
-        self.attention.num_attention_heads = self.attention.num_attention_heads - len(heads)
-        self.attention.all_head_size = self.attention.attention_head_size * self.attention.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
-        self_outputs = self.attention(hidden_states, head_mask, output_attentions)
-
-        # attention_output = self.output(self_outputs[0], hidden_states)
-
-        # outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
-        return None
-
-
-
-# Copied from transformers.models.vit.modeling_vit.ViTIntermediate with ViT->ProPainter
-class ProPainterIntermediate(nn.Module):
-    def __init__(self, config: ProPainterConfig) -> None:
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
-        if isinstance(config.hidden_act, str):
-            self.intermediate_act_fn = ACT2FN[config.hidden_act]
-        else:
-            self.intermediate_act_fn = config.hidden_act
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.intermediate_act_fn(hidden_states)
-
-        return hidden_states
-
 
 # Copied from transformers.models.vit.modeling_vit.ViTOutput with ViT->ProPainter
 class ProPainterOutput(nn.Module):
@@ -318,107 +75,6 @@ class ProPainterOutput(nn.Module):
 
         return hidden_states
 
-
-# Copied from transformers.models.vit.modeling_vit.ViTLayer with VIT->PROPAINTER,ViT->ProPainter
-class ProPainterLayer(nn.Module):
-    """This corresponds to the Block class in the timm implementation."""
-
-    def __init__(self, config: ProPainterConfig) -> None:
-        super().__init__()
-        self.chunk_size_feed_forward = config.chunk_size_feed_forward
-        self.seq_len_dim = 1
-        # self.attention = PROPAINTER_ATTENTION_CLASSES[config._attn_implementation](config)
-        self.intermediate = ProPainterIntermediate(config)
-        self.output = ProPainterOutput(config)
-        self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
-        self_attention_outputs = self.attention(
-            self.layernorm_before(hidden_states),  # in ProPainter, layernorm is applied before self-attention
-            head_mask,
-            output_attentions=output_attentions,
-        )
-        attention_output = self_attention_outputs[0]
-        outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
-
-        # first residual connection
-        hidden_states = attention_output + hidden_states
-
-        # in ProPainter, layernorm is also applied after self-attention
-        layer_output = self.layernorm_after(hidden_states)
-        layer_output = self.intermediate(layer_output)
-
-        # second residual connection is done here
-        layer_output = self.output(layer_output, hidden_states)
-
-        outputs = (layer_output,) + outputs
-
-        return outputs
-
-
-# Copied from transformers.models.vit.modeling_vit.ViTEncoder with ViT->ProPainter
-# class ProPainterEncoder(nn.Module):
-#     def __init__(self, config: ProPainterConfig) -> None:
-#         super().__init__()
-#         self.config = config
-#         self.layer = nn.ModuleList([ProPainterLayer(config) for _ in range(config.num_hidden_layers)])
-#         self.gradient_checkpointing = False
-
-#     def forward(
-#         self,
-#         hidden_states: torch.Tensor,
-#         head_mask: Optional[torch.Tensor] = None,
-#         output_attentions: bool = False,
-#         output_hidden_states: bool = False,
-#         return_dict: bool = True,
-#     ) -> Union[tuple, BaseModelOutput]:
-#         all_hidden_states = () if output_hidden_states else None
-#         all_self_attentions = () if output_attentions else None
-
-#         for i, layer_module in enumerate(self.layer):
-#             if output_hidden_states:
-#                 all_hidden_states = all_hidden_states + (hidden_states,)
-
-#             layer_head_mask = head_mask[i] if head_mask is not None else None
-
-#             if self.gradient_checkpointing and self.training:
-#                 layer_outputs = self._gradient_checkpointing_func(
-#                     layer_module.__call__,
-#                     hidden_states,
-#                     layer_head_mask,
-#                     output_attentions,
-#                 )
-#             else:
-#                 layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions)
-
-#             hidden_states = layer_outputs[0]
-
-#             if output_attentions:
-#                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
-
-#         if output_hidden_states:
-#             all_hidden_states = all_hidden_states + (hidden_states,)
-
-#         if not return_dict:
-#             return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
-#         return BaseModelOutput(
-#             last_hidden_state=hidden_states,
-#             hidden_states=all_hidden_states,
-#             attentions=all_self_attentions,
-#         )
-
-############################***************####################ALL MODULES TO ADDDDDDDDDDDDDd################**********##########################################
-
-##################################################ProPainterRaftOpticalFlow MODULES STARTS HERE######################################################
-
-
-#made transformers compliant
 class ProPainterResidualBlock(nn.Module):
     def __init__(self, in_channels, channels, norm_fn='group', stride=1):
         super(ProPainterResidualBlock, self).__init__()
@@ -796,9 +452,6 @@ class ProPainterRaftOpticalFlow(nn.Module):
         gt_flows_backward = gt_flows_backward.view(batch_size, temporal_length-1, 2, height, width)
 
         return gt_flows_forward, gt_flows_backward
-
-
-##################################################ProPainterRaftOpticalFlow MODULES ENDS HERE######################################################
 
 class ProPainterP3DBlock(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size, stride, padding, use_residual=0, bias=True):
@@ -1352,64 +1005,6 @@ class ProPainterRecurrentFlowCompleteNet(nn.Module):
 
         return pred_flows_forward, pred_flows_backward
 
-#########################################################RECURRENT FLOW NETWORK FINISH#####################################################
-
-# class ProPainterBaseNetwork(nn.Module):
-#     def __init__(self):
-#         super(ProPainterBaseNetwork, self).__init__()
-
-    # def print_network(self):
-    #     if isinstance(self, list):
-    #         self = self[0]
-    #     num_params = 0
-    #     for param in self.parameters():
-    #         num_params += param.numel()
-    #     print(
-    #         'Network [%s] was created. Total number of parameters: %.1f million. '
-    #         'To see the architecture, do print(network).' %
-    #         (type(self).__name__, num_params / 1000000))
-
-    # def init_weights(self, init_type='normal', gain=0.02):
-    #     '''
-    #     initialize network's weights
-    #     init_type: normal | xavier | kaiming | orthogonal
-    #     https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix/blob/9451e70673400885567d08a9e97ade2524c700d0/models/networks.py#L39
-    #     '''
-    #     def init_func(m):
-    #         classname = m.__class__.__name__
-    #         if classname.find('InstanceNorm2d') != -1:
-    #             if hasattr(m, 'weight') and m.weight is not None:
-    #                 nn.init.constant_(m.weight.data, 1.0)
-    #             if hasattr(m, 'bias') and m.bias is not None:
-    #                 nn.init.constant_(m.bias.data, 0.0)
-    #         elif hasattr(m, 'weight') and (classname.find('Conv') != -1
-    #                                        or classname.find('Linear') != -1):
-    #             if init_type == 'normal':
-    #                 nn.init.normal_(m.weight.data, 0.0, gain)
-    #             elif init_type == 'xavier':
-    #                 nn.init.xavier_normal_(m.weight.data, gain=gain)
-    #             elif init_type == 'xavier_uniform':
-    #                 nn.init.xavier_uniform_(m.weight.data, gain=1.0)
-    #             elif init_type == 'kaiming':
-    #                 nn.init.kaiming_normal_(m.weight.data, a=0, mode='fan_in')
-    #             elif init_type == 'orthogonal':
-    #                 nn.init.orthogonal_(m.weight.data, gain=gain)
-    #             elif init_type == 'none':  # uses pytorch's default init method
-    #                 m.reset_parameters()
-    #             else:
-    #                 raise NotImplementedError(
-    #                     'initialization method [%s] is not implemented' %
-    #                     init_type)
-    #             if hasattr(m, 'bias') and m.bias is not None:
-    #                 nn.init.constant_(m.bias.data, 0.0)
-
-    #     self.apply(init_func)
-
-    #     # propagate to children
-    #     for m in self.children():
-    #         if hasattr(m, 'init_weights'):
-    #             m.init_weights(init_type, gain)
-
 
 class ProPainterEncoder(nn.Module):
     def __init__(self):
@@ -1506,41 +1101,41 @@ class ProPainterSoftComp(nn.Module):
         return hidden_states
 
 # Copied from transformers.models.swin.modeling_swin.window_partition
-def window_partition(input_feature, window_size, num_head):
+def window_partition(input_feature, window_size, num_attention_heads):
     """
     Args:
         input_feature: shape is (batch_size, timesteps, height, width, num_channels)
         window_size (tuple[int]): window size
     Returns:
-        windows: (batch_size, num_windows_h, num_windows_w, num_head, timesteps, window_size, window_size, num_channels//num_head)
+        windows: (batch_size, num_windows_h, num_windows_w, num_attention_heads, timesteps, window_size, window_size, num_channels//num_attention_heads)
     """
     batch_size, timesteps, height, width, num_channels= input_feature.shape
     input_feature = input_feature.view(
-        batch_size, timesteps, height // window_size[0], window_size[0], width // window_size[1], window_size[1], num_head, num_channels//num_head)
+        batch_size, timesteps, height // window_size[0], window_size[0], width // window_size[1], window_size[1], num_attention_heads, num_channels//num_attention_heads)
     windows = input_feature.permute(0, 2, 4, 6, 1, 3, 5, 7).contiguous()
     return windows
 
 
 class ProPainterSparseWindowAttention(nn.Module):
-    def __init__(self, dimension, num_head, window_size, pool_size=(4,4), qkv_bias=True, attn_drop=0., proj_drop=0., 
+    def __init__(self, hidden_size, num_attention_heads, window_size, pool_size=(4,4), qkv_bias=True, attn_drop=0., proj_drop=0., 
                 pooling_token=True):
         super().__init__()
-        assert dimension % num_head == 0
+        assert hidden_size % num_attention_heads == 0
         # key, query, value projections for all heads
-        self.key = nn.Linear(dimension, dimension, qkv_bias)
-        self.query = nn.Linear(dimension, dimension, qkv_bias)
-        self.value = nn.Linear(dimension, dimension, qkv_bias)
+        self.key = nn.Linear(hidden_size, hidden_size, qkv_bias)
+        self.query = nn.Linear(hidden_size, hidden_size, qkv_bias)
+        self.value = nn.Linear(hidden_size, hidden_size, qkv_bias)
         # regularization
         self.attn_drop = nn.Dropout(attn_drop)
         self.proj_drop = nn.Dropout(proj_drop)
         # output projection
-        self.proj = nn.Linear(dimension, dimension)
-        self.num_head = num_head
+        self.proj = nn.Linear(hidden_size, hidden_size)
+        self.num_attention_heads = num_attention_heads
         self.window_size = window_size
         self.pooling_token = pooling_token
         if self.pooling_token:
             kernel_size, stride = pool_size, pool_size
-            self.pool_layer = nn.Conv2d(dimension, dimension, kernel_size=kernel_size, stride=stride, padding=(0, 0), groups=dimension)
+            self.pool_layer = nn.Conv2d(hidden_size, hidden_size, kernel_size=kernel_size, stride=stride, padding=(0, 0), groups=hidden_size)
             self.pool_layer.weight.data.fill_(1. / (pool_size[0] * pool_size[1]))
             self.pool_layer.bias.data.fill_(0)
         # self.expand_size = tuple(i // 2 for i in window_size)
@@ -1565,7 +1160,7 @@ class ProPainterSparseWindowAttention(nn.Module):
     def forward(self, hidden_states, mask=None, token_indices=None):
         batch_size, timesteps, height, width, num_channels = hidden_states.shape # 20 36
         window_height, window_width = self.window_size[0], self.window_size[1]
-        channel_head = num_channels // self.num_head
+        channel_head = num_channels // self.num_attention_heads
         n_window_height = math.ceil(height / self.window_size[0])
         n_window_width = math.ceil(width / self.window_size[1])
         new_height = n_window_height * self.window_size[0] # 20
@@ -1581,9 +1176,9 @@ class ProPainterSparseWindowAttention(nn.Module):
         query = self.query(hidden_states)
         key = self.key(hidden_states)
         value = self.value(hidden_states)
-        window_query = window_partition(query.contiguous(), self.window_size, self.num_head).view(batch_size, n_window_height*n_window_width, self.num_head, timesteps, window_height*window_width, channel_head)
-        window_key = window_partition(key.contiguous(), self.window_size, self.num_head).view(batch_size, n_window_height*n_window_width, self.num_head, timesteps, window_height*window_width, channel_head)
-        window_value = window_partition(value.contiguous(), self.window_size, self.num_head).view(batch_size, n_window_height*n_window_width, self.num_head, timesteps, window_height*window_width, channel_head)
+        window_query = window_partition(query.contiguous(), self.window_size, self.num_attention_heads).view(batch_size, n_window_height*n_window_width, self.num_attention_heads, timesteps, window_height*window_width, channel_head)
+        window_key = window_partition(key.contiguous(), self.window_size, self.num_attention_heads).view(batch_size, n_window_height*n_window_width, self.num_attention_heads, timesteps, window_height*window_width, channel_head)
+        window_value = window_partition(value.contiguous(), self.window_size, self.num_attention_heads).view(batch_size, n_window_height*n_window_width, self.num_attention_heads, timesteps, window_height*window_width, channel_head)
         # roll_k and roll_v
         if any(i > 0 for i in self.expand_size):
             (key_top_left, value_top_left) = map(lambda a: torch.roll(a, shifts=(-self.expand_size[0], -self.expand_size[1]), dims=(2, 3)), (key, value))
@@ -1592,19 +1187,19 @@ class ProPainterSparseWindowAttention(nn.Module):
             (key_bottom_right, value_bottom_right) = map(lambda a: torch.roll(a, shifts=(self.expand_size[0], self.expand_size[1]), dims=(2, 3)), (key, value))
 
             (key_top_left_windows, key_top_right_windows, key_bottom_left_windows, key_bottom_right_windows) = map(
-                lambda a: window_partition(a, self.window_size, self.num_head).view(batch_size, n_window_height*n_window_width, self.num_head, timesteps, window_height*window_width, channel_head), 
+                lambda a: window_partition(a, self.window_size, self.num_attention_heads).view(batch_size, n_window_height*n_window_width, self.num_attention_heads, timesteps, window_height*window_width, channel_head), 
                 (key_top_left, key_top_right, key_bottom_left, key_bottom_right))
             (value_top_left_windows, value_top_right_windows, value_bottom_left_windows, value_bottom_right_windows) = map(
-                lambda a: window_partition(a, self.window_size, self.num_head).view(batch_size, n_window_height*n_window_width, self.num_head, timesteps, window_height*window_width, channel_head), 
+                lambda a: window_partition(a, self.window_size, self.num_attention_heads).view(batch_size, n_window_height*n_window_width, self.num_attention_heads, timesteps, window_height*window_width, channel_head), 
                 (value_top_left, value_top_right, value_bottom_left, value_bottom_right))
             rool_key = torch.cat((key_top_left_windows, key_top_right_windows, key_bottom_left_windows, key_bottom_right_windows), 4).contiguous()
-            rool_value = torch.cat((value_top_left_windows, value_top_right_windows, value_bottom_left_windows, value_bottom_right_windows), 4).contiguous() # [batch_size, n_window_height*n_window_width, num_head, timesteps, window_height*window_width, channel_head]
+            rool_value = torch.cat((value_top_left_windows, value_top_right_windows, value_bottom_left_windows, value_bottom_right_windows), 4).contiguous() # [batch_size, n_window_height*n_window_width, num_attention_heads, timesteps, window_height*window_width, channel_head]
             # mask output tokens in current window
             rool_key = rool_key[:, :, :, :, self.valid_ind_rolled]
             rool_value = rool_value[:, :, :, :, self.valid_ind_rolled]
             roll_N = rool_key.shape[4]
-            rool_key = rool_key.view(batch_size, n_window_height*n_window_width, self.num_head, timesteps, roll_N, num_channels // self.num_head)
-            rool_value = rool_value.view(batch_size, n_window_height*n_window_width, self.num_head, timesteps, roll_N, num_channels // self.num_head)
+            rool_key = rool_key.view(batch_size, n_window_height*n_window_width, self.num_attention_heads, timesteps, roll_N, num_channels // self.num_attention_heads)
+            rool_value = rool_value.view(batch_size, n_window_height*n_window_width, self.num_attention_heads, timesteps, roll_N, num_channels // self.num_attention_heads)
             window_key = torch.cat((window_key, rool_key), dim=4)
             window_value = torch.cat((window_value, rool_value), dim=4)
         else:
@@ -1618,16 +1213,16 @@ class ProPainterSparseWindowAttention(nn.Module):
             pool_x = pool_x.permute(0,2,3,1).view(batch_size, timesteps, p_h, p_w, num_channels)
             # pool_k
             pool_k = self.key(pool_x).unsqueeze(1).repeat(1, n_window_height*n_window_width, 1, 1, 1, 1) # [batch_size, n_window_height*n_window_width, timesteps, p_h, p_w, num_channels]
-            pool_k = pool_k.view(batch_size, n_window_height*n_window_width, timesteps, p_h, p_w, self.num_head, channel_head).permute(0,1,5,2,3,4,6)
-            pool_k = pool_k.contiguous().view(batch_size, n_window_height*n_window_width, self.num_head, timesteps, p_h*p_w, channel_head)
+            pool_k = pool_k.view(batch_size, n_window_height*n_window_width, timesteps, p_h, p_w, self.num_attention_heads, channel_head).permute(0,1,5,2,3,4,6)
+            pool_k = pool_k.contiguous().view(batch_size, n_window_height*n_window_width, self.num_attention_heads, timesteps, p_h*p_w, channel_head)
             window_key = torch.cat((window_key, pool_k), dim=4)
             # pool_v
             pool_v = self.value(pool_x).unsqueeze(1).repeat(1, n_window_height*n_window_width, 1, 1, 1, 1) # [batch_size, n_window_height*n_window_width, timesteps, p_h, p_w, num_channels]
-            pool_v = pool_v.view(batch_size, n_window_height*n_window_width, timesteps, p_h, p_w, self.num_head, channel_head).permute(0,1,5,2,3,4,6)
-            pool_v = pool_v.contiguous().view(batch_size, n_window_height*n_window_width, self.num_head, timesteps, p_h*p_w, channel_head)
+            pool_v = pool_v.view(batch_size, n_window_height*n_window_width, timesteps, p_h, p_w, self.num_attention_heads, channel_head).permute(0,1,5,2,3,4,6)
+            pool_v = pool_v.contiguous().view(batch_size, n_window_height*n_window_width, self.num_attention_heads, timesteps, p_h*p_w, channel_head)
             window_value = torch.cat((window_value, pool_v), dim=4)
 
-        # [batch_size, n_window_height*n_window_width, num_head, timesteps, window_height*window_width, channel_head]
+        # [batch_size, n_window_height*n_window_width, num_attention_heads, timesteps, window_height*window_width, channel_head]
         output = torch.zeros_like(window_query)
         l_t = mask.size(1)
 
@@ -1638,33 +1233,33 @@ class ProPainterSparseWindowAttention(nn.Module):
             ### For masked windows
             mask_ind_i = mask[i].nonzero(as_tuple=False).view(-1)
             # mask output quary in current window
-            # [batch_size, n_window_height*n_window_width, num_head, timesteps, window_height*window_width, channel_head]
+            # [batch_size, n_window_height*n_window_width, num_attention_heads, timesteps, window_height*window_width, channel_head]
             mask_n = len(mask_ind_i)
             if mask_n > 0:
-                window_query_t = window_query[i, mask_ind_i].view(mask_n, self.num_head, timesteps*window_height*window_width, channel_head)
+                window_query_t = window_query[i, mask_ind_i].view(mask_n, self.num_attention_heads, timesteps*window_height*window_width, channel_head)
                 window_key_t = window_key[i, mask_ind_i] 
                 window_value_t = window_value[i, mask_ind_i] 
                 # mask output key and value
                 if token_indices is not None:
-                    # key [n_window_height*n_window_width, num_head, timesteps, window_height*window_width, channel_head]
-                    window_key_t = window_key_t[:, :, token_indices.view(-1)].view(mask_n, self.num_head, -1, channel_head)
+                    # key [n_window_height*n_window_width, num_attention_heads, timesteps, window_height*window_width, channel_head]
+                    window_key_t = window_key_t[:, :, token_indices.view(-1)].view(mask_n, self.num_attention_heads, -1, channel_head)
                     # value
-                    window_value_t = window_value_t[:, :, token_indices.view(-1)].view(mask_n, self.num_head, -1, channel_head)
+                    window_value_t = window_value_t[:, :, token_indices.view(-1)].view(mask_n, self.num_attention_heads, -1, channel_head)
                 else:
-                    window_key_t = window_key_t.view(n_window_height*n_window_width, self.num_head, timesteps*window_height*window_width, channel_head)
-                    window_value_t = window_value_t.view(n_window_height*n_window_width, self.num_head, timesteps*window_height*window_width, channel_head)
+                    window_key_t = window_key_t.view(n_window_height*n_window_width, self.num_attention_heads, timesteps*window_height*window_width, channel_head)
+                    window_value_t = window_value_t.view(n_window_height*n_window_width, self.num_attention_heads, timesteps*window_height*window_width, channel_head)
 
                 att_t = (window_query_t @ window_key_t.transpose(-2, -1)) * (1.0 / math.sqrt(window_query_t.size(-1)))
                 att_t = F.softmax(att_t, dim=-1)
                 att_t = self.attn_drop(att_t)
                 y_t = att_t @ window_value_t 
                 
-                output[i, mask_ind_i] = y_t.view(-1, self.num_head, timesteps, window_height*window_width, channel_head)
+                output[i, mask_ind_i] = y_t.view(-1, self.num_attention_heads, timesteps, window_height*window_width, channel_head)
 
             ### For unmasked windows
             unmask_ind_i = (mask[i] == 0).nonzero(as_tuple=False).view(-1)
             # mask output quary in current window
-            # [batch_size, n_window_height*n_window_width, num_head, timesteps, window_height*window_width, channel_head]
+            # [batch_size, n_window_height*n_window_width, num_attention_heads, timesteps, window_height*window_width, channel_head]
             window_query_s = window_query[i, unmask_ind_i]
             window_key_s = window_key[i, unmask_ind_i, :, :, :window_height*window_width]
             window_value_s = window_value[i, unmask_ind_i, :, :, :window_height*window_width]
@@ -1676,7 +1271,7 @@ class ProPainterSparseWindowAttention(nn.Module):
             output[i, unmask_ind_i] = y_s
 
         # re-assemble all head outputs side by side
-        output = output.view(batch_size, n_window_height, n_window_width, self.num_head, timesteps, window_height, window_width, channel_head)
+        output = output.view(batch_size, n_window_height, n_window_width, self.num_attention_heads, timesteps, window_height, window_width, channel_head)
         output = output.permute(0, 4, 1, 5, 2, 6, 3, 7).contiguous().view(batch_size, timesteps, new_height, new_width, num_channels)
 
 
@@ -1688,11 +1283,11 @@ class ProPainterSparseWindowAttention(nn.Module):
         return output
 
 class ProPainterFusionFeedForward(nn.Module):
-    def __init__(self, dimension, hidden_dim=1960, token_to_token_params=None):
+    def __init__(self, hidden_size, hidden_dim=1960, token_to_token_params=None):
         super(ProPainterFusionFeedForward, self).__init__()
         # We set hidden_dim as a default to 1960
-        self.fc1 = nn.Sequential(nn.Linear(dimension, hidden_dim))
-        self.fc2 = nn.Sequential(nn.GELU(), nn.Linear(hidden_dim, dimension))
+        self.fc1 = nn.Sequential(nn.Linear(hidden_size, hidden_dim))
+        self.fc2 = nn.Sequential(nn.GELU(), nn.Linear(hidden_dim, hidden_size))
         assert token_to_token_params is not None
         self.token_to_token_params = token_to_token_params
         self.kernel_shape = reduce((lambda x, y: x * y), token_to_token_params['kernel_size']) # 49
@@ -1727,15 +1322,15 @@ class ProPainterFusionFeedForward(nn.Module):
         return hidden_states
 
 
-class ProPainterTemporalSparseTransformer(nn.Module):
-    def __init__(self, dimension, num_head, window_size, pool_size,
+class ProPainterTemporalSparseTransformerBlock(nn.Module):
+    def __init__(self, hidden_size, num_attention_heads, window_size, pool_size,
                 layer_norm=nn.LayerNorm, token_to_token_params=None):
         super().__init__()
         self.window_size = window_size
-        self.attention = ProPainterSparseWindowAttention(dimension, num_head, window_size, pool_size)
-        self.layer_norm1 = layer_norm(dimension)
-        self.layer_norm2 = layer_norm(dimension)
-        self.mlp = ProPainterFusionFeedForward(dimension, token_to_token_params=token_to_token_params)
+        self.attention = ProPainterSparseWindowAttention(hidden_size, num_attention_heads, window_size, pool_size)
+        self.layer_norm1 = layer_norm(hidden_size)
+        self.layer_norm2 = layer_norm(hidden_size)
+        self.mlp = ProPainterFusionFeedForward(hidden_size, token_to_token_params=token_to_token_params)
 
     def forward(self, image_tokens, fold_x_size, mask=None, token_indices=None):
         """
@@ -1759,16 +1354,16 @@ class ProPainterTemporalSparseTransformer(nn.Module):
 
         return image_tokens
 
-class ProPainterTemporalSparseTransformerBlock(nn.Module):
-    def __init__(self, dimension, num_head, window_size, pool_size, depths, token_to_token_params=None):
+class ProPainterTemporalSparseTransformer(nn.Module):
+    def __init__(self, hidden_size, num_attention_heads, window_size, pool_size, num_hidden_layers, token_to_token_params=None):
         super().__init__()
         blocks = []
-        for _ in range(depths):
+        for _ in range(num_hidden_layers):
              blocks.append(
-                ProPainterTemporalSparseTransformer(dimension, num_head, window_size, pool_size, token_to_token_params=token_to_token_params)
+                ProPainterTemporalSparseTransformerBlock(hidden_size, num_attention_heads, window_size, pool_size, token_to_token_params=token_to_token_params)
              )
         self.transformer = nn.Sequential(*blocks)
-        self.depths = depths
+        self.num_hidden_layers = num_hidden_layers
 
     def forward(self, image_tokens, fold_x_size, local_mask=None, t_dilation=2):
         """
@@ -1779,27 +1374,25 @@ class ProPainterTemporalSparseTransformerBlock(nn.Module):
         Returns:
             out_tokens: shape [batch_size, timesteps, height, width, channel]
         """
-        assert self.depths % t_dilation == 0, 'wrong t_dilation input.'
+        assert self.num_hidden_layers % t_dilation == 0, 'wrong t_dilation input.'
         timesteps = image_tokens.size(1)
-        token_indices = [torch.arange(i, timesteps, t_dilation) for i in range(t_dilation)] * (self.depths // t_dilation)
+        token_indices = [torch.arange(i, timesteps, t_dilation) for i in range(t_dilation)] * (self.num_hidden_layers // t_dilation)
 
-        for i in range(0, self.depths):
+        for i in range(0, self.num_hidden_layers):
             image_tokens = self.transformer[i](image_tokens, fold_x_size, local_mask, token_indices[i])
 
         return image_tokens
 
 class ProPainterInpaintGenerator(nn.Module):
-    def __init__(self):
+    def __init__(self,config):
         super(ProPainterInpaintGenerator, self).__init__()
-        channel = 128
-        hidden_size = 512
 
         # ProPainterEncoder
         self.encoder = ProPainterEncoder()
 
         # decoder
         self.decoder = nn.Sequential(
-            ProPainterDeconv(channel, 128, kernel_size=3, padding=1),
+            ProPainterDeconv(config.num_channels, 128, kernel_size=3, padding=1),
             nn.LeakyReLU(0.2, inplace=True),
             nn.Conv2d(128, 64, kernel_size=3, stride=1, padding=1),
             nn.LeakyReLU(0.2, inplace=True),
@@ -1808,32 +1401,25 @@ class ProPainterInpaintGenerator(nn.Module):
             nn.Conv2d(64, 3, kernel_size=3, stride=1, padding=1))
 
         # soft split and soft composition
-        kernel_size = (7, 7)
-        padding = (3, 3)
-        stride = (3, 3)
         token_to_token_params = {
-            'kernel_size': kernel_size,
-            'stride': stride,
-            'padding': padding
+            'kernel_size': config.kernel_size,
+            'stride': config.stride,
+            'padding': config.padding
         }
-        self.soft_split = ProPainterSoftSplit(channel, hidden_size, kernel_size, stride, padding)
-        self.soft_comp = ProPainterSoftComp(channel, hidden_size, kernel_size, stride, padding)
-        self.max_pool = nn.MaxPool2d(kernel_size, stride, padding)
+        self.soft_split = ProPainterSoftSplit(config.num_channels, config.hidden_size, config.kernel_size, config.stride, config.padding)
+        self.soft_comp = ProPainterSoftComp(config.num_channels, config.hidden_size, config.kernel_size, config.stride, config.padding)
+        self.max_pool = nn.MaxPool2d(config.kernel_size, config.stride, config.padding)
 
         # feature propagation module
         self.img_prop_module = ProPainterBidirectionalPropagationInPaint(3, learnable=False)
         self.feature_propagation_module = ProPainterBidirectionalPropagationInPaint(128, learnable=True)
         
         
-        depths = 8
-        num_heads = 4
-        window_size = (5, 9)
-        pool_size = (4, 4)
-        self.transformers = ProPainterTemporalSparseTransformerBlock(dimension=hidden_size,
-                                                num_head=num_heads,
-                                                window_size=window_size,
-                                                pool_size=pool_size,
-                                                depths=depths,
+        self.transformers = ProPainterTemporalSparseTransformer(hidden_size=config.hidden_size,
+                                                num_attention_heads=config.num_attention_heads,
+                                                window_size=config.window_size,
+                                                pool_size=config.pool_size,
+                                                num_hidden_layers=config.num_hidden_layers,
                                                 token_to_token_params=token_to_token_params)
 
     def img_propagation(self, masked_frames, completed_flows, masks, interpolation='nearest'):
@@ -2211,15 +1797,6 @@ class ProPainterDiscriminator(nn.Module):
         hidden_states = torch.transpose(hidden_states, 1, 2)  # batch_size, timesteps, channel, height, width
         return hidden_states
 
-
-
-
-#########################################propainter moduelsss finsihes here##########################################################################
-
-
-
-
-# Copied from transformers.models.vit.modeling_vit.ViTPreTrainedModel with ViT->ProPainter,vit->propainter
 class ProPainterPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -2230,7 +1807,6 @@ class ProPainterPreTrainedModel(PreTrainedModel):
     base_model_prefix = "propainter"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
-    # _no_split_modules = ["ProPainterEmbeddings", "ProPainterLayer"]
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
@@ -2304,14 +1880,13 @@ PROPAINTER_INPUTS_DOCSTRING = r"""
     "The bare ProPainter Model outputting composed frames without any specific head on top.",
     PROPAINTER_START_DOCSTRING,
 )
-# Copied from transformers.models.vit.modeling_vit.ViTModel with VIT->PROPAINTER,ViT->ProPainter
 class ProPainterModel(ProPainterPreTrainedModel):
     def __init__(self, config: ProPainterConfig):
         super().__init__(config)
         self.config = config
         self.optical_flow_model = ProPainterRaftOpticalFlow(config)
         self.flow_completion_net = ProPainterRecurrentFlowCompleteNet()
-        self.inpaint_generator = ProPainterInpaintGenerator()
+        self.inpaint_generator = ProPainterInpaintGenerator(config)
         self.discriminator = ProPainterDiscriminator(use_sigmoid=self.config.GAN_LOSS != 'hinge')
         # Initialize weights and apply final processing
         self.post_init()
@@ -2516,36 +2091,10 @@ class ProPainterModel(ProPainterPreTrainedModel):
         
         self.video_length = pixel_values.size(1)
         with torch.no_grad():
-            # ---- compute flow ----
-            
-            # # use fp32 for RAFT
-            # if pixel_values.size(1) > short_clip_len:
-            #     gt_flows_f_list, gt_flows_b_list = [], []
-            #     for f in range(0, video_length, short_clip_len):
-            #         end_f = min(video_length, f + short_clip_len)
-            #         if f == 0:
-            #             flows_f, flows_b = self.optical_flow_model(pixel_values[:,f:end_f], iters=self.config.raft_iter)
-            #         else:
-            #             flows_f, flows_b = self.optical_flow_model(pixel_values[:,f-1:end_f], iters=self.config.raft_iter)
-                    
-            #         gt_flows_f_list.append(flows_f)
-            #         gt_flows_b_list.append(flows_b)
-            #         torch.cuda.empty_cache()
-                    
-            #     gt_flows_f = torch.cat(gt_flows_f_list, dim=1)
-            #     gt_flows_b = torch.cat(gt_flows_b_list, dim=1)
-            #     gt_flows_bi = (gt_flows_f, gt_flows_b)
-            # else:
-            #     gt_flows_bi = self.optical_flow_model(pixel_values, iters=self.config.raft_iter)
-            #     torch.cuda.empty_cache()
-
             gt_flows_bi = self.compute_flow(pixel_values)
             
-            # ---- complete flow ----
             pred_flows_bi = self.complete_flow(gt_flows_bi,flow_masks)
                 
-
-            # ---- image propagation ----
             updated_frames,updated_masks = self.image_propagation(pixel_values,masks_dilated,pred_flows_bi)
                 
         comp_frames = self.feature_propagation(updated_frames, updated_masks, masks_dilated, pred_flows_bi, pixel_values_inp)
@@ -2559,240 +2108,3 @@ class ProPainterModel(ProPainterPreTrainedModel):
             hidden_states=None,
             attentions=None,
         )
-
-
-# @add_start_docstrings(
-#     """ProPainter Model with a decoder on top for masked image modeling, as proposed in [SimMIM](https://arxiv.org/abs/2111.09886).
-
-#     <Tip>
-
-#     Note that we provide a script to pre-train this model on custom data in our [examples
-#     directory](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-pretraining).
-
-#     </Tip>
-#     """,
-#     PROPAINTER_START_DOCSTRING,
-# )
-
-# class ProPainterModelForVideoInPainting(ProPainterPreTrainedModel):
-#     def __init__(self, config: ProPainterConfig) -> None:
-#         super().__init__(config)
-
-#         self.propainter = ProPainterModel(config, add_pooling_layer=False, use_mask_token=True)
-
-#         self.decoder = nn.Sequential(
-#             nn.Conv2d(
-#                 in_channels=config.hidden_size,
-#                 out_channels=config.encoder_stride**2 * config.num_channels,
-#                 kernel_size=1,
-#             ),
-#             nn.PixelShuffle(config.encoder_stride),
-#         )
-
-#         # Initialize weights and apply final processing
-#         self.post_init()
-
-#     @add_start_docstrings_to_model_forward(PROPAINTER_INPUTS_DOCSTRING)
-#     @add_code_sample_docstrings(
-#         checkpoint=_IMAGE_CLASS_CHECKPOINT,
-#         output_type=MaskedImageModelingOutput,
-#         config_class=_CONFIG_FOR_DOC,
-#         expected_output=_EXPECTED_OUTPUT_SHAPE,
-#     )
-#     @replace_return_docstrings(output_type=MaskedImageModelingOutput, config_class=_CONFIG_FOR_DOC)
-#     def forward(
-#         self,
-#         pixel_values: Optional[torch.Tensor] = None,
-#         bool_masked_pos: Optional[torch.BoolTensor] = None,
-#         head_mask: Optional[torch.Tensor] = None,
-#         output_attentions: Optional[bool] = None,
-#         output_hidden_states: Optional[bool] = None,
-#         interpolate_pos_encoding: Optional[bool] = None,
-#         return_dict: Optional[bool] = None,
-#     ) -> Union[tuple, MaskedImageModelingOutput]:
-#         r"""
-#         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`):
-#             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
-
-#         Returns:
-
-#         Examples:
-#         ```python
-#         >>> from transformers import AutoImageProcessor, ProPainterForMaskedImageModeling
-#         >>> import torch
-#         >>> from PIL import Image
-#         >>> import requests
-
-#         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-#         >>> image = Image.open(requests.get(url, stream=True).raw)
-
-#         >>> image_processor = AutoImageProcessor.from_pretrained("ruffy369/propainter")
-#         >>> model = ProPainterForMaskedImageModeling.from_pretrained("ruffy369/propainter")
-
-#         >>> num_patches = (model.config.image_size // model.config.patch_size) ** 2
-#         >>> pixel_values = image_processor(images=image, return_tensors="pt").pixel_values
-#         >>> # create random boolean mask of shape (batch_size, num_patches)
-#         >>> bool_masked_pos = torch.randint(low=0, high=2, size=(1, num_patches)).bool()
-
-#         >>> outputs = model(pixel_values, bool_masked_pos=bool_masked_pos)
-#         >>> loss, reconstructed_pixel_values = outputs.loss, outputs.reconstruction
-#         >>> list(reconstructed_pixel_values.shape)
-#         [1, 3, 224, 224]
-#         ```"""
-#         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-#         if bool_masked_pos is not None and (self.config.patch_size != self.config.encoder_stride):
-#             raise ValueError(
-#                 "When `bool_masked_pos` is provided, `patch_size` must be equal to `encoder_stride` to ensure that "
-#                 "the reconstructed image has the same dimensions as the input. "
-#                 f"Got `patch_size` = {self.config.patch_size} and `encoder_stride` = {self.config.encoder_stride}."
-#             )
-
-#         outputs = self.propainter(
-#             pixel_values,
-#             bool_masked_pos=bool_masked_pos,
-#             head_mask=head_mask,
-#             output_attentions=output_attentions,
-#             output_hidden_states=output_hidden_states,
-#             interpolate_pos_encoding=interpolate_pos_encoding,
-#             return_dict=return_dict,
-#         )
-
-#         sequence_output = outputs[0]
-
-#         # Reshape to (batch_size, num_channels, height, width)
-#         sequence_output = sequence_output[:, 1:]
-#         batch_size, sequence_length, num_channels = sequence_output.shape
-#         height = width = math.floor(sequence_length**0.5)
-#         sequence_output = sequence_output.permute(0, 2, 1).reshape(batch_size, num_channels, height, width)
-
-#         # Reconstruct pixel values
-#         reconstructed_pixel_values = self.decoder(sequence_output)
-
-#         masked_im_loss = None
-#         if bool_masked_pos is not None:
-#             size = self.config.image_size // self.config.patch_size
-#             bool_masked_pos = bool_masked_pos.reshape(-1, size, size)
-#             mask = (
-#                 bool_masked_pos.repeat_interleave(self.config.patch_size, 1)
-#                 .repeat_interleave(self.config.patch_size, 2)
-#                 .unsqueeze(1)
-#                 .contiguous()
-#             )
-#             reconstruction_loss = nn.functional.l1_loss(pixel_values, reconstructed_pixel_values, reduction="none")
-#             masked_im_loss = (reconstruction_loss * mask).sum() / (mask.sum() + 1e-5) / self.config.num_channels
-
-#         if not return_dict:
-#             output = (reconstructed_pixel_values,) + outputs[1:]
-#             return ((masked_im_loss,) + output) if masked_im_loss is not None else output
-
-#         return MaskedImageModelingOutput(
-#             loss=masked_im_loss,
-#             reconstruction=reconstructed_pixel_values,
-#             hidden_states=outputs.hidden_states,
-#             attentions=outputs.attentions,
-#         )
-
-
-# @add_start_docstrings(
-#     """
-#     ProPainter Model transformer with an image classification head on top (a linear layer on top of the final hidden state of
-#     the [CLS] token) e.g. for ImageNet.
-
-#     <Tip>
-
-#         Note that it's possible to fine-tune ProPainter on higher resolution images than the ones it has been trained on, by
-#         setting `interpolate_pos_encoding` to `True` in the forward of the model. This will interpolate the pre-trained
-#         position embeddings to the higher resolution.
-
-#     </Tip>
-#     """,
-#     PROPAINTER_START_DOCSTRING,
-# )
-# # Copied from transformers.models.vit.modeling_vit.ViTForImageClassification with VIT->PROPAINTER,ViT->ProPainter,vit->propainter
-# class ProPainterModelForVideoOutPainting(ProPainterPreTrainedModel):
-#     def __init__(self, config: ProPainterConfig) -> None:
-#         super().__init__(config)
-
-#         self.num_labels = config.num_labels
-#         self.propainter = ProPainterModel(config, add_pooling_layer=False)
-
-#         # Classifier head
-#         self.classifier = nn.Linear(config.hidden_size, config.num_labels) if config.num_labels > 0 else nn.Identity()
-
-#         # Initialize weights and apply final processing
-#         self.post_init()
-
-#     @add_start_docstrings_to_model_forward(PROPAINTER_INPUTS_DOCSTRING)
-#     @add_code_sample_docstrings(
-#         checkpoint=_IMAGE_CLASS_CHECKPOINT,
-#         output_type=MaskedImageModelingOutput,
-#         config_class=_CONFIG_FOR_DOC,
-#         expected_output=_EXPECTED_OUTPUT_SHAPE,
-#     )
-#     def forward(
-#         self,
-#         pixel_values: Optional[torch.Tensor] = None,
-#         head_mask: Optional[torch.Tensor] = None,
-#         labels: Optional[torch.Tensor] = None,
-#         output_attentions: Optional[bool] = None,
-#         output_hidden_states: Optional[bool] = None,
-#         interpolate_pos_encoding: Optional[bool] = None,
-#         return_dict: Optional[bool] = None,
-#     ) -> Union[tuple, MaskedImageModelingOutput]:
-#         r"""
-#         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-#             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-#             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-#             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-#         """
-#         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-#         outputs = self.propainter(
-#             pixel_values,
-#             head_mask=head_mask,
-#             output_attentions=output_attentions,
-#             output_hidden_states=output_hidden_states,
-#             interpolate_pos_encoding=interpolate_pos_encoding,
-#             return_dict=return_dict,
-#         )
-
-#         sequence_output = outputs[0]
-
-#         logits = self.classifier(sequence_output[:, 0, :])
-
-#         loss = None
-#         if labels is not None:
-#             # move labels to correct device to enable model parallelism
-#             labels = labels.to(logits.device)
-#             if self.config.problem_type is None:
-#                 if self.num_labels == 1:
-#                     self.config.problem_type = "regression"
-#                 elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
-#                     self.config.problem_type = "single_label_classification"
-#                 else:
-#                     self.config.problem_type = "multi_label_classification"
-
-#             if self.config.problem_type == "regression":
-#                 loss_fct = MSELoss()
-#                 if self.num_labels == 1:
-#                     loss = loss_fct(logits.squeeze(), labels.squeeze())
-#                 else:
-#                     loss = loss_fct(logits, labels)
-#             elif self.config.problem_type == "single_label_classification":
-#                 loss_fct = CrossEntropyLoss()
-#                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-#             elif self.config.problem_type == "multi_label_classification":
-#                 loss_fct = BCEWithLogitsLoss()
-#                 loss = loss_fct(logits, labels)
-
-#         if not return_dict:
-#             output = (logits,) + outputs[1:]
-#             return ((loss,) + output) if loss is not None else output
-
-#         return MaskedImageModelingOutput(
-#             loss=loss,
-#             logits=logits,
-#             hidden_states=outputs.hidden_states,
-#             attentions=outputs.attentions,
-#         )

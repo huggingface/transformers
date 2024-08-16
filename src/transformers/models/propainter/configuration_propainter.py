@@ -154,6 +154,15 @@ class ProPainterConfig(PretrainedConfig):
         dropout=0,
         initializer_range=0.02,
         raft_iter=20,
+        num_channels=128,
+        hidden_size=512,
+        kernel_size=(7, 7),
+        padding=(3, 3),
+        stride=(3, 3),
+        num_hidden_layers=8,
+        num_attention_heads=4,
+        window_size=(5, 9),
+        pool_size=(4, 4),
         
         **kwargs,
     ):
@@ -204,3 +213,12 @@ class ProPainterConfig(PretrainedConfig):
         self.dropout = dropout
         self.initializer_range = initializer_range
         self.raft_iter = raft_iter
+        self.num_channels = num_channels
+        self.hidden_size = hidden_size
+        self.kernel_size = kernel_size
+        self.padding = padding
+        self.stride = stride
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.window_size = window_size
+        self.pool_size = pool_size
