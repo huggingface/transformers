@@ -16,13 +16,36 @@
 Processor class for Chameleon.
 """
 
+import sys
 from typing import List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
-from ...utils import TensorType
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, TextKwargs
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
+
+if sys.version_info >= (3, 11):
+    from typing import Unpack
+else:
+    from typing_extensions import Unpack
+
+
+class ChameleonTextKwargs(TextKwargs, total=False):
+    return_for_text_completion: bool
+
+
+class ChameleonProcessorKwargs(ProcessingKwargs, total=False):
+    text_kwargs: ChameleonTextKwargs
+    _defaults = {
+        "text_kwargs": {
+            "padding": False,
+            "stride": 0,
+            "return_for_text_completion": False,
+        },
+        "common_kwargs": {
+            "return_tensors": "pt",
+        },
+    }
 
 
 class ChameleonProcessor(ProcessorMixin):
@@ -57,13 +80,9 @@ class ChameleonProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
-        images: ImageInput = None,
-        padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = None,
-        max_length: int = None,
-        return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH,
-        return_for_text_completion: bool = False,
+        text: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
+        images: Optional[ImageInput] = None,
+        **kwargs: Unpack[ChameleonProcessorKwargs],
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
@@ -80,26 +99,6 @@ class ChameleonProcessor(ProcessorMixin):
             images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. Both channels-first and channels-last formats are supported.
-            padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
-                Select a strategy to pad the returned sequences (according to the model's padding side and padding
-                index) among:
-                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
-                  sequence if provided).
-                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
-                  acceptable input length for the model if that argument is not provided.
-                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
-                  lengths).
-            max_length (`int`, *optional*):
-                Maximum length of the returned list and optionally padding length (see above).
-            truncation (`bool`, *optional*):
-                Activates truncation to cut input sequences longer than `max_length` to `max_length`.
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
@@ -114,6 +113,15 @@ class ChameleonProcessor(ProcessorMixin):
             text = [text]
         elif not isinstance(text, list) and not isinstance(text[0], str):
             raise TypeError("Invalid input text. Please provide a string, or a list of strings")
+        if text is None and images is None:
+            raise ValueError("You must provide either text or images")
+
+        output_kwargs = self._merge_kwargs(
+            ChameleonProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
+        return_for_text_completion = output_kwargs["text_kwargs"].pop("return_for_text_completion", False)
 
         # Replace the image token with the expanded image token sequence
         prompt_strings = []
@@ -124,19 +132,12 @@ class ChameleonProcessor(ProcessorMixin):
                 sample += self.tokenizer.sep_token  # special Chameleon treatment to add sep for chat mode
             prompt_strings.append(sample)
 
-        data = self.tokenizer(
-            prompt_strings,
-            return_tensors=return_tensors,
-            padding=padding,
-            truncation=truncation,
-            max_length=max_length,
-        )
+        data = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
 
         if images is not None:
-            pixel_values = self.image_processor(images, return_tensors=return_tensors)["pixel_values"]
-            data["pixel_values"] = pixel_values
+            data["pixel_values"] = self.image_processor(images, **output_kwargs["images_kwargs"])["pixel_values"]
 
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        return BatchFeature(data=data, tensor_type=output_kwargs["common_kwargs"]["return_tensors"])
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama
     def batch_decode(self, *args, **kwargs):
