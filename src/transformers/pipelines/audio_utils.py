@@ -51,7 +51,7 @@ def ffmpeg_microphone(
     chunk_length_s: float,
     format_for_conversion: str = "f32le",
     ffmpeg_input_device: Optional[str] = None,
-    background_arg: Optional[str] = None
+    background_arg: Optional[str] = None,
 ):
     """
     Helper function to read audio from a microphone using ffmpeg. The default input device will be used unless another
@@ -120,7 +120,7 @@ def ffmpeg_microphone(
         "-loglevel",
         "quiet",
         "pipe:1",
-        stdin_arg
+        stdin_arg,
     ]
     chunk_len = int(round(sampling_rate * chunk_length_s)) * size_of_sample
     iterator = _ffmpeg_stream(ffmpeg_command, chunk_len)
@@ -135,7 +135,7 @@ def ffmpeg_microphone_live(
     stride_length_s: Optional[Union[Tuple[float, float], float]] = None,
     format_for_conversion: str = "f32le",
     ffmpeg_input_device: Optional[str] = None,
-    run_in_background: Optional[bool] = False
+    run_in_background: Optional[bool] = False,
 ):
     """
     Helper function to read audio from a microphone using ffmpeg. This will output `partial` overlapping chunks starting
@@ -183,16 +183,18 @@ def ffmpeg_microphone_live(
 
     if run_in_background:
         microphone = ffmpeg_microphone(
-            sampling_rate, chunk_s,
+            sampling_rate,
+            chunk_s,
             format_for_conversion=format_for_conversion,
             ffmpeg_input_device=ffmpeg_input_device,
-            background_arg="-nostdin"
+            background_arg="-nostdin",
         )
     else:
         microphone = ffmpeg_microphone(
-            sampling_rate, chunk_s,
+            sampling_rate,
+            chunk_s,
             format_for_conversion=format_for_conversion,
-            ffmpeg_input_device=ffmpeg_input_device
+            ffmpeg_input_device=ffmpeg_input_device,
         )
 
     if format_for_conversion == "s16le":
