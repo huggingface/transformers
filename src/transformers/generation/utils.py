@@ -2379,7 +2379,7 @@ class GenerationMixin:
             for candidate_premature_layer in candidate_premature_layers:
                 candidate_premature_logits[candidate_premature_layer] = lm_head(
                     outputs.hidden_states[candidate_premature_layer][:, -1, :]
-                )
+                ).to(final_logits.device)
 
             if synced_gpus and this_peer_finished:
                 continue  # don't waste resources running the code we don't need
