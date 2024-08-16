@@ -244,6 +244,7 @@ class TvpImageProcessor(BaseImageProcessor):
                 The channel dimension format of the input image. If not provided, it will be inferred.
         """
         height, width = get_image_size(image, channel_dim=input_data_format)
+        pad_size = get_size_dict(pad_size)
         max_height = pad_size.get("height", height)
         max_width = pad_size.get("width", width)
 

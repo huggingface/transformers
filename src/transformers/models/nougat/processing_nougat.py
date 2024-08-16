@@ -103,7 +103,11 @@ class NougatProcessor(ProcessorMixin):
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
+        # Temporary fix for "paddding_side" in init_kwargs
+        _ = output_kwargs["text_kwargs"].pop("padding_side", None)
 
+        # For backwards compatibility, we reuse `audio` as `text_pair`
+        # in case downstream users passed it as a positional argument
         if output_kwargs["text_kwargs"].get("text_pair") is not None and audio is not None:
             raise ValueError(
                 "You cannot provide `text_pair` as a positional argument and as a keyword argument at the same time."
@@ -113,11 +117,11 @@ class NougatProcessor(ProcessorMixin):
             warnings.warn(
                 "No `text_pair` kwarg was detected. The use of `text_pair` as an argument without specifying it explicitely as `text_pair=` will be deprecated in future versions."
             )
-            # For backwards compatibility, we reuse `audio` as `text_pair` in case
-            # downstream users passed it as a positional argument
             if audio is not None:
                 output_kwargs["text_kwargs"]["text_pair"] = audio
 
+        # For backwards compatibility, we reuse `videos` as `text_target`
+        # in case downstream users passed it as a positional argument
         if output_kwargs["text_kwargs"].get("text_target") is not None and videos is not None:
             raise ValueError(
                 "You cannot provide `text_target` as a positional argument and as a keyword argument at the same time."
@@ -127,11 +131,11 @@ class NougatProcessor(ProcessorMixin):
             warnings.warn(
                 "No `text_target` kwarg was detected. The use of `text_target` as an argument without specifying it explicitely as `text_target=` will be deprecated in future versions."
             )
-            # For backwards compatibility, we reuse `videos` as `text_target` in case
-            # downstream users passed it as a positional argument
             if videos is not None:
                 output_kwargs["text_kwargs"]["text_target"] = videos
 
+        # For backwards compatibility, we reuse `backwards_compatibility_placeholder_arg` as `text_pair_target`
+        # in case downstream users passed it as a positional argument
         if (
             output_kwargs["text_kwargs"].get("text_pair_target") is not None
             and backwards_compatibility_placeholder_arg is not None
@@ -144,8 +148,6 @@ class NougatProcessor(ProcessorMixin):
             warnings.warn(
                 "No `text_pair_target` kwarg was detected. The use of `text_pair_target` as an argument without specifying it explicitely as `text_pair_target=` will be deprecated in future versions."
             )
-            # For backwards compatibility, we reuse `backwards_compatibility_placeholder_arg` as `text_pair_target` in case
-            # downstream users passed it as a positional argument
             if backwards_compatibility_placeholder_arg is not None:
                 output_kwargs["text_kwargs"]["text_pair_target"] = backwards_compatibility_placeholder_arg
 

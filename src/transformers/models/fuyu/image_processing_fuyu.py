@@ -19,7 +19,7 @@ from typing import Dict, List, Optional, Union
 
 import numpy as np
 
-from ...image_processing_utils import BaseImageProcessor, BatchFeature
+from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import (
     pad,
     resize,
@@ -344,6 +344,7 @@ class FuyuImageProcessor(BaseImageProcessor):
                 The channel dimension format of the input image. If not provided, it will be inferred.
         """
         image_height, image_width = get_image_size(image, input_data_format)
+        size = get_size_dict(size)
         target_height, target_width = size["height"], size["width"]
         padding_top = 0
         padding_left = 0
