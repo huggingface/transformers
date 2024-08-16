@@ -788,12 +788,12 @@ class Kosmos2ModelIntegrationTest(unittest.TestCase):
             outputs = model(**inputs, interpolate_pos_encoding=True)
 
         # verify the logits
-        expected_shape = torch.Size((1, 257, 1024))
+        expected_shape = torch.Size((1, 145, 1024))
 
         self.assertEqual(outputs.vision_model_output.last_hidden_state.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[1.4228, -1.9611, 3.8449], [3.4988, 2.0516, 0.3597], [3.1699, 0.2604, -0.4210]]
+            [[ 1.0551, -1.1680,  3.2926], [ 2.7077,  0.0720, -0.7721], [ 1.5863,  0.1665, -0.5936]]
         ).to(torch_device)
 
         self.assertTrue(
