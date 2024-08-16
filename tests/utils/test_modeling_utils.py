@@ -1651,6 +1651,7 @@ class ModelUtilsTest(TestCasePlus):
 
         missing_keys = loading_info["missing_keys"]
         unexpected_keys = loading_info["unexpected_keys"]
+        self.assertIn("`TestModelGamma`", cl1.out)
         self.assertIn(warning_msg_gamma, cl1.out)
         self.assertIn("gamma_param", missing_keys)
         self.assertIn("weight_param", unexpected_keys)
@@ -1675,6 +1676,7 @@ class ModelUtilsTest(TestCasePlus):
 
         missing_keys = loading_info["missing_keys"]
         unexpected_keys = loading_info["unexpected_keys"]
+        self.assertIn("`TestModelBeta`", cl2.out)
         self.assertIn(warning_msg_beta, cl2.out)
         self.assertIn("beta_param", missing_keys)
         self.assertIn("bias_param", unexpected_keys)

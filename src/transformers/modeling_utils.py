@@ -688,37 +688,30 @@ def _find_identical(tensors: List[Set[str]], state_dict: Dict[str, torch.Tensor]
     return shared_tensors, identical
 
 
-def _load_state_dict_into_model(
-    model_to_load, state_dict, start_prefix, assign_to_params_buffers=False, pretrained_model_name_or_path=None
-):
+def _load_state_dict_into_model(model_to_load, state_dict, start_prefix, assign_to_params_buffers=False):
     # Convert old format to new format if needed from a PyTorch state_dict
     old_keys = []
     new_keys = []
     renamed_keys = {}
-    found_gamma = False
-    found_beta = False
-    warning_msg = "This model "
-    if pretrained_model_name_or_path is not None:
-        warning_msg += f"(`{pretrained_model_name_or_path}`) "
-    warning_msg += "contains parameters that have been renamed internally (a few are listed below but more are present in the model):\n"
+    renamed_gamma = {}
+    renamed_beta = {}
+    warning_msg = f"A pretrained model of type `{model_to_load.__class__.__name__}` "
     for key in state_dict.keys():
         new_key = None
         if "gamma" in key:
             # We add only the first key as an example
-            if not found_gamma:
-                renamed_keys[key] = key.replace("gamma", "weight")
-            found_gamma = True
             new_key = key.replace("gamma", "weight")
+            renamed_gamma[key] = new_key if not renamed_gamma else renamed_gamma
         if "beta" in key:
             # We add only the first key as an example
-            if not found_beta:
-                renamed_keys[key] = key.replace("beta", "bias")
-            found_beta = True
             new_key = key.replace("beta", "bias")
+            renamed_beta[key] = new_key if not renamed_beta else renamed_beta
         if new_key:
             old_keys.append(key)
             new_keys.append(new_key)
+    renamed_keys = {**renamed_gamma, **renamed_beta}
     if renamed_keys:
+        warning_msg += "contains parameters that have been renamed internally (a few are listed below but more are present in the model):\n"
         for old_key, new_key in renamed_keys.items():
             warning_msg += f"* `{old_key}` -> `{new_key}`\n"
         warning_msg += "If you are using a model from the Hub, consider submitting a PR to adjust these weights and help future users."
@@ -861,30 +854,26 @@ def _load_state_dict_into_meta_model(
 
     old_keys = []
     new_keys = []
-    renamed_keys = {}
-    found_gamma = False
-    found_beta = False
-    warning_msg = "This model "
-    if pretrained_model_name_or_path is not None:
-        warning_msg += f"(`{pretrained_model_name_or_path}`) "
-    warning_msg += "contains parameters that have been renamed internally (a few are listed below but more are present in the model):\n"
+    renamed_gamma = {}
+    renamed_beta = {}
     is_quantized = hf_quantizer is not None
+    warning_msg = f"This model {type(model)}"
     for key in state_dict.keys():
         new_key = None
         if "gamma" in key:
-            if not found_gamma:
-                renamed_keys[key] = key.replace("gamma", "weight")
-            found_gamma = True
+            # We add only the first key as an example
             new_key = key.replace("gamma", "weight")
+            renamed_gamma[key] = new_key if not renamed_gamma else renamed_gamma
         if "beta" in key:
-            if not found_beta:
-                renamed_keys[key] = key.replace("beta", "bias")
-            found_beta = True
+            # We add only the first key as an example
             new_key = key.replace("beta", "bias")
+            renamed_beta[key] = new_key if not renamed_beta else renamed_beta
         if new_key:
             old_keys.append(key)
             new_keys.append(new_key)
+    renamed_keys = {**renamed_gamma, **renamed_beta}
     if renamed_keys:
+        warning_msg += "contains parameters that have been renamed internally (a few are listed below but more are present in the model):\n"
         for old_key, new_key in renamed_keys.items():
             warning_msg += f"* `{old_key}` -> `{new_key}`\n"
         warning_msg += "If you are using a model from the Hub, consider submitting a PR to adjust these weights and help future users."
@@ -4388,7 +4377,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     is_safetensors=is_safetensors,
                     keep_in_fp32_modules=keep_in_fp32_modules,
                     unexpected_keys=unexpected_keys,
-                    pretrained_model_name_or_path=pretrained_model_name_or_path,
                 )
             else:
                 # Sharded checkpoint or whole but low_cpu_mem_usage==True
@@ -4396,7 +4384,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     model_to_load, state_dict, start_prefix
                 )
                 error_msgs = _load_state_dict_into_model(
-                    model_to_load, state_dict, start_prefix, assign_to_params_buffers, pretrained_model_name_or_path
+                    model_to_load, state_dict, start_prefix, assign_to_params_buffers
                 )
 
         else:
@@ -4466,7 +4454,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             is_safetensors=is_safetensors,
                             keep_in_fp32_modules=keep_in_fp32_modules,
                             unexpected_keys=unexpected_keys,
-                            pretrained_model_name_or_path=pretrained_model_name_or_path,
                         )
                         error_msgs += new_error_msgs
                 else:
@@ -4614,7 +4601,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             start_prefix,
             expected_keys=expected_keys,
             hf_quantizer=hf_quantizer,
-            pretrained_model_name_or_path=pretrained_model_name_or_path,
         )
         return error_msgs
 
