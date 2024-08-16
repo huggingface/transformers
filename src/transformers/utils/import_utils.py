@@ -172,6 +172,7 @@ _tf2onnx_available = _is_package_available("tf2onnx")
 _timm_available = _is_package_available("timm")
 _tokenizers_available = _is_package_available("tokenizers")
 _torchaudio_available = _is_package_available("torchaudio")
+_torchao_available = _is_package_available("torchao")
 _torchdistx_available = _is_package_available("torchdistx")
 _torchvision_available = _is_package_available("torchvision")
 _mlx_available = _is_package_available("mlx")
@@ -1090,6 +1091,10 @@ def is_nltk_available():
 
 def is_torchaudio_available():
     return _torchaudio_available
+
+
+def is_torchao_available():
+    return _torchao_available
 
 
 def is_speech_available():

@@ -59,7 +59,7 @@ is_fast_path_available = all(
     (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)
 )
 
-_CHECKPOINT_FOR_DOC = "tiiuae/falcon_mamba-7b"
+_CHECKPOINT_FOR_DOC = "tiiuae/falcon-mamba-7b"
 _CONFIG_FOR_DOC = "FalconMambaConfig"
 
 
