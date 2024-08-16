@@ -729,10 +729,10 @@ class MambaForCausalLM(MambaPreTrainedModel):
         else:
             model_inputs = {"input_ids": input_ids.contiguous()}
 
-        # In case cache is not used, manually add a new column in the attention mask
+        # In case cache is not used, manually update the attention mask
         if not use_cache and attention_mask is not None and input_ids.shape != attention_mask.shape:
-            pad_length = input_ids.shape[-1] - attention_mask.shape[-1]
-            attention_mask = torch.cat([attention_mask, torch.ones_like(input_ids[:, :pad_length])], dim=-1)
+            past_length = input_ids.shape[-1] - attention_mask.shape[-1]
+            attention_mask = torch.cat([attention_mask, torch.ones_like(input_ids[:, :past_length])], dim=-1)
 
         model_inputs.update(
             {
