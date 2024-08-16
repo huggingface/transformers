@@ -34,6 +34,7 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
     require_torch_gpu,
+    require_torch_multi_gpu,
     slow,
     torch_device,
 )
@@ -498,7 +499,7 @@ class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         torch.cuda.empty_cache()
 
     @slow
-    @unittest.skip("Test hits OOM on CI - https://github.com/huggingface/transformers/issues/32288")
+    @require_torch_multi_gpu
     def test_integration_test(self):
         model = Idefics2ForConditionalGeneration.from_pretrained(
             "HuggingFaceM4/idefics2-8b-base",
