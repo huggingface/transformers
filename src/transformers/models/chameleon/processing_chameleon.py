@@ -40,7 +40,6 @@ class ChameleonProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "padding": False,
-            "stride": 0,
             "return_for_text_completion": False,
         },
         "common_kwargs": {
