@@ -620,6 +620,7 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     @require_flash_attn
     @require_torch_gpu
     @slow
+    @pytest.mark.flash_attn_test
     def test_use_flash_attention_2_true(self):
         """
         NOTE: this is the only test testing that the legacy `use_flash_attention=2` argument still works as intended.
@@ -1039,7 +1040,7 @@ class Mask4DTestHard(unittest.TestCase):
         max_cache_len = 16  # note that max_cache_len is greater than the attention_mask.shape[-1]
         past_key_values = StaticCache(
             config=self.model.config,
-            max_batch_size=1,
+            batch_size=1,
             max_cache_len=max_cache_len,
             device=torch_device,
             dtype=self.model.dtype,
@@ -1087,7 +1088,7 @@ class Mask4DTestHard(unittest.TestCase):
         max_cache_len = 16  # note that max_cache_len is greater than the attention_mask.shape[-1]
         past_key_values = StaticCache(
             config=self.model.config,
-            max_batch_size=1,
+            batch_size=1,
             max_cache_len=max_cache_len,
             device=torch_device,
             dtype=self.model.dtype,
