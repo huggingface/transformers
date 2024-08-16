@@ -57,7 +57,6 @@ def make_batched_videos(videos) -> List[VideoInput]:
         return videos
 
     elif isinstance(videos, (list, tuple)) and is_valid_image(videos[0]):
-        print(videos[0].shape)
         if isinstance(videos[0], Image.Image) or len(videos[0].shape) == 3:
             return [videos]
         elif len(videos[0].shape) == 4:
