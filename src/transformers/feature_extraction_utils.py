@@ -140,7 +140,11 @@ class BatchFeature(UserDict):
                 if isinstance(value, (list, tuple)) and len(value) > 0:
                     if isinstance(value[0], np.ndarray):
                         value = np.array(value)
-                    elif isinstance(value[0], (list, tuple)) and len(value[0]) > 0 and isinstance(value[0][0], np.ndarray):
+                    elif (
+                        isinstance(value[0], (list, tuple))
+                        and len(value[0]) > 0
+                        and isinstance(value[0][0], np.ndarray)
+                    ):
                         value = np.array(value)
                 return torch.tensor(value)
 
