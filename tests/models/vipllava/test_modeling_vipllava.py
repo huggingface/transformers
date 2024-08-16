@@ -18,6 +18,7 @@ import gc
 import unittest
 
 import requests
+from parameterized import parameterized
 
 from transformers import (
     AutoProcessor,
@@ -73,7 +74,7 @@ class VipLlavaVisionText2TextModelTester:
             "initializer_range": 0.02,
             "num_labels": 3,
             "num_choices": 4,
-            "pad_token_id": 0,
+            "pad_token_id": 1,
         },
         is_training=True,
         vision_config={
@@ -140,6 +141,8 @@ class VipLlavaVisionText2TextModelTester:
         config, pixel_values = config_and_inputs
         input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
         attention_mask = input_ids.ne(1).to(torch_device)
+        # set to random non-image token to prevent flakiness
+        input_ids[input_ids == config.image_token_index] = 2
         # we are giving 3 images let's make sure we pass in 3 image tokens
         input_ids[:, 1] = config.image_token_index
         inputs_dict = {
@@ -158,6 +161,7 @@ class VipLlavaForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestC
     """
 
     all_model_classes = (VipLlavaForConditionalGeneration,) if is_torch_available() else ()
+    all_generative_model_classes = (VipLlavaForConditionalGeneration,) if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = True
@@ -166,6 +170,24 @@ class VipLlavaForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestC
     def setUp(self):
         self.model_tester = VipLlavaVisionText2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=VipLlavaConfig, has_text_modality=False)
+
+    @parameterized.expand([(True,), (False,)])
+    def test_greedy_generation(self, use_cache: bool):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_generative_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            out = model.generate(
+                **inputs_dict,
+                min_new_tokens=20,
+                max_new_tokens=20,
+                use_cache=use_cache,
+                bad_words_ids=[[config.image_token_index]],
+            )
+            self.assertTrue(out.shape[1] == inputs_dict["input_ids"].shape[1] + 20)
 
     @unittest.skip(
         reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"

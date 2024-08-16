@@ -853,7 +853,7 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         # Merge text and images in prefill stage
-        if past_key_values is None:
+        if input_ids is not None and inputs_embeds.shape[1] != 1:
             # First merge image tokens if there are any
             if pixel_values is not None and pixel_values.size(0) > 0:
                 image_features = self._get_image_features(pixel_values, image_sizes)
@@ -910,7 +910,7 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel):
             pass
 
         # generation with cache, decoding stage
-        elif past_key_values is not None and (pixel_values is not None or pixel_values_videos is not None):
+        elif pixel_values is not None or pixel_values_videos is not None:
             # Retrieve the first layer to inspect the logits and mask out the hidden states that are set to 0
             first_layer_past_key_value = past_key_values[0][0][:, :, :, 0]
             # Sum all dimensions of head_dim (-2) to avoid random errors such as: https://github.com/huggingface/transformers/pull/28032#issuecomment-1863691941
