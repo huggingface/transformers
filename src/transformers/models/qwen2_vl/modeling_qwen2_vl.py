@@ -375,7 +375,9 @@ class Qwen2VisionTransformer(PreTrainedModel):
         head_dim = config.embed_dim // config.num_heads
         self.rotary_pos_emb = VisionRotaryEmbedding(head_dim // 2)
 
-        self.blocks = nn.ModuleList([Qwen2VLVisionBlock(config, config._attn_implementation) for _ in range(config.depth)])
+        self.blocks = nn.ModuleList(
+            [Qwen2VLVisionBlock(config, config._attn_implementation) for _ in range(config.depth)]
+        )
         self.merger = PatchMerger(dim=config.hidden_size, context_dim=config.embed_dim)
 
     def get_dtype(self) -> torch.dtype:
