@@ -16,16 +16,31 @@
 Processor class for Llava.
 """
 
-from typing import List, Optional, Union
+import sys
+from typing import List, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, get_image_size, to_numpy_array
-from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
-from ...utils import TensorType, logging
+from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...utils import logging
 
+
+if sys.version_info >= (3, 11):
+    from typing import Unpack
+else:
+    from typing_extensions import Unpack
 
 logger = logging.get_logger(__name__)
+
+
+class LlavaProcessorKwargs(ProcessingKwargs, total=False):
+    _defaults = {
+        "text_kwargs": {
+            "padding": False,
+        },
+        "images_kwargs": {},
+    }
 
 
 class LlavaProcessor(ProcessorMixin):
@@ -73,12 +88,11 @@ class LlavaProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
         images: ImageInput = None,
-        padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = None,
-        max_length=None,
-        return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH,
+        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        audio=None,
+        videos=None,
+        **kwargs: Unpack[LlavaProcessorKwargs],
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
@@ -125,8 +139,27 @@ class LlavaProcessor(ProcessorMixin):
               `None`).
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
+        if images is None and text is None:
+            raise ValueError("You have to specify at least images or text.")
+        # check if images and text inputs are reversed for BC
+        if (
+            text is not None
+            and not isinstance(text[0], str)
+            or images is not None
+            and (isinstance(images, str) or (isinstance(images, (list, tuple)) and isinstance(images[0], str)))
+        ):
+            logger.warning_once(
+                "It looks like you are passing the inputs in the wrong order. You should pass the images input first and the text input second."
+                "Images and text inputs will be swapped."
+            )
+            images, text = text, images
+        output_kwargs = self._merge_kwargs(
+            LlavaProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
         if images is not None:
-            image_inputs = self.image_processor(images, return_tensors=return_tensors)
+            image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
         else:
             image_inputs = {}
 
@@ -158,13 +191,7 @@ class LlavaProcessor(ProcessorMixin):
                     "Using processors without these attributes in the config is deprecated and will throw an error in v4.47."
                 )
 
-        text_inputs = self.tokenizer(
-            prompt_strings,
-            return_tensors=return_tensors,
-            padding=padding,
-            truncation=truncation,
-            max_length=max_length,
-        )
+        text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
         return BatchFeature(data={**text_inputs, **image_inputs})
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama

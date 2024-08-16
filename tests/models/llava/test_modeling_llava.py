@@ -274,7 +274,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         prompt = "<image>\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT:"
         image_file = "https://llava-vl.github.io/static/images/view.jpg"
         raw_image = Image.open(requests.get(image_file, stream=True).raw)
-        inputs = self.processor(prompt, raw_image, return_tensors="pt")
+        inputs = self.processor(images=raw_image, text=prompt, return_tensors="pt")
 
         EXPECTED_INPUT_IDS = torch.tensor([[1, 32000, 28705, 13, 11123, 28747, 1824, 460, 272, 1722,315, 1023, 347, 13831, 925, 684, 739, 315, 3251, 456,1633, 28804, 13, 4816, 8048, 12738, 28747]])  # fmt: skip
         self.assertTrue(torch.equal(inputs["input_ids"], EXPECTED_INPUT_IDS))
@@ -299,7 +299,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         prompt = "USER: <image>\nWhat are the things I should be cautious about when I visit this place? ASSISTANT:"
         image_file = "https://llava-vl.github.io/static/images/view.jpg"
         raw_image = Image.open(requests.get(image_file, stream=True).raw)
-        inputs = processor(prompt, raw_image, return_tensors="pt").to(torch_device, torch.float16)
+        inputs = processor(images=raw_image, text=prompt, return_tensors="pt").to(torch_device, torch.float16)
 
         output = model.generate(**inputs, max_new_tokens=900, do_sample=False)
         EXPECTED_DECODED_TEXT = "USER:  \nWhat are the things I should be cautious about when I visit this place? ASSISTANT: When visiting this place, which is a pier or dock extending over a body of water, there are a few things to be cautious about. First, be aware of the weather conditions, as sudden changes in weather can make the pier unsafe to walk on. Second, be mindful of the water depth and any potential hazards, such as submerged rocks or debris, that could cause accidents or injuries. Additionally, be cautious of the tides and currents, as they can change rapidly and pose a risk to swimmers or those who venture too close to the edge of the pier. Finally, be respectful of the environment and other visitors, and follow any posted rules or guidelines for the area."  # fmt: skip
@@ -325,7 +325,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
         image2 = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
 
-        inputs = processor(prompts, images=[image1, image2], return_tensors="pt", padding=True)
+        inputs = processor(images=[image1, image2], text=prompts, return_tensors="pt", padding=True)
 
         output = model.generate(**inputs, max_new_tokens=20)
 
@@ -349,7 +349,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
         image2 = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
 
-        inputs = self.processor(prompts, images=[image1, image2], return_tensors="pt", padding=True)
+        inputs = self.processor(images=[image1, image2], text=prompts, return_tensors="pt", padding=True)
 
         output = model.generate(**inputs, max_new_tokens=20)
 
@@ -381,7 +381,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
         image2 = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
 
-        inputs = processor(prompts, images=[image1, image2, image1], return_tensors="pt", padding=True)
+        inputs = processor(images=[image1, image2, image1], text=prompts, return_tensors="pt", padding=True)
 
         output = model.generate(**inputs, max_new_tokens=20)
 
@@ -409,8 +409,8 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         image2 = Image.open(requests.get(url2, stream=True).raw)
 
         inputs = processor(
-            text=[prompt1, prompt2, prompt3],
             images=[image1, image2, image1, image2],
+            text=[prompt1, prompt2, prompt3],
             return_tensors="pt",
             padding=True,
         ).to(torch_device)
@@ -444,7 +444,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         image_file = "http://images.cocodataset.org/val2017/000000039769.jpg"
 
         raw_image = Image.open(requests.get(image_file, stream=True).raw)
-        inputs = processor(prompt, raw_image, return_tensors="pt").to(torch_device, torch.float16)
+        inputs = processor(images=raw_image, text=prompt, return_tensors="pt").to(torch_device, torch.float16)
 
         # Make sure that `generate` works
         _ = model.generate(**inputs, max_new_tokens=20)
@@ -554,13 +554,13 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         # check processing with expansion of inputs
         processor.vision_feature_select_strategy = "default"
         processor.patch_size = 14
-        inputs_expanded = processor(prompt, raw_image, return_tensors="pt").to(torch_device, torch.float16)
+        inputs_expanded = processor(images=raw_image, text=prompt, return_tensors="pt").to(torch_device, torch.float16)
         self.assertTrue(inputs_expanded.input_ids.shape[-1] == 593)
 
         # check processing without expansion of inputs (legacy behavior)
         processor.vision_feature_select_strategy = None
         processor.patch_size = None
-        inputs = processor(prompt, raw_image, return_tensors="pt").to(torch_device, torch.float16)
+        inputs = processor(images=raw_image, text=prompt, return_tensors="pt").to(torch_device, torch.float16)
         self.assertTrue(inputs.input_ids.shape[-1] == 18)
 
         # generate exactly 20 tokens
