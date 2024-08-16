@@ -853,7 +853,7 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         # Merge text and images in prefill stage
-        if input_ids.shape[1] != 1:
+        if input_ids is not None and inputs_embeds.shape[1] != 1:
             # First merge image tokens if there are any
             if pixel_values is not None and pixel_values.size(0) > 0:
                 image_features = self._get_image_features(pixel_values, image_sizes)
