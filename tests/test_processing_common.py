@@ -49,6 +49,8 @@ if is_vision_available():
 @require_torch
 class ProcessorTesterMixin:
     processor_class = None
+    text_data_arg_name = "input_ids"
+    images_data_arg_name = "pixel_values"
 
     def prepare_processor_dict(self):
         return {}
@@ -136,7 +138,7 @@ class ProcessorTesterMixin:
         image_input = self.prepare_image_inputs()
 
         inputs = processor(text=input_str, images=image_input, return_tensors="pt")
-        self.assertEqual(len(inputs["input_ids"][0]), 117)
+        self.assertEqual(len(inputs[self.text_data_arg_name][0]), 117)
 
     @require_torch
     @require_vision
@@ -153,7 +155,7 @@ class ProcessorTesterMixin:
         image_input = self.prepare_image_inputs()
 
         inputs = processor(text=input_str, images=image_input)
-        self.assertEqual(len(inputs["pixel_values"][0][0]), 234)
+        self.assertEqual(len(inputs[self.images_data_arg_name][0][0]), 234)
 
     @require_vision
     @require_torch
@@ -171,7 +173,7 @@ class ProcessorTesterMixin:
         inputs = processor(
             text=input_str, images=image_input, return_tensors="pt", max_length=112, padding="max_length"
         )
-        self.assertEqual(len(inputs["input_ids"][0]), 112)
+        self.assertEqual(len(inputs[self.text_data_arg_name][0]), 112)
 
     @require_torch
     @require_vision
@@ -188,7 +190,7 @@ class ProcessorTesterMixin:
         image_input = self.prepare_image_inputs()
 
         inputs = processor(text=input_str, images=image_input, size=[224, 224], crop_size=(224, 224))
-        self.assertEqual(len(inputs["pixel_values"][0][0]), 224)
+        self.assertEqual(len(inputs[self.images_data_arg_name][0][0]), 224)
 
     @require_torch
     @require_vision
@@ -213,8 +215,8 @@ class ProcessorTesterMixin:
             max_length=76,
         )
 
-        self.assertEqual(inputs["pixel_values"].shape[2], 214)
-        self.assertEqual(len(inputs["input_ids"][0]), 76)
+        self.assertEqual(inputs[self.images_data_arg_name].shape[2], 214)
+        self.assertEqual(len(inputs[self.text_data_arg_name][0]), 76)
 
     @require_torch
     @require_vision
@@ -239,9 +241,9 @@ class ProcessorTesterMixin:
             max_length=76,
         )
 
-        self.assertEqual(inputs["pixel_values"].shape[2], 214)
+        self.assertEqual(inputs[self.images_data_arg_name].shape[2], 214)
 
-        self.assertEqual(len(inputs["input_ids"][0]), 6)
+        self.assertEqual(len(inputs[self.text_data_arg_name][0]), 6)
 
     @require_torch
     @require_vision
@@ -292,9 +294,9 @@ class ProcessorTesterMixin:
         inputs = processor(text=input_str, images=image_input, **all_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
 
-        self.assertEqual(inputs["pixel_values"].shape[2], 214)
+        self.assertEqual(inputs[self.images_data_arg_name].shape[2], 214)
 
-        self.assertEqual(len(inputs["input_ids"][0]), 76)
+        self.assertEqual(len(inputs[self.text_data_arg_name][0]), 76)
 
     @require_torch
     @require_vision
@@ -321,9 +323,9 @@ class ProcessorTesterMixin:
         }
 
         inputs = processor(text=input_str, images=image_input, **all_kwargs)
-        self.assertEqual(inputs["pixel_values"].shape[2], 214)
+        self.assertEqual(inputs[self.images_data_arg_name].shape[2], 214)
 
-        self.assertEqual(len(inputs["input_ids"][0]), 76)
+        self.assertEqual(len(inputs[self.text_data_arg_name][0]), 76)
 
 
 class MyProcessor(ProcessorMixin):
