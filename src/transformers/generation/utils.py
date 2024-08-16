@@ -1426,7 +1426,7 @@ class GenerationMixin:
         return model_kwargs
 
     def _get_cache(
-        self, cache_implementation: str, max_batch_size: int, max_cache_len: int, device: torch.device, model_kwargs
+        self, cache_implementation: str, batch_size: int, max_cache_len: int, device: torch.device, model_kwargs
     ) -> Cache:
         """
         Sets a cache for `generate`, that will persist across calls. A new cache will only be initialized a
@@ -1448,7 +1448,7 @@ class GenerationMixin:
         need_new_cache = (
             not hasattr(self, "_cache")
             or (not isinstance(cache_to_check, cache_cls))
-            or cache_to_check.max_batch_size != max_batch_size
+            or cache_to_check.batch_size != batch_size
         )
         if cache_implementation != "mamba":
             need_new_cache = need_new_cache or cache_to_check.max_cache_len < max_cache_len
@@ -1473,7 +1473,7 @@ class GenerationMixin:
 
             cache_kwargs = {
                 "config": self.config,
-                "max_batch_size": max_batch_size,
+                "batch_size": batch_size,
                 "max_cache_len": max_cache_len,
                 "device": device,
                 "dtype": cache_dtype,
@@ -1812,7 +1812,7 @@ class GenerationMixin:
                     )
                 model_kwargs[cache_name] = self._get_cache(
                     cache_implementation=generation_config.cache_implementation,
-                    max_batch_size=generation_config.num_beams * generation_config.num_return_sequences * batch_size,
+                    batch_size=generation_config.num_beams * generation_config.num_return_sequences * batch_size,
                     max_cache_len=generation_config.max_length,
                     device=device,
                     model_kwargs=model_kwargs,
