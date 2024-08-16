@@ -158,10 +158,11 @@ class VideoLlavaVisionText2TextModelTester:
         config, pixel_values_images, pixel_values_videos = config_and_inputs
         input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
         attention_mask = input_ids.ne(1).to(torch_device)
+        # set to random non-image token to prevent flakiness
+        input_ids[input_ids == config.image_token_index] = 2
+        input_ids[input_ids == config.video_token_index] = 2
 
-        # we are giving 3 videos and 3 images. Need to pass in image and video tokens, both
-        # also need to make sure no other special tokens are set
-        input_ids[(input_ids == 0) | (input_ids == 1)] = 3
+        # we are giving 3 videos and 3 images. Need to pass in image and video tokens
         input_ids[:, 0] = config.video_token_index
         input_ids[:, 1:2] = config.image_token_index
         inputs_dict = {
