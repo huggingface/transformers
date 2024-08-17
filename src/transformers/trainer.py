@@ -100,7 +100,6 @@ from .trainer_pt_utils import (
     get_model_param_count,
     get_module_class_from_name,
     get_parameter_names,
-    is_deepspeed_zero3_enabled,
     nested_concat,
     nested_detach,
     nested_numpify,
@@ -434,15 +433,6 @@ class Trainer:
                     FutureWarning,
                 )
             self.model_init = model_init
-
-        # Will reach this branch if the user has
-        # 1. Used `.from_pretrained` or `.from_config` to initialize their model
-        # 2. Did not configure Zero-3 via `TrainingArguments` or `accelerate launch` beforehand
-        # New models init such as `MyModel()` will not hit this step
-        if is_deepspeed_zero3_enabled() and not getattr(model, "_transformers_zero3_init_used", True):
-            raise ValueError(
-                "Model was not initialized with `Zero-3` despite being configured for DeepSpeed Zero-3. Please re-initialize your model via `Model.from_pretrained(...)` or `Model.from_config(...)` after creating your `TrainingArguments`!"
-            )
 
         if model.__class__.__name__ in MODEL_MAPPING_NAMES:
             raise ValueError(

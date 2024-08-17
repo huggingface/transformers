@@ -583,6 +583,3 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
             model_inputs["pixel_values"] = pixel_values
 
         return model_inputs
-
-    def _reorder_cache(self, *args, **kwargs):
-        return self.language_model._reorder_cache(*args, **kwargs)

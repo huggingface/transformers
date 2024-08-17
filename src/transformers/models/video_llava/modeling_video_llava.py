@@ -686,12 +686,6 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
         )
 
         if legacy_processing:
-            # legacy specific code copied from prev version, we assume that we always have one more new token (assisted decoding doesn't work for VLMs)
-            # if cache_position[0] != 0:
-            #     model_inputs["input_ids"] = model_inputs["input_ids"][:, -1:]
-            #     if "position_ids" in model_inputs:
-            #         model_inputs["position_ids"] = model_inputs["position_ids"][:, -1:]
-
             model_inputs["pixel_values_images"] = pixel_values_images
             model_inputs["pixel_values_videos"] = pixel_values_videos
 
@@ -702,6 +696,3 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
             model_inputs["pixel_values_videos"] = pixel_values_videos
 
         return model_inputs
-
-    def _reorder_cache(self, *args, **kwargs):
-        return self.language_model._reorder_cache(*args, **kwargs)
