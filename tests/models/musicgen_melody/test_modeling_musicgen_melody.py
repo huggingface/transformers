@@ -645,8 +645,10 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
         atols = {
             ("cpu", False, torch.float32): 1e-6,
             ("cpu", False, torch.bfloat16): 1e-2,
+            ("cpu", False, torch.float16): 5e-3,
             ("cpu", True, torch.float32): 1e-6,
             ("cpu", True, torch.bfloat16): 1e-2,
+            ("cpu", True, torch.float16): 5e-3,
             ("cuda", False, torch.float32): 1e-6,
             ("cuda", False, torch.bfloat16): 1e-2,
             ("cuda", False, torch.float16): 5e-3,
@@ -657,8 +659,10 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
         rtols = {
             ("cpu", False, torch.float32): 1e-4,
             ("cpu", False, torch.bfloat16): 1e-2,
+            ("cpu", False, torch.float16): 5e-3,
             ("cpu", True, torch.float32): 1e-4,
             ("cpu", True, torch.bfloat16): 1e-2,
+            ("cpu", True, torch.float16): 5e-3,
             ("cuda", False, torch.float32): 1e-4,
             ("cuda", False, torch.bfloat16): 1e-2,
             ("cuda", False, torch.float16): 5e-3,
