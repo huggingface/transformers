@@ -115,8 +115,8 @@ def get_resize_output_image_size(
         new_width = scale * new_width
 
     new_height, new_width = int(new_height + 0.5), int(new_width + 0.5)
-    new_height = new_height // size_divisor * size_divisor
-    new_width = new_width // size_divisor * size_divisor
+    new_height = max(1, new_height // size_divisor) * size_divisor
+    new_width = max(1, new_width // size_divisor) * size_divisor
 
     return new_height, new_width
 

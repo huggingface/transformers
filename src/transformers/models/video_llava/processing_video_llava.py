@@ -16,16 +16,34 @@
 Processor class for VideoLlava.
 """
 
+import sys
 from typing import List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, get_image_size, to_numpy_array
-from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
-from ...utils import TensorType, logging
+from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...utils import logging
+
+
+if sys.version_info >= (3, 11):
+    from typing import Unpack
+else:
+    from typing_extensions import Unpack
 
 
 logger = logging.get_logger(__name__)
+
+
+class VideoLlavaProcessorKwargs(ProcessingKwargs, total=False):
+    _defaults = {
+        "text_kwargs": {
+            "padding": False,
+        },
+        "common_kwargs": {
+            "return_tensors": "pt",
+        },
+    }
 
 
 class VideoLlavaProcessor(ProcessorMixin):
@@ -77,13 +95,11 @@ class VideoLlavaProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
-        images: ImageInput = None,
-        videos: ImageInput = None,
-        padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = None,
-        max_length=None,
-        return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH,
+        text: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
+        images: Optional[ImageInput] = None,
+        videos: Optional[ImageInput] = None,
+        audio=None,
+        **kwargs: Unpack[VideoLlavaProcessorKwargs],
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
@@ -105,26 +121,6 @@ class VideoLlavaProcessor(ProcessorMixin):
                 Video frames to preprocess. Expects a single or batch of video frames in NumPy array or PyTorch
                 tensor. Each video should be of shape (T, C, H, W), where T is number of frames, C is
                 number of channels, H and W are image height and width.
-            padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
-                Select a strategy to pad the returned sequences (according to the model's padding side and padding
-                index) among:
-                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
-                  sequence if provided).
-                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
-                  acceptable input length for the model if that argument is not provided.
-                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
-                  lengths).
-            max_length (`int`, *optional*):
-                Maximum length of the returned list and optionally padding length (see above).
-            truncation (`bool`, *optional*):
-                Activates truncation to cut input sequences longer than `max_length` to `max_length`.
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
@@ -135,9 +131,17 @@ class VideoLlavaProcessor(ProcessorMixin):
               `None`).
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
+        output_kwargs = self._merge_kwargs(
+            VideoLlavaProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
+        # Temporary fix for "paddding_side" in init_kwargs
+        _ = output_kwargs["text_kwargs"].pop("padding_side", None)
+
         data = {}
         if images is not None or videos is not None:
-            encoded_images = self.image_processor(images=images, videos=videos, return_tensors=return_tensors)
+            encoded_images = self.image_processor(images=images, videos=videos, **output_kwargs["images_kwargs"])
             data.update(encoded_images)
 
         if isinstance(text, str):
@@ -174,13 +178,7 @@ class VideoLlavaProcessor(ProcessorMixin):
                 sample = sample.replace(self.video_token, self.video_token * num_video_tokens)
                 prompt_strings.append(sample)
 
-        text_inputs = self.tokenizer(
-            prompt_strings,
-            return_tensors=return_tensors,
-            padding=padding,
-            truncation=truncation,
-            max_length=max_length,
-        )
+        text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
         data.update(text_inputs)
 
         return BatchFeature(data=data)

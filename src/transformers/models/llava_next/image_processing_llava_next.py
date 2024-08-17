@@ -720,7 +720,11 @@ class LlavaNextImageProcessor(BaseImageProcessor):
             image_patches = self.get_image_patches(
                 image,
                 image_grid_pinpoints,
-                size=(size["shortest_edge"], size["shortest_edge"]),
+                size=(
+                    (size["shortest_edge"], size["shortest_edge"])
+                    if "shortest_edge" in size
+                    else (size["height"], size["width"])
+                ),
                 patch_size=crop_size["height"],
                 resample=resample,
                 data_format=input_data_format,

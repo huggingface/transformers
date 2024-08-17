@@ -16,10 +16,23 @@
 Image/Text processor class for AltCLIP
 """
 
+import sys
 import warnings
+from typing import List, Optional, Union
 
-from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import BatchEncoding
+from ...image_utils import ImageInput
+from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
+
+
+if sys.version_info >= (3, 11):
+    from typing import Unpack
+else:
+    from typing_extensions import Unpack
+
+
+class AltCLIPProcessingKwargs(ProcessingKwargs, total=False):
+    _defaults = {}
 
 
 class AltCLIPProcessor(ProcessorMixin):
@@ -59,7 +72,12 @@ class AltCLIPProcessor(ProcessorMixin):
 
         super().__init__(image_processor, tokenizer)
 
-    def __call__(self, text=None, images=None, return_tensors=None, **kwargs):
+    def __call__(
+        self,
+        text: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
+        images: Optional[ImageInput] = None,
+        **kwargs: Unpack[AltCLIPProcessingKwargs],
+    ):
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to XLMRobertaTokenizerFast's [`~XLMRobertaTokenizerFast.__call__`] if `text` is not
@@ -97,11 +115,17 @@ class AltCLIPProcessor(ProcessorMixin):
         if text is None and images is None:
             raise ValueError("You have to specify either text or images. Both cannot be none.")
 
+        output_kwargs = self._merge_kwargs(
+            AltCLIPProcessingKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
+
         if text is not None:
-            encoding = self.tokenizer(text, return_tensors=return_tensors, **kwargs)
+            encoding = self.tokenizer(text, **output_kwargs["text_kwargs"])
 
         if images is not None:
-            image_features = self.image_processor(images, return_tensors=return_tensors, **kwargs)
+            image_features = self.image_processor(images, **output_kwargs["images_kwargs"])
 
         if text is not None and images is not None:
             encoding["pixel_values"] = image_features.pixel_values
@@ -109,7 +133,9 @@ class AltCLIPProcessor(ProcessorMixin):
         elif text is not None:
             return encoding
         else:
-            return BatchEncoding(data=dict(**image_features), tensor_type=return_tensors)
+            return BatchEncoding(
+                data=dict(**image_features), tensor_type=output_kwargs["common_kwargs"]["return_tensors"]
+            )
 
     def batch_decode(self, *args, **kwargs):
         """

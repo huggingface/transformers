@@ -16,13 +16,41 @@
 Image/Text processor class for FLAVA
 """
 
+import sys
 import warnings
 from typing import List, Optional, Union
 
 from ...image_utils import ImageInput
-from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
-from ...utils import TensorType
+from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin
+from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
+
+
+if sys.version_info >= (3, 11):
+    from typing import Unpack
+else:
+    from typing_extensions import Unpack
+
+
+class FlavaImagesKwargs(ImagesKwargs, total=False):
+    return_image_mask: Optional[bool]
+    return_codebook_pixels: Optional[bool]
+
+
+class FlavaProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: FlavaImagesKwargs
+    _defaults = {
+        "text_kwargs": {
+            "add_special_tokens": True,
+            "padding": False,
+            "truncation": False,
+            "stride": 0,
+            "return_overflowing_tokens": False,
+            "return_special_tokens_mask": False,
+            "return_offsets_mapping": False,
+            "return_length": False,
+            "verbose": True,
+        },
+    }
 
 
 class FlavaProcessor(ProcessorMixin):
@@ -64,23 +92,7 @@ class FlavaProcessor(ProcessorMixin):
         self,
         images: Optional[ImageInput] = None,
         text: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
-        add_special_tokens: bool = True,
-        padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = False,
-        max_length: Optional[int] = None,
-        stride: int = 0,
-        pad_to_multiple_of: Optional[int] = None,
-        return_image_mask: Optional[bool] = None,
-        return_codebook_pixels: Optional[bool] = None,
-        return_token_type_ids: Optional[bool] = None,
-        return_attention_mask: Optional[bool] = None,
-        return_overflowing_tokens: bool = False,
-        return_special_tokens_mask: bool = False,
-        return_offsets_mapping: bool = False,
-        return_length: bool = False,
-        verbose: bool = True,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        **kwargs,
+        **kwargs: Unpack[FlavaProcessorKwargs],
     ):
         """
         This method uses [`FlavaImageProcessor.__call__`] method to prepare image(s) for the model, and
@@ -92,33 +104,16 @@ class FlavaProcessor(ProcessorMixin):
         if text is None and images is None:
             raise ValueError("You have to specify either text or images. Both cannot be none.")
 
+        output_kwargs = self._merge_kwargs(
+            FlavaProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
+
         if text is not None:
-            encoding = self.tokenizer(
-                text=text,
-                add_special_tokens=add_special_tokens,
-                padding=padding,
-                truncation=truncation,
-                max_length=max_length,
-                stride=stride,
-                pad_to_multiple_of=pad_to_multiple_of,
-                return_token_type_ids=return_token_type_ids,
-                return_attention_mask=return_attention_mask,
-                return_overflowing_tokens=return_overflowing_tokens,
-                return_special_tokens_mask=return_special_tokens_mask,
-                return_offsets_mapping=return_offsets_mapping,
-                return_length=return_length,
-                verbose=verbose,
-                return_tensors=return_tensors,
-                **kwargs,
-            )
+            encoding = self.tokenizer(text=text, **output_kwargs["text_kwargs"])
         if images is not None:
-            image_features = self.image_processor(
-                images,
-                return_image_mask=return_image_mask,
-                return_codebook_pixels=return_codebook_pixels,
-                return_tensors=return_tensors,
-                **kwargs,
-            )
+            image_features = self.image_processor(images, **output_kwargs["images_kwargs"])
 
         if text is not None and images is not None:
             encoding.update(image_features)
@@ -126,7 +121,9 @@ class FlavaProcessor(ProcessorMixin):
         elif text is not None:
             return encoding
         else:
-            return BatchEncoding(data=dict(**image_features), tensor_type=return_tensors)
+            return BatchEncoding(
+                data=dict(**image_features), tensor_type=output_kwargs["common_kwargs"]["return_tensors"]
+            )
 
     def batch_decode(self, *args, **kwargs):
         """
