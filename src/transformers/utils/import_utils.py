@@ -177,6 +177,7 @@ _torchdistx_available = _is_package_available("torchdistx")
 _torchvision_available = _is_package_available("torchvision")
 _mlx_available = _is_package_available("mlx")
 _hqq_available = _is_package_available("hqq")
+_liger_kernel_available = _is_package_available("liger_kernel")
 
 
 _torch_version = "N/A"
@@ -1162,6 +1163,10 @@ def is_jinja_available():
 
 def is_mlx_available():
     return _mlx_available
+
+
+def is_liger_kernel_avaiable():
+    return _liger_kernel_available
 
 
 # docstyle-ignore

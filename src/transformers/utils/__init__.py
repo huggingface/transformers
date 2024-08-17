@@ -148,6 +148,7 @@ from .import_utils import (
     is_keras_nlp_available,
     is_levenshtein_available,
     is_librosa_available,
+    is_liger_kernel_avaiable,
     is_lomo_available,
     is_mlx_available,
     is_natten_available,
