@@ -1490,7 +1490,7 @@ class GenerationMixin:
         self,
         generation_config: GenerationConfig,
         model_kwargs: Dict,
-        assistant_model: PreTrainedModel,
+        assistant_model: "PreTrainedModel",
         batch_size: int,
         device: torch.device,
     ) -> bool:
@@ -1498,15 +1498,19 @@ class GenerationMixin:
         Prepares the cache for generation (if applicable), given `generate`'s paramaterization. If a cache is
         instantiated, writes it to `model_kwargs`, under the name expected by the model.
         """
-        use_dynamic_cache_by_default = False
 
         if "mamba" in self.__class__.__name__.lower():
             cache_name = "cache_params"
         else:
             cache_name = "past_key_values"
 
-        # Quick escape route 1: if the user specifies a cache, we don't need to do anything (other than check for
-        # conflicting `generate` arguments)
+        requires_cross_attention_cache = (
+            self.config.is_encoder_decoder or model_kwargs.get("encoder_outputs") is not None
+        )
+
+        # Quick escape route 1: if the user specifies a cache, we only need to:
+        # a) check for conflicting `generate` arguments
+        # b) convert to the new cache format (if the user passes a legacy cache and model supports it)
         user_defined_cache = model_kwargs.get(cache_name)
         if user_defined_cache is not None:
             if is_torchdynamo_compiling():
@@ -1520,19 +1524,35 @@ class GenerationMixin:
                     f"Passing both `cache_implementation` (used to initialize certain caches) and `{cache_name}` (a "
                     "Cache object) is unsupported. Please use only one of the two."
                 )
-            return use_dynamic_cache_by_default
+            if isinstance(user_defined_cache, tuple) and self._supports_default_dynamic_cache():
+                model_kwargs[cache_name] = (
+                    DynamicCache.from_legacy_cache(user_defined_cache)
+                    if not requires_cross_attention_cache
+                    else EncoderDecoderCache.from_legacy_cache(user_defined_cache)
+                )
+            return
 
         # Quick escape route 2: if the user specifies no cache is to be used. (conflicting arguments are handled in
         # `generation_config.validate()`)
+        if generation_config.use_cache is False:
+            return
 
-        # Otherwise we may need to prepare a cache, based on `generation_config.cache_implementation`
+        # Quick escape route 3: model that only supports legacy caches = nothing to prepare
+        if not self._supports_default_dynamic_cache():
+            if generation_config.cache_implementation is not None:
+                warnings.warn(
+                    "This model does not support `Cache` instances, it only supports the legacy cache format (tuple "
+                    f"of tuples). `cache_implementation` (set to {generation_config.cache_implementation}) will be "
+                    "ignored.",
+                    UserWarning,
+                )
+            return
+
+        # Otherwise we NEED to prepare a cache, based on `generation_config.cache_implementation`
+
         # TODO(joao): support static caches in assisted generation. assisted generation needs to roll back caches,
         # which is only supported in dynamic caches atm
-        if (
-            assistant_model is not None
-            and generation_config.cache_implementation is not None
-            and self._supports_default_dynamic_cache()
-        ):
+        if assistant_model is not None and generation_config.cache_implementation is not None:
             logger.warning_once(
                 "An assistant model is provided, using a dynamic cache instead of a cache of type="
                 f"'{generation_config.cache_implementation}'."
@@ -1557,7 +1577,7 @@ class GenerationMixin:
                 if not self._supports_quantized_cache:
                     raise ValueError(
                         "This model does not support the quantized cache. If you want your model to support quantized "
-                        "cache, please open an issue."
+                        "cache, please open an issue and tag @zucchini-nlp."
                     )
 
                 cache_config = (
@@ -1581,30 +1601,15 @@ class GenerationMixin:
                 model_kwargs[cache_name] = cache_class(cache_config)
             elif generation_config.cache_implementation == "offloaded":
                 model_kwargs[cache_name] = OffloadedCache()
+
         # Use DynamicCache() instance by default. This will avoid back and forth from legacy format that
         # keeps copying the cache thus using much more memory
-        elif generation_config.cache_implementation is None and self._supports_default_dynamic_cache():
-            past = model_kwargs.get(cache_name, None)
-            requires_cross_attention_cache = (
-                self.config.is_encoder_decoder or model_kwargs.get("encoder_outputs") is not None
+        else:
+            model_kwargs[cache_name] = (
+                DynamicCache()
+                if not requires_cross_attention_cache
+                else EncoderDecoderCache(DynamicCache(), DynamicCache())
             )
-            if past is None:
-                model_kwargs[cache_name] = (
-                    DynamicCache()
-                    if not requires_cross_attention_cache
-                    else EncoderDecoderCache(DynamicCache(), DynamicCache())
-                )
-                use_dynamic_cache_by_default = True
-            elif isinstance(past, tuple):
-                model_kwargs[cache_name] = (
-                    DynamicCache.from_legacy_cache(past)
-                    if not requires_cross_attention_cache
-                    else EncoderDecoderCache.from_legacy_cache(past)
-                )
-                use_dynamic_cache_by_default = True
-
-        return use_dynamic_cache_by_default
-
 
     def _prepare_special_tokens(
         self,
@@ -1884,8 +1889,9 @@ class GenerationMixin:
         self._validate_generated_length(generation_config, input_ids_length, has_default_max_length)
 
         # 7. Prepare the cache.
-        # - `model_kwargs` may be updated in place with the appropriate cache
-        # - `max_length`, prepared above, is used to determine the cache length
+        # - `model_kwargs` may be updated in place with a cache as defined by the parameters in `generation_config`.
+        # - different models have a different cache name expected by the model (default = "past_key_values")
+        # - `max_length`, prepared above, is used to determine the maximum cache length
         self._prepare_cache_for_generation(generation_config, model_kwargs, assistant_model, batch_size, device)
 
         # 8. determine generation mode
@@ -2153,10 +2159,16 @@ class GenerationMixin:
 
         # Convert to legacy cache format if requested
         if (
-            generation_config.return_legacy_cache
+            generation_config.return_legacy_cache is not False
             and hasattr(result, "past_key_values")
             and isinstance(result.past_key_values, (DynamicCache, EncoderDecoderCache))
         ):
+            if generation_config.return_legacy_cache is None:
+                logger.warning_once(
+                    "From v4.47 onwards, when a model cache is to be returned, `generate` will return a `Cache` "
+                    "instance instead by default (as opposed to the legacy tuple of tuples format). If you want to "
+                    "keep returning the legacy format, please set `return_legacy_cache=True`."
+                )
             result.past_key_values = result.past_key_values.to_legacy_cache()
         return result
 
