@@ -21,7 +21,7 @@ import warnings
 from typing import List, Optional, Union
 
 from ...image_utils import ImageInput
-from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin
+from ...processing_utils import ProcessingKwargs, ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
 
 
@@ -31,12 +31,7 @@ else:
     from typing_extensions import Unpack
 
 
-class CLIPSegImagesKwargs(ImagesKwargs, total=False):
-    visual_prompt: Optional[ImageInput]
-
-
 class CLIPSegProcessorKwargs(ProcessingKwargs, total=False):
-    images_kwargs: CLIPSegImagesKwargs
     _defaults = {}
 
 
@@ -57,6 +52,8 @@ class CLIPSegProcessor(ProcessorMixin):
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "ViTImageProcessor"
     tokenizer_class = ("CLIPTokenizer", "CLIPTokenizerFast")
+    # For backward compatibility. See transformers.processing_utils.ProcessorMixin.prepare_and_validate_optional_call_args for more details.
+    optional_call_args = ["visual_prompt"]
 
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
         feature_extractor = None
@@ -80,6 +77,10 @@ class CLIPSegProcessor(ProcessorMixin):
         self,
         text: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
         images: Optional[ImageInput] = None,
+        # The following is to capture `visual_prompt` argument that may be passed as a positional argument.
+        # See transformers.processing_utils.ProcessorMixin.prepare_and_validate_optional_call_args for more details.
+        # This behavior is only needed for backward compatibility and will be removed in future versions.
+        *args,
         audio=None,
         videos=None,
         **kwargs: Unpack[CLIPSegProcessorKwargs],
@@ -118,21 +119,8 @@ class CLIPSegProcessor(ProcessorMixin):
             CLIPSegProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
+            **self.prepare_and_validate_optional_call_args(*args),
         )
-
-        if output_kwargs["images_kwargs"].get("visual_prompt") is not None and audio is not None:
-            raise ValueError(
-                "You cannot provide `visual_prompt` as a positional argument and as a keyword argument at the same time."
-                "Please provide it only as a keyword argument (i.e. `visual_prompt=...`)."
-            )
-        if "visual_prompt" not in output_kwargs["images_kwargs"]:
-            warnings.warn(
-                "No `visual_prompt` kwarg was detected. The use of `visual_prompt` as an argument without specifying it explicitely as `visual_prompt=` will be deprecated in future versions."
-            )
-            # For backwards compatibility, we reuse `audio` as `visual_prompt` in case
-            # downstream users passed it as a positional argument
-            if audio is not None:
-                output_kwargs["images_kwargs"]["visual_prompt"] = audio
 
         visual_prompt = output_kwargs["images_kwargs"].pop("visual_prompt", None)
 

@@ -17,7 +17,6 @@ Image/Text processor class for OWLv2
 """
 
 import sys
-import warnings
 from typing import List, Optional, Union
 
 import numpy as np
@@ -66,6 +65,8 @@ class Owlv2Processor(ProcessorMixin):
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "Owlv2ImageProcessor"
     tokenizer_class = ("CLIPTokenizer", "CLIPTokenizerFast")
+    # For backward compatibility. See transformers.processing_utils.ProcessorMixin.prepare_and_validate_optional_call_args for more details.
+    optional_call_args = ["query_images"]
 
     def __init__(self, image_processor, tokenizer, **kwargs):
         super().__init__(image_processor, tokenizer)
@@ -74,6 +75,10 @@ class Owlv2Processor(ProcessorMixin):
         self,
         text: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
         images: Optional[ImageInput] = None,
+        # The following is to capture `visual_prompt` argument that may be passed as a positional argument.
+        # See transformers.processing_utils.ProcessorMixin.prepare_and_validate_optional_call_args for more details.
+        # This behavior is only needed for backward compatibility and will be removed in future versions.
+        *args,
         audio=None,
         videos=None,
         **kwargs: Unpack[Owlv2ProcessorKwargs],
@@ -86,15 +91,15 @@ class Owlv2Processor(ProcessorMixin):
         of the above two methods for more information.
 
         Args:
-            text (`str`, `List[str]`, `List[List[str]]`):
+            text (`str`, `List[str]`, `List[List[str]]`, *optional*):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
             images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`,
-            `List[torch.Tensor]`):
+            `List[torch.Tensor]`, *optional*):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. Both channels-first and channels-last formats are supported.
-            query_images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
+            query_images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`, *optional*):
                 The query image to be prepared, one query image is expected per target image to be queried. Each image
                 can be a PIL image, NumPy array or PyTorch tensor. In case of a NumPy array/PyTorch tensor, each image
                 should be of shape (C, H, W), where C is a number of channels, H and W are image height and width.
@@ -111,21 +116,8 @@ class Owlv2Processor(ProcessorMixin):
             Owlv2ProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
+            **self.prepare_and_validate_optional_call_args(*args),
         )
-
-        if output_kwargs["images_kwargs"].get("query_images") is not None and audio is not None:
-            raise ValueError(
-                "You cannot provide `query_images` as a positional argument and as a keyword argument at the same time."
-                "Please provide it only as a keyword argument (i.e. `query_images=...`)."
-            )
-        if "query_images" not in output_kwargs["images_kwargs"]:
-            warnings.warn(
-                "No `query_images` kwarg was detected. The use of `query_images` as an argument without specifying it explicitely as `query_images=` will be deprecated in future versions."
-            )
-            # For backwards compatibility, we reuse `audio` as `query_images` in case
-            # downstream users passed it as a positional argument
-            if audio is not None:
-                output_kwargs["images_kwargs"]["query_images"] = audio
 
         query_images = output_kwargs["images_kwargs"].pop("query_images", None)
         return_tensors = output_kwargs["common_kwargs"]["return_tensors"]

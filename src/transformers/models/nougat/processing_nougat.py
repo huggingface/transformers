@@ -17,11 +17,10 @@ Processor class for Nougat.
 """
 
 import sys
-import warnings
 from typing import List, Optional, Union
 
 from ...image_utils import ImageInput
-from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, TextKwargs
+from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 
 
@@ -31,12 +30,6 @@ else:
     from typing_extensions import Unpack
 
 
-class NougatTextKwargs(TextKwargs, total=False):
-    text_pair: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]]
-    text_target: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]]
-    text_pair_target: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]]
-
-
 class NougatImagesKwargs(ImagesKwargs, total=False):
     do_crop_margin: Optional[bool]
     do_thumbnail: Optional[bool]
@@ -44,7 +37,6 @@ class NougatImagesKwargs(ImagesKwargs, total=False):
 
 
 class NougatProcessorKwargs(ProcessingKwargs, total=False):
-    text_kwargs: NougatTextKwargs
     images_kwargs: NougatImagesKwargs
     _defaults = {
         "text_kwargs": {
@@ -92,7 +84,6 @@ class NougatProcessor(ProcessorMixin):
         text: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
         audio=None,
         videos=None,
-        backwards_compatibility_placeholder_arg=None,
         **kwargs: Unpack[NougatProcessorKwargs],
     ):
         if images is None and text is None:
@@ -106,65 +97,10 @@ class NougatProcessor(ProcessorMixin):
         # Temporary fix for "paddding_side" in init_kwargs
         _ = output_kwargs["text_kwargs"].pop("padding_side", None)
 
-        # For backwards compatibility, we reuse `audio` as `text_pair`
-        # in case downstream users passed it as a positional argument
-        if output_kwargs["text_kwargs"].get("text_pair") is not None and audio is not None:
-            raise ValueError(
-                "You cannot provide `text_pair` as a positional argument and as a keyword argument at the same time."
-                "Please provide it only as a keyword argument (i.e. `text_pair=...`)."
-            )
-        if "text_pair" not in output_kwargs["text_kwargs"]:
-            warnings.warn(
-                "No `text_pair` kwarg was detected. The use of `text_pair` as an argument without specifying it explicitely as `text_pair=` will be deprecated in future versions."
-            )
-            if audio is not None:
-                output_kwargs["text_kwargs"]["text_pair"] = audio
-
-        # For backwards compatibility, we reuse `videos` as `text_target`
-        # in case downstream users passed it as a positional argument
-        if output_kwargs["text_kwargs"].get("text_target") is not None and videos is not None:
-            raise ValueError(
-                "You cannot provide `text_target` as a positional argument and as a keyword argument at the same time."
-                "Please provide it only as a keyword argument (i.e. `text_target=...`)."
-            )
-        if "text_target" not in output_kwargs["text_kwargs"]:
-            warnings.warn(
-                "No `text_target` kwarg was detected. The use of `text_target` as an argument without specifying it explicitely as `text_target=` will be deprecated in future versions."
-            )
-            if videos is not None:
-                output_kwargs["text_kwargs"]["text_target"] = videos
-
-        # For backwards compatibility, we reuse `backwards_compatibility_placeholder_arg` as `text_pair_target`
-        # in case downstream users passed it as a positional argument
-        if (
-            output_kwargs["text_kwargs"].get("text_pair_target") is not None
-            and backwards_compatibility_placeholder_arg is not None
-        ):
-            raise ValueError(
-                "You cannot provide `text_pair_target` as a positional argument and as a keyword argument at the same time."
-                "Please provide it only as a keyword argument (i.e. `text_pair_target=...`)."
-            )
-        if "text_pair_target" not in output_kwargs["text_kwargs"]:
-            warnings.warn(
-                "No `text_pair_target` kwarg was detected. The use of `text_pair_target` as an argument without specifying it explicitely as `text_pair_target=` will be deprecated in future versions."
-            )
-            if backwards_compatibility_placeholder_arg is not None:
-                output_kwargs["text_kwargs"]["text_pair_target"] = backwards_compatibility_placeholder_arg
-
-        text_pair = output_kwargs["text_kwargs"].pop("text_pair", None)
-        text_target = output_kwargs["text_kwargs"].pop("text_target", None)
-        text_pair_target = output_kwargs["text_kwargs"].pop("text_pair_target", None)
-
         if images is not None:
             inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
         if text is not None:
-            encodings = self.tokenizer(
-                text,
-                text_pair=text_pair,
-                text_target=text_target,
-                text_pair_target=text_pair_target,
-                **output_kwargs["text_kwargs"],
-            )
+            encodings = self.tokenizer(text, **output_kwargs["text_kwargs"])
 
         if text is None:
             return inputs

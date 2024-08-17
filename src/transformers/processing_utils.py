@@ -35,7 +35,9 @@ if is_vision_available():
 
 from .tokenization_utils_base import (
     PaddingStrategy,
+    PreTokenizedInput,
     PreTrainedTokenizerBase,
+    TextInput,
     TruncationStrategy,
 )
 from .utils import (
@@ -106,6 +108,9 @@ class TextKwargs(TypedDict, total=False):
             The side on which padding will be applied.
     """
 
+    text_pair: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]]
+    text_target: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]
+    text_pair_target: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]]
     add_special_tokens: Optional[bool]
     padding: Union[bool, str, PaddingStrategy]
     truncation: Union[bool, str, TruncationStrategy]
@@ -317,6 +322,7 @@ class ProcessorMixin(PushToHubMixin):
 
     attributes = ["feature_extractor", "tokenizer"]
     optional_attributes = ["chat_template"]
+    optional_call_args: List[str] = []
     # Names need to be attr_class for attr in attributes
     feature_extractor_class = None
     tokenizer_class = None
@@ -955,6 +961,62 @@ class ProcessorMixin(PushToHubMixin):
             )
             unused_kwargs = {k: processor_config[k] for k in unused_keys}
         return unused_kwargs
+
+    def prepare_and_validate_optional_call_args(self, *args):
+        """
+        Matches optional positional arguments to their corresponding names in `optional_call_args`
+        in the processor class in the order they are passed to the processor call.
+
+        Note that this should only be used in the `__call__` method of the processors with special
+        arguments. Special arguments are arguments that aren't `text`, `images`, `audio`, nor `videos`
+        but also aren't passed to the tokenizer, image processor, etc. Examples of such processors are:
+            - `CLIPSegProcessor`
+            - `LayoutLMv2Processor`
+            - `OwlViTProcessor`
+
+        Also note that passing by position to the processor call is now deprecated and will be disallowed
+        in future versions. We only have this for backward compatibility.
+
+        Example:
+            Suppose that the processor class has `optional_call_args = ["arg_name_1", "arg_name_2"]`.
+            And we define the call method as:
+            ```python
+            def __call__(
+                self,
+                text: str,
+                images: Optional[ImageInput] = None,
+                *arg,
+                audio=None,
+                videos=None,
+            )
+            ```
+
+            Then, if we call the processor as:
+            ```python
+            images = [...]
+            processor("What is common in these images?", images, "arg_value_1", "arg_value_2")
+            ```
+
+            Then, this method will return:
+            ```python
+            {
+                "arg_name_1": "arg_value_1",
+                "arg_name_2": "arg_value_2",
+            }
+            ```
+            which we could then pass as kwargs to `self._merge_kwargs`
+        """
+        if len(args):
+            warnings.warn(
+                "Passing positional arguments to the processor call is now deprecated and will be disallowed in future versions. "
+                "Please pass all arguments as keyword arguments."
+            )
+        if len(args) > len(self.optional_call_args):
+            raise ValueError(
+                f"Expected *at most* {len(self.optional_call_args)} optional positional arguments in processor call but received {len(args)}."
+                "Passing positional arguments to the processor call is not recommended"
+            )
+        return {arg_name: arg_value for arg_value, arg_name in zip(args, self.optional_call_args)}
 
     def apply_chat_template(
         self,
