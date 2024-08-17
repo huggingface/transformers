@@ -14,7 +14,7 @@
 # limitations under the License.
 """PyTorch ProPainter model."""
 
-import collections.abc
+from collections import namedtuple
 import itertools
 import math
 import numpy as np
@@ -24,13 +24,15 @@ import torch
 import torch.utils.checkpoint
 import torch.nn.functional as F
 import torchvision
-from functools import reduce
 
+from functools import reduce
 from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss, L1Loss
 from torch.nn.modules.utils import _pair, _single
 from torch.cuda.amp import autocast
 from torch.nn.functional import normalize
+from torchvision import models as tv
+
 
 
 from ...activations import ACT2FN
@@ -1797,6 +1799,230 @@ class ProPainterDiscriminator(nn.Module):
         hidden_states = torch.transpose(hidden_states, 1, 2)  # batch_size, timesteps, channel, height, width
         return hidden_states
 
+#Adapted from https://github.com/richzhang/PerceptualSimilarity/blob/master/lpips/pretrained_networks.py
+class vgg16(nn.Module):
+    def __init__(self, requires_grad=False, pretrained=True):
+        super(vgg16, self).__init__()
+        vgg_pretrained_features = tv.vgg16(pretrained=pretrained).features
+        self.slice1 = torch.nn.Sequential()
+        self.slice2 = torch.nn.Sequential()
+        self.slice3 = torch.nn.Sequential()
+        self.slice4 = torch.nn.Sequential()
+        self.slice5 = torch.nn.Sequential()
+        self.N_slices = 5
+        for x in range(4):
+            self.slice1.add_module(str(x), vgg_pretrained_features[x])
+        for x in range(4, 9):
+            self.slice2.add_module(str(x), vgg_pretrained_features[x])
+        for x in range(9, 16):
+            self.slice3.add_module(str(x), vgg_pretrained_features[x])
+        for x in range(16, 23):
+            self.slice4.add_module(str(x), vgg_pretrained_features[x])
+        for x in range(23, 30):
+            self.slice5.add_module(str(x), vgg_pretrained_features[x])
+        if not requires_grad:
+            for param in self.parameters():
+                param.requires_grad = False
+
+    def forward(self, frames):
+        hidden_states = self.slice1(frames)
+        hidden_states_relu1_2 = hidden_states
+        hidden_states = self.slice2(hidden_states)
+        hidden_states_relu2_2 = hidden_states
+        hidden_states = self.slice3(hidden_states)
+        hidden_states_relu3_3 = hidden_states
+        hidden_states = self.slice4(hidden_states)
+        hidden_states_relu4_3 = hidden_states
+        hidden_states = self.slice5(hidden_states)
+        hidden_states_relu5_3 = hidden_states
+        vgg_outputs = namedtuple("VggOutputs", ['relu1_2', 'relu2_2', 'relu3_3', 'relu4_3', 'relu5_3'])
+        hidden_states = vgg_outputs(hidden_states_relu1_2, hidden_states_relu2_2, hidden_states_relu3_3, hidden_states_relu4_3, hidden_states_relu5_3)
+
+        return hidden_states
+
+#Adapted from https://github.com/richzhang/PerceptualSimilarity/blob/master/lpips/lpips.py
+class ScalingLayer(nn.Module):
+    def __init__(self):
+        super(ScalingLayer, self).__init__()
+        self.register_buffer('shift', torch.Tensor([-.030,-.088,-.188])[None,:,None,None])
+        self.register_buffer('scale', torch.Tensor([.458,.448,.450])[None,:,None,None])
+
+    def forward(self, frames):
+        return (frames - self.shift) / self.scale
+
+#Adapted from https://github.com/richzhang/PerceptualSimilarity/blob/master/lpips/lpips.py
+class IntermediateLossLayer(nn.Module):
+    ''' A single linear layer which does a 1x1 conv '''
+    def __init__(self, num_channels, num_channels_out=1, use_dropout=False):
+        super(IntermediateLossLayer, self).__init__()
+
+        layers = [nn.Dropout(),] if(use_dropout) else []
+        layers += [nn.Conv2d(num_channels, num_channels, 1, stride=1, padding=0, bias=False),]
+        self.loss_layers = nn.Sequential(*layers)
+
+    def forward(self, hidden_states):
+        return self.loss_layers(hidden_states)
+
+def spatial_average(input_tensor, keepdim=True):
+    return input_tensor.mean([2,3],keepdim=keepdim)
+
+def upsample(input_tensor, out_HW=(64,64)): # assumes scale factor is same for H and W
+    return nn.Upsample(size=out_HW, mode='bilinear', align_corners=False)(input_tensor)
+
+def normalize_tensor(hidden_states,eps=1e-10):
+    norm_factor = torch.sqrt(torch.sum(hidden_states**2,dim=1,keepdim=True))
+    return hidden_states/(norm_factor+eps)
+
+#Adapted from https://github.com/richzhang/PerceptualSimilarity/blob/master/lpips/lpips.py
+# Learned perceptual metric
+class LPIPS(nn.Module):
+    def __init__(self, use_dropout=True,):
+        """ Initializes a perceptual loss torch.nn.Module
+        use_dropout : bool
+            [True] to use dropout when training linear layers
+            [False] for no dropout when training linear layers
+        """
+
+        super(LPIPS, self).__init__()
+        
+        self.scaling_layer = ScalingLayer()
+
+        self.num_channels = [64,128,256,512,512]
+        self.length = len(self.num_channels)
+
+        self.net = vgg16()
+
+        
+        self.layer0 = IntermediateLossLayer(self.num_channels[0], use_dropout=use_dropout)
+        self.layer1 = IntermediateLossLayer(self.num_channels[1], use_dropout=use_dropout)
+        self.layer2 = IntermediateLossLayer(self.num_channels[2], use_dropout=use_dropout)
+        self.layer3 = IntermediateLossLayer(self.num_channels[3], use_dropout=use_dropout)
+        self.layer4 = IntermediateLossLayer(self.num_channels[4], use_dropout=use_dropout)
+        self.layers = [self.layer0,self.layer1,self.layer2,self.layer3,self.layer4]
+        self.layers = nn.ModuleList(self.layers)
+
+    def forward(self, frames, pred_images):
+        frames = 2 * frames  - 1
+        pred_images = 2 * pred_images  - 1
+
+        frames, pred_images = (self.scaling_layer(frames), self.scaling_layer(pred_images))
+        hidden_states0, hidden_states1 = self.net.forward(frames), self.net.forward(pred_images)
+        feats0, feats1, diffs = {}, {}, {}
+
+        for i in range(self.length):
+            feats0[i], feats1[i] = normalize_tensor(hidden_states0[i]), normalize_tensor(hidden_states1[i])
+            diffs[i] = (feats0[i]-feats1[i])**2
+
+        layer_perceptual_losses = [spatial_average(self.layers[i](diffs[i]), keepdim=True) for i in range(self.length)]
+
+        return sum(layer_perceptual_losses)
+
+class LPIPSLoss(nn.Module):
+    def __init__(self, 
+            loss_weight=1.0, 
+            use_input_norm=True,
+            range_norm=False,):
+        super(LPIPSLoss, self).__init__()
+        self.perceptual = LPIPS().eval()
+        self.loss_weight = loss_weight
+        self.use_input_norm = use_input_norm
+        self.range_norm = range_norm
+
+        if self.use_input_norm:
+            # the mean is for image with range [0, 1]
+            self.register_buffer('mean', torch.Tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1))
+            # the std is for image with range [0, 1]
+            self.register_buffer('std', torch.Tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1))
+
+    def forward(self, pred_images, frames):
+        if self.range_norm:
+            pred_images   = (pred_images + 1) / 2
+            frames = (frames + 1) / 2
+        if self.use_input_norm:
+            pred_images   = (pred_images - self.mean) / self.std
+            frames = (frames - self.mean) / self.std
+        lpips_loss = self.perceptual(frames.contiguous(), pred_images.contiguous())
+        return self.loss_weight * lpips_loss.mean(), None
+
+class AdversarialLoss(nn.Module):
+    r"""
+    Adversarial loss
+    https://arxiv.org/abs/1711.10337
+    """
+    def __init__(self,
+                 type='nsgan',
+                 target_real_label=1.0,
+                 target_fake_label=0.0):
+        r"""
+        type = nsgan | lsgan | hinge
+        """
+        super(AdversarialLoss, self).__init__()
+        self.type = type
+        self.register_buffer('real_label', torch.tensor(target_real_label))
+        self.register_buffer('fake_label', torch.tensor(target_fake_label))
+
+        if type == 'nsgan':
+            self.criterion = nn.BCELoss()
+        elif type == 'lsgan':
+            self.criterion = nn.MSELoss()
+        elif type == 'hinge':
+            self.criterion = nn.ReLU()
+
+    def __call__(self, generated_frames, is_real, is_disc=None):
+        if self.type == 'hinge':
+            if is_disc:
+                if is_real:
+                    generated_frames = -generated_frames
+                return self.criterion(1 + generated_frames).mean()
+            else:
+                return (-generated_frames).mean()
+        else:
+            labels = (self.real_label
+                      if is_real else self.fake_label).expand_as(generated_frames)
+            loss = self.criterion(generated_frames, labels)
+            return loss
+
+class ProPainterLosses():
+    def __init__(self, config) -> None:
+        self.config = config
+        self.l1_loss = L1Loss()
+        self.perc_loss = LPIPSLoss(use_input_norm=True, range_norm=True)
+        self.adversarial_loss = AdversarialLoss(type=config.GAN_LOSS)
+
+    def calculate_losses(self, pred_imgs,masks_dilated, frames, comp_frames):
+        gen_loss = 0
+        dis_loss = 0
+        # generator l1 loss
+        hole_loss = self.l1_loss(pred_imgs * masks_dilated, frames * masks_dilated)
+        hole_loss = hole_loss / torch.mean(masks_dilated) * self.config.hole_weight
+        gen_loss += hole_loss
+
+        valid_loss = self.l1_loss(pred_imgs * (1 - masks_dilated), frames * (1 - masks_dilated))
+        valid_loss = valid_loss / torch.mean(1-masks_dilated) * self.config.valid_weight
+        gen_loss += valid_loss
+
+        # perceptual loss
+        if self.config.perceptual_weight > 0:
+            perc_loss = self.perc_loss(pred_imgs.view(-1,3,h,w), frames.view(-1,3,h,w))[0] * self.config['losses']['perceptual_weight']
+            gen_loss += perc_loss
+
+        # gan loss
+        if not self.config.no_dis:
+            # generator adversarial loss
+            gen_clip = self.netD(comp_frames)
+            gan_loss = self.adversarial_loss(gen_clip, True, False)
+            gan_loss = gan_loss * self.config.adversarial_weight
+            gen_loss += gan_loss
+
+        if not self.config.no_dis:
+            # discriminator adversarial loss
+            real_clip = self.netD(frames)
+            fake_clip = self.netD(comp_frames.detach())
+            dis_real_loss = self.adversarial_loss(real_clip, True, True)
+            dis_fake_loss = self.adversarial_loss(fake_clip, False, True)
+            dis_loss += (dis_real_loss + dis_fake_loss) / 2
+
+        return gen_loss, dis_loss
 class ProPainterPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -2023,7 +2249,8 @@ class ProPainterModel(ProPainterPreTrainedModel):
             ref_num = self.config.subvideo_length // self.config.ref_stride
         else:
             ref_num = -1
-        
+
+        pred_imgs_loss = []
         # ---- feature propagation + transformer ----
         for f in range(0, self.video_length, neighbor_stride):
             neighbor_ids = [
@@ -2045,6 +2272,8 @@ class ProPainterModel(ProPainterPreTrainedModel):
                 
                 pred_img = pred_img.view(-1, 3, height, width)
 
+                pred_imgs_loss.append(pred_img)
+
                 pred_img = (pred_img + 1) / 2
                 pred_img = pred_img.cpu().permute(0, 2, 3, 1).numpy() * 255
                 binary_masks = masks_dilated[0, neighbor_ids, :, :, :].cpu().permute(
@@ -2060,7 +2289,7 @@ class ProPainterModel(ProPainterPreTrainedModel):
                         
                     comp_frames[idx] = comp_frames[idx].astype(np.uint8)
 
-        return comp_frames
+        return comp_frames, pred_imgs_loss
     
  
     def forward(
@@ -2086,6 +2315,7 @@ class ProPainterModel(ProPainterPreTrainedModel):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
         
+        losses = ProPainterLosses(self.config)
 
         self.size = size
         
@@ -2097,14 +2327,17 @@ class ProPainterModel(ProPainterPreTrainedModel):
                 
             updated_frames,updated_masks = self.image_propagation(pixel_values,masks_dilated,pred_flows_bi)
                 
-        comp_frames = self.feature_propagation(updated_frames, updated_masks, masks_dilated, pred_flows_bi, pixel_values_inp)
+        comp_frames, pred_imgs_loss = self.feature_propagation(updated_frames, updated_masks, masks_dilated, pred_flows_bi, pixel_values_inp)
+
+        gen_loss, dis_loss = losses.calculate_losses(pred_imgs_loss,masks_dilated, pixel_values, comp_frames)
         
         # if not return_dict:
         #     head_outputs = (sequence_output, pooled_output) if pooled_output is not None else (sequence_output,)
         #     return head_outputs + encoder_outputs[1:]
 
-        return BaseModelOutput(
-            last_hidden_state=comp_frames,
+        return MaskedImageModelingOutput(
+            loss=(gen_loss, dis_loss),
+            reconstruction=comp_frames,
             hidden_states=None,
             attentions=None,
         )

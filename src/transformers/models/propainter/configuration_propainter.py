@@ -163,6 +163,7 @@ class ProPainterConfig(PretrainedConfig):
         num_attention_heads=4,
         window_size=(5, 9),
         pool_size=(4, 4),
+        no_dis=0,
         
         **kwargs,
     ):
@@ -222,3 +223,4 @@ class ProPainterConfig(PretrainedConfig):
         self.num_attention_heads = num_attention_heads
         self.window_size = window_size
         self.pool_size = pool_size
+        self.no_dis = no_dis
