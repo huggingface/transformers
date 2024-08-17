@@ -794,7 +794,7 @@ class TrainingArguments:
 
         use_liger (`bool`, *optional*, defaults to `False`):
             Whether enable [Liger](https://github.com/linkedin/Liger-Kernel) (Linkedin GPU Efficient Runtime) Kernel for LLM model training.
-            It can effectively increase multi-GPU training throughput by ~20% and reduces memory usage by ~60%, works out of the box with 
+            It can effectively increase multi-GPU training throughput by ~20% and reduces memory usage by ~60%, works out of the box with
             flash attention, PyTorch FSDP, and Microsoft DeepSpeed. Currently, it supports llama, mistral, mixtral and gemma models.
     """
 
@@ -1495,7 +1495,7 @@ class TrainingArguments:
             "help": "Whether to run through the entire `evaluation` step at the very beginning of training as a sanity check."
         },
     )
-    
+
     use_liger: Optional[bool] = field(
         default=False,
         metadata={
