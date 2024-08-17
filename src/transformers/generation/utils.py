@@ -1568,7 +1568,7 @@ class GenerationMixin:
                     )
                 model_kwargs[cache_name] = self._get_cache(
                     cache_implementation=generation_config.cache_implementation,
-                    max_batch_size=generation_config.num_beams * generation_config.num_return_sequences * batch_size,
+                    batch_size=generation_config.num_beams * generation_config.num_return_sequences * batch_size,
                     max_cache_len=generation_config.max_length,
                     device=device,
                     model_kwargs=model_kwargs,
