@@ -2168,7 +2168,11 @@ class GenerationMixin:
             is_user_defined_cache = user_defined_cache is not None
             is_default_cache_type = (
                 type(result.past_key_values) == DynamicCache  # noqa E721
-                or type(result.past_key_values) == EncoderDecoderCache  # noqa E721
+                or (
+                    isinstance(result.past_key_values, EncoderDecoderCache)
+                    and type(result.past_key_values.self_attention_cache) == DynamicCache
+                    and type(result.past_key_values.cross_attention_cache) == DynamicCache
+                )  # noqa E721
             )
             if not is_user_defined_cache and is_default_cache_type:
                 logger.warning_once(
