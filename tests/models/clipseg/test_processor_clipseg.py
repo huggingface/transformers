@@ -21,20 +21,24 @@ import unittest
 import numpy as np
 import pytest
 
-from transformers import CLIPTokenizer, CLIPTokenizerFast
+from transformers import CLIPSegProcessor, CLIPTokenizer, CLIPTokenizerFast
 from transformers.models.clip.tokenization_clip import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_vision
 from transformers.utils import IMAGE_PROCESSOR_NAME, is_vision_available
+
+from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
     from PIL import Image
 
-    from transformers import CLIPSegProcessor, ViTImageProcessor
+    from transformers import ViTImageProcessor
 
 
 @require_vision
-class CLIPSegProcessorTest(unittest.TestCase):
+class CLIPSegProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    processor_class = CLIPSegProcessor
+
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
 

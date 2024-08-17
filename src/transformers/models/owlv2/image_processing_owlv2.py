@@ -19,7 +19,7 @@ from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
-from ...image_processing_utils import BaseImageProcessor, BatchFeature
+from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import (
     center_to_corners_format,
     pad,
@@ -296,6 +296,7 @@ class Owlv2ImageProcessor(BaseImageProcessor):
         """
         requires_backends(self, "scipy")
 
+        size = get_size_dict(size)
         output_shape = (size["height"], size["width"])
         image = to_channel_dimension_format(image, ChannelDimension.LAST)
         image, output_shape = _preprocess_resize_output_shape(image, output_shape)
