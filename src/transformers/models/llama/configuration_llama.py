@@ -123,7 +123,7 @@ class LlamaConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         mlp_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in up_proj, down_proj and gate_proj layers in the MLP layers.
-        head_dim (`int`, *optional*, defaults to None):
+        head_dim (`int`, *optional*):
             The attention head dimension. If None, it will default to hidden_size // num_heads
 
 
