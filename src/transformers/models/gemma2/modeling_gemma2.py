@@ -660,7 +660,7 @@ class Gemma2PreTrainedModel(PreTrainedModel):
     def _check_and_enable_sdpa(cls, config, hard_check_only: bool = False):
         """
         Overloads `PreTrainedModel._check_and_enable_sdpa` so as to DISABLE torch SDPA by default on Gemma2 models.
-        SDPA reduces the model performance on Gemma2, so it is disabled by default.
+        SDPA reduces the model performance on Gemma2 because of the logits softcapping.
         """
         config = super()._check_and_enable_sdpa(config, hard_check_only=hard_check_only)
 

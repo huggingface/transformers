@@ -81,12 +81,16 @@ class Gemma2ModelTest(GemmaModelTest, unittest.TestCase):
         self.model_tester = Gemma2ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Gemma2Config, hidden_size=37)
 
-    @unittest.skip("Eager and SDPA do not produce the same outputs, thus this test fails")
+    @unittest.skip("Failing because of unique cache (HybridCache)")
     def test_model_outputs_equivalence(self, **kwargs):
         pass
 
-    @unittest.skip("Gemma2's outputs are expected to be different")
+    @unittest.skip("Gemma2's eager attn/sdpa attn outputs are expected to be different")
     def test_eager_matches_sdpa_inference(self):
+        pass
+
+    @unittest.skip("Gemma2's eager attn/sdpa attn outputs are expected to be different")
+    def test_sdpa_equivalence(self):
         pass
 
     def test_eager_attention_loaded_by_default(self):
