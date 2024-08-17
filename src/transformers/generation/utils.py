@@ -1499,11 +1499,7 @@ class GenerationMixin:
         instantiated, writes it to `model_kwargs`, under the name expected by the model.
         """
 
-        if "mamba" in self.__class__.__name__.lower():
-            cache_name = "cache_params"
-        else:
-            cache_name = "past_key_values"
-
+        cache_name = "past_key_values" if "mamba" not in self.__class__.__name__.lower() else "cache_params"
         requires_cross_attention_cache = (
             self.config.is_encoder_decoder or model_kwargs.get("encoder_outputs") is not None
         )
@@ -1515,9 +1511,9 @@ class GenerationMixin:
         if user_defined_cache is not None:
             if is_torchdynamo_compiling():
                 raise ValueError(
-                    "Passing `past_key_values` is not supported when compiling `model.generate` with torch.compile -- you "
-                    "may get incorrect outputs. Please compile `model.forward` only or use the `cache_implementation` "
-                    "input argument."
+                    "Passing `past_key_values` is not supported when compiling `model.generate` with torch.compile -- "
+                    "you may get incorrect outputs. Please compile `model.forward` only or use the "
+                    "`cache_implementation` input argument."
                 )
             if generation_config.cache_implementation is not None:
                 raise ValueError(
@@ -1892,6 +1888,9 @@ class GenerationMixin:
         # - `model_kwargs` may be updated in place with a cache as defined by the parameters in `generation_config`.
         # - different models have a different cache name expected by the model (default = "past_key_values")
         # - `max_length`, prepared above, is used to determine the maximum cache length
+        # TODO (joao): remove `user_defined_cache` after v4.47 (remove default conversion to legacy format)
+        cache_name = "past_key_values" if "mamba" not in self.__class__.__name__.lower() else "cache_params"
+        user_defined_cache = model_kwargs.get(cache_name)
         self._prepare_cache_for_generation(generation_config, model_kwargs, assistant_model, batch_size, device)
 
         # 8. determine generation mode
@@ -2159,17 +2158,27 @@ class GenerationMixin:
 
         # Convert to legacy cache format if requested
         if (
-            generation_config.return_legacy_cache is not False
+            generation_config.return_legacy_cache is not False  # Should check for `True` after v4.47
             and hasattr(result, "past_key_values")
-            and isinstance(result.past_key_values, (DynamicCache, EncoderDecoderCache))
+            and hasattr(result.past_key_values, "to_legacy_cache")
+            and result.past_key_values.to_legacy_cache is not None
         ):
-            if generation_config.return_legacy_cache is None:
+            # handle BC (convert by default if he user hasn't passed a cache AND the cache is of the default type)
+            should_convert_cache = generation_config.return_legacy_cache
+            is_user_defined_cache = user_defined_cache is not None
+            is_default_cache_type = (
+                type(result.past_key_values) == DynamicCache  # noqa E721
+                or type(result.past_key_values) == EncoderDecoderCache  # noqa E721
+            )
+            if not is_user_defined_cache and is_default_cache_type:
                 logger.warning_once(
                     "From v4.47 onwards, when a model cache is to be returned, `generate` will return a `Cache` "
                     "instance instead by default (as opposed to the legacy tuple of tuples format). If you want to "
                     "keep returning the legacy format, please set `return_legacy_cache=True`."
                 )
-            result.past_key_values = result.past_key_values.to_legacy_cache()
+                should_convert_cache = True
+            if should_convert_cache:
+                result.past_key_values = result.past_key_values.to_legacy_cache()
         return result
 
     def _has_unfinished_sequences(

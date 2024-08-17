@@ -194,6 +194,7 @@ class GenerationTesterMixin:
         output_attentions=False,
         output_hidden_states=False,
         return_dict_in_generate=False,
+        use_cache=True,
     ):
         logits_processor_kwargs = self._get_logits_processor_kwargs(do_sample=False)
         model_kwargs = {"attention_mask": attention_mask} if attention_mask is not None else {}
@@ -207,6 +208,7 @@ class GenerationTesterMixin:
             output_scores=output_scores,
             output_logits=output_logits,
             return_dict_in_generate=return_dict_in_generate,
+            use_cache=use_cache,
             **logits_processor_kwargs,
             **model_kwargs,
         )
@@ -224,6 +226,7 @@ class GenerationTesterMixin:
         output_attentions=False,
         output_hidden_states=False,
         return_dict_in_generate=False,
+        use_cache=True,
     ):
         torch.manual_seed(0)
         logits_processor_kwargs = self._get_logits_processor_kwargs(do_sample=True)
@@ -239,6 +242,7 @@ class GenerationTesterMixin:
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict_in_generate=return_dict_in_generate,
+            use_cache=use_cache,
             **logits_processor_kwargs,
             **model_kwargs,
         )
@@ -256,6 +260,7 @@ class GenerationTesterMixin:
         output_attentions=False,
         output_hidden_states=False,
         return_dict_in_generate=False,
+        use_cache=True,
     ):
         logits_processor_kwargs = self._get_logits_processor_kwargs(do_sample=False)
         model_kwargs = {"attention_mask": attention_mask} if attention_mask is not None else {}
@@ -268,6 +273,7 @@ class GenerationTesterMixin:
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict_in_generate=return_dict_in_generate,
+            use_cache=use_cache,
             **beam_kwargs,
             **logits_processor_kwargs,
             **model_kwargs,
@@ -286,6 +292,7 @@ class GenerationTesterMixin:
         output_attentions=False,
         output_hidden_states=False,
         return_dict_in_generate=False,
+        use_cache=True,
     ):
         torch.manual_seed(0)
         logits_processor_kwargs = self._get_logits_processor_kwargs(do_sample=True)
@@ -299,6 +306,7 @@ class GenerationTesterMixin:
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict_in_generate=return_dict_in_generate,
+            use_cache=use_cache,
             **beam_kwargs,
             **logits_processor_kwargs,
             **model_kwargs,
@@ -317,6 +325,7 @@ class GenerationTesterMixin:
         output_attentions=False,
         output_hidden_states=False,
         return_dict_in_generate=False,
+        use_cache=True,
     ):
         logits_processor_kwargs = self._get_logits_processor_kwargs(do_sample=False)
         model_kwargs = {"attention_mask": attention_mask} if attention_mask is not None else {}
@@ -329,6 +338,7 @@ class GenerationTesterMixin:
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict_in_generate=return_dict_in_generate,
+            use_cache=use_cache,
             **beam_kwargs,
             **logits_processor_kwargs,
             **model_kwargs,
@@ -348,6 +358,7 @@ class GenerationTesterMixin:
         output_attentions=False,
         output_hidden_states=False,
         return_dict_in_generate=False,
+        use_cache=True,
     ):
         logits_processor_kwargs = self._get_logits_processor_kwargs(do_sample=False)
         model_kwargs = {"attention_mask": attention_mask} if attention_mask is not None else {}
@@ -361,6 +372,7 @@ class GenerationTesterMixin:
             output_hidden_states=output_hidden_states,
             return_dict_in_generate=return_dict_in_generate,
             constraints=constraints,
+            use_cache=use_cache,
             **beam_kwargs,
             **logits_processor_kwargs,
             **model_kwargs,
@@ -378,6 +390,7 @@ class GenerationTesterMixin:
         output_attentions=False,
         output_hidden_states=False,
         return_dict_in_generate=False,
+        use_cache=True,
     ):
         contrastive_search_kwargs = {
             "penalty_alpha": 0.6,
@@ -396,6 +409,7 @@ class GenerationTesterMixin:
             output_scores=output_scores,
             output_logits=output_logits,
             return_dict_in_generate=return_dict_in_generate,
+            use_cache=use_cache,
             **logits_processor_kwargs,
             **model_kwargs,
             **contrastive_search_kwargs,
@@ -1902,6 +1916,8 @@ class GenerationTesterMixin:
                 seq_length=past_sequence_length,
                 config=config,
             )
+        elif use_cache is False:
+            self.assertTrue(output.past_key_values is None)
 
     def _check_scores(self, batch_size, scores, length, config):
         expected_shape = (batch_size, config.vocab_size)
