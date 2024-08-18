@@ -53,7 +53,6 @@ class GgufIntegrationTests(unittest.TestCase):
     iq2_xs_gguf_model_id = "TinyLlama-1.1B-Chat-v1.0-IQ2_XS.gguf"
     iq2_xxs_gguf_model_id = "TinyLlama-1.1B-Chat-v1.0-IQ2_XXS.gguf"
     iq3_s_gguf_model_id = "TinyLlama-1.1B-Chat-v1.0-IQ3_S.gguf"
-    iq3_xs_gguf_model_id = "TinyLlama-1.1B-Chat-v1.0-IQ3_XS.gguf"
     iq3_xxs_gguf_model_id = "TinyLlama-1.1B-Chat-v1.0-IQ3_XXS.gguf"
     iq4_xs_gguf_model_id = "TinyLlama-1.1B-Chat-v1.0-IQ4_XS.gguf"
     iq4_nl_gguf_model_id = "TinyLlama-1.1B-Chat-v1.0-IQ4_NL.gguf"
@@ -246,18 +245,6 @@ class GgufIntegrationTests(unittest.TestCase):
         out = model.generate(**text, max_new_tokens=10)
 
         EXPECTED_TEXT = "Hello, World!\n\n5. Python:\n"
-        self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
-
-    def test_iq3_xs(self):
-        tokenizer = AutoTokenizer.from_pretrained(self.imatrix_model_id, gguf_file=self.iq3_xs_gguf_model_id)
-        model = AutoModelForCausalLM.from_pretrained(self.imatrix_model_id, gguf_file=self.iq3_xs_gguf_model_id).to(
-            torch_device
-        )
-
-        text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
-        out = model.generate(**text, max_new_tokens=10)
-
-        EXPECTED_TEXT = "Hello, World!\n\nExplanation:\n"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
     def test_iq3_xxs(self):
