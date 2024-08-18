@@ -68,6 +68,9 @@ on the Hub.
 - IQ4_XS
 - IQ4_NL
 
+> [!NOTE]
+> To support gguf dequantization, `gguf>=0.10.0` installation is required.
+
 ### Supported model architectures
 
 For now the supported model architectures are the architectures that have been very popular on the Hub, namely:

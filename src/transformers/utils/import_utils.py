@@ -89,6 +89,7 @@ TORCH_FX_REQUIRED_VERSION = version.parse("1.10")
 
 ACCELERATE_MIN_VERSION = "0.21.0"
 FSDP_MIN_VERSION = "1.12.0"
+GGUF_MIN_VERSION = "0.10.0"
 XLA_FSDPV2_MIN_VERSION = "2.2.0"
 
 
@@ -154,7 +155,7 @@ _safetensors_available = _is_package_available("safetensors")
 _scipy_available = _is_package_available("scipy")
 _sentencepiece_available = _is_package_available("sentencepiece")
 _is_seqio_available = _is_package_available("seqio")
-_is_gguf_available = _is_package_available("gguf")
+_is_gguf_available, _gguf_version = _is_package_available("gguf", return_version=True)
 _sklearn_available = importlib.util.find_spec("sklearn") is not None
 if _sklearn_available:
     try:
@@ -879,8 +880,8 @@ def is_seqio_available():
     return _is_seqio_available
 
 
-def is_gguf_available():
-    return _is_gguf_available
+def is_gguf_available(min_version: str = GGUF_MIN_VERSION):
+    return _is_gguf_available and version.parse(_gguf_version) >= version.parse(min_version)
 
 
 def is_protobuf_available():
