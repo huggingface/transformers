@@ -750,7 +750,9 @@ def require_torch_multi_gpu(test_case):
 
     import torch
 
-    return unittest.skipUnless(torch.cuda.device_count() > 1, "test requires multiple GPUs")(test_case)
+    device_count = torch.cuda.device_count() if not is_torch_xpu_available else torch.xpu.device_count()
+
+    return unittest.skipUnless(device_count > 1, "test requires multiple GPUs")(test_case)
 
 
 def require_torch_multi_accelerator(test_case):
