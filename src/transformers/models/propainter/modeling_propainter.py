@@ -1988,8 +1988,7 @@ class ProPainterLosses():
         self.l1_loss = L1Loss()
         self.perc_loss = LPIPSLoss(use_input_norm=True, range_norm=True)
         self.adversarial_loss = AdversarialLoss(type=config.GAN_LOSS)
-
-    def calculate_losses(self, pred_imgs,masks_dilated, frames, comp_frames):
+    def calculate_losses(self, pred_imgs,masks_dilated, frames, comp_frames,discriminator):
         gen_loss = 0
         dis_loss = 0
         # generator l1 loss
@@ -2009,15 +2008,15 @@ class ProPainterLosses():
         # gan loss
         if not self.config.no_dis:
             # generator adversarial loss
-            gen_clip = self.netD(comp_frames)
+            gen_clip = discriminator(comp_frames)
             gan_loss = self.adversarial_loss(gen_clip, True, False)
             gan_loss = gan_loss * self.config.adversarial_weight
             gen_loss += gan_loss
 
         if not self.config.no_dis:
             # discriminator adversarial loss
-            real_clip = self.netD(frames)
-            fake_clip = self.netD(comp_frames.detach())
+            real_clip = discriminator(frames)
+            fake_clip = discriminator(comp_frames.detach())
             dis_real_loss = self.adversarial_loss(real_clip, True, True)
             dis_fake_loss = self.adversarial_loss(fake_clip, False, True)
             dis_loss += (dis_real_loss + dis_fake_loss) / 2
@@ -2241,6 +2240,7 @@ class ProPainterModel(ProPainterPreTrainedModel):
         return updated_frames,updated_masks
 
     def feature_propagation(self,updated_frames,updated_masks,masks_dilated,pred_flows_bi,original_frames):
+        
         width, height = self.size
         comp_frames = [None] * self.video_length
 
@@ -2250,7 +2250,7 @@ class ProPainterModel(ProPainterPreTrainedModel):
         else:
             ref_num = -1
 
-        pred_imgs_loss = []
+        pred_imgs_loss = [None] * self.video_length
         # ---- feature propagation + transformer ----
         for f in range(0, self.video_length, neighbor_stride):
             neighbor_ids = [
@@ -2272,12 +2272,12 @@ class ProPainterModel(ProPainterPreTrainedModel):
                 
                 pred_img = pred_img.view(-1, 3, height, width)
 
-                pred_imgs_loss.append(pred_img)
-
+                
                 pred_img = (pred_img + 1) / 2
                 pred_img = pred_img.cpu().permute(0, 2, 3, 1).numpy() * 255
                 binary_masks = masks_dilated[0, neighbor_ids, :, :, :].cpu().permute(
                     0, 2, 3, 1).numpy().astype(np.uint8)
+                
                 for i in range(len(neighbor_ids)):
                     idx = neighbor_ids[i]
                     img = np.array(pred_img[i]).astype(np.uint8) * binary_masks[i] \
@@ -2286,9 +2286,8 @@ class ProPainterModel(ProPainterPreTrainedModel):
                         comp_frames[idx] = img
                     else: 
                         comp_frames[idx] = comp_frames[idx].astype(np.float32) * 0.5 + img.astype(np.float32) * 0.5
-                        
                     comp_frames[idx] = comp_frames[idx].astype(np.uint8)
-
+                    pred_imgs_loss[idx]=pred_img[i]
         return comp_frames, pred_imgs_loss
     
  
@@ -2328,8 +2327,9 @@ class ProPainterModel(ProPainterPreTrainedModel):
             updated_frames,updated_masks = self.image_propagation(pixel_values,masks_dilated,pred_flows_bi)
                 
         comp_frames, pred_imgs_loss = self.feature_propagation(updated_frames, updated_masks, masks_dilated, pred_flows_bi, pixel_values_inp)
-
-        gen_loss, dis_loss = losses.calculate_losses(pred_imgs_loss,masks_dilated, pixel_values, comp_frames)
+        pred_imgs_loss = torch.tensor(np.array(pred_imgs_loss)).permute(0, 3, 1, 2).unsqueeze(0).to(masks_dilated.device)
+        comp_frames_loss = torch.tensor(np.array(comp_frames)).permute(3,0,1,2).to(masks_dilated.device).to(torch.float32)
+        gen_loss, dis_loss = losses.calculate_losses(pred_imgs_loss,masks_dilated, pixel_values, comp_frames_loss,self.discriminator)
         
         # if not return_dict:
         #     head_outputs = (sequence_output, pooled_output) if pooled_output is not None else (sequence_output,)
