@@ -257,7 +257,6 @@ class DepsTableUpdateCommand(Command):
         with open(target, "w", encoding="utf-8", newline="\n") as f:
             f.write("\n".join(content))
 
-
 extras = {}
 
 extras["ja"] = deps_list("fugashi", "ipadic", "unidic_lite", "unidic", "sudachipy", "sudachidict_core", "rhoknp")
