@@ -26,7 +26,6 @@ except ImportError:
 import unittest
 
 import numpy as np
-from huggingface_hub import hf_hub_download
 
 from transformers import CLIPTokenizerFast, ProcessorMixin
 from transformers.models.auto.processing_auto import processor_class_from_name
@@ -94,10 +93,7 @@ class ProcessorTesterMixin:
 
     @require_vision
     def prepare_video_inputs(self):
-        video_file = hf_hub_download(
-            repo_id="raushan-testing-hf/videos-test", filename="video_demo.npy", repo_type="dataset"
-        )
-        return [np.load(video_file)]
+        return [np.random.randint(255, size=(4, 3, 30, 400), dtype=np.uint8)]
 
     def test_processor_to_json_string(self):
         processor = self.get_processor()
