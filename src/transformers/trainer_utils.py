@@ -413,7 +413,7 @@ def speed_metrics(split, start_time, num_samples=None, num_steps=None, num_token
 class SchedulerType(ExplicitEnum):
     """
     Scheduler names for the parameter `lr_scheduler_type` in [`TrainingArguments`].
-    By default, it uses "linear". Internally, this retrieves `get_linear_schedule_with_warmup` scheduler from [`Trainer`].    
+    By default, it uses "linear". Internally, this retrieves `get_linear_schedule_with_warmup` scheduler from [`Trainer`].
       Scheduler types:
        - "linear" = get_linear_schedule_with_warmup
        - "cosine" = get_cosine_schedule_with_warmup
