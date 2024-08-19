@@ -70,10 +70,16 @@ OBJECTS_TO_IGNORE = [
     # Deprecated
     "InputExample",
     "InputFeatures",
+    "LogitsWarper",
     # Signature is *args/**kwargs
     "TFSequenceSummary",
     "TFBertTokenizer",
     "TFGPT2Tokenizer",
+    # Going through an argument deprecation cycle, remove after v4.46
+    "HybridCache",
+    "MambaCache",
+    "SlidingWindowCache",
+    "StaticCache",
     # Missing arguments in the docstring
     "ASTFeatureExtractor",
     "AlbertModel",
