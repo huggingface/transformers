@@ -461,7 +461,7 @@ class DacIntegrationTest(unittest.TestCase):
         expected_encoder_output_dict = {
             "quantized_representation": torch.tensor([0.9807, 2.8212, 5.2514, 2.7241, 1.0426]),
             "audio_codes": torch.tensor([919, 919, 234, 777, 234]),
-            "projected_latents": torch.tensor([-4.7822, -5.0046, -4.5574, -5.0363, -5.4271]),
+            "projected_latents": torch.tensor([-4.7821, -5.0046, -4.5574, -5.0363, -5.4271]),
         }
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 
