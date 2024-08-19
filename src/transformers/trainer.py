@@ -167,8 +167,8 @@ from .utils import (
     is_torch_neuroncore_available,
     is_torch_npu_available,
     is_torch_xla_available,
-    is_torchao_available,
     is_torch_xpu_available,
+    is_torchao_available,
     logging,
     strtobool,
 )
