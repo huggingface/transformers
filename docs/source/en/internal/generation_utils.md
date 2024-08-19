@@ -158,9 +158,6 @@ generation.
 [[autodoc]] LogitsProcessorList
     - __call__
 
-[[autodoc]] LogitsWarper
-    - __call__
-
 [[autodoc]] MinLengthLogitsProcessor
     - __call__
 
@@ -421,4 +418,3 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
 
 [[autodoc]] WatermarkDetector
     - __call__
-
