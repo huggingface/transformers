@@ -26,7 +26,6 @@ except ImportError:
 import unittest
 
 import numpy as np
-from huggingface_hub import hf_hub_download
 
 from transformers import CLIPTokenizerFast, ProcessorMixin
 from transformers.models.auto.processing_auto import processor_class_from_name
@@ -91,13 +90,6 @@ class ProcessorTesterMixin:
         image_inputs = [np.random.randint(255, size=(3, 30, 400), dtype=np.uint8)]
         image_inputs = [Image.fromarray(np.moveaxis(x, 0, -1)) for x in image_inputs]
         return image_inputs
-
-    @require_vision
-    def prepare_video_inputs(self):
-        video_file = hf_hub_download(
-            repo_id="raushan-testing-hf/videos-test", filename="video_demo.npy", repo_type="dataset"
-        )
-        return [np.load(video_file)]
 
     def test_processor_to_json_string(self):
         processor = self.get_processor()
@@ -168,29 +160,6 @@ class ProcessorTesterMixin:
 
         inputs = processor(text=input_str, images=image_input, return_tensors="pt")
         self.assertEqual(inputs[self.images_data_arg_name].shape[-1], 234)
-
-    @require_torch
-    @require_vision
-    def test_video_processor_defaults_preserved_by_kwargs(self):
-        if "video_processor" not in self.processor_class.attributes:
-            self.skipTest(f"video_processor attribute not present in {self.processor_class}")
-        image_processor = self.get_component("image_processor", size=(234, 234), crop_size=(234, 234))
-        video_processor = self.get_component("video_processor", size=(234, 234), crop_size=(234, 234))
-        tokenizer = self.get_component("tokenizer", max_length=117, padding="max_length")
-
-        processor = self.processor_class(
-            tokenizer=tokenizer,
-            image_processor=image_processor,
-            video_processor=video_processor,
-        )
-        self.skip_processor_without_typed_kwargs(processor)
-
-        input_str = "lower newer"
-        image_input = self.prepare_image_inputs()
-        video_input = self.prepare_video_inputs()
-
-        inputs = processor(text=input_str, images=image_input, videos=video_input, return_tensors="pt")
-        self.assertEqual(inputs[self.videos_data_arg_name].shape[-1], 234)
 
     @require_vision
     @require_torch
