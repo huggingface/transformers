@@ -1453,11 +1453,11 @@ class Trainer:
                 }
             )
         elif args.optim == OptimizerNames.ADAMW_TORCH_4BIT:
-            if not is_torchao_available() or version.parse(importlib.metadata.version("torchao")) <= version.parse(
-                "0.3.1"
+            if not is_torchao_available() or version.parse(importlib.metadata.version("torchao")) < version.parse(
+                "0.4.0"
             ):
                 raise ImportError(
-                    "You need to have `torchao>0.3.1` in order to use torch 4-bit optimizers. "
+                    "You need to have `torchao>=0.4.0` in order to use torch 4-bit optimizers."
                     "Install it with `pip install torchao` or follow the instructions here: https://github.com/pytorch/ao"
                 )
             if version.parse(importlib.metadata.version("torch")) < version.parse("2.3"):
