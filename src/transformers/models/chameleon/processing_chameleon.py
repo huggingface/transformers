@@ -114,7 +114,7 @@ class ChameleonProcessor(ProcessorMixin):
         elif not isinstance(text, list) and not isinstance(text[0], str):
             raise TypeError("Invalid input text. Please provide a string, or a list of strings")
         if text is None and images is None:
-            raise ValueError("You must provide either text or images")
+            raise ValueError("You must provide either text or images as prompt")
 
         output_kwargs = self._merge_kwargs(
             ChameleonProcessorKwargs,
@@ -132,12 +132,10 @@ class ChameleonProcessor(ProcessorMixin):
                 sample += self.tokenizer.sep_token  # special Chameleon treatment to add sep for chat mode
             prompt_strings.append(sample)
 
-        data = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
-
+        features = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
         if images is not None:
-            data["pixel_values"] = self.image_processor(images, **output_kwargs["images_kwargs"])["pixel_values"]
-
-        return BatchFeature(data=data, tensor_type=output_kwargs["common_kwargs"]["return_tensors"])
+            features["pixel_values"] = self.image_processor(images, **output_kwargs["images_kwargs"])["pixel_values"]
+        return features
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama
     def batch_decode(self, *args, **kwargs):

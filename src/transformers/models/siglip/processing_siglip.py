@@ -67,6 +67,8 @@ class SiglipProcessor(ProcessorMixin):
         self,
         text: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
         images: Optional[ImageInput] = None,
+        audio=None,
+        videos=None,
         **kwargs: Unpack[SiglipProcessingKwargs],
     ) -> BatchFeature:
         """
@@ -116,9 +118,7 @@ class SiglipProcessor(ProcessorMixin):
         elif text is not None:
             return encoding
         else:
-            return BatchFeature(
-                data=dict(**image_features), tensor_type=output_kwargs["common_kwargs"]["return_tensors"]
-            )
+            return image_features
 
     def decode(self, *args, **kwargs):
         """

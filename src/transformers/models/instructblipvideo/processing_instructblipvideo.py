@@ -20,15 +20,10 @@ import os
 import sys
 from typing import List, Optional, Union
 
-from ...image_processing_utils import BatchFeature
+from ...feature_extraction_utils import BatchFeature
 from ...image_utils import VideoInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin
-from ...tokenization_utils_base import (
-    AddedToken,
-    BatchEncoding,
-    PreTokenizedInput,
-    TextInput,
-)
+from ...tokenization_utils_base import AddedToken, PreTokenizedInput, TextInput
 from ...utils import logging
 from ..auto import AutoTokenizer
 
@@ -103,7 +98,26 @@ class InstructBlipVideoProcessor(ProcessorMixin):
         This method uses [`InstructBlipVideoImageProcessor.__call__`] method to prepare image(s) or video(s) for the model, and
         [`BertTokenizerFast.__call__`] to prepare text for the model.
 
-        Please refer to the docstring of the above two methods for more information.
+        Args:
+            text (`TextInput`, `PreTokenizedInput`, `List[TextInput]`, `List[PreTokenizedInput]`):
+                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
+                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
+                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
+                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
+                tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
+                number of channels, H and W are image height and width.
+
+        Returns:
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
+
+            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
+            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
+              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
+              `None`).
+            -- **qformer_input_ids** - List of token ids from the Q-Former tokenizer to be fed to a model. Returned when `text` is not `None`.
+            -- **qformer_attention_mask** - List of indices specifying which tokens from the Q-Former tokenizer should be attended to by the model. Returned when `text` is not `None`.
+            - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
         output_kwargs = self._merge_kwargs(
             InstructBlipVideoProcessorKwargs,
@@ -150,7 +164,7 @@ class InstructBlipVideoProcessor(ProcessorMixin):
                     )
 
             # cast to desired return tensors type after concatenating
-            text_encoding = BatchEncoding(
+            text_encoding = BatchFeature(
                 text_encoding, tensor_type=output_kwargs["common_kwargs"].get("return_tensors")
             )
             encoding.update(text_encoding)

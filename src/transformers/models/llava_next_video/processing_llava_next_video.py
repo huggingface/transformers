@@ -139,7 +139,8 @@ class LlavaNextVideoProcessor(ProcessorMixin):
             - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
               `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
               `None`).
-            - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
+            - **pixel_values_images** -- Pixel values of images to be fed to a model. Returned when `images` is not `None`.
+            - **pixel_values_videos** -- Pixel values of videos to be fed to a model. Returned when `videos` is not `None`.
         """
         output_kwargs = self._merge_kwargs(
             LlavaNextVideoProcessorKwargs,
@@ -161,8 +162,6 @@ class LlavaNextVideoProcessor(ProcessorMixin):
             text = [text]
         elif not isinstance(text, list) and not isinstance(text[0], str):
             raise ValueError("Invalid input text. Please provide a string, or a list of strings")
-
-        print(self.patch_size, self.vision_feature_select_strategy, image_inputs, videos_inputs.keys())
 
         if self.patch_size is None or self.vision_feature_select_strategy is None:
             prompt_strings = text
@@ -207,7 +206,10 @@ class LlavaNextVideoProcessor(ProcessorMixin):
 
         text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
 
-        return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs})
+        return BatchFeature(
+            data={**text_inputs, **image_inputs, **videos_inputs},
+            tensor_type=output_kwargs["common_kwargs"].get("return_tensors"),
+        )
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama
     def batch_decode(self, *args, **kwargs):

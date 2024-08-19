@@ -22,7 +22,7 @@ from typing import List, Optional, Union
 
 from ...image_utils import ImageInput
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin
-from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
 
 
 if sys.version_info >= (3, 11):
@@ -92,6 +92,8 @@ class FlavaProcessor(ProcessorMixin):
         self,
         images: Optional[ImageInput] = None,
         text: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
+        audio=None,
+        videos=None,
         **kwargs: Unpack[FlavaProcessorKwargs],
     ):
         """
@@ -121,9 +123,7 @@ class FlavaProcessor(ProcessorMixin):
         elif text is not None:
             return encoding
         else:
-            return BatchEncoding(
-                data=dict(**image_features), tensor_type=output_kwargs["common_kwargs"]["return_tensors"]
-            )
+            return image_features
 
     def batch_decode(self, *args, **kwargs):
         """

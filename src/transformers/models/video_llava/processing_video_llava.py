@@ -20,7 +20,7 @@ import sys
 from typing import List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput, get_image_size, to_numpy_array
+from ...image_utils import ImageInput, VideoInput, get_image_size, to_numpy_array
 from ...processing_utils import ProcessingKwargs, ProcessorMixin
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import logging
@@ -97,7 +97,7 @@ class VideoLlavaProcessor(ProcessorMixin):
         self,
         text: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
         images: Optional[ImageInput] = None,
-        videos: Optional[ImageInput] = None,
+        videos: Optional[VideoInput] = None,
         audio=None,
         **kwargs: Unpack[VideoLlavaProcessorKwargs],
     ) -> BatchFeature:
@@ -181,7 +181,7 @@ class VideoLlavaProcessor(ProcessorMixin):
         text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
         data.update(text_inputs)
 
-        return BatchFeature(data=data)
+        return BatchFeature(data=data, tensor_type=output_kwargs["common_kwargs"].get("return_tensors"))
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama
     def batch_decode(self, *args, **kwargs):
