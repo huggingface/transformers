@@ -14,13 +14,24 @@
 # limitations under the License.
 """Processor class for MGP-STR."""
 
+import sys
 import warnings
+from typing import List, Optional, Union
 
 from transformers import AutoTokenizer
-from transformers.utils import is_torch_available
-from transformers.utils.generic import ExplicitEnum
 
-from ...processing_utils import ProcessorMixin
+from ...feature_extraction_utils import BatchFeature
+from ...image_utils import ImageInput
+from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...utils.generic import ExplicitEnum
+from ...utils.import_utils import is_torch_available
+
+
+if sys.version_info >= (3, 11):
+    from typing import Unpack
+else:
+    from typing_extensions import Unpack
 
 
 if is_torch_available():
@@ -34,6 +45,10 @@ class DecodeType(ExplicitEnum):
 
 
 SUPPORTED_ANNOTATION_FORMATS = (DecodeType.CHARACTER, DecodeType.BPE, DecodeType.WORDPIECE)
+
+
+class MgpstrProcessorKwargs(ProcessingKwargs, total=False):
+    _defaults = {}
 
 
 class MgpstrProcessor(ProcessorMixin):
@@ -50,9 +65,9 @@ class MgpstrProcessor(ProcessorMixin):
             The tokenizer is a required input.
     """
 
-    attributes = ["image_processor", "char_tokenizer"]
+    attributes = ["image_processor", "tokenizer"]
     image_processor_class = "ViTImageProcessor"
-    char_tokenizer_class = "MgpstrTokenizer"
+    tokenizer_class = "MgpstrTokenizer"
 
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
         feature_extractor = None
@@ -63,41 +78,81 @@ class MgpstrProcessor(ProcessorMixin):
                 FutureWarning,
             )
             feature_extractor = kwargs.pop("feature_extractor")
+        if "char_tokenizer" in kwargs:
+            warnings.warn(
+                "The `char_tokenizer` argument is deprecated and will be removed in future versions, use `tokenizer`"
+                " instead.",
+                FutureWarning,
+            )
+            char_tokenizer = kwargs.pop("char_tokenizer")
 
         image_processor = image_processor if image_processor is not None else feature_extractor
+        tokenizer = tokenizer if tokenizer is not None else char_tokenizer
         if image_processor is None:
             raise ValueError("You need to specify an `image_processor`.")
         if tokenizer is None:
             raise ValueError("You need to specify a `tokenizer`.")
 
-        self.char_tokenizer = tokenizer
+        self.tokenizer = tokenizer
+        self.char_tokenizer = tokenizer  # For backwards compatibility
         self.bpe_tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
         self.wp_tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
 
         super().__init__(image_processor, tokenizer)
 
-    def __call__(self, text=None, images=None, return_tensors=None, **kwargs):
+    def __call__(
+        self,
+        text: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
+        images: Optional[ImageInput] = None,
+        audio=None,
+        videos=None,
+        **kwargs: Unpack[MgpstrProcessorKwargs],
+    ) -> BatchFeature:
         """
         When used in normal mode, this method forwards all its arguments to ViTImageProcessor's
         [`~ViTImageProcessor.__call__`] and returns its output. This method also forwards the `text` and `kwargs`
         arguments to MgpstrTokenizer's [`~MgpstrTokenizer.__call__`] if `text` is not `None` to encode the text. Please
         refer to the doctsring of the above methods for more information.
+
+        Args:
+            text (`TextInput`, `PreTokenizedInput`, `List[TextInput]`, `List[PreTokenizedInput]`, *optional*):
+                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
+                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
+                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
+            images (`ImageInput`, *optional*):
+                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
+                tensor. Both channels-first and channels-last formats are supported.
+
+        Returns:
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
+
+            - **labels** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
+            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
+              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
+              `None`).
+            - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
         if images is None and text is None:
             raise ValueError("You need to specify either an `images` or `text` input to process.")
 
-        if images is not None:
-            inputs = self.image_processor(images, return_tensors=return_tensors, **kwargs)
-        if text is not None:
-            encodings = self.char_tokenizer(text, return_tensors=return_tensors, **kwargs)
+        output_kwargs = self._merge_kwargs(
+            MgpstrProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
 
-        if text is None:
-            return inputs
-        elif images is None:
-            return encodings
+        if images is not None:
+            image_features = self.image_processor(images, **output_kwargs["images_kwargs"])
+        if text is not None:
+            encodings = self.tokenizer(text, **output_kwargs["text_kwargs"])
+
+        return_tensors = output_kwargs["common_kwargs"].get("return_tensors")
+        if text is not None and images is not None:
+            return BatchFeature(data=dict(**image_features, labels=encodings["input_ids"]), tensor_type=return_tensors)
+        elif text is not None:
+            return BatchFeature(data=dict(**encodings), tensor_type=return_tensors)
         else:
-            inputs["labels"] = encodings["input_ids"]
-            return inputs
+            return BatchFeature(data=dict(**image_features), tensor_type=return_tensors)
 
     def batch_decode(self, sequences):
         """
@@ -201,7 +256,7 @@ class MgpstrProcessor(ProcessorMixin):
         Returns:
             `List[str]`: The list of char decoded sentences.
         """
-        decode_strs = [seq.replace(" ", "") for seq in self.char_tokenizer.batch_decode(sequences)]
+        decode_strs = [seq.replace(" ", "") for seq in self.tokenizer.batch_decode(sequences)]
         return decode_strs
 
     def bpe_decode(self, sequences):

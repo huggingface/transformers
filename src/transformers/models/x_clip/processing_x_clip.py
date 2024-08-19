@@ -16,10 +16,24 @@
 Image/Text processor class for XCLIP
 """
 
+import sys
 import warnings
+from typing import List, Optional, Union
 
-from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import BatchEncoding
+from ...feature_extraction_utils import BatchFeature
+from ...image_utils import VideoInput
+from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
+
+
+if sys.version_info >= (3, 11):
+    from typing import Unpack
+else:
+    from typing_extensions import Unpack
+
+
+class XCLIPProcessorKwargs(ProcessingKwargs, total=False):
+    _defaults = {}
 
 
 class XCLIPProcessor(ProcessorMixin):
@@ -59,7 +73,14 @@ class XCLIPProcessor(ProcessorMixin):
         super().__init__(image_processor, tokenizer)
         self.current_processor = self.image_processor
 
-    def __call__(self, text=None, videos=None, return_tensors=None, **kwargs):
+    def __call__(
+        self,
+        text: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
+        videos: Optional[VideoInput] = None,
+        images=None,
+        audio=None,
+        **kwargs: Unpack[XCLIPProcessorKwargs],
+    ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to CLIPTokenizerFast's [`~CLIPTokenizerFast.__call__`] if `text` is not `None` to encode
@@ -78,16 +99,8 @@ class XCLIPProcessor(ProcessorMixin):
                 each frame should be of shape (H, W, C), where H and W are frame height and width, and C is a number of
                 channels.
 
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
-
         Returns:
-            [`BatchEncoding`]: A [`BatchEncoding`] with the following fields:
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 
             - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
             - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
@@ -99,19 +112,25 @@ class XCLIPProcessor(ProcessorMixin):
         if text is None and videos is None:
             raise ValueError("You have to specify either text or videos. Both cannot be none.")
 
+        output_kwargs = self._merge_kwargs(
+            XCLIPProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
+
         if text is not None:
-            encoding = self.tokenizer(text, return_tensors=return_tensors, **kwargs)
+            encoding = self.tokenizer(text, **output_kwargs["text_kwargs"])
 
         if videos is not None:
-            image_features = self.image_processor(videos, return_tensors=return_tensors, **kwargs)
+            image_features = self.image_processor(videos, **output_kwargs["videos_kwargs"])
 
+        return_tensors = output_kwargs["common_kwargs"].get("return_tensors")
         if text is not None and videos is not None:
-            encoding["pixel_values"] = image_features.pixel_values
-            return encoding
+            return BatchFeature(data=dict(**encoding, **image_features), tensor_type=return_tensors)
         elif text is not None:
-            return encoding
+            return BatchFeature(data=dict(**encoding), tensor_type=return_tensors)
         else:
-            return BatchEncoding(data=dict(**image_features), tensor_type=return_tensors)
+            return BatchFeature(data=dict(**image_features), tensor_type=return_tensors)
 
     def batch_decode(self, *args, **kwargs):
         """

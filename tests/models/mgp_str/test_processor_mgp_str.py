@@ -20,13 +20,14 @@ import shutil
 import tempfile
 import unittest
 
-import numpy as np
 import pytest
 
-from transformers import MgpstrTokenizer
+from transformers import MgpstrProcessor, MgpstrTokenizer
 from transformers.models.mgp_str.tokenization_mgp_str import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import IMAGE_PROCESSOR_NAME, is_torch_available, is_vision_available
+
+from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_torch_available():
@@ -34,15 +35,15 @@ if is_torch_available():
 
 
 if is_vision_available():
-    from PIL import Image
-
-    from transformers import MgpstrProcessor, ViTImageProcessor
+    from transformers import ViTImageProcessor
 
 
 @require_torch
 @require_vision
-class MgpstrProcessorTest(unittest.TestCase):
+class MgpstrProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    processor_class = MgpstrProcessor
     image_processing_class = ViTImageProcessor if is_vision_available() else None
+    text_data_arg_name = "labels"
 
     @property
     def image_processor_dict(self):
@@ -78,15 +79,6 @@ class MgpstrProcessorTest(unittest.TestCase):
 
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
-
-    def prepare_image_inputs(self):
-        """This function prepares a list of PIL images."""
-
-        image_input = np.random.randint(255, size=(3, 30, 400), dtype=np.uint8)
-
-        image_input = Image.fromarray(np.moveaxis(image_input, 0, -1))
-
-        return image_input
 
     def test_save_load_pretrained_default(self):
         tokenizer = self.get_tokenizer()

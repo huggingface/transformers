@@ -31,7 +31,7 @@ else:
     from typing_extensions import Unpack
 
 
-class SiglipProcessingKwargs(ProcessingKwargs, total=False):
+class SiglipProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "padding": False,
@@ -69,7 +69,7 @@ class SiglipProcessor(ProcessorMixin):
         images: Optional[ImageInput] = None,
         audio=None,
         videos=None,
-        **kwargs: Unpack[SiglipProcessingKwargs],
+        **kwargs: Unpack[SiglipProcessorKwargs],
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
@@ -101,7 +101,7 @@ class SiglipProcessor(ProcessorMixin):
             raise ValueError("You have to specify either text or images. Both cannot be none.")
 
         output_kwargs = self._merge_kwargs(
-            SiglipProcessingKwargs,
+            SiglipProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
@@ -112,13 +112,15 @@ class SiglipProcessor(ProcessorMixin):
         if images is not None:
             image_features = self.image_processor(images, **output_kwargs["images_kwargs"])
 
+        return_tensors = output_kwargs["common_kwargs"].get("return_tensors")
         if text is not None and images is not None:
-            encoding["pixel_values"] = image_features.pixel_values
-            return encoding
+            return BatchFeature(
+                data=dict(**encoding, pixel_values=image_features.pixel_values), tensor_type=return_tensors
+            )
         elif text is not None:
-            return encoding
+            return BatchFeature(data=dict(**encoding), tensor_type=return_tensors)
         else:
-            return image_features
+            return BatchFeature(data=dict(**image_features), tensor_type=return_tensors)
 
     def decode(self, *args, **kwargs):
         """

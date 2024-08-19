@@ -20,6 +20,7 @@ import sys
 import warnings
 from typing import List, Optional, Union
 
+from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
@@ -95,13 +96,13 @@ class FlavaProcessor(ProcessorMixin):
         audio=None,
         videos=None,
         **kwargs: Unpack[FlavaProcessorKwargs],
-    ):
+    ) -> BatchFeature:
         """
         This method uses [`FlavaImageProcessor.__call__`] method to prepare image(s) for the model, and
         [`BertTokenizerFast.__call__`] to prepare text for the model.
 
         Args:
-            text (`TextInput`, `PreTokenizedInput`, `List[TextInput]`, `List[PreTokenizedInput]`):
+            text (`TextInput`, `PreTokenizedInput`, `List[TextInput]`, `List[PreTokenizedInput]`, *optional*):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
@@ -134,13 +135,13 @@ class FlavaProcessor(ProcessorMixin):
         if images is not None:
             image_features = self.image_processor(images, **output_kwargs["images_kwargs"])
 
+        return_tensors = output_kwargs["common_kwargs"].get("return_tensors")
         if text is not None and images is not None:
-            encoding.update(image_features)
-            return encoding
+            return BatchFeature(data=dict(**encoding, **image_features), tensor_type=return_tensors)
         elif text is not None:
-            return encoding
+            return BatchFeature(data=dict(**encoding), tensor_type=return_tensors)
         else:
-            return image_features
+            return BatchFeature(data=dict(**image_features), tensor_type=return_tensors)
 
     def batch_decode(self, *args, **kwargs):
         """

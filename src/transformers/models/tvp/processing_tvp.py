@@ -16,8 +16,35 @@
 Processor class for TVP.
 """
 
-from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import BatchEncoding
+import sys
+from typing import List, Optional, Union
+
+from ...feature_extraction_utils import BatchFeature
+from ...image_utils import VideoInput
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, TextKwargs
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
+
+
+if sys.version_info >= (3, 11):
+    from typing import Unpack
+else:
+    from typing_extensions import Unpack
+
+
+class TvpTextKwargs(TextKwargs, total=False):
+    pad_to_max_length: bool
+
+
+class TvpProcessorKwargs(ProcessingKwargs, total=False):
+    text_kwargs: TvpTextKwargs
+    _defaults = {
+        "text_kwargs": {
+            "padding": "max_length",
+            "truncation": True,
+            "pad_to_max_length": True,
+            "return_token_type_ids": False,
+        },
+    }
 
 
 class TvpProcessor(ProcessorMixin):
@@ -46,7 +73,14 @@ class TvpProcessor(ProcessorMixin):
 
         super().__init__(image_processor, tokenizer)
 
-    def __call__(self, text=None, videos=None, return_tensors=None, **kwargs):
+    def __call__(
+        self,
+        text: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
+        videos: Optional[VideoInput] = None,
+        images=None,
+        audio=None,
+        **kwargs: Unpack[TvpProcessorKwargs],
+    ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to BertTokenizerFast's [`~BertTokenizerFast.__call__`] if `text` is not `None` to encode
@@ -65,16 +99,8 @@ class TvpProcessor(ProcessorMixin):
                 each frame should be of shape (H, W, C), where H and W are frame height and width, and C is a number of
                 channels.
 
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
-
         Returns:
-            [`BatchEncoding`]: A [`BatchEncoding`] with the following fields:
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 
             - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
             - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
@@ -83,30 +109,28 @@ class TvpProcessor(ProcessorMixin):
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `videos` is not `None`.
         """
 
-        max_text_length = kwargs.pop("max_text_length", None)
+        if "max_text_length" in kwargs:
+            kwargs["max_length"] = kwargs.pop("max_text_length")
 
         if text is None and videos is None:
             raise ValueError("You have to specify either text or videos. Both cannot be none.")
 
+        output_kwargs = self._merge_kwargs(
+            TvpProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
+
         encoding = {}
         if text is not None:
-            textual_input = self.tokenizer.batch_encode_plus(
-                text,
-                truncation=True,
-                padding="max_length",
-                max_length=max_text_length,
-                pad_to_max_length=True,
-                return_tensors=return_tensors,
-                return_token_type_ids=False,
-                **kwargs,
-            )
+            textual_input = self.tokenizer(text, **output_kwargs["text_kwargs"])
             encoding.update(textual_input)
 
         if videos is not None:
-            image_features = self.image_processor(videos, return_tensors=return_tensors, **kwargs)
+            image_features = self.image_processor(videos, **output_kwargs["videos_kwargs"])
             encoding.update(image_features)
 
-        return BatchEncoding(data=encoding, tensor_type=return_tensors)
+        return BatchFeature(data=encoding, tensor_type=output_kwargs["common_kwargs"].get("return_tensors"))
 
     def batch_decode(self, *args, **kwargs):
         """

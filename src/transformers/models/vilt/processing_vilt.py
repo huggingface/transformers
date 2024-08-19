@@ -114,6 +114,7 @@ class ViltProcessor(ProcessorMixin):
               `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
               `None`).
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
+            - **pixel_mask** -- Mask for the pixel values. Returned when `images` is not `None`.
         """
         output_kwargs = self._merge_kwargs(
             ViltProcessorKwargs,
@@ -126,7 +127,7 @@ class ViltProcessor(ProcessorMixin):
         encoding_image_processor = self.image_processor(images, **output_kwargs["images_kwargs"])
         encoding.update(encoding_image_processor)
 
-        return encoding
+        return BatchFeature(data=dict(**encoding), tensor_type=output_kwargs["common_kwargs"].get("return_tensors"))
 
     def batch_decode(self, *args, **kwargs):
         """
