@@ -42,6 +42,7 @@ else:
     _import_structure["speech_to_text"] = ["SpeechToTextTool"]
     _import_structure["text_to_speech"] = ["TextToSpeechTool"]
     _import_structure["translation"] = ["TranslationTool"]
+    _import_structure["search"] = ["DuckDuckGoSearch"]
 
 if TYPE_CHECKING:
     from .agents import Agent, CodeAgent, ReactAgent, ReactCodeAgent, ReactJsonAgent, Toolbox
@@ -61,6 +62,7 @@ if TYPE_CHECKING:
         from .speech_to_text import SpeechToTextTool
         from .text_to_speech import TextToSpeechTool
         from .translation import TranslationTool
+        from .search import DuckDuckGoSearch
 else:
     import sys
 
