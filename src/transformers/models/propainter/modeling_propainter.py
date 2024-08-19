@@ -18,7 +18,7 @@ from collections import namedtuple
 import itertools
 import math
 import numpy as np
-from typing import Dict, List, Optional, Set, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -27,7 +27,7 @@ import torchvision
 
 from functools import reduce
 from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss, L1Loss
+from torch.nn import L1Loss
 from torch.nn.modules.utils import _pair, _single
 from torch.cuda.amp import autocast
 from torch.nn.functional import normalize
@@ -35,7 +35,6 @@ from torchvision import models as tv
 
 
 
-from ...activations import ACT2FN
 from ...modeling_outputs import (
     BaseModelOutput,
     MaskedImageModelingOutput,
@@ -47,7 +46,6 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
-    replace_return_docstrings,
 )
 from .configuration_propainter import ProPainterConfig
 
@@ -59,7 +57,7 @@ _CONFIG_FOR_DOC = "ProPainterConfig"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "ruffy369/propainter"
-_EXPECTED_OUTPUT_SHAPE = [80, 240, 432, 3] #****************************TO FILL
+_EXPECTED_OUTPUT_SHAPE = [80, 240, 432, 3]
 
 
 # Copied from transformers.models.vit.modeling_vit.ViTOutput with ViT->ProPainter
@@ -153,7 +151,7 @@ class ProPainterBasicEncoder(nn.Module):
         channels = (64,96,128)
         strides = (1,2,2)
 
-        self.resblocks = [[ProPainterResidualBlock(in_channel, channel, norm_fn, stride),ProPainterResidualBlock(channel, channel, norm_fn, stride=1)] for in_channel,channel,stride in zip(in_channels,channels,strides)]
+        self.resblocks = [[ProPainterResidualBlock(in_channel, num_channels, norm_fn, stride),ProPainterResidualBlock(num_channels, num_channels, norm_fn, stride=1)] for in_channel,num_channels,stride in zip(in_channels,channels,strides)]
         #using itertools makes flattening a little faster :)
         self.resblocks = nn.ModuleList(list(itertools.chain.from_iterable(self.resblocks))) 
 
@@ -290,10 +288,10 @@ def coords_grid(batch_size, height, width):
 
 def sample_point(img, coords):
     """ Wrapper for grid_sample, uses pixel coordinates """
-    H, W = img.shape[-2:]
+    height, width = img.shape[-2:]
     xgrid, ygrid = coords.split([1,1], dim=-1)
-    xgrid = 2*xgrid/(W-1) - 1
-    ygrid = 2*ygrid/(H-1) - 1
+    xgrid = 2*xgrid/(width-1) - 1
+    ygrid = 2*ygrid/(height-1) - 1
 
     grid = torch.cat([xgrid, ygrid], dim=-1)
     img = F.grid_sample(img, grid, align_corners=True)
@@ -371,25 +369,25 @@ class ProPainterRaftOpticalFlow(nn.Module):
 
     def initialize_flow(self, image):
         """ Flow is represented as difference between two coordinate grids flow = coords1 - coords0"""
-        N, _, H, W = image.shape
-        coords0 = coords_grid(N, H//8, W//8).to(image.device)
-        coords1 = coords_grid(N, H//8, W//8).to(image.device)
+        N, _, height, width = image.shape
+        coords0 = coords_grid(N, height//8, width//8).to(image.device)
+        coords1 = coords_grid(N, height//8, width//8).to(image.device)
 
         # optical flow computed as difference: flow = coords1 - coords0
         return coords0, coords1
 
     def upsample_flow(self, flow, mask):
-        """ Upsample flow field [H/8, W/8, 2] -> [H, W, 2] using convex combination """
-        N, _, H, W = flow.shape
-        mask = mask.view(N, 1, 9, 8, 8, H, W)
+        """ Upsample flow field [height/8, width/8, 2] -> [height, width, 2] using convex combination """
+        N, _, height, width = flow.shape
+        mask = mask.view(N, 1, 9, 8, 8, height, width)
         mask = torch.softmax(mask, dim=2)
 
         up_flow = F.unfold(8 * flow, [3,3], padding=1)
-        up_flow = up_flow.view(N, 2, 9, 1, 1, H, W)
+        up_flow = up_flow.view(N, 2, 9, 1, 1, height, width)
 
         up_flow = torch.sum(mask * up_flow, dim=2)
         up_flow = up_flow.permute(0, 1, 4, 2, 5, 3)
-        return up_flow.reshape(N, 2, 8*H, 8*W)
+        return up_flow.reshape(N, 2, 8*height, 8*width)
 
     def _forward(self, image1, image2, iters=12, flow_init=None):
         """ Estimate optical flow between pair of frames """
@@ -441,10 +439,10 @@ class ProPainterRaftOpticalFlow(nn.Module):
         return coords1 - coords0, flow_up
 
     def forward(self, gt_local_frames, iters=20):
-        batch_size, temporal_length, channel, height, width = gt_local_frames.size()
+        batch_size, temporal_length, num_channels, height, width = gt_local_frames.size()
 
-        gt_local_frames_1 = gt_local_frames[:, :-1, :, :, :].reshape(-1, channel, height, width)
-        gt_local_frames_2 = gt_local_frames[:, 1:, :, :, :].reshape(-1, channel, height, width)
+        gt_local_frames_1 = gt_local_frames[:, :-1, :, :, :].reshape(-1, num_channels, height, width)
+        gt_local_frames_2 = gt_local_frames[:, 1:, :, :, :].reshape(-1, num_channels, height, width)
 
         _, gt_flows_forward = self._forward(gt_local_frames_1, gt_local_frames_2, iters=iters)
         _, gt_flows_backward = self._forward(gt_local_frames_2, gt_local_frames_1, iters=iters)
@@ -510,29 +508,29 @@ class ProPainterEdgeDetection(nn.Module):
         return edge
 
 class ProPainterBidirectionalPropagationFlowComplete(nn.Module):
-    def __init__(self, channel):
+    def __init__(self, num_channels):
         super(ProPainterBidirectionalPropagationFlowComplete, self).__init__()
         modules = ['backward_', 'forward_']
         self.deform_align = nn.ModuleDict()
         self.backbone = nn.ModuleDict()
-        self.channel = channel
+        self.num_channels = num_channels
 
         for i, module in enumerate(modules):
             self.deform_align[module] = ProPainterSecondOrderDeformableAlignment(
-                2 * channel, channel, 3, padding=1, deform_groups=16)
+                2 * num_channels, num_channels, 3, padding=1, deform_groups=16)
 
             self.backbone[module] = nn.Sequential(
-                nn.Conv2d((2 + i) * channel, channel, 3, 1, 1),
+                nn.Conv2d((2 + i) * num_channels, num_channels, 3, 1, 1),
                 nn.LeakyReLU(negative_slope=0.1, inplace=True),
-                nn.Conv2d(channel, channel, 3, 1, 1),
+                nn.Conv2d(num_channels, num_channels, 3, 1, 1),
             )
 
-        self.fusion = nn.Conv2d(2 * channel, channel, 1, 1, 0)
+        self.fusion = nn.Conv2d(2 * num_channels, num_channels, 1, 1, 0)
 
     def forward(self, hidden_states):
         """
-        hidden_states shape : [batch_size, timesteps, channel, height, width]
-        return [batch_size, timesteps, channel, height, width]
+        hidden_states shape : [batch_size, timesteps, num_channels, height, width]
+        return [batch_size, timesteps, num_channels, height, width]
         """
         batch_size, timesteps, _, height, width = hidden_states.shape
         features = {}
@@ -549,7 +547,7 @@ class ProPainterBidirectionalPropagationFlowComplete(nn.Module):
             if 'backward' in module_name:
                 frame_idx = frame_idx[::-1]
 
-            feature_propagation = hidden_states.new_zeros(batch_size, self.channel, height, width)
+            feature_propagation = hidden_states.new_zeros(batch_size, self.num_channels, height, width)
             for i, idx in enumerate(frame_idx):
                 feat_current = features['spatial'][mapping_idx[idx]]
                 if i > 0:
@@ -596,9 +594,9 @@ def flow_warp(features,
               align_corners=True):
     """Warp an image or a feature map with optical flow.
     Args:
-        features (Tensor): Tensor with size (n, c, height, width).
+        features (Tensor): Tensor with size (n, num_channels, height, width).
         flow (Tensor): Tensor with size (n, height, width, 2). The last dimension is
-            a two-channel, denoting the width and height relative offsets.
+            a two-num_channels, denoting the width and height relative offsets.
             Note that the values are not normalized to [-1, 1].
         interpolation (str): Interpolation mode: 'nearest' or 'bilinear'.
             Default: 'bilinear'.
@@ -642,29 +640,29 @@ def fbConsistencyCheck(flow_forward, flow_backward, alpha1=0.01, alpha2=0.5):
 
 
 class ProPainterBidirectionalPropagationInPaint(nn.Module):
-    def __init__(self, channel, learnable=True):
+    def __init__(self, num_channels, learnable=True):
         super(ProPainterBidirectionalPropagationInPaint, self).__init__()
         self.deform_align = nn.ModuleDict()
         self.backbone = nn.ModuleDict()
-        self.channel = channel
+        self.num_channels = num_channels
         self.propagation_list = ['backward_1', 'forward_1']
         self.learnable = learnable
 
         if self.learnable:
             for _, module in enumerate(self.propagation_list):
                 self.deform_align[module] = ProPainterDeformableAlignment(
-                    channel, channel, 3, padding=1, deform_groups=16)
+                    num_channels, num_channels, 3, padding=1, deform_groups=16)
 
                 self.backbone[module] = nn.Sequential(
-                    nn.Conv2d(2*channel+2, channel, 3, 1, 1),
+                    nn.Conv2d(2*num_channels+2, num_channels, 3, 1, 1),
                     nn.LeakyReLU(negative_slope=0.2, inplace=True),
-                    nn.Conv2d(channel, channel, 3, 1, 1),
+                    nn.Conv2d(num_channels, num_channels, 3, 1, 1),
                 )
 
             self.fuse = nn.Sequential(
-                    nn.Conv2d(2*channel+2, channel, 3, 1, 1),
+                    nn.Conv2d(2*num_channels+2, num_channels, 3, 1, 1),
                     nn.LeakyReLU(negative_slope=0.2, inplace=True),
-                    nn.Conv2d(channel, channel, 3, 1, 1),
+                    nn.Conv2d(num_channels, num_channels, 3, 1, 1),
                 ) 
             
     def binary_mask(self, mask, th=0.1):
@@ -672,12 +670,12 @@ class ProPainterBidirectionalPropagationInPaint(nn.Module):
 
     def forward(self, masked_frames, flows_forward, flows_backward, mask, interpolation='bilinear'):
         """
-        masked_frames shape : [batch_size, timesteps, channel, height, width]
-        return [batch_size, timesteps, channel, height, width]
+        masked_frames shape : [batch_size, timesteps, num_channels, height, width]
+        return [batch_size, timesteps, num_channels, height, width]
         """
 
         # For backward warping, pred_flows_forward for backward feature propagation, pred_flows_backward for forward feature propagation
-        batch_size, timesteps, channel, height, width = masked_frames.shape
+        batch_size, timesteps, num_channels, height, width = masked_frames.shape
         features, masks = {}, {}
         features['input'] = [masked_frames[:, i, :, :, :] for i in range(0, timesteps)]
         masks['input'] = [mask[:, i, :, :, :] for i in range(0, timesteps)]
@@ -740,19 +738,19 @@ class ProPainterBidirectionalPropagationInPaint(nn.Module):
                 features[module_name] = features[module_name][::-1]
                 masks[module_name] = masks[module_name][::-1]
 
-        outputs_b = torch.stack(features['backward_1'], dim=1).view(-1, channel, height, width)
-        outputs_f = torch.stack(features['forward_1'], dim=1).view(-1, channel, height, width)
+        outputs_b = torch.stack(features['backward_1'], dim=1).view(-1, num_channels, height, width)
+        outputs_f = torch.stack(features['forward_1'], dim=1).view(-1, num_channels, height, width)
 
         if self.learnable:
             mask_in = mask.view(-1, 2, height, width)
             masks_f = None
-            outputs = self.fuse(torch.cat([outputs_b, outputs_f, mask_in], dim=1)) + masked_frames.view(-1, channel, height, width)
+            outputs = self.fuse(torch.cat([outputs_b, outputs_f, mask_in], dim=1)) + masked_frames.view(-1, num_channels, height, width)
         else:
             masks_f = torch.stack(masks['forward_1'], dim=1)
             outputs = outputs_f
 
-        return outputs_b.view(batch_size, -1, channel, height, width), outputs_f.view(batch_size, -1, channel, height, width), \
-               outputs.view(batch_size, -1, channel, height, width), masks_f
+        return outputs_b.view(batch_size, -1, num_channels, height, width), outputs_f.view(batch_size, -1, num_channels, height, width), \
+               outputs.view(batch_size, -1, num_channels, height, width), masks_f
 
 class ProPainterDeconv(nn.Module):
     def __init__(self,
@@ -943,19 +941,19 @@ class ProPainterRecurrentFlowCompleteNet(nn.Module):
         downsample_inputs = self.downsample(inputs)
 
         features_enc1 = self.encoder1(downsample_inputs)
-        features_enc2 = self.encoder2(features_enc1) # batch_size channel timesteps height width
-        features_intermediate = self.intermediate_dilation(features_enc2) # batch_size channel timesteps height width
-        features_intermediate = features_intermediate.permute(0,2,1,3,4) # batch_size timesteps channel height width
+        features_enc2 = self.encoder2(features_enc1) # batch_size num_channels timesteps height width
+        features_intermediate = self.intermediate_dilation(features_enc2) # batch_size num_channels timesteps height width
+        features_intermediate = features_intermediate.permute(0,2,1,3,4) # batch_size timesteps num_channels height width
 
         features_prop = self.feature_propagation_module(features_intermediate)
-        features_prop = features_prop.view(-1, 128, height//8, width//8) # batch_size*timesteps channel height width
+        features_prop = features_prop.view(-1, 128, height//8, width//8) # batch_size*timesteps num_channels height width
 
-        _, c, _, h_f, w_f = features_enc1.shape
-        features_enc1 = features_enc1.permute(0,2,1,3,4).contiguous().view(-1, c, h_f, w_f) # batch_size*timesteps channel height width
+        _, num_channels, _, h_f, w_f = features_enc1.shape
+        features_enc1 = features_enc1.permute(0,2,1,3,4).contiguous().view(-1, num_channels, h_f, w_f) # batch_size*timesteps num_channels height width
         features_dec2 = self.decoder2(features_prop) + features_enc1
 
-        _, c, _, h_f, w_f = downsample_inputs.shape
-        downsample_inputs = downsample_inputs.permute(0,2,1,3,4).contiguous().view(-1, c, h_f, w_f) # batch_size*timesteps channel height width
+        _, num_channels, _, h_f, w_f = downsample_inputs.shape
+        downsample_inputs = downsample_inputs.permute(0,2,1,3,4).contiguous().view(-1, num_channels, h_f, w_f) # batch_size*timesteps num_channels height width
 
         features_dec1 = self.decoder1(features_dec2)
 
@@ -1050,7 +1048,7 @@ class ProPainterEncoder(nn.Module):
         return features
 
 class ProPainterSoftSplit(nn.Module):
-    def __init__(self, channel, hidden_size, kernel_size, stride, padding):
+    def __init__(self, num_channels, hidden_size, kernel_size, stride, padding):
         super(ProPainterSoftSplit, self).__init__()
         self.kernel_size = kernel_size
         self.stride = stride
@@ -1058,7 +1056,7 @@ class ProPainterSoftSplit(nn.Module):
         self.unfold = nn.Unfold(kernel_size=kernel_size,
                              stride=stride,
                              padding=padding)
-        input_features = reduce((lambda x, y: x * y), kernel_size) * channel
+        input_features = reduce((lambda x, y: x * y), kernel_size) * num_channels
         self.embedding = nn.Linear(input_features, hidden_size)
 
     def forward(self, hidden_states, batch_size, output_size):
@@ -1074,16 +1072,16 @@ class ProPainterSoftSplit(nn.Module):
         return hidden_states
 
 class ProPainterSoftComp(nn.Module):
-    def __init__(self, channel, hidden_size, kernel_size, stride, padding):
+    def __init__(self, num_channels, hidden_size, kernel_size, stride, padding):
         super(ProPainterSoftComp, self).__init__()
         self.relu = nn.LeakyReLU(0.2, inplace=True)
-        output_features = reduce((lambda x, y: x * y), kernel_size) * channel
+        output_features = reduce((lambda x, y: x * y), kernel_size) * num_channels
         self.embedding = nn.Linear(hidden_size, output_features)
         self.kernel_size = kernel_size
         self.stride = stride
         self.padding = padding
-        self.bias_conv = nn.Conv2d(channel,
-                                   channel,
+        self.bias_conv = nn.Conv2d(num_channels,
+                                   num_channels,
                                    kernel_size=3,
                                    stride=1,
                                    padding=1)
@@ -1092,8 +1090,8 @@ class ProPainterSoftComp(nn.Module):
         num_batch_, _, _, _, channel_ = hidden_states.shape
         hidden_states = hidden_states.view(num_batch_, -1, channel_)
         hidden_states = self.embedding(hidden_states)
-        batch_size, _, channel = hidden_states.size()
-        hidden_states = hidden_states.view(batch_size * timestep, -1, channel).permute(0, 2, 1)
+        batch_size, _, num_channels = hidden_states.size()
+        hidden_states = hidden_states.view(batch_size * timestep, -1, num_channels).permute(0, 2, 1)
         hidden_states = F.fold(hidden_states,
                       output_size=output_size,
                       kernel_size=self.kernel_size,
@@ -1337,13 +1335,13 @@ class ProPainterTemporalSparseTransformerBlock(nn.Module):
     def forward(self, image_tokens, fold_x_size, mask=None, token_indices=None):
         """
         Args:
-            image_tokens: shape [batch_size, timesteps, height, width, channel]
+            image_tokens: shape [batch_size, timesteps, height, width, num_channels]
             fold_x_size: fold feature size, shape [60 108]
             mask: mask tokens, shape [batch_size, timesteps, height, width, 1]
         Returns:
             out_tokens: shape [batch_size, timesteps, height, width, 1]
         """
-        batch_size, timesteps, height, width, channel = image_tokens.shape # 20 36
+        batch_size, timesteps, height, width, num_channels = image_tokens.shape # 20 36
 
         shortcut = image_tokens
         image_tokens = self.layer_norm1(image_tokens)
@@ -1352,7 +1350,7 @@ class ProPainterTemporalSparseTransformerBlock(nn.Module):
         # FFN
         image_tokens = shortcut + att_x
         y = self.layer_norm2(image_tokens)
-        image_tokens = image_tokens + self.mlp(y.view(batch_size, timesteps * height * width, channel), fold_x_size).view(batch_size, timesteps, height, width, channel)
+        image_tokens = image_tokens + self.mlp(y.view(batch_size, timesteps * height * width, num_channels), fold_x_size).view(batch_size, timesteps, height, width, num_channels)
 
         return image_tokens
 
@@ -1370,11 +1368,11 @@ class ProPainterTemporalSparseTransformer(nn.Module):
     def forward(self, image_tokens, fold_x_size, local_mask=None, t_dilation=2):
         """
         Args:
-            image_tokens: shape [batch_size, timesteps, height, width, channel]
+            image_tokens: shape [batch_size, timesteps, height, width, num_channels]
             fold_x_size: fold feature size, shape [60 108]
             local_mask: local mask tokens, shape [batch_size, timesteps, height, width, 1]
         Returns:
-            out_tokens: shape [batch_size, timesteps, height, width, channel]
+            out_tokens: shape [batch_size, timesteps, height, width, num_channels]
         """
         assert self.num_hidden_layers % t_dilation == 0, 'wrong t_dilation input.'
         timesteps = image_tokens.size(1)
@@ -1442,9 +1440,9 @@ class ProPainterInpaintGenerator(nn.Module):
         encoder_hidden_states = self.encoder(torch.cat([masked_frames.view(batch_size * timestep, 3, original_height, original_width),
                                         masks_in.view(batch_size * timestep, 1, original_height, original_width),
                                         masks_updated.view(batch_size * timestep, 1, original_height, original_width)], dim=1))
-        _, channel, height, width = encoder_hidden_states.size()
-        local_features = encoder_hidden_states.view(batch_size, timestep, channel, height, width)[:, :local_timestep, ...]
-        ref_features = encoder_hidden_states.view(batch_size, timestep, channel, height, width)[:, local_timestep:, ...]
+        _, num_channels, height, width = encoder_hidden_states.size()
+        local_features = encoder_hidden_states.view(batch_size, timestep, num_channels, height, width)[:, :local_timestep, ...]
+        ref_features = encoder_hidden_states.view(batch_size, timestep, num_channels, height, width)[:, local_timestep:, ...]
         fold_feat_size = (height, width)
 
         ds_flows_f = F.interpolate(completed_flows[0].view(-1, 2, original_height, original_width), scale_factor=1/4, mode='bilinear', align_corners=False).view(batch_size, local_timestep-1, 2, height, width)/4.0
@@ -1466,7 +1464,7 @@ class ProPainterInpaintGenerator(nn.Module):
         _, _, local_features, _ = self.feature_propagation_module(local_features, ds_flows_f, ds_flows_b, prop_mask_in, interpolation)
         encoder_hidden_states = torch.cat((local_features, ref_features), dim=1)
 
-        trans_feat = self.soft_split(encoder_hidden_states.view(-1, channel, height, width), batch_size, fold_feat_size)
+        trans_feat = self.soft_split(encoder_hidden_states.view(-1, num_channels, height, width), batch_size, fold_feat_size)
         mask_pool_l = mask_pool_l.permute(0,1,3,4,2).contiguous()
         trans_feat = self.transformers(trans_feat, fold_feat_size, mask_pool_l, t_dilation=t_dilation)
         trans_feat = self.soft_comp(trans_feat, timestep, fold_feat_size)
@@ -1475,10 +1473,10 @@ class ProPainterInpaintGenerator(nn.Module):
         encoder_hidden_states = encoder_hidden_states + trans_feat
 
         if self.training:
-            output = self.decoder(encoder_hidden_states.view(-1, channel, height, width))
+            output = self.decoder(encoder_hidden_states.view(-1, num_channels, height, width))
             output = torch.tanh(output).view(batch_size, timestep, 3, original_height, original_width)
         else:
-            output = self.decoder(encoder_hidden_states[:, :local_timestep].view(-1, channel, height, width))
+            output = self.decoder(encoder_hidden_states[:, :local_timestep].view(-1, num_channels, height, width))
             output = torch.tanh(output).view(batch_size, local_timestep, 3, original_height, original_width)
 
         return output
@@ -1796,19 +1794,19 @@ class ProPainterDiscriminator(nn.Module):
         hidden_states = self.conv(completed_frames_t)
         if self.use_sigmoid:
             hidden_states = torch.sigmoid(hidden_states)
-        hidden_states = torch.transpose(hidden_states, 1, 2)  # batch_size, timesteps, channel, height, width
+        hidden_states = torch.transpose(hidden_states, 1, 2)  # batch_size, timesteps, num_channels, height, width
         return hidden_states
 
 #Adapted from https://github.com/richzhang/PerceptualSimilarity/blob/master/lpips/pretrained_networks.py
-class vgg16(nn.Module):
+class ProPainterVgg16(nn.Module):
     def __init__(self, requires_grad=False, pretrained=True):
-        super(vgg16, self).__init__()
+        super(ProPainterVgg16, self).__init__()
         vgg_pretrained_features = tv.vgg16(pretrained=pretrained).features
-        self.slice1 = torch.nn.Sequential()
-        self.slice2 = torch.nn.Sequential()
-        self.slice3 = torch.nn.Sequential()
-        self.slice4 = torch.nn.Sequential()
-        self.slice5 = torch.nn.Sequential()
+        self.slice1 = nn.Sequential()
+        self.slice2 = nn.Sequential()
+        self.slice3 = nn.Sequential()
+        self.slice4 = nn.Sequential()
+        self.slice5 = nn.Sequential()
         self.N_slices = 5
         for x in range(4):
             self.slice1.add_module(str(x), vgg_pretrained_features[x])
@@ -1841,9 +1839,9 @@ class vgg16(nn.Module):
         return hidden_states
 
 #Adapted from https://github.com/richzhang/PerceptualSimilarity/blob/master/lpips/lpips.py
-class ScalingLayer(nn.Module):
+class ProPainterScalingLayer(nn.Module):
     def __init__(self):
-        super(ScalingLayer, self).__init__()
+        super(ProPainterScalingLayer, self).__init__()
         self.register_buffer('shift', torch.Tensor([-.030,-.088,-.188])[None,:,None,None])
         self.register_buffer('scale', torch.Tensor([.458,.448,.450])[None,:,None,None])
 
@@ -1851,10 +1849,10 @@ class ScalingLayer(nn.Module):
         return (frames - self.shift) / self.scale
 
 #Adapted from https://github.com/richzhang/PerceptualSimilarity/blob/master/lpips/lpips.py
-class IntermediateLossLayer(nn.Module):
+class ProPainterIntermediateLossLayer(nn.Module):
     ''' A single linear layer which does a 1x1 conv '''
-    def __init__(self, num_channels, num_channels_out=1, use_dropout=False):
-        super(IntermediateLossLayer, self).__init__()
+    def __init__(self, num_channels, use_dropout=False):
+        super(ProPainterIntermediateLossLayer, self).__init__()
 
         layers = [nn.Dropout(),] if(use_dropout) else []
         layers += [nn.Conv2d(num_channels, num_channels, 1, stride=1, padding=0, bias=False),]
@@ -1866,7 +1864,7 @@ class IntermediateLossLayer(nn.Module):
 def spatial_average(input_tensor, keepdim=True):
     return input_tensor.mean([2,3],keepdim=keepdim)
 
-def upsample(input_tensor, out_HW=(64,64)): # assumes scale factor is same for H and W
+def upsample(input_tensor, out_HW=(64,64)): # assumes scale factor is same for height and W
     return nn.Upsample(size=out_HW, mode='bilinear', align_corners=False)(input_tensor)
 
 def normalize_tensor(hidden_states,eps=1e-10):
@@ -1875,7 +1873,7 @@ def normalize_tensor(hidden_states,eps=1e-10):
 
 #Adapted from https://github.com/richzhang/PerceptualSimilarity/blob/master/lpips/lpips.py
 # Learned perceptual metric
-class LPIPS(nn.Module):
+class ProPainterLpips(nn.Module):
     def __init__(self, use_dropout=True,):
         """ Initializes a perceptual loss torch.nn.Module
         use_dropout : bool
@@ -1883,21 +1881,21 @@ class LPIPS(nn.Module):
             [False] for no dropout when training linear layers
         """
 
-        super(LPIPS, self).__init__()
+        super(ProPainterLpips, self).__init__()
         
-        self.scaling_layer = ScalingLayer()
+        self.scaling_layer = ProPainterScalingLayer()
 
         self.num_channels = [64,128,256,512,512]
         self.length = len(self.num_channels)
 
-        self.net = vgg16()
+        self.net = ProPainterVgg16()
 
         
-        self.layer0 = IntermediateLossLayer(self.num_channels[0], use_dropout=use_dropout)
-        self.layer1 = IntermediateLossLayer(self.num_channels[1], use_dropout=use_dropout)
-        self.layer2 = IntermediateLossLayer(self.num_channels[2], use_dropout=use_dropout)
-        self.layer3 = IntermediateLossLayer(self.num_channels[3], use_dropout=use_dropout)
-        self.layer4 = IntermediateLossLayer(self.num_channels[4], use_dropout=use_dropout)
+        self.layer0 = ProPainterIntermediateLossLayer(self.num_channels[0], use_dropout=use_dropout)
+        self.layer1 = ProPainterIntermediateLossLayer(self.num_channels[1], use_dropout=use_dropout)
+        self.layer2 = ProPainterIntermediateLossLayer(self.num_channels[2], use_dropout=use_dropout)
+        self.layer3 = ProPainterIntermediateLossLayer(self.num_channels[3], use_dropout=use_dropout)
+        self.layer4 = ProPainterIntermediateLossLayer(self.num_channels[4], use_dropout=use_dropout)
         self.layers = [self.layer0,self.layer1,self.layer2,self.layer3,self.layer4]
         self.layers = nn.ModuleList(self.layers)
 
@@ -1917,13 +1915,13 @@ class LPIPS(nn.Module):
 
         return sum(layer_perceptual_losses)
 
-class LPIPSLoss(nn.Module):
+class ProPainterLpipsLoss(nn.Module):
     def __init__(self, 
             loss_weight=1.0, 
             use_input_norm=True,
             range_norm=False,):
-        super(LPIPSLoss, self).__init__()
-        self.perceptual = LPIPS().eval()
+        super(ProPainterLpipsLoss, self).__init__()
+        self.perceptual = ProPainterLpips().eval()
         self.loss_weight = loss_weight
         self.use_input_norm = use_input_norm
         self.range_norm = range_norm
@@ -1944,7 +1942,7 @@ class LPIPSLoss(nn.Module):
         lpips_loss = self.perceptual(frames.contiguous(), pred_images.contiguous())
         return self.loss_weight * lpips_loss.mean(), None
 
-class AdversarialLoss(nn.Module):
+class ProPainterAdversarialLoss(nn.Module):
     r"""
     Adversarial loss
     https://arxiv.org/abs/1711.10337
@@ -1956,7 +1954,7 @@ class AdversarialLoss(nn.Module):
         r"""
         type = nsgan | lsgan | hinge
         """
-        super(AdversarialLoss, self).__init__()
+        super(ProPainterAdversarialLoss, self).__init__()
         self.type = type
         self.register_buffer('real_label', torch.tensor(target_real_label))
         self.register_buffer('fake_label', torch.tensor(target_fake_label))
@@ -1982,9 +1980,9 @@ class AdversarialLoss(nn.Module):
             loss = self.criterion(generated_frames, labels)
             return loss
 
-def create_mask(tensor, paddings):
+def create_mask(flow, paddings):
     """
-    tensor shape: [b, c, h, w]
+    flow shape: [batch_size, num_channels, height, width]
     paddings: [2 x 2] shape list, the first row indicates up and down paddings
     the second row indicates left and right paddings
     |            |
@@ -1993,7 +1991,7 @@ def create_mask(tensor, paddings):
     |       x    |
     |            |
     """
-    shape = tensor.shape
+    shape = flow.shape
     inner_height = shape[2] - (paddings[0][0] + paddings[0][1])
     inner_width = shape[3] - (paddings[1][0] + paddings[1][1])
     inner = torch.ones([inner_height, inner_width])
@@ -2005,7 +2003,7 @@ def create_mask(tensor, paddings):
 
 def smoothness_deltas(flow):
     """
-    flow: [b, c, h, w]
+    flow: [batch_size, num_channels, height, width]
     """
     mask_x = create_mask(flow, [[0, 0], [0, 1]])
     mask_y = create_mask(flow, [[0, 1], [0, 0]])
@@ -2023,18 +2021,18 @@ def smoothness_deltas(flow):
     delta_v = F.conv2d(flow_v, weights, stride=1, padding=1)
     return delta_u, delta_v, mask
 
-def charbonnier_loss(x, mask=None, truncate=None, alpha=0.45, beta=1.0, epsilon=0.001):
+def charbonnier_loss(delta, mask=None, truncate=None, alpha=0.45, beta=1.0, epsilon=0.001):
     """
     Compute the generalized charbonnier loss of the difference tensor x
     All positions where mask == 0 are not taken into account
-    x: a tensor of shape [b, c, h, w]
-    mask: a mask of shape [b, mc, h, w], where mask channels must be either 1 or the same as
-    the number of channels of x. Entries should be 0 or 1
+    delta: a tensor of shape [batch_size, num_channels, height, width]
+    mask: a mask of shape [batch_size, mc, height, width], where mask channels must be either 1 or the same as
+    the number of channels of delta. Entries should be 0 or 1
     return: loss
     """
-    b, c, h, w = x.shape
-    norm = b * c * h * w
-    error = torch.pow(torch.square(x * beta) + torch.square(torch.tensor(epsilon)), alpha)
+    batch_size, num_channels, height, width = delta.shape
+    norm = batch_size * num_channels * height * width
+    error = torch.pow(torch.square(delta * beta) + torch.square(torch.tensor(epsilon)), alpha)
     if mask is not None:
         error = mask * error
     if truncate is not None:
@@ -2044,7 +2042,7 @@ def charbonnier_loss(x, mask=None, truncate=None, alpha=0.45, beta=1.0, epsilon=
 def second_order_deltas(flow):
     """
     consider the single flow first
-    flow shape: [b, c, h, w]
+    flow shape: [batch_size, num_channels, height, width]
     """
     # create mask
     mask_x = create_mask(flow, [[0, 0], [1, 1]])
@@ -2077,139 +2075,14 @@ def smoothness_loss(flow, cmask):
     return loss_u + loss_v
 
 def second_order_loss(flow, cmask):
-    delta_u, delta_v, mask = second_order_deltas(flow)
+    delta_u, delta_v, _ = second_order_deltas(flow)
     loss_u = charbonnier_loss(delta_u, cmask)
     loss_v = charbonnier_loss(delta_v, cmask)
     return loss_u + loss_v
 
-def rgb2gray(image):
-    gray_image = image[:, 0] * 0.299 + image[:, 1] * 0.587 + 0.110 * image[:, 2]
-    gray_image = gray_image.unsqueeze(1)
-    return gray_image
-
-def ternary_transform(image, max_distance=1):
-    device = image.device
-    patch_size = 2 * max_distance + 1
-    intensities = rgb2gray(image) * 255
-    out_channels = patch_size * patch_size
-    w = np.eye(out_channels).reshape(out_channels, 1, patch_size, patch_size)
-    weights = torch.from_numpy(w).float().to(device)
-    patches = F.conv2d(intensities, weights, stride=1, padding=1)
-    transf = patches - intensities
-    transf_norm = transf / torch.sqrt(0.81 + torch.square(transf))
-    return transf_norm
-
-def hamming_distance(t1, t2):
-    dist = torch.square(t1 - t2)
-    dist_norm = dist / (0.1 + dist)
-    dist_sum = torch.sum(dist_norm, dim=1, keepdim=True)
-    return dist_sum
-
-def ternary_loss2(frame1, warp_frame21, confMask, masks, max_distance=1):
-    """
-
-    Args:
-        frame1: torch tensor, with shape [b * t, c, h, w]
-        warp_frame21: torch tensor, with shape [b * t, c, h, w]
-        confMask: confidence mask, with shape [b * t, c, h, w]
-        masks: torch tensor, with shape [b * t, c, h, w]
-        max_distance: maximum distance.
-
-    Returns: ternary loss
-
-    """
-    t1 = ternary_transform(frame1)
-    t21 = ternary_transform(warp_frame21)
-    dist = hamming_distance(t1, t21) 
-    loss = torch.mean(dist * confMask * masks) / torch.mean(masks)
-    return loss
-
-def ternary_loss(flow_comp, flow_gt, mask, current_frame, shift_frame, scale_factor=1):
-    if scale_factor != 1:
-        current_frame = F.interpolate(current_frame, scale_factor=1 / scale_factor, mode='bilinear')
-        shift_frame = F.interpolate(shift_frame, scale_factor=1 / scale_factor, mode='bilinear')
-    warped_sc = flow_warp(shift_frame, flow_gt.permute(0, 2, 3, 1))
-    noc_mask = torch.exp(-50. * torch.sum(torch.abs(current_frame - warped_sc), dim=1).pow(2)).unsqueeze(1)
-    warped_comp_sc = flow_warp(shift_frame, flow_comp.permute(0, 2, 3, 1))
-    loss = ternary_loss2(current_frame, warped_comp_sc, noc_mask, mask)
-    return loss
-
-class FlowLoss(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.l1_criterion = nn.L1Loss()
-
-    def forward(self, pred_flows, gt_flows, masks, frames):
-        # pred_flows: b t-1 2 h w
-        loss = 0
-        warp_loss = 0
-        h, w = pred_flows[0].shape[-2:]
-        masks = [masks[:,:-1,...].contiguous(), masks[:, 1:, ...].contiguous()]
-        frames0 = frames[:,:-1,...]
-        frames1 = frames[:,1:,...]
-        current_frames = [frames0, frames1]
-        next_frames = [frames1, frames0]
-        for i in range(len(pred_flows)):
-            # print(pred_flows[i].shape)
-            combined_flow = pred_flows[i] * masks[i] + gt_flows[i] * (1-masks[i])
-            l1_loss = self.l1_criterion(pred_flows[i] * masks[i], gt_flows[i] * masks[i]) / torch.mean(masks[i])
-            l1_loss += self.l1_criterion(pred_flows[i] * (1-masks[i]), gt_flows[i] * (1-masks[i])) / torch.mean((1-masks[i]))
-
-            smooth_loss = smoothness_loss(combined_flow.reshape(-1,2,h,w), masks[i].reshape(-1,1,h,w))
-            smooth_loss2 = second_order_loss(combined_flow.reshape(-1,2,h,w), masks[i].reshape(-1,1,h,w))
-            
-            warp_loss_i = ternary_loss(combined_flow.reshape(-1,2,h,w), gt_flows[i].reshape(-1,2,h,w), 
-                            masks[i].reshape(-1,1,h,w), current_frames[i].reshape(-1,3,h,w), next_frames[i].reshape(-1,3,h,w)) 
-
-            loss += l1_loss + smooth_loss + smooth_loss2
-
-            warp_loss += warp_loss_i
-            
-        return loss, warp_loss
-
-def edgeLoss(preds_edges, edges):
-    """
-
-    Args:
-        preds_edges: with shape [b, c, h , w]
-        edges: with shape [b, c, h, w]
-
-    Returns: Edge losses
-
-    """
-    mask = (edges > 0.5).float()
-    b, c, h, w = mask.shape
-    num_pos = torch.sum(mask, dim=[1, 2, 3]).float() # Shape: [b,].
-    num_neg = c * h * w - num_pos # Shape: [b,].
-    neg_weights = (num_neg / (num_pos + num_neg)).unsqueeze(1).unsqueeze(2).unsqueeze(3)
-    pos_weights = (num_pos / (num_pos + num_neg)).unsqueeze(1).unsqueeze(2).unsqueeze(3)
-    weight = neg_weights * mask + pos_weights * (1 - mask)  # weight for debug
-    losses = F.binary_cross_entropy_with_logits(preds_edges.float(), edges.float(), weight=weight, reduction='none')
-    loss = torch.mean(losses)
-    return loss
-
-class EdgeLoss(nn.Module):
-    def __init__(self):
-        super().__init__()
-
-    def forward(self, pred_edges, gt_edges, masks):
-        # pred_flows: b t-1 1 h w
-        loss = 0
-        h, w = pred_edges[0].shape[-2:]
-        masks = [masks[:,:-1,...].contiguous(), masks[:, 1:, ...].contiguous()]
-        for i in range(len(pred_edges)):
-            # print(f'edges_{i}',  torch.sum(gt_edges[i])) # debug
-            combined_edge = pred_edges[i] * masks[i] + gt_edges[i] * (1-masks[i])
-            edge_loss = (edgeLoss(pred_edges[i].reshape(-1,1,h,w), gt_edges[i].reshape(-1,1,h,w)) \
-                        + 5 * edgeLoss(combined_edge.reshape(-1,1,h,w), gt_edges[i].reshape(-1,1,h,w)))
-            loss += edge_loss 
-
-        return loss
-
-
-def rgb_to_grayscale(image, rgb_weights = None):
+def convert_rgb_to_grayscale(image, rgb_weights = None):
     if len(image.shape) < 3 or image.shape[-3] != 3:
-        raise ValueError(f"Input size must have a shape of (*, 3, H, W). Got {image.shape}")
+        raise ValueError(f"Input size must have a shape of (*, 3, height, width). Got {image.shape}")
 
     if rgb_weights is None:
         # 8 bit images
@@ -2232,15 +2105,118 @@ def rgb_to_grayscale(image, rgb_weights = None):
     w_r, w_g, w_b = rgb_weights.unbind()
     return w_r * r + w_g * g + w_b * b
 
+def ternary_transform(image, max_distance=1):
+    device = image.device
+    patch_size = 2 * max_distance + 1
+    intensities = convert_rgb_to_grayscale(image) * 255
+    out_channels = patch_size * patch_size
+    weights = np.eye(out_channels).reshape(out_channels, 1, patch_size, patch_size)
+    weights = torch.from_numpy(weights).float().to(device)
+    patches = F.conv2d(intensities, weights, stride=1, padding=1)
+    transf = patches - intensities
+    transf_norm = transf / torch.sqrt(0.81 + torch.square(transf))
+    return transf_norm
+
+def hamming_distance(ternary_transform_frame1, ternary_transform_frame2):
+    distance = torch.square(ternary_transform_frame1 - ternary_transform_frame2)
+    distance_norm = distance / (0.1 + distance)
+    distance_sum = torch.sum(distance_norm, dim=1, keepdim=True)
+    return distance_sum
+
+def ternary_loss(flow_comp, flow_gt, mask, current_frame, shift_frame, scale_factor=1):
+    if scale_factor != 1:
+        current_frame = F.interpolate(current_frame, scale_factor=1 / scale_factor, mode='bilinear')
+        shift_frame = F.interpolate(shift_frame, scale_factor=1 / scale_factor, mode='bilinear')
+    warped_sc = flow_warp(shift_frame, flow_gt.permute(0, 2, 3, 1))
+    confidence_mask = torch.exp(-50. * torch.sum(torch.abs(current_frame - warped_sc), dim=1).pow(2)).unsqueeze(1)
+    warped_comp_sc = flow_warp(shift_frame, flow_comp.permute(0, 2, 3, 1))
+    
+    ternary_transform1 = ternary_transform(current_frame) #current_frame: [batch_size * timesteps, num_channels, height, width]
+    ternary_transform21 = ternary_transform(warped_comp_sc) #warped_comp_sc: [batch_size * timesteps, num_channels, height, width]
+    dist = hamming_distance(ternary_transform1, ternary_transform21) 
+    loss = torch.mean(dist * confidence_mask * mask) / torch.mean(mask) #confidence_mask, mask: [batch_size * timesteps, num_channels, height, width]
+    
+    return loss
+
+class ProPainterFlowLoss(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.l1_criterion = nn.L1Loss()
+
+    def forward(self, pred_flows, gt_flows, masks, frames):
+        # pred_flows: bacth_size timestep-1 2 height width
+        loss = 0
+        warp_loss = 0
+        height, width = pred_flows[0].shape[-2:]
+        masks = [masks[:,:-1,...].contiguous(), masks[:, 1:, ...].contiguous()]
+        frames0 = frames[:,:-1,...]
+        frames1 = frames[:,1:,...]
+        current_frames = [frames0, frames1]
+        next_frames = [frames1, frames0]
+        for i in range(len(pred_flows)):
+            combined_flow = pred_flows[i] * masks[i] + gt_flows[i] * (1-masks[i])
+            l1_loss = self.l1_criterion(pred_flows[i] * masks[i], gt_flows[i] * masks[i]) / torch.mean(masks[i])
+            l1_loss += self.l1_criterion(pred_flows[i] * (1-masks[i]), gt_flows[i] * (1-masks[i])) / torch.mean((1-masks[i]))
+
+            smooth_loss = smoothness_loss(combined_flow.reshape(-1,2,height,width), masks[i].reshape(-1,1,height,width))
+            smooth_loss2 = second_order_loss(combined_flow.reshape(-1,2,height,width), masks[i].reshape(-1,1,height,width))
+            
+            warp_loss_i = ternary_loss(combined_flow.reshape(-1,2,height,width), gt_flows[i].reshape(-1,2,height,width), 
+                            masks[i].reshape(-1,1,height,width), current_frames[i].reshape(-1,3,height,width), next_frames[i].reshape(-1,3,height,width)) 
+
+            loss += l1_loss + smooth_loss + smooth_loss2
+
+            warp_loss += warp_loss_i
+            
+        return loss, warp_loss
+
+class ProPainterEdgeLoss(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def edgeLoss(self,pred_edges, edges):
+        """
+
+        Args:
+            pred_edges: with shape [batch_size, num_channels, height, width]
+            edges: with shape [batch_size, num_channels, height, width]
+
+        Returns: Edge losses
+
+        """
+        mask = (edges > 0.5).float()
+        _, num_channels, height, width = mask.shape
+        num_pos = torch.sum(mask, dim=[1, 2, 3]).float() # Shape: [batch_size,].
+        num_neg = num_channels * height * width - num_pos # Shape: [batch_size,].
+        neg_weights = (num_neg / (num_pos + num_neg)).unsqueeze(1).unsqueeze(2).unsqueeze(3)
+        pos_weights = (num_pos / (num_pos + num_neg)).unsqueeze(1).unsqueeze(2).unsqueeze(3)
+        weight = neg_weights * mask + pos_weights * (1 - mask)  # weight for debug
+        losses = F.binary_cross_entropy_with_logits(pred_edges.float(), edges.float(), weight=weight, reduction='none')
+        loss = torch.mean(losses)
+        return loss
+
+    def forward(self, pred_edges, gt_edges, masks):
+        # pred_flows: batch_size timestep-1 1 height width
+        loss = 0
+        height, width = pred_edges[0].shape[-2:]
+        masks = [masks[:,:-1,...].contiguous(), masks[:, 1:, ...].contiguous()]
+        for i in range(len(pred_edges)):
+            combined_edge = pred_edges[i] * masks[i] + gt_edges[i] * (1-masks[i])
+            edge_loss = (self.edgeLoss(pred_edges[i].reshape(-1,1,height,width), gt_edges[i].reshape(-1,1,height,width)) \
+                        + 5 * self.edgeLoss(combined_edge.reshape(-1,1,height,width), gt_edges[i].reshape(-1,1,height,width)))
+            loss += edge_loss 
+
+        return loss
+
 def gaussian(window_size: int, sigma: float) -> torch.Tensor:
     device, dtype = None, None
     if isinstance(sigma, torch.Tensor):
         device, dtype = sigma.device, sigma.dtype
-    x = torch.arange(window_size, device=device, dtype=dtype) - window_size // 2
+    offsets = torch.arange(window_size, device=device, dtype=dtype) - window_size // 2
     if window_size % 2 == 0:
-        x = x + 0.5
+        offsets = offsets + 0.5
 
-    gauss = torch.exp((-x.pow(2.0) / (2 * sigma**2)).float())
+    gauss = torch.exp((-offsets.pow(2.0) / (2 * sigma**2)).float())
     return gauss / gauss.sum()
 
 def get_gaussian_kernel1d(kernel_size: int, sigma: float, force_even: bool = False) -> torch.Tensor:
@@ -2253,17 +2229,6 @@ def get_gaussian_kernel1d(kernel_size: int, sigma: float, force_even: bool = Fal
 
     Returns:
         1D tensor with gaussian filter coefficients.
-
-    Shape:
-        - Output: :math:`(\text{kernel_size})`
-
-    Examples:
-
-        >>> get_gaussian_kernel1d(3, 2.5)
-        tensor([0.3243, 0.3513, 0.3243])
-
-        >>> get_gaussian_kernel1d(5, 1.5)
-        tensor([0.1201, 0.2339, 0.2921, 0.2339, 0.1201])
     """
     if not isinstance(kernel_size, int) or ((kernel_size % 2 == 0) and not force_even) or (kernel_size <= 0):
         raise TypeError("kernel_size must be an odd positive integer. " "Got {}".format(kernel_size))
@@ -2302,13 +2267,13 @@ def filter2d(
     r"""Convolve a tensor with a 2d kernel.
 
     The function applies a given kernel to a tensor. The kernel is applied
-    independently at each depth channel of the tensor. Before applying the
+    independently at each depth num_channels of the tensor. Before applying the
     kernel, the function applies padding according to the specified mode so
     that the output remains in the same shape.
 
     Args:
         input: the input tensor with shape of
-          :math:`(B, C, H, W)`.
+          :math:`(batch_size, num_channels, height, width)`.
         kernel: the kernel to be convolved with the input
           tensor. The kernel shape must be :math:`(1, kH, kW)` or :math:`(B, kH, kW)`.
         border_type: the padding mode to be applied before convolving.
@@ -2320,22 +2285,7 @@ def filter2d(
 
     Return:
         torch.Tensor: the convolved tensor of same size and numbers of channels
-        as the input with shape :math:`(B, C, H, W)`.
-
-    Example:
-        >>> input = torch.tensor([[[
-        ...    [0., 0., 0., 0., 0.],
-        ...    [0., 0., 0., 0., 0.],
-        ...    [0., 0., 5., 0., 0.],
-        ...    [0., 0., 0., 0., 0.],
-        ...    [0., 0., 0., 0., 0.],]]])
-        >>> kernel = torch.ones(1, 3, 3)
-        >>> filter2d(input, kernel, padding='same')
-        tensor([[[[0., 0., 0., 0., 0.],
-                  [0., 5., 5., 5., 0.],
-                  [0., 5., 5., 5., 0.],
-                  [0., 5., 5., 5., 0.],
-                  [0., 0., 0., 0., 0.]]]])
+        as the input with shape :math:`(batch_size, num_channels, height, width)`.
     """
     if not isinstance(input, torch.Tensor):
         raise TypeError(f"Input input is not torch.Tensor. Got {type(input)}")
@@ -2365,126 +2315,34 @@ def filter2d(
         raise ValueError(f"Invalid kernel shape, we expect 1xHxW or BxHxW. Got: {kernel.shape}")
 
     # prepare kernel
-    b, c, h, w = input.shape
+    batch_size, num_channels, height, width = input.shape
     tmp_kernel: torch.Tensor = kernel.unsqueeze(1).to(input)
 
     if normalized:
         tmp_kernel = normalize_kernel2d(tmp_kernel)
 
-    tmp_kernel = tmp_kernel.expand(-1, c, -1, -1)
+    tmp_kernel = tmp_kernel.expand(-1, num_channels, -1, -1)
 
-    height, width = tmp_kernel.shape[-2:]
+    height_, width_ = tmp_kernel.shape[-2:]
 
     # pad the input tensor
     if padding == 'same':
-        padding_shape: List[int] = _compute_padding([height, width])
+        padding_shape: List[int] = _compute_padding([height_, width_])
         input = F.pad(input, padding_shape, mode=border_type)
 
     # kernel and input tensor reshape to align element-wise or batch-wise params
-    tmp_kernel = tmp_kernel.reshape(-1, 1, height, width)
+    tmp_kernel = tmp_kernel.reshape(-1, 1, height_, width_)
     input = input.view(-1, tmp_kernel.size(0), input.size(-2), input.size(-1))
 
     # convolve the tensor with the kernel.
     output = F.conv2d(input, tmp_kernel, groups=tmp_kernel.size(0), padding=0, stride=1)
 
     if padding == 'same':
-        out = output.view(b, c, h, w)
+        out = output.view(batch_size, num_channels, height, width)
     else:
-        out = output.view(b, c, h - height + 1, w - width + 1)
+        out = output.view(batch_size, num_channels, height - height_ + 1, width - width_ + 1)
 
     return out
-
-def filter2d_separable(
-    input: torch.Tensor,
-    kernel_x: torch.Tensor,
-    kernel_y: torch.Tensor,
-    border_type: str = 'reflect',
-    normalized: bool = False,
-    padding: str = 'same',
-) -> torch.Tensor:
-    r"""Convolve a tensor with two 1d kernels, in x and y directions.
-
-    The function applies a given kernel to a tensor. The kernel is applied
-    independently at each depth channel of the tensor. Before applying the
-    kernel, the function applies padding according to the specified mode so
-    that the output remains in the same shape.
-
-    Args:
-        input: the input tensor with shape of
-          :math:`(B, C, H, W)`.
-        kernel_x: the kernel to be convolved with the input
-          tensor. The kernel shape must be :math:`(1, kW)` or :math:`(B, kW)`.
-        kernel_y: the kernel to be convolved with the input
-          tensor. The kernel shape must be :math:`(1, kH)` or :math:`(B, kH)`.
-        border_type: the padding mode to be applied before convolving.
-          The expected modes are: ``'constant'``, ``'reflect'``,
-          ``'replicate'`` or ``'circular'``.
-        normalized: If True, kernel will be L1 normalized.
-        padding: This defines the type of padding.
-          2 modes available ``'same'`` or ``'valid'``.
-
-    Return:
-        torch.Tensor: the convolved tensor of same size and numbers of channels
-        as the input with shape :math:`(B, C, H, W)`.
-
-    Example:
-        >>> input = torch.tensor([[[
-        ...    [0., 0., 0., 0., 0.],
-        ...    [0., 0., 0., 0., 0.],
-        ...    [0., 0., 5., 0., 0.],
-        ...    [0., 0., 0., 0., 0.],
-        ...    [0., 0., 0., 0., 0.],]]])
-        >>> kernel = torch.ones(1, 3)
-
-        >>> filter2d_separable(input, kernel, kernel, padding='same')
-        tensor([[[[0., 0., 0., 0., 0.],
-                  [0., 5., 5., 5., 0.],
-                  [0., 5., 5., 5., 0.],
-                  [0., 5., 5., 5., 0.],
-                  [0., 0., 0., 0., 0.]]]])
-    """
-    out_x = filter2d(input, kernel_x.unsqueeze(0), border_type, normalized, padding)
-    out = filter2d(out_x, kernel_y.unsqueeze(-1), border_type, normalized, padding)
-    return out
-
-def get_gaussian_kernel2d(
-    kernel_size: Tuple[int, int], sigma: Tuple[float, float], force_even: bool = False
-) -> torch.Tensor:
-    r"""Function that returns Gaussian filter matrix coefficients.
-
-    Args:
-        kernel_size: filter sizes in the x and y direction.
-         Sizes should be odd and positive.
-        sigma: gaussian standard deviation in the x and y
-         direction.
-        force_even: overrides requirement for odd kernel size.
-
-    Returns:
-        2D tensor with gaussian filter matrix coefficients.
-
-    Shape:
-        - Output: :math:`(\text{kernel_size}_x, \text{kernel_size}_y)`
-
-    Examples:
-        >>> get_gaussian_kernel2d((3, 3), (1.5, 1.5))
-        tensor([[0.0947, 0.1183, 0.0947],
-                [0.1183, 0.1478, 0.1183],
-                [0.0947, 0.1183, 0.0947]])
-        >>> get_gaussian_kernel2d((3, 5), (1.5, 1.5))
-        tensor([[0.0370, 0.0720, 0.0899, 0.0720, 0.0370],
-                [0.0462, 0.0899, 0.1123, 0.0899, 0.0462],
-                [0.0370, 0.0720, 0.0899, 0.0720, 0.0370]])
-    """
-    if not isinstance(kernel_size, tuple) or len(kernel_size) != 2:
-        raise TypeError(f"kernel_size must be a tuple of length two. Got {kernel_size}")
-    if not isinstance(sigma, tuple) or len(sigma) != 2:
-        raise TypeError(f"sigma must be a tuple of length two. Got {sigma}")
-    ksize_x, ksize_y = kernel_size
-    sigma_x, sigma_y = sigma
-    kernel_x: torch.Tensor = get_gaussian_kernel1d(ksize_x, sigma_x, force_even)
-    kernel_y: torch.Tensor = get_gaussian_kernel1d(ksize_y, sigma_y, force_even)
-    kernel_2d: torch.Tensor = torch.matmul(kernel_x.unsqueeze(-1), kernel_y.unsqueeze(-1).t())
-    return kernel_2d
 
 def gaussian_blur2d(
     input: torch.Tensor,
@@ -2494,14 +2352,11 @@ def gaussian_blur2d(
     separable: bool = True,
 ) -> torch.Tensor:
     r"""Create an operator that blurs a tensor using a Gaussian filter.
-
-    .. image:: _static/img/gaussian_blur2d.png
-
     The operator smooths the given tensor with a gaussian kernel by convolving
-    it to each channel. It supports batched operation.
+    it to each num_channels. It supports batched operation.
 
     Arguments:
-        input: the input tensor with shape :math:`(B,C,H,W)`.
+        input: the input tensor with shape :math:`(B,C,height,width)`.
         kernel_size: the size of the kernel.
         sigma: the standard deviation of the kernel.
         border_type: the padding mode to be applied before convolving.
@@ -2510,26 +2365,35 @@ def gaussian_blur2d(
         separable: run as composition of two 1d-convolutions.
 
     Returns:
-        the blurred tensor with shape :math:`(B, C, H, W)`.
+        the blurred tensor with shape :math:`(batch_size, num_channels, height, width)`.
 
     .. note::
        See a working example `here <https://kornia-tutorials.readthedocs.io/en/latest/
        gaussian_blur.html>`__.
-
-    Examples:
-        >>> input = torch.rand(2, 4, 5, 5)
-        >>> output = gaussian_blur2d(input, (3, 3), (1.5, 1.5))
-        >>> output.shape
-        torch.Size([2, 4, 5, 5])
     """
     if separable:
         kernel_x: torch.Tensor = get_gaussian_kernel1d(kernel_size[1], sigma[1])
         kernel_y: torch.Tensor = get_gaussian_kernel1d(kernel_size[0], sigma[0])
-        out = filter2d_separable(input, kernel_x[None], kernel_y[None], border_type)
+        # Convolve a tensor with two 1d kernels, in x and y directions.The kernel is applied
+        # independently at each depth num_channels of the tensor. Before applying the
+        # kernel, the function applies padding according to the specified mode so
+        # that the output remains in the same shape.
+        output_x = filter2d(input, kernel_x[None].unsqueeze(0), border_type, normalized = False, padding = 'same')
+        output = filter2d(output_x, kernel_y[None].unsqueeze(-1), border_type, normalized = False, padding = 'same')
     else:
-        kernel: torch.Tensor = get_gaussian_kernel2d(kernel_size, sigma)
-        out = filter2d(input, kernel[None], border_type)
-    return out
+        #returns Gaussian filter matrix coefficients.
+        if not isinstance(kernel_size, tuple) or len(kernel_size) != 2:
+            raise TypeError(f"kernel_size must be a tuple of length two. Got {kernel_size}")
+        if not isinstance(sigma, tuple) or len(sigma) != 2:
+            raise TypeError(f"sigma must be a tuple of length two. Got {sigma}")
+        ksize_x, ksize_y = kernel_size
+        sigma_x, sigma_y = sigma
+        kernel_x: torch.Tensor = get_gaussian_kernel1d(ksize_x, sigma_x, force_even = False)
+        kernel_y: torch.Tensor = get_gaussian_kernel1d(ksize_y, sigma_y, force_even = False)
+        kernel_2d: torch.Tensor = torch.matmul(kernel_x.unsqueeze(-1), kernel_y.unsqueeze(-1).t())        
+        output = filter2d(input, kernel_2d[None], border_type)
+
+    return output
 
 def get_sobel_kernel_3x3() -> torch.Tensor:
     """Utility function that returns a sobel kernel of 3x3."""
@@ -2622,37 +2486,25 @@ def get_spatial_gradient_kernel2d(mode: str, order: int) -> torch.Tensor:
         raise NotImplementedError("")
     return kernel
 
-def normalize_kernel2d(input: torch.Tensor) -> torch.Tensor:
+def normalize_kernel2d(kernel: torch.Tensor) -> torch.Tensor:
     r"""Normalize both derivative and smoothing kernel."""
-    if len(input.size()) < 2:
-        raise TypeError(f"input should be at least 2D tensor. Got {input.size()}")
-    norm: torch.Tensor = input.abs().sum(dim=-1).sum(dim=-1)
-    return input / (norm.unsqueeze(-1).unsqueeze(-1))
+    if len(kernel.size()) < 2:
+        raise TypeError(f"kernel should be at least 2D tensor. Got {kernel.size()}")
+    norm: torch.Tensor = kernel.abs().sum(dim=-1).sum(dim=-1)
+    return kernel / (norm.unsqueeze(-1).unsqueeze(-1))
 
 
 def spatial_gradient(input: torch.Tensor, mode: str = 'sobel', order: int = 1, normalized: bool = True) -> torch.Tensor:
     r"""Compute the first order image derivative in both x and y using a Sobel operator.
 
-    .. image:: _static/img/spatial_gradient.png
-
     Args:
-        input: input image tensor with shape :math:`(B, C, H, W)`.
+        input: input image tensor with shape :math:`(batch_size, num_channels, height, width)`.
         mode: derivatives modality, can be: `sobel` or `diff`.
         order: the order of the derivatives.
         normalized: whether the output is normalized.
 
     Return:
-        the derivatives of the input feature map. with shape :math:`(B, C, 2, H, W)`.
-
-    .. note::
-       See a working example `here <https://kornia-tutorials.readthedocs.io/en/latest/
-       filtering_edges.html>`__.
-
-    Examples:
-        >>> input = torch.rand(1, 3, 4, 4)
-        >>> output = spatial_gradient(input)  # 1x3x2x4x4
-        >>> output.shape
-        torch.Size([1, 3, 2, 4, 4])
+        the derivatives of the input feature map. with shape :math:`(B, C, 2, height, width)`.
     """
     if not isinstance(input, torch.Tensor):
         raise TypeError(f"Input type is not a torch.Tensor. Got {type(input)}")
@@ -2665,19 +2517,19 @@ def spatial_gradient(input: torch.Tensor, mode: str = 'sobel', order: int = 1, n
         kernel = normalize_kernel2d(kernel)
 
     # prepare kernel
-    b, c, h, w = input.shape
+    batch_size, num_channels, height, width = input.shape
     tmp_kernel: torch.Tensor = kernel.to(input).detach()
     tmp_kernel = tmp_kernel.unsqueeze(1).unsqueeze(1)
 
     # convolve input tensor with sobel kernel
     kernel_flip: torch.Tensor = tmp_kernel.flip(-3)
 
-    # Pad with "replicate for spatial dims, but with zeros for channel
+    # Pad with "replicate for spatial dims, but with zeros for num_channels
     spatial_pad = [kernel.size(1) // 2, kernel.size(1) // 2, kernel.size(2) // 2, kernel.size(2) // 2]
     out_channels: int = 3 if order == 2 else 2
-    padded_inp: torch.Tensor = F.pad(input.reshape(b * c, 1, h, w), spatial_pad, 'replicate')[:, :, None]
+    padded_inp: torch.Tensor = F.pad(input.reshape(batch_size * num_channels, 1, height, width), spatial_pad, 'replicate')[:, :, None]
 
-    return F.conv3d(padded_inp, kernel_flip, padding=0).view(b, c, out_channels, h, w)
+    return F.conv3d(padded_inp, kernel_flip, padding=0).view(batch_size, num_channels, out_channels, height, width)
 
 def get_canny_nms_kernel(device=torch.device('cpu'), dtype=torch.float) -> torch.Tensor:
     """Utility function that returns 3x3 kernels for the Canny Non-maximal suppression."""
@@ -2715,150 +2567,11 @@ def get_hysteresis_kernel(device=torch.device('cpu'), dtype=torch.float) -> torc
     )
     return kernel.unsqueeze(1)
 
-def canny(
-    input: torch.Tensor,
-    low_threshold: float = 0.1,
-    high_threshold: float = 0.2,
-    kernel_size: Tuple[int, int] = (5, 5),
-    sigma: Tuple[float, float] = (1, 1),
-    hysteresis: bool = True,
-    eps: float = 1e-6,
-) -> Tuple[torch.Tensor, torch.Tensor]:
-    r"""Find edges of the input image and filters them using the Canny algorithm.
-
-    .. image:: _static/img/canny.png
-
-    Args:
-        input: input image tensor with shape :math:`(B,C,H,W)`.
-        low_threshold: lower threshold for the hysteresis procedure.
-        high_threshold: upper threshold for the hysteresis procedure.
-        kernel_size: the size of the kernel for the gaussian blur.
-        sigma: the standard deviation of the kernel for the gaussian blur.
-        hysteresis: if True, applies the hysteresis edge tracking.
-            Otherwise, the edges are divided between weak (0.5) and strong (1) edges.
-        eps: regularization number to avoid NaN during backprop.
-
-    Returns:
-        - the canny edge magnitudes map, shape of :math:`(B,1,H,W)`.
-        - the canny edge detection filtered by thresholds and hysteresis, shape of :math:`(B,1,H,W)`.
-
-    .. note::
-       See a working example `here <https://kornia-tutorials.readthedocs.io/en/latest/
-       canny.html>`__.
-
-    Example:
-        >>> input = torch.rand(5, 3, 4, 4)
-        >>> magnitude, edges = canny(input)  # 5x3x4x4
-        >>> magnitude.shape
-        torch.Size([5, 1, 4, 4])
-        >>> edges.shape
-        torch.Size([5, 1, 4, 4])
-    """
-    if not isinstance(input, torch.Tensor):
-        raise TypeError(f"Input type is not a torch.Tensor. Got {type(input)}")
-
-    if not len(input.shape) == 4:
-        raise ValueError(f"Invalid input shape, we expect BxCxHxW. Got: {input.shape}")
-
-    if low_threshold > high_threshold:
-        raise ValueError(
-            "Invalid input thresholds. low_threshold should be smaller than the high_threshold. Got: {}>{}".format(
-                low_threshold, high_threshold
-            )
-        )
-
-    if low_threshold < 0 and low_threshold > 1:
-        raise ValueError(f"Invalid input threshold. low_threshold should be in range (0,1). Got: {low_threshold}")
-
-    if high_threshold < 0 and high_threshold > 1:
-        raise ValueError(f"Invalid input threshold. high_threshold should be in range (0,1). Got: {high_threshold}")
-
-    device: torch.device = input.device
-    dtype: torch.dtype = input.dtype
-
-    # To Grayscale
-    if input.shape[1] == 3:
-        input = rgb_to_grayscale(input)
-
-    # Gaussian filter
-    blurred: torch.Tensor = gaussian_blur2d(input, kernel_size, sigma)
-
-    # Compute the gradients
-    gradients: torch.Tensor = spatial_gradient(blurred, normalized=False)
-
-    # Unpack the edges
-    gx: torch.Tensor = gradients[:, :, 0]
-    gy: torch.Tensor = gradients[:, :, 1]
-
-    # Compute gradient magnitude and angle
-    magnitude: torch.Tensor = torch.sqrt(gx * gx + gy * gy + eps)
-    angle: torch.Tensor = torch.atan2(gy, gx)
-
-    # Radians to Degrees
-    angle = 180.0 * angle / math.pi
-
-    # Round angle to the nearest 45 degree
-    angle = torch.round(angle / 45) * 45
-
-    # Non-maximal suppression
-    nms_kernels: torch.Tensor = get_canny_nms_kernel(device, dtype)
-    nms_magnitude: torch.Tensor = F.conv2d(magnitude, nms_kernels, padding=nms_kernels.shape[-1] // 2)
-
-    # Get the indices for both directions
-    positive_idx: torch.Tensor = (angle / 45) % 8
-    positive_idx = positive_idx.long()
-
-    negative_idx: torch.Tensor = ((angle / 45) + 4) % 8
-    negative_idx = negative_idx.long()
-
-    # Apply the non-maximum suppression to the different directions
-    channel_select_filtered_positive: torch.Tensor = torch.gather(nms_magnitude, 1, positive_idx)
-    channel_select_filtered_negative: torch.Tensor = torch.gather(nms_magnitude, 1, negative_idx)
-
-    channel_select_filtered: torch.Tensor = torch.stack(
-        [channel_select_filtered_positive, channel_select_filtered_negative], 1
-    )
-
-    is_max: torch.Tensor = channel_select_filtered.min(dim=1)[0] > 0.0
-
-    magnitude = magnitude * is_max
-
-    # Threshold
-    edges: torch.Tensor = F.threshold(magnitude, low_threshold, 0.0)
-
-    low: torch.Tensor = magnitude > low_threshold
-    high: torch.Tensor = magnitude > high_threshold
-
-    edges = low * 0.5 + high * 0.5
-    edges = edges.to(dtype)
-
-    # Hysteresis
-    if hysteresis:
-        edges_old: torch.Tensor = -torch.ones(edges.shape, device=edges.device, dtype=dtype)
-        hysteresis_kernels: torch.Tensor = get_hysteresis_kernel(device, dtype)
-
-        while ((edges_old - edges).abs() != 0).any():
-            weak: torch.Tensor = (edges == 0.5).float()
-            strong: torch.Tensor = (edges == 1).float()
-
-            hysteresis_magnitude: torch.Tensor = F.conv2d(
-                edges, hysteresis_kernels, padding=hysteresis_kernels.shape[-1] // 2
-            )
-            hysteresis_magnitude = (hysteresis_magnitude == 1).any(1, keepdim=True).to(dtype)
-            hysteresis_magnitude = hysteresis_magnitude * weak + strong
-
-            edges_old = edges.clone()
-            edges = hysteresis_magnitude + (hysteresis_magnitude == 0) * weak * 0.5
-
-        edges = hysteresis_magnitude
-
-    return magnitude, edges
-
-class Canny(nn.Module):
+class ProPainterCanny(nn.Module):
     r"""Module that finds edges of the input image and filters them using the Canny algorithm.
 
     Args:
-        input: input image tensor with shape :math:`(B,C,H,W)`.
+        input: input image tensor with shape :math:`(B,C,height,width)`.
         low_threshold: lower threshold for the hysteresis procedure.
         high_threshold: upper threshold for the hysteresis procedure.
         kernel_size: the size of the kernel for the gaussian blur.
@@ -2868,8 +2581,8 @@ class Canny(nn.Module):
         eps: regularization number to avoid NaN during backprop.
 
     Returns:
-        - the canny edge magnitudes map, shape of :math:`(B,1,H,W)`.
-        - the canny edge detection filtered by thresholds and hysteresis, shape of :math:`(B,1,H,W)`.
+        - the canny edge magnitudes map, shape of :math:`(B,1,height,width)`.
+        - the canny edge detection filtered by thresholds and hysteresis, shape of :math:`(B,1,height,width)`.
 
     Example:
         >>> input = torch.rand(5, 3, 4, 4)
@@ -2918,8 +2631,137 @@ class Canny(nn.Module):
 
         self.eps: float = eps
 
+    def canny(
+        self,
+        input: torch.Tensor,
+        low_threshold: float = 0.1,
+        high_threshold: float = 0.2,
+        kernel_size: Tuple[int, int] = (5, 5),
+        sigma: Tuple[float, float] = (1, 1),
+        hysteresis: bool = True,
+        eps: float = 1e-6,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        r"""Find edges of the input image and filters them using the Canny algorithm.
+        Args:
+            input: input image tensor with shape :math:`(B,C,height,width)`.
+            low_threshold: lower threshold for the hysteresis procedure.
+            high_threshold: upper threshold for the hysteresis procedure.
+            kernel_size: the size of the kernel for the gaussian blur.
+            sigma: the standard deviation of the kernel for the gaussian blur.
+            hysteresis: if True, applies the hysteresis edge tracking.
+                Otherwise, the edges are divided between weak (0.5) and strong (1) edges.
+            eps: regularization number to avoid NaN during backprop.
+
+        Returns:
+            - the canny edge magnitudes map, shape of :math:`(B,1,height,width)`.
+            - the canny edge detection filtered by thresholds and hysteresis, shape of :math:`(B,1,height,width)`.
+
+        .. note::
+        See a working example `here <https://kornia-tutorials.readthedocs.io/en/latest/
+        canny.html>`__.
+        """
+        if not isinstance(input, torch.Tensor):
+            raise TypeError(f"Input type is not a torch.Tensor. Got {type(input)}")
+
+        if not len(input.shape) == 4:
+            raise ValueError(f"Invalid input shape, we expect BxCxHxW. Got: {input.shape}")
+
+        if low_threshold > high_threshold:
+            raise ValueError(
+                "Invalid input thresholds. low_threshold should be smaller than the high_threshold. Got: {}>{}".format(
+                    low_threshold, high_threshold
+                )
+            )
+
+        if low_threshold < 0 and low_threshold > 1:
+            raise ValueError(f"Invalid input threshold. low_threshold should be in range (0,1). Got: {low_threshold}")
+
+        if high_threshold < 0 and high_threshold > 1:
+            raise ValueError(f"Invalid input threshold. high_threshold should be in range (0,1). Got: {high_threshold}")
+
+        device: torch.device = input.device
+        dtype: torch.dtype = input.dtype
+
+        # To Grayscale
+        if input.shape[1] == 3:
+            input = convert_rgb_to_grayscale(input)
+
+        # Gaussian filter
+        blurred: torch.Tensor = gaussian_blur2d(input, kernel_size, sigma)
+
+        # Compute the gradients
+        gradients: torch.Tensor = spatial_gradient(blurred, normalized=False)
+
+        # Unpack the edges
+        gx: torch.Tensor = gradients[:, :, 0]
+        gy: torch.Tensor = gradients[:, :, 1]
+
+        # Compute gradient magnitude and angle
+        magnitude: torch.Tensor = torch.sqrt(gx * gx + gy * gy + eps)
+        angle: torch.Tensor = torch.atan2(gy, gx)
+
+        # Radians to Degrees
+        angle = 180.0 * angle / math.pi
+
+        # Round angle to the nearest 45 degree
+        angle = torch.round(angle / 45) * 45
+
+        # Non-maximal suppression
+        nms_kernels: torch.Tensor = get_canny_nms_kernel(device, dtype)
+        nms_magnitude: torch.Tensor = F.conv2d(magnitude, nms_kernels, padding=nms_kernels.shape[-1] // 2)
+
+        # Get the indices for both directions
+        positive_idx: torch.Tensor = (angle / 45) % 8
+        positive_idx = positive_idx.long()
+
+        negative_idx: torch.Tensor = ((angle / 45) + 4) % 8
+        negative_idx = negative_idx.long()
+
+        # Apply the non-maximum suppression to the different directions
+        channel_select_filtered_positive: torch.Tensor = torch.gather(nms_magnitude, 1, positive_idx)
+        channel_select_filtered_negative: torch.Tensor = torch.gather(nms_magnitude, 1, negative_idx)
+
+        channel_select_filtered: torch.Tensor = torch.stack(
+            [channel_select_filtered_positive, channel_select_filtered_negative], 1
+        )
+
+        is_max: torch.Tensor = channel_select_filtered.min(dim=1)[0] > 0.0
+
+        magnitude = magnitude * is_max
+
+        # Threshold
+        edges: torch.Tensor = F.threshold(magnitude, low_threshold, 0.0)
+
+        low: torch.Tensor = magnitude > low_threshold
+        high: torch.Tensor = magnitude > high_threshold
+
+        edges = low * 0.5 + high * 0.5
+        edges = edges.to(dtype)
+
+        # Hysteresis
+        if hysteresis:
+            edges_old: torch.Tensor = -torch.ones(edges.shape, device=edges.device, dtype=dtype)
+            hysteresis_kernels: torch.Tensor = get_hysteresis_kernel(device, dtype)
+
+            while ((edges_old - edges).abs() != 0).any():
+                weak: torch.Tensor = (edges == 0.5).float()
+                strong: torch.Tensor = (edges == 1).float()
+
+                hysteresis_magnitude: torch.Tensor = F.conv2d(
+                    edges, hysteresis_kernels, padding=hysteresis_kernels.shape[-1] // 2
+                )
+                hysteresis_magnitude = (hysteresis_magnitude == 1).any(1, keepdim=True).to(dtype)
+                hysteresis_magnitude = hysteresis_magnitude * weak + strong
+
+                edges_old = edges.clone()
+                edges = hysteresis_magnitude + (hysteresis_magnitude == 0) * weak * 0.5
+
+            edges = hysteresis_magnitude
+
+        return magnitude, edges
+
     def forward(self, input: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-        return canny(
+        return self.canny(
             input, self.low_threshold, self.high_threshold, self.kernel_size, self.sigma, self.hysteresis, self.eps
         )
 
@@ -2927,28 +2769,28 @@ class ProPainterLosses():
     def __init__(self, config) -> None:
         self.config = config
         self.l1_loss = L1Loss()
-        self.perc_loss = LPIPSLoss(use_input_norm=True, range_norm=True)
-        self.adversarial_loss = AdversarialLoss(type=config.GAN_LOSS)
-        self.flow_loss = FlowLoss()
-        self.edge_loss = EdgeLoss()
-        self.canny = Canny(sigma=(2,2), low_threshold=0.1, high_threshold=0.2)
+        self.perc_loss = ProPainterLpipsLoss(use_input_norm=True, range_norm=True)
+        self.adversarial_loss = ProPainterAdversarialLoss(type=config.GAN_LOSS)
+        self.flow_loss = ProPainterFlowLoss()
+        self.edge_loss = ProPainterEdgeLoss()
+        self.canny = ProPainterCanny(sigma=(2,2), low_threshold=0.1, high_threshold=0.2)
 
     def get_edges(self, flows): 
-        # (b, t, 2, H, W)
-        b, t, _, h, w = flows.shape
-        flows = flows.view(-1, 2, h, w)
+        # (batch_size, timesteps, 2, height, width)
+        batch_size, timesteps, _, height, width = flows.shape
+        flows = flows.view(-1, 2, height, width)
         flows_gray = (flows[:, 0, None] ** 2 + flows[:, 1, None] ** 2) ** 0.5
         if flows_gray.max() < 1:
             flows_gray = flows_gray*0
         else:
             flows_gray = flows_gray / flows_gray.max()
             
-        magnitude, edges = self.canny(flows_gray.float())
-        edges = edges.view(b, t, 1, h, w)
+        _, edges = self.canny(flows_gray.float())
+        edges = edges.view(batch_size, timesteps, 1, height, width)
         return edges
 
     def calculate_losses(self, pred_imgs,masks_dilated, frames, comp_frames ,discriminator, pred_flows_bi, gt_flows_bi,flow_masks,pred_edges_bi):
-        _,_,_, h, w = frames.size()
+        _,_,_, height, width = frames.size()
         
         gt_edges_forward = self.get_edges(gt_flows_bi[0])
         gt_edges_backward = self.get_edges(gt_flows_bi[1])
@@ -2967,7 +2809,7 @@ class ProPainterLosses():
 
         # perceptual loss
         if self.config.perceptual_weight > 0:
-            perc_loss = self.perc_loss(pred_imgs.view(-1,3,h,w), frames.view(-1,3,h,w))[0] * self.config['losses']['perceptual_weight']
+            perc_loss = self.perc_loss(pred_imgs.view(-1,3,height,width), frames.view(-1,3,height,width))[0] * self.config['losses']['perceptual_weight']
             gen_loss += perc_loss
 
         # gan loss
@@ -2997,6 +2839,7 @@ class ProPainterLosses():
 
         flow_complete_loss = flow_loss + warp_loss * 0.01 + edge_loss
         return gen_loss, dis_loss, flow_complete_loss
+
 class ProPainterPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -3199,15 +3042,15 @@ class ProPainterModel(ProPainterPreTrainedModel):
                 pad_len_s = max(0, f) - s_f
                 pad_len_e = e_f - min(self.video_length, f + subvideo_length_img_prop)
 
-                b, t, _, _, _ = masks_dilated[:, s_f:e_f].size()
+                batch_size, timesteps, _, _, _ = masks_dilated[:, s_f:e_f].size()
                 pred_flows_bi_sub = (pred_flows_bi[0][:, s_f:e_f-1], pred_flows_bi[1][:, s_f:e_f-1])
                 prop_imgs_sub, updated_local_masks_sub = self.inpaint_generator.img_propagation(masked_frames[:, s_f:e_f], 
                                                                     pred_flows_bi_sub, 
                                                                     masks_dilated[:, s_f:e_f], 
                                                                     'nearest')
                 updated_frames_sub = pixel_values[:, s_f:e_f] * (1 - masks_dilated[:, s_f:e_f]) + \
-                                    prop_imgs_sub.view(b, t, 3, height, width) * masks_dilated[:, s_f:e_f]
-                updated_masks_sub = updated_local_masks_sub.view(b, t, 1, height, width)
+                                    prop_imgs_sub.view(batch_size, timesteps, 3, height, width) * masks_dilated[:, s_f:e_f]
+                updated_masks_sub = updated_local_masks_sub.view(batch_size, timesteps, 1, height, width)
                 
                 updated_frames.append(updated_frames_sub[:, pad_len_s:e_f-s_f-pad_len_e])
                 updated_masks.append(updated_masks_sub[:, pad_len_s:e_f-s_f-pad_len_e])
@@ -3216,10 +3059,10 @@ class ProPainterModel(ProPainterPreTrainedModel):
             updated_frames = torch.cat(updated_frames, dim=1)
             updated_masks = torch.cat(updated_masks, dim=1)
         else:
-            b, t, _, _, _ = masks_dilated.size()
+            batch_size, timesteps, _, _, _ = masks_dilated.size()
             prop_imgs, updated_local_masks = self.inpaint_generator.img_propagation(masked_frames, pred_flows_bi, masks_dilated, 'nearest')
-            updated_frames = pixel_values * (1 - masks_dilated) + prop_imgs.view(b, t, 3, height, width) * masks_dilated
-            updated_masks = updated_local_masks.view(b, t, 1, height, width)
+            updated_frames = pixel_values * (1 - masks_dilated) + prop_imgs.view(batch_size, timesteps, 3, height, width) * masks_dilated
+            updated_masks = updated_local_masks.view(batch_size, timesteps, 1, height, width)
             torch.cuda.empty_cache()
 
         return updated_frames,updated_masks
