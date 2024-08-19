@@ -960,11 +960,11 @@ class ProPainterRecurrentFlowCompleteNet(nn.Module):
         features_dec1 = self.decoder1(features_dec2)
 
         flow = self.upsample(features_dec1)
-        if self.training:
-            edge = self.edgeDetector(flow)
-            edge = edge.view(batch_size, timesteps, 1, height, width)
-        else:
-            edge = None
+        # if self.training:
+        edge = self.edgeDetector(flow)
+        edge = edge.view(batch_size, timesteps, 1, height, width)
+        # else:
+        #     edge = None
 
         flow = flow.view(batch_size, timesteps, 2, height, width)
 
@@ -1982,13 +1982,978 @@ class AdversarialLoss(nn.Module):
             loss = self.criterion(generated_frames, labels)
             return loss
 
+def create_mask(tensor, paddings):
+    """
+    tensor shape: [b, c, h, w]
+    paddings: [2 x 2] shape list, the first row indicates up and down paddings
+    the second row indicates left and right paddings
+    |            |
+    |       x    |
+    |     x * x  |
+    |       x    |
+    |            |
+    """
+    shape = tensor.shape
+    inner_height = shape[2] - (paddings[0][0] + paddings[0][1])
+    inner_width = shape[3] - (paddings[1][0] + paddings[1][1])
+    inner = torch.ones([inner_height, inner_width])
+    torch_paddings = [paddings[1][0], paddings[1][1], paddings[0][0], paddings[0][1]]  # left, right, up and down
+    mask2d = F.pad(inner, pad=torch_paddings)
+    mask3d = mask2d.unsqueeze(0).repeat(shape[0], 1, 1)
+    mask4d = mask3d.unsqueeze(1)
+    return mask4d.detach()
+
+def smoothness_deltas(flow):
+    """
+    flow: [b, c, h, w]
+    """
+    mask_x = create_mask(flow, [[0, 0], [0, 1]])
+    mask_y = create_mask(flow, [[0, 1], [0, 0]])
+    mask = torch.cat((mask_x, mask_y), dim=1)
+    mask = mask.to(flow.device)
+    filter_x = torch.tensor([[0, 0, 0.], [0, 1, -1], [0, 0, 0]])
+    filter_y = torch.tensor([[0, 0, 0.], [0, 1, 0], [0, -1, 0]])
+    weights = torch.ones([2, 1, 3, 3])
+    weights[0, 0] = filter_x
+    weights[1, 0] = filter_y
+    weights = weights.to(flow.device)
+
+    flow_u, flow_v = torch.split(flow, split_size_or_sections=1, dim=1)
+    delta_u = F.conv2d(flow_u, weights, stride=1, padding=1)
+    delta_v = F.conv2d(flow_v, weights, stride=1, padding=1)
+    return delta_u, delta_v, mask
+
+def charbonnier_loss(x, mask=None, truncate=None, alpha=0.45, beta=1.0, epsilon=0.001):
+    """
+    Compute the generalized charbonnier loss of the difference tensor x
+    All positions where mask == 0 are not taken into account
+    x: a tensor of shape [b, c, h, w]
+    mask: a mask of shape [b, mc, h, w], where mask channels must be either 1 or the same as
+    the number of channels of x. Entries should be 0 or 1
+    return: loss
+    """
+    b, c, h, w = x.shape
+    norm = b * c * h * w
+    error = torch.pow(torch.square(x * beta) + torch.square(torch.tensor(epsilon)), alpha)
+    if mask is not None:
+        error = mask * error
+    if truncate is not None:
+        error = torch.min(error, truncate)
+    return torch.sum(error) / norm
+
+def second_order_deltas(flow):
+    """
+    consider the single flow first
+    flow shape: [b, c, h, w]
+    """
+    # create mask
+    mask_x = create_mask(flow, [[0, 0], [1, 1]])
+    mask_y = create_mask(flow, [[1, 1], [0, 0]])
+    mask_diag = create_mask(flow, [[1, 1], [1, 1]])
+    mask = torch.cat((mask_x, mask_y, mask_diag, mask_diag), dim=1)
+    mask = mask.to(flow.device)
+
+    filter_x = torch.tensor([[0, 0, 0.], [1, -2, 1], [0, 0, 0]])
+    filter_y = torch.tensor([[0, 1, 0.], [0, -2, 0], [0, 1, 0]])
+    filter_diag1 = torch.tensor([[1, 0, 0.], [0, -2, 0], [0, 0, 1]])
+    filter_diag2 = torch.tensor([[0, 0, 1.], [0, -2, 0], [1, 0, 0]])
+    weights = torch.ones([4, 1, 3, 3])
+    weights[0] = filter_x
+    weights[1] = filter_y
+    weights[2] = filter_diag1
+    weights[3] = filter_diag2
+    weights = weights.to(flow.device)
+
+    # split the flow into flow_u and flow_v, conv them with the weights
+    flow_u, flow_v = torch.split(flow, split_size_or_sections=1, dim=1)
+    delta_u = F.conv2d(flow_u, weights, stride=1, padding=1)
+    delta_v = F.conv2d(flow_v, weights, stride=1, padding=1)
+    return delta_u, delta_v, mask
+
+def smoothness_loss(flow, cmask):
+    delta_u, delta_v, _ = smoothness_deltas(flow)
+    loss_u = charbonnier_loss(delta_u, cmask)
+    loss_v = charbonnier_loss(delta_v, cmask)
+    return loss_u + loss_v
+
+def second_order_loss(flow, cmask):
+    delta_u, delta_v, mask = second_order_deltas(flow)
+    loss_u = charbonnier_loss(delta_u, cmask)
+    loss_v = charbonnier_loss(delta_v, cmask)
+    return loss_u + loss_v
+
+def rgb2gray(image):
+    gray_image = image[:, 0] * 0.299 + image[:, 1] * 0.587 + 0.110 * image[:, 2]
+    gray_image = gray_image.unsqueeze(1)
+    return gray_image
+
+def ternary_transform(image, max_distance=1):
+    device = image.device
+    patch_size = 2 * max_distance + 1
+    intensities = rgb2gray(image) * 255
+    out_channels = patch_size * patch_size
+    w = np.eye(out_channels).reshape(out_channels, 1, patch_size, patch_size)
+    weights = torch.from_numpy(w).float().to(device)
+    patches = F.conv2d(intensities, weights, stride=1, padding=1)
+    transf = patches - intensities
+    transf_norm = transf / torch.sqrt(0.81 + torch.square(transf))
+    return transf_norm
+
+def hamming_distance(t1, t2):
+    dist = torch.square(t1 - t2)
+    dist_norm = dist / (0.1 + dist)
+    dist_sum = torch.sum(dist_norm, dim=1, keepdim=True)
+    return dist_sum
+
+def ternary_loss2(frame1, warp_frame21, confMask, masks, max_distance=1):
+    """
+
+    Args:
+        frame1: torch tensor, with shape [b * t, c, h, w]
+        warp_frame21: torch tensor, with shape [b * t, c, h, w]
+        confMask: confidence mask, with shape [b * t, c, h, w]
+        masks: torch tensor, with shape [b * t, c, h, w]
+        max_distance: maximum distance.
+
+    Returns: ternary loss
+
+    """
+    t1 = ternary_transform(frame1)
+    t21 = ternary_transform(warp_frame21)
+    dist = hamming_distance(t1, t21) 
+    loss = torch.mean(dist * confMask * masks) / torch.mean(masks)
+    return loss
+
+def ternary_loss(flow_comp, flow_gt, mask, current_frame, shift_frame, scale_factor=1):
+    if scale_factor != 1:
+        current_frame = F.interpolate(current_frame, scale_factor=1 / scale_factor, mode='bilinear')
+        shift_frame = F.interpolate(shift_frame, scale_factor=1 / scale_factor, mode='bilinear')
+    warped_sc = flow_warp(shift_frame, flow_gt.permute(0, 2, 3, 1))
+    noc_mask = torch.exp(-50. * torch.sum(torch.abs(current_frame - warped_sc), dim=1).pow(2)).unsqueeze(1)
+    warped_comp_sc = flow_warp(shift_frame, flow_comp.permute(0, 2, 3, 1))
+    loss = ternary_loss2(current_frame, warped_comp_sc, noc_mask, mask)
+    return loss
+
+class FlowLoss(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.l1_criterion = nn.L1Loss()
+
+    def forward(self, pred_flows, gt_flows, masks, frames):
+        # pred_flows: b t-1 2 h w
+        loss = 0
+        warp_loss = 0
+        h, w = pred_flows[0].shape[-2:]
+        masks = [masks[:,:-1,...].contiguous(), masks[:, 1:, ...].contiguous()]
+        frames0 = frames[:,:-1,...]
+        frames1 = frames[:,1:,...]
+        current_frames = [frames0, frames1]
+        next_frames = [frames1, frames0]
+        for i in range(len(pred_flows)):
+            # print(pred_flows[i].shape)
+            combined_flow = pred_flows[i] * masks[i] + gt_flows[i] * (1-masks[i])
+            l1_loss = self.l1_criterion(pred_flows[i] * masks[i], gt_flows[i] * masks[i]) / torch.mean(masks[i])
+            l1_loss += self.l1_criterion(pred_flows[i] * (1-masks[i]), gt_flows[i] * (1-masks[i])) / torch.mean((1-masks[i]))
+
+            smooth_loss = smoothness_loss(combined_flow.reshape(-1,2,h,w), masks[i].reshape(-1,1,h,w))
+            smooth_loss2 = second_order_loss(combined_flow.reshape(-1,2,h,w), masks[i].reshape(-1,1,h,w))
+            
+            warp_loss_i = ternary_loss(combined_flow.reshape(-1,2,h,w), gt_flows[i].reshape(-1,2,h,w), 
+                            masks[i].reshape(-1,1,h,w), current_frames[i].reshape(-1,3,h,w), next_frames[i].reshape(-1,3,h,w)) 
+
+            loss += l1_loss + smooth_loss + smooth_loss2
+
+            warp_loss += warp_loss_i
+            
+        return loss, warp_loss
+
+def edgeLoss(preds_edges, edges):
+    """
+
+    Args:
+        preds_edges: with shape [b, c, h , w]
+        edges: with shape [b, c, h, w]
+
+    Returns: Edge losses
+
+    """
+    mask = (edges > 0.5).float()
+    b, c, h, w = mask.shape
+    num_pos = torch.sum(mask, dim=[1, 2, 3]).float() # Shape: [b,].
+    num_neg = c * h * w - num_pos # Shape: [b,].
+    neg_weights = (num_neg / (num_pos + num_neg)).unsqueeze(1).unsqueeze(2).unsqueeze(3)
+    pos_weights = (num_pos / (num_pos + num_neg)).unsqueeze(1).unsqueeze(2).unsqueeze(3)
+    weight = neg_weights * mask + pos_weights * (1 - mask)  # weight for debug
+    losses = F.binary_cross_entropy_with_logits(preds_edges.float(), edges.float(), weight=weight, reduction='none')
+    loss = torch.mean(losses)
+    return loss
+
+class EdgeLoss(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, pred_edges, gt_edges, masks):
+        # pred_flows: b t-1 1 h w
+        loss = 0
+        h, w = pred_edges[0].shape[-2:]
+        masks = [masks[:,:-1,...].contiguous(), masks[:, 1:, ...].contiguous()]
+        for i in range(len(pred_edges)):
+            # print(f'edges_{i}',  torch.sum(gt_edges[i])) # debug
+            combined_edge = pred_edges[i] * masks[i] + gt_edges[i] * (1-masks[i])
+            edge_loss = (edgeLoss(pred_edges[i].reshape(-1,1,h,w), gt_edges[i].reshape(-1,1,h,w)) \
+                        + 5 * edgeLoss(combined_edge.reshape(-1,1,h,w), gt_edges[i].reshape(-1,1,h,w)))
+            loss += edge_loss 
+
+        return loss
+
+
+def rgb_to_grayscale(image, rgb_weights = None):
+    if len(image.shape) < 3 or image.shape[-3] != 3:
+        raise ValueError(f"Input size must have a shape of (*, 3, H, W). Got {image.shape}")
+
+    if rgb_weights is None:
+        # 8 bit images
+        if image.dtype == torch.uint8:
+            rgb_weights = torch.tensor([76, 150, 29], device=image.device, dtype=torch.uint8)
+        # floating point images
+        elif image.dtype in (torch.float16, torch.float32, torch.float64):
+            rgb_weights = torch.tensor([0.299, 0.587, 0.114], device=image.device, dtype=image.dtype)
+        else:
+            raise TypeError(f"Unknown data type: {image.dtype}")
+    else:
+        # is tensor that we make sure is in the same device/dtype
+        rgb_weights = rgb_weights.to(image)
+
+    # unpack the color image channels with RGB order
+    r = image[..., 0:1, :, :]
+    g = image[..., 1:2, :, :]
+    b = image[..., 2:3, :, :]
+
+    w_r, w_g, w_b = rgb_weights.unbind()
+    return w_r * r + w_g * g + w_b * b
+
+def gaussian(window_size: int, sigma: float) -> torch.Tensor:
+    device, dtype = None, None
+    if isinstance(sigma, torch.Tensor):
+        device, dtype = sigma.device, sigma.dtype
+    x = torch.arange(window_size, device=device, dtype=dtype) - window_size // 2
+    if window_size % 2 == 0:
+        x = x + 0.5
+
+    gauss = torch.exp((-x.pow(2.0) / (2 * sigma**2)).float())
+    return gauss / gauss.sum()
+
+def get_gaussian_kernel1d(kernel_size: int, sigma: float, force_even: bool = False) -> torch.Tensor:
+    r"""Function that returns Gaussian filter coefficients.
+
+    Args:
+        kernel_size: filter size. It should be odd and positive.
+        sigma: gaussian standard deviation.
+        force_even: overrides requirement for odd kernel size.
+
+    Returns:
+        1D tensor with gaussian filter coefficients.
+
+    Shape:
+        - Output: :math:`(\text{kernel_size})`
+
+    Examples:
+
+        >>> get_gaussian_kernel1d(3, 2.5)
+        tensor([0.3243, 0.3513, 0.3243])
+
+        >>> get_gaussian_kernel1d(5, 1.5)
+        tensor([0.1201, 0.2339, 0.2921, 0.2339, 0.1201])
+    """
+    if not isinstance(kernel_size, int) or ((kernel_size % 2 == 0) and not force_even) or (kernel_size <= 0):
+        raise TypeError("kernel_size must be an odd positive integer. " "Got {}".format(kernel_size))
+    window_1d: torch.Tensor = gaussian(kernel_size, sigma)
+    return window_1d
+
+def _compute_padding(kernel_size: List[int]) -> List[int]:
+    """Compute padding tuple."""
+    # 4 or 6 ints:  (padding_left, padding_right,padding_top,padding_bottom)
+    # https://pytorch.org/docs/stable/nn.html#torch.nn.functional.pad
+    if len(kernel_size) < 2:
+        raise AssertionError(kernel_size)
+    computed = [k - 1 for k in kernel_size]
+
+    # for even kernels we need to do asymmetric padding :(
+    out_padding = 2 * len(kernel_size) * [0]
+
+    for i in range(len(kernel_size)):
+        computed_tmp = computed[-(i + 1)]
+
+        pad_front = computed_tmp // 2
+        pad_rear = computed_tmp - pad_front
+
+        out_padding[2 * i + 0] = pad_front
+        out_padding[2 * i + 1] = pad_rear
+
+    return out_padding
+
+def filter2d(
+    input: torch.Tensor,
+    kernel: torch.Tensor,
+    border_type: str = 'reflect',
+    normalized: bool = False,
+    padding: str = 'same',
+) -> torch.Tensor:
+    r"""Convolve a tensor with a 2d kernel.
+
+    The function applies a given kernel to a tensor. The kernel is applied
+    independently at each depth channel of the tensor. Before applying the
+    kernel, the function applies padding according to the specified mode so
+    that the output remains in the same shape.
+
+    Args:
+        input: the input tensor with shape of
+          :math:`(B, C, H, W)`.
+        kernel: the kernel to be convolved with the input
+          tensor. The kernel shape must be :math:`(1, kH, kW)` or :math:`(B, kH, kW)`.
+        border_type: the padding mode to be applied before convolving.
+          The expected modes are: ``'constant'``, ``'reflect'``,
+          ``'replicate'`` or ``'circular'``.
+        normalized: If True, kernel will be L1 normalized.
+        padding: This defines the type of padding.
+          2 modes available ``'same'`` or ``'valid'``.
+
+    Return:
+        torch.Tensor: the convolved tensor of same size and numbers of channels
+        as the input with shape :math:`(B, C, H, W)`.
+
+    Example:
+        >>> input = torch.tensor([[[
+        ...    [0., 0., 0., 0., 0.],
+        ...    [0., 0., 0., 0., 0.],
+        ...    [0., 0., 5., 0., 0.],
+        ...    [0., 0., 0., 0., 0.],
+        ...    [0., 0., 0., 0., 0.],]]])
+        >>> kernel = torch.ones(1, 3, 3)
+        >>> filter2d(input, kernel, padding='same')
+        tensor([[[[0., 0., 0., 0., 0.],
+                  [0., 5., 5., 5., 0.],
+                  [0., 5., 5., 5., 0.],
+                  [0., 5., 5., 5., 0.],
+                  [0., 0., 0., 0., 0.]]]])
+    """
+    if not isinstance(input, torch.Tensor):
+        raise TypeError(f"Input input is not torch.Tensor. Got {type(input)}")
+
+    if not isinstance(kernel, torch.Tensor):
+        raise TypeError(f"Input kernel is not torch.Tensor. Got {type(kernel)}")
+
+    if not isinstance(border_type, str):
+        raise TypeError(f"Input border_type is not string. Got {type(border_type)}")
+
+    if border_type not in ['constant', 'reflect', 'replicate', 'circular']:
+        raise ValueError(
+            f"Invalid border type, we expect 'constant', \
+        'reflect', 'replicate', 'circular'. Got:{border_type}"
+        )
+
+    if not isinstance(padding, str):
+        raise TypeError(f"Input padding is not string. Got {type(padding)}")
+
+    if padding not in ['valid', 'same']:
+        raise ValueError(f"Invalid padding mode, we expect 'valid' or 'same'. Got: {padding}")
+
+    if not len(input.shape) == 4:
+        raise ValueError(f"Invalid input shape, we expect BxCxHxW. Got: {input.shape}")
+
+    if (not len(kernel.shape) == 3) and not ((kernel.shape[0] == 0) or (kernel.shape[0] == input.shape[0])):
+        raise ValueError(f"Invalid kernel shape, we expect 1xHxW or BxHxW. Got: {kernel.shape}")
+
+    # prepare kernel
+    b, c, h, w = input.shape
+    tmp_kernel: torch.Tensor = kernel.unsqueeze(1).to(input)
+
+    if normalized:
+        tmp_kernel = normalize_kernel2d(tmp_kernel)
+
+    tmp_kernel = tmp_kernel.expand(-1, c, -1, -1)
+
+    height, width = tmp_kernel.shape[-2:]
+
+    # pad the input tensor
+    if padding == 'same':
+        padding_shape: List[int] = _compute_padding([height, width])
+        input = F.pad(input, padding_shape, mode=border_type)
+
+    # kernel and input tensor reshape to align element-wise or batch-wise params
+    tmp_kernel = tmp_kernel.reshape(-1, 1, height, width)
+    input = input.view(-1, tmp_kernel.size(0), input.size(-2), input.size(-1))
+
+    # convolve the tensor with the kernel.
+    output = F.conv2d(input, tmp_kernel, groups=tmp_kernel.size(0), padding=0, stride=1)
+
+    if padding == 'same':
+        out = output.view(b, c, h, w)
+    else:
+        out = output.view(b, c, h - height + 1, w - width + 1)
+
+    return out
+
+def filter2d_separable(
+    input: torch.Tensor,
+    kernel_x: torch.Tensor,
+    kernel_y: torch.Tensor,
+    border_type: str = 'reflect',
+    normalized: bool = False,
+    padding: str = 'same',
+) -> torch.Tensor:
+    r"""Convolve a tensor with two 1d kernels, in x and y directions.
+
+    The function applies a given kernel to a tensor. The kernel is applied
+    independently at each depth channel of the tensor. Before applying the
+    kernel, the function applies padding according to the specified mode so
+    that the output remains in the same shape.
+
+    Args:
+        input: the input tensor with shape of
+          :math:`(B, C, H, W)`.
+        kernel_x: the kernel to be convolved with the input
+          tensor. The kernel shape must be :math:`(1, kW)` or :math:`(B, kW)`.
+        kernel_y: the kernel to be convolved with the input
+          tensor. The kernel shape must be :math:`(1, kH)` or :math:`(B, kH)`.
+        border_type: the padding mode to be applied before convolving.
+          The expected modes are: ``'constant'``, ``'reflect'``,
+          ``'replicate'`` or ``'circular'``.
+        normalized: If True, kernel will be L1 normalized.
+        padding: This defines the type of padding.
+          2 modes available ``'same'`` or ``'valid'``.
+
+    Return:
+        torch.Tensor: the convolved tensor of same size and numbers of channels
+        as the input with shape :math:`(B, C, H, W)`.
+
+    Example:
+        >>> input = torch.tensor([[[
+        ...    [0., 0., 0., 0., 0.],
+        ...    [0., 0., 0., 0., 0.],
+        ...    [0., 0., 5., 0., 0.],
+        ...    [0., 0., 0., 0., 0.],
+        ...    [0., 0., 0., 0., 0.],]]])
+        >>> kernel = torch.ones(1, 3)
+
+        >>> filter2d_separable(input, kernel, kernel, padding='same')
+        tensor([[[[0., 0., 0., 0., 0.],
+                  [0., 5., 5., 5., 0.],
+                  [0., 5., 5., 5., 0.],
+                  [0., 5., 5., 5., 0.],
+                  [0., 0., 0., 0., 0.]]]])
+    """
+    out_x = filter2d(input, kernel_x.unsqueeze(0), border_type, normalized, padding)
+    out = filter2d(out_x, kernel_y.unsqueeze(-1), border_type, normalized, padding)
+    return out
+
+def get_gaussian_kernel2d(
+    kernel_size: Tuple[int, int], sigma: Tuple[float, float], force_even: bool = False
+) -> torch.Tensor:
+    r"""Function that returns Gaussian filter matrix coefficients.
+
+    Args:
+        kernel_size: filter sizes in the x and y direction.
+         Sizes should be odd and positive.
+        sigma: gaussian standard deviation in the x and y
+         direction.
+        force_even: overrides requirement for odd kernel size.
+
+    Returns:
+        2D tensor with gaussian filter matrix coefficients.
+
+    Shape:
+        - Output: :math:`(\text{kernel_size}_x, \text{kernel_size}_y)`
+
+    Examples:
+        >>> get_gaussian_kernel2d((3, 3), (1.5, 1.5))
+        tensor([[0.0947, 0.1183, 0.0947],
+                [0.1183, 0.1478, 0.1183],
+                [0.0947, 0.1183, 0.0947]])
+        >>> get_gaussian_kernel2d((3, 5), (1.5, 1.5))
+        tensor([[0.0370, 0.0720, 0.0899, 0.0720, 0.0370],
+                [0.0462, 0.0899, 0.1123, 0.0899, 0.0462],
+                [0.0370, 0.0720, 0.0899, 0.0720, 0.0370]])
+    """
+    if not isinstance(kernel_size, tuple) or len(kernel_size) != 2:
+        raise TypeError(f"kernel_size must be a tuple of length two. Got {kernel_size}")
+    if not isinstance(sigma, tuple) or len(sigma) != 2:
+        raise TypeError(f"sigma must be a tuple of length two. Got {sigma}")
+    ksize_x, ksize_y = kernel_size
+    sigma_x, sigma_y = sigma
+    kernel_x: torch.Tensor = get_gaussian_kernel1d(ksize_x, sigma_x, force_even)
+    kernel_y: torch.Tensor = get_gaussian_kernel1d(ksize_y, sigma_y, force_even)
+    kernel_2d: torch.Tensor = torch.matmul(kernel_x.unsqueeze(-1), kernel_y.unsqueeze(-1).t())
+    return kernel_2d
+
+def gaussian_blur2d(
+    input: torch.Tensor,
+    kernel_size: Tuple[int, int],
+    sigma: Tuple[float, float],
+    border_type: str = 'reflect',
+    separable: bool = True,
+) -> torch.Tensor:
+    r"""Create an operator that blurs a tensor using a Gaussian filter.
+
+    .. image:: _static/img/gaussian_blur2d.png
+
+    The operator smooths the given tensor with a gaussian kernel by convolving
+    it to each channel. It supports batched operation.
+
+    Arguments:
+        input: the input tensor with shape :math:`(B,C,H,W)`.
+        kernel_size: the size of the kernel.
+        sigma: the standard deviation of the kernel.
+        border_type: the padding mode to be applied before convolving.
+          The expected modes are: ``'constant'``, ``'reflect'``,
+          ``'replicate'`` or ``'circular'``. Default: ``'reflect'``.
+        separable: run as composition of two 1d-convolutions.
+
+    Returns:
+        the blurred tensor with shape :math:`(B, C, H, W)`.
+
+    .. note::
+       See a working example `here <https://kornia-tutorials.readthedocs.io/en/latest/
+       gaussian_blur.html>`__.
+
+    Examples:
+        >>> input = torch.rand(2, 4, 5, 5)
+        >>> output = gaussian_blur2d(input, (3, 3), (1.5, 1.5))
+        >>> output.shape
+        torch.Size([2, 4, 5, 5])
+    """
+    if separable:
+        kernel_x: torch.Tensor = get_gaussian_kernel1d(kernel_size[1], sigma[1])
+        kernel_y: torch.Tensor = get_gaussian_kernel1d(kernel_size[0], sigma[0])
+        out = filter2d_separable(input, kernel_x[None], kernel_y[None], border_type)
+    else:
+        kernel: torch.Tensor = get_gaussian_kernel2d(kernel_size, sigma)
+        out = filter2d(input, kernel[None], border_type)
+    return out
+
+def get_sobel_kernel_3x3() -> torch.Tensor:
+    """Utility function that returns a sobel kernel of 3x3."""
+    return torch.tensor([[-1.0, 0.0, 1.0], [-2.0, 0.0, 2.0], [-1.0, 0.0, 1.0]])
+
+
+def get_sobel_kernel_5x5_2nd_order() -> torch.Tensor:
+    """Utility function that returns a 2nd order sobel kernel of 5x5."""
+    return torch.tensor(
+        [
+            [-1.0, 0.0, 2.0, 0.0, -1.0],
+            [-4.0, 0.0, 8.0, 0.0, -4.0],
+            [-6.0, 0.0, 12.0, 0.0, -6.0],
+            [-4.0, 0.0, 8.0, 0.0, -4.0],
+            [-1.0, 0.0, 2.0, 0.0, -1.0],
+        ]
+    )
+
+
+def _get_sobel_kernel_5x5_2nd_order_xy() -> torch.Tensor:
+    """Utility function that returns a 2nd order sobel kernel of 5x5."""
+    return torch.tensor(
+        [
+            [-1.0, -2.0, 0.0, 2.0, 1.0],
+            [-2.0, -4.0, 0.0, 4.0, 2.0],
+            [0.0, 0.0, 0.0, 0.0, 0.0],
+            [2.0, 4.0, 0.0, -4.0, -2.0],
+            [1.0, 2.0, 0.0, -2.0, -1.0],
+        ]
+    )
+
+def get_diff_kernel_3x3() -> torch.Tensor:
+    """Utility function that returns a first order derivative kernel of 3x3."""
+    return torch.tensor([[-0.0, 0.0, 0.0], [-1.0, 0.0, 1.0], [-0.0, 0.0, 0.0]])
+
+
+def get_sobel_kernel2d() -> torch.Tensor:
+    kernel_x: torch.Tensor = get_sobel_kernel_3x3()
+    kernel_y: torch.Tensor = kernel_x.transpose(0, 1)
+    return torch.stack([kernel_x, kernel_y])
+
+
+def get_diff_kernel2d() -> torch.Tensor:
+    kernel_x: torch.Tensor = get_diff_kernel_3x3()
+    kernel_y: torch.Tensor = kernel_x.transpose(0, 1)
+    return torch.stack([kernel_x, kernel_y])
+
+
+def get_sobel_kernel2d_2nd_order() -> torch.Tensor:
+    gxx: torch.Tensor = get_sobel_kernel_5x5_2nd_order()
+    gyy: torch.Tensor = gxx.transpose(0, 1)
+    gxy: torch.Tensor = _get_sobel_kernel_5x5_2nd_order_xy()
+    return torch.stack([gxx, gxy, gyy])
+
+
+def get_diff_kernel2d_2nd_order() -> torch.Tensor:
+    gxx: torch.Tensor = torch.tensor([[0.0, 0.0, 0.0], [1.0, -2.0, 1.0], [0.0, 0.0, 0.0]])
+    gyy: torch.Tensor = gxx.transpose(0, 1)
+    gxy: torch.Tensor = torch.tensor([[-1.0, 0.0, 1.0], [0.0, 0.0, 0.0], [1.0, 0.0, -1.0]])
+    return torch.stack([gxx, gxy, gyy])
+
+def get_spatial_gradient_kernel2d(mode: str, order: int) -> torch.Tensor:
+    r"""Function that returns kernel for 1st or 2nd order image gradients, using one of the following operators:
+
+    sobel, diff.
+    """
+    if mode not in ['sobel', 'diff']:
+        raise TypeError(
+            "mode should be either sobel\
+                         or diff. Got {}".format(
+                mode
+            )
+        )
+    if order not in [1, 2]:
+        raise TypeError(
+            "order should be either 1 or 2\
+                         Got {}".format(
+                order
+            )
+        )
+    if mode == 'sobel' and order == 1:
+        kernel: torch.Tensor = get_sobel_kernel2d()
+    elif mode == 'sobel' and order == 2:
+        kernel = get_sobel_kernel2d_2nd_order()
+    elif mode == 'diff' and order == 1:
+        kernel = get_diff_kernel2d()
+    elif mode == 'diff' and order == 2:
+        kernel = get_diff_kernel2d_2nd_order()
+    else:
+        raise NotImplementedError("")
+    return kernel
+
+def normalize_kernel2d(input: torch.Tensor) -> torch.Tensor:
+    r"""Normalize both derivative and smoothing kernel."""
+    if len(input.size()) < 2:
+        raise TypeError(f"input should be at least 2D tensor. Got {input.size()}")
+    norm: torch.Tensor = input.abs().sum(dim=-1).sum(dim=-1)
+    return input / (norm.unsqueeze(-1).unsqueeze(-1))
+
+
+def spatial_gradient(input: torch.Tensor, mode: str = 'sobel', order: int = 1, normalized: bool = True) -> torch.Tensor:
+    r"""Compute the first order image derivative in both x and y using a Sobel operator.
+
+    .. image:: _static/img/spatial_gradient.png
+
+    Args:
+        input: input image tensor with shape :math:`(B, C, H, W)`.
+        mode: derivatives modality, can be: `sobel` or `diff`.
+        order: the order of the derivatives.
+        normalized: whether the output is normalized.
+
+    Return:
+        the derivatives of the input feature map. with shape :math:`(B, C, 2, H, W)`.
+
+    .. note::
+       See a working example `here <https://kornia-tutorials.readthedocs.io/en/latest/
+       filtering_edges.html>`__.
+
+    Examples:
+        >>> input = torch.rand(1, 3, 4, 4)
+        >>> output = spatial_gradient(input)  # 1x3x2x4x4
+        >>> output.shape
+        torch.Size([1, 3, 2, 4, 4])
+    """
+    if not isinstance(input, torch.Tensor):
+        raise TypeError(f"Input type is not a torch.Tensor. Got {type(input)}")
+
+    if not len(input.shape) == 4:
+        raise ValueError(f"Invalid input shape, we expect BxCxHxW. Got: {input.shape}")
+    # allocate kernel
+    kernel: torch.Tensor = get_spatial_gradient_kernel2d(mode, order)
+    if normalized:
+        kernel = normalize_kernel2d(kernel)
+
+    # prepare kernel
+    b, c, h, w = input.shape
+    tmp_kernel: torch.Tensor = kernel.to(input).detach()
+    tmp_kernel = tmp_kernel.unsqueeze(1).unsqueeze(1)
+
+    # convolve input tensor with sobel kernel
+    kernel_flip: torch.Tensor = tmp_kernel.flip(-3)
+
+    # Pad with "replicate for spatial dims, but with zeros for channel
+    spatial_pad = [kernel.size(1) // 2, kernel.size(1) // 2, kernel.size(2) // 2, kernel.size(2) // 2]
+    out_channels: int = 3 if order == 2 else 2
+    padded_inp: torch.Tensor = F.pad(input.reshape(b * c, 1, h, w), spatial_pad, 'replicate')[:, :, None]
+
+    return F.conv3d(padded_inp, kernel_flip, padding=0).view(b, c, out_channels, h, w)
+
+def get_canny_nms_kernel(device=torch.device('cpu'), dtype=torch.float) -> torch.Tensor:
+    """Utility function that returns 3x3 kernels for the Canny Non-maximal suppression."""
+    kernel: torch.Tensor = torch.tensor(
+        [
+            [[0.0, 0.0, 0.0], [0.0, 1.0, -1.0], [0.0, 0.0, 0.0]],
+            [[0.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, -1.0]],
+            [[0.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, -1.0, 0.0]],
+            [[0.0, 0.0, 0.0], [0.0, 1.0, 0.0], [-1.0, 0.0, 0.0]],
+            [[0.0, 0.0, 0.0], [-1.0, 1.0, 0.0], [0.0, 0.0, 0.0]],
+            [[-1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 0.0]],
+            [[0.0, -1.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 0.0]],
+            [[0.0, 0.0, -1.0], [0.0, 1.0, 0.0], [0.0, 0.0, 0.0]],
+        ],
+        device=device,
+        dtype=dtype,
+    )
+    return kernel.unsqueeze(1)
+
+def get_hysteresis_kernel(device=torch.device('cpu'), dtype=torch.float) -> torch.Tensor:
+    """Utility function that returns the 3x3 kernels for the Canny hysteresis."""
+    kernel: torch.Tensor = torch.tensor(
+        [
+            [[0.0, 0.0, 0.0], [0.0, 0.0, 1.0], [0.0, 0.0, 0.0]],
+            [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 1.0]],
+            [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
+            [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [1.0, 0.0, 0.0]],
+            [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 0.0]],
+            [[1.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]],
+            [[0.0, 1.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]],
+            [[0.0, 0.0, 1.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]],
+        ],
+        device=device,
+        dtype=dtype,
+    )
+    return kernel.unsqueeze(1)
+
+def canny(
+    input: torch.Tensor,
+    low_threshold: float = 0.1,
+    high_threshold: float = 0.2,
+    kernel_size: Tuple[int, int] = (5, 5),
+    sigma: Tuple[float, float] = (1, 1),
+    hysteresis: bool = True,
+    eps: float = 1e-6,
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    r"""Find edges of the input image and filters them using the Canny algorithm.
+
+    .. image:: _static/img/canny.png
+
+    Args:
+        input: input image tensor with shape :math:`(B,C,H,W)`.
+        low_threshold: lower threshold for the hysteresis procedure.
+        high_threshold: upper threshold for the hysteresis procedure.
+        kernel_size: the size of the kernel for the gaussian blur.
+        sigma: the standard deviation of the kernel for the gaussian blur.
+        hysteresis: if True, applies the hysteresis edge tracking.
+            Otherwise, the edges are divided between weak (0.5) and strong (1) edges.
+        eps: regularization number to avoid NaN during backprop.
+
+    Returns:
+        - the canny edge magnitudes map, shape of :math:`(B,1,H,W)`.
+        - the canny edge detection filtered by thresholds and hysteresis, shape of :math:`(B,1,H,W)`.
+
+    .. note::
+       See a working example `here <https://kornia-tutorials.readthedocs.io/en/latest/
+       canny.html>`__.
+
+    Example:
+        >>> input = torch.rand(5, 3, 4, 4)
+        >>> magnitude, edges = canny(input)  # 5x3x4x4
+        >>> magnitude.shape
+        torch.Size([5, 1, 4, 4])
+        >>> edges.shape
+        torch.Size([5, 1, 4, 4])
+    """
+    if not isinstance(input, torch.Tensor):
+        raise TypeError(f"Input type is not a torch.Tensor. Got {type(input)}")
+
+    if not len(input.shape) == 4:
+        raise ValueError(f"Invalid input shape, we expect BxCxHxW. Got: {input.shape}")
+
+    if low_threshold > high_threshold:
+        raise ValueError(
+            "Invalid input thresholds. low_threshold should be smaller than the high_threshold. Got: {}>{}".format(
+                low_threshold, high_threshold
+            )
+        )
+
+    if low_threshold < 0 and low_threshold > 1:
+        raise ValueError(f"Invalid input threshold. low_threshold should be in range (0,1). Got: {low_threshold}")
+
+    if high_threshold < 0 and high_threshold > 1:
+        raise ValueError(f"Invalid input threshold. high_threshold should be in range (0,1). Got: {high_threshold}")
+
+    device: torch.device = input.device
+    dtype: torch.dtype = input.dtype
+
+    # To Grayscale
+    if input.shape[1] == 3:
+        input = rgb_to_grayscale(input)
+
+    # Gaussian filter
+    blurred: torch.Tensor = gaussian_blur2d(input, kernel_size, sigma)
+
+    # Compute the gradients
+    gradients: torch.Tensor = spatial_gradient(blurred, normalized=False)
+
+    # Unpack the edges
+    gx: torch.Tensor = gradients[:, :, 0]
+    gy: torch.Tensor = gradients[:, :, 1]
+
+    # Compute gradient magnitude and angle
+    magnitude: torch.Tensor = torch.sqrt(gx * gx + gy * gy + eps)
+    angle: torch.Tensor = torch.atan2(gy, gx)
+
+    # Radians to Degrees
+    angle = 180.0 * angle / math.pi
+
+    # Round angle to the nearest 45 degree
+    angle = torch.round(angle / 45) * 45
+
+    # Non-maximal suppression
+    nms_kernels: torch.Tensor = get_canny_nms_kernel(device, dtype)
+    nms_magnitude: torch.Tensor = F.conv2d(magnitude, nms_kernels, padding=nms_kernels.shape[-1] // 2)
+
+    # Get the indices for both directions
+    positive_idx: torch.Tensor = (angle / 45) % 8
+    positive_idx = positive_idx.long()
+
+    negative_idx: torch.Tensor = ((angle / 45) + 4) % 8
+    negative_idx = negative_idx.long()
+
+    # Apply the non-maximum suppression to the different directions
+    channel_select_filtered_positive: torch.Tensor = torch.gather(nms_magnitude, 1, positive_idx)
+    channel_select_filtered_negative: torch.Tensor = torch.gather(nms_magnitude, 1, negative_idx)
+
+    channel_select_filtered: torch.Tensor = torch.stack(
+        [channel_select_filtered_positive, channel_select_filtered_negative], 1
+    )
+
+    is_max: torch.Tensor = channel_select_filtered.min(dim=1)[0] > 0.0
+
+    magnitude = magnitude * is_max
+
+    # Threshold
+    edges: torch.Tensor = F.threshold(magnitude, low_threshold, 0.0)
+
+    low: torch.Tensor = magnitude > low_threshold
+    high: torch.Tensor = magnitude > high_threshold
+
+    edges = low * 0.5 + high * 0.5
+    edges = edges.to(dtype)
+
+    # Hysteresis
+    if hysteresis:
+        edges_old: torch.Tensor = -torch.ones(edges.shape, device=edges.device, dtype=dtype)
+        hysteresis_kernels: torch.Tensor = get_hysteresis_kernel(device, dtype)
+
+        while ((edges_old - edges).abs() != 0).any():
+            weak: torch.Tensor = (edges == 0.5).float()
+            strong: torch.Tensor = (edges == 1).float()
+
+            hysteresis_magnitude: torch.Tensor = F.conv2d(
+                edges, hysteresis_kernels, padding=hysteresis_kernels.shape[-1] // 2
+            )
+            hysteresis_magnitude = (hysteresis_magnitude == 1).any(1, keepdim=True).to(dtype)
+            hysteresis_magnitude = hysteresis_magnitude * weak + strong
+
+            edges_old = edges.clone()
+            edges = hysteresis_magnitude + (hysteresis_magnitude == 0) * weak * 0.5
+
+        edges = hysteresis_magnitude
+
+    return magnitude, edges
+
+class Canny(nn.Module):
+    r"""Module that finds edges of the input image and filters them using the Canny algorithm.
+
+    Args:
+        input: input image tensor with shape :math:`(B,C,H,W)`.
+        low_threshold: lower threshold for the hysteresis procedure.
+        high_threshold: upper threshold for the hysteresis procedure.
+        kernel_size: the size of the kernel for the gaussian blur.
+        sigma: the standard deviation of the kernel for the gaussian blur.
+        hysteresis: if True, applies the hysteresis edge tracking.
+            Otherwise, the edges are divided between weak (0.5) and strong (1) edges.
+        eps: regularization number to avoid NaN during backprop.
+
+    Returns:
+        - the canny edge magnitudes map, shape of :math:`(B,1,H,W)`.
+        - the canny edge detection filtered by thresholds and hysteresis, shape of :math:`(B,1,H,W)`.
+
+    Example:
+        >>> input = torch.rand(5, 3, 4, 4)
+        >>> magnitude, edges = Canny()(input)  # 5x3x4x4
+        >>> magnitude.shape
+        torch.Size([5, 1, 4, 4])
+        >>> edges.shape
+        torch.Size([5, 1, 4, 4])
+    """
+
+    def __init__(
+        self,
+        low_threshold: float = 0.1,
+        high_threshold: float = 0.2,
+        kernel_size: Tuple[int, int] = (5, 5),
+        sigma: Tuple[float, float] = (1, 1),
+        hysteresis: bool = True,
+        eps: float = 1e-6,
+    ) -> None:
+        super().__init__()
+
+        if low_threshold > high_threshold:
+            raise ValueError(
+                "Invalid input thresholds. low_threshold should be\
+                             smaller than the high_threshold. Got: {}>{}".format(
+                    low_threshold, high_threshold
+                )
+            )
+
+        if low_threshold < 0 or low_threshold > 1:
+            raise ValueError(f"Invalid input threshold. low_threshold should be in range (0,1). Got: {low_threshold}")
+
+        if high_threshold < 0 or high_threshold > 1:
+            raise ValueError(f"Invalid input threshold. high_threshold should be in range (0,1). Got: {high_threshold}")
+
+        # Gaussian blur parameters
+        self.kernel_size = kernel_size
+        self.sigma = sigma
+
+        # Double threshold
+        self.low_threshold = low_threshold
+        self.high_threshold = high_threshold
+
+        # Hysteresis
+        self.hysteresis = hysteresis
+
+        self.eps: float = eps
+
+    def forward(self, input: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        return canny(
+            input, self.low_threshold, self.high_threshold, self.kernel_size, self.sigma, self.hysteresis, self.eps
+        )
+
 class ProPainterLosses():
     def __init__(self, config) -> None:
         self.config = config
         self.l1_loss = L1Loss()
         self.perc_loss = LPIPSLoss(use_input_norm=True, range_norm=True)
         self.adversarial_loss = AdversarialLoss(type=config.GAN_LOSS)
-    def calculate_losses(self, pred_imgs,masks_dilated, frames, comp_frames,discriminator):
+        self.flow_loss = FlowLoss()
+        self.edge_loss = EdgeLoss()
+        self.canny = Canny(sigma=(2,2), low_threshold=0.1, high_threshold=0.2)
+
+    def get_edges(self, flows): 
+        # (b, t, 2, H, W)
+        b, t, _, h, w = flows.shape
+        flows = flows.view(-1, 2, h, w)
+        flows_gray = (flows[:, 0, None] ** 2 + flows[:, 1, None] ** 2) ** 0.5
+        if flows_gray.max() < 1:
+            flows_gray = flows_gray*0
+        else:
+            flows_gray = flows_gray / flows_gray.max()
+            
+        magnitude, edges = self.canny(flows_gray.float())
+        edges = edges.view(b, t, 1, h, w)
+        return edges
+
+    def calculate_losses(self, pred_imgs,masks_dilated, frames, comp_frames ,discriminator, pred_flows_bi, gt_flows_bi,flow_masks,pred_edges_bi):
+        _,_,_, h, w = frames.size()
+        
+        gt_edges_forward = self.get_edges(gt_flows_bi[0])
+        gt_edges_backward = self.get_edges(gt_flows_bi[1])
+        gt_edges_bi = [gt_edges_forward, gt_edges_backward]
+
         gen_loss = 0
         dis_loss = 0
         # generator l1 loss
@@ -2021,7 +2986,17 @@ class ProPainterLosses():
             dis_fake_loss = self.adversarial_loss(fake_clip, False, True)
             dis_loss += (dis_real_loss + dis_fake_loss) / 2
 
-        return gen_loss, dis_loss
+        #these losses are for training flow completion network
+        # compulte flow_loss
+        flow_loss, warp_loss = self.flow_loss(pred_flows_bi, gt_flows_bi, flow_masks, frames)
+        flow_loss = flow_loss * self.config.flow_weight
+
+        # compute edge loss
+        edge_loss = self.edge_loss(pred_edges_bi, gt_edges_bi, flow_masks)
+        edge_loss = edge_loss*1.0
+
+        flow_complete_loss = flow_loss + warp_loss * 0.01 + edge_loss
+        return gen_loss, dis_loss, flow_complete_loss
 class ProPainterPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -2172,16 +3147,19 @@ class ProPainterModel(ProPainterPreTrainedModel):
     def complete_flow(self,gt_flows_bi, flow_masks):
         flow_length = gt_flows_bi[0].size(1)
         if flow_length > self.config.subvideo_length:
-            pred_flows_f, pred_flows_b = [], []
+            pred_flows_f, pred_flows_b, pred_flows_bi_loss, pred_edges_bi_loss= [], [], []
             pad_len = 5
             for f in range(0, flow_length, self.config.subvideo_length):
                 s_f = max(0, f - pad_len)
                 e_f = min(flow_length, f + self.config.subvideo_length + pad_len)
                 pad_len_s = max(0, f) - s_f
                 pad_len_e = e_f - min(flow_length, f + self.config.subvideo_length)
-                pred_flows_bi_sub, _ = self.flow_completion_net.forward_bidirect_flow(
+                pred_flows_bi_sub, pred_edges_bi = self.flow_completion_net.forward_bidirect_flow(
                     (gt_flows_bi[0][:, s_f:e_f], gt_flows_bi[1][:, s_f:e_f]), 
                     flow_masks[:, s_f:e_f+1])
+
+                pred_flows_bi_loss.append(pred_flows_bi_sub)
+                pred_edges_bi_loss.append(pred_edges_bi)
                 pred_flows_bi_sub = self.flow_completion_net.combine_flow(
                     (gt_flows_bi[0][:, s_f:e_f], gt_flows_bi[1][:, s_f:e_f]), 
                     pred_flows_bi_sub, 
@@ -2194,12 +3172,19 @@ class ProPainterModel(ProPainterPreTrainedModel):
             pred_flows_f = torch.cat(pred_flows_f, dim=1)
             pred_flows_b = torch.cat(pred_flows_b, dim=1)
             pred_flows_bi = (pred_flows_f, pred_flows_b)
+
+            pred_flows_bi_loss = torch.cat(pred_flows_bi_loss)
+            pred_edges_bi_loss = torch.cat(pred_edges_bi_loss)
         else:
-            pred_flows_bi, _ = self.flow_completion_net.forward_bidirect_flow(gt_flows_bi, flow_masks)
+            pred_flows_bi, pred_edges_bi = self.flow_completion_net.forward_bidirect_flow(gt_flows_bi, flow_masks)
+
+            pred_flows_bi_loss = pred_flows_bi
+
             pred_flows_bi = self.flow_completion_net.combine_flow(gt_flows_bi, pred_flows_bi, flow_masks)
+
             torch.cuda.empty_cache()
 
-        return pred_flows_bi        
+        return pred_flows_bi, pred_flows_bi_loss, pred_edges_bi  
 
     def image_propagation(self,pixel_values,masks_dilated, pred_flows_bi):
         width, height = self.size
@@ -2322,21 +3307,23 @@ class ProPainterModel(ProPainterPreTrainedModel):
         with torch.no_grad():
             gt_flows_bi = self.compute_flow(pixel_values)
             
-            pred_flows_bi = self.complete_flow(gt_flows_bi,flow_masks)
+            pred_flows_bi, pred_flows_bi_loss, pred_edges_bi = self.complete_flow(gt_flows_bi,flow_masks)
                 
             updated_frames,updated_masks = self.image_propagation(pixel_values,masks_dilated,pred_flows_bi)
                 
         comp_frames, pred_imgs_loss = self.feature_propagation(updated_frames, updated_masks, masks_dilated, pred_flows_bi, pixel_values_inp)
         pred_imgs_loss = torch.tensor(np.array(pred_imgs_loss)).permute(0, 3, 1, 2).unsqueeze(0).to(masks_dilated.device)
         comp_frames_loss = torch.tensor(np.array(comp_frames)).permute(3,0,1,2).to(masks_dilated.device).to(torch.float32)
-        gen_loss, dis_loss = losses.calculate_losses(pred_imgs_loss,masks_dilated, pixel_values, comp_frames_loss,self.discriminator)
+ 
+        #ADD LOCAL FRAMES and training mode
+        gen_loss, dis_loss, flow_complete_loss = losses.calculate_losses(pred_imgs_loss,masks_dilated, pixel_values, comp_frames_loss,self.discriminator,pred_flows_bi_loss,gt_flows_bi,flow_masks,pred_edges_bi)
         
         # if not return_dict:
         #     head_outputs = (sequence_output, pooled_output) if pooled_output is not None else (sequence_output,)
         #     return head_outputs + encoder_outputs[1:]
 
         return MaskedImageModelingOutput(
-            loss=(gen_loss, dis_loss),
+            loss=(gen_loss, dis_loss, flow_complete_loss),
             reconstruction=comp_frames,
             hidden_states=None,
             attentions=None,

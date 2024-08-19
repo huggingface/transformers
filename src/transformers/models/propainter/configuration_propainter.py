@@ -164,6 +164,7 @@ class ProPainterConfig(PretrainedConfig):
         window_size=(5, 9),
         pool_size=(4, 4),
         no_dis=0,
+        flow_weight=0.25,
         
         **kwargs,
     ):
@@ -224,3 +225,4 @@ class ProPainterConfig(PretrainedConfig):
         self.window_size = window_size
         self.pool_size = pool_size
         self.no_dis = no_dis
+        self.flow_weight = flow_weight
