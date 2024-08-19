@@ -59,10 +59,10 @@ if TYPE_CHECKING:
         from .default_tools import FinalAnswerTool, PythonInterpreterTool
         from .document_question_answering import DocumentQuestionAnsweringTool
         from .image_question_answering import ImageQuestionAnsweringTool
+        from .search import DuckDuckGoSearch
         from .speech_to_text import SpeechToTextTool
         from .text_to_speech import TextToSpeechTool
         from .translation import TranslationTool
-        from .search import DuckDuckGoSearch
 else:
     import sys
 
