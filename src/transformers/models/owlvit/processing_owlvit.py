@@ -22,8 +22,8 @@ from typing import List, Optional, Union
 
 import numpy as np
 
-from ...image_utils import ImageInput
 from ...feature_extraction_utils import BatchFeature
+from ...image_utils import ImageInput
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import is_flax_available, is_tf_available, is_torch_available
@@ -128,6 +128,7 @@ class OwlViTProcessor(ProcessorMixin):
               `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
               `None`).
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
+            - **query_pixel_values** -- Pixel values of the query images to be fed to a model. Returned when `query_images` is not `None`.
         """
 
         output_kwargs = self._merge_kwargs(

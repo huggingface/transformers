@@ -20,8 +20,8 @@ import sys
 import warnings
 from typing import List, Optional, Union
 
-from ...image_utils import ImageInput
 from ...feature_extraction_utils import BatchFeature
+from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 
@@ -109,11 +109,12 @@ class CLIPSegProcessor(ProcessorMixin):
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 
-            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
+            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None` and `visual_prompt` is `None`.
             - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
               `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
-              `None`).
+              `None`) and `visual_prompt` is `None`.
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
+            - **conditional_pixel_values** -- Conditional pixel values to be fed to a model. Returned when `visual_prompt` is not `None`.
         """
 
         output_kwargs = self._merge_kwargs(
@@ -145,7 +146,7 @@ class CLIPSegProcessor(ProcessorMixin):
                 "pixel_values": image_features.pixel_values,
                 "conditional_pixel_values": prompt_features.pixel_values,
             }
-            return encoding
+            return BatchFeature(data=encoding, tensor_type=output_kwargs["common_kwargs"].get("return_tensors"))
         elif text is not None and images is not None:
             encoding["pixel_values"] = image_features.pixel_values
             return encoding
@@ -155,7 +156,7 @@ class CLIPSegProcessor(ProcessorMixin):
             encoding = {
                 "conditional_pixel_values": prompt_features.pixel_values,
             }
-            return encoding
+            return BatchFeature(data=encoding, tensor_type=output_kwargs["common_kwargs"].get("return_tensors"))
         else:
             return BatchFeature(
                 data=dict(**image_features), tensor_type=output_kwargs["common_kwargs"].get("return_tensors")
