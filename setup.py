@@ -358,7 +358,6 @@ extras["all"] = (
     + extras["video"]
 )
 
-
 extras["dev-torch"] = (
     extras["testing"]
     + extras["torch"]
