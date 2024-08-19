@@ -19,10 +19,9 @@ import torch
 from deepspeed import initialize
 
 from transformers import AutoModel
-from transformers.integrations.deepspeed import (
-    is_deepspeed_sp_enabled,
-)  # noqa
-from transformers.modeling_flash_attention_utils import _flash_attention_forward
+from transformers.integrations.deepspeed import is_deepspeed_sp_enabled  # noqa
+from transformers.modeling_flash_attention_utils import \
+    _flash_attention_forward
 
 
 # Call transformer flash attention with and without deepspeed sp enabled and compare they match
