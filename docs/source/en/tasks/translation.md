@@ -90,7 +90,7 @@ The next step is to load a T5 tokenizer to process the English-French language p
 The preprocessing function you want to create needs to:
 
 1. Prefix the input with a prompt so T5 knows this is a translation task. Some models capable of multiple NLP tasks require prompting for specific tasks.
-2. Tokenize the input (English) and target (French) separately because you can't tokenize French text with a tokenizer pretrained on an English vocabulary.
+2. Set the target language (French) in the `text_target` parameter to ensure the tokenizer processes the target text correctly. If you don't set `text_target`, the tokenizer processes the target text as English.
 3. Truncate sequences to be no longer than the maximum length set by the `max_length` parameter.
 
 ```py

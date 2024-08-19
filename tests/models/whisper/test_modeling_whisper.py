@@ -31,6 +31,7 @@ from parameterized import parameterized
 import transformers
 from transformers import WhisperConfig
 from transformers.testing_utils import (
+    is_flaky,
     is_pt_flax_cross_test,
     require_flash_attn,
     require_torch,
@@ -67,14 +68,7 @@ if is_torch_available():
         set_seed,
     )
     from transformers.generation import (
-        BeamSampleDecoderOnlyOutput,
-        BeamSampleEncoderDecoderOutput,
-        BeamSearchDecoderOnlyOutput,
-        BeamSearchEncoderDecoderOutput,
-        GenerateBeamDecoderOnlyOutput,
-        GenerateBeamEncoderDecoderOutput,
         GenerateEncoderDecoderOutput,
-        PhrasalConstraint,
     )
     from transformers.generation.logits_process import LogitsProcessor
     from transformers.models.whisper.modeling_whisper import WhisperDecoder, WhisperEncoder, sinusoids
@@ -417,6 +411,30 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             return True
 
         return False
+
+    def _get_logits_processor_kwargs(self, do_sample=False):
+        # Overwritten from `GenerationTesterMixin`, Whisper needs `"temperature": 0.0` to be able to do beam search
+        logits_processor_kwargs = super()._get_logits_processor_kwargs(do_sample=do_sample)
+        logits_processor_kwargs["temperature"] = 0.0
+        return logits_processor_kwargs
+
+    def _get_beam_kwargs(self, num_return_sequences=1):
+        # Overwritten from `GenerationTesterMixin`, Whisper's `num_return_sequences` differs from the core `generate`
+        beam_kwargs = super()._get_beam_kwargs(num_return_sequences=num_return_sequences)
+        beam_kwargs["num_return_sequences"] = beam_kwargs["num_beams"]
+        return beam_kwargs
+
+    def _get_diverse_beam_kwargs(self, num_return_sequences=1):
+        # Overwritten from `GenerationTesterMixin`, Whisper's `num_return_sequences` differs from the core `generate`
+        beam_kwargs = super()._get_diverse_beam_kwargs(num_return_sequences=num_return_sequences)
+        beam_kwargs["num_return_sequences"] = beam_kwargs["num_beams"]
+        return beam_kwargs
+
+    def _get_constrained_beam_kwargs(self, num_return_sequences=1):
+        # Overwritten from `GenerationTesterMixin`, Whisper's `num_return_sequences` differs from the core `generate`
+        beam_kwargs = super()._get_constrained_beam_kwargs(num_return_sequences=num_return_sequences)
+        beam_kwargs["num_return_sequences"] = beam_kwargs["num_beams"]
+        return beam_kwargs
 
     def setUp(self):
         self.model_tester = WhisperModelTester(self)
@@ -1550,241 +1568,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_longform_generate_multi_batch_cond_prev(self):
         self._check_longform_generate_multi_batch(condition_on_prev_tokens=True)
 
-    def test_beam_sample_generate_dict_output(self):
-        # We overwrite test_beam_sample_generate_dict_output in test_utils as
-        # we can only perform beam search if the temperature is set to 0 in Whisper.
-        config, input_ids, attention_mask = self._get_input_ids_and_config()
-
-        # disable cache
-        config.use_cache = False
-
-        model = WhisperForConditionalGeneration(config).to(torch_device).eval()
-        _, logits_warper_kwargs = self._get_logits_processor_and_warper_kwargs(input_ids.shape[-1])
-        beam_kwargs = self._get_beam_kwargs()
-
-        # With Whisper, we can only perform a beam search if the temperature is set to 0.
-        logits_warper_kwargs["temperature"] = 0
-        # We will return num_beams sequences per input only if num_return_sequences == num_beams:
-        beam_kwargs["num_return_sequences"] = beam_kwargs["num_beams"]
-
-        output_generate = self._beam_sample_generate(
-            model=model,
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            beam_kwargs=beam_kwargs,
-            logits_warper_kwargs=logits_warper_kwargs,
-            output_scores=True,
-            output_logits=True,
-            output_hidden_states=True,
-            output_attentions=True,
-            return_dict_in_generate=True,
-        )
-        if model.config.is_encoder_decoder:
-            self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + 1)
-            self.assertIsInstance(output_generate, GenerateBeamEncoderDecoderOutput)
-            # Retrocompatibility check
-            self.assertIsInstance(output_generate, BeamSampleEncoderDecoderOutput)
-        else:
-            self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + input_ids.shape[-1])
-            self.assertIsInstance(output_generate, GenerateBeamDecoderOnlyOutput)
-            # Retrocompatibility check
-            self.assertIsInstance(output_generate, BeamSampleDecoderOnlyOutput)
-
-        self._check_outputs(output_generate, input_ids, model.config, num_return_sequences=beam_kwargs["num_beams"])
-
-    def test_beam_search_generate_dict_output(self):
-        # We overwrite test_beam_search_generate_dict_output in test_utils as
-        # we can only perform beam search if the temperature is set to 0 in Whisper.
-        for model_class in self.all_generative_model_classes:
-            config, input_ids, attention_mask = self._get_input_ids_and_config()
-
-            # disable cache
-            config.use_cache = False
-
-            model = model_class(config).to(torch_device).eval()
-            logits_process_kwargs, _ = self._get_logits_processor_and_warper_kwargs(
-                input_ids.shape[-1],
-                config.forced_bos_token_id,
-                config.forced_eos_token_id,
-            )
-            beam_kwargs = self._get_beam_kwargs()
-
-            # With Whisper, we can only perform a beam search if the temperature is set to 0.
-            logits_process_kwargs["temperature"] = 0
-            # We will return num_beams sequences per input only if num_return_sequences == num_beams:
-            beam_kwargs["num_return_sequences"] = beam_kwargs["num_beams"]
-
-            output_generate = self._beam_search_generate(
-                model=model,
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                beam_kwargs=beam_kwargs,
-                logits_process_kwargs=logits_process_kwargs,
-                output_scores=True,
-                output_logits=True,
-                output_hidden_states=True,
-                output_attentions=True,
-                return_dict_in_generate=True,
-            )
-            if model.config.is_encoder_decoder:
-                self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + 1)
-                self.assertIsInstance(output_generate, GenerateBeamEncoderDecoderOutput)
-                # Retrocompatibility check
-                self.assertIsInstance(output_generate, BeamSearchEncoderDecoderOutput)
-            else:
-                self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + input_ids.shape[-1])
-                self.assertIsInstance(output_generate, GenerateBeamDecoderOnlyOutput)
-                # Retrocompatibility check
-                self.assertIsInstance(output_generate, BeamSearchDecoderOnlyOutput)
-
-            self._check_outputs(
-                output_generate, input_ids, model.config, num_return_sequences=beam_kwargs["num_beams"]
-            )
-
-    def test_beam_search_generate_dict_outputs_use_cache(self):
-        # We overwrite test_beam_search_generate_dict_outputs_use_cache in test_utils as
-        # we can only perform beam search if the temperature is set to 0 in Whisper.
-        for model_class in self.all_generative_model_classes:
-            # enable cache
-            config, input_ids, attention_mask = self._get_input_ids_and_config()
-
-            if not hasattr(config, "use_cache"):
-                self.skipTest("This model doesn't support caching")
-
-            model = model_class(config).to(torch_device).eval()
-            logits_process_kwargs, _ = self._get_logits_processor_and_warper_kwargs(
-                input_ids.shape[-1],
-                config.forced_bos_token_id,
-                config.forced_eos_token_id,
-            )
-
-            beam_kwargs = self._get_beam_kwargs()
-
-            # We will return num_beams sequences per input only if num_return_sequences == num_beams:
-            beam_kwargs["num_return_sequences"] = beam_kwargs["num_beams"]
-
-            config.use_cache = True
-            config.is_decoder = True
-            model = model_class(config).to(torch_device).eval()
-            output_generate = self._beam_search_generate(
-                model=model,
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                beam_kwargs=beam_kwargs,
-                logits_process_kwargs=logits_process_kwargs,
-                output_scores=True,
-                output_logits=True,
-                output_hidden_states=True,
-                output_attentions=True,
-                return_dict_in_generate=True,
-            )
-
-            if model.config.is_encoder_decoder:
-                self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + 1)
-            else:
-                self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + input_ids.shape[-1])
-            self._check_outputs(
-                output_generate, input_ids, model.config, use_cache=True, num_return_sequences=beam_kwargs["num_beams"]
-            )
-
-    def test_group_beam_search_generate_dict_output(self):
-        # We overwrite test_group_beam_search_generate_dict_output in test_utils as
-        # we can only perform beam search if the temperature is set to 0 in Whisper.
-        for model_class in self.all_generative_model_classes:
-            config, input_ids, attention_mask = self._get_input_ids_and_config()
-            config.use_cache = False
-
-            model = model_class(config).to(torch_device).eval()
-            logits_process_kwargs, _ = self._get_logits_processor_and_warper_kwargs(
-                input_ids.shape[-1],
-                config.forced_bos_token_id,
-                config.forced_eos_token_id,
-            )
-
-            beam_kwargs = self._get_diverse_beam_kwargs()
-
-            # We will return num_beams sequences per input only if num_return_sequences == num_beams:
-            beam_kwargs["num_return_sequences"] = beam_kwargs["num_beams"]
-
-            output_generate = self._group_beam_search_generate(
-                model=model,
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                beam_kwargs=beam_kwargs,
-                logits_process_kwargs=logits_process_kwargs,
-                output_scores=True,
-                output_logits=True,
-                output_hidden_states=True,
-                output_attentions=True,
-                return_dict_in_generate=True,
-            )
-            if model.config.is_encoder_decoder:
-                self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + 1)
-                self.assertIsInstance(output_generate, GenerateBeamEncoderDecoderOutput)
-                # Retrocompatibility check
-                self.assertIsInstance(output_generate, BeamSearchEncoderDecoderOutput)
-            else:
-                self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + input_ids.shape[-1])
-                self.assertIsInstance(output_generate, GenerateBeamDecoderOnlyOutput)
-                # Retrocompatibility check
-                self.assertIsInstance(output_generate, BeamSearchDecoderOnlyOutput)
-
-            self._check_outputs(
-                output_generate, input_ids, model.config, num_return_sequences=beam_kwargs["num_beams"]
-            )
-
-    def test_constrained_beam_search_generate_dict_output(self):
-        for model_class in self.all_generative_model_classes:
-            config, input_ids, attention_mask = self._get_input_ids_and_config()
-
-            # disable cache
-            config.use_cache = False
-
-            model = model_class(config).to(torch_device).eval()
-            logits_process_kwargs, _ = self._get_logits_processor_and_warper_kwargs(
-                input_ids.shape[-1],
-                config.forced_bos_token_id,
-                config.forced_eos_token_id,
-            )
-
-            # Sample constraints
-            min_id = 3
-            max_id = model.config.vocab_size
-            force_tokens = torch.randint(min_id, max_id, (1, 2)).tolist()[0]
-            constraints = [
-                PhrasalConstraint(force_tokens),
-            ]
-
-            beam_kwargs = self._get_constrained_beam_kwargs()
-            output_generate = self._constrained_beam_search_generate(
-                model=model,
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                constraints=constraints,
-                beam_kwargs=beam_kwargs,
-                logits_process_kwargs=logits_process_kwargs,
-                output_scores=True,
-                output_logits=True,
-                output_hidden_states=True,
-                output_attentions=True,
-                return_dict_in_generate=True,
-            )
-
-            if model.config.is_encoder_decoder:
-                self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + 1)
-                self.assertIsInstance(output_generate, GenerateBeamEncoderDecoderOutput)
-                # Retrocompatibility check
-                self.assertIsInstance(output_generate, BeamSearchEncoderDecoderOutput)
-            else:
-                self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + input_ids.shape[-1])
-                self.assertIsInstance(output_generate, GenerateBeamDecoderOnlyOutput)
-                # Retrocompatibility check
-                self.assertIsInstance(output_generate, BeamSearchDecoderOnlyOutput)
-
-            self._check_outputs(
-                output_generate, input_ids, model.config, num_return_sequences=beam_kwargs["num_return_sequences"]
-            )
-
+    @is_flaky()  # TODO (joao, sanchit): fails ~9% of the times. Does the original test have the same issue?
     def test_custom_4d_attention_mask(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         model = WhisperForConditionalGeneration(config).to(device=torch_device, dtype=torch.float32)
@@ -1841,6 +1625,59 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 return_dict_in_generate=return_dict_in_generate,
             )
             assert isinstance(pred_ids, expected_output_type)
+
+    @require_flash_attn
+    @require_torch_gpu
+    @pytest.mark.flash_attn_test
+    @slow
+    def test_flash_attn_2_generate_reuse_cache(self):
+        max_new_tokens = 2
+        for model_class in self.all_generative_model_classes:
+            if not model_class._supports_flash_attn_2:
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+            dummy_input = inputs_dict[model_class.main_input_name][..., :10]
+            if dummy_input.dtype in [torch.float32, torch.bfloat16]:
+                dummy_input = dummy_input.to(torch.float16)
+
+            # make sure that all models have enough positions for generation
+            if hasattr(config, "max_position_embeddings"):
+                config.max_position_embeddings = dummy_input.shape[1] * 2 + max_new_tokens * 2 + 1
+
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                model = model_class.from_pretrained(
+                    tmpdirname,
+                    torch_dtype=torch.float16,
+                    attn_implementation="flash_attention_2",
+                    low_cpu_mem_usage=True,
+                ).to(torch_device)
+
+                # run generate once to get filled cache
+                output = model.generate(
+                    dummy_input,
+                    max_new_tokens=max_new_tokens,
+                    do_sample=False,
+                    use_cache=True,
+                    return_dict_in_generate=True,
+                )
+                past_key_values = output.past_key_values
+
+                # Try to continue generation from where we left, given that we have more than 1 new token to process
+                # e.g. this can happen in speculative decoding when feeding candidate tokens back to target model
+                _ = model.generate(
+                    dummy_input,
+                    decoder_input_ids=output.sequences,
+                    max_new_tokens=max_new_tokens,
+                    do_sample=False,
+                    use_cache=True,
+                    past_key_values=past_key_values,
+                )
 
 
 @require_torch
@@ -3384,6 +3221,66 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         # assert re-ordered generations match those from eager
         assert (eager_generated_ids[permutation_idx, :] == static_generated_ids).all()
 
+    @slow
+    def test_tiny_static_generation_long_form(self):
+        import torch._dynamo.config
+
+        # only permit 4 compilations: 2 prefill steps and 2 decoding steps (1 for each of conditioned/not conditioned)
+        torch._dynamo.config.cache_size_limit = 4
+
+        processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
+        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
+        model.to(torch_device)
+
+        dataset = load_dataset("distil-whisper/meanwhile", "default")["test"]
+        dataset = dataset.cast_column("audio", Audio(sampling_rate=16000))
+        input_speech = [audio["array"] for audio in dataset[2:4]["audio"]]
+
+        inputs = processor(
+            input_speech,
+            return_tensors="pt",
+            padding="longest",
+            truncation=False,
+            return_attention_mask=True,
+            sampling_rate=16_000,
+        )
+        inputs = inputs.to(torch_device)
+
+        gen_kwargs = {
+            "return_timestamps": True,
+            "no_speech_threshold": 0.6,
+            "temperature": (0.0, 0.2, 0.4, 0.6, 0.8, 1.0),
+            "compression_ratio_threshold": 1.35,
+            "condition_on_prev_tokens": True,  # conditioning on prev tokens introduces a recompile on the second time step
+            "logprob_threshold": -1.0,
+            "num_beams": 1,
+        }
+
+        set_seed(42)
+        eager_generated_ids = model.generate(**inputs, **gen_kwargs)
+
+        # compile the forward pass and assert equivalence
+        model.generation_config.cache_implementation = "static"
+        model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
+
+        set_seed(42)
+        static_generated_ids = model.generate(**inputs, **gen_kwargs)
+        assert (eager_generated_ids == static_generated_ids).all()
+
+        # check the compiled graph can be re-used and that the cache is correctly reset
+        # reverse the ordering of the input features
+        input_features = inputs.input_features
+        permutation_idx = (
+            torch.arange(input_features.shape[0], 0, step=-1, dtype=torch.long, device=input_features.device) - 1
+        )
+        input_features = input_features[permutation_idx, ...]
+        attention_mask = inputs.attention_mask[permutation_idx, ...]
+
+        set_seed(42)
+        static_generated_ids = model.generate(input_features, attention_mask=attention_mask, **gen_kwargs)
+        # assert re-ordered generations match those from eager
+        assert (eager_generated_ids[permutation_idx, :] == static_generated_ids).all()
+
 
 def prepare_whisper_encoder_inputs_dict(config, input_features, head_mask=None):
     if head_mask is None:
@@ -3996,12 +3893,23 @@ class WhisperStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin,
         # generate only works with input ids for whisper
         pass
 
+    @unittest.skip(reason="Generate needs input ids")
+    def test_inputs_embeds_matches_input_ids_with_generate(self):
+        # generate only works with input ids for whisper
+        pass
+
     @unittest.skip(reason="Decoder can't keep attention grads")
     def test_retain_grad_hidden_states_attentions(self):
         return
 
     @unittest.skip(reason="The model doesn't support fast init from base")
     def test_save_load_fast_init_from_base(self):
+        pass
+
+    @unittest.skip(
+        reason="FA2 testing suite needs to be refactored to be compatible with WhisperDecoder for that test"
+    )
+    def test_flash_attn_2_generate_reuse_cache(self):
         pass
 
     @unittest.skip(

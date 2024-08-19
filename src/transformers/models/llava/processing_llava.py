@@ -19,10 +19,13 @@ Processor class for Llava.
 from typing import List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput
+from ...image_utils import ImageInput, get_image_size, to_numpy_array
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
-from ...utils import TensorType
+from ...utils import TensorType, logging
+
+
+logger = logging.get_logger(__name__)
 
 
 class LlavaProcessor(ProcessorMixin):
@@ -37,16 +40,35 @@ class LlavaProcessor(ProcessorMixin):
             The image processor is a required input.
         tokenizer ([`LlamaTokenizerFast`], *optional*):
             The tokenizer is a required input.
+        patch_size (`int`, *optional*):
+            Patch size from the vision tower.
+        vision_feature_select_strategy (`str`, *optional*):
+            The feature selection strategy used to select the vision feature from the vision backbone.
+            Shoudl be same as in model's config
         chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
             in a chat into a tokenizable string.
+        image_token (`str`, *optional*, defaults to `"<image>"`):
+            Special token used to denote image location.
     """
 
     attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = ["chat_template"]
+    valid_kwargs = ["chat_template", "patch_size", "vision_feature_select_strategy", "image_token"]
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
-    def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
+    def __init__(
+        self,
+        image_processor=None,
+        tokenizer=None,
+        patch_size=None,
+        vision_feature_select_strategy=None,
+        chat_template=None,
+        image_token="<image>",  # set the default and let users change if they have peculiar special tokens in rare cases
+        **kwargs,
+    ):
+        self.patch_size = patch_size
+        self.vision_feature_select_strategy = vision_feature_select_strategy
+        self.image_token = image_token
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     def __call__(
@@ -104,14 +126,46 @@ class LlavaProcessor(ProcessorMixin):
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
         if images is not None:
-            pixel_values = self.image_processor(images, return_tensors=return_tensors)["pixel_values"]
+            image_inputs = self.image_processor(images, return_tensors=return_tensors)
         else:
-            pixel_values = None
-        text_inputs = self.tokenizer(
-            text, return_tensors=return_tensors, padding=padding, truncation=truncation, max_length=max_length
-        )
+            image_inputs = {}
 
-        return BatchFeature(data={**text_inputs, "pixel_values": pixel_values})
+        if isinstance(text, str):
+            text = [text]
+        elif not isinstance(text, list) and not isinstance(text[0], str):
+            raise ValueError("Invalid input text. Please provide a string, or a list of strings")
+
+        # try to expand inputs in processing if we have the necessary parts
+        if image_inputs.get("pixel_values") is not None:
+            if self.patch_size is not None and self.vision_feature_select_strategy is not None:
+                # Replace the image token with the expanded image token sequence
+                pixel_values = image_inputs["pixel_values"]
+                height, width = get_image_size(to_numpy_array(pixel_values[0]))
+                num_image_tokens = (height // self.patch_size) * (width // self.patch_size) + 1
+                if self.vision_feature_select_strategy == "default":
+                    num_image_tokens -= 1
+
+                prompt_strings = []
+                for sample in text:
+                    sample = sample.replace(self.image_token, self.image_token * num_image_tokens)
+                    prompt_strings.append(sample)
+            else:
+                prompt_strings = text
+                logger.warning_once(
+                    "Expanding inputs for image tokens in LLaVa should be done in processing. "
+                    "Please add `patch_size` and `vision_feature_select_strategy` to the model's processing config or set directly "
+                    "with `processor.patch_size = {{patch_size}}` and processor.vision_feature_select_strategy = {{vision_feature_select_strategy}}`. "
+                    "Using processors without these attributes in the config is deprecated and will throw an error in v4.47."
+                )
+
+        text_inputs = self.tokenizer(
+            prompt_strings,
+            return_tensors=return_tensors,
+            padding=padding,
+            truncation=truncation,
+            max_length=max_length,
+        )
+        return BatchFeature(data={**text_inputs, **image_inputs})
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama
     def batch_decode(self, *args, **kwargs):

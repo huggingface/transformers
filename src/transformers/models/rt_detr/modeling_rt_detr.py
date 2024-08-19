@@ -559,9 +559,10 @@ class RTDetrConvEncoder(nn.Module):
 
         backbone = load_backbone(config)
 
-        # replace batch norm by frozen batch norm
-        with torch.no_grad():
-            replace_batch_norm(backbone)
+        if config.freeze_backbone_batch_norms:
+            # replace batch norm by frozen batch norm
+            with torch.no_grad():
+                replace_batch_norm(backbone)
         self.model = backbone
         self.intermediate_channel_sizes = self.model.channels
 
@@ -2452,7 +2453,7 @@ def _max_by_axis(the_list):
 
 
 # Copied from transformers.models.detr.modeling_detr.NestedTensor
-class NestedTensor(object):
+class NestedTensor:
     def __init__(self, tensors, mask: Optional[Tensor]):
         self.tensors = tensors
         self.mask = mask

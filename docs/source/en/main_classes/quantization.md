@@ -64,3 +64,7 @@ Learn how to quantize models in the [Quantization](../quantization) guide.
 ## CompressedTensorsConfig
 
 [[autodoc]] CompressedTensorsConfig
+
+## TorchAoConfig
+
+[[autodoc]] TorchAoConfig

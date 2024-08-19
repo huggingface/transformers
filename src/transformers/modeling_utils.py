@@ -59,6 +59,7 @@ from .quantizers import AutoHfQuantizer, HfQuantizer
 from .quantizers.quantizers_utils import get_module_from_name
 from .safetensors_conversion import auto_conversion
 from .utils import (
+    ACCELERATE_MIN_VERSION,
     ADAPTER_SAFE_WEIGHTS_NAME,
     ADAPTER_WEIGHTS_NAME,
     CONFIG_NAME,
@@ -104,7 +105,6 @@ from .utils.quantization_config import BitsAndBytesConfig, QuantizationMethod
 
 XLA_USE_BF16 = os.environ.get("XLA_USE_BF16", "0").upper()
 XLA_DOWNCAST_BF16 = os.environ.get("XLA_DOWNCAST_BF16", "0").upper()
-PARAM_RENAME_WARNING = "A parameter name that contains `{}` will be renamed internally to `{}`. Please use a different name to suppress this warning."
 
 
 if is_accelerate_available():
@@ -692,17 +692,30 @@ def _load_state_dict_into_model(model_to_load, state_dict, start_prefix, assign_
     # Convert old format to new format if needed from a PyTorch state_dict
     old_keys = []
     new_keys = []
+    renamed_keys = {}
+    renamed_gamma = {}
+    renamed_beta = {}
+    warning_msg = f"A pretrained model of type `{model_to_load.__class__.__name__}` "
     for key in state_dict.keys():
         new_key = None
         if "gamma" in key:
-            logger.warning(PARAM_RENAME_WARNING.format("gamma", "weight"))
+            # We add only the first key as an example
             new_key = key.replace("gamma", "weight")
+            renamed_gamma[key] = new_key if not renamed_gamma else renamed_gamma
         if "beta" in key:
-            logger.warning(PARAM_RENAME_WARNING.format("beta", "bias"))
+            # We add only the first key as an example
             new_key = key.replace("beta", "bias")
+            renamed_beta[key] = new_key if not renamed_beta else renamed_beta
         if new_key:
             old_keys.append(key)
             new_keys.append(new_key)
+    renamed_keys = {**renamed_gamma, **renamed_beta}
+    if renamed_keys:
+        warning_msg += "contains parameters that have been renamed internally (a few are listed below but more are present in the model):\n"
+        for old_key, new_key in renamed_keys.items():
+            warning_msg += f"* `{old_key}` -> `{new_key}`\n"
+        warning_msg += "If you are using a model from the Hub, consider submitting a PR to adjust these weights and help future users."
+        logger.info_once(warning_msg)
     for old_key, new_key in zip(old_keys, new_keys):
         state_dict[new_key] = state_dict.pop(old_key)
 
@@ -818,6 +831,7 @@ def _load_state_dict_into_meta_model(
     is_safetensors=False,
     keep_in_fp32_modules=None,
     unexpected_keys=None,  # passing `unexpected` for cleanup from quantization items
+    pretrained_model_name_or_path=None,  # for flagging the user when the model contains renamed keys
 ):
     """
     This is somewhat similar to `_load_state_dict_into_model`, but deals with a model that has some or all of its
@@ -840,18 +854,30 @@ def _load_state_dict_into_meta_model(
 
     old_keys = []
     new_keys = []
+    renamed_gamma = {}
+    renamed_beta = {}
     is_quantized = hf_quantizer is not None
+    warning_msg = f"This model {type(model)}"
     for key in state_dict.keys():
         new_key = None
         if "gamma" in key:
-            logger.warning(PARAM_RENAME_WARNING.format("gamma", "weight"))
+            # We add only the first key as an example
             new_key = key.replace("gamma", "weight")
+            renamed_gamma[key] = new_key if not renamed_gamma else renamed_gamma
         if "beta" in key:
-            logger.warning(PARAM_RENAME_WARNING.format("beta", "bias"))
+            # We add only the first key as an example
             new_key = key.replace("beta", "bias")
+            renamed_beta[key] = new_key if not renamed_beta else renamed_beta
         if new_key:
             old_keys.append(key)
             new_keys.append(new_key)
+    renamed_keys = {**renamed_gamma, **renamed_beta}
+    if renamed_keys:
+        warning_msg += "contains parameters that have been renamed internally (a few are listed below but more are present in the model):\n"
+        for old_key, new_key in renamed_keys.items():
+            warning_msg += f"* `{old_key}` -> `{new_key}`\n"
+        warning_msg += "If you are using a model from the Hub, consider submitting a PR to adjust these weights and help future users."
+        logger.info_once(warning_msg)
     for old_key, new_key in zip(old_keys, new_keys):
         state_dict[new_key] = state_dict.pop(old_key)
 
@@ -1449,7 +1475,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             dtype_orig = cls._set_default_torch_dtype(torch_dtype)
 
         config = copy.deepcopy(config)  # We do not want to modify the config inplace in _from_config.
-        config._attn_implementation = kwargs.pop("attn_implementation", None)
+
+        if config._attn_implementation_internal is not None:
+            # In this case, the config has been created with the attn_implementation set by the user, which we
+            # should respect.
+            attn_implementation = config._attn_implementation_internal
+        else:
+            attn_implementation = None
+
+        config._attn_implementation = kwargs.pop("attn_implementation", attn_implementation)
         config = cls._autoset_attn_implementation(
             config,
             use_flash_attention_2=use_flash_attention_2,
@@ -1465,6 +1499,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # and memory copying it on CPU or each GPU first
             with deepspeed.zero.Init(config_dict_or_path=deepspeed_config()):
                 model = cls(config, **kwargs)
+
         else:
             model = cls(config, **kwargs)
 
@@ -1980,12 +2015,22 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if new_num_tokens is None and pad_to_multiple_of is None:
             return model_embeds
 
+        # Since we are basically resuing the same old embeddings with new weight values, gathering is required
+        is_quantized = hasattr(self, "hf_quantizer") and self.hf_quantizer is not None
+        if is_deepspeed_zero3_enabled() and not is_quantized:
+            import deepspeed
+
+            with deepspeed.zero.GatheredParameters(model_embeds.weight, modifier_rank=None):
+                vocab_size = model_embeds.weight.shape[0]
+        else:
+            vocab_size = model_embeds.weight.shape[0]
+
         # Update base model and current model config
         if hasattr(self.config, "text_config"):
-            self.config.text_config.vocab_size = model_embeds.weight.shape[0]
+            self.config.text_config.vocab_size = vocab_size
         else:
-            self.config.vocab_size = model_embeds.weight.shape[0]
-        self.vocab_size = model_embeds.weight.shape[0]
+            self.config.vocab_size = vocab_size
+        self.vocab_size = vocab_size
 
         # Tie weights again if needed
         self.tie_weights()
@@ -2139,7 +2184,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             params = [old_embeddings.weight, new_embeddings.weight]
             with deepspeed.zero.GatheredParameters(params, modifier_rank=0):
-                old_embeddings.weight.data = new_embeddings.weight.data
+                old_embeddings.weight = new_embeddings.weight
                 old_embeddings.num_embeddings = new_embeddings.weight.data.shape[0]
 
                 # If the new number of tokens is smaller than the original `padding_idx`, the `padding_idx`
@@ -2723,7 +2768,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if module_map:
             filename_to_tensors = logging.tqdm(filename_to_tensors, desc="Saving checkpoint shards")
         for shard_file, tensors in filename_to_tensors:
-            shard = {tensor: state_dict[tensor] for tensor in tensors}
+            shard = {tensor: state_dict[tensor].contiguous() for tensor in tensors}
             # remake shard with onloaded parameters if necessary
             if module_map:
                 if accelerate_version < version.parse("0.31"):
@@ -3011,7 +3056,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             > Parameters for big model inference
 
             low_cpu_mem_usage(`bool`, *optional*):
-                Tries to not use more than 1x model size in CPU memory (including peak memory) while loading the model.
+                Tries not to use more than 1x model size in CPU memory (including peak memory) while loading the model.
                 Generally should be combined with a `device_map` (such as `"auto"`) for best results.
                 This is an experimental feature and a subject to change at any moment.
                 </Tip>
@@ -3272,7 +3317,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
             elif not is_accelerate_available():
                 raise ImportError(
-                    "Using `low_cpu_mem_usage=True` or a `device_map` requires Accelerate: `pip install accelerate`"
+                    f"Using `low_cpu_mem_usage=True` or a `device_map` requires Accelerate: `pip install 'accelerate>={ACCELERATE_MIN_VERSION}'`"
                 )
 
         # handling bnb config from kwargs, remove after `load_in_{4/8}bit` deprecation.
@@ -4515,7 +4560,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     @staticmethod
     def _load_pretrained_model_low_mem(
-        model, loaded_state_dict_keys, resolved_archive_file, start_prefix="", hf_quantizer=None
+        model,
+        loaded_state_dict_keys,
+        resolved_archive_file,
+        start_prefix="",
+        hf_quantizer=None,
+        pretrained_model_name_or_path=None,
     ):
         """
         This is an experimental function that loads the model using ~1.x model size CPU memory

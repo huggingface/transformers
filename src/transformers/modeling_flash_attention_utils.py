@@ -39,7 +39,7 @@ def _get_unpad_data(attention_mask: torch.Tensor) -> Tuple[torch.Tensor, torch.T
             Boolean or int tensor of shape (batch_size, sequence_length), 1 means valid and 0 means not valid.
 
     Return:
-        indices (`torch.Tensor):
+        indices (`torch.Tensor`):
             The indices of non-masked tokens from the flattened input sequence.
         cu_seqlens (`torch.Tensor`):
             The cumulative sequence lengths, used to index into ragged (unpadded) tensors. `cu_seqlens` shape is (batch_size + 1,).
@@ -83,7 +83,7 @@ def _upad_input(
             Target length.
 
     Return:
-        query_layer (`torch.Tensor):
+        query_layer (`torch.Tensor`):
             Query state without padding. Shape: (total_target_length, num_heads, head_dim).
         key_layer (`torch.Tensor`):
             Key state with padding. Shape: (total_source_length, num_key_value_heads, head_dim).
@@ -149,7 +149,7 @@ def prepare_fa2_from_position_ids(query, key, value, position_ids):
             Boolean or int tensor of shape (batch_size, sequence_length), 1 means valid and 0 means not valid.
 
     Return:
-        query (`torch.Tensor):
+        query (`torch.Tensor`):
             Query state without padding. Shape: (total_target_length, num_heads, head_dim).
         key (`torch.Tensor`):
             Key state with padding. Shape: (total_source_length, num_key_value_heads, head_dim).
@@ -264,9 +264,10 @@ def _flash_attention_forward(
         )
         attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
 
-    # if position_ids is provided and check not all examples (row) contain only 1 sequence,
-    # then use `flash_attn_varlen_func` to prevent cross-example attention and also allow padding free approach
-    elif position_ids is not None and not (position_ids[:, -1] == position_ids.size(1) - 1).all():
+    # If position_ids is provided and check all examples do not contain only 1 sequence, If tensor in increasing
+    # then we probably have one sequence, otherwise it is packed. Additionally check we are in pre-fill/training stage.
+    # Use `flash_attn_varlen_func` to prevent cross-example attention and also allow padding free approach
+    elif position_ids is not None and not (torch.diff(position_ids, dim=-1) >= 0).all() and query_length != 1:
         batch_size = query_states.size(0)
         query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = prepare_fa2_from_position_ids(
             query_states, key_states, value_states, position_ids

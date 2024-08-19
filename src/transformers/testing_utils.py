@@ -77,6 +77,7 @@ from .utils import (
     is_g2p_en_available,
     is_galore_torch_available,
     is_gguf_available,
+    is_grokadamw_available,
     is_ipex_available,
     is_jieba_available,
     is_jinja_available,
@@ -127,6 +128,7 @@ from .utils import (
     is_torch_tf32_available,
     is_torch_xla_available,
     is_torch_xpu_available,
+    is_torchao_available,
     is_torchaudio_available,
     is_torchdynamo_available,
     is_torchvision_available,
@@ -359,6 +361,13 @@ def require_lomo(test_case):
     return unittest.skipUnless(is_lomo_available(), "test requires LOMO")(test_case)
 
 
+def require_grokadamw(test_case):
+    """
+    Decorator marking a test that requires GrokAdamW. These tests are skipped when GrokAdamW isn't installed.
+    """
+    return unittest.skipUnless(is_grokadamw_available(), "test requires GrokAdamW")(test_case)
+
+
 def require_cv2(test_case):
     """
     Decorator marking a test that requires OpenCV.
@@ -514,7 +523,10 @@ def require_read_token(fn):
 
     @wraps(fn)
     def _inner(*args, **kwargs):
-        with patch("huggingface_hub.utils._headers.get_token", return_value=token):
+        if token is not None:
+            with patch("huggingface_hub.utils._headers.get_token", return_value=token):
+                return fn(*args, **kwargs)
+        else:  # Allow running locally with the default token env variable
             return fn(*args, **kwargs)
 
     return _inner
@@ -898,6 +910,11 @@ else:
 def require_torchdynamo(test_case):
     """Decorator marking a test that requires TorchDynamo"""
     return unittest.skipUnless(is_torchdynamo_available(), "test requires TorchDynamo")(test_case)
+
+
+def require_torchao(test_case):
+    """Decorator marking a test that requires torchao"""
+    return unittest.skipUnless(is_torchao_available(), "test requires torchao")(test_case)
 
 
 def require_torch_tensorrt_fx(test_case):
