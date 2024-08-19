@@ -210,8 +210,7 @@ class LlavaOnevisionProcessor(ProcessorMixin):
         )
         scale_height, scale_width = height_best_resolution // height, width_best_resolution // width
 
-        patches_height = int(math.sqrt(self.num_image_tokens))
-        patches_width = int(math.sqrt(self.num_image_tokens))
+        patches_height = patches_width = int(math.sqrt(self.num_image_tokens))
         unpadded_features, newline_features = self._get_unpadded_features(
             orig_height, orig_width, patches_height, patches_width, scale_height, scale_width
         )
