@@ -540,7 +540,7 @@ class Phi3FlashAttention2(Phi3Attention):
             max(kv_seq_len, position_ids[:, -1].max().item() + 1) if position_ids is not None else kv_seq_len
         )
 
-        cos, sin = self.rotary_emb(value_states, seq_len=rotary_seq_len)
+        cos, sin = self.rotary_emb(value_states, seq_len=rotary_seq_len, position_ids=position_ids)
 
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
@@ -841,7 +841,7 @@ class Phi3PreTrainedModel(PreTrainedModel):
     _no_split_modules = ["Phi3DecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
-    _supports_sdpa = False
+    _supports_sdpa = True
     _supports_cache_class = True
 
     _version = "0.0.5"
@@ -1318,17 +1318,18 @@ class Phi3ForCausalLM(Phi3PreTrainedModel):
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and cache_position[0] == 0:
-            model_inputs = {"inputs_embeds": inputs_embeds}
+            model_inputs = {"inputs_embeds": inputs_embeds, "input_ids": None}
         else:
-            model_inputs = {"input_ids": input_ids}
+            # The clone here is for the same reason as for `position_ids`.
+            model_inputs = {"input_ids": input_ids.clone(memory_format=torch.contiguous_format), "inputs_embeds": None}
 
         if isinstance(past_key_values, StaticCache) and attention_mask.ndim == 2:
-            if inputs_embeds is not None:
-                batch_size, sequence_length = inputs_embeds.shape
-                device = inputs_embeds.device
+            if model_inputs["inputs_embeds"] is not None:
+                batch_size, sequence_length, _ = model_inputs["inputs_embeds"].shape
+                device = model_inputs["inputs_embeds"].device
             else:
-                batch_size, sequence_length = input_ids.shape
-                device = input_ids.device
+                batch_size, sequence_length = model_inputs["input_ids"].shape
+                device = model_inputs["input_ids"].device
 
             dtype = self.lm_head.weight.dtype
             min_dtype = torch.finfo(dtype).min

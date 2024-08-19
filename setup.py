@@ -99,7 +99,6 @@ _deps = [
     "accelerate>=0.21.0",
     "av==9.2.0",  # Latest version of PyAV (10.0.0) has issues with audio stream.
     "beautifulsoup4",
-    "blobfile==2.1.1",
     "codecarbon==1.2.0",
     "cookiecutter==1.7.3",
     "dataclasses",
@@ -178,7 +177,6 @@ _deps = [
     "tensorflow-probability<0.24",
     "tf2onnx",
     "timeout-decorator",
-    "tiktoken==0.7.0",
     "timm<=0.9.16",
     "tokenizers>=0.19,<0.20",
     "torch",
@@ -257,6 +255,7 @@ class DepsTableUpdateCommand(Command):
         with open(target, "w", encoding="utf-8", newline="\n") as f:
             f.write("\n".join(content))
 
+
 extras = {}
 
 extras["ja"] = deps_list("fugashi", "ipadic", "unidic_lite", "unidic", "sudachipy", "sudachidict_core", "rhoknp")
@@ -310,8 +309,8 @@ extras["torch-vision"] = deps_list("torchvision") + extras["vision"]
 extras["natten"] = deps_list("natten")
 extras["codecarbon"] = deps_list("codecarbon")
 extras["video"] = deps_list("decord", "av")
+
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
-extras["tiktoken"] = deps_list("tiktoken", "blobfile")
 extras["testing"] = (
     deps_list(
         "pytest",
@@ -359,6 +358,7 @@ extras["all"] = (
     + extras["accelerate"]
     + extras["video"]
 )
+
 
 extras["dev-torch"] = (
     extras["testing"]
