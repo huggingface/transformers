@@ -415,7 +415,7 @@ class SchedulerType(ExplicitEnum):
     Scheduler names for the parameter `lr_scheduler_type` in [`TrainingArguments`].
     By default, it uses "linear". Internally, this retrieves `get_linear_schedule_with_warmup` scheduler from [`Trainer`].
     
-    Scheduler types:
+      Scheduler types:
        - "linear" = get_linear_schedule_with_warmup
        - "cosine" = get_cosine_schedule_with_warmup
        - "cosine_with_restarts" = get_cosine_with_hard_restarts_schedule_with_warmup
