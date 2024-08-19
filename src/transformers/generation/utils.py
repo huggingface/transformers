@@ -1476,7 +1476,7 @@ class GenerationMixin:
                     cache_dtype = self.get_output_embeddings().weight.dtype
 
             cache_kwargs = {
-                "config": self.config,
+                "config": self.config if hasattr(self.config, "text_config") else self.config,
                 "max_batch_size": max_batch_size,
                 "max_cache_len": max_cache_len,
                 "device": device,

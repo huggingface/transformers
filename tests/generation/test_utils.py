@@ -459,8 +459,7 @@ class GenerationTesterMixin:
                 # Retrocompatibility check
                 self.assertIsInstance(output_generate, GreedySearchDecoderOnlyOutput)
 
-            config = model.config if not hasattr(model.config, "text_config") else model.config.text_config
-            self._check_outputs(output_generate, input_ids, config)
+            self._check_outputs(output_generate, input_ids, model.config)
 
     def test_greedy_generate_dict_outputs_use_cache(self):
         for model_class in self.all_generative_model_classes:
@@ -489,8 +488,8 @@ class GenerationTesterMixin:
                 self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + 1)
             else:
                 self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + input_ids.shape[-1])
-            config = model.config if not hasattr(model.config, "text_config") else model.config.text_config
-            self._check_outputs(output_generate, input_ids, config, use_cache=True)
+
+            self._check_outputs(output_generate, input_ids, model.config, use_cache=True)
 
     def test_sample_generate(self):
         for model_class in self.all_generative_model_classes:
@@ -555,8 +554,7 @@ class GenerationTesterMixin:
                 # Retrocompatibility check
                 self.assertIsInstance(output_generate, SampleDecoderOnlyOutput)
 
-            config = model.config if not hasattr(model.config, "text_config") else model.config.text_config
-            self._check_outputs(output_generate, input_ids, config, num_return_sequences=2)
+            self._check_outputs(output_generate, input_ids, model.config, num_return_sequences=2)
 
     def test_beam_search_generate(self):
         for model_class in self.all_generative_model_classes:
@@ -621,8 +619,9 @@ class GenerationTesterMixin:
                 # Retrocompatibility check
                 self.assertIsInstance(output_generate, BeamSearchDecoderOnlyOutput)
 
-            config = model.config if not hasattr(model.config, "text_config") else model.config.text_config
-            self._check_outputs(output_generate, input_ids, config, num_return_sequences=beam_kwargs["num_beams"])
+            self._check_outputs(
+                output_generate, input_ids, model.config, num_return_sequences=beam_kwargs["num_beams"]
+            )
 
     def test_beam_search_generate_dict_outputs_use_cache(self):
         for model_class in self.all_generative_model_classes:
@@ -663,9 +662,9 @@ class GenerationTesterMixin:
                 self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + 1)
             else:
                 self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + input_ids.shape[-1])
-            config = model.config if not hasattr(model.config, "text_config") else model.config.text_config
+
             self._check_outputs(
-                output_generate, input_ids, config, use_cache=True, num_return_sequences=beam_kwargs["num_beams"]
+                output_generate, input_ids, model.config, use_cache=True, num_return_sequences=beam_kwargs["num_beams"]
             )
 
     @require_accelerate
@@ -762,8 +761,9 @@ class GenerationTesterMixin:
                 # Retrocompatibility check
                 self.assertIsInstance(output_generate, BeamSampleDecoderOnlyOutput)
 
-            config = model.config if not hasattr(model.config, "text_config") else model.config.text_config
-            self._check_outputs(output_generate, input_ids, config, num_return_sequences=beam_kwargs["num_beams"])
+            self._check_outputs(
+                output_generate, input_ids, model.config, num_return_sequences=beam_kwargs["num_beams"]
+            )
 
     def test_generate_without_input_ids(self):
         config, _, _ = self._get_input_ids_and_config()
@@ -861,8 +861,9 @@ class GenerationTesterMixin:
                 # Retrocompatibility check
                 self.assertIsInstance(output_generate, BeamSearchDecoderOnlyOutput)
 
-            config = model.config if not hasattr(model.config, "text_config") else model.config.text_config
-            self._check_outputs(output_generate, input_ids, config, num_return_sequences=beam_kwargs["num_beams"])
+            self._check_outputs(
+                output_generate, input_ids, model.config, num_return_sequences=beam_kwargs["num_beams"]
+            )
 
     # TODO: @gante
     @is_flaky()
@@ -987,8 +988,9 @@ class GenerationTesterMixin:
                 # Retrocompatibility check
                 self.assertIsInstance(output_generate, BeamSearchDecoderOnlyOutput)
 
-            config = model.config if not hasattr(model.config, "text_config") else model.config.text_config
-            self._check_outputs(output_generate, input_ids, config, num_return_sequences=beam_kwargs["num_beams"])
+            self._check_outputs(
+                output_generate, input_ids, model.config, num_return_sequences=beam_kwargs["num_beams"]
+            )
 
     def test_contrastive_generate(self):
         for model_class in self.all_generative_model_classes:
@@ -1050,8 +1052,8 @@ class GenerationTesterMixin:
                 self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + 1)
             else:
                 self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + input_ids.shape[-1])
-            config = model.config if not hasattr(model.config, "text_config") else model.config.text_config
-            self._check_outputs(output_generate, input_ids, config, use_cache=True)
+
+            self._check_outputs(output_generate, input_ids, model.config, use_cache=True)
 
     def test_contrastive_generate_low_memory(self):
         # Check that choosing 'low_memory' does not change the model output
@@ -1206,10 +1208,10 @@ class GenerationTesterMixin:
             output_assisted = model.generate(input_ids, attention_mask=attention_mask, **generation_kwargs)
 
             # The two outputs must match and their shape must be as expected
-            config = model.config if not hasattr(model.config, "text_config") else model.config.text_config
+
             self.assertListEqual(output_greedy.sequences.tolist(), output_assisted.sequences.tolist())
             for output in (output_greedy, output_assisted):
-                self._check_outputs(output, input_ids, config, use_cache=True)
+                self._check_outputs(output, input_ids, model.config, use_cache=True)
 
     @is_flaky()
     def test_prompt_lookup_decoding_matches_greedy_search(self):
@@ -1270,10 +1272,10 @@ class GenerationTesterMixin:
             output_prompt_lookup = model.generate(input_ids, attention_mask=attention_mask, **generation_kwargs)
 
             # The two outputs must match and their shape must be as expected
-            config = model.config if not hasattr(model.config, "text_config") else model.config.text_config
+
             self.assertListEqual(output_greedy.sequences.tolist(), output_prompt_lookup.sequences.tolist())
             for output in (output_greedy, output_prompt_lookup):
-                self._check_outputs(output, input_ids, config, use_cache=True)
+                self._check_outputs(output, input_ids, model.config, use_cache=True)
 
     def test_dola_decoding_sample(self):
         # TODO (joao): investigate skips, try to reduce incompatibilities
@@ -1322,8 +1324,7 @@ class GenerationTesterMixin:
             generation_kwargs.update({"dola_layers": "low"})
             model_kwargs = {"attention_mask": attention_mask} if attention_mask is not None else {}
             output_dola = model.generate(input_ids, **model_kwargs, **generation_kwargs)
-            text_config = model.config if not hasattr(model.config, "text_config") else model.config.text_config
-            self._check_outputs(output_dola, input_ids, text_config, use_cache=config.use_cache)
+            self._check_outputs(output_dola, input_ids, model.config, use_cache=config.use_cache)
 
     def test_assisted_decoding_sample(self):
         # In this test we don't check assisted vs non-assisted output -- seeded assisted decoding with sample will not
@@ -1382,8 +1383,7 @@ class GenerationTesterMixin:
             }
             output_assisted = model.generate(input_ids, attention_mask=attention_mask, **generation_kwargs)
 
-            config = model.config if not hasattr(model.config, "text_config") else model.config.text_config
-            self._check_outputs(output_assisted, input_ids, config, use_cache=True)
+            self._check_outputs(output_assisted, input_ids, model.config, use_cache=True)
 
     def test_prompt_lookup_decoding_stops_at_eos(self):
         # This test ensures that the prompt lookup generation stops at eos token and does not suggest more tokens
@@ -1917,6 +1917,7 @@ class GenerationTesterMixin:
 
     def _check_outputs(self, output, input_ids, config, use_cache=False, num_return_sequences=1):
         batch_size, seq_length = input_ids.shape
+        config = config.text_config if hasattr(config, "text_config") else config
         num_sequences_in_output = batch_size * num_return_sequences
 
         gen_len = (

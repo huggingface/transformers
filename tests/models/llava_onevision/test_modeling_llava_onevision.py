@@ -284,37 +284,21 @@ class LlavaOnevisionForConditionalGenerationModelTest(ModelTesterMixin, Generati
             self.assertTrue(torch.allclose(out_embeds, out_ids))
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecure seem to not compute gradients properly when using GC, SiglipVisionModel does not support standalone training"
     )
     def test_training_gradient_checkpointing(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecure seem to not compute gradients properly when using GC, SiglipVisionModel does not support standalone training"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecure seem to not compute gradients properly when using GC, SiglipVisionModel does not support standalone training"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(reason="Feedforward chunking is not yet supported")
-    def test_feed_forward_chunking(self):
-        pass
-
-    @unittest.skip(reason="CPU offload is not yet supported")
-    def test_cpu_offload(self):
-        pass
-
-    @unittest.skip(reason="Compile not yet supported because in LLava models")
-    def test_sdpa_can_compile_dynamic(self):
-        pass
-
-    @unittest.skip(reason="Compile not yet supported because in LLava models")
-    def test_sdpa_can_dispatch_on_flash(self):
         pass
 
 

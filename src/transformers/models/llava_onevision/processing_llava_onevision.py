@@ -18,7 +18,7 @@ Processor class for LLaVa-Onevision.
 
 import math
 import sys
-from typing import List, Union
+from typing import Iterable, List, Union
 
 
 if sys.version_info >= (3, 11):
@@ -34,7 +34,6 @@ from ...processing_utils import (
     ProcessorMixin,
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import to_py_obj
 
 
 class LlavaOnevisionProcessorKwargs(ProcessingKwargs, total=False):
@@ -75,7 +74,7 @@ class LlavaOnevisionProcessor(ProcessorMixin):
             Special token used to denote video location.
     """
 
-    attributes = ["video_processor", "image_processor", "tokenizer"]
+    attributes = ["image_processor", "tokenizer", "video_processor"]
     valid_kwargs = [
         "chat_template",
         "num_image_tokens",
@@ -83,15 +82,15 @@ class LlavaOnevisionProcessor(ProcessorMixin):
         "image_token",
         "video_token",
     ]
-    video_processor_class = "LlavaOnevisionVideoProcessor"
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
+    video_processor_class = "LlavaOnevisionVideoProcessor"
 
     def __init__(
         self,
-        video_processor=None,
         image_processor=None,
         tokenizer=None,
+        video_processor=None,
         num_image_tokens=None,
         vision_feature_select_strategy=None,
         chat_template=None,
@@ -103,7 +102,7 @@ class LlavaOnevisionProcessor(ProcessorMixin):
         self.vision_feature_select_strategy = vision_feature_select_strategy
         self.image_token = image_token
         self.video_token = video_token
-        super().__init__(video_processor, image_processor, tokenizer, chat_template=chat_template)
+        super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template)
 
     def __call__(
         self,
@@ -120,13 +119,13 @@ class LlavaOnevisionProcessor(ProcessorMixin):
         of the above two methods for more information.
 
         Args:
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
+                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
+                tensor. Both channels-first and channels-last formats are supported.
             text (`str`, `List[str]`, `List[List[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. Both channels-first and channels-last formats are supported.
             videos (`np.ndarray`, `torch.Tensor`, `List[np.ndarray]`, `List[torch.Tensor]`):
                 The image or batch of videos to be prepared. Each video can be a 4D NumPy array or PyTorch
 
@@ -159,48 +158,50 @@ class LlavaOnevisionProcessor(ProcessorMixin):
         if images is not None:
             image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
 
-            image_sizes = to_py_obj(image_inputs["image_sizes"])
-            height, width = get_image_size(to_numpy_array(image_inputs["pixel_values"][0][0]))
-            prompt_strings = []
-
-            for sample in text:
-                while self.image_token in sample:
-                    image_size = image_sizes.pop(0)
-                    orig_height, orig_width = image_size
-                    num_image_tokens = self._get_number_of_features(orig_height, orig_width, height, width)
-                    if self.vision_feature_select_strategy == "default":
-                        num_image_tokens -= 1
-
-                    sample = sample.replace(self.image_token, "<placeholder>" * num_image_tokens, 1)
-                prompt_strings.append(sample)
-            text = [sample.replace("<placeholder>", self.image_token) for sample in prompt_strings]
+            image_sizes = iter(reversed(image_inputs["image_sizes"]))
+            height, width = get_image_size(
+                to_numpy_array(image_inputs["pixel_values"][0][0]),
+                channel_dim=output_kwargs["images_kwargs"].get("data_format"),
+            )
+            text = self._expand_special_token_num_visual_times(text, image_sizes, height, width, self.image_token)
 
         if videos is not None:
             video_inputs = self.video_processor(videos, **output_kwargs["videos_kwargs"])
 
-            image_sizes = to_py_obj(video_inputs["image_sizes_videos"])
+            image_sizes = iter(reversed(video_inputs["image_sizes_videos"]))
             one_video = to_numpy_array(video_inputs["pixel_values_videos"][0])
-            height, width = get_image_size(one_video[0])
+            height, width = get_image_size(one_video[0], channel_dim=output_kwargs["images_kwargs"].get("data_format"))
             num_frames = one_video.shape[0]  # frame dim is always after batch dim
-            num_image_tokens = self.num_image_tokens
-            prompt_strings = []
-
-            for sample in text:
-                while self.video_token in sample:
-                    image_size_list = image_sizes.pop(0)
-                    orig_height, orig_width = image_size_list[0]
-                    num_image_tokens = self._get_number_of_features(orig_height, orig_width, height, width)
-                    if self.vision_feature_select_strategy == "default":
-                        num_image_tokens -= 1
-
-                    sample = sample.replace(self.video_token, "<placeholder>" * num_image_tokens * num_frames, 1)
-                prompt_strings.append(sample)
-            text = [sample.replace("<placeholder>", self.video_token) for sample in prompt_strings]
+            text = self._expand_special_token_num_visual_times(
+                text, image_sizes, height, width, self.video_token, num_frames=num_frames
+            )
 
         # Padding side can be in TextKwargs but is not accepted by the tokenizer
         _ = output_kwargs["text_kwargs"].pop("padding_side", None)
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
         return BatchFeature(data={**text_inputs, **image_inputs, **video_inputs})
+
+    def _expand_special_token_num_visual_times(
+        self,
+        text: List[TextInput],
+        image_sizes: Iterable[Union[List[int], int]],
+        height: int,
+        width: int,
+        special_token: str,
+        num_frames: int = 1,
+    ):
+        prompt_strings = []
+        for sample in text:
+            while special_token in sample:
+                image_size_list = next(image_sizes)
+                orig_height, orig_width = image_size_list[0] if num_frames != 1 else image_size_list
+                num_image_tokens = self._get_number_of_features(orig_height, orig_width, height, width)
+                if self.vision_feature_select_strategy == "default":
+                    num_image_tokens -= 1
+                sample = sample.replace(special_token, "<placeholder>" * num_image_tokens * num_frames, 1)
+            prompt_strings.append(sample)
+        text = [sample.replace("<placeholder>", special_token) for sample in prompt_strings]
+        return text
 
     def _get_number_of_features(self, orig_height: int, orig_width: int, height: int, width: int) -> int:
         image_grid_pinpoints = self.image_processor.image_grid_pinpoints

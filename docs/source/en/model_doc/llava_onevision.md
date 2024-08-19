@@ -37,7 +37,7 @@ Tips:
 
 <Tip warning={true}>
 
-- Llava-Next uses different number of patches for images and thus has to pad the inputs inside modeling code, aside from the padding done when processing the inputs. The default setting is "left-padding" if model is in `eval()` mode, otherwise "right-padding".
+- Llava-Onevision uses different number of patches for images and thus has to pad the inputs inside modeling code, aside from the padding done when processing the inputs. The default setting is "left-padding" if model is in `eval()` mode, otherwise "right-padding".
 
 </Tip>
 
@@ -193,7 +193,7 @@ processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokeniza
 
 ### Video inference
 
-LLaVa-Onevision can perform inference with multiple images as input, where images either belong to the same prompt or different prompts (in batched inference). Here is how you can do it:
+LLaVa-Onevision also can perform inference with videos as input, where video frames are treated as multiple images. Here is how you can do it:
 
 ```python
 import av

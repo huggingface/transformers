@@ -274,12 +274,12 @@ LLAVA_ONEVISION_INPUTS_DOCSTRING = r"""
             The tensors corresponding to the input images. Pixel values can be obtained using
             [`AutoImageProcessor`]. See [`LlavaNextImageProcessor.__call__`] for details. [`LlavaProcessor`] uses
             [`LlavaNextImageProcessor`] for processing images.
+        image_sizes (`torch.LongTensor` of shape `(batch_size, 2)`, *optional*):
+            The sizes of the images in the batch, being (height, width) for each image.
         pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, frames, num_channels, image_size, image_size)):
             The tensors corresponding to the input videos. Pixel values can be obtained using
             [`LlavaNextVideoProcessor`]. See [`LlavaNextVideoProcessor.__call__`] for details. [`LlavaProcessor`] uses
             [`LlavaNextVideoProcessor`] for processing videos.
-        image_sizes (`torch.LongTensor` of shape `(batch_size, 2)`, *optional*):
-            The sizes of the images in the batch, being (height, width) for each image.
         image_sizes_videos (`torch.LongTensor` of shape `(batch_size, frames, 2)`, *optional*):
             The sizes of the videos in the batch, being (height, width) for each frame in the video.
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -326,6 +326,8 @@ LLAVA_ONEVISION_INPUTS_DOCSTRING = r"""
             The feature selection strategy used to select the vision feature from the vision backbone.
             Can be one of `"default"` or `"full"`. If `"default"`, the CLS token is removed from the vision features.
             If `"full"`, the full vision features are used.
+        vision_aspect_ratio (`str`, *optional*, defaults to `"anyres_max_9"`):
+            Aspect ratio used when processong image features. The default value is "anyres_max_9".
         use_cache (`bool`, *optional*):
             If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
             `past_key_values`).
@@ -344,6 +346,10 @@ LLAVA_ONEVISION_INPUTS_DOCSTRING = r"""
 """
 
 
+@add_start_docstrings(
+    """The LLaVA-Onevision model which consists of a vision backbone and a language model.""",
+    LLAVA_ONEVISION_START_DOCSTRING,
+)
 class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel):
     def __init__(self, config: LlavaOnevisionConfig):
         super().__init__(config)
@@ -455,6 +461,7 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel):
         feature_lens = torch.tensor(feature_lens, dtype=torch.long, device=image_features.device)
         return image_features, feature_lens
 
+    @add_start_docstrings(LLAVA_ONEVISION_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -553,6 +560,16 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel):
             if pixels is None:
                 continue
 
+            if sizes is None:
+                raise ValueError(
+                    "Make sure to pass `image_sizes/image_sizes_videos` if you passed `pixel_values/pixel_values_videos`"
+                )
+
+            if pixels.dim() not in [4, 5] and special_token == self.config.image_token_index:
+                raise ValueError(f"pixel_values of shape {pixels.shape}, expect to be of 4 or 5 dimensions")
+            elif pixels.dim() not in [5, 6] and special_token == self.config.video_token_index:
+                raise ValueError(f"pixel_values_videos of shape {pixels.shape}, expect to be of 5 or 6 dimensions")
+
             # if videos are being processed, we can flatten frame dim and treat it as a huge batch of images
             if pixels.dim() == 6:
                 sizes = [imsize for size_list in sizes for imsize in size_list]
@@ -568,13 +585,11 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel):
                 for imsize in sizes
             ]
 
-            # figure out if pixel_values is concatenated or stacked
+            # unpad extra patches and concatenate them
             if pixels.dim() == 5:
                 _pixel_values_list = [pix_val[:num_patch] for pix_val, num_patch in zip(pixels, image_num_patches)]
-                # [batch_size*frames*num_patches, num_channels, height, width]
+                # [batch_size*frames*num_patches, num_channels, height, width] where frames=1 for images
                 pixels = torch.cat(_pixel_values_list, dim=0)
-            elif pixels.dim() != 4:
-                raise ValueError(f"pixel_values_videos of shape {pixels.shape}, expect to be of 4 or 5 dimensions")
 
             image_features = self.vision_tower(pixels, output_hidden_states=True)
             selected_image_feature = image_features.hidden_states[vision_feature_layer]
