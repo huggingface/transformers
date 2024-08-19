@@ -103,7 +103,7 @@ class InstructBlipVideoProcessor(ProcessorMixin):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
+            images (`ImageInput`, *optional*):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
                 number of channels, H and W are image height and width.
@@ -119,6 +119,7 @@ class InstructBlipVideoProcessor(ProcessorMixin):
             -- **qformer_attention_mask** - List of indices specifying which tokens from the Q-Former tokenizer should be attended to by the model. Returned when `text` is not `None`.
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
+
         output_kwargs = self._merge_kwargs(
             InstructBlipVideoProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
