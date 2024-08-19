@@ -22,8 +22,9 @@ from typing import List, Optional, Union
 import numpy as np
 
 from ...image_utils import ImageInput
+from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin
-from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import is_flax_available, is_tf_available, is_torch_available
 
 
@@ -105,7 +106,7 @@ class Owlv2Processor(ProcessorMixin):
                 should be of shape (C, H, W), where C is a number of channels, H and W are image height and width.
 
         Returns:
-            [`BatchEncoding`]: A [`BatchEncoding`] with the following fields:
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
             - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
             - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
               `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
@@ -172,12 +173,12 @@ class Owlv2Processor(ProcessorMixin):
             else:
                 raise ValueError("Target return tensor type could not be returned")
 
-            encoding = BatchEncoding()
+            encoding = BatchFeature()
             encoding["input_ids"] = input_ids
             encoding["attention_mask"] = attention_mask
 
         if query_images is not None:
-            encoding = BatchEncoding()
+            encoding = BatchFeature()
             query_pixel_values = self.image_processor(query_images, **output_kwargs["images_kwargs"]).pixel_values
             encoding["query_pixel_values"] = query_pixel_values
 
@@ -193,7 +194,7 @@ class Owlv2Processor(ProcessorMixin):
         elif text is not None or query_images is not None:
             return encoding
         else:
-            return BatchEncoding(data=dict(**image_features), tensor_type=return_tensors)
+            return BatchFeature(data=dict(**image_features), tensor_type=return_tensors)
 
     # Copied from transformers.models.owlvit.processing_owlvit.OwlViTProcessor.post_process_object_detection with OWLViT->OWLv2
     def post_process_object_detection(self, *args, **kwargs):

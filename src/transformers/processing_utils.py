@@ -1013,8 +1013,10 @@ class ProcessorMixin(PushToHubMixin):
             )
         if len(args) > len(self.optional_call_args):
             raise ValueError(
-                f"Expected *at most* {len(self.optional_call_args)} optional positional arguments in processor call but received {len(args)}."
-                "Passing positional arguments to the processor call is not recommended"
+                f"Expected *at most* {len(self.optional_call_args)} optional positional arguments in processor call"
+                f"which will be matched with {' '.join(self.optional_call_args)} in the order they are passed."
+                f"However, got {len(args)} positional arguments instead."
+                "Please pass all arguments as keyword arguments instead (e.g. `processor(arg_name_1=..., arg_name_2=...))`."
             )
         return {arg_name: arg_value for arg_value, arg_name in zip(args, self.optional_call_args)}
 

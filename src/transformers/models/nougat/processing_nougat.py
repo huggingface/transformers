@@ -71,8 +71,8 @@ class NougatProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "AutoImageProcessor"
-    tokenizer_class = "AutoTokenizer"
+    image_processor_class = "NougatImageProcessor"
+    tokenizer_class = "NougatTokenizerFast"
 
     def __init__(self, image_processor, tokenizer):
         super().__init__(image_processor, tokenizer)
@@ -86,6 +86,32 @@ class NougatProcessor(ProcessorMixin):
         videos=None,
         **kwargs: Unpack[NougatProcessorKwargs],
     ):
+        """
+        Main method to prepare for the model one or several text(s) and image(s). This method forwards the `text` and
+        `kwargs` arguments to NougatTokenizerFast's [`~NougatTokenizerFast.__call__`] if `text` is not `None` to encode
+        the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
+        NougatImageProcessor's [`~NougatImageProcessor.__call__`] if `images` is not `None`. Please refer to the doctsring
+        of the above two methods for more information.
+
+        Args:
+            text (`str`, `List[str]`, `List[List[str]]`, *optional*):
+                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
+                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
+                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`,
+            `List[torch.Tensor]`, *optional*):
+                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
+                tensor. Both channels-first and channels-last formats are supported.
+
+        Returns:
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
+            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
+            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
+              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
+              `None`).
+            - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
+            - **labels** -- List of label token ids to be fed to a model. Returned when both `text` and `images` are not `None`.
+        """
         if images is None and text is None:
             raise ValueError("You need to specify either an `images` or `text` input to process.")
 

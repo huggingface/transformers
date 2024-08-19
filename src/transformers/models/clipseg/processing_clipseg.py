@@ -21,8 +21,9 @@ import warnings
 from typing import List, Optional, Union
 
 from ...image_utils import ImageInput
+from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin
-from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
 
 
 if sys.version_info >= (3, 11):
@@ -106,7 +107,7 @@ class CLIPSegProcessor(ProcessorMixin):
                 (C, H, W), where C is a number of channels, H and W are image height and width.
 
         Returns:
-            [`BatchEncoding`]: A [`BatchEncoding`] with the following fields:
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 
             - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
             - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
@@ -156,7 +157,7 @@ class CLIPSegProcessor(ProcessorMixin):
             }
             return encoding
         else:
-            return BatchEncoding(
+            return BatchFeature(
                 data=dict(**image_features), tensor_type=output_kwargs["common_kwargs"].get("return_tensors")
             )
 
