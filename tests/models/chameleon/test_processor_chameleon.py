@@ -13,6 +13,10 @@ class ChameleonProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def get_component(self, attribute, **kwargs):
         assert attribute in self.processor_class.attributes
+        if attribute != "tokenizer":
+            return super().get_component(attribute, **kwargs)
+        # We use the fast tokenizer by default as the slow tokenizer expects the vocab file to be present in the loading directory.
+        # This vocab file is neither in the official repo nor does it get saved when we save the processor in `setUp` below.
         component_class_name = getattr(self.processor_class, f"{attribute}_class")
         if isinstance(component_class_name, tuple):
             if "_fast" in component_class_name[0]:
