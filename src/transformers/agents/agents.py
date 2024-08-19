@@ -324,8 +324,7 @@ def format_prompt_with_managed_agents_descriptions(prompt_template, managed_agen
         managed_agents_descriptions = """You can also give requests to team members.
 Calling a team member works the same as for calling a tool: simply, the only argument you can give in the call is 'request', a long string explaning your request.
 Given that this team member is a real human, you should be very verbose in your request.
-Here is a list of the team members that you can call:
-    """
+Here is a list of the team members that you can call:"""
         for agent in managed_agents.values():
             managed_agents_descriptions += f"\n- {agent.name}: {agent.description}"
         return prompt_template.replace("<<managed_agents_descriptions>>", managed_agents_descriptions)
@@ -410,6 +409,7 @@ class Agent:
             self.system_prompt_template,
             self.tool_description_template,
         )
+        self.system_prompt = format_prompt_with_managed_agents_descriptions(self.system_prompt, self.managed_agents)
         if hasattr(self, "authorized_imports"):
             self.system_prompt = format_prompt_with_imports(
                 self.system_prompt, list(set(LIST_SAFE_MODULES) | set(self.authorized_imports))
@@ -1142,7 +1142,7 @@ class ManagedAgent:
         self.description = description
         self.additional_prompting = additional_prompting
 
-    def __call__(self, task):
+    def write_full_task(self, task):
         full_task = f"""You're a helpful agent named '{self.name}'.
 You have been submitted this task by your manager: '{task}'
 
@@ -1160,4 +1160,8 @@ And even if your task resolution is not successful, please return as much contex
             full_task = full_task.replace("\n<<additional_prompting>>", self.additional_prompting).strip()
         else:
             full_task = full_task.replace("\n<<additional_prompting>>", "").strip()
-        return self.agent.run(full_task)
+        return full_task
+
+    def __call__(self, task, **kwargs):
+        full_task = self.write_full_task(task)
+        return self.agent.run(full_task, **kwargs)
