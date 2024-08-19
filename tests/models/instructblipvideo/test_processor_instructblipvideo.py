@@ -9,6 +9,7 @@ from ...test_processing_common import ProcessorTesterMixin
 class InstructBlipVideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     from_pretrained_id = "Salesforce/instructblip-vicuna-7b"
     processor_class = InstructBlipVideoProcessor
+    videos_data_arg_name = "pixel_values"
 
     def prepare_components(self):
         components = super().prepare_components()

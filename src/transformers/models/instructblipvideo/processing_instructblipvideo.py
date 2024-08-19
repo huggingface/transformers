@@ -18,6 +18,7 @@ Processor class for InstructBLIP. Largely copy of Blip2Processor with addition o
 
 import os
 import sys
+import warnings
 from typing import List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
@@ -88,10 +89,10 @@ class InstructBlipVideoProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        images: Optional[VideoInput] = None,
+        images: Optional[VideoInput] = None,  # Keeping this here for backwards compatibility
         text: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
+        videos: Optional[VideoInput] = None,
         audio=None,
-        videos=None,
         **kwargs: Unpack[InstructBlipVideoProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -107,6 +108,9 @@ class InstructBlipVideoProcessor(ProcessorMixin):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
                 number of channels, H and W are image height and width.
+            videos (`VideoInput`, *optional*):
+                The image or batch of videos to be prepared. Each video can be a 4D NumPy array or PyTorch
+                tensor, or a nested list of 3D frames. Both channels-first and channels-last formats are supported.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
@@ -119,6 +123,17 @@ class InstructBlipVideoProcessor(ProcessorMixin):
             -- **qformer_attention_mask** - List of indices specifying which tokens from the Q-Former tokenizer should be attended to by the model. Returned when `text` is not `None`.
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
+        if images is not None:
+            warnings.warn(
+                "The `images` argument is deprecated and will be removed in future versions, use `videos` instead.",
+                FutureWarning,
+            )
+        if images is not None and videos is not None:
+            raise ValueError(
+                "You cannot provide both `images` and `videos` at the same time. Please pass video data as `videos=...` instead."
+            )
+        if images is not None and videos is None:
+            videos = images
 
         output_kwargs = self._merge_kwargs(
             InstructBlipVideoProcessorKwargs,
@@ -144,7 +159,7 @@ class InstructBlipVideoProcessor(ProcessorMixin):
 
             # if we know how many query tokens, expand text inside processor. We need this hacky manipulation
             # because BLIP expects image tokens to be at the beginning even before BOS token
-            if self.num_query_tokens is not None and images is not None:
+            if self.num_query_tokens is not None and videos is not None:
                 text_encoding = {}
                 video_tokens = (
                     self.video_token.content * self.num_query_tokens * 4
@@ -157,7 +172,7 @@ class InstructBlipVideoProcessor(ProcessorMixin):
                     ]
             else:
                 text_encoding = _text_encoding
-                if images is not None:
+                if videos is not None:
                     logger.warning_once(
                         "Expanding inputs for video tokens in InstructBLIPVideo should be done in processing. "
                         "Please follow instruction here (https://gist.github.com/zucchini-nlp/65f22892b054dc0d68228af56fbeaac2) to update your InstructBLIPVideo model. "
@@ -173,8 +188,8 @@ class InstructBlipVideoProcessor(ProcessorMixin):
             encoding["qformer_input_ids"] = qformer_text_encoding.pop("input_ids")
             encoding["qformer_attention_mask"] = qformer_text_encoding.pop("attention_mask")
 
-        if images is not None:
-            image_encoding = self.image_processor(images, **output_kwargs["images_kwargs"])
+        if videos is not None:
+            image_encoding = self.image_processor(videos, **output_kwargs["images_kwargs"])
             encoding.update(image_encoding)
 
         return encoding

@@ -168,24 +168,27 @@ class ProcessorTesterMixin:
     @require_torch
     @require_vision
     def test_video_processor_defaults_preserved_by_kwargs(self):
-        if "video_processor" not in self.processor_class.attributes:
+        if "video_processor" not in self.processor_class.attributes and (
+            "videos" not in inspect.signature(self.processor_class.__call__).parameters
+            or inspect.signature(self.processor_class.__call__).parameters["videos"].annotation == inspect._empty
+        ):
             self.skipTest(f"video_processor attribute not present in {self.processor_class}")
-        image_processor = self.get_component("image_processor", size=(234, 234), crop_size=(234, 234))
-        video_processor = self.get_component("video_processor", size=(234, 234), crop_size=(234, 234))
-        tokenizer = self.get_component("tokenizer", max_length=117, padding="max_length")
-
-        processor = self.processor_class(
-            tokenizer=tokenizer,
-            image_processor=image_processor,
-            video_processor=video_processor,
+        processor_components = self.prepare_components()
+        processor_components["image_processor"] = self.get_component(
+            "image_processor", size=(234, 234), crop_size=(234, 234)
         )
+        if "video_processor" in self.processor_class.attributes:
+            processor_components["video_processor"] = self.get_component(
+                "video_processor", size=(234, 234), crop_size=(234, 234)
+            )
+        processor_components["tokenizer"] = self.get_component("tokenizer", max_length=117, padding="max_length")
+        processor = self.processor_class(**processor_components)
         self.skip_processor_without_typed_kwargs(processor)
 
         input_str = "lower newer"
-        image_input = self.prepare_image_inputs()
         video_input = self.prepare_video_inputs()
 
-        inputs = processor(text=input_str, images=image_input, videos=video_input, return_tensors="pt")
+        inputs = processor(text=input_str, videos=video_input, return_tensors="pt")
         self.assertEqual(inputs[self.videos_data_arg_name].shape[-1], 234)
 
     @require_vision
