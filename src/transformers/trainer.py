@@ -466,18 +466,18 @@ class Trainer:
 
         if self.args.use_liger:
             if is_liger_kernel_available():
-                from liger_kernel.transformers import MODEL_TO_LIGER_KERNEL_PATCHING_FUNC
-
-                if model.__class__.__name__ not in MODEL_TO_LIGER_KERNEL_PATCHING_FUNC:
-                    raise ValueError(
-                        "The model you have picked ({model.__class__.__name__}) cannot be used with Liger kernels, "
-                        f"a list of supported model classes are: {MODEL_TO_LIGER_KERNEL_PATCHING_FUNC.keys()}"
-                    )
-                # monkey patch the model with liger kernels
-                MODEL_TO_LIGER_KERNEL_PATCHING_FUNC[model.__class__.__name__](model)
+                from liger_kernel.transformers.trainer_integration import _apply_liger_kernel
+                
+                model_type = getattr(model, "config", None) and getattr(model.config, "model_type", None):
+                if model_type:
+                    # Monkey patch the model with liger kernels. Use the default kernel configurations.
+                    _apply_liger_kernel(model_type=model_type)
+                else:
+                    logger.info("The model does not have a valid `model_type` specified.")
             else:
                 raise ImportError(
-                    "You have set `use_liger` to `True` but Liger kernel is not available. Please install Liger kernel"
+                    "You have set `use_liger` to `True` but liger-kernel >= 0.1.0 is not available. "
+                    "Please install it with `pip install liger-kernel`"
                 )
 
         _is_quantized_and_base_model = getattr(model, "is_quantized", False) and not getattr(
