@@ -113,7 +113,7 @@ VITPOSE_INPUTS_DOCSTRING = r"""
         dataset_index (`torch.Tensor` of shape `(batch_size,)`):
             Index to use in the Mixture-of-Experts (MoE) blocks of the backbone.
 
-            This corresponds to the dataset index used during training, e.g. index 0 refers to COCO.
+            This corresponds to the dataset index used during training, e.g. For the single dataset index 0 refers to the corresponding dataset. For the multiple datasets index 0 refers to dataset A (e.g. MPII) and index 1 refers to dataset B (e.g. CrowdPose).
 
         flip_pairs (`torch.tensor`, *optional*):
             Whether to mirror pairs of keypoints (for example, left ear -- right ear).
