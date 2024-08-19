@@ -55,12 +55,12 @@ class LlavaOnevisionProcessor(ProcessorMixin):
     [`~LlavaOnevisionVideoProcessor.__call__`], [`~LlavaNextProcessor.__call__`] and [`~LlavaNextProcessor.decode`] for more information.
 
     Args:
-        video_processor ([`LlavaOnevisionVideoProcessor`], *optional*):
-            The video processor is a required input.
         image_processor ([`LlavaNextImageProcessor`], *optional*):
             The image processor is a required input.
         tokenizer ([`LlamaTokenizerFast`], *optional*):
             The tokenizer is a required input.
+        video_processor ([`LlavaOnevisionVideoProcessor`], *optional*):
+            The video processor is a required input.
         num_image_tokens (`int`, *optional*):
             Number of image tokens for one imagethat will be returned by vision tower.
         vision_feature_select_strategy (`str`, *optional*):
