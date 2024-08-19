@@ -145,8 +145,8 @@
     title: bitsandbytes
   - local: in_translation
     title: (번역중) GPTQ
-  - local: in_translation
-    title: (번역중) AWQ
+  - local: quantization/awq
+    title: AWQ
   - local: in_translation
     title: (번역중) AQLM
   - local: in_translation
@@ -192,10 +192,10 @@
       title: (번역중) Methods and tools for efficient training on a single GPU
     - local: perf_train_gpu_many
       title: 다중 GPU에서 훈련 진행하기
+    - local: deepspeed
+      title: DeepSpeed
     - local: fsdp
       title: 완전 분할 데이터 병렬 처리
-    - local: in_translation
-      title: (번역중) DeepSpeed
     - local: perf_train_cpu
       title: CPU에서 훈련
     - local: perf_train_cpu_many
@@ -266,8 +266,8 @@
   title: (번역중) 개념 가이드
 - sections:
   - sections:
-    - local: in_translation
-      title: (번역중) Agents and Tools
+    - local: main_classes/agent
+      title: 에이전트와 도구
     - local: in_translation
       title: (번역중) Auto Classes
     - local: in_translation
@@ -302,8 +302,8 @@
       title: (번역중) Tokenizer
     - local: in_translation
       title: (번역중) Trainer
-    - local: in_translation
-      title: (번역중) DeepSpeed
+    - local: deepspeed
+      title: DeepSpeed
     - local: in_translation
       title: (번역중) Feature Extractor
     - local: in_translation

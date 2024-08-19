@@ -416,6 +416,7 @@ _import_structure = {
     "models.ernie": ["ErnieConfig"],
     "models.esm": ["EsmConfig", "EsmTokenizer"],
     "models.falcon": ["FalconConfig"],
+    "models.falcon_mamba": ["FalconMambaConfig"],
     "models.fastspeech2_conformer": [
         "FastSpeech2ConformerConfig",
         "FastSpeech2ConformerHifiGanConfig",
@@ -929,6 +930,7 @@ _import_structure = {
         "is_tokenizers_available",
         "is_torch_available",
         "is_torch_mlu_available",
+        "is_torch_musa_available",
         "is_torch_neuroncore_available",
         "is_torch_npu_available",
         "is_torch_tpu_available",
@@ -947,6 +949,7 @@ _import_structure = {
         "GPTQConfig",
         "HqqConfig",
         "QuantoConfig",
+        "TorchAoConfig",
     ],
 }
 
@@ -2136,6 +2139,13 @@ else:
             "FalconForTokenClassification",
             "FalconModel",
             "FalconPreTrainedModel",
+        ]
+    )
+    _import_structure["models.falcon_mamba"].extend(
+        [
+            "FalconMambaForCausalLM",
+            "FalconMambaModel",
+            "FalconMambaPreTrainedModel",
         ]
     )
     _import_structure["models.fastspeech2_conformer"].extend(
@@ -5127,6 +5137,7 @@ if TYPE_CHECKING:
     from .models.ernie import ErnieConfig
     from .models.esm import EsmConfig, EsmTokenizer
     from .models.falcon import FalconConfig
+    from .models.falcon_mamba import FalconMambaConfig
     from .models.fastspeech2_conformer import (
         FastSpeech2ConformerConfig,
         FastSpeech2ConformerHifiGanConfig,
@@ -5697,6 +5708,7 @@ if TYPE_CHECKING:
         is_tokenizers_available,
         is_torch_available,
         is_torch_mlu_available,
+        is_torch_musa_available,
         is_torch_neuroncore_available,
         is_torch_npu_available,
         is_torch_tpu_available,
@@ -5717,6 +5729,7 @@ if TYPE_CHECKING:
         GPTQConfig,
         HqqConfig,
         QuantoConfig,
+        TorchAoConfig,
     )
 
     try:
@@ -6738,6 +6751,11 @@ if TYPE_CHECKING:
             FalconForTokenClassification,
             FalconModel,
             FalconPreTrainedModel,
+        )
+        from .models.falcon_mamba import (
+            FalconMambaForCausalLM,
+            FalconMambaModel,
+            FalconMambaPreTrainedModel,
         )
         from .models.fastspeech2_conformer import (
             FastSpeech2ConformerHifiGan,
