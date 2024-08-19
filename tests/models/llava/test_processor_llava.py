@@ -84,8 +84,8 @@ class LlavaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         input_str = ["lower newer", "upper older longer string"]
         image_input = self.prepare_image_inputs() * 2
         inputs = processor(
-            text=input_str,
             images=image_input,
+            text=input_str,
             return_tensors="pt",
             size={"height": 214, "width": 214},
             padding="longest",

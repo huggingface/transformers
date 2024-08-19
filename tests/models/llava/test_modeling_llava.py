@@ -510,7 +510,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         processor = AutoProcessor.from_pretrained(model_id)
 
         # Prepare inputs with no images
-        inputs = processor("Hello, I am", return_tensors="pt").to(torch_device)
+        inputs = processor(text="Hello, I am", return_tensors="pt").to(torch_device)
 
         # Make sure that `generate` works
         _ = model.generate(**inputs, max_new_tokens=20)

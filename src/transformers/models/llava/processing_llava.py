@@ -141,18 +141,10 @@ class LlavaProcessor(ProcessorMixin):
         """
         if images is None and text is None:
             raise ValueError("You have to specify at least images or text.")
+
         # check if images and text inputs are reversed for BC
-        if (
-            text is not None
-            and not isinstance(text[0], str)
-            or images is not None
-            and (isinstance(images, str) or (isinstance(images, (list, tuple)) and isinstance(images[0], str)))
-        ):
-            logger.warning_once(
-                "It looks like you are passing the inputs in the wrong order. You should pass the images input first and the text input second."
-                "Images and text inputs will be swapped."
-            )
-            images, text = text, images
+        images, text = self._check_reversed_images_text(images, text)
+
         output_kwargs = self._merge_kwargs(
             LlavaProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
