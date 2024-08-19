@@ -214,6 +214,8 @@ OBJECTS_TO_IGNORE = [
     "FlaxBloomForCausalLM",
     "FlaxBloomModel",
     "FlaxCLIPModel",
+    "FlaxDinov2ForImageClassification",
+    "FlaxDinov2Model",
     "FlaxDistilBertForMaskedLM",
     "FlaxDistilBertForMultipleChoice",
     "FlaxDistilBertForQuestionAnswering",
