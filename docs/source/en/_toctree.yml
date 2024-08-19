@@ -92,11 +92,15 @@
       title: Visual Question Answering
     - local: tasks/text-to-speech
       title: Text to speech
+    - local: tasks/image_text_to_text
+      title: Image-text-to-text
     title: Multimodal
   - isExpanded: false
     sections:
     - local: generation_strategies
       title: Customize the generation strategy
+    - local: kv_cache
+      title: Best Practices for Generation with Cache
     title: Generation
   - isExpanded: false
     sections:
@@ -116,7 +120,7 @@
   - local: custom_models
     title: Share a custom model
   - local: chat_templating
-    title: Templates for chat models
+    title: Chat templates
   - local: trainer
     title: Trainer
   - local: sagemaker
@@ -155,8 +159,12 @@
     title: EETQ
   - local: quantization/hqq
     title: HQQ
+  - local: quantization/fbgemm_fp8
+    title: FBGEMM_FP8
   - local: quantization/optimum
     title: Optimum
+  - local: quantization/torchao
+    title: TorchAO
   - local: quantization/contribute
     title: Contribute new quantization method
   title: Quantization Methods
@@ -364,6 +372,8 @@
         title: ESM
       - local: model_doc/falcon
         title: Falcon
+      - local: model_doc/falcon_mamba
+        title: FalconMamba
       - local: model_doc/fastspeech2_conformer
         title: FastSpeech2Conformer
       - local: model_doc/flan-t5
@@ -432,6 +442,8 @@
         title: MADLAD-400
       - local: model_doc/mamba
         title: Mamba
+      - local: model_doc/mamba2
+        title: mamba2
       - local: model_doc/marian
         title: MarianMT
       - local: model_doc/markuplm
@@ -462,6 +474,8 @@
         title: MT5
       - local: model_doc/mvp
         title: MVP
+      - local: model_doc/nemotron
+        title: Nemotron
       - local: model_doc/nezha
         title: NEZHA
       - local: model_doc/nllb
@@ -496,6 +510,8 @@
         title: QDQBert
       - local: model_doc/qwen2
         title: Qwen2
+      - local: model_doc/qwen2_audio
+        title: Qwen2Audio
       - local: model_doc/qwen2_moe
         title: Qwen2MoE
       - local: model_doc/rag
@@ -603,6 +619,8 @@
         title: FocalNet
       - local: model_doc/glpn
         title: GLPN
+      - local: model_doc/hiera
+        title: Hiera
       - local: model_doc/imagegpt
         title: ImageGPT
       - local: model_doc/levit
@@ -678,8 +696,12 @@
         title: Bark
       - local: model_doc/clap
         title: CLAP
+      - local: model_doc/dac
+        title: dac
       - local: model_doc/encodec
         title: EnCodec
+      - local: model_doc/hiera
+        title: Hiera
       - local: model_doc/hubert
         title: Hubert
       - local: model_doc/mctct
@@ -754,6 +776,8 @@
         title: BridgeTower
       - local: model_doc/bros
         title: BROS
+      - local: model_doc/chameleon
+        title: Chameleon
       - local: model_doc/chinese_clip
         title: Chinese-CLIP
       - local: model_doc/clip
@@ -800,7 +824,7 @@
         title: Llava
       - local: model_doc/llava_next
         title: LLaVA-NeXT
-      - local: model_doc/llava-next-video
+      - local: model_doc/llava_next_video
         title: LLaVa-NeXT-Video
       - local: model_doc/lxmert
         title: LXMERT

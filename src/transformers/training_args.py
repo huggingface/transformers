@@ -49,6 +49,7 @@ from .utils import (
     is_torch_bf16_gpu_available,
     is_torch_mlu_available,
     is_torch_mps_available,
+    is_torch_musa_available,
     is_torch_neuroncore_available,
     is_torch_npu_available,
     is_torch_tf32_available,
@@ -176,6 +177,7 @@ class OptimizerNames(ExplicitEnum):
     GALORE_ADAFACTOR_LAYERWISE = "galore_adafactor_layerwise"
     LOMO = "lomo"
     ADALOMO = "adalomo"
+    GROKADAMW = "grokadamw"
 
 
 # Sometimes users will pass in a `str` repr of a dict in the CLI
@@ -771,7 +773,7 @@ class TrainingArguments:
             If not `None`, this will activate NEFTune noise embeddings. This can drastically improve model performance
             for instruction fine-tuning. Check out the [original paper](https://arxiv.org/abs/2310.05914) and the
             [original code](https://github.com/neelsjain/NEFTune). Support transformers `PreTrainedModel` and also
-            `PeftModel` from peft.
+            `PeftModel` from peft. The original paper used values in the range [5.0, 15.0].
         optim_target_modules (`Union[str, List[str]]`, *optional*):
             The target modules to optimize, i.e. the module names that you would like to train, right now this is used only for GaLore algorithm
             https://arxiv.org/abs/2403.03507
@@ -789,7 +791,7 @@ class TrainingArguments:
             Whether to perform a evaluation step (sanity check) before the training to ensure the validation steps works correctly.
 
         eval_use_gather_object (`bool`, *optional*, defaults to `False`):
-            Whether to run recursively gather object in a nested list/tuple/dictionary of objects from all devices.
+            Whether to run recursively gather object in a nested list/tuple/dictionary of objects from all devices. This should only be enabled if users are not just returning tensors, and this is actively discouraged by PyTorch.
     """
 
     framework = "pt"
@@ -1090,7 +1092,7 @@ class TrainingArguments:
         default=None,
         metadata={
             "help": "The backend to be used for distributed training",
-            "choices": ["nccl", "gloo", "mpi", "ccl", "hccl", "cncl"],
+            "choices": ["nccl", "gloo", "mpi", "ccl", "hccl", "cncl", "mccl"],
         },
     )
     tpu_num_cores: Optional[int] = field(
@@ -1817,11 +1819,11 @@ class TrainingArguments:
                 " during training"
             )
 
-        if not isinstance(self.warmup_steps, int) or self.warmup_steps < 0 or 0 < self.warmup_steps <= 1:
-            raise ValueError("warmup_steps must be either 0 or > 1")
+        if not isinstance(self.warmup_steps, int) or self.warmup_steps < 0:
+            raise ValueError("warmup_steps must be of type int and must be 0 or a positive integer.")
 
         if isinstance(self.fsdp, bool):
-            self.fsdp = "full_shard" if self.fsdp else ""
+            self.fsdp = [FSDPOption.FULL_SHARD] if self.fsdp else ""
         if isinstance(self.fsdp, str):
             self.fsdp = [FSDPOption(s) for s in self.fsdp.split()]
         if self.fsdp == [FSDPOption.OFFLOAD]:
@@ -1831,6 +1833,15 @@ class TrainingArguments:
             )
         elif FSDPOption.FULL_SHARD in self.fsdp and FSDPOption.SHARD_GRAD_OP in self.fsdp:
             raise ValueError("`--fsdp full_shard` is not compatible with `--fsdp shard_grad_op`.")
+
+        if self.gradient_checkpointing and (
+            FSDPOption.FULL_SHARD in self.fsdp or FSDPOption.HYBRID_SHARD in self.fsdp
+        ):
+            logger.warning(
+                "When using FSDP full shard, instead of using `gradient_checkpointing` in TrainingArguments, please"
+                " use `activation_checkpointing` in `fsdp_config`. The former introduces a redundant AllGather"
+                " operation in backward pass. Reference: https://github.com/huggingface/transformers/issues/30404"
+            )
 
         if self.fsdp_config is None:
             self.fsdp_config = {}
@@ -1894,7 +1905,7 @@ class TrainingArguments:
                 warnings.warn("`--xla_fsdp_grad_ckpt` is useful only when `--xla` is set to true.")
 
         # accelerate integration for FSDP
-        if len(self.fsdp) > 0 and not self.fsdp_config["xla"]:
+        if len(self.fsdp) > 0 and is_accelerate_available("0.28.0"):
             os.environ["ACCELERATE_USE_FSDP"] = "true"
             from accelerate.utils.constants import (
                 FSDP_AUTO_WRAP_POLICY,
@@ -1960,7 +1971,9 @@ class TrainingArguments:
             # - must be run very last in arg parsing, since it will use a lot of these settings.
             # - must be run before the model is created.
             if not is_accelerate_available():
-                raise ValueError("--deepspeed requires Accelerate to be installed: `pip install accelerate`.")
+                raise ValueError(
+                    f"--deepspeed requires Accelerate to be installed: `pip install 'accelerate>={ACCELERATE_MIN_VERSION}'`."
+                )
             from transformers.integrations.deepspeed import HfTrainerDeepSpeedConfig
 
             # will be used later by the Trainer
@@ -2032,7 +2045,7 @@ class TrainingArguments:
 
         if self.eval_use_gather_object and not is_accelerate_available("0.30.0"):
             raise ValueError(
-                "--eval_use_gather_object requires Accelerate to be version of `accelerate` < 0.30.0."
+                "--eval_use_gather_object requires Accelerate to be version of `accelerate` > 0.30.0."
                 "This is not supported and we recommend you to update your version."
             )
 
@@ -2094,7 +2107,7 @@ class TrainingArguments:
             if not is_accelerate_available():
                 raise ImportError(
                     f"Using the `Trainer` with `PyTorch` requires `accelerate>={ACCELERATE_MIN_VERSION}`: "
-                    "Please run `pip install transformers[torch]` or `pip install accelerate -U`"
+                    "Please run `pip install transformers[torch]` or `pip install 'accelerate>={ACCELERATE_MIN_VERSION}'`"
                 )
         # We delay the init of `PartialState` to the end for clarity
         accelerator_state_kwargs = {"enabled": True, "use_configured_state": False}
@@ -2190,6 +2203,9 @@ class TrainingArguments:
             elif is_torch_mlu_available():
                 device = torch.device("mlu:0")
                 torch.mlu.set_device(device)
+            elif is_torch_musa_available():
+                device = torch.device("musa:0")
+                torch.musa.set_device(device)
             elif is_torch_npu_available():
                 device = torch.device("npu:0")
                 torch.npu.set_device(device)

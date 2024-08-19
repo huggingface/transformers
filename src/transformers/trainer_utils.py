@@ -37,6 +37,7 @@ from .utils import (
     is_torch_cuda_available,
     is_torch_mlu_available,
     is_torch_mps_available,
+    is_torch_musa_available,
     is_torch_npu_available,
     is_torch_xla_available,
     is_torch_xpu_available,
@@ -74,6 +75,8 @@ def enable_full_determinism(seed: int, warn_only: bool = False):
         # The environment variable required to enable deterministic mode on Ascend NPUs.
         os.environ["ASCEND_LAUNCH_BLOCKING"] = "1"
         os.environ["HCCL_DETERMINISTIC"] = "1"
+
+        os.environ["FLASH_ATTENTION_DETERMINISTIC"] = "1"
         torch.use_deterministic_algorithms(True, warn_only=warn_only)
 
         # Enable CUDNN deterministic mode
@@ -106,6 +109,8 @@ def set_seed(seed: int, deterministic: bool = False):
             torch.use_deterministic_algorithms(True)
     if is_torch_mlu_available():
         torch.mlu.manual_seed_all(seed)
+    if is_torch_musa_available():
+        torch.musa.manual_seed_all(seed)
     if is_torch_npu_available():
         torch.npu.manual_seed_all(seed)
     if is_torch_xpu_available():
@@ -462,7 +467,7 @@ class TrainerMemoryTracker:
 
         import psutil  # noqa
 
-        if is_torch_cuda_available() or is_torch_mlu_available():
+        if is_torch_cuda_available() or is_torch_mlu_available() or is_torch_musa_available():
             import torch
 
             self.torch = torch
@@ -538,6 +543,9 @@ class TrainerMemoryTracker:
             elif is_torch_mlu_available():
                 self.torch.mlu.reset_peak_memory_stats()
                 self.torch.mlu.empty_cache()
+            elif is_torch_musa_available():
+                self.torch.musa.reset_peak_memory_stats()
+                self.torch.musa.empty_cache()
             elif is_torch_xpu_available():
                 self.torch.xpu.reset_peak_memory_stats()
                 self.torch.xpu.empty_cache()
@@ -553,6 +561,8 @@ class TrainerMemoryTracker:
                 self.gpu_mem_used_at_start = self.torch.cuda.memory_allocated()
             elif is_torch_mlu_available():
                 self.gpu_mem_used_at_start = self.torch.mlu.memory_allocated()
+            elif is_torch_musa_available():
+                self.gpu_mem_used_at_start = self.torch.musa.memory_allocated()
             elif is_torch_xpu_available():
                 self.gpu_mem_used_at_start = self.torch.xpu.memory_allocated()
             elif is_torch_npu_available():
@@ -586,6 +596,8 @@ class TrainerMemoryTracker:
                 self.torch.cuda.empty_cache()
             elif is_torch_mlu_available():
                 self.torch.mlu.empty_cache()
+            elif is_torch_musa_available():
+                self.torch.musa.empty_cache()
             elif is_torch_xpu_available():
                 self.torch.xpu.empty_cache()
             elif is_torch_npu_available():
@@ -606,6 +618,9 @@ class TrainerMemoryTracker:
             elif is_torch_mlu_available():
                 self.gpu_mem_used_now = self.torch.mlu.memory_allocated()
                 self.gpu_mem_used_peak = self.torch.mlu.max_memory_allocated()
+            elif is_torch_musa_available():
+                self.gpu_mem_used_now = self.torch.musa.memory_allocated()
+                self.gpu_mem_used_peak = self.torch.musa.max_memory_allocated()
             elif is_torch_xpu_available():
                 self.gpu_mem_used_now = self.torch.xpu.memory_allocated()
                 self.gpu_mem_used_peak = self.torch.xpu.max_memory_allocated()
