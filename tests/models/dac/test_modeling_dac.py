@@ -457,7 +457,7 @@ class DacIntegrationTest(unittest.TestCase):
 
     def test_integration_24khz(self):
         expected_rmse = 0.0039
-        
+
         expected_encoder_output_dict = {
             "quantized_representation": torch.tensor([0.9807, 2.8212, 5.2514, 2.7241, 1.0426]),
             "audio_codes": torch.tensor([919, 919, 234, 777, 234]),
@@ -482,15 +482,27 @@ class DacIntegrationTest(unittest.TestCase):
 
         with torch.no_grad():
             encoder_outputs = model.encode(inputs["input_values"])
-            
-            expected_quantized_representation = encoder_outputs['quantized_representation'][0,0,:5].cpu()
-            expected_audio_codes = encoder_outputs['audio_codes'][0,0,:5].cpu()
-            expected_projected_latents = encoder_outputs['projected_latents'][0,0,:5].cpu()
-            
+
+            expected_quantized_representation = encoder_outputs["quantized_representation"][0, 0, :5].cpu()
+            expected_audio_codes = encoder_outputs["audio_codes"][0, 0, :5].cpu()
+            expected_projected_latents = encoder_outputs["projected_latents"][0, 0, :5].cpu()
+
             # make sure values are correct for audios slices
-            self.assertTrue(torch.allclose(expected_quantized_representation, expected_encoder_output_dict['quantized_representation'], atol=1e-3))
-            self.assertTrue(torch.allclose(expected_audio_codes, expected_encoder_output_dict['audio_codes'], atol=1e-3))
-            self.assertTrue(torch.allclose(expected_projected_latents, expected_encoder_output_dict['projected_latents'], atol=1e-3))
+            self.assertTrue(
+                torch.allclose(
+                    expected_quantized_representation,
+                    expected_encoder_output_dict["quantized_representation"],
+                    atol=1e-3,
+                )
+            )
+            self.assertTrue(
+                torch.allclose(expected_audio_codes, expected_encoder_output_dict["audio_codes"], atol=1e-3)
+            )
+            self.assertTrue(
+                torch.allclose(
+                    expected_projected_latents, expected_encoder_output_dict["projected_latents"], atol=1e-3
+                )
+            )
 
             _, quantized_representation, _, _ = encoder_outputs.to_tuple()
             input_values_dec = model.decode(quantized_representation)[0]
