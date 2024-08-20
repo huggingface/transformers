@@ -26,7 +26,10 @@ The original code can be found [here](https://github.com/ViTAE-Transformer/ViTPo
 
 ## Usage Tips
 
-The current model utilizes a 2-step inference pipeline. The first step involves placing a bounding box around the region corresponding to the person. After that, the second step uses ViTPose to predict the keypoints.
+- To enable MoE(Mixture or Expert) function in backbone, user have to give appropriate input indices into the backbone model. 
+  However, it is not used in default parameters.
+- The current model utilizes a 2-step inference pipeline. The first step involves placing a bounding box around the region corresponding to the person.
+  After that, the second step uses ViTPose to predict the keypoints.
 
 ```py
 >>> import torch
