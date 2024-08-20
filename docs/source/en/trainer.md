@@ -395,7 +395,7 @@ First make sure to install Liger official repository:
 pip install liger-kernel
 ```
 
-You should pass `use_liger=True` to apply liger kenel on your model, for example:
+You should pass `use_liger=True` to apply liger kernel on your model, for example:
 
 ```py
 from transformers import TrainingArguments
