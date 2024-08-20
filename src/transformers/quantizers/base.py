@@ -99,6 +99,16 @@ class HfQuantizer(ABC):
         """
         return torch_dtype
 
+    def update_unexpected_keys(self, model, unexpected_keys: List[str], prefix: str) -> List[str]:
+        """
+        Override this method if you want to adjust the `unexpected_keys`.
+
+        Args:
+            unexpected_keys (`List[str]`, *optional*):
+                The list of unexpected keys in the state dict of the model compared to the checkpoint
+        """
+        return unexpected_keys
+
     def update_missing_keys(self, model, missing_keys: List[str], prefix: str) -> List[str]:
         """
         Override this method if you want to adjust the `missing_keys`.

@@ -4182,6 +4182,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             for pat in cls._keys_to_ignore_on_load_unexpected:
                 unexpected_keys = [k for k in unexpected_keys if re.search(pat, k) is None]
         if hf_quantizer is not None:
+            unexpected_keys = hf_quantizer.update_unexpected_keys(model, unexpected_keys, prefix)
             missing_keys = hf_quantizer.update_missing_keys(model, missing_keys, prefix)
 
         # retrieve weights on meta device and put them back on CPU.

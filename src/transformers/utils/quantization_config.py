@@ -1100,6 +1100,7 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
                     "quantization_status": quantization_status,
                     "global_compression_ratio": global_compression_ratio,
                     "ignore": ignore,
+                    **kwargs,
                 }
             )
 
@@ -1109,6 +1110,32 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
             )
 
         super().__init__(quant_method=QuantizationMethod.COMPRESSED_TENSORS)
+
+    @classmethod
+    def from_dict(cls, config_dict, return_unused_kwargs=False, **kwargs):
+        """
+        Instantiates a [`CompressedTensorsConfig`] from a Python dictionary of parameters.
+        Optionally unwraps any args from the nested quantization_config
+
+        Args:
+            config_dict (`Dict[str, Any]`):
+                Dictionary that will be used to instantiate the configuration object.
+            return_unused_kwargs (`bool`,*optional*, defaults to `False`):
+                Whether or not to return a list of unused keyword arguments. Used for `from_pretrained` method in
+                `PreTrainedModel`.
+            kwargs (`Dict[str, Any]`):
+                Additional parameters from which to initialize the configuration object.
+
+        Returns:
+            [`QuantizationConfigMixin`]: The configuration object instantiated from those parameters.
+        """
+        if "quantization_config" in config_dict:
+            config_dict = dict(
+                sparsity_config=config_dict.get("sparsity_config"),
+                **config_dict["quantization_config"],
+            )
+
+        return super().from_dict(config_dict, return_unused_kwargs=return_unused_kwargs, **kwargs)
 
     def to_dict(self) -> Dict[str, Any]:
         """
