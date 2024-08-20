@@ -155,11 +155,16 @@ class MgpstrProcessor(ProcessorMixin):
             data.update(text_features)
         if images is not None:
             image_features = self.image_processor(images, **output_kwargs["images_kwargs"])
-            data.update(image_features)
-            # TODO: remove this after standardizing the outputs of vision-language processors
             if "input_ids" in data:
-                data["labels"] = data["input_ids"]
-                data.pop("input_ids")
+                # For backwards compatibility. MGP-STR doesn't actually use the labels, but the tests do.
+                # And users also expect the labels--and only the labels--to be returned.
+                # This requirement, however, may be relaxed in future versions.
+                data = {
+                    "pixel_values": image_features["pixel_values"],
+                    "labels": data["input_ids"],
+                }
+            else:
+                data.update(image_features)
         return BatchFeature(data=data, tensor_type=output_kwargs["common_kwargs"].get("return_tensors"))
 
     def batch_decode(self, sequences):
