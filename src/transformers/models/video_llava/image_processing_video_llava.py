@@ -59,6 +59,8 @@ def make_batched_videos(videos) -> List[VideoInput]:
         if isinstance(videos[0], PIL.Image.Image):
             return [videos]
         elif len(videos[0].shape) == 4:
+            return videos
+        elif len(videos[0].shape) == 3:
             return [videos]
 
     elif is_valid_image(videos):
