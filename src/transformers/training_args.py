@@ -1499,7 +1499,7 @@ class TrainingArguments:
     use_liger: Optional[bool] = field(
         default=False,
         metadata={
-            "help": "Whether or not to enable the Liger (Linkedin GPU Efficient Runtime) Kernel for model training."
+            "help": "Whether or not to enable the Liger Kernel for model training."
         },
     )
 
