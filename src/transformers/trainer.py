@@ -4780,16 +4780,15 @@ class Trainer:
             fsdp_plugin.limit_all_gathers = self.args.fsdp_config.get(
                 "limit_all_gathers", fsdp_plugin.limit_all_gathers
             )
-            if is_accelerate_available("0.23.0"):
-                fsdp_plugin.activation_checkpointing = self.args.fsdp_config.get(
-                    "activation_checkpointing", fsdp_plugin.activation_checkpointing
+            fsdp_plugin.activation_checkpointing = self.args.fsdp_config.get(
+                "activation_checkpointing", fsdp_plugin.activation_checkpointing
+            )
+            if fsdp_plugin.activation_checkpointing and self.args.gradient_checkpointing:
+                raise ValueError(
+                    "The activation_checkpointing in FSDP config and the gradient_checkpointing in training arg "
+                    "can't be set to True simultaneously. Please use FSDP's activation_checkpointing logic "
+                    "when using FSDP."
                 )
-                if fsdp_plugin.activation_checkpointing and self.args.gradient_checkpointing:
-                    raise ValueError(
-                        "The activation_checkpointing in FSDP config and the gradient_checkpointing in training arg "
-                        "can't be set to True simultaneously. Please use FSDP's activation_checkpointing logic "
-                        "when using FSDP."
-                    )
 
         if self.is_deepspeed_enabled and getattr(self.args, "hf_deepspeed_config", None) is None:
             self.propagate_args_to_deepspeed()
