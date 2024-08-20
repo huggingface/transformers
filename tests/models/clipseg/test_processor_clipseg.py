@@ -187,7 +187,7 @@ class CLIPSegProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         inputs = processor(images=image_input, visual_prompt=visual_prompt_input)
 
-        self.assertListEqual(list(inputs.keys()), ["pixel_values", "conditional_pixel_values"])
+        self.assertListEqual(list(inputs.keys()), ["conditional_pixel_values", "pixel_values"])
 
         # test if it raises when no input is passed
         with pytest.raises(ValueError):

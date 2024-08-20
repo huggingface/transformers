@@ -258,3 +258,18 @@ class OwlViTProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         decoded_tok = tokenizer.batch_decode(predicted_ids)
 
         self.assertListEqual(decoded_tok, decoded_processor)
+
+    def test_processor_query_images_positional(self):
+        processor_components = self.prepare_components()
+        processor = OwlViTProcessor(**processor_components)
+
+        image_input = self.prepare_image_inputs()
+        query_images = self.prepare_image_inputs()
+
+        inputs = processor(None, image_input, query_images)
+
+        self.assertListEqual(list(inputs.keys()), ["query_pixel_values", "pixel_values"])
+
+        # test if it raises when no input is passed
+        with pytest.raises(ValueError):
+            processor()
