@@ -396,7 +396,7 @@ class ViTPoseImageProcessor(BaseImageProcessor):
 
             boxes (`List[List[float]]` or `np.ndarray`):
                 List or array of bounding boxes for each image. Each box should be a list of 4 floats representing the bounding
-                box coordinates in COCO format (x, y, w, h).
+                box coordinates in COCO format (top_left_x, top_left_y, width, height).
 
             do_affine_transform (`bool`, *optional*, defaults to `self.do_affine_transform`):
                 Whether to apply an affine transformation to the input images.
