@@ -74,6 +74,8 @@ class Qwen2Config(PretrainedConfig):
             The number of layers that use SWA (Sliding Window Attention). The bottom layers use SWA while the top use full attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
+        attention_qkv_bias (`bool`, *optional*, defaults to `True`):
+            Whether to include bias in the QKV projection layers.
 
     ```python
     >>> from transformers import Qwen2Model, Qwen2Config
@@ -110,6 +112,7 @@ class Qwen2Config(PretrainedConfig):
         sliding_window=4096,
         max_window_layers=28,
         attention_dropout=0.0,
+        attention_qkv_bias=True,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -133,6 +136,7 @@ class Qwen2Config(PretrainedConfig):
         self.use_cache = use_cache
         self.rope_theta = rope_theta
         self.attention_dropout = attention_dropout
+        self.attention_qkv_bias = attention_qkv_bias
 
         super().__init__(
             tie_word_embeddings=tie_word_embeddings,
