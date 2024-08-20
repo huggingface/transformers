@@ -296,3 +296,15 @@ class TokenizerUtilsTest(unittest.TestCase):
                 self.assertEqual(len(tokenizer), tokenizer.vocab_size + 1)
                 self.assertEqual(len(tokenizer.added_tokens_decoder), added_tokens_size + 1)
                 self.assertEqual(len(tokenizer.added_tokens_encoder), added_tokens_size + 1)
+
+    def test_add_special_token(self):
+        tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-cased")
+        old_vocab_size = len(tokenizer.all_special_tokens_extended)
+
+        special_tokens_dict = {'cls_token': '<|CLS|>'}
+        len_add_tokens = len(special_tokens_dict)
+
+        tokenizer.add_special_tokens(special_tokens_dict)
+        new_vocab_size = len(tokenizer.all_special_tokens_extended)
+
+        self.assertEqual(new_vocab_size, old_vocab_size + len(len_add_tokens))

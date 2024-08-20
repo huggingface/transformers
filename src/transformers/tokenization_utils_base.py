@@ -1343,6 +1343,13 @@ class SpecialTokensMixin:
                 tokens_to_add = [value] if str(value) not in seen else []
             seen.update(map(str, tokens_to_add))
             all_tokens.extend(tokens_to_add)
+
+        for _id, token in self.added_tokens_decoder.items():
+            str_token = str(token)
+            if token.special and str_token not in seen:
+                all_tokens.append(token)
+                seen.add(str_token)
+
         return all_tokens
 
     @property
