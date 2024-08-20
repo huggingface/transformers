@@ -1189,7 +1189,7 @@ class Starcoder2ForCausalLM(Starcoder2PreTrainedModel):
             }
         )
         return model_inputs
-    
+
     # Copied from transformers.models.opt.modeling_opt.OPTForCausalLM._reorder_cache
     @staticmethod
     def _reorder_cache(past_key_values, beam_idx):
