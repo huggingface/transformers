@@ -1498,9 +1498,7 @@ class TrainingArguments:
 
     use_liger: Optional[bool] = field(
         default=False,
-        metadata={
-            "help": "Whether or not to enable the Liger Kernel for model training."
-        },
+        metadata={"help": "Whether or not to enable the Liger Kernel for model training."},
     )
 
     eval_use_gather_object: Optional[bool] = field(

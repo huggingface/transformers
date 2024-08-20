@@ -467,13 +467,15 @@ class Trainer:
         if self.args.use_liger:
             if is_liger_kernel_available():
                 from liger_kernel.transformers.trainer_integration import _apply_liger_kernel
-                
-                model_type = getattr(model, "config", None) and getattr(model.config, "model_type", None):
+
+                model_type = getattr(model, "config", None) and getattr(model.config, "model_type", None)
                 if model_type:
                     # Monkey patch the model with liger kernels. Use the default kernel configurations.
                     _apply_liger_kernel(model_type=model_type)
                 else:
-                    logger.warning("The model does not have a valid `model_type` specified. No liger kernels will be applied.")
+                    logger.warning(
+                        "The model does not have a valid `model_type` specified. No liger kernels will be applied."
+                    )
             else:
                 raise ImportError(
                     "You have set `use_liger` to `True` but liger-kernel >= 0.1.0 is not available. "
