@@ -793,7 +793,7 @@ class TrainingArguments:
             Whether to run recursively gather object in a nested list/tuple/dictionary of objects from all devices. This should only be enabled if users are not just returning tensors, and this is actively discouraged by PyTorch.
 
         use_liger (`bool`, *optional*, defaults to `False`):
-            Whether enable [Liger](https://github.com/linkedin/Liger-Kernel) (Linkedin GPU Efficient Runtime) Kernel for LLM model training.
+            Whether enable [Liger](https://github.com/linkedin/Liger-Kernel) Kernel for LLM model training.
             It can effectively increase multi-GPU training throughput by ~20% and reduces memory usage by ~60%, works out of the box with
             flash attention, PyTorch FSDP, and Microsoft DeepSpeed. Currently, it supports llama, mistral, mixtral and gemma models.
     """
