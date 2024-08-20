@@ -630,7 +630,9 @@ class BaseSerializationTest(unittest.TestCase):
                     d1[k].quant_state.as_dict().values(),
                 ):
                     if isinstance(v0, torch.Tensor):
-                        self.assertTrue(torch.equal(v0, v1.to(v0.device)))
+                        # The asbmax will not be saved in the quant_state when using NF4 in CPU
+                        if v0.numel() != 0:
+                            self.assertTrue(torch.equal(v0, v1.to(v0.device)))
                     else:
                         self.assertTrue(v0 == v1)
 
