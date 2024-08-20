@@ -20,6 +20,7 @@ import unittest
 
 import numpy as np
 import requests
+from parameterized import parameterized
 
 from transformers import (
     CONFIG_MAPPING,
@@ -38,7 +39,6 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
@@ -319,7 +319,7 @@ class InstructBlipTextModelDecoderOnlyTester:
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
-        max_position_embeddings=20,
+        max_position_embeddings=256,
         eos_token_id=2,
         pad_token_id=1,
         bos_token_id=0,
@@ -452,8 +452,9 @@ class InstructBlipForConditionalGenerationDecoderOnlyModelTester:
 
 
 @require_torch
-class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (InstructBlipForConditionalGeneration,) if is_torch_available() else ()
+    all_generative_model_classes = (InstructBlipForConditionalGeneration,) if is_torch_available() else ()
     fx_compatible = False
     test_head_masking = False
     test_pruning = False
@@ -463,6 +464,19 @@ class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, Gene
 
     def setUp(self):
         self.model_tester = InstructBlipForConditionalGenerationDecoderOnlyModelTester(self)
+
+    @parameterized.expand([(True,), (False,)])
+    def test_greedy_generation(self, use_cache: bool):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_generative_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            model.config.text_config.architectures = ["OptForCausalLM"]
+
+            out = model.generate(**inputs_dict, min_new_tokens=20, max_new_tokens=20, use_cache=use_cache)
+            self.assertTrue(out.shape[1] == 21)  # BLIP is special, therefore 21
 
     def test_for_conditional_generation(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

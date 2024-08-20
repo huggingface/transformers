@@ -19,6 +19,7 @@ import unittest
 
 import numpy as np
 from huggingface_hub import hf_hub_download
+from parameterized import parameterized
 
 from transformers import (
     AutoProcessor,
@@ -34,7 +35,6 @@ from transformers.testing_utils import (
     torch_device,
 )
 
-from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
@@ -86,7 +86,7 @@ class LlavaNextVideoVisionText2TextModelTester:
             "initializer_range": 0.02,
             "num_labels": 3,
             "num_choices": 4,
-            "pad_token_id": 0,
+            "pad_token_id": 1,
         },
         is_training=True,
         vision_config={
@@ -167,6 +167,9 @@ class LlavaNextVideoVisionText2TextModelTester:
         config, pixel_values, pixel_values_videos = self.prepare_config_and_inputs()
         input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 2) + 2
         attention_mask = torch.ones(input_ids.shape, dtype=torch.long).to(torch_device)
+        # set to random non-image token to prevent flakiness
+        input_ids[input_ids == config.image_token_index] = 2
+        input_ids[input_ids == config.video_token_index] = 2
         # we are giving 3 images and videos let's make sure we pass in 3 special tokens
         input_ids[:, 1] = config.image_token_index
         input_ids[:, 2] = config.video_token_index
@@ -223,12 +226,13 @@ class LlavaNextVideoVisionText2TextModelTester:
 
 
 @require_torch
-class LlavaNextVideoForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class LlavaNextVideoForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
     """
     Model tester for `LlavaNextVideoForConditionalGeneration`.
     """
 
     all_model_classes = (LlavaNextVideoForConditionalGeneration,) if is_torch_available() else ()
+    all_generative_model_classes = (LlavaNextVideoForConditionalGeneration,) if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
 
@@ -273,6 +277,24 @@ class LlavaNextVideoForConditionalGenerationModelTest(ModelTesterMixin, Generati
 
             with torch.no_grad():
                 model(**inputs)
+
+    @parameterized.expand([(True,), (False,)])
+    def test_greedy_generation(self, use_cache: bool):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_generative_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            out = model.generate(
+                **inputs_dict,
+                min_new_tokens=20,
+                max_new_tokens=20,
+                use_cache=use_cache,
+                bad_words_ids=[[config.image_token_index], [config.video_token_index]],
+            )
+            self.assertTrue(out.shape[1] == inputs_dict["input_ids"].shape[1] + 20)
 
     @unittest.skip(
         reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"

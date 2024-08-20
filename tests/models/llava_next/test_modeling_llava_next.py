@@ -19,6 +19,7 @@ import unittest
 
 import requests
 from huggingface_hub import hf_hub_download
+from parameterized import parameterized
 
 from transformers import (
     AutoProcessor,
@@ -34,7 +35,6 @@ from transformers.testing_utils import (
     torch_device,
 )
 
-from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
@@ -86,7 +86,7 @@ class LlavaNextVisionText2TextModelTester:
             "initializer_range": 0.02,
             "num_labels": 3,
             "num_choices": 4,
-            "pad_token_id": 0,
+            "pad_token_id": 1,
         },
         is_training=True,
         vision_config={
@@ -157,6 +157,8 @@ class LlavaNextVisionText2TextModelTester:
         config, pixel_values = config_and_inputs
         input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 2) + 2
         attention_mask = torch.ones(input_ids.shape, dtype=torch.long).to(torch_device)
+        # set to random non-image token to prevent flakiness
+        input_ids[input_ids == config.image_token_index] = 2
         # we are giving 3 images let's make sure we pass in 3 image tokens
         input_ids[:, 1] = config.image_token_index
         labels = torch.zeros((self.batch_size, self.seq_length), dtype=torch.long, device=torch_device)
@@ -208,12 +210,13 @@ class LlavaNextVisionText2TextModelTester:
 
 
 @require_torch
-class LlavaNextForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class LlavaNextForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
     """
     Model tester for `LlavaNextForConditionalGeneration`.
     """
 
     all_model_classes = (LlavaNextForConditionalGeneration,) if is_torch_available() else ()
+    all_generative_model_classes = (LlavaNextForConditionalGeneration,) if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
 
@@ -236,6 +239,24 @@ class LlavaNextForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
                         [0.0, 1.0],
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
+
+    @parameterized.expand([(True,), (False,)])
+    def test_greedy_generation(self, use_cache: bool):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_generative_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            out = model.generate(
+                **inputs_dict,
+                min_new_tokens=20,
+                max_new_tokens=20,
+                use_cache=use_cache,
+                bad_words_ids=[[config.image_token_index]],
+            )
+            self.assertTrue(out.shape[1] == inputs_dict["input_ids"].shape[1] + 20)
 
     @unittest.skip(
         reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
