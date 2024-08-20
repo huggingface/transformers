@@ -473,7 +473,7 @@ class Trainer:
                     # Monkey patch the model with liger kernels. Use the default kernel configurations.
                     _apply_liger_kernel(model_type=model_type)
                 else:
-                    logger.info("The model does not have a valid `model_type` specified. No liger kernels will be applied.")
+                    logger.warning("The model does not have a valid `model_type` specified. No liger kernels will be applied.")
             else:
                 raise ImportError(
                     "You have set `use_liger` to `True` but liger-kernel >= 0.1.0 is not available. "
