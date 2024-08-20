@@ -46,7 +46,7 @@ logger = logging.get_logger(__name__)
 
 
 if is_vision_available():
-    from PIL import Image
+    import PIL
 
 
 # Copied from transformers.models.vivit.image_processing_vivit.make_batched_videos
@@ -213,7 +213,7 @@ class LlavaNextVideoImageProcessor(BaseImageProcessor):
         do_convert_rgb: bool = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-    ) -> Image.Image:
+    ) -> PIL.Image.Image:
         """
         Preprocess an image or batch of images. Copy of the `preprocess` method from `CLIPImageProcessor`.
 

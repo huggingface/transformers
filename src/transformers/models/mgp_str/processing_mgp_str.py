@@ -156,6 +156,10 @@ class MgpstrProcessor(ProcessorMixin):
         if images is not None:
             image_features = self.image_processor(images, **output_kwargs["images_kwargs"])
             data.update(image_features)
+            # TODO: remove this after standardizing the outputs of vision-language processors
+            if "input_ids" in data:
+                data["labels"] = data["input_ids"]
+                data.pop("input_ids")
         return BatchFeature(data=data, tensor_type=output_kwargs["common_kwargs"].get("return_tensors"))
 
     def batch_decode(self, sequences):

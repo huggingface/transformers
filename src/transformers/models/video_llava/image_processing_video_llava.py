@@ -34,6 +34,7 @@ from ...image_utils import (
     VideoInput,
     infer_channel_dimension_format,
     is_scaled_image,
+    is_valid_image,
     make_list_of_images,
     to_numpy_array,
     valid_images,
