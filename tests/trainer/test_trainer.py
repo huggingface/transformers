@@ -64,8 +64,8 @@ from transformers.testing_utils import (
     require_galore_torch,
     require_grokadamw,
     require_intel_extension_for_pytorch,
-    require_lomo,
     require_liger_kernel,
+    require_lomo,
     require_optuna,
     require_peft,
     require_ray,
@@ -1159,7 +1159,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
         self.assertTrue(torch.allclose(emb1, emb2), "Neftune noise is still applied!")
 
-
     def test_logging_inf_nan_filter(self):
         config = GPT2Config(vocab_size=100, n_positions=128, n_embd=32, n_layer=3, n_head=4)
         tiny_gpt2 = GPT2LMHeadModel(config)
@@ -1329,8 +1328,9 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
     @require_liger_kernel
     def test_apply_liger_kernel(self):
         # Test that the model code actually gets patched with Liger kernel
-        from transformers.models.llama import modeling_llama
         from liger_kernel.transformers.rms_norm import LigerRMSNorm
+
+        from transformers.models.llama import modeling_llama
 
         config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
         tiny_model = LlamaForCausalLM(config)
