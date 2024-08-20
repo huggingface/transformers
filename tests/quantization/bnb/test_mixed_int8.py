@@ -641,7 +641,8 @@ class MixedInt8TestPipeline(BaseMixedInt8Test):
         TearDown function needs to be called at the end of each test to free the GPU memory and cache, also to
         avoid unexpected behaviors. Please see: https://discuss.pytorch.org/t/how-can-we-release-gpu-memory-cache/14530/27
         """
-        del self.pipe
+        if hasattr(self, "pipe"):
+            del self.pipe
 
         gc.collect()
         torch.cuda.empty_cache()
