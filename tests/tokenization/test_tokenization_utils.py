@@ -301,10 +301,10 @@ class TokenizerUtilsTest(unittest.TestCase):
         tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-cased")
         old_vocab_size = len(tokenizer.all_special_tokens_extended)
 
-        special_tokens_dict = {'cls_token': '<|CLS|>'}
+        special_tokens_dict = {"cls_token": "<|CLS|>"}
         len_add_tokens = len(special_tokens_dict)
 
         tokenizer.add_special_tokens(special_tokens_dict)
         new_vocab_size = len(tokenizer.all_special_tokens_extended)
 
-        self.assertEqual(new_vocab_size, old_vocab_size + len(len_add_tokens))
+        self.assertEqual(new_vocab_size, old_vocab_size + len_add_tokens)
