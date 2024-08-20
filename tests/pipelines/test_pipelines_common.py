@@ -526,7 +526,7 @@ class PipelineUtilsTest(unittest.TestCase):
         checkpoint = "hf-internal-testing/tiny-random-distilbert"
         config = AutoConfig.from_pretrained(checkpoint)
         config.dropout = 0.5  # Changed from default
-        pipe = pipeline(model="hf-internal-testing/tiny-random-distilbert", config=config)
+        pipe = pipeline(model=checkpoint, config=config)
         self.assertEqual(pipe.model.config.dropout, 0.5)
 
     @require_torch_accelerator
