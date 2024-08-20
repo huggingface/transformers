@@ -395,7 +395,7 @@ First make sure to install Liger official repository:
 pip install liger-kernel
 ```
 
-You should pass `use_liger=True` to apply liger kernel on your model, for example:
+You should pass `use_liger_kernel=True` to apply liger kernel on your model, for example:
 
 ```py
 from transformers import TrainingArguments
@@ -411,11 +411,11 @@ training_args = TrainingArguments(
     save_strategy="epoch",
     load_best_model_at_end=True,
     push_to_hub=True,
-    use_liger=True
+    use_liger_kernel=True
 )
 ```
 
-The kernel supports the Llama, Gemma, Mistral, and Mixtral model architectures. The most up-to-date list of supported models can be found [here](https://github.com/linkedin/Liger-Kernel). When `use_liger` is set to `True`, the corresponding layers in the original model will be patched with Liger's efficient implementation, so you don't need to do anything extra other than setting the argument value.
+The kernel supports the Llama, Gemma, Mistral, and Mixtral model architectures. The most up-to-date list of supported models can be found [here](https://github.com/linkedin/Liger-Kernel). When `use_liger_kernel` is set to `True`, the corresponding layers in the original model will be patched with Liger's efficient implementation, so you don't need to do anything extra other than setting the argument value.
 
 ## LOMO optimizer
 

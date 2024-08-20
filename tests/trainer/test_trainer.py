@@ -1337,7 +1337,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
         args = TrainingArguments(
             "./test",
-            use_liger=True,
+            use_liger_kernel=True,
         )
         Trainer(tiny_model, args)
 

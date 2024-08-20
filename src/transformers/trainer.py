@@ -464,7 +464,7 @@ class Trainer:
                     " to `True` to avoid any unexpected behavior such as device placement mismatching."
                 )
 
-        if self.args.use_liger:
+        if self.args.use_liger_kernel:
             if is_liger_kernel_available():
                 from liger_kernel.transformers.trainer_integration import _apply_liger_kernel
 
@@ -478,7 +478,7 @@ class Trainer:
                     )
             else:
                 raise ImportError(
-                    "You have set `use_liger` to `True` but liger-kernel >= 0.1.0 is not available. "
+                    "You have set `use_liger_kernel` to `True` but liger-kernel >= 0.1.0 is not available. "
                     "Please install it with `pip install liger-kernel`"
                 )
 
