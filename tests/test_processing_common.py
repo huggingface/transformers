@@ -93,7 +93,7 @@ class ProcessorTesterMixin:
 
     @require_vision
     def prepare_video_inputs(self):
-        return [np.random.randint(255, size=(4, 3, 30, 400), dtype=np.uint8)]
+        return np.random.randint(255, size=(1, 4, 3, 30, 400), dtype=np.uint8)
 
     def test_processor_to_json_string(self):
         processor = self.get_processor()

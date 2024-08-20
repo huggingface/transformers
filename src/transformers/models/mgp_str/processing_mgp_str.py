@@ -78,27 +78,34 @@ class MgpstrProcessor(ProcessorMixin):
                 FutureWarning,
             )
             feature_extractor = kwargs.pop("feature_extractor")
-        if "char_tokenizer" in kwargs:
-            warnings.warn(
-                "The `char_tokenizer` argument is deprecated and will be removed in future versions, use `tokenizer`"
-                " instead.",
-                FutureWarning,
-            )
-            char_tokenizer = kwargs.pop("char_tokenizer")
 
         image_processor = image_processor if image_processor is not None else feature_extractor
-        tokenizer = tokenizer if tokenizer is not None else char_tokenizer
         if image_processor is None:
             raise ValueError("You need to specify an `image_processor`.")
         if tokenizer is None:
             raise ValueError("You need to specify a `tokenizer`.")
 
         self.tokenizer = tokenizer
-        self.char_tokenizer = tokenizer  # For backwards compatibility
         self.bpe_tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
         self.wp_tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
 
         super().__init__(image_processor, tokenizer)
+
+    @property
+    def char_tokenizer(self):
+        warnings.warn(
+            "The `char_tokenizer` attribute is deprecated and will be removed in future versions, use `tokenizer` instead.",
+            FutureWarning,
+        )
+        return self.tokenizer
+
+    @char_tokenizer.setter
+    def char_tokenizer(self, value):
+        warnings.warn(
+            "The `char_tokenizer` attribute is deprecated and will be removed in future versions, use `tokenizer` instead.",
+            FutureWarning,
+        )
+        self.tokenizer = value
 
     def __call__(
         self,

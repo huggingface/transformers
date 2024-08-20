@@ -50,7 +50,13 @@ logger = logging.get_logger(__name__)
 
 # Copied from transformers.models.vivit.image_processing_vivit.make_batched
 def make_batched(videos) -> List[List[ImageInput]]:
-    if isinstance(videos, (list, tuple)) and isinstance(videos[0], (list, tuple)) and is_valid_image(videos[0][0]):
+    if isinstance(videos, np.ndarray) and videos.ndim == 5:
+        return videos
+
+    elif isinstance(videos, np.ndarray) and videos.ndim == 4:
+        return [videos]
+
+    elif isinstance(videos, (list, tuple)) and isinstance(videos[0], (list, tuple)) and is_valid_image(videos[0][0]):
         return videos
 
     elif isinstance(videos, (list, tuple)) and is_valid_image(videos[0]):
@@ -305,29 +311,19 @@ class TvpImageProcessor(BaseImageProcessor):
         # All transformations expect numpy arrays.
         image = to_numpy_array(image)
 
-        print(f"{image.shape = }")
-
         if do_resize:
             image = self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
-
-        print(f"{image.shape = }")
 
         if do_center_crop:
             image = self.center_crop(image, size=crop_size, input_data_format=input_data_format)
 
-        print(f"{image.shape = }")
-
         if do_rescale:
             image = self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
-
-        print(f"{image.shape = }")
 
         if do_normalize:
             image = self.normalize(
                 image=image.astype(np.float32), mean=image_mean, std=image_std, input_data_format=input_data_format
             )
-
-        print(f"{image.shape = }")
 
         if do_pad:
             image = self.pad_image(
@@ -338,17 +334,11 @@ class TvpImageProcessor(BaseImageProcessor):
                 input_data_format=input_data_format,
             )
 
-        print(f"{image.shape = }")
-
         # the pretrained checkpoints assume images are BGR, not RGB
         if do_flip_channel_order:
             image = flip_channel_order(image=image, input_data_format=input_data_format)
 
-        print(f"{image.shape = }")
-
         image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
-
-        print(f"{image.shape = }")
 
         return image
 

@@ -51,7 +51,13 @@ logger = logging.get_logger(__name__)
 
 
 def make_batched(videos) -> List[List[ImageInput]]:
-    if isinstance(videos, (list, tuple)) and isinstance(videos[0], (list, tuple)) and is_valid_image(videos[0][0]):
+    if isinstance(videos, np.ndarray) and videos.ndim == 5:
+        return videos
+
+    elif isinstance(videos, np.ndarray) and videos.ndim == 4:
+        return [videos]
+
+    elif isinstance(videos, (list, tuple)) and isinstance(videos[0], (list, tuple)) and is_valid_image(videos[0][0]):
         return videos
 
     elif isinstance(videos, (list, tuple)) and is_valid_image(videos[0]):
