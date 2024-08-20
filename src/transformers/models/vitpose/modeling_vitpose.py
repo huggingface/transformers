@@ -46,7 +46,7 @@ class PoseEstimatorOutput(ModelOutput):
 
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Classification (or regression if config.num_labels==1) loss.
+            Loss is not supported at this moment. See https://github.com/ViTAE-Transformer/ViTPose/tree/main/mmpose/models/losses for further detail.
         heatmaps (`torch.FloatTensor` of shape `(batch_size, num_keypoints, height, width)`):
             Heatmaps as predicted by the model.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
