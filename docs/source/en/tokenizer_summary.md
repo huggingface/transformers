@@ -73,7 +73,7 @@ As can be seen space and punctuation tokenization, as well as rule-based tokeniz
 punctuation tokenization and rule-based tokenization are both examples of word tokenization, which is loosely defined
 as splitting sentences into words. While it's the most intuitive way to split texts into smaller chunks, this
 tokenization method can lead to problems for massive text corpora. In this case, space and punctuation tokenization
-usually generates a very big vocabulary (the set of all unique words and tokens used). *E.g.*, [Transformer XL](model_doc/transformerxl) uses space and punctuation tokenization, resulting in a vocabulary size of 267,735!
+usually generates a very big vocabulary (the set of all unique words and tokens used). *E.g.*, [Transformer XL](model_doc/transfo-xl) uses space and punctuation tokenization, resulting in a vocabulary size of 267,735!
 
 Such a big vocabulary size forces the model to have an enormous embedding matrix as the input and output layer, which
 causes both an increased memory and time complexity. In general, transformers models rarely have a vocabulary size
@@ -142,7 +142,7 @@ on.
 Byte-Pair Encoding (BPE) was introduced in [Neural Machine Translation of Rare Words with Subword Units (Sennrich et
 al., 2015)](https://arxiv.org/abs/1508.07909). BPE relies on a pre-tokenizer that splits the training data into
 words. Pretokenization can be as simple as space tokenization, e.g. [GPT-2](model_doc/gpt2), [RoBERTa](model_doc/roberta). More advanced pre-tokenization include rule-based tokenization, e.g. [XLM](model_doc/xlm),
-[FlauBERT](model_doc/flaubert) which uses Moses for most languages, or [GPT](model_doc/gpt) which uses
+[FlauBERT](model_doc/flaubert) which uses Moses for most languages, or [GPT](model_doc/openai-gpt) which uses
 spaCy and ftfy, to count the frequency of each word in the training corpus.
 
 After pre-tokenization, a set of unique words has been created and the frequency with which each word occurred in the
@@ -195,7 +195,7 @@ the symbol `"m"` is not in the base vocabulary. In general, single letters such 
 to happen for very special characters like emojis.
 
 As mentioned earlier, the vocabulary size, *i.e.* the base vocabulary size + the number of merges, is a hyperparameter
-to choose. For instance [GPT](model_doc/gpt) has a vocabulary size of 40,478 since they have 478 base characters
+to choose. For instance [GPT](model_doc/openai-gpt) has a vocabulary size of 40,478 since they have 478 base characters
 and chose to stop training after 40,000 merges.
 
 #### Byte-level BPE
@@ -268,7 +268,7 @@ $$\mathcal{L} = -\sum_{i=1}^{N} \log \left ( \sum_{x \in S(x_{i})} p(x) \right )
 
 All tokenization algorithms described so far have the same problem: It is assumed that the input text uses spaces to
 separate words. However, not all languages use spaces to separate words. One possible solution is to use language
-specific pre-tokenizers, *e.g.* [XLM](model_doc/xlm) uses a specific Chinese, Japanese, and Thai pre-tokenizer).
+specific pre-tokenizers, *e.g.* [XLM](model_doc/xlm) uses a specific Chinese, Japanese, and Thai pre-tokenizer.
 To solve this problem more generally, [SentencePiece: A simple and language independent subword tokenizer and
 detokenizer for Neural Text Processing (Kudo et al., 2018)](https://arxiv.org/pdf/1808.06226.pdf) treats the input
 as a raw input stream, thus including the space in the set of characters to use. It then uses the BPE or unigram

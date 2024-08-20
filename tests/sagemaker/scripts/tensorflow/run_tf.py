@@ -56,7 +56,7 @@ if __name__ == "__main__":
     tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path)
 
     # Load dataset
-    train_dataset, test_dataset = load_dataset("imdb", split=["train", "test"])
+    train_dataset, test_dataset = load_dataset("stanfordnlp/imdb", split=["train", "test"])
     train_dataset = train_dataset.shuffle().select(range(5000))  # smaller the size for train dataset to 5k
     test_dataset = test_dataset.shuffle().select(range(500))  # smaller the size for test dataset to 500
 

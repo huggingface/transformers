@@ -1,4 +1,4 @@
-transformers==4.19.0
+transformers==4.38.0
 datasets==1.16.0
 wandb==0.12.0
 tensorboard==2.6.0

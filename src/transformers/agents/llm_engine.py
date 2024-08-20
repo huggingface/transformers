@@ -16,7 +16,7 @@
 # limitations under the License.
 from copy import deepcopy
 from enum import Enum
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from huggingface_hub import InferenceClient
 
@@ -54,39 +54,51 @@ def get_clean_message_list(message_list: List[Dict[str, str]], role_conversions:
             message["role"] = role_conversions[role]
 
         if len(final_message_list) > 0 and message["role"] == final_message_list[-1]["role"]:
-            final_message_list[-1]["content"] += "\n===\n" + message["content"]
+            final_message_list[-1]["content"] += "\n=======\n" + message["content"]
         else:
             final_message_list.append(message)
     return final_message_list
 
 
 llama_role_conversions = {
-    MessageRole.SYSTEM: MessageRole.USER,
     MessageRole.TOOL_RESPONSE: MessageRole.USER,
 }
 
 
 class HfEngine:
-    def __init__(self, model: str = "meta-llama/Meta-Llama-3-8B-Instruct"):
+    def __init__(self, model: str = "meta-llama/Meta-Llama-3.1-8B-Instruct"):
         self.model = model
-        self.client = InferenceClient(model=self.model, timeout=120)
+        self.client = InferenceClient(self.model, timeout=120)
 
-    def __call__(self, messages: List[Dict[str, str]], stop_sequences=[]) -> str:
-        if "Meta-Llama-3" in self.model:
-            if "<|eot_id|>" not in stop_sequences:
-                stop_sequences.append("<|eot_id|>")
-            if "!!!!!" not in stop_sequences:
-                stop_sequences.append("!!!!!")
-
+    def __call__(
+        self, messages: List[Dict[str, str]], stop_sequences: List[str] = [], grammar: Optional[str] = None
+    ) -> str:
         # Get clean message list
         messages = get_clean_message_list(messages, role_conversions=llama_role_conversions)
 
-        # Get answer
-        response = self.client.chat_completion(messages, stop=stop_sequences, max_tokens=1500)
+        # Get LLM output
+        if grammar is not None:
+            response = self.client.chat_completion(
+                messages, stop=stop_sequences, max_tokens=1500, response_format=grammar
+            )
+        else:
+            response = self.client.chat_completion(messages, stop=stop_sequences, max_tokens=1500)
+
         response = response.choices[0].message.content
 
-        # Remove stop sequences from the answer
+        # Remove stop sequences from LLM output
         for stop_seq in stop_sequences:
             if response[-len(stop_seq) :] == stop_seq:
                 response = response[: -len(stop_seq)]
         return response
+
+
+DEFAULT_JSONAGENT_REGEX_GRAMMAR = {
+    "type": "regex",
+    "value": 'Thought: .+?\\nAction:\\n\\{\\n\\s{4}"action":\\s"[^"\\n]+",\\n\\s{4}"action_input":\\s"[^"\\n]+"\\n\\}\\n<end_action>',
+}
+
+DEFAULT_CODEAGENT_REGEX_GRAMMAR = {
+    "type": "regex",
+    "value": "Thought: .+?\\nCode:\\n```(?:py|python)?\\n(?:.|\\s)+?\\n```<end_action>",
+}

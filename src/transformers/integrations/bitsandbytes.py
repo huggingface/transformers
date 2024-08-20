@@ -243,6 +243,10 @@ def replace_with_bnb_linear(model, modules_to_not_convert=None, current_key_name
             An array to track the current key of the recursion. This is used to check whether the current key (part of
             it) is not in the list of modules to not convert (for instances modules that are offloaded to `cpu` or
             `disk`).
+        quantization_config ('transformers.utils.quantization_config.BitsAndBytesConfig'):
+            To configure and manage settings related to quantization, a technique used to compress neural network models
+            by reducing the precision of the weights and activations, thus making models more efficient in terms of both
+            storage and computation.
     """
     modules_to_not_convert = ["lm_head"] if modules_to_not_convert is None else modules_to_not_convert
     model, has_been_replaced = _replace_with_bnb_linear(
@@ -328,7 +332,7 @@ def get_keys_to_not_convert(model):
 
 
 # Copied from PEFT: https://github.com/huggingface/peft/blob/47b3712898539569c02ec5b3ed4a6c36811331a1/src/peft/utils/integrations.py#L41
-def dequantize_bnb_weight(weight: torch.nn.Parameter, state=None):
+def dequantize_bnb_weight(weight: "torch.nn.Parameter", state=None):
     """
     Helper function to dequantize 4bit or 8bit bnb weights.
 

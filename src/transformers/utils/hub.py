@@ -49,11 +49,14 @@ from huggingface_hub.file_download import REGEX_COMMIT_HASH, http_get
 from huggingface_hub.utils import (
     EntryNotFoundError,
     GatedRepoError,
+    HfHubHTTPError,
     HFValidationError,
     LocalEntryNotFoundError,
+    OfflineModeIsEnabled,
     RepositoryNotFoundError,
     RevisionNotFoundError,
     build_hf_headers,
+    get_session,
     hf_raise_for_status,
     send_telemetry,
 )
@@ -75,7 +78,7 @@ from .logging import tqdm
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
-_is_offline_mode = True if os.environ.get("TRANSFORMERS_OFFLINE", "0").upper() in ENV_VARS_TRUE_VALUES else False
+_is_offline_mode = huggingface_hub.constants.HF_HUB_OFFLINE
 
 
 def is_offline_mode():
@@ -599,10 +602,16 @@ def has_file(
     revision: Optional[str] = None,
     proxies: Optional[Dict[str, str]] = None,
     token: Optional[Union[bool, str]] = None,
+    *,
+    local_files_only: bool = False,
+    cache_dir: Union[str, Path, None] = None,
+    repo_type: Optional[str] = None,
     **deprecated_kwargs,
 ):
     """
     Checks if a repo contains a given file without downloading it. Works for remote repos and local folders.
+
+    If offline mode is enabled, checks if the file exists in the cache.
 
     <Tip warning={false}>
 
@@ -621,15 +630,41 @@ def has_file(
             raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
         token = use_auth_token
 
+    # If path to local directory, check if the file exists
     if os.path.isdir(path_or_repo):
         return os.path.isfile(os.path.join(path_or_repo, filename))
 
-    url = hf_hub_url(path_or_repo, filename=filename, revision=revision)
-    headers = build_hf_headers(token=token, user_agent=http_user_agent())
+    # Else it's a repo => let's check if the file exists in local cache or on the Hub
 
-    r = requests.head(url, headers=headers, allow_redirects=False, proxies=proxies, timeout=10)
+    # Check if file exists in cache
+    # This information might be outdated so it's best to also make a HEAD call (if allowed).
+    cached_path = try_to_load_from_cache(
+        repo_id=path_or_repo,
+        filename=filename,
+        revision=revision,
+        repo_type=repo_type,
+        cache_dir=cache_dir,
+    )
+    has_file_in_cache = isinstance(cached_path, str)
+
+    # If local_files_only, don't try the HEAD call
+    if local_files_only:
+        return has_file_in_cache
+
+    # Check if the file exists
     try:
-        hf_raise_for_status(r)
+        response = get_session().head(
+            hf_hub_url(path_or_repo, filename=filename, revision=revision, repo_type=repo_type),
+            headers=build_hf_headers(token=token, user_agent=http_user_agent()),
+            allow_redirects=False,
+            proxies=proxies,
+            timeout=10,
+        )
+    except OfflineModeIsEnabled:
+        return has_file_in_cache
+
+    try:
+        hf_raise_for_status(response)
         return True
     except GatedRepoError as e:
         logger.error(e)
@@ -640,16 +675,20 @@ def has_file(
         ) from e
     except RepositoryNotFoundError as e:
         logger.error(e)
-        raise EnvironmentError(f"{path_or_repo} is not a local folder or a valid repository name on 'https://hf.co'.")
+        raise EnvironmentError(
+            f"{path_or_repo} is not a local folder or a valid repository name on 'https://hf.co'."
+        ) from e
     except RevisionNotFoundError as e:
         logger.error(e)
         raise EnvironmentError(
             f"{revision} is not a valid git identifier (branch name, tag name or commit id) that exists for this "
             f"model name. Check the model page at 'https://huggingface.co/{path_or_repo}' for available revisions."
-        )
+        ) from e
+    except EntryNotFoundError:
+        return False  # File does not exist
     except requests.HTTPError:
-        # We return false for EntryNotFoundError (logical) as well as any connection error.
-        return False
+        # Any authentication/authorization error will be caught here => default to cache
+        return has_file_in_cache
 
 
 class PushToHubMixin:
@@ -755,7 +794,16 @@ class PushToHubMixin:
                 )
 
         if revision is not None:
-            create_branch(repo_id=repo_id, branch=revision, token=token, exist_ok=True)
+            try:
+                create_branch(repo_id=repo_id, branch=revision, token=token, exist_ok=True)
+            except HfHubHTTPError as e:
+                if e.response.status_code == 403 and create_pr:
+                    # If we are creating a PR on a repo we don't have access to, we can't create the branch.
+                    # so let's assume the branch already exists. If it's not the case, an error will be raised when
+                    # calling `create_commit` below.
+                    pass
+                else:
+                    raise
 
         logger.info(f"Uploading the following files to {repo_id}: {','.join(modified_files)}")
         return create_commit(

@@ -4,7 +4,7 @@ ARG REF=main
 RUN echo ${REF}
 USER root
 RUN apt-get update &&  apt-get install -y --no-install-recommends libsndfile1-dev espeak-ng time git g++ cmake pkg-config openssh-client git git-lfs
-ENV VIRTUAL_ENV=/usr/local
+ENV UV_PYTHON=/usr/local/bin/python
 RUN pip --no-cache-dir install uv && uv venv && uv pip install --no-cache-dir -U pip setuptools
 RUN uv pip install --no-cache-dir  --no-deps accelerate --extra-index-url https://download.pytorch.org/whl/cpu 
 RUN pip install --no-cache-dir 'torch' 'torchvision' 'torchaudio' --index-url https://download.pytorch.org/whl/cpu

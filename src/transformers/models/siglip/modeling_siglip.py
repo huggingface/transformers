@@ -34,10 +34,16 @@ from ...utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    is_flash_attn_2_available,
+    is_flash_attn_greater_or_equal_2_10,
     logging,
     replace_return_docstrings,
 )
 from .configuration_siglip import SiglipConfig, SiglipTextConfig, SiglipVisionConfig
+
+
+if is_flash_attn_2_available():
+    from ...modeling_flash_attention_utils import _flash_attention_forward
 
 
 logger = logging.get_logger(__name__)
@@ -95,7 +101,7 @@ def trunc_normal_tf_(
 
     NOTE: this 'tf' variant behaves closer to Tensorflow / JAX impl where the
     bounds [a, b] are applied when sampling the normal distribution with mean=0, std=1.0
-    and the result is subsquently scaled and shifted by the mean and std args.
+    and the result is subsequently scaled and shifted by the mean and std args.
 
     Args:
         tensor: an n-dimensional `torch.Tensor`
@@ -373,7 +379,7 @@ class SiglipAttention(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         """Input shape: Batch x Time x Channel"""
 
         batch_size, q_len, _ = hidden_states.size()
@@ -421,6 +427,173 @@ class SiglipAttention(nn.Module):
         return attn_output, attn_weights
 
 
+class SiglipFlashAttention2(SiglipAttention):
+    """
+    SiglipAttention flash attention module. This module inherits from `SiglipAttention` as the weights of the module stays
+    untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
+    flash attention and deal with padding tokens in case the input contains any of them.
+    """
+
+    is_causal = False
+
+    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # TODO: Should be removed once Flash Attention for RoCm is bumped to 2.1.
+        # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
+        # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
+        self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
+
+    # Adapted from transformers.models.llama.modeling_llama.LlamaFlashAttention2.forward
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.LongTensor] = None,
+        output_attentions: bool = False,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        output_attentions = False
+
+        batch_size, q_len, _ = hidden_states.size()
+
+        query_states = self.q_proj(hidden_states)
+        key_states = self.k_proj(hidden_states)
+        value_states = self.v_proj(hidden_states)
+
+        # Flash attention requires the input to have the shape
+        # batch_size x seq_length x head_dim x hidden_dim
+        # therefore we just need to keep the original shape
+        query_states = query_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+
+        # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor the KV cache
+        # to be able to avoid many of these transpose/reshape/view.
+        query_states = query_states.transpose(1, 2)
+        key_states = key_states.transpose(1, 2)
+        value_states = value_states.transpose(1, 2)
+
+        dropout_rate = self.dropout if self.training else 0.0
+
+        # In PEFT, usually we cast the layer norms in float32 for training stability reasons
+        # therefore the input hidden states gets silently casted in float32. Hence, we need
+        # cast them back in the correct dtype just to be sure everything works as expected.
+        # This might slowdown training & inference so it is recommended to not cast the LayerNorms
+        # in fp32.
+
+        input_dtype = query_states.dtype
+        if input_dtype == torch.float32:
+            if torch.is_autocast_enabled():
+                target_dtype = torch.get_autocast_gpu_dtype()
+            # Handle the case where the model is quantized
+            elif hasattr(self.config, "_pre_quantization_dtype"):
+                target_dtype = self.config._pre_quantization_dtype
+            else:
+                target_dtype = self.q_proj.weight.dtype
+
+            logger.warning_once(
+                f"The input hidden states seems to be silently casted in float32, this might be related to"
+                f" the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
+                f" {target_dtype}."
+            )
+
+            query_states = query_states.to(target_dtype)
+            key_states = key_states.to(target_dtype)
+            value_states = value_states.to(target_dtype)
+
+        attn_output = _flash_attention_forward(
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            q_len,
+            dropout=dropout_rate,
+            is_causal=self.is_causal,
+            use_top_left_mask=self._flash_attn_uses_top_left_mask,
+        )
+
+        attn_output = attn_output.reshape(batch_size, q_len, self.embed_dim).contiguous()
+        attn_output = self.out_proj(attn_output)
+
+        if not output_attentions:
+            attn_weights = None
+
+        return attn_output, attn_weights
+
+
+class SiglipSdpaAttention(SiglipAttention):
+    """
+    Siglip attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
+    `SiglipAttention` as the weights of the module stays untouched. The only changes are on the forward pass to adapt to
+    SDPA API.
+    """
+
+    is_causal = False
+
+    # Adapted from SiglipAttention.forward and transformers.models.llama.modeling_llama.LlamaSdpaAttention.forward
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = False,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+        if output_attentions:
+            # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
+            logger.warning_once(
+                "SiglipModel is using SiglipSdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to the manual attention implementation, "
+                'but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+            )
+            return super().forward(
+                hidden_states=hidden_states,
+                attention_mask=attention_mask,
+                output_attentions=output_attentions,
+            )
+
+        batch_size, q_len, _ = hidden_states.size()
+
+        query_states = self.q_proj(hidden_states)
+        key_states = self.k_proj(hidden_states)
+        value_states = self.v_proj(hidden_states)
+
+        query_states = query_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+
+        # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
+        # Reference: https://github.com/pytorch/pytorch/issues/112577.
+        if query_states.device.type == "cuda" and attention_mask is not None:
+            query_states = query_states.contiguous()
+            key_states = key_states.contiguous()
+            value_states = value_states.contiguous()
+
+        # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
+        # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
+        is_causal = True if self.is_causal and q_len > 1 else False
+
+        attn_output = torch.nn.functional.scaled_dot_product_attention(
+            query_states,
+            key_states,
+            value_states,
+            attn_mask=attention_mask,
+            dropout_p=self.dropout if self.training else 0.0,
+            is_causal=is_causal,
+        )
+
+        attn_output = attn_output.transpose(1, 2).contiguous()
+        attn_output = attn_output.view(batch_size, q_len, self.embed_dim)
+
+        attn_output = self.out_proj(attn_output)
+
+        return attn_output, None
+
+
+SIGLIP_ATTENTION_CLASSES = {
+    "eager": SiglipAttention,
+    "flash_attention_2": SiglipFlashAttention2,
+    "sdpa": SiglipSdpaAttention,
+}
+
+
 # Copied from transformers.models.clip.modeling_clip.CLIPMLP with CLIP->Siglip
 class SiglipMLP(nn.Module):
     def __init__(self, config):
@@ -437,12 +610,11 @@ class SiglipMLP(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPEncoderLayer with CLIP->Siglip
 class SiglipEncoderLayer(nn.Module):
     def __init__(self, config: SiglipConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
-        self.self_attn = SiglipAttention(config)
+        self.self_attn = SIGLIP_ATTENTION_CLASSES[config._attn_implementation](config=config)
         self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.mlp = SiglipMLP(config)
         self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
@@ -496,6 +668,15 @@ class SiglipPreTrainedModel(PreTrainedModel):
     config_class = SiglipConfig
     base_model_prefix = "siglip"
     supports_gradient_checkpointing = True
+    _no_split_modules = [
+        "SiglipTextEmbeddings",
+        "SiglipEncoderLayer",
+        "SiglipVisionEmbeddings",
+        "SiglipEncoderLayer",
+        "SiglipMultiheadAttentionPoolingHead",
+    ]
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -648,7 +829,7 @@ SIGLIP_INPUTS_DOCSTRING = r"""
 """
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPEncoder with CLIP->Siglip
+# Copied from transformers.models.altclip.modeling_altclip.AltCLIPEncoder with AltCLIP->Siglip
 class SiglipEncoder(nn.Module):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
@@ -747,6 +928,7 @@ class SiglipTextTransformer(nn.Module):
         self.final_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
         self.head = nn.Linear(embed_dim, embed_dim)
+        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
 
     @add_start_docstrings_to_model_forward(SIGLIP_TEXT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=SiglipTextConfig)
@@ -779,7 +961,7 @@ class SiglipTextTransformer(nn.Module):
 
         # note: SigLIP's text model does not use a causal mask, unlike the original CLIP model.
         # expand attention_mask
-        if attention_mask is not None:
+        if attention_mask is not None and not self._use_flash_attention_2:
             # [batch_size, seq_len] -> [batch_size, 1, tgt_seq_len, src_seq_len]
             attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
 
@@ -815,8 +997,6 @@ class SiglipTextTransformer(nn.Module):
 )
 class SiglipTextModel(SiglipPreTrainedModel):
     config_class = SiglipTextConfig
-
-    _no_split_modules = ["SiglipTextEmbeddings", "SiglipEncoderLayer"]
 
     def __init__(self, config: SiglipTextConfig):
         super().__init__(config)
@@ -959,7 +1139,6 @@ class SiglipMultiheadAttentionPoolingHead(nn.Module):
 class SiglipVisionModel(SiglipPreTrainedModel):
     config_class = SiglipVisionConfig
     main_input_name = "pixel_values"
-    _no_split_modules = ["SiglipVisionTransformer"]
 
     def __init__(self, config: SiglipVisionConfig):
         super().__init__(config)
@@ -1023,13 +1202,13 @@ class SiglipModel(SiglipPreTrainedModel):
         super().__init__(config)
 
         if not isinstance(config.text_config, SiglipTextConfig):
-            raise ValueError(
+            raise TypeError(
                 "config.text_config is expected to be of type SiglipTextConfig but is of type"
                 f" {type(config.text_config)}."
             )
 
         if not isinstance(config.vision_config, SiglipVisionConfig):
-            raise ValueError(
+            raise TypeError(
                 "config.vision_config is expected to be of type SiglipVisionConfig but is of type"
                 f" {type(config.vision_config)}."
             )
@@ -1037,8 +1216,13 @@ class SiglipModel(SiglipPreTrainedModel):
         text_config = config.text_config
         vision_config = config.vision_config
 
-        self.text_model = SiglipTextTransformer(text_config)
-        self.vision_model = SiglipVisionTransformer(vision_config)
+        # First, initialize the text and vision models with proper attention implementation
+        text_model = SiglipTextModel._from_config(text_config, attn_implementation=config._attn_implementation)
+        vision_model = SiglipVisionModel._from_config(vision_config, attn_implementation=config._attn_implementation)
+
+        # Second, get the text and vision submodules (for backward compatibility)
+        self.text_model = text_model.text_model
+        self.vision_model = vision_model.vision_model
 
         self.logit_scale = nn.Parameter(torch.randn(1))
         self.logit_bias = nn.Parameter(torch.randn(1))
@@ -1222,12 +1406,20 @@ class SiglipModel(SiglipPreTrainedModel):
         text_embeds = text_embeds / text_embeds.norm(p=2, dim=-1, keepdim=True)
 
         # cosine similarity as logits
-        logits_per_text = torch.matmul(text_embeds, image_embeds.t()) * self.logit_scale.exp() + self.logit_bias
+        logits_per_text = (
+            torch.matmul(text_embeds, image_embeds.t().to(text_embeds.device)) * self.logit_scale.exp()
+            + self.logit_bias
+        )
         logits_per_image = logits_per_text.t()
 
         loss = None
         if return_loss:
-            raise NotImplementedError("SigLIP loss to be implemented")
+            # Adapted from https://github.com/google-research/big_vision/blob/01edb81a4716f93a48be43b3a4af14e29cdb3a7f/big_vision/trainers/proj/image_text/siglip.py#L287
+            eye = torch.eye(logits_per_text.size(0), device=logits_per_text.device)
+            m1_diag1 = -torch.ones_like(logits_per_text) + 2 * eye
+            loglik = torch.nn.functional.logsigmoid(m1_diag1 * logits_per_text)
+            nll = -torch.sum(loglik, dim=-1)
+            loss = nll.mean()
 
         if not return_dict:
             output = (logits_per_image, logits_per_text, text_embeds, image_embeds, text_outputs, vision_outputs)
@@ -1258,7 +1450,13 @@ class SiglipForImageClassification(SiglipPreTrainedModel):
         super().__init__(config)
 
         self.num_labels = config.num_labels
-        self.vision_model = SiglipVisionTransformer(config.vision_config)
+
+        # Create the vision model with proper attention
+        # and take only vision_model submodule (for backward compatibility)
+        vision_model = SiglipVisionModel._from_config(
+            config.vision_config, attn_implementation=config._attn_implementation
+        )
+        self.vision_model = vision_model.vision_model
 
         # Classifier head
         self.classifier = (
@@ -1329,7 +1527,7 @@ class SiglipForImageClassification(SiglipPreTrainedModel):
         sequence_output = outputs[0]
 
         # average pool the patch tokens
-        sequence_output = torch.mean(sequence_output[:, 1:, :], dim=1)
+        sequence_output = torch.mean(sequence_output, dim=1)
         # apply classifier
         logits = self.classifier(sequence_output)
 

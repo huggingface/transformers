@@ -270,7 +270,7 @@ class BeitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_feed_forward_chunking(self):
         pass
 
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -301,7 +301,7 @@ class BeitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def test_training(self):
         if not self.model_tester.is_training:
-            return
+            self.skipTest(reason="model_tester.is_training is set to False")
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
@@ -325,7 +325,7 @@ class BeitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         if not self.model_tester.is_training:
-            return
+            self.skipTest(reason="model_tester.is_training is set to False")
 
         config.use_cache = False
         config.return_dict = True
@@ -484,7 +484,7 @@ class BeitModelIntegrationTest(unittest.TestCase):
 
         image_processor = BeitImageProcessor(do_resize=True, size=640, do_center_crop=False)
 
-        ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
+        ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test", trust_remote_code=True)
         image = Image.open(ds[0]["file"])
         inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
 
@@ -527,7 +527,7 @@ class BeitModelIntegrationTest(unittest.TestCase):
 
         image_processor = BeitImageProcessor(do_resize=True, size=640, do_center_crop=False)
 
-        ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
+        ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test", trust_remote_code=True)
         image = Image.open(ds[0]["file"])
         inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
 
@@ -544,6 +544,31 @@ class BeitModelIntegrationTest(unittest.TestCase):
         segmentation = image_processor.post_process_semantic_segmentation(outputs=outputs)
         expected_shape = torch.Size((160, 160))
         self.assertEqual(segmentation[0].shape, expected_shape)
+
+    @slow
+    def test_inference_interpolate_pos_encoding(self):
+        model_name = "microsoft/beit-base-patch16-224-pt22k"
+        model = BeitModel.from_pretrained(model_name, **{"use_absolute_position_embeddings": True}).to(torch_device)
+
+        image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+        processor = BeitImageProcessor.from_pretrained(model_name)
+        inputs = processor(images=image, return_tensors="pt", size={"height": 480, "width": 480})
+        pixel_values = inputs.pixel_values.to(torch_device)
+
+        # with interpolate_pos_encoding being False an exception should be raised with higher resolution
+        # images than what the model supports.
+        self.assertFalse(processor.do_center_crop)
+        with torch.no_grad():
+            with self.assertRaises(ValueError, msg="doesn't match model"):
+                model(pixel_values, interpolate_pos_encoding=False)
+
+        # with interpolate_pos_encoding being True the model should process the higher resolution image
+        # successfully and produce the expected output.
+        with torch.no_grad():
+            outputs = model(pixel_values, interpolate_pos_encoding=True)
+
+        expected_shape = torch.Size((1, 1801, 768))
+        self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
 
 @require_torch

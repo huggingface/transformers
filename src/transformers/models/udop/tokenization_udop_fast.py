@@ -425,6 +425,11 @@ class UdopTokenizerFast(PreTrainedTokenizerFast):
     # Copied from transformers.models.layoutxlm.tokenization_layoutxlm_fast.LayoutXLMTokenizerFast.tokenize
     def tokenize(self, text: str, pair: Optional[str] = None, add_special_tokens: bool = False, **kwargs) -> List[str]:
         batched_input = [(text, pair)] if pair else [text]
+
+        self._tokenizer.encode_special_tokens = kwargs.pop(
+            "split_special_tokens", self._tokenizer.encode_special_tokens
+        )
+
         encodings = self._tokenizer.encode_batch(
             batched_input, add_special_tokens=add_special_tokens, is_pretokenized=False, **kwargs
         )
@@ -809,7 +814,7 @@ class UdopTokenizerFast(PreTrainedTokenizerFast):
         </Tip>
 
         Args:
-            text (`str`, `List[str]` or `List[int]` (the latter only for not-fast tokenizers)):
+            text (`str`, `List[str]` or (for non-fast tokenizers) `List[int]`):
                 The first sequence to be encoded. This can be a string, a list of strings (tokenized string using the
                 `tokenize` method) or a list of integers (tokenized string ids using the `convert_tokens_to_ids`
                 method).

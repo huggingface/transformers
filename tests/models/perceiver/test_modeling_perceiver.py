@@ -315,7 +315,12 @@ class PerceiverModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 
     def setUp(self):
         self.model_tester = PerceiverModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=PerceiverConfig, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self,
+            config_class=PerceiverConfig,
+            hidden_size=37,
+            common_properties=["d_model", "num_self_attention_heads", "num_cross_attention_heads"],
+        )
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = copy.deepcopy(inputs_dict)
@@ -344,12 +349,7 @@ class PerceiverModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         return inputs_dict
 
     def test_config(self):
-        # we don't test common_properties and arguments_init as these don't apply for Perceiver
-        self.config_tester.create_and_test_config_to_json_string()
-        self.config_tester.create_and_test_config_to_json_file()
-        self.config_tester.create_and_test_config_from_and_save_pretrained()
-        self.config_tester.create_and_test_config_with_num_labels()
-        self.config_tester.check_config_can_be_init_without_params()
+        self.config_tester.run_common_tests()
 
     def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs(model_class=PerceiverForMaskedLM)
@@ -377,7 +377,7 @@ class PerceiverModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         )
         self.model_tester.create_and_check_for_image_classification_conv(*config_and_inputs)
 
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
             model = model_class(config)
@@ -387,7 +387,7 @@ class PerceiverModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 
     def test_training(self):
         if not self.model_tester.is_training:
-            return
+            self.skipTest(reason="model_tester.is_training is set to False")
 
         for model_class in self.all_model_classes:
             if model_class.__name__ in [
@@ -732,7 +732,7 @@ class PerceiverModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 
     def test_correct_missing_keys(self):
         if not self.test_missing_keys:
-            return
+            self.skipTest(reason="test_missing_keys is set to False")
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -851,7 +851,7 @@ def prepare_img():
 
 # Helper functions for optical flow integration test
 def prepare_optical_flow_images():
-    dataset = load_dataset("hf-internal-testing/fixtures_sintel", split="test")
+    dataset = load_dataset("hf-internal-testing/fixtures_sintel", split="test", trust_remote_code=True)
     image1 = Image.open(dataset[0]["file"]).convert("RGB")
     image2 = Image.open(dataset[0]["file"]).convert("RGB")
 
@@ -1031,3 +1031,23 @@ class PerceiverModelIntegrationTest(unittest.TestCase):
         )
 
         self.assertTrue(torch.allclose(logits[0, :3, :3, :3], expected_slice, atol=1e-4))
+
+    @slow
+    def test_inference_interpolate_pos_encoding(self):
+        image_processor = PerceiverImageProcessor(size={"height": 384, "width": 384})
+        model = PerceiverForImageClassificationLearned.from_pretrained("deepmind/vision-perceiver-learned")
+        model.to(torch_device)
+
+        # prepare inputs
+        image = prepare_img()
+        inputs = image_processor(image, return_tensors="pt").pixel_values.to(torch_device)
+        input_mask = None
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(inputs=inputs, attention_mask=input_mask, interpolate_pos_encoding=True)
+        logits = outputs.logits
+
+        # verify logits
+        expected_shape = torch.Size((1, model.config.num_labels))
+        self.assertEqual(logits.shape, expected_shape)

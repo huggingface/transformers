@@ -34,7 +34,7 @@ Tips:
 - The model predicts much better results if input 2D points and/or input bounding boxes are provided
 - You can prompt multiple points for the same image, and predict a single mask. 
 - Fine-tuning the model is not supported yet
-- According to the paper, textual input should be also supported. However, at this time of writing this seems to be not supported according to [the official repository](https://github.com/facebookresearch/segment-anything/issues/4#issuecomment-1497626844). 
+- According to the paper, textual input should be also supported. However, at this time of writing this seems not to be supported according to [the official repository](https://github.com/facebookresearch/segment-anything/issues/4#issuecomment-1497626844). 
 
 
 This model was contributed by [ybelkada](https://huggingface.co/ybelkada) and [ArthurZ](https://huggingface.co/ArthurZ).
@@ -81,10 +81,10 @@ processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
 img_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
 raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
 mask_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
-segmentation_map = Image.open(requests.get(mask_url, stream=True).raw).convert("RGB")
+segmentation_map = Image.open(requests.get(mask_url, stream=True).raw).convert("1")
 input_points = [[[450, 600]]]  # 2D location of a window in the image
 
-inputs = processor(raw_image, input_points=input_points, segmentation_maps=mask, return_tensors="pt").to(device)
+inputs = processor(raw_image, input_points=input_points, segmentation_maps=segmentation_map, return_tensors="pt").to(device)
 with torch.no_grad():
     outputs = model(**inputs)
 

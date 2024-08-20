@@ -28,7 +28,7 @@ Callbacks是“只读”的代码片段，除了它们返回的[TrainerControl]�
 - [`PrinterCallback`] 或 [`ProgressCallback`]，用于显示进度和打印日志（如果通过[`TrainingArguments`]停用tqdm，则使用第一个函数；否则使用第二个）。
 - [`~integrations.TensorBoardCallback`]，如果TensorBoard可访问（通过PyTorch版本 >= 1.4 或者 tensorboardX）。
 - [`~integrations.WandbCallback`]，如果安装了[wandb](https://www.wandb.com/)。
-- [`~integrations.CometCallback`]，如果安装了[comet_ml](https://www.comet.ml/site/)。
+- [`~integrations.CometCallback`]，如果安装了[comet_ml](https://www.comet.com/site/)。
 - [`~integrations.MLflowCallback`]，如果安装了[mlflow](https://www.mlflow.org/)。
 - [`~integrations.NeptuneCallback`]，如果安装了[neptune](https://neptune.ai/)。
 - [`~integrations.AzureMLCallback`]，如果安装了[azureml-sdk](https://pypi.org/project/azureml-sdk/)。

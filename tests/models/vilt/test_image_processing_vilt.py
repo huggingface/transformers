@@ -16,6 +16,8 @@
 
 import unittest
 
+import numpy as np
+
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_vision_available
 
@@ -44,6 +46,7 @@ class ViltImageProcessingTester(unittest.TestCase):
         image_mean=[0.5, 0.5, 0.5],
         image_std=[0.5, 0.5, 0.5],
     ):
+        super().__init__()
         size = size if size is not None else {"shortest_edge": 30}
         self.parent = parent
         self.batch_size = batch_size
@@ -78,6 +81,8 @@ class ViltImageProcessingTester(unittest.TestCase):
             image = image_inputs[0]
             if isinstance(image, Image.Image):
                 w, h = image.size
+            elif isinstance(image, np.ndarray):
+                h, w = image.shape[0], image.shape[1]
             else:
                 h, w = image.shape[1], image.shape[2]
             scale = size / min(w, h)
@@ -130,6 +135,7 @@ class ViltImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = ViltImageProcessor if is_vision_available() else None
 
     def setUp(self):
+        super().setUp()
         self.image_processor_tester = ViltImageProcessingTester(self)
 
     @property

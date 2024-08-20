@@ -175,7 +175,7 @@ class TFConvNextV2Layer(keras.layers.Layer):
             Model configuration class.
         dim (`int`):
             Number of input channels.
-        drop_path (`float`, defaults to 0.0):
+        drop_path (`float`, *optional*, defaults to 0.0):
             Stochastic depth rate.
     """
 

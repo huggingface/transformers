@@ -149,6 +149,10 @@ def get_imports(filename: Union[str, os.PathLike]) -> List[str]:
 
     # filter out try/except block so in custom code we can have try/except imports
     content = re.sub(r"\s*try\s*:\s*.*?\s*except\s*.*?:", "", content, flags=re.MULTILINE | re.DOTALL)
+    # filter out imports under is_flash_attn_2_available block for avoid import issues in cpu only environment
+    content = re.sub(
+        r"if is_flash_attn[a-zA-Z0-9_]+available\(\):\s*(from flash_attn\s*.*\s*)+", "", content, flags=re.MULTILINE
+    )
 
     # Imports of the form `import xxx`
     imports = re.findall(r"^\s*import\s+(\S+)\s*$", content, flags=re.MULTILINE)
@@ -198,7 +202,10 @@ def get_class_in_module(class_name: str, module_path: Union[str, os.PathLike]) -
     Returns:
         `typing.Type`: The class looked for.
     """
-    name = os.path.normpath(module_path).rstrip(".py").replace(os.path.sep, ".")
+    name = os.path.normpath(module_path)
+    if name.endswith(".py"):
+        name = name[:-3]
+    name = name.replace(os.path.sep, ".")
     module_spec = importlib.util.spec_from_file_location(name, location=Path(HF_MODULES_CACHE) / module_path)
     module = sys.modules.get(name)
     if module is None:

@@ -272,7 +272,7 @@ class ViltModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def test_training(self):
         if not self.model_tester.is_training:
-            return
+            self.skipTest(reason="model_tester.is_training is set to False.")
 
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -296,7 +296,7 @@ class ViltModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def test_training_gradient_checkpointing(self):
         if not self.model_tester.is_training:
-            return
+            self.skipTest(reason="model_tester.is_training is set to False.")
 
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -547,11 +547,11 @@ class ViltForImagesAndTextClassificationModelTest(ViltModelTest, unittest.TestCa
         self.model_tester = ViltModelTester(self, modality_type_vocab_size=3, add_multiple_images=True, num_images=2)
         self.config_tester = ConfigTester(self, config_class=ViltConfig, hidden_size=37)
 
-    @unittest.skip("We only test the model that takes in multiple images")
+    @unittest.skip(reason="We only test the model that takes in multiple images")
     def test_model(self):
         pass
 
-    @unittest.skip("We only test the model that takes in multiple images")
+    @unittest.skip(reason="We only test the model that takes in multiple images")
     def test_for_token_classification(self):
         pass
 
@@ -637,7 +637,7 @@ class ViltModelIntegrationTest(unittest.TestCase):
 
         processor = self.default_processor
 
-        dataset = load_dataset("hf-internal-testing/fixtures_nlvr2", split="test")
+        dataset = load_dataset("hf-internal-testing/fixtures_nlvr2", split="test", trust_remote_code=True)
         image1 = Image.open(dataset[0]["file"]).convert("RGB")
         image2 = Image.open(dataset[1]["file"]).convert("RGB")
 

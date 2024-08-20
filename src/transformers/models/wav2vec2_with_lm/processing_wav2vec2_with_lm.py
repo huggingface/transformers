@@ -92,7 +92,7 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
 
         super().__init__(feature_extractor, tokenizer)
         if not isinstance(decoder, BeamSearchDecoderCTC):
-            raise ValueError(f"`decoder` has to be of type {BeamSearchDecoderCTC.__class__}, but is {type(decoder)}")
+            raise TypeError(f"`decoder` has to be of type {BeamSearchDecoderCTC.__class__}, but is {type(decoder)}")
 
         if feature_extractor.__class__.__name__ not in ["Wav2Vec2FeatureExtractor", "SeamlessM4TFeatureExtractor"]:
             raise ValueError(
@@ -152,7 +152,8 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
         feature_extractor, tokenizer = super()._get_arguments_from_pretrained(pretrained_model_name_or_path, **kwargs)
 
         if os.path.isdir(pretrained_model_name_or_path) or os.path.isfile(pretrained_model_name_or_path):
-            decoder = BeamSearchDecoderCTC.load_from_dir(pretrained_model_name_or_path)
+            unigram_encoding = kwargs.get("unigram_encoding", "utf-8")
+            decoder = BeamSearchDecoderCTC.load_from_dir(pretrained_model_name_or_path, unigram_encoding)
         else:
             # BeamSearchDecoderCTC has no auto class
             kwargs.pop("_from_auto", None)
@@ -544,7 +545,7 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
         >>> processor = AutoProcessor.from_pretrained("patrickvonplaten/wav2vec2-base-100h-with-lm")
 
         >>> # load first sample of English common_voice
-        >>> dataset = load_dataset("mozilla-foundation/common_voice_11_0", "en", split="train", streaming=True)
+        >>> dataset = load_dataset("mozilla-foundation/common_voice_11_0", "en", split="train", streaming=True, trust_remote_code=True)
         >>> dataset = dataset.cast_column("audio", datasets.Audio(sampling_rate=16_000))
         >>> dataset_iter = iter(dataset)
         >>> sample = next(dataset_iter)

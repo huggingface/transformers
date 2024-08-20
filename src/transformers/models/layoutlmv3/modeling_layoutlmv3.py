@@ -33,7 +33,13 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils import (
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+    replace_return_docstrings,
+    torch_int,
+)
 from .configuration_layoutlmv3 import LayoutLMv3Config
 
 
@@ -600,7 +606,12 @@ class LayoutLMv3Encoder(nn.Module):
             num_buckets=self.rel_pos_bins,
             max_distance=self.max_rel_pos,
         )
-        rel_pos = self.rel_pos_bias.weight.t()[rel_pos].permute(0, 3, 1, 2)
+        # Since this is a simple indexing operation that is independent of the input,
+        # no need to track gradients for this operation
+        #
+        # Without this no_grad context, training speed slows down significantly
+        with torch.no_grad():
+            rel_pos = self.rel_pos_bias.weight.t()[rel_pos].permute(0, 3, 1, 2)
         rel_pos = rel_pos.contiguous()
         return rel_pos
 
@@ -619,8 +630,13 @@ class LayoutLMv3Encoder(nn.Module):
             num_buckets=self.rel_2d_pos_bins,
             max_distance=self.max_rel_2d_pos,
         )
-        rel_pos_x = self.rel_pos_x_bias.weight.t()[rel_pos_x].permute(0, 3, 1, 2)
-        rel_pos_y = self.rel_pos_y_bias.weight.t()[rel_pos_y].permute(0, 3, 1, 2)
+        # Since this is a simple indexing operation that is independent of the input,
+        # no need to track gradients for this operation
+        #
+        # Without this no_grad context, training speed slows down significantly
+        with torch.no_grad():
+            rel_pos_x = self.rel_pos_x_bias.weight.t()[rel_pos_x].permute(0, 3, 1, 2)
+            rel_pos_y = self.rel_pos_y_bias.weight.t()[rel_pos_y].permute(0, 3, 1, 2)
         rel_pos_x = rel_pos_x.contiguous()
         rel_pos_y = rel_pos_y.contiguous()
         rel_2d_pos = rel_pos_x + rel_pos_y
@@ -849,7 +865,7 @@ class LayoutLMv3Model(LayoutLMv3PreTrainedModel):
         >>> processor = AutoProcessor.from_pretrained("microsoft/layoutlmv3-base", apply_ocr=False)
         >>> model = AutoModel.from_pretrained("microsoft/layoutlmv3-base")
 
-        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
+        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train", trust_remote_code=True)
         >>> example = dataset[0]
         >>> image = example["image"]
         >>> words = example["tokens"]
@@ -900,8 +916,8 @@ class LayoutLMv3Model(LayoutLMv3PreTrainedModel):
         patch_height = patch_width = None
         if pixel_values is not None:
             patch_height, patch_width = (
-                int(pixel_values.shape[2] / self.config.patch_size),
-                int(pixel_values.shape[3] / self.config.patch_size),
+                torch_int(pixel_values.shape[2] / self.config.patch_size),
+                torch_int(pixel_values.shape[3] / self.config.patch_size),
             )
             visual_embeddings = self.forward_image(pixel_values)
             visual_attention_mask = torch.ones(
@@ -1065,7 +1081,7 @@ class LayoutLMv3ForTokenClassification(LayoutLMv3PreTrainedModel):
         >>> processor = AutoProcessor.from_pretrained("microsoft/layoutlmv3-base", apply_ocr=False)
         >>> model = AutoModelForTokenClassification.from_pretrained("microsoft/layoutlmv3-base", num_labels=7)
 
-        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
+        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train", trust_remote_code=True)
         >>> example = dataset[0]
         >>> image = example["image"]
         >>> words = example["tokens"]
@@ -1181,7 +1197,7 @@ class LayoutLMv3ForQuestionAnswering(LayoutLMv3PreTrainedModel):
         >>> processor = AutoProcessor.from_pretrained("microsoft/layoutlmv3-base", apply_ocr=False)
         >>> model = AutoModelForQuestionAnswering.from_pretrained("microsoft/layoutlmv3-base")
 
-        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
+        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train", trust_remote_code=True)
         >>> example = dataset[0]
         >>> image = example["image"]
         >>> question = "what's his name?"
@@ -1301,7 +1317,7 @@ class LayoutLMv3ForSequenceClassification(LayoutLMv3PreTrainedModel):
         >>> processor = AutoProcessor.from_pretrained("microsoft/layoutlmv3-base", apply_ocr=False)
         >>> model = AutoModelForSequenceClassification.from_pretrained("microsoft/layoutlmv3-base")
 
-        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
+        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train", trust_remote_code=True)
         >>> example = dataset[0]
         >>> image = example["image"]
         >>> words = example["tokens"]

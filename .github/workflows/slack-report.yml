@@ -18,7 +18,12 @@ on:
       quantization_matrix:
         required: true
         type: string
+      ci_event:
+        required: true
+        type: string
 
+env:
+  TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN: ${{ secrets.TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN }}
 
 jobs:
   send_results:
@@ -43,7 +48,7 @@ jobs:
           CI_SLACK_CHANNEL_DUMMY_TESTS: ${{ secrets.CI_SLACK_CHANNEL_DUMMY_TESTS }}
           SLACK_REPORT_CHANNEL: ${{ inputs.slack_report_channel }}
           ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
-          CI_EVENT: scheduled
+          CI_EVENT: ${{ inputs.ci_event }}
           CI_SHA: ${{ github.sha }}
           CI_WORKFLOW_REF: ${{ github.workflow_ref }}
           CI_TEST_JOB: ${{ inputs.job }}
@@ -54,6 +59,7 @@ jobs:
         # empty string, and the called script still get one argument (which is the emtpy string).
         run: |
           sudo apt-get install -y curl
+          pip install huggingface_hub
           pip install slack_sdk
           pip show slack_sdk
           python utils/notification_service.py "${{ inputs.folder_slices }}"
@@ -73,7 +79,7 @@ jobs:
           CI_SLACK_BOT_TOKEN: ${{ secrets.CI_SLACK_BOT_TOKEN }}
           ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
           SLACK_REPORT_CHANNEL: ${{ inputs.slack_report_channel }}
-          CI_EVENT: scheduled
+          CI_EVENT: ${{ inputs.ci_event }}
           CI_SHA: ${{ github.sha }}
           CI_TEST_JOB: ${{ inputs.job }}
           SETUP_STATUS: ${{ inputs.setup_status }}
@@ -81,6 +87,7 @@ jobs:
         # `quantization/bnb` to `quantization_bnb` is required, as the artifact names use `_` instead of `/`.
         run: |
           sudo apt-get install -y curl
+          pip install huggingface_hub
           pip install slack_sdk
           pip show slack_sdk
           python utils/notification_service_quantization.py "${{ inputs.quantization_matrix }}" 

@@ -18,6 +18,7 @@ import unittest
 import unittest.mock as mock
 from pathlib import Path
 
+from huggingface_hub import hf_hub_download
 from requests.exceptions import HTTPError
 
 from transformers.utils import (
@@ -33,6 +34,7 @@ from transformers.utils import (
 
 
 RANDOM_BERT = "hf-internal-testing/tiny-random-bert"
+TINY_BERT_PT_ONLY = "hf-internal-testing/tiny-bert-pt-only"
 CACHE_DIR = os.path.join(TRANSFORMERS_CACHE, "models--hf-internal-testing--tiny-random-bert")
 FULL_COMMIT_HASH = "9b8c223d42b2188cb49d29af482996f9d0f3e5a6"
 
@@ -99,9 +101,20 @@ class GetFromCacheTests(unittest.TestCase):
             mock_head.assert_called()
 
     def test_has_file(self):
-        self.assertTrue(has_file("hf-internal-testing/tiny-bert-pt-only", WEIGHTS_NAME))
-        self.assertFalse(has_file("hf-internal-testing/tiny-bert-pt-only", TF2_WEIGHTS_NAME))
-        self.assertFalse(has_file("hf-internal-testing/tiny-bert-pt-only", FLAX_WEIGHTS_NAME))
+        self.assertTrue(has_file(TINY_BERT_PT_ONLY, WEIGHTS_NAME))
+        self.assertFalse(has_file(TINY_BERT_PT_ONLY, TF2_WEIGHTS_NAME))
+        self.assertFalse(has_file(TINY_BERT_PT_ONLY, FLAX_WEIGHTS_NAME))
+
+    def test_has_file_in_cache(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            # Empty cache dir + offline mode => return False
+            assert not has_file(TINY_BERT_PT_ONLY, WEIGHTS_NAME, local_files_only=True, cache_dir=tmp_dir)
+
+            # Populate cache dir
+            hf_hub_download(TINY_BERT_PT_ONLY, WEIGHTS_NAME, cache_dir=tmp_dir)
+
+            # Cache dir + offline mode => return True
+            assert has_file(TINY_BERT_PT_ONLY, WEIGHTS_NAME, local_files_only=True, cache_dir=tmp_dir)
 
     def test_get_file_from_repo_distant(self):
         # `get_file_from_repo` returns None if the file does not exist

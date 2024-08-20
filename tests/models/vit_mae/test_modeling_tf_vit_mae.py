@@ -426,7 +426,7 @@ def prepare_img():
 class TFViTMAEModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return ViTImageProcessor.from_pretrained("facebook/vit-mae-base") if is_vision_available() else None
+        return ViTImageProcessor.from_pretrained("facebook/vit-mae-base")
 
     @slow
     def test_inference_for_pretraining(self):
@@ -457,3 +457,32 @@ class TFViTMAEModelIntegrationTest(unittest.TestCase):
         )
 
         tf.debugging.assert_near(outputs.logits[0, :3, :3], expected_slice, atol=1e-4)
+
+    @slow
+    def test_inference_interpolate_pos_encoding(self):
+        # ViTMAE models have an `interpolate_pos_encoding` argument in their forward method,
+        # allowing to interpolate the pre-trained position embeddings in order to use
+        # the model on higher resolutions. The DINO model by Facebook AI leverages this
+        # to visualize self-attention on higher resolution images.
+
+        # make random mask reproducible across the PT and TF model
+        np.random.seed(2)
+
+        model = TFViTMAEForPreTraining.from_pretrained("facebook/vit-mae-base")
+
+        image_processor = self.default_image_processor
+        image = prepare_img()
+        inputs = image_processor(images=image, do_resize=False, return_tensors="tf")
+
+        # prepare a noise vector that will be also used for testing the TF model
+        # (this way we can ensure that the PT and TF models operate on the same inputs)
+        vit_mae_config = ViTMAEConfig()
+        num_patches = (image.height // vit_mae_config.patch_size) * (image.width // vit_mae_config.patch_size)
+        noise = np.random.uniform(size=(1, num_patches))
+
+        # forward pass
+        outputs = model(**inputs, noise=noise, interpolate_pos_encoding=True)
+
+        # verify the logits
+        expected_shape = tf.convert_to_tensor([1, 1200, 768])
+        self.assertEqual(outputs.logits.shape, expected_shape)

@@ -118,8 +118,8 @@ class Qwen2TokenizerFast(PreTrainedTokenizerFast):
         )
 
         super().__init__(
-            vocab_file,
-            merges_file,
+            vocab_file=vocab_file,
+            merges_file=merges_file,
             tokenizer_file=tokenizer_file,
             unk_token=unk_token,
             bos_token=bos_token,
