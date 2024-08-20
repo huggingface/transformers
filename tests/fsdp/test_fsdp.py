@@ -196,11 +196,7 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(trainer.args.fsdp[0], sharding_strategy)
             self.assertEqual(trainer.args.fsdp[1], FSDPOption.OFFLOAD)
             self.assertEqual(trainer.args.fsdp[2], FSDPOption.AUTO_WRAP)
-            fsdp_sharding_strategy = (
-                str(FSDP_SHARDING_STRATEGY.index(sharding_strategy.upper()) + 1)
-                if is_accelerate_available("0.26.0")
-                else sharding_strategy.upper()
-            )
+            fsdp_sharding_strategy = str(FSDP_SHARDING_STRATEGY.index(sharding_strategy.upper()) + 1)
             self.assertEqual(os.environ[f"{prefix}SHARDING_STRATEGY"], fsdp_sharding_strategy)
             self.assertEqual(os.environ[f"{prefix}OFFLOAD_PARAMS"], "true")
             self.assertEqual(os.environ[f"{prefix}AUTO_WRAP_POLICY"], "TRANSFORMER_BASED_WRAP")
