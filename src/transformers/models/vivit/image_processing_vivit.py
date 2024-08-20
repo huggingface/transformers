@@ -34,6 +34,7 @@ from ...image_utils import (
     ChannelDimension,
     ImageInput,
     PILImageResampling,
+    VideoInput,
     infer_channel_dimension_format,
     is_scaled_image,
     is_valid_image,
@@ -50,15 +51,18 @@ if is_vision_available():
 logger = logging.get_logger(__name__)
 
 
-def make_batched(videos) -> List[List[ImageInput]]:
+def make_batched_videos(videos) -> List[VideoInput]:
     if isinstance(videos, np.ndarray) and videos.ndim == 5:
         return videos
 
     elif isinstance(videos, np.ndarray) and videos.ndim == 4:
         return [videos]
 
-    elif isinstance(videos, (list, tuple)) and isinstance(videos[0], (list, tuple)) and is_valid_image(videos[0][0]):
-        return videos
+    elif isinstance(videos, (list, tuple)):
+        if isinstance(videos[0], (list, tuple)) and is_valid_image(videos[0][0]):
+            return videos
+        if isinstance(videos[0], np.ndarray) and videos[0].ndim == 4:
+            return videos
 
     elif isinstance(videos, (list, tuple)) and is_valid_image(videos[0]):
         return [videos]
@@ -381,7 +385,7 @@ class VivitImageProcessor(BaseImageProcessor):
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
 
-        videos = make_batched(videos)
+        videos = make_batched_videos(videos)
 
         videos = [
             [

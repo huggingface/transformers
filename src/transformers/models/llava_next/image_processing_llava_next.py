@@ -53,7 +53,7 @@ if is_vision_available():
     from PIL import Image
 
 
-def make_batched_images(images) -> List[List[ImageInput]]:
+def make_batched_images(images) -> List[ImageInput]:
     """
     Accepts images in list or nested list format, and makes a list of images for preprocessing.
 

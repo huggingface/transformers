@@ -44,7 +44,8 @@ if is_vision_available():
     import PIL
 
 
-def make_batched_images(images) -> List[List[ImageInput]]:
+# Copied from transformers.models.llava_next.image_processing_llava_next.make_batched_images
+def make_batched_images(images) -> List[ImageInput]:
     """
     Accepts images in list or nested list format, and makes a list of images for preprocessing.
 
