@@ -298,7 +298,6 @@ class RecurrentGemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
     test_model_parallel = False
     test_pruning = False
     test_head_masking = False  # RecurrentGemma does not have attention heads
-    test_model_parallel = False
 
     # Need to remove 0.9 in `test_cpu_offload`
     # This is because we are hitting edge cases with the causal_mask buffer
@@ -412,6 +411,10 @@ class RecurrentGemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
 
     @unittest.skip(reason="TODO @arthurzucker not super important and failing.")
     def test_initialization(self):
+        pass
+
+    @unittest.skip(reason="RecurrentGemma does not support generating with input embeddings (missing position_ids)")
+    def test_inputs_embeds_matches_input_ids_with_generate(self):
         pass
 
 

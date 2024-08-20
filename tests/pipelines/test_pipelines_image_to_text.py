@@ -17,7 +17,7 @@ import unittest
 import requests
 
 from transformers import MODEL_FOR_VISION_2_SEQ_MAPPING, TF_MODEL_FOR_VISION_2_SEQ_MAPPING, is_vision_available
-from transformers.pipelines import pipeline
+from transformers.pipelines import ImageToTextPipeline, pipeline
 from transformers.testing_utils import (
     is_pipeline_test,
     require_tf,
@@ -46,8 +46,8 @@ class ImageToTextPipelineTests(unittest.TestCase):
     tf_model_mapping = TF_MODEL_FOR_VISION_2_SEQ_MAPPING
 
     def get_test_pipeline(self, model, tokenizer, processor, torch_dtype="float32"):
-        pipe = pipeline(
-            "image-to-text", model=model, tokenizer=tokenizer, image_processor=processor, torch_dtype=torch_dtype
+        pipe = ImageToTextPipeline(
+            model=model, tokenizer=tokenizer, image_processor=processor, torch_dtype=torch_dtype
         )
         examples = [
             Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png"),

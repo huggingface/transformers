@@ -16,11 +16,13 @@ import collections
 import copy
 import gc
 import inspect
+import math
 import os
 import os.path
 import random
 import re
 import tempfile
+import time
 import warnings
 from collections import defaultdict
 from typing import Dict, List, Tuple
@@ -36,6 +38,7 @@ from transformers import (
     AutoModelForCausalLM,
     AutoModelForSequenceClassification,
     AutoTokenizer,
+    GenerationConfig,
     PretrainedConfig,
     PreTrainedModel,
     is_torch_available,
@@ -55,6 +58,7 @@ from transformers.models.auto.modeling_auto import (
     MODEL_FOR_MASKED_LM_MAPPING_NAMES,
     MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES,
     MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING_NAMES,
+    MODEL_FOR_PRETRAINING_MAPPING_NAMES,
     MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES,
     MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES,
     MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES,
@@ -75,6 +79,7 @@ from transformers.testing_utils import (
     require_read_token,
     require_safetensors,
     require_torch,
+    require_torch_accelerator,
     require_torch_gpu,
     require_torch_multi_accelerator,
     require_torch_multi_gpu,
@@ -194,6 +199,14 @@ class ModelTesterMixin:
             }
         elif model_class.__name__ in get_values(MODEL_FOR_AUDIO_XVECTOR_MAPPING_NAMES):
             inputs_dict.pop("attention_mask")
+        elif model_class.__name__ == MODEL_FOR_PRETRAINING_MAPPING_NAMES["hiera"]:
+            config = self.model_tester.get_config()
+            mask_spatial_shape = [
+                i // s // ms for i, s, ms in zip(config.image_size, config.patch_stride, config.masked_unit_size)
+            ]
+            num_windows = math.prod(mask_spatial_shape)
+            torch.manual_seed(0)
+            inputs_dict["noise"] = torch.rand(self.model_tester.batch_size, num_windows)
 
         if return_labels:
             if model_class.__name__ in get_values(MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES):
@@ -249,9 +262,11 @@ class ModelTesterMixin:
             # make sure we don't have nans
             out_2 = out2.cpu().numpy()
             out_2[np.isnan(out_2)] = 0
+            out_2 = out_2[~np.isneginf(out_2)]
 
             out_1 = out1.cpu().numpy()
             out_1[np.isnan(out_1)] = 0
+            out_1 = out_1[~np.isneginf(out_1)]
             max_diff = np.amax(np.abs(out_1 - out_2))
             self.assertLessEqual(max_diff, 1e-5)
 
@@ -650,6 +665,8 @@ class ModelTesterMixin:
             out_2 = second.cpu().numpy()
             out_1 = out_1[~np.isnan(out_1)]
             out_2 = out_2[~np.isnan(out_2)]
+            out_1 = out_1[~np.isneginf(out_1)]
+            out_2 = out_2[~np.isneginf(out_2)]
             max_diff = np.amax(np.abs(out_1 - out_2))
             self.assertLessEqual(max_diff, 1e-5)
 
@@ -1158,10 +1175,12 @@ class ModelTesterMixin:
                     "input_features",
                     "input_ids",
                     "input_values",
+                    "inputs_embeds",
                     "pixel_values",
                     "token_type_ids",
                     "visual_feats",
                     "visual_pos",
+                    "noise",
                 ]
 
                 labels = inputs.get("labels", None)
@@ -1214,16 +1233,46 @@ class ModelTesterMixin:
                             (past_mask, inputs_to_test[1]["attention_mask"]), dim=1
                         )
 
+                forward_parameters = inspect.signature(model.forward).parameters
+                if "input_ids" in forward_parameters and "inputs_embeds" in forward_parameters:
+                    inps = copy.deepcopy(inputs_to_test[0])
+
+                    embedding_size = (
+                        model.config.embedding_size
+                        if getattr(model.config, "embedding_size", None) is not None
+                        and model.config.model_type != "megatron-bert"
+                        else model.config.hidden_size
+                    )
+
+                    if (
+                        model.config.model_type in MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES
+                        and model.__class__.__name__
+                        == MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES[model.config.model_type]
+                    ):
+                        batch_size, num_choices, sequence_length = inputs["input_ids"].shape
+                        shape = (batch_size, num_choices, sequence_length, embedding_size)
+                    elif inps["input_ids"].ndim == 2:
+                        batch_size, sequence_length = inputs["input_ids"].shape
+                        shape = (batch_size, sequence_length, embedding_size)
+                    else:
+                        self.skipTest("Unknown case")
+
+                    del inps["input_ids"]
+                    inps["inputs_embeds"] = torch.rand(shape, dtype=torch.float, device=torch_device)
+                    inputs_to_test.append(inps)
+
             for inps in inputs_to_test:
                 filtered_inputs = {k: v for (k, v) in inps.items() if k in input_names}
-                input_names = list(filtered_inputs.keys())
+                input_names_to_trace = list(filtered_inputs.keys())
 
                 if model.__class__.__name__ in set(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES.values()) and (
                     not hasattr(model.config, "problem_type") or model.config.problem_type is None
                 ):
                     model.config.problem_type = "single_label_classification"
 
-                traced_model = symbolic_trace(model, input_names)
+                model.config.use_cache = "past_key_values" in input_names_to_trace
+
+                traced_model = symbolic_trace(model, input_names_to_trace)
 
                 with torch.no_grad():
                     traced_output = traced_model(**filtered_inputs)
@@ -1709,6 +1758,8 @@ class ModelTesterMixin:
             config = copy.deepcopy(original_config)
             model = model_class(config)
             model.to(torch_device)
+            model_embed_pre_resize = model.get_input_embeddings()
+            type_model_embed_pre_resize = type(model_embed_pre_resize)
 
             if self.model_tester.is_training is False:
                 model.eval()
@@ -1728,6 +1779,9 @@ class ModelTesterMixin:
             self.assertEqual(new_model_vocab_size, model_vocab_size + 10)
             # Check that it actually resizes the embeddings matrix
             self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] + 10)
+            # Check to make sure the type of embeddings returned post resizing is same as type of input
+            type_model_embed_post_resize = type(model_embed)
+            self.assertEqual(type_model_embed_pre_resize, type_model_embed_post_resize)
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
             model(**self._prepare_for_class(inputs_dict, model_class))
 
@@ -2766,6 +2820,57 @@ class ModelTesterMixin:
                     )[0]
             self.assertTrue(torch.allclose(out_embeds, out_ids))
 
+    def test_inputs_embeds_matches_input_ids_with_generate(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            if model_class.__name__ not in get_values(MODEL_FOR_CAUSAL_LM_MAPPING_NAMES):
+                continue
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            model_forward_args = inspect.signature(model.forward).parameters
+            if any(argument not in model_forward_args for argument in ["inputs_embeds", "position_ids"]):
+                self.skipTest(reason="This model doesn't use `inputs_embeds` or `position_ids`.")
+            has_inputs_embeds_forwarding = "inputs_embeds" in set(
+                inspect.signature(model.prepare_inputs_for_generation).parameters.keys()
+            )
+            if not has_inputs_embeds_forwarding:
+                self.skipTest(reason="This model doesn't support `inputs_embeds` passed to `generate`.")
+            inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
+            pad_token_id = config.pad_token_id if config.pad_token_id is not None else 1
+
+            wte = model.get_input_embeddings()
+            if not self.is_encoder_decoder:
+                input_ids = inputs["input_ids"]
+                # some models infer position ids/attn mask differently when input ids
+                # by check if pad_token let's make sure no padding is in input ids
+                not_pad_token_id = pad_token_id + 1 if max(0, pad_token_id - 1) == 0 else pad_token_id - 1
+                input_ids[input_ids == pad_token_id] = not_pad_token_id
+                del inputs["input_ids"]
+                inputs_embeds = wte(input_ids)
+                out_ids = model.generate(input_ids=input_ids, **inputs, max_new_tokens=2)[:, -2:]
+                out_embeds = model.generate(inputs_embeds=inputs_embeds, **inputs, max_new_tokens=2)
+            else:
+                encoder_input_ids = inputs["input_ids"]
+                decoder_input_ids = inputs.get("decoder_input_ids", encoder_input_ids)
+                encoder_input_ids[encoder_input_ids == pad_token_id] = max(0, pad_token_id + 1)
+                decoder_input_ids[decoder_input_ids == pad_token_id] = max(0, pad_token_id + 1)
+                del inputs["input_ids"]
+                inputs.pop("decoder_input_ids", None)
+                inputs_embeds = wte(encoder_input_ids)
+                decoder_inputs_embeds = wte(decoder_input_ids)
+                out_ids = model.generate(
+                    input_ids=encoder_input_ids, decoder_input_ids=decoder_input_ids, **inputs, max_new_tokens=2
+                )[:, -2:]
+                out_embeds = model.generate(
+                    inputs_embeds=inputs_embeds,
+                    decoder_inputs_embeds=decoder_inputs_embeds,
+                    **inputs,
+                    max_new_tokens=2,
+                )
+            self.assertTrue(torch.allclose(out_embeds, out_ids))
+
     @require_torch_multi_gpu
     def test_multi_gpu_data_parallel_forward(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -3155,8 +3260,67 @@ class ModelTesterMixin:
         configs_no_init = _config_zero_init(config)
 
         for model_class in self.all_model_classes:
-            if model_class.__name__ not in get_values(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES):
+            mappings = [
+                MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES,
+                MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES,
+                MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES,
+                MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES,
+            ]
+            is_classication_model = any(model_class.__name__ in get_values(mapping) for mapping in mappings)
+
+            if not is_classication_model:
                 continue
+
+            # TODO: ydshieh
+            is_special_classes = model_class.__name__ in [
+                "wav2vec2.masked_spec_embed",
+                "Wav2Vec2ForSequenceClassification",
+                "CLIPForImageClassification",
+                "RegNetForImageClassification",
+                "ResNetForImageClassification",
+                "UniSpeechSatForSequenceClassification",
+                "Wav2Vec2BertForSequenceClassification",
+                "PvtV2ForImageClassification",
+                "Wav2Vec2ConformerForSequenceClassification",
+                "WavLMForSequenceClassification",
+                "SwiftFormerForImageClassification",
+                "SEWForSequenceClassification",
+                "BitForImageClassification",
+                "SEWDForSequenceClassification",
+                "SiglipForImageClassification",
+                "HubertForSequenceClassification",
+                "Swinv2ForImageClassification",
+                "Data2VecAudioForSequenceClassification",
+                "UniSpeechForSequenceClassification",
+                "PvtForImageClassification",
+            ]
+            special_param_names = [
+                r"^bit\.",
+                r"^classifier\.weight",
+                r"^classifier\.bias",
+                r"^classifier\..+\.weight",
+                r"^classifier\..+\.bias",
+                r"^data2vec_audio\.",
+                r"^dist_head\.",
+                r"^head\.",
+                r"^hubert\.",
+                r"^pvt\.",
+                r"^pvt_v2\.",
+                r"^regnet\.",
+                r"^resnet\.",
+                r"^sew\.",
+                r"^sew_d\.",
+                r"^swiftformer\.",
+                r"^swinv2\.",
+                r"^transformers\.models\.swiftformer\.",
+                r"^unispeech\.",
+                r"^unispeech_sat\.",
+                r"^vision_model\.",
+                r"^wav2vec2\.",
+                r"^wav2vec2_bert\.",
+                r"^wav2vec2_conformer\.",
+                r"^wavlm\.",
+            ]
 
             with self.subTest(msg=f"Testing {model_class}"):
                 with tempfile.TemporaryDirectory() as tmp_dir:
@@ -3165,23 +3329,41 @@ class ModelTesterMixin:
 
                     # Fails when we don't set ignore_mismatched_sizes=True
                     with self.assertRaises(RuntimeError):
-                        new_model = AutoModelForSequenceClassification.from_pretrained(tmp_dir, num_labels=42)
+                        new_model = model_class.from_pretrained(tmp_dir, num_labels=42)
 
                     logger = logging.get_logger("transformers.modeling_utils")
 
                     with CaptureLogger(logger) as cl:
-                        new_model = AutoModelForSequenceClassification.from_pretrained(
-                            tmp_dir, num_labels=42, ignore_mismatched_sizes=True
-                        )
+                        new_model = model_class.from_pretrained(tmp_dir, num_labels=42, ignore_mismatched_sizes=True)
                     self.assertIn("the shapes did not match", cl.out)
 
                     for name, param in new_model.named_parameters():
                         if param.requires_grad:
-                            self.assertIn(
-                                ((param.data.mean() * 1e9).round() / 1e9).item(),
-                                [0.0, 1.0],
-                                msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                            )
+                            param_mean = ((param.data.mean() * 1e9).round() / 1e9).item()
+                            if not (
+                                is_special_classes
+                                and any(len(re.findall(target, name)) > 0 for target in special_param_names)
+                            ):
+                                self.assertIn(
+                                    param_mean,
+                                    [0.0, 1.0],
+                                    msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                                )
+                            else:
+                                # Here we allow the parameters' mean to be in the range [-5.0, 5.0] instead of being
+                                # either `0.0` or `1.0`, because their initializations are not using
+                                # `config.initializer_factor` (or something similar). The purpose of this test is simply
+                                # to make sure they are properly initialized (to avoid very large value or even `nan`).
+                                self.assertGreaterEqual(
+                                    param_mean,
+                                    -5.0,
+                                    msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                                )
+                                self.assertLessEqual(
+                                    param_mean,
+                                    5.0,
+                                    msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                                )
 
     def test_matched_shapes_have_loaded_weights_when_some_mismatched_shapes_exist(self):
         # 1. Create a dummy class. Should have buffers as well? To make sure we test __init__
@@ -3924,17 +4106,17 @@ class ModelTesterMixin:
                     _ = model(**inputs_dict)
 
     @require_torch_sdpa
-    @require_torch_gpu
+    @require_torch_accelerator
     @slow
     def test_sdpa_can_compile_dynamic(self):
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
+        if "cuda" in torch_device:
+            compute_capability = torch.cuda.get_device_capability()
+            major, _ = compute_capability
 
-        compute_capability = torch.cuda.get_device_capability()
-        major, _ = compute_capability
-
-        if not torch.version.cuda or major < 8:
-            self.skipTest(reason="This test requires an NVIDIA GPU with compute capability >= 8.0")
+            if not torch.version.cuda or major < 8:
+                self.skipTest(reason="This test requires an NVIDIA GPU with compute capability >= 8.0")
 
         for model_class in self.all_model_classes:
             if not model_class._supports_sdpa:
@@ -4142,6 +4324,74 @@ class ModelTesterMixin:
                     use_cache=True,
                 )
 
+                # Generate with one batch only to test generation when attention mask will be None
+                # when real inputs are used, because there is no padding. See issue #32237 for more
+                dummy_input = dummy_input[:1, ...]
+                dummy_attention_mask = torch.ones_like(dummy_attention_mask[:1, ...])
+                _ = model.generate(
+                    dummy_input,
+                    attention_mask=dummy_attention_mask,
+                    max_new_tokens=max_new_tokens,
+                    do_sample=False,
+                    use_cache=True,
+                )
+
+    @require_flash_attn
+    @require_torch_gpu
+    @mark.flash_attn_test
+    @slow
+    def test_flash_attn_2_generate_reuse_cache(self):
+        if not self.has_attentions:
+            self.skipTest(reason="Model architecture does not support attentions")
+
+        max_new_tokens = 2
+        for model_class in self.all_generative_model_classes:
+            if not model_class._supports_flash_attn_2:
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+            dummy_input = inputs_dict[model_class.main_input_name]
+            if dummy_input.dtype in [torch.float32, torch.bfloat16]:
+                dummy_input = dummy_input.to(torch.float16)
+
+            # make sure that all models have enough positions for generation
+            if hasattr(config, "max_position_embeddings"):
+                config.max_position_embeddings = dummy_input.shape[1] * 2 + max_new_tokens * 2 + 1
+
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                model = model_class.from_pretrained(
+                    tmpdirname,
+                    torch_dtype=torch.float16,
+                    attn_implementation="flash_attention_2",
+                    low_cpu_mem_usage=True,
+                ).to(torch_device)
+
+                # run generate once to get filled cache
+                output = model.generate(
+                    dummy_input,
+                    max_new_tokens=max_new_tokens,
+                    do_sample=False,
+                    use_cache=True,
+                    return_dict_in_generate=True,
+                )
+                past_key_values = output.past_key_values
+
+                # Try to continue generation from where we left, given that we have more than 1 new token to process
+                # e.g. this can happen in speculative decoding when feeding candidate tokens back to target model
+                dummy_input_updated = torch.cat([dummy_input, output.sequences], dim=-1)
+                _ = model.generate(
+                    dummy_input_updated,
+                    max_new_tokens=max_new_tokens,
+                    do_sample=False,
+                    use_cache=True,
+                    past_key_values=past_key_values,
+                )
+
     @require_flash_attn
     @require_torch_gpu
     @require_bitsandbytes
@@ -4198,6 +4448,79 @@ class ModelTesterMixin:
                     _ = model(dummy_input)
                     # with attention mask
                     _ = model(dummy_input, attention_mask=dummy_attention_mask)
+
+    @require_flash_attn
+    @require_torch_gpu
+    @mark.flash_attn_test
+    @slow
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
+        if not self.has_attentions:
+            self.skipTest(reason="Model architecture does not support attentions")
+
+        max_new_tokens = 30
+
+        for model_class in self.all_generative_model_classes:
+            if not model_class._supports_flash_attn_2:
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            if 0 not in inputs_dict.get("attention_mask", []) or "attention_mask" not in inputs_dict:
+                self.skipTest("Model dummy inputs should contain padding in their attention mask")
+
+            dummy_input = inputs_dict[model_class.main_input_name]
+            if dummy_input.dtype in [torch.float32, torch.bfloat16]:
+                dummy_input = dummy_input.to(torch.float16)
+
+            # make sure that all models have enough positions for generation
+            if hasattr(config, "max_position_embeddings"):
+                config.max_position_embeddings = max_new_tokens + dummy_input.shape[1] + 1
+
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                # ensure left padding, to adapt for some models
+                if 0 in inputs_dict["attention_mask"][:, -1]:
+                    inputs_dict["attention_mask"] = inputs_dict["attention_mask"].flip(1)
+                dummy_attention_mask = inputs_dict["attention_mask"]
+                inputs_dict["input_ids"][~dummy_attention_mask.bool()] = config.pad_token_id
+
+                model = (
+                    model_class.from_pretrained(
+                        tmpdirname,
+                        torch_dtype=torch.float16,
+                        attn_implementation="flash_attention_2",
+                        low_cpu_mem_usage=True,
+                    )
+                    .to(torch_device)
+                    .eval()
+                )
+
+                # flatten
+                padfree_inputs_dict = {
+                    k: v[dummy_attention_mask.bool()].unsqueeze(0)
+                    for k, v in inputs_dict.items()
+                    if not k == "attention_mask"
+                }
+                # add position_ids
+                padfree_inputs_dict["position_ids"] = (
+                    torch.cat([torch.arange(length) for length in dummy_attention_mask.sum(1).tolist()])
+                    .long()
+                    .unsqueeze(0)
+                    .to(torch_device)
+                )
+
+                res_padded = model(**inputs_dict)
+                res_padfree = model(**padfree_inputs_dict)
+
+                logits_padded = res_padded.logits[inputs_dict["attention_mask"].bool()]
+                logits_padfree = res_padfree.logits[0]
+
+                torch.testing.assert_close(logits_padded.argmax(-1), logits_padfree.argmax(-1), atol=0, rtol=0)
+                # acceptable numerical instability
+                tol = torch.finfo(torch.float16).eps
+                torch.testing.assert_close(logits_padded, logits_padfree, atol=tol, rtol=tol)
 
     @is_pt_tf_cross_test
     def test_tf_from_pt_safetensors(self):
@@ -4367,13 +4690,48 @@ class ModelTesterMixin:
             out_last_tokens = logits[:, -1, :]  # last tokens in each batch line
             out_shared_prefix_last_tokens = logits_shared_prefix[0, -3:, :]  # last three tokens
 
-            # comparing greedily-chosen tokens:
-            assert torch.equal(out_last_tokens.max(axis=1).indices, out_shared_prefix_last_tokens.max(axis=1).indices)
-
             # comparing softmax-normalized logits:
             normalized_0 = F.softmax(out_last_tokens)
             normalized_1 = F.softmax(out_shared_prefix_last_tokens)
             torch.testing.assert_close(normalized_0, normalized_1, rtol=1e-3, atol=1e-4)
+
+    def test_static_cache_matches_dynamic(self):
+        """
+        Tests that generating with static cache give almost same results as with dynamic cache.
+        This test does not compile the model and check only logits similarity for numerical precision
+        errors.
+        """
+        if len(self.all_generative_model_classes) == 0:
+            self.skipTest(
+                reason="Model architecture has no generative classes, and thus not necessarily supporting 4D masks"
+            )
+
+        for model_class in self.all_generative_model_classes:
+            if not model_class._supports_static_cache:
+                self.skipTest(f"{model_class.__name__} does not support static cache")
+
+            if not model_class._supports_cache_class:
+                self.skipTest(f"{model_class.__name__} does not support cache class")
+
+            config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+            if getattr(config, "sliding_window", 0) > 0:
+                self.skipTest(f"{model_class.__name__} with sliding window attention is not supported by this test")
+
+            model = model_class(config).to(device=torch_device, dtype=torch.float32)
+            model.eval()
+
+            dynamic_out = model.generate(
+                **inputs, do_sample=False, max_new_tokens=10, output_logits=True, return_dict_in_generate=True
+            )
+            static_out = model.generate(
+                **inputs,
+                do_sample=False,
+                max_new_tokens=10,
+                cache_implementation="static",
+                output_logits=True,
+                return_dict_in_generate=True,
+            )
+            self.assertTrue(torch.allclose(dynamic_out.logits[0], static_out.logits[0], rtol=1e-3, atol=1e-4))
 
     # For now, Let's focus only on GPU for `torch.compile`
     @slow
@@ -4396,7 +4754,6 @@ class ModelTesterMixin:
         model = AutoModelForCausalLM.from_pretrained(ckpt, torch_dtype=torch.float16).to(torch_device)
 
         model.generation_config.max_new_tokens = 4
-        model.generation_config.max_new_tokens = 4
 
         model.generation_config.cache_implementation = "static"
         model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
@@ -4406,6 +4763,66 @@ class ModelTesterMixin:
 
         for i in range(n_iter):
             _ = model.generate(**input_ids, do_sample=False)
+
+    @slow
+    @require_torch_gpu  # Testing cuda graphs.
+    @require_read_token
+    def test_compile_cuda_graph_time(self):
+        if version.parse(torch.__version__) < version.parse("2.3"):
+            self.skipTest(reason="This test requires torch >= 2.3 to run.")
+
+        # TODO felix: All models supporting `StaticCache` or `torch.compile` should be tested.
+        # At the moment, only llama, gemma and gemma2 are tested here!
+        if not hasattr(self, "_torch_compile_test_ckpt"):
+            self.skipTest(f"{self.__class__.__name__} doesn't have the attribute `_torch_compile_test_ckpt`.")
+        ckpt = self._torch_compile_test_ckpt
+
+        os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
+        tokenizer = AutoTokenizer.from_pretrained(ckpt)
+        model = AutoModelForCausalLM.from_pretrained(ckpt, torch_dtype=torch.float16).to(torch_device)
+
+        cache_implementation = "static"
+        if model.config.model_type == "gemma2":
+            cache_implementation = "hybrid"
+
+        new_tokens = 50
+        gen_config = GenerationConfig(
+            max_new_tokens=new_tokens,
+            min_new_tokens=new_tokens,
+            use_cache=True,
+            pad_token_id=tokenizer.pad_token_id,
+            num_beams=1,
+            do_sample=False,
+            eos_token_id=None,  # This is required for min_new_tokens to actually have an effect.
+        )
+        model.generation_config.eos_token_id = None  # greedy_search falls back on this eos_token_id that we need to set to None as well for min_new_tokens to have an effect.
+
+        model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
+
+        inp = tokenizer("Why cats are cute?", return_tensors="pt").to(torch_device)
+
+        # First run: the first run warms up each graph, which does things like CuBlas or Triton benchmarking
+        start = time.perf_counter()
+        _ = model.generate(**inp, generation_config=gen_config, cache_implementation=cache_implementation)
+        end = time.perf_counter()
+        graph_warmup_time = end - start
+
+        # Second run: CUDA Graph recording, and replays it
+        start = time.perf_counter()
+        _ = model.generate(**inp, generation_config=gen_config, cache_implementation=cache_implementation)
+        end = time.perf_counter()
+        record_time = end - start
+
+        # Finally: we hit the optimized, CUDA Graph replay path
+        start = time.perf_counter()
+        _ = model.generate(**inp, generation_config=gen_config, cache_implementation=cache_implementation)
+        end = time.perf_counter()
+        opt_time = end - start
+
+        # For the recording step, we expect only two cuda graphs and this step should be much faster than the first.
+        self.assertTrue(record_time < 0.15 * graph_warmup_time)
+        self.assertTrue(opt_time < record_time)
 
 
 global_rng = random.Random()

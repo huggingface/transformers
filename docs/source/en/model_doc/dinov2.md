@@ -57,7 +57,7 @@ print((last_hidden_states - traced_outputs[0]).abs().max())
 
 ## Resources
 
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with DPT.
+A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with DINOv2.
 
 - Demo notebooks for DINOv2 can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/DINOv2). 🌎
 
@@ -72,6 +72,9 @@ If you're interested in submitting a resource to be included here, please feel f
 
 [[autodoc]] Dinov2Config
 
+<frameworkcontent>
+<pt>
+
 ## Dinov2Model
 
 [[autodoc]] Dinov2Model
@@ -81,3 +84,20 @@ If you're interested in submitting a resource to be included here, please feel f
 
 [[autodoc]] Dinov2ForImageClassification
     - forward
+
+</pt>
+<jax>
+
+## FlaxDinov2Model
+
+[[autodoc]] FlaxDinov2Model
+    - __call__
+
+
+## FlaxDinov2ForImageClassification
+
+[[autodoc]] FlaxDinov2ForImageClassification
+    - __call__
+
+</jax>
+</frameworkcontent>

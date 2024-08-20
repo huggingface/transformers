@@ -218,6 +218,12 @@ class EfficientNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     @is_pipeline_test
     @require_vision
     @slow
+    def test_pipeline_image_feature_extraction_fp16(self):
+        super().test_pipeline_image_feature_extraction_fp16()
+
+    @is_pipeline_test
+    @require_vision
+    @slow
     def test_pipeline_image_classification(self):
         super().test_pipeline_image_classification()
 

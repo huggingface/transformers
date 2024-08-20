@@ -191,7 +191,7 @@ RUN_SLOW=1 pytest -m accelerate_tests tests/models/opt/test_modeling_opt.py
 ### Run documentation tests
 
 In order to test whether the documentation examples are correct, you should check that the `doctests` are passing.
-As an example, let's use [`WhisperModel.forward`'s docstring](https://github.com/huggingface/transformers/blob/main/src/transformers/models/whisper/modeling_whisper.py#L1017-L1035):
+As an example, let's use [`WhisperModel.forward`'s docstring](https://github.com/huggingface/transformers/blob/1124d95dbb1a3512d3e80791d73d0f541d1d7e9f/src/transformers/models/whisper/modeling_whisper.py#L1591-L1609)
 
 ```python
 r"""
@@ -1011,7 +1011,7 @@ slow models to do qualitative testing. To see the use of these simply look for *
 grep tiny tests examples
 ```
 
-Here is a an example of a [script](https://github.com/huggingface/transformers/tree/main/scripts/fsmt/fsmt-make-tiny-model.py) that created the tiny model
+Here is an example of a [script](https://github.com/huggingface/transformers/tree/main/scripts/fsmt/fsmt-make-tiny-model.py) that created the tiny model
 [stas/tiny-wmt19-en-de](https://huggingface.co/stas/tiny-wmt19-en-de). You can easily adjust it to your specific
 model's architecture.
 

@@ -88,6 +88,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                          [ByT5](model_doc/byt5)                          |       ✅        |         ✅         |      ✅      |
 |                     [CamemBERT](model_doc/camembert)                     |       ✅        |         ✅         |      ❌      |
 |                        [CANINE](model_doc/canine)                        |       ✅        |         ❌         |      ❌      |
+|                     [Chameleon](model_doc/chameleon)                     |       ✅        |         ❌         |      ❌      |
 |                  [Chinese-CLIP](model_doc/chinese_clip)                  |       ✅        |         ❌         |      ❌      |
 |                          [CLAP](model_doc/clap)                          |       ✅        |         ❌         |      ❌      |
 |                          [CLIP](model_doc/clip)                          |       ✅        |         ✅         |      ✅      |
@@ -104,6 +105,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                       [CPM-Ant](model_doc/cpmant)                        |       ✅        |         ❌         |      ❌      |
 |                          [CTRL](model_doc/ctrl)                          |       ✅        |         ✅         |      ❌      |
 |                           [CvT](model_doc/cvt)                           |       ✅        |         ✅         |      ❌      |
+|                           [DAC](model_doc/dac)                           |       ✅        |         ❌         |      ❌      |
 |                   [Data2VecAudio](model_doc/data2vec)                    |       ✅        |         ❌         |      ❌      |
 |                    [Data2VecText](model_doc/data2vec)                    |       ✅        |         ❌         |      ❌      |
 |                   [Data2VecVision](model_doc/data2vec)                   |       ✅        |         ✅         |      ❌      |
@@ -136,6 +138,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                           [ESM](model_doc/esm)                           |       ✅        |         ✅         |      ❌      |
 |              [FairSeq Machine-Translation](model_doc/fsmt)               |       ✅        |         ❌         |      ❌      |
 |                        [Falcon](model_doc/falcon)                        |       ✅        |         ❌         |      ❌      |
+|                  [FalconMamba](model_doc/falcon_mamba)                   |       ✅        |         ❌         |      ❌      |
 |         [FastSpeech2Conformer](model_doc/fastspeech2_conformer)          |       ✅        |         ❌         |      ❌      |
 |                       [FLAN-T5](model_doc/flan-t5)                       |       ✅        |         ✅         |      ✅      |
 |                      [FLAN-UL2](model_doc/flan-ul2)                      |       ✅        |         ✅         |      ✅      |
@@ -160,6 +163,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                [Grounding DINO](model_doc/grounding-dino)                |       ✅        |         ❌         |      ❌      |
 |                      [GroupViT](model_doc/groupvit)                      |       ✅        |         ✅         |      ❌      |
 |                       [HerBERT](model_doc/herbert)                       |       ✅        |         ✅         |      ✅      |
+|                         [Hiera](model_doc/hiera)                         |       ✅        |         ❌         |      ❌      |
 |                        [Hubert](model_doc/hubert)                        |       ✅        |         ✅         |      ❌      |
 |                        [I-BERT](model_doc/ibert)                         |       ✅        |         ❌         |      ❌      |
 |                       [IDEFICS](model_doc/idefics)                       |       ✅        |         ✅         |      ❌      |
@@ -184,7 +188,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                        [Llama3](model_doc/llama3)                        |       ✅        |         ❌         |      ✅      |
 |                         [LLaVa](model_doc/llava)                         |       ✅        |         ❌         |      ❌      |
 |                    [LLaVA-NeXT](model_doc/llava_next)                    |       ✅        |         ❌         |      ❌      |
-|              [LLaVa-NeXT-Video](model_doc/llava-next-video)              |       ✅        |         ❌         |      ❌      |
+|              [LLaVa-NeXT-Video](model_doc/llava_next_video)              |       ✅        |         ❌         |      ❌      |
 |                    [Longformer](model_doc/longformer)                    |       ✅        |         ✅         |      ❌      |
 |                        [LongT5](model_doc/longt5)                        |       ✅        |         ❌         |      ✅      |
 |                          [LUKE](model_doc/luke)                          |       ✅        |         ❌         |      ❌      |
@@ -193,6 +197,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                       [M2M100](model_doc/m2m_100)                        |       ✅        |         ❌         |      ❌      |
 |                    [MADLAD-400](model_doc/madlad-400)                    |       ✅        |         ✅         |      ✅      |
 |                         [Mamba](model_doc/mamba)                         |       ✅        |         ❌         |      ❌      |
+|                        [mamba2](model_doc/mamba2)                        |       ✅        |         ❌         |      ❌      |
 |                        [Marian](model_doc/marian)                        |       ✅        |         ✅         |      ✅      |
 |                      [MarkupLM](model_doc/markuplm)                      |       ✅        |         ❌         |      ❌      |
 |                   [Mask2Former](model_doc/mask2former)                   |       ✅        |         ❌         |      ❌      |
@@ -221,6 +226,7 @@ Flax), PyTorch, and/or TensorFlow.
 |               [MusicGen Melody](model_doc/musicgen_melody)               |       ✅        |         ❌         |      ❌      |
 |                           [MVP](model_doc/mvp)                           |       ✅        |         ❌         |      ❌      |
 |                           [NAT](model_doc/nat)                           |       ✅        |         ❌         |      ❌      |
+|                      [Nemotron](model_doc/nemotron)                      |       ✅        |         ❌         |      ❌      |
 |                         [Nezha](model_doc/nezha)                         |       ✅        |         ❌         |      ❌      |
 |                          [NLLB](model_doc/nllb)                          |       ✅        |         ❌         |      ❌      |
 |                      [NLLB-MOE](model_doc/nllb-moe)                      |       ✅        |         ❌         |      ❌      |
@@ -253,6 +259,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                        [PVTv2](model_doc/pvt_v2)                         |       ✅        |         ❌         |      ❌      |
 |                       [QDQBert](model_doc/qdqbert)                       |       ✅        |         ❌         |      ❌      |
 |                         [Qwen2](model_doc/qwen2)                         |       ✅        |         ❌         |      ❌      |
+|                   [Qwen2Audio](model_doc/qwen2_audio)                    |       ✅        |         ❌         |      ❌      |
 |                     [Qwen2MoE](model_doc/qwen2_moe)                      |       ✅        |         ❌         |      ❌      |
 |                           [RAG](model_doc/rag)                           |       ✅        |         ✅         |      ❌      |
 |                         [REALM](model_doc/realm)                         |       ✅        |         ❌         |      ❌      |
@@ -344,5 +351,6 @@ Flax), PyTorch, and/or TensorFlow.
 |                 [XLSR-Wav2Vec2](model_doc/xlsr_wav2vec2)                 |       ✅        |         ✅         |      ✅      |
 |                         [YOLOS](model_doc/yolos)                         |       ✅        |         ❌         |      ❌      |
 |                          [YOSO](model_doc/yoso)                          |       ✅        |         ❌         |      ❌      |
+|                      [ZoeDepth](model_doc/zoedepth)                      |       ✅        |         ❌         |      ❌      |
 
 <!-- End table-->

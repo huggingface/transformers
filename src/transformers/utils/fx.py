@@ -138,6 +138,7 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "gpt2",
     "gpt_neo",
     "gptj",
+    "hiera",
     "hubert",
     "layoutlm",
     "llama",
@@ -995,6 +996,25 @@ class HFTracer(Tracer):
             inputs_dict[input_name] = torch.zeros(
                 *shape, model.config.input_feat_per_channel, dtype=torch.float, device=device
             )
+        elif "inputs_embeds" in input_name:
+            batch_size = shape[0]
+
+            if (
+                getattr(model.config, "embedding_size", None) is not None
+                and model.config.model_type != "megatron-bert"
+            ):
+                embedding_size = model.config.embedding_size
+            else:
+                embedding_size = model.config.hidden_size
+
+            if len(shape) == 3:
+                # (batch_size, num_choices, sequence_length, embedding_size)
+                embedding_shape = (batch_size, shape[1], shape[2], embedding_size)
+            else:
+                # (batch_size, sequence_length, embedding_size)
+                embedding_shape = (batch_size, shape[1], embedding_size)
+
+            inputs_dict[input_name] = torch.zeros(embedding_shape, dtype=torch.float, device=device)
         elif "visual_feats" in input_name:
             inputs_dict[input_name] = torch.zeros(
                 shape

@@ -59,6 +59,7 @@ else:
             ("blip", ("BlipImageProcessor",)),
             ("blip-2", ("BlipImageProcessor",)),
             ("bridgetower", ("BridgeTowerImageProcessor",)),
+            ("chameleon", ("ChameleonImageProcessor",)),
             ("chinese_clip", ("ChineseCLIPImageProcessor",)),
             ("clip", ("CLIPImageProcessor",)),
             ("clipseg", ("ViTImageProcessor", "ViTImageProcessorFast")),
@@ -85,6 +86,7 @@ else:
             ("glpn", ("GLPNImageProcessor",)),
             ("grounding-dino", ("GroundingDinoImageProcessor",)),
             ("groupvit", ("CLIPImageProcessor",)),
+            ("hiera", ("BitImageProcessor",)),
             ("idefics", ("IdeficsImageProcessor",)),
             ("idefics2", ("Idefics2ImageProcessor",)),
             ("imagegpt", ("ImageGPTImageProcessor",)),
@@ -95,8 +97,8 @@ else:
             ("layoutlmv3", ("LayoutLMv3ImageProcessor",)),
             ("levit", ("LevitImageProcessor",)),
             ("llava", ("CLIPImageProcessor",)),
-            ("llava-next-video", ("LlavaNextVideoImageProcessor",)),
             ("llava_next", ("LlavaNextImageProcessor",)),
+            ("llava_next_video", ("LlavaNextVideoImageProcessor",)),
             ("mask2former", ("Mask2FormerImageProcessor",)),
             ("maskformer", ("MaskFormerImageProcessor",)),
             ("mgp-str", ("ViTImageProcessor", "ViTImageProcessorFast")),
@@ -142,6 +144,7 @@ else:
             ("vitmatte", ("VitMatteImageProcessor",)),
             ("xclip", ("CLIPImageProcessor",)),
             ("yolos", ("YolosImageProcessor",)),
+            ("zoedepth", ("ZoeDepthImageProcessor",)),
         ]
     )
 

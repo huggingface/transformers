@@ -159,6 +159,7 @@ class VisionEncoderDecoderModel(PreTrainedModel):
     base_model_prefix = "vision_encoder_decoder"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
+    _supports_param_buffer_assignment = False
 
     def __init__(
         self,

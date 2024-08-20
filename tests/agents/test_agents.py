@@ -30,7 +30,7 @@ def get_new_path(suffix="") -> str:
     return os.path.join(directory, str(uuid.uuid4()) + suffix)
 
 
-def fake_react_json_llm(messages, stop_sequences=None) -> str:
+def fake_react_json_llm(messages, stop_sequences=None, grammar=None) -> str:
     prompt = str(messages)
 
     if "special_marker" not in prompt:
@@ -53,7 +53,7 @@ Action:
 """
 
 
-def fake_react_code_llm(messages, stop_sequences=None) -> str:
+def fake_react_code_llm(messages, stop_sequences=None, grammar=None) -> str:
     prompt = str(messages)
     if "special_marker" not in prompt:
         return """
@@ -119,7 +119,7 @@ final_answer(res)
 """
 
 
-def fake_code_llm_oneshot(messages, stop_sequences=None) -> str:
+def fake_code_llm_oneshot(messages, stop_sequences=None, grammar=None) -> str:
     return """
 Thought: I should multiply 2 by 3.6452. special_marker
 Code:
@@ -130,7 +130,7 @@ final_answer(result)
 """
 
 
-def fake_code_llm_no_return(messages, stop_sequences=None) -> str:
+def fake_code_llm_no_return(messages, stop_sequences=None, grammar=None) -> str:
     return """
 Thought: I should multiply 2 by 3.6452. special_marker
 Code:
@@ -198,7 +198,7 @@ Action:
         )
         agent.run("What is 2 multiplied by 3.6452?")
         assert len(agent.logs) == 7
-        assert type(agent.logs[-1]["error"]) == AgentMaxIterationsError
+        assert type(agent.logs[-1]["error"]) is AgentMaxIterationsError
 
     @require_torch
     def test_init_agent_with_different_toolsets(self):
@@ -223,7 +223,7 @@ Action:
         # check that add_base_tools will not interfere with existing tools
         with pytest.raises(KeyError) as e:
             agent = ReactJsonAgent(tools=toolset_3, llm_engine=fake_react_json_llm, add_base_tools=True)
-        assert "python_interpreter already exists in the toolbox" in str(e)
+        assert "already exists in the toolbox" in str(e)
 
         # check that python_interpreter base tool does not get added to code agents
         agent = ReactCodeAgent(tools=[], llm_engine=fake_react_code_llm, add_base_tools=True)
