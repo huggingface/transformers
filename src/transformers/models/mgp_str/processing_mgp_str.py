@@ -139,6 +139,7 @@ class MgpstrProcessor(ProcessorMixin):
               `None`).
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
+
         if images is None and text is None:
             raise ValueError("You need to specify either an `images` or `text` input to process.")
 
@@ -148,18 +149,14 @@ class MgpstrProcessor(ProcessorMixin):
             **kwargs,
         )
 
+        data = {}
+        if text is not None:
+            text_features = self.tokenizer(text=text, **output_kwargs["text_kwargs"])
+            data.update(text_features)
         if images is not None:
             image_features = self.image_processor(images, **output_kwargs["images_kwargs"])
-        if text is not None:
-            encodings = self.tokenizer(text, **output_kwargs["text_kwargs"])
-
-        return_tensors = output_kwargs["common_kwargs"].get("return_tensors")
-        if text is not None and images is not None:
-            return BatchFeature(data=dict(**image_features, labels=encodings["input_ids"]), tensor_type=return_tensors)
-        elif text is not None:
-            return BatchFeature(data=dict(**encodings), tensor_type=return_tensors)
-        else:
-            return BatchFeature(data=dict(**image_features), tensor_type=return_tensors)
+            data.update(image_features)
+        return BatchFeature(data=data, tensor_type=output_kwargs["common_kwargs"].get("return_tensors"))
 
     def batch_decode(self, sequences):
         """

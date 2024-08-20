@@ -116,19 +116,14 @@ class AltCLIPProcessor(ProcessorMixin):
             **kwargs,
         )
 
+        data = {}
         if text is not None:
-            encoding = self.tokenizer(text, **output_kwargs["text_kwargs"])
-
+            text_features = self.tokenizer(text, **output_kwargs["text_kwargs"])
+            data.update(text_features)
         if images is not None:
             image_features = self.image_processor(images, **output_kwargs["images_kwargs"])
-
-        return_tensors = output_kwargs["common_kwargs"].get("return_tensors")
-        if text is not None and images is not None:
-            return BatchFeature(data=dict(**encoding, **image_features), tensor_type=return_tensors)
-        elif text is not None:
-            return BatchFeature(data=dict(**encoding), tensor_type=return_tensors)
-        else:
-            return BatchFeature(data=dict(**image_features), tensor_type=return_tensors)
+            data.update(image_features)
+        return BatchFeature(data=data, tensor_type=output_kwargs["common_kwargs"].get("return_tensors"))
 
     def batch_decode(self, *args, **kwargs):
         """

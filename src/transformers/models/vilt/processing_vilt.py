@@ -122,12 +122,14 @@ class ViltProcessor(ProcessorMixin):
             **kwargs,
         )
 
-        encoding = self.tokenizer(text=text, **output_kwargs["text_kwargs"])
-        # add pixel_values + pixel_mask
-        encoding_image_processor = self.image_processor(images, **output_kwargs["images_kwargs"])
-        encoding.update(encoding_image_processor)
-
-        return BatchFeature(data=dict(**encoding), tensor_type=output_kwargs["common_kwargs"].get("return_tensors"))
+        data = {}
+        if text is not None:
+            text_features = self.tokenizer(text=text, **output_kwargs["text_kwargs"])
+            data.update(text_features)
+        if images is not None:
+            images_features = self.image_processor(images, **output_kwargs["images_kwargs"])
+            data.update(images_features)
+        return BatchFeature(data=data, tensor_type=output_kwargs["common_kwargs"].get("return_tensors"))
 
     def batch_decode(self, *args, **kwargs):
         """

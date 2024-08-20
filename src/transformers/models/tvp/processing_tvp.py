@@ -121,16 +121,14 @@ class TvpProcessor(ProcessorMixin):
             **kwargs,
         )
 
-        encoding = {}
+        data = {}
         if text is not None:
-            textual_input = self.tokenizer(text, **output_kwargs["text_kwargs"])
-            encoding.update(textual_input)
-
+            text_features = self.tokenizer(text=text, **output_kwargs["text_kwargs"])
+            data.update(text_features)
         if videos is not None:
-            image_features = self.image_processor(videos, **output_kwargs["videos_kwargs"])
-            encoding.update(image_features)
-
-        return BatchFeature(data=encoding, tensor_type=output_kwargs["common_kwargs"].get("return_tensors"))
+            video_features = self.image_processor(videos, **output_kwargs["videos_kwargs"])
+            data.update(video_features)
+        return BatchFeature(data=data, tensor_type=output_kwargs["common_kwargs"].get("return_tensors"))
 
     def batch_decode(self, *args, **kwargs):
         """
