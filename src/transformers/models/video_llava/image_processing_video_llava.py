@@ -63,9 +63,8 @@ def make_batched_videos(videos) -> List[VideoInput]:
             return videos
         if isinstance(videos[0], np.ndarray) and videos[0].ndim == 4:
             return videos
-
-    elif isinstance(videos, (list, tuple)) and is_valid_image(videos[0]):
-        return [videos]
+        if is_valid_image(videos[0]):
+            return [videos]
 
     elif is_valid_image(videos):
         return [[videos]]
