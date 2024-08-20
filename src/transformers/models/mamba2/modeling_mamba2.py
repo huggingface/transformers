@@ -170,27 +170,21 @@ class Mamba2Cache:
 
 
 class MambaRMSNormGated(torch.nn.Module):
-    def __init__(self, hidden_size, eps=1e-6, norm_before_gate=False):
+    def __init__(self, hidden_size, eps=1e-6):
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
-        self.norm_before_gate = norm_before_gate
 
     def forward(self, hidden_states, gate=None):
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
 
-        if gate is not None and not self.norm_before_gate:
+        if gate is not None:
             hidden_states = hidden_states * nn.functional.silu(gate.to(torch.float32))
-
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        hidden_states = self.weight * hidden_states
 
-        if gate is not None and self.norm_before_gate:
-            hidden_states = hidden_states * nn.functional.silu(gate.to(torch.float32))
-
-        return hidden_states.to(input_dtype)
+        return self.weight * hidden_states.to(input_dtype)
 
 
 class Mamba2Mixer(nn.Module):
@@ -214,7 +208,6 @@ class Mamba2Mixer(nn.Module):
         self.activation = config.hidden_act
         self.act = ACT2FN[config.hidden_act]
 
-        self.norm_before_gate = config.norm_before_gate
         self.layer_norm_epsilon = config.layer_norm_epsilon
         self.rms_norm = config.rms_norm
 
@@ -254,9 +247,7 @@ class Mamba2Mixer(nn.Module):
         A = torch.arange(1, self.num_heads + 1)
         self.A_log = nn.Parameter(torch.log(A))
         self.A_log._no_weight_decay = True
-        self.norm = MambaRMSNormGated(
-            self.intermediate_size, eps=self.layer_norm_epsilon, norm_before_gate=self.norm_before_gate
-        )
+        self.norm = MambaRMSNormGated(self.intermediate_size, eps=self.layer_norm_epsilon)
         self.D = nn.Parameter(torch.ones(self.num_heads))
         self.D._no_weight_decay = True
 
@@ -355,7 +346,7 @@ class Mamba2Mixer(nn.Module):
                     outproj_bias=self.out_proj.bias,
                     headdim=self.head_dim,
                     ngroups=self.n_groups,
-                    norm_before_gate=self.norm_before_gate,
+                    norm_before_gate=False,
                     return_final_states=True,
                     **dt_limit_kwargs,
                 )
