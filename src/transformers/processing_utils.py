@@ -837,21 +837,21 @@ class ProcessorMixin(PushToHubMixin):
         in the processor's `__call__` method before calling this method.
         """
 
-        def _is_valid_text_input(t):
+        def _is_valid_text_input_for_processor(t):
             if isinstance(t, str):
                 # Strings are fine
                 return True
             elif isinstance(t, (list, tuple)):
                 # List are fine as long as they are...
                 if len(t) == 0:
-                    # ... empty
-                    return True
-                elif isinstance(t[0], str):
-                    # ... list of strings
+                    # ... not empty
+                    return False
+                elif isinstance(t[0], (str, int)):
+                    # ... list of strings or int (for encoded inputs)
                     return True
                 elif isinstance(t[0], (list, tuple)):
-                    # ... list with an empty list or with a list of strings
-                    return len(t[0]) == 0 or isinstance(t[0][0], str)
+                    # ... list of list of strings or int (for encoded inputs)
+                    return isinstance(t[0][0], (str, int))
                 else:
                     return False
             else:
@@ -862,8 +862,12 @@ class ProcessorMixin(PushToHubMixin):
             is_convertible = converter(input) if not is_valid else False
             return is_valid, is_convertible
 
-        images_is_valid, images_is_text = _is_valid_or_convertible(images, valid_images, _is_valid_text_input)
-        text_is_valid, text_is_images = _is_valid_or_convertible(text, _is_valid_text_input, valid_images)
+        images_is_valid, images_is_text = _is_valid_or_convertible(
+            images, valid_images, _is_valid_text_input_for_processor
+        )
+        text_is_valid, text_is_images = _is_valid_or_convertible(
+            text, _is_valid_text_input_for_processor, valid_images
+        )
 
         # Handle cases where both inputs are valid
         if images_is_valid and text_is_valid:
@@ -877,7 +881,7 @@ class ProcessorMixin(PushToHubMixin):
         ):
             logger.warning_once(
                 "You may have used the wrong order for inputs. `images` should be passed before `text`. "
-                "The `images` and `text` inputs will be swapped."
+                "The `images` and `text` inputs will be swapped. This behavior will be deprecated in transformers v4.47."
             )
             return text, images
 
