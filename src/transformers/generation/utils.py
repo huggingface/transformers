@@ -2426,8 +2426,9 @@ class GenerationMixin:
                 output_hidden_states=True,
             )
 
-            final_layer_next_token_logits = outputs.logits[:, -1, :].detach().clone()
-            final_logits = outputs.logits[:, -1, :]
+            # .float() is needed to retain precision for later logits manipulations
+            final_layer_next_token_logits = outputs.logits[:, -1, :].detach().clone().float()
+            final_logits = outputs.logits[:, -1, :].float()
             candidate_premature_logits = {}
             for candidate_premature_layer in candidate_premature_layers:
                 candidate_premature_logits[candidate_premature_layer] = lm_head(
@@ -2604,6 +2605,7 @@ class GenerationMixin:
                 # next logit for contrastive search to select top-k candidate tokens
                 # Clone is needed to avoid keeping a hanging ref to outputs.logits which may be very large for this first iteration
                 # (the clone itself is always small)
+                # .float() is needed to retain precision for later logits manipulations
                 logit_for_next_step = outputs.logits[:, -1, :].clone().float()
 
                 model_kwargs = self._update_model_kwargs_for_generation(
@@ -2734,7 +2736,8 @@ class GenerationMixin:
                 next_hidden = outputs.hidden_states[-1]
                 full_hidden_states = outputs.hidden_states
 
-            logits = outputs.logits[:, -1, :]
+            # .float() is needed to retain precision for later logits manipulations
+            logits = outputs.logits[:, -1, :].float()
             context_hidden = last_hidden_states.repeat_interleave(top_k, dim=0)
 
             # compute the degeneration penalty and re-rank the candidates based on the degeneration penalty and the
@@ -2792,7 +2795,7 @@ class GenerationMixin:
 
                     next_past_key_values = tuple(new_key_values)
 
-            logit_for_next_step = torch.stack(torch.split(logits, top_k))[range(batch_size), selected_idx, :].float()
+            logit_for_next_step = torch.stack(torch.split(logits, top_k))[range(batch_size), selected_idx, :]
 
             # Rebuilds the relevant parts of the model output for the selected token, for use in the next iteration
             if self.config.is_encoder_decoder:
@@ -2980,6 +2983,7 @@ class GenerationMixin:
 
             # Clone is needed to avoid keeping a hanging ref to outputs.logits which may be very large for first iteration
             # (the clone itself is always small)
+            # .float() is needed to retain precision for later logits manipulations
             next_token_logits = outputs.logits[:, -1, :].clone().float()
 
             # pre-process distribution
@@ -3224,6 +3228,7 @@ class GenerationMixin:
 
             # Clone is needed to avoid keeping a hanging ref to outputs.logits which may be very large for first iteration
             # (the clone itself is always small)
+            # .float() is needed to retain precision for later logits manipulations
             next_token_logits = outputs.logits[:, -1, :].clone().float()
             next_token_scores = nn.functional.log_softmax(
                 next_token_logits, dim=-1
@@ -3498,6 +3503,7 @@ class GenerationMixin:
 
                 # select outputs of beams of current group only
                 # No need to clone() the logits here as they will not retain outputs.logits at the end of the loop
+                # .float() is needed to retain precision for later logits manipulations
                 next_token_logits = outputs.logits[batch_group_indices, -1, :].float()
 
                 next_token_scores = nn.functional.log_softmax(
@@ -3753,6 +3759,7 @@ class GenerationMixin:
 
             # Clone is needed to avoid keeping a hanging ref to outputs.logits which may be very large for first iteration
             # (the clone itself is always small)
+            # .float() is needed to retain precision for later logits manipulations
             next_token_logits = outputs.logits[:, -1, :].clone().float()
             next_token_scores = nn.functional.log_softmax(
                 next_token_logits, dim=-1
@@ -4012,8 +4019,9 @@ class GenerationMixin:
             outputs = self(**model_inputs)
 
             # 2.3. Process the new logits
-            new_logits = outputs.logits[:, -candidate_length - 1 :]  # excludes the input prompt if present
-            next_token_logits = new_logits.clone().float()
+            # .float() is needed to retain precision for later logits manipulations
+            new_logits = outputs.logits[:, -candidate_length - 1 :].float()  # excludes the input prompt if present
+            next_token_logits = new_logits.clone()
             if len(logits_processor) > 0:
                 for i in range(candidate_length + 1):
                     new_logits[:, i, :] = logits_processor(candidate_input_ids[:, : cur_len + i], new_logits[:, i, :])
