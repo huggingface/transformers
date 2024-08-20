@@ -17,6 +17,7 @@ Image/Text processor class for OWLv2
 """
 
 import sys
+import warnings
 from typing import List, Optional, Union
 
 import numpy as np
@@ -83,7 +84,7 @@ class Owlv2Processor(ProcessorMixin):
         audio=None,
         videos=None,
         **kwargs: Unpack[Owlv2ProcessorKwargs],
-    ):
+    ) -> BatchFeature:
         """
         Main method to prepare for the model one or several text(s) and image(s). This method forwards the `text` and
         `kwargs` arguments to CLIPTokenizerFast's [`~CLIPTokenizerFast.__call__`] if `text` is not `None` to encode:
@@ -114,6 +115,7 @@ class Owlv2Processor(ProcessorMixin):
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
             - **query_pixel_values** -- Pixel values of the query images to be fed to a model. Returned when `query_images` is not `None`.
         """
+
         output_kwargs = self._merge_kwargs(
             Owlv2ProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
@@ -128,6 +130,12 @@ class Owlv2Processor(ProcessorMixin):
             raise ValueError(
                 "You have to specify at least one text or query image or image. All three cannot be none."
             )
+        if text is not None and query_images is not None:
+            warnings.warn(
+                "Query images will override the text prompt. In the future, this will raise an error.", FutureWarning
+            )
+
+        data = {}
 
         if text is not None:
             if isinstance(text, str) or (isinstance(text, List) and not isinstance(text[0], List)):
@@ -174,28 +182,19 @@ class Owlv2Processor(ProcessorMixin):
             else:
                 raise ValueError("Target return tensor type could not be returned")
 
-            encoding = BatchFeature()
-            encoding["input_ids"] = input_ids
-            encoding["attention_mask"] = attention_mask
+            data["input_ids"] = input_ids
+            data["attention_mask"] = attention_mask
 
         if query_images is not None:
-            encoding = BatchFeature()
             query_pixel_values = self.image_processor(query_images, **output_kwargs["images_kwargs"]).pixel_values
-            encoding["query_pixel_values"] = query_pixel_values
+            # Query images always override the text prompt
+            data = {"query_pixel_values": query_pixel_values}
 
         if images is not None:
             image_features = self.image_processor(images, **output_kwargs["images_kwargs"])
+            data["pixel_values"] = image_features.pixel_values
 
-        if text is not None and images is not None:
-            encoding["pixel_values"] = image_features.pixel_values
-            return encoding
-        elif query_images is not None and images is not None:
-            encoding["pixel_values"] = image_features.pixel_values
-            return encoding
-        elif text is not None or query_images is not None:
-            return encoding
-        else:
-            return BatchFeature(data=dict(**image_features), tensor_type=return_tensors)
+        return BatchFeature(data=data, tensor_type=return_tensors)
 
     # Copied from transformers.models.owlvit.processing_owlvit.OwlViTProcessor.post_process_object_detection with OWLViT->OWLv2
     def post_process_object_detection(self, *args, **kwargs):

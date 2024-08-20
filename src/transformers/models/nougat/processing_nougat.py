@@ -19,6 +19,7 @@ Processor class for Nougat.
 import sys
 from typing import List, Optional, Union
 
+from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
@@ -85,7 +86,7 @@ class NougatProcessor(ProcessorMixin):
         audio=None,
         videos=None,
         **kwargs: Unpack[NougatProcessorKwargs],
-    ):
+    ) -> BatchFeature:
         """
         Main method to prepare for the model one or several text(s) and image(s). This method forwards the `text` and
         `kwargs` arguments to NougatTokenizerFast's [`~NougatTokenizerFast.__call__`] if `text` is not `None` to encode
@@ -105,12 +106,12 @@ class NougatProcessor(ProcessorMixin):
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
-            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
+            - **labels** -- List of token ids to be fed to a model. Returned when both `text` and `images` are not `None`.
+            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None` and `images` is `None`.
             - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
               `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
               `None`).
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
-            - **labels** -- List of label token ids to be fed to a model. Returned when both `text` and `images` are not `None`.
         """
         if images is None and text is None:
             raise ValueError("You need to specify either an `images` or `text` input to process.")
@@ -123,18 +124,16 @@ class NougatProcessor(ProcessorMixin):
         # Temporary fix for "paddding_side" in init_kwargs
         _ = output_kwargs["text_kwargs"].pop("padding_side", None)
 
-        if images is not None:
-            inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
+        data = {}
         if text is not None:
-            encodings = self.tokenizer(text, **output_kwargs["text_kwargs"])
-
-        if text is None:
-            return inputs
-        elif images is None:
-            return encodings
-        else:
-            inputs["labels"] = encodings["input_ids"]
-            return inputs
+            text_features = self.tokenizer(text=text, **output_kwargs["text_kwargs"])
+            data.update(text_features)
+        if images is not None:
+            image_features = self.image_processor(images, **output_kwargs["images_kwargs"])
+            data.update(image_features)
+            if "input_ids" in data:
+                data["labels"] = data.pop("input_ids")
+        return BatchFeature(data=data, tensor_type=output_kwargs["common_kwargs"].get("return_tensors"))
 
     def batch_decode(self, *args, **kwargs):
         """

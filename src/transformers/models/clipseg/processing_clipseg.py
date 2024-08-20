@@ -85,7 +85,7 @@ class CLIPSegProcessor(ProcessorMixin):
         audio=None,
         videos=None,
         **kwargs: Unpack[CLIPSegProcessorKwargs],
-    ):
+    ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to CLIPTokenizerFast's [`~CLIPTokenizerFast.__call__`] if `text` is not `None` to encode
@@ -132,35 +132,18 @@ class CLIPSegProcessor(ProcessorMixin):
         if text is not None and visual_prompt is not None:
             raise ValueError("You have to specify exactly one type of prompt. Either text or visual prompt.")
 
+        data = {}
         if text is not None:
-            encoding = self.tokenizer(text, **output_kwargs["text_kwargs"])
-
+            text_features = self.tokenizer(text, **output_kwargs["text_kwargs"])
+            data.update(text_features)
         if visual_prompt is not None:
-            prompt_features = self.image_processor(visual_prompt, **output_kwargs["images_kwargs"])
-
+            prompt_image_features = self.image_processor(visual_prompt, **output_kwargs["images_kwargs"])
+            data["conditional_pixel_values"] = prompt_image_features.pixel_values
         if images is not None:
             image_features = self.image_processor(images, **output_kwargs["images_kwargs"])
+            data["pixel_values"] = image_features.pixel_values
 
-        if visual_prompt is not None and images is not None:
-            encoding = {
-                "pixel_values": image_features.pixel_values,
-                "conditional_pixel_values": prompt_features.pixel_values,
-            }
-            return BatchFeature(data=encoding, tensor_type=output_kwargs["common_kwargs"].get("return_tensors"))
-        elif text is not None and images is not None:
-            encoding["pixel_values"] = image_features.pixel_values
-            return encoding
-        elif text is not None:
-            return encoding
-        elif visual_prompt is not None:
-            encoding = {
-                "conditional_pixel_values": prompt_features.pixel_values,
-            }
-            return BatchFeature(data=encoding, tensor_type=output_kwargs["common_kwargs"].get("return_tensors"))
-        else:
-            return BatchFeature(
-                data=dict(**image_features), tensor_type=output_kwargs["common_kwargs"].get("return_tensors")
-            )
+        return BatchFeature(data=data, tensor_type=output_kwargs["common_kwargs"].get("return_tensors"))
 
     def batch_decode(self, *args, **kwargs):
         """
