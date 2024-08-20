@@ -21,7 +21,7 @@ from typing import List, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, get_image_size, to_numpy_array
-from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, _check_reversed_images_text_for_vlms
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import logging
 
@@ -123,7 +123,7 @@ class LlavaProcessor(ProcessorMixin):
             raise ValueError("You have to specify at least images or text.")
 
         # check if images and text inputs are reversed for BC
-        images, text = self._check_reversed_images_text(images, text)
+        images, text = _check_reversed_images_text_for_vlms(images, text)
 
         output_kwargs = self._merge_kwargs(
             LlavaProcessorKwargs,

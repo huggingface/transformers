@@ -829,64 +829,6 @@ class ProcessorMixin(PushToHubMixin):
             output_kwargs[modality].update(output_kwargs["common_kwargs"])
         return output_kwargs
 
-    def _check_reversed_images_text(self, images, text):
-        """
-        For backward compatibility: reverse the order of `images` and `text` inputs if they are swapped.
-        This method should only be called for processors where `images` and `text` have been swapped for uniformization purposes.
-        Note that this method assumes that two `None` inputs are valid inputs. If this is not the case, it should be handled
-        in the processor's `__call__` method before calling this method.
-        """
-
-        def _is_valid_text_input_for_processor(t):
-            if isinstance(t, str):
-                # Strings are fine
-                return True
-            elif isinstance(t, (list, tuple)):
-                # List are fine as long as they are...
-                if len(t) == 0:
-                    # ... not empty
-                    return False
-                elif isinstance(t[0], (str, int)):
-                    # ... list of strings or int (for encoded inputs)
-                    return True
-                elif isinstance(t[0], (list, tuple)):
-                    # ... list of list of strings or int (for encoded inputs)
-                    return isinstance(t[0][0], (str, int))
-                else:
-                    return False
-            else:
-                return False
-
-        def _is_valid_or_convertible(input, validator, converter):
-            is_valid = validator(input) or input is None
-            is_convertible = converter(input) if not is_valid else False
-            return is_valid, is_convertible
-
-        images_is_valid, images_is_text = _is_valid_or_convertible(
-            images, valid_images, _is_valid_text_input_for_processor
-        )
-        text_is_valid, text_is_images = _is_valid_or_convertible(
-            text, _is_valid_text_input_for_processor, valid_images
-        )
-
-        # Handle cases where both inputs are valid
-        if images_is_valid and text_is_valid:
-            return images, text
-
-        # Handle cases where inputs need to and can be swapped
-        if (
-            (images is None and text_is_images)
-            or (text is None and images_is_text)
-            or (images_is_text and text_is_images)
-        ):
-            logger.warning_once(
-                "You may have used the wrong order for inputs. `images` should be passed before `text`. "
-                "The `images` and `text` inputs will be swapped. This behavior will be deprecated in transformers v4.47."
-            )
-            return text, images
-
-        raise ValueError("Invalid input type. Check that `images` and/or `text` are valid inputs.")
-
     @classmethod
     def from_pretrained(
         cls,
