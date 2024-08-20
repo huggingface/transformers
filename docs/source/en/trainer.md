@@ -415,7 +415,7 @@ training_args = TrainingArguments(
 )
 ```
 
-Currently, the kernel supports the Llama, Gemma, Mistral, and Mixtral model architectures. A list of supported models is defined [here](https://github.com/linkedin/Liger-Kernel/blob/main/src/liger_kernel/transformers/monkey_patch.py#L7). When use_liger is set to True, the corresponding layers in the original model will be patched with Liger's efficient implementation, so you don't need to do anything extra other than setting the argument value.
+Currently, the kernel supports the Llama, Gemma, Mistral, and Mixtral model architectures. A list of supported models is defined [here](https://github.com/linkedin/Liger-Kernel/blob/main/src/liger_kernel/transformers/monkey_patch.py#L7). When `use_liger` is set to `True`, the corresponding layers in the original model will be patched with Liger's efficient implementation, so you don't need to do anything extra other than setting the argument value.
 
 ## LOMO optimizer
 
