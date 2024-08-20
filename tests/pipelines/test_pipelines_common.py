@@ -26,6 +26,7 @@ from huggingface_hub import HfFolder, delete_repo
 from requests.exceptions import HTTPError
 
 from transformers import (
+    AutoConfig,
     AutoModelForSequenceClassification,
     AutoTokenizer,
     DistilBertForSequenceClassification,
@@ -519,6 +520,14 @@ class PipelineUtilsTest(unittest.TestCase):
         expected_output = [{"generated_text": ANY(str)}]
         actual_output = classifier("Test input.")
         self.assertEqual(expected_output, actual_output)
+
+    @require_torch
+    def test_config_object_with_named_repo(self):
+        checkpoint = "hf-internal-testing/tiny-random-distilbert"
+        config = AutoConfig.from_pretrained(checkpoint)
+        config.dropout = 0.5  # Changed from default
+        pipe = pipeline(model="hf-internal-testing/tiny-random-distilbert", config=config)
+        self.assertEqual(pipe.model.config.dropout, 0.5)
 
     @require_torch_accelerator
     def test_pipeline_no_device(self):
