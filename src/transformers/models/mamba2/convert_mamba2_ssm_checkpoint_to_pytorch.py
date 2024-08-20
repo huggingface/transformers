@@ -55,7 +55,6 @@ def convert_ssm_config_to_hf_config(config_ssm: Dict, mamba2_model_dict: Dict) -
     hf_config.n_groups = config_ssm.get(config_dict["n_groups"], 1)
     hf_config.residual_in_fp32 = config_ssm[config_dict["residual_in_fp32"]]
     hf_config.tie_word_embeddings = config_ssm[config_dict["tie_word_embeddings"]]
-    hf_config.norm_before_gate = config_dict["norm_before_gate"]
     hf_config.bos_token_id = config_dict["bos_token_id"]
     hf_config.pad_token_id = config_dict["pad_token_id"]
     hf_config.eos_token_id = config_dict["eos_token_id"]
@@ -96,7 +95,6 @@ _MAMBA2_MODELS_DICT = {
         "n_groups": "n_groups",
         "residual_in_fp32": "residual_in_fp32",
         "tie_word_embeddings": "tie_embeddings",
-        "norm_before_gate": False,
         "vocab_size": "vocab_size",
         "pad_vocab_size_multiple": "pad_vocab_size_multiple",
         "bos_token_id": 0,
@@ -112,7 +110,6 @@ _MAMBA2_MODELS_DICT = {
         "n_groups": "ngroups",
         "residual_in_fp32": "residual_in_fp32",
         "tie_word_embeddings": "tie_embeddings",
-        "norm_before_gate": False,
         "vocab_size": "vocab_size",
         "pad_vocab_size_multiple": "pad_vocab_size_multiple",
         "bos_token_id": 0,
