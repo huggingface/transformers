@@ -31,6 +31,7 @@ python utils/check_inits.py --fix_and_overwrite
 
 which is used by `make fix-copies`.
 """
+
 import argparse
 import collections
 import os
@@ -155,6 +156,7 @@ MODEL_NAMES_WITH_SAME_CONFIG = {
     "HerBERT": "BERT",
     "LayoutXLM": "LayoutLMv2",
     "Llama2": "LLaMA",
+    "Llama3": "LLaMA",
     "MADLAD-400": "T5",
     "MatCha": "Pix2Struct",
     "mBART-50": "mBART",
@@ -171,7 +173,7 @@ MODEL_NAMES_WITH_SAME_CONFIG = {
     "XLS-R": "Wav2Vec2",
     "XLSR-Wav2Vec2": "Wav2Vec2",
 }
-MODEL_NAMES_TO_IGNORE = ["CLIPVisionModel"]
+MODEL_NAMES_TO_IGNORE = ["CLIPVisionModel", "SiglipVisionModel", "ChineseCLIPVisionModel", "Qwen2AudioEncoder"]
 
 
 def get_model_table_from_auto_modules() -> str:

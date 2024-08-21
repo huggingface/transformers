@@ -22,10 +22,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_univnet": [
-        "UNIVNET_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "UnivNetConfig",
-    ],
+    "configuration_univnet": ["UnivNetConfig"],
     "feature_extraction_univnet": ["UnivNetFeatureExtractor"],
 }
 
@@ -36,14 +33,12 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_univnet"] = [
-        "UNIVNET_PRETRAINED_MODEL_ARCHIVE_LIST",
         "UnivNetModel",
     ]
 
 
 if TYPE_CHECKING:
     from .configuration_univnet import (
-        UNIVNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
         UnivNetConfig,
     )
     from .feature_extraction_univnet import UnivNetFeatureExtractor
@@ -55,7 +50,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_univnet import (
-            UNIVNET_PRETRAINED_MODEL_ARCHIVE_LIST,
             UnivNetModel,
         )
 

@@ -14,9 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
- PyTorch Transformer XL model. Adapted from https://github.com/kimiyoung/transformer-xl. In particular
- https://github.com/kimiyoung/transformer-xl/blob/master/pytorch/mem_transformer.py
+PyTorch Transformer XL model. Adapted from https://github.com/kimiyoung/transformer-xl. In particular
+https://github.com/kimiyoung/transformer-xl/blob/master/pytorch/mem_transformer.py
 """
+
 import warnings
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
@@ -39,13 +40,8 @@ from .modeling_transfo_xl_utilities import ProjectedAdaptiveLogSoftmax
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "transfo-xl-wt103"
+_CHECKPOINT_FOR_DOC = "transfo-xl/transfo-xl-wt103"
 _CONFIG_FOR_DOC = "TransfoXLConfig"
-
-TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "transfo-xl-wt103",
-    # See all Transformer XL models at https://huggingface.co/models?filter=transfo-xl
-]
 
 
 def build_tf_to_pytorch_map(model, config):
@@ -942,7 +938,9 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
         hids = []
         attentions = [] if output_attentions else None
         if self.attn_type == 0:  # default
-            pos_seq = torch.arange(klen - 1, -1, -1.0, device=word_emb.device, dtype=word_emb.dtype)
+            pos_seq = torch.arange(klen - 1, -1, -1.0, device=word_emb.device, dtype=torch.int64).type_as(
+                dtype=word_emb.dtype
+            )
             if self.clamp_len > 0:
                 pos_seq.clamp_(max=self.clamp_len)
             pos_emb = self.pos_emb(pos_seq)
@@ -1253,7 +1251,7 @@ class TransfoXLForSequenceClassification(TransfoXLPreTrainedModel):
                 sequence_lengths = sequence_lengths.to(logits.device)
             else:
                 sequence_lengths = -1
-                logger.warning(
+                logger.warning_once(
                     f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
                     "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
                 )

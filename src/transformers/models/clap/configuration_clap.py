@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" CLAP model configuration"""
+"""CLAP model configuration"""
 
 import os
 from typing import Union
@@ -22,11 +22,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-CLAP_PRETRAINED_MODEL_ARCHIVE_LIST = {
-    "laion/clap-htsat-fused": "https://huggingface.co/laion/clap-htsat-fused/resolve/main/config.json",
-    "laion/clap-htsat-unfused": "https://huggingface.co/laion/clap-htsat-unfused/resolve/main/config.json",
-}
 
 
 class ClapTextConfig(PretrainedConfig):
@@ -202,7 +197,7 @@ class ClapAudioConfig(PretrainedConfig):
             Whether or not to enable patch fusion. This is the main contribution of the authors, and should give the
             best results.
         hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout probabilitiy for all fully connected layers in the encoder.
+            The dropout probability for all fully connected layers in the encoder.
         fusion_type (`[type]`, *optional*):
             Fusion type used for the patch fusion.
         patch_embed_input_channels (`int`, *optional*, defaults to 1):
@@ -347,9 +342,9 @@ class ClapConfig(PretrainedConfig):
         audio_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize [`ClapAudioConfig`].
         logit_scale_init_value (`float`, *optional*, defaults to 14.29):
-            The inital value of the *logit_scale* paramter. Default is used as per the original CLAP implementation.
+            The initial value of the *logit_scale* parameter. Default is used as per the original CLAP implementation.
         projection_dim (`int`, *optional*, defaults to 512):
-            Dimentionality of text and audio projection layers.
+            Dimensionality of text and audio projection layers.
         projection_hidden_act (`str`, *optional*, defaults to `"relu"`):
             Activation function for the projection layers.
         initializer_factor (`float`, *optional*, defaults to 1.0):

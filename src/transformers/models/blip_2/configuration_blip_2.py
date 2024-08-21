@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" BLIP-2 model configuration"""
+"""BLIP-2 model configuration"""
 
 import os
 from typing import Union
@@ -24,10 +24,6 @@ from ..auto import CONFIG_MAPPING
 
 
 logger = logging.get_logger(__name__)
-
-BLIP_2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "salesforce/blip2-opt-2.7b": "https://huggingface.co/salesforce/blip2-opt-2.7b/resolve/main/config.json",
-}
 
 
 class Blip2VisionConfig(PretrainedConfig):
@@ -55,7 +51,7 @@ class Blip2VisionConfig(PretrainedConfig):
             The size (resolution) of each patch.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` ``"gelu"` are supported. layer_norm_eps (`float`, *optional*, defaults
+            `"relu"`, `"selu"` and `"gelu_new"` `"gelu"` are supported. layer_norm_eps (`float`, *optional*, defaults
             to 1e-5): The epsilon used by the layer normalization layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
@@ -268,6 +264,8 @@ class Blip2Config(PretrainedConfig):
         num_query_tokens (`int`, *optional*, defaults to 32):
             The number of query tokens passed through the Transformer.
 
+        image_token_index (`int`, *optional*):
+            Token index of special image token.
         kwargs (*optional*):
             Dictionary of keyword arguments.
 
@@ -303,7 +301,15 @@ class Blip2Config(PretrainedConfig):
 
     model_type = "blip-2"
 
-    def __init__(self, vision_config=None, qformer_config=None, text_config=None, num_query_tokens=32, **kwargs):
+    def __init__(
+        self,
+        vision_config=None,
+        qformer_config=None,
+        text_config=None,
+        num_query_tokens=32,
+        image_token_index=None,
+        **kwargs,
+    ):
         super().__init__(**kwargs)
 
         if vision_config is None:
@@ -327,6 +333,7 @@ class Blip2Config(PretrainedConfig):
         self.is_encoder_decoder = self.text_config.is_encoder_decoder
 
         self.num_query_tokens = num_query_tokens
+        self.image_token_index = image_token_index
         self.qformer_config.encoder_hidden_size = self.vision_config.hidden_size
         self.use_decoder_only_language_model = self.text_config.model_type in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
         self.initializer_factor = 1.0

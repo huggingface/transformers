@@ -14,7 +14,6 @@
 # limitations under the License.
 """PyTorch ERNIE model."""
 
-
 import math
 import warnings
 from dataclasses import dataclass
@@ -54,21 +53,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "nghuyong/ernie-1.0-base-zh"
 _CONFIG_FOR_DOC = "ErnieConfig"
-
-
-ERNIE_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "nghuyong/ernie-1.0-base-zh",
-    "nghuyong/ernie-2.0-base-en",
-    "nghuyong/ernie-2.0-large-en",
-    "nghuyong/ernie-3.0-base-zh",
-    "nghuyong/ernie-3.0-medium-zh",
-    "nghuyong/ernie-3.0-mini-zh",
-    "nghuyong/ernie-3.0-micro-zh",
-    "nghuyong/ernie-3.0-nano-zh",
-    "nghuyong/ernie-gram-zh",
-    "nghuyong/ernie-health-zh",
-    # See all ERNIE models at https://huggingface.co/models?filter=ernie
-]
 
 
 class ErnieEmbeddings(nn.Module):
@@ -297,11 +281,18 @@ class ErnieSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->Ernie
+ERNIE_SELF_ATTENTION_CLASSES = {
+    "eager": ErnieSelfAttention,
+}
+
+
+# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->Ernie,BERT->ERNIE
 class ErnieAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
-        self.self = ErnieSelfAttention(config, position_embedding_type=position_embedding_type)
+        self.self = ERNIE_SELF_ATTENTION_CLASSES[config._attn_implementation](
+            config, position_embedding_type=position_embedding_type
+        )
         self.output = ErnieSelfOutput(config)
         self.pruned_heads = set()
 
@@ -608,6 +599,9 @@ class ErnieLMPredictionHead(nn.Module):
         # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
         self.decoder.bias = self.bias
 
+    def _tie_weights(self):
+        self.decoder.bias = self.bias
+
     def forward(self, hidden_states):
         hidden_states = self.transform(hidden_states)
         hidden_states = self.decoder(hidden_states)
@@ -799,7 +793,7 @@ class ErnieModel(ErniePreTrainedModel):
     `add_cross_attention` set to `True`; an `encoder_hidden_states` is then expected as an input to the forward pass.
     """
 
-    # Copied from transformers.models.bert.modeling_bert.BertModel.__init__ with Bert->Ernie
+    # Copied from transformers.models.clap.modeling_clap.ClapTextModel.__init__ with ClapText->Ernie
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
@@ -995,6 +989,7 @@ class ErnieForPreTraining(ErniePreTrainedModel):
     # Copied from transformers.models.bert.modeling_bert.BertForPreTraining.set_output_embeddings
     def set_output_embeddings(self, new_embeddings):
         self.cls.predictions.decoder = new_embeddings
+        self.cls.predictions.bias = new_embeddings.bias
 
     @add_start_docstrings_to_model_forward(ERNIE_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=ErnieForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
@@ -1024,7 +1019,7 @@ class ErnieForPreTraining(ErniePreTrainedModel):
 
                 - 0 indicates sequence B is a continuation of sequence A,
                 - 1 indicates sequence B is a random sequence.
-            kwargs (`Dict[str, any]`, optional, defaults to *{}*):
+            kwargs (`Dict[str, any]`, *optional*, defaults to `{}`):
                 Used to hide legacy arguments that have been deprecated.
 
         Returns:
@@ -1109,6 +1104,7 @@ class ErnieForCausalLM(ErniePreTrainedModel):
     # Copied from transformers.models.bert.modeling_bert.BertLMHeadModel.set_output_embeddings
     def set_output_embeddings(self, new_embeddings):
         self.cls.predictions.decoder = new_embeddings
+        self.cls.predictions.bias = new_embeddings.bias
 
     @add_start_docstrings_to_model_forward(ERNIE_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -1269,6 +1265,7 @@ class ErnieForMaskedLM(ErniePreTrainedModel):
     # Copied from transformers.models.bert.modeling_bert.BertForMaskedLM.set_output_embeddings
     def set_output_embeddings(self, new_embeddings):
         self.cls.predictions.decoder = new_embeddings
+        self.cls.predictions.bias = new_embeddings.bias
 
     @add_start_docstrings_to_model_forward(ERNIE_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(

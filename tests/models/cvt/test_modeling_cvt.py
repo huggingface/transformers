@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch CvT model. """
-
+"""Testing suite for the PyTorch CvT model."""
 
 import unittest
 from math import floor
@@ -31,7 +30,6 @@ if is_torch_available():
     import torch
 
     from transformers import CvtForImageClassification, CvtModel
-    from transformers.models.cvt.modeling_cvt import CVT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -151,7 +149,7 @@ class CvtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     all_model_classes = (CvtModel, CvtForImageClassification) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": CvtModel, "image-classification": CvtForImageClassification}
+        {"image-feature-extraction": CvtModel, "image-classification": CvtForImageClassification}
         if is_torch_available()
         else {}
     )
@@ -164,19 +162,16 @@ class CvtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = CvtModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=CvtConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self,
+            config_class=CvtConfig,
+            has_text_modality=False,
+            hidden_size=37,
+            common_properties=["hidden_size", "num_channels"],
+        )
 
     def test_config(self):
-        self.create_and_test_config_common_properties()
-        self.config_tester.create_and_test_config_to_json_string()
-        self.config_tester.create_and_test_config_to_json_file()
-        self.config_tester.create_and_test_config_from_and_save_pretrained()
-        self.config_tester.create_and_test_config_with_num_labels()
-        self.config_tester.check_config_can_be_init_without_params()
-        self.config_tester.check_config_arguments_init()
-
-    def create_and_test_config_common_properties(self):
-        return
+        self.config_tester.run_common_tests()
 
     @unittest.skip(reason="Cvt does not output attentions")
     def test_attention_outputs(self):
@@ -187,7 +182,7 @@ class CvtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(reason="Cvt does not support input and output embeddings")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     def test_model(self):
@@ -236,9 +231,9 @@ class CvtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in CVT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = CvtModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "microsoft/cvt-13"
+        model = CvtModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats
@@ -252,11 +247,11 @@ def prepare_img():
 class CvtModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return AutoImageProcessor.from_pretrained(CVT_PRETRAINED_MODEL_ARCHIVE_LIST[0])
+        return AutoImageProcessor.from_pretrained("microsoft/cvt-13")
 
     @slow
     def test_inference_image_classification_head(self):
-        model = CvtForImageClassification.from_pretrained(CVT_PRETRAINED_MODEL_ARCHIVE_LIST[0]).to(torch_device)
+        model = CvtForImageClassification.from_pretrained("microsoft/cvt-13").to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()

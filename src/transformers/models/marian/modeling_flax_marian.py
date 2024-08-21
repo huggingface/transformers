@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Flax Marian model."""
+"""Flax Marian model."""
 
 import math
 import random
@@ -711,7 +711,7 @@ class FlaxMarianEncoder(nn.Module):
         inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
         positions = jnp.take(self.embed_positions, position_ids, axis=0)
-        # explictly cast the positions here, since self.embed_positions are not registered as parameters
+        # explicitly cast the positions here, since self.embed_positions are not registered as parameters
         positions = positions.astype(inputs_embeds.dtype)
 
         hidden_states = inputs_embeds + positions
@@ -771,7 +771,7 @@ class FlaxMarianDecoder(nn.Module):
 
         # embed positions
         positions = jnp.take(self.embed_positions, position_ids, axis=0)
-        # explictly cast the positions here, since self.embed_positions are not registered as parameters
+        # explicitly cast the positions here, since self.embed_positions are not registered as parameters
         positions = positions.astype(inputs_embeds.dtype)
 
         hidden_states = inputs_embeds + positions

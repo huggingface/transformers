@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch FLAVA model. """
-
+"""Testing suite for the PyTorch FLAVA model."""
 
 import inspect
 import os
@@ -56,10 +55,6 @@ if is_torch_available():
         FlavaModel,
         FlavaMultimodalModel,
         FlavaTextModel,
-    )
-    from transformers.models.flava.modeling_flava import (
-        FLAVA_CODEBOOK_PRETRAINED_MODEL_ARCHIVE_LIST,
-        FLAVA_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
 else:
     FlavaModel = None
@@ -181,11 +176,11 @@ class FlavaImageModelTest(ModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    @unittest.skip("Flava does not use input_ids")
     def test_inputs_embeds(self):
-        # FLAVA does not use inputs_embeds
         pass
 
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -305,9 +300,11 @@ class FlavaImageModelTest(ModelTesterMixin, unittest.TestCase):
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
+    @unittest.skip
     def test_training(self):
         pass
 
+    @unittest.skip
     def test_training_gradient_checkpointing(self):
         pass
 
@@ -323,21 +320,21 @@ class FlavaImageModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    # skip this test as FlavaImageModel has no base class and is
-    # not available in MODEL_MAPPING
+    @unittest.skip(reason="FlavaImageModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_from_base(self):
         pass
 
     # skip this test as FlavaImageModel has no base class and is
     # not available in MODEL_MAPPING
+    @unittest.skip(reason="FlavaImageModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_to_base(self):
         pass
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in FLAVA_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = FlavaImageModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "facebook/flava-full"
+        model = FlavaImageModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 class FlavaTextModelTester:
@@ -464,9 +461,11 @@ class FlavaTextModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    @unittest.skip
     def test_training(self):
         pass
 
+    @unittest.skip
     def test_training_gradient_checkpointing(self):
         pass
 
@@ -482,25 +481,24 @@ class FlavaTextModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
+    @unittest.skip(reason="FLAVA does not use input_embeds")
     def test_inputs_embeds(self):
         # FLAVA does not use inputs_embeds
         pass
 
-    # skip this test as FlavaTextModel has no base class and is
-    # not available in MODEL_MAPPING
+    @unittest.skip(reason="FlavaTextModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_from_base(self):
         pass
 
-    # skip this test as FlavaTextModel has no base class and is
-    # not available in MODEL_MAPPING
+    @unittest.skip(reason="FlavaTextModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_to_base(self):
         pass
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in FLAVA_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = FlavaTextModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "facebook/flava-full"
+        model = FlavaTextModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 class FlavaMultimodalModelTester:
@@ -624,13 +622,15 @@ class FlavaMultimodalModelTest(ModelTesterMixin, unittest.TestCase):
             expected_arg_names = ["hidden_states"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
 
-    def test_model_common_attributes(self):
-        # No embedding in multimodal model
+    @unittest.skip("FLAVA does not have input embeddings")
+    def test_model_get_set_embeddings(self):
         pass
 
+    @unittest.skip
     def test_training(self):
         pass
 
+    @unittest.skip
     def test_training_gradient_checkpointing(self):
         pass
 
@@ -646,25 +646,23 @@ class FlavaMultimodalModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
+    @unittest.skip(reason="FLAVA does not use input_embeds")
     def test_inputs_embeds(self):
-        # FLAVA does not use inputs_embeds
         pass
 
-    # skip this test as FlavaMultimodalModel has no base class and is
-    # not available in MODEL_MAPPING
+    @unittest.skip(reason="FlavaMultimodalModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_from_base(self):
         pass
 
-    # skip this test as FlavaMultimodalModel has no base class and is
-    # not available in MODEL_MAPPING
+    @unittest.skip(reason="FlavaMultimodalModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_to_base(self):
         pass
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in FLAVA_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = FlavaMultimodalModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "facebook/flava-full"
+        model = FlavaMultimodalModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 class FlavaImageCodebookTester:
@@ -747,20 +745,23 @@ class FlavaImageCodebookTest(ModelTesterMixin, unittest.TestCase):
     def test_attention_outputs(self):
         pass
 
-    def test_model_common_attributes(self):
-        # No embedding in multimodal model
+    @unittest.skip(reason="No embedding in multimodal model")
+    def test_model_get_set_embeddings(self):
         pass
 
+    @unittest.skip
     def test_training(self):
         pass
 
+    @unittest.skip
     def test_hidden_states_output(self):
         pass
 
+    @unittest.skip(reason="FlavaImageCodebook has no attentions")
     def test_retain_grad_hidden_states_attentions(self):
-        # no attentions
         pass
 
+    @unittest.skip
     def test_training_gradient_checkpointing(self):
         pass
 
@@ -776,28 +777,27 @@ class FlavaImageCodebookTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
+    @unittest.skip(reason="FLAVA does not use input_embeds")
     def test_inputs_embeds(self):
-        # FLAVA does not use inputs_embeds
         pass
 
+    @unittest.skip
     def test_model_outputs_equivalence(self):
         pass
 
-    # skip this test as FlavaImageCodebook has no base class and is
-    # not available in MODEL_MAPPING
+    @unittest.skip(reason="FlavaImageCodebook has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_from_base(self):
         pass
 
-    # skip this test as FlavaImageCodebook has no base class and is
-    # not available in MODEL_MAPPING
+    @unittest.skip(reason="FlavaImageCodebook has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_to_base(self):
         pass
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in FLAVA_CODEBOOK_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = FlavaImageCodebook.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "facebook/flava-full"
+        model = FlavaImageCodebook.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 class FlavaModelTester:
@@ -836,6 +836,7 @@ class FlavaModelTester:
         self.projection_dim = projection_dim
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
+        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -935,20 +936,20 @@ class FlavaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    # hidden_states are tested in individual model tests
+    @unittest.skip(reason="tested in individual model tests")
     def test_hidden_states_output(self):
         pass
 
-    # input_embeds are tested in individual model tests
+    @unittest.skip(reason="tested in individual model tests")
     def test_inputs_embeds(self):
         pass
 
-    # tested in individual model tests
+    @unittest.skip(reason="tested in individual model tests")
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
-    # FlavaModel does not have input/output embeddings
-    def test_model_common_attributes(self):
+    @unittest.skip(reason="FlavaModel does not have input/output embeddings")
+    def test_model_get_set_embeddings(self):
         pass
 
     # override as the `logit_scale` parameter initilization is different for FLAVA
@@ -977,7 +978,7 @@ class FlavaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:
-            return
+            self.skipTest(reason="test_torchscript is set to False")
 
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
         configs_no_init.torchscript = True
@@ -1080,9 +1081,9 @@ class FlavaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     # overwrite from common since FlavaModel/TFFlavaModel return FLAVAOutput/TFFLAVAOutput
     @slow
     def test_model_from_pretrained(self):
-        for model_name in FLAVA_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = FlavaModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "facebook/flava-full"
+        model = FlavaModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 class FlavaForPreTrainingTester(FlavaModelTester):
@@ -1289,7 +1290,7 @@ class FlavaModelIntegrationTest(unittest.TestCase):
         # verify the embeddings
         self.assertAlmostEqual(outputs.image_embeddings.sum().item(), -1352.53540, places=4)
         self.assertAlmostEqual(outputs.text_embeddings.sum().item(), -198.98225, places=4)
-        self.assertAlmostEqual(outputs.multimodal_embeddings.sum().item(), -3988.51367, places=4)
+        self.assertAlmostEqual(outputs.multimodal_embeddings.sum().item(), -4030.4604492, places=4)
 
 
 @require_vision
@@ -1313,8 +1314,12 @@ class FlavaForPreTrainingIntegrationTest(unittest.TestCase):
             return_codebook_pixels=True,
             return_image_mask=True,
         )
+        # Create a clone of the input_ids tensor that will be its masked version
         inputs["input_ids_masked"] = inputs["input_ids"].clone()
+        # Mask the tokens "a" & "cat" from the "a photo of a cat" text using the special 103 value
         inputs["input_ids_masked"][0, 4:6] = 103
+        # MLM labels. It is a cloned version of input_ids where all values are -100 (i.e., ignored)
+        # except those that are masked, whose original values are stored
         inputs["mlm_labels"] = inputs["input_ids"].clone()
         inputs["mlm_labels"][:, :] = -100
         inputs["mlm_labels"][0, 4:6] = inputs["input_ids"][0, 4:6]
@@ -1335,6 +1340,57 @@ class FlavaForPreTrainingIntegrationTest(unittest.TestCase):
 
         expected_logits = torch.tensor([[16.1291, 8.4033], [16.1291, 8.4033]], device=torch_device)
         self.assertTrue(torch.allclose(outputs.contrastive_logits_per_image, expected_logits, atol=1e-3))
-        self.assertAlmostEqual(outputs.loss_info.mmm_text.item(), 1.75533199, places=4)
-        self.assertAlmostEqual(outputs.loss_info.mmm_image.item(), 7.0290069, places=4)
-        self.assertAlmostEqual(outputs.loss.item(), 11.0626, places=4)
+        self.assertAlmostEqual(outputs.loss_info.mmm_text.item(), 2.0727925, places=4)
+        self.assertAlmostEqual(outputs.loss_info.mmm_image.item(), 7.0282096, places=4)
+        self.assertAlmostEqual(outputs.loss.item(), 11.3792324, places=4)
+
+    @slow
+    def test_inference_with_itm_labels(self):
+        model_name = "facebook/flava-full"
+        model = FlavaForPreTraining.from_pretrained(model_name).to(torch_device)
+        processor = FlavaProcessor.from_pretrained(model_name)
+        torch.manual_seed(1)
+        random.seed(1)
+
+        image = prepare_img()
+        inputs = processor(
+            text=["a photo of a cat", "a photo of a dog"],
+            images=[image, image],
+            padding="max_length",
+            max_length=77,
+            return_tensors="pt",
+            return_codebook_pixels=True,
+            return_image_mask=True,
+        )
+        # Create a clone of the input_ids tensor that will be its masked version
+        inputs["input_ids_masked"] = inputs["input_ids"].clone()
+        # Mask the tokens "a" & "cat" from the "a photo of a cat" text using the special 103 value
+        inputs["input_ids_masked"][0, 4:6] = 103
+        # MLM labels. It is a cloned version of input_ids where all values are -100 (i.e., ignored)
+        # except those that are masked, whose original values are stored
+        inputs["mlm_labels"] = inputs["input_ids"].clone()
+        inputs["mlm_labels"][:, :] = -100
+        inputs["mlm_labels"][0, 4:6] = inputs["input_ids"][0, 4:6]
+        # Manually create the itm_labels tensor that indicates if the image-text match.
+        # In this case, the firs pair matches and the second does not
+        inputs["itm_labels"] = torch.tensor([1, 0])
+        inputs = inputs.to(torch_device)
+        # forward pass
+        with torch.no_grad():
+            outputs = model(**inputs)
+
+        # verify the logits
+        self.assertEqual(
+            outputs.contrastive_logits_per_image.shape,
+            torch.Size((torch.count_nonzero(inputs["itm_labels"]).item(), inputs.input_ids.shape[0])),
+        )
+        self.assertEqual(
+            outputs.contrastive_logits_per_text.shape,
+            torch.Size((torch.count_nonzero(inputs["itm_labels"]).item(), inputs.pixel_values.shape[0])),
+        )
+
+        expected_logits = torch.tensor([[16.1291, 8.4033], [16.1291, 8.4033]], device=torch_device)
+        self.assertTrue(torch.allclose(outputs.contrastive_logits_per_image, expected_logits, atol=1e-3))
+        self.assertAlmostEqual(outputs.loss_info.mmm_text.item(), 2.0727925, places=4)
+        self.assertAlmostEqual(outputs.loss_info.mmm_image.item(), 6.8965902, places=4)
+        self.assertAlmostEqual(outputs.loss.item(), 9.6084213, places=4)

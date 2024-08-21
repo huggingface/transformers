@@ -12,10 +12,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch SAM model."""
+"""PyTorch SAM model."""
 
 import collections
-import math
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -36,13 +35,6 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "SamConfig"
 _CHECKPOINT_FOR_DOC = "facebook/sam-vit-huge"
-
-SAM_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/sam-vit-huge",
-    "facebook/sam-vit-large",
-    "facebook/sam-vit-base",
-    # See all SAM models at https://huggingface.co/models?filter=sam
-]
 
 
 @dataclass
@@ -71,8 +63,8 @@ class SamVisionEncoderOutput(ModelOutput):
 
     image_embeds: Optional[torch.FloatTensor] = None
     last_hidden_state: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -106,9 +98,9 @@ class SamImageSegmentationOutput(ModelOutput):
 
     iou_scores: torch.FloatTensor = None
     pred_masks: torch.FloatTensor = None
-    vision_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    vision_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    mask_decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    vision_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    vision_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    mask_decoder_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 class SamPatchEmbeddings(nn.Module):
@@ -239,7 +231,7 @@ class SamAttention(nn.Module):
         # SamAttention
         _, _, _, c_per_head = query.shape
         attn = query @ key.permute(0, 1, 3, 2)  # batch_size * point_batch_size  x N_heads x N_tokens x N_tokens
-        attn = attn / math.sqrt(c_per_head)
+        attn = attn / (c_per_head**0.5)
         attn = torch.softmax(attn, dim=-1)
 
         if attention_similarity is not None:
@@ -1078,6 +1070,7 @@ class SamPreTrainedModel(PreTrainedModel):
     config_class = SamConfig
     base_model_prefix = "sam"
     main_input_name = "pixel_values"
+    _no_split_modules = ["SamVisionAttention"]
 
     def _init_weights(self, module):
         std = self.config.initializer_range

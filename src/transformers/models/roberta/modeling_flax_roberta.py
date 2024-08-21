@@ -43,7 +43,7 @@ from .configuration_roberta import RobertaConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "roberta-base"
+_CHECKPOINT_FOR_DOC = "FacebookAI/roberta-base"
 _CONFIG_FOR_DOC = "RobertaConfig"
 
 remat = nn_partitioning.remat

@@ -25,7 +25,6 @@ import os
 import random
 import sys
 import time
-import warnings
 from dataclasses import asdict, dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -42,7 +41,7 @@ from flax import struct, traverse_util
 from flax.jax_utils import pad_shard_unpad, replicate, unreplicate
 from flax.training import train_state
 from flax.training.common_utils import get_metrics, onehot, shard
-from huggingface_hub import Repository, create_repo
+from huggingface_hub import HfApi
 from tqdm import tqdm
 from utils_qa import postprocess_qa_predictions
 
@@ -62,7 +61,7 @@ from transformers.utils import check_min_version, send_example_telemetry
 logger = logging.getLogger(__name__)
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.37.0.dev0")
+check_min_version("4.45.0.dev0")
 
 Array = Any
 Dataset = datasets.arrow_dataset.Dataset
@@ -165,19 +164,13 @@ class ModelArguments:
             )
         },
     )
-    use_auth_token: bool = field(
-        default=None,
-        metadata={
-            "help": "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token` instead."
-        },
-    )
     trust_remote_code: bool = field(
         default=False,
         metadata={
             "help": (
-                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option"
-                "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
-                "execute code present on the Hub on your local machine."
+                "Whether to trust the execution of code from datasets/models defined on the Hub."
+                " This option should only be set to `True` for repositories you trust and in which you have read the"
+                " code, as it will execute code present on the Hub on your local machine."
             )
         },
     )
@@ -433,7 +426,8 @@ def eval_data_collator(dataset: Dataset, batch_size: int):
 
     for idx in batch_idx:
         batch = dataset[idx]
-        batch = {k: np.array(v) for k, v in batch.items()}
+        # Ignore `offset_mapping` to avoid numpy/JAX array conversion issue.
+        batch = {k: np.array(v) for k, v in batch.items() if k != "offset_mapping"}
 
         yield batch
 
@@ -454,15 +448,6 @@ def main():
         model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
-
-    if model_args.use_auth_token is not None:
-        warnings.warn(
-            "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token` instead.",
-            FutureWarning,
-        )
-        if model_args.token is not None:
-            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
-        model_args.token = model_args.use_auth_token
 
     # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
     # information sent is the one passed as arguments along with your Python/PyTorch versions.
@@ -493,9 +478,8 @@ def main():
         if repo_name is None:
             repo_name = Path(training_args.output_dir).absolute().name
         # Create repo and retrieve repo_id
-        repo_id = create_repo(repo_name, exist_ok=True, token=training_args.hub_token).repo_id
-        # Clone repo locally
-        repo = Repository(training_args.output_dir, clone_from=repo_id, token=training_args.hub_token)
+        api = HfApi()
+        repo_id = api.create_repo(repo_name, exist_ok=True, token=training_args.hub_token).repo_id
 
     # region Load Data
     # Get the datasets: you can either provide your own CSV/JSON/TXT training and evaluation files (see below)
@@ -514,6 +498,7 @@ def main():
             data_args.dataset_config_name,
             cache_dir=model_args.cache_dir,
             token=model_args.token,
+            trust_remote_code=model_args.trust_remote_code,
         )
     else:
         # Loading the dataset from local csv or json file.
@@ -674,7 +659,7 @@ def main():
             raise ValueError("--do_train requires a train dataset")
         train_dataset = raw_datasets["train"]
         if data_args.max_train_samples is not None:
-            # We will select sample from whole data if agument is specified
+            # We will select sample from whole data if argument is specified
             max_train_samples = min(len(train_dataset), data_args.max_train_samples)
             train_dataset = train_dataset.select(range(max_train_samples))
         # Create train feature from dataset
@@ -807,7 +792,9 @@ def main():
         references = [{"id": ex["id"], "answers": ex[answer_column_name]} for ex in examples]
         return EvalPrediction(predictions=formatted_predictions, label_ids=references)
 
-    metric = evaluate.load("squad_v2" if data_args.version_2_with_negative else "squad")
+    metric = evaluate.load(
+        "squad_v2" if data_args.version_2_with_negative else "squad", cache_dir=model_args.cache_dir
+    )
 
     def compute_metrics(p: EvalPrediction):
         return metric.compute(predictions=p.predictions, references=p.label_ids)
@@ -1015,7 +1002,6 @@ def main():
                     position=2,
                 ):
                     _ = batch.pop("example_id")
-                    _ = batch.pop("offset_mapping")
                     predictions = pad_shard_unpad(p_eval_step)(
                         state, batch, min_device_batch=per_device_eval_batch_size
                     )
@@ -1049,7 +1035,13 @@ def main():
                     model.save_pretrained(training_args.output_dir, params=params)
                     tokenizer.save_pretrained(training_args.output_dir)
                     if training_args.push_to_hub:
-                        repo.push_to_hub(commit_message=f"Saving weights and logs of step {cur_step}", blocking=False)
+                        api.upload_folder(
+                            commit_message=f"Saving weights and logs of step {cur_step}",
+                            folder_path=training_args.output_dir,
+                            repo_id=repo_id,
+                            repo_type="model",
+                            token=training_args.hub_token,
+                        )
         epochs.desc = f"Epoch ... {epoch + 1}/{num_epochs}"
     # endregion
 
@@ -1064,7 +1056,6 @@ def main():
             eval_loader, total=math.ceil(len(eval_dataset) / eval_batch_size), desc="Evaluating ...", position=2
         ):
             _ = batch.pop("example_id")
-            _ = batch.pop("offset_mapping")
             predictions = pad_shard_unpad(p_eval_step)(state, batch, min_device_batch=per_device_eval_batch_size)
             start_logits = np.array(predictions[0])
             end_logits = np.array(predictions[1])

@@ -32,6 +32,7 @@ python utils/check_docstrings.py --fix_and_overwrite
 which is used by `make fix-copies` (note that this fills what it cans, you might have to manually fill information
 like argument descriptions).
 """
+
 import argparse
 import ast
 import enum
@@ -42,10 +43,12 @@ from pathlib import Path
 from typing import Any, Optional, Tuple, Union
 
 from check_repo import ignore_undocumented
+from git import Repo
 
 from transformers.utils import direct_transformers_import
 
 
+PATH_TO_REPO = Path(__file__).parent.parent.resolve()
 PATH_TO_TRANSFORMERS = Path("src").resolve() / "transformers"
 
 # This is to make sure the transformers module imported is the one in the repo.
@@ -67,12 +70,16 @@ OBJECTS_TO_IGNORE = [
     # Deprecated
     "InputExample",
     "InputFeatures",
+    "LogitsWarper",
     # Signature is *args/**kwargs
-    # "PretrainedConfig", #ignored but could be fixed
-    # "GenerationConfig", #ignored but could be fixed
     "TFSequenceSummary",
     "TFBertTokenizer",
     "TFGPT2Tokenizer",
+    # Going through an argument deprecation cycle, remove after v4.46
+    "HybridCache",
+    "MambaCache",
+    "SlidingWindowCache",
+    "StaticCache",
     # Missing arguments in the docstring
     "ASTFeatureExtractor",
     "AlbertModel",
@@ -82,7 +89,6 @@ OBJECTS_TO_IGNORE = [
     "AudioClassificationPipeline",
     "AutoformerConfig",
     "AutomaticSpeechRecognitionPipeline",
-    "AzureOpenAiAgent",
     "BarkCoarseConfig",
     "BarkConfig",
     "BarkFineConfig",
@@ -127,7 +133,6 @@ OBJECTS_TO_IGNORE = [
     "ConvBertTokenizerFast",
     "ConvNextConfig",
     "ConvNextV2Config",
-    "ConversationalPipeline",
     "CpmAntTokenizer",
     "CvtConfig",
     "CvtModel",
@@ -165,9 +170,6 @@ OBJECTS_TO_IGNORE = [
     "ElectraConfig",
     "ElectraTokenizerFast",
     "EncoderDecoderModel",
-    "EncoderRepetitionPenaltyLogitsProcessor",
-    "ErnieConfig",
-    "ErnieMConfig",
     "ErnieMModel",
     "ErnieModel",
     "ErnieMTokenizer",
@@ -212,6 +214,8 @@ OBJECTS_TO_IGNORE = [
     "FlaxBloomForCausalLM",
     "FlaxBloomModel",
     "FlaxCLIPModel",
+    "FlaxDinov2ForImageClassification",
+    "FlaxDinov2Model",
     "FlaxDistilBertForMaskedLM",
     "FlaxDistilBertForMultipleChoice",
     "FlaxDistilBertForQuestionAnswering",
@@ -235,12 +239,16 @@ OBJECTS_TO_IGNORE = [
     "FlaxGPTNeoModel",
     "FlaxLlamaForCausalLM",
     "FlaxLlamaModel",
+    "FlaxGemmaForCausalLM",
+    "FlaxGemmaModel",
     "FlaxMBartForConditionalGeneration",
     "FlaxMBartForQuestionAnswering",
     "FlaxMBartForSequenceClassification",
     "FlaxMBartModel",
     "FlaxMarianMTModel",
     "FlaxMarianModel",
+    "FlaxMistralForCausalLM",
+    "FlaxMistralModel",
     "FlaxOPTForCausalLM",
     "FlaxPegasusForConditionalGeneration",
     "FlaxPegasusModel",
@@ -324,12 +332,12 @@ OBJECTS_TO_IGNORE = [
     "IdeficsConfig",
     "IdeficsProcessor",
     "ImageClassificationPipeline",
+    "ImageFeatureExtractionPipeline",
     "ImageGPTConfig",
     "ImageSegmentationPipeline",
     "ImageToImagePipeline",
     "ImageToTextPipeline",
     "InformerConfig",
-    "InstructBlipQFormerConfig",
     "JukeboxPriorConfig",
     "JukeboxTokenizer",
     "LEDConfig",
@@ -392,6 +400,7 @@ OBJECTS_TO_IGNORE = [
     "MraConfig",
     "MusicgenDecoderConfig",
     "MusicgenForConditionalGeneration",
+    "MusicgenMelodyForConditionalGeneration",
     "MvpConfig",
     "MvpTokenizerFast",
     "MT5Tokenizer",
@@ -446,7 +455,6 @@ OBJECTS_TO_IGNORE = [
     "RemBertModel",
     "RemBertTokenizer",
     "RemBertTokenizerFast",
-    "RepetitionPenaltyLogitsProcessor",
     "RetriBertConfig",
     "RetriBertTokenizerFast",
     "RoCBertConfig",
@@ -492,249 +500,26 @@ OBJECTS_TO_IGNORE = [
     "Text2TextGenerationPipeline",
     "TextClassificationPipeline",
     "TextGenerationPipeline",
-    "TFAlbertForMaskedLM",
-    "TFAlbertForMultipleChoice",
-    "TFAlbertForPreTraining",
-    "TFAlbertForQuestionAnswering",
-    "TFAlbertForSequenceClassification",
-    "TFAlbertForTokenClassification",
-    "TFAlbertModel",
     "TFBartForConditionalGeneration",
     "TFBartForSequenceClassification",
     "TFBartModel",
-    "TFBertForMaskedLM",
-    "TFBertForMultipleChoice",
-    "TFBertForNextSentencePrediction",
-    "TFBertForPreTraining",
-    "TFBertForQuestionAnswering",
-    "TFBertForSequenceClassification",
-    "TFBertForTokenClassification",
     "TFBertModel",
-    "TFBlenderbotForConditionalGeneration",
-    "TFBlenderbotModel",
-    "TFBlenderbotSmallForConditionalGeneration",
-    "TFBlenderbotSmallModel",
-    "TFBlipForConditionalGeneration",
-    "TFBlipForImageTextRetrieval",
-    "TFBlipForQuestionAnswering",
-    "TFCLIPModel",
-    "TFCTRLForSequenceClassification",
-    "TFCTRLLMHeadModel",
-    "TFCTRLModel",
-    "TFCamembertForCausalLM",
-    "TFCamembertForMaskedLM",
-    "TFCamembertForMultipleChoice",
-    "TFCamembertForQuestionAnswering",
-    "TFCamembertForSequenceClassification",
-    "TFCamembertForTokenClassification",
-    "TFCamembertModel",
-    "TFConvBertForMaskedLM",
-    "TFConvBertForMultipleChoice",
-    "TFConvBertForQuestionAnswering",
-    "TFConvBertForSequenceClassification",
-    "TFConvBertForTokenClassification",
-    "TFConvBertModel",
-    "TFConvNextForImageClassification",
     "TFConvNextModel",
-    "TFConvNextV2Model",  # Parsing issue. Equivalent to PT ConvNextV2Model, see PR #25558
-    "TFConvNextV2ForImageClassification",
-    "TFCvtForImageClassification",
-    "TFCvtModel",
-    "TFDPRReader",
-    "TFData2VecVisionForImageClassification",
-    "TFData2VecVisionForSemanticSegmentation",
     "TFData2VecVisionModel",
-    "TFDebertaForMaskedLM",
-    "TFDebertaForQuestionAnswering",
-    "TFDebertaForSequenceClassification",
-    "TFDebertaForTokenClassification",
-    "TFDebertaModel",
-    "TFDebertaV2ForMaskedLM",
-    "TFDebertaV2ForMultipleChoice",
-    "TFDebertaV2ForQuestionAnswering",
-    "TFDebertaV2ForSequenceClassification",
-    "TFDebertaV2ForTokenClassification",
-    "TFDebertaV2Model",
-    "TFDeiTForImageClassification",
-    "TFDeiTForImageClassificationWithTeacher",
-    "TFDeiTForMaskedImageModeling",
     "TFDeiTModel",
-    "TFDistilBertForMaskedLM",
-    "TFDistilBertForMultipleChoice",
-    "TFDistilBertForQuestionAnswering",
-    "TFDistilBertForSequenceClassification",
-    "TFDistilBertForTokenClassification",
-    "TFDistilBertModel",
-    "TFEfficientFormerForImageClassification",
-    "TFEfficientFormerForImageClassificationWithTeacher",
-    "TFEfficientFormerModel",
-    "TFElectraForMaskedLM",
-    "TFElectraForMultipleChoice",
-    "TFElectraForPreTraining",
-    "TFElectraForQuestionAnswering",
-    "TFElectraForSequenceClassification",
-    "TFElectraForTokenClassification",
-    "TFElectraModel",
     "TFEncoderDecoderModel",
-    "TFEsmForMaskedLM",
-    "TFEsmForSequenceClassification",
-    "TFEsmForTokenClassification",
     "TFEsmModel",
-    "TFFlaubertForMultipleChoice",
-    "TFFlaubertForQuestionAnsweringSimple",
-    "TFFlaubertForSequenceClassification",
-    "TFFlaubertForTokenClassification",
-    "TFFlaubertModel",
-    "TFFlaubertWithLMHeadModel",
-    "TFFunnelBaseModel",
-    "TFFunnelForMaskedLM",
-    "TFFunnelForMultipleChoice",
-    "TFFunnelForPreTraining",
-    "TFFunnelForQuestionAnswering",
-    "TFFunnelForSequenceClassification",
-    "TFFunnelForTokenClassification",
-    "TFFunnelModel",
-    "TFGPT2DoubleHeadsModel",
-    "TFGPT2ForSequenceClassification",
-    "TFGPT2LMHeadModel",
-    "TFGPT2Model",
-    "TFGPTJForCausalLM",
-    "TFGPTJForQuestionAnswering",
-    "TFGPTJForSequenceClassification",
-    "TFGPTJModel",
-    "TFGroupViTModel",
-    "TFHubertForCTC",
-    "TFHubertModel",
-    "TFLEDForConditionalGeneration",
-    "TFLEDModel",
-    "TFLayoutLMForMaskedLM",
-    "TFLayoutLMForQuestionAnswering",
-    "TFLayoutLMForSequenceClassification",
-    "TFLayoutLMForTokenClassification",
-    "TFLayoutLMModel",
-    "TFLayoutLMv3ForQuestionAnswering",
-    "TFLayoutLMv3ForSequenceClassification",
-    "TFLayoutLMv3ForTokenClassification",
-    "TFLayoutLMv3Model",
-    "TFLongformerForMaskedLM",
-    "TFLongformerForMultipleChoice",
-    "TFLongformerForQuestionAnswering",
-    "TFLongformerForSequenceClassification",
-    "TFLongformerForTokenClassification",
-    "TFLongformerModel",
-    "TFLxmertForPreTraining",
-    "TFLxmertModel",
-    "TFMBartForConditionalGeneration",
-    "TFMBartModel",
-    "TFMPNetForMaskedLM",
-    "TFMPNetForMultipleChoice",
-    "TFMPNetForQuestionAnswering",
-    "TFMPNetForSequenceClassification",
-    "TFMPNetForTokenClassification",
-    "TFMPNetModel",
-    "TFMarianMTModel",
-    "TFMarianModel",
-    "TFMobileBertForMaskedLM",
-    "TFMobileBertForMultipleChoice",
-    "TFMobileBertForNextSentencePrediction",
-    "TFMobileBertForPreTraining",
-    "TFMobileBertForQuestionAnswering",
-    "TFMobileBertForSequenceClassification",
-    "TFMobileBertForTokenClassification",
-    "TFMobileBertModel",
-    "TFMobileViTForImageClassification",
-    "TFMobileViTForSemanticSegmentation",
     "TFMobileViTModel",
-    "TFOPTForCausalLM",
-    "TFOPTModel",
-    "TFOpenAIGPTDoubleHeadsModel",
-    "TFOpenAIGPTForSequenceClassification",
-    "TFOpenAIGPTLMHeadModel",
-    "TFOpenAIGPTModel",
-    "TFPegasusForConditionalGeneration",
-    "TFPegasusModel",
     "TFRagModel",
     "TFRagSequenceForGeneration",
     "TFRagTokenForGeneration",
-    "TFRemBertForCausalLM",
-    "TFRemBertForMaskedLM",
-    "TFRemBertForMultipleChoice",
-    "TFRemBertForQuestionAnswering",
-    "TFRemBertForSequenceClassification",
-    "TFRemBertForTokenClassification",
-    "TFRemBertModel",
     "TFRepetitionPenaltyLogitsProcessor",
-    "TFResNetForImageClassification",
-    "TFResNetModel",
-    "TFRoFormerForCausalLM",
-    "TFRoFormerForMaskedLM",
-    "TFRoFormerForMultipleChoice",
-    "TFRoFormerForQuestionAnswering",
-    "TFRoFormerForSequenceClassification",
-    "TFRoFormerForTokenClassification",
-    "TFRoFormerModel",
-    "TFRobertaForMaskedLM",
-    "TFRobertaForMultipleChoice",
-    "TFRobertaForQuestionAnswering",
-    "TFRobertaForSequenceClassification",
-    "TFRobertaForTokenClassification",
-    "TFRobertaModel",
-    "TFRobertaPreLayerNormForMaskedLM",
-    "TFRobertaPreLayerNormForMultipleChoice",
-    "TFRobertaPreLayerNormForQuestionAnswering",
-    "TFRobertaPreLayerNormForSequenceClassification",
-    "TFRobertaPreLayerNormForTokenClassification",
-    "TFRobertaPreLayerNormModel",
-    "TFSamModel",
-    "TFSegformerForImageClassification",
-    "TFSegformerForSemanticSegmentation",
-    "TFSegformerModel",
-    "TFSpeech2TextForConditionalGeneration",
-    "TFSpeech2TextModel",
-    "TFSwinForImageClassification",
-    "TFSwinForMaskedImageModeling",
     "TFSwinModel",
-    "TFT5EncoderModel",
-    "TFT5ForConditionalGeneration",
-    "TFT5Model",
-    "TFTapasForMaskedLM",
-    "TFTapasForQuestionAnswering",
-    "TFTapasForSequenceClassification",
-    "TFTapasModel",
-    "TFTransfoXLForSequenceClassification",
-    "TFTransfoXLLMHeadModel",
-    "TFTransfoXLModel",
-    "TFViTForImageClassification",
-    "TFViTMAEForPreTraining",
-    "TFViTMAEModel",
     "TFViTModel",
     "TFVisionEncoderDecoderModel",
     "TFVisionTextDualEncoderModel",
-    "TFWav2Vec2ForCTC",
-    "TFWav2Vec2Model",
-    "TFWhisperForConditionalGeneration",
-    "TFWhisperModel",
     "TFXGLMForCausalLM",
     "TFXGLMModel",
-    "TFXLMForMultipleChoice",
-    "TFXLMForQuestionAnsweringSimple",
-    "TFXLMForSequenceClassification",
-    "TFXLMForTokenClassification",
-    "TFXLMModel",
-    "TFXLMRobertaForCausalLM",
-    "TFXLMRobertaForMaskedLM",
-    "TFXLMRobertaForMultipleChoice",
-    "TFXLMRobertaForQuestionAnswering",
-    "TFXLMRobertaForSequenceClassification",
-    "TFXLMRobertaForTokenClassification",
-    "TFXLMRobertaModel",
-    "TFXLMWithLMHeadModel",
-    "TFXLNetForMultipleChoice",
-    "TFXLNetForQuestionAnsweringSimple",
-    "TFXLNetForSequenceClassification",
-    "TFXLNetForTokenClassification",
-    "TFXLNetLMHeadModel",
-    "TFXLNetModel",
     "TimeSeriesTransformerConfig",
     "TokenClassificationPipeline",
     "TrOCRConfig",
@@ -762,6 +547,7 @@ OBJECTS_TO_IGNORE = [
     "VitMatteForImageMatting",
     "VitsTokenizer",
     "VivitModel",
+    "Wav2Vec2BertForCTC",
     "Wav2Vec2CTCTokenizer",
     "Wav2Vec2Config",
     "Wav2Vec2ConformerConfig",
@@ -935,6 +721,10 @@ def replace_default_in_arg_description(description: str, default: Any) -> str:
                 except Exception:
                     # Otherwise there is a math operator so we add a code block.
                     str_default = f"`{current_default}`"
+            elif isinstance(default, enum.Enum) and default.name == current_default.split(".")[-1]:
+                # When the default is an Enum (this is often the case for PIL.Image.Resampling), and the docstring
+                # matches the enum name, keep the existing docstring rather than clobbering it with the enum value.
+                str_default = f"`{current_default}`"
 
         if str_default is None:
             str_default = stringify_default(default)
@@ -1163,14 +953,33 @@ def fix_docstring(obj: Any, old_doc_args: str, new_doc_args: str):
         f.write("\n".join(lines))
 
 
-def check_docstrings(overwrite: bool = False):
+def check_docstrings(overwrite: bool = False, check_all: bool = False):
     """
-    Check docstrings of all public objects that are callables and are documented.
+    Check docstrings of all public objects that are callables and are documented. By default, only checks the diff.
 
     Args:
         overwrite (`bool`, *optional*, defaults to `False`):
             Whether to fix inconsistencies or not.
+        check_all (`bool`, *optional*, defaults to `False`):
+            Whether to check all files.
     """
+    module_diff_files = None
+    if not check_all:
+        module_diff_files = set()
+        repo = Repo(PATH_TO_REPO)
+        # Diff from index to unstaged files
+        for modified_file_diff in repo.index.diff(None):
+            if modified_file_diff.a_path.startswith("src/transformers"):
+                module_diff_files.add(modified_file_diff.a_path)
+        # Diff from index to `main`
+        for modified_file_diff in repo.index.diff(repo.refs.main.commit):
+            if modified_file_diff.a_path.startswith("src/transformers"):
+                module_diff_files.add(modified_file_diff.a_path)
+        # quick escape route: if there are no module files in the diff, skip this check
+        if len(module_diff_files) == 0:
+            return
+        print("    Checking docstrings in the following files:" + "\n    - " + "\n    - ".join(module_diff_files))
+
     failures = []
     hard_failures = []
     to_clean = []
@@ -1182,6 +991,13 @@ def check_docstrings(overwrite: bool = False):
         obj = getattr(transformers, name)
         if not callable(obj) or not isinstance(obj, type) or getattr(obj, "__doc__", None) is None:
             continue
+
+        # If we are checking against the diff, we skip objects that are not part of the diff.
+        if module_diff_files is not None:
+            object_file = find_source_file(getattr(transformers, name))
+            object_file_relative_path = "src/" + str(object_file).split("/src/")[1]
+            if object_file_relative_path not in module_diff_files:
+                continue
 
         # Check docstring
         try:
@@ -1212,7 +1028,10 @@ def check_docstrings(overwrite: bool = False):
         error_message += "\n" + "\n".join([f"- {name}" for name in hard_failures])
     if len(failures) > 0:
         error_message += (
-            "The following objects docstrings do not match their signature. Run `make fix-copies` to fix this."
+            "The following objects docstrings do not match their signature. Run `make fix-copies` to fix this. "
+            "In some cases, this error may be raised incorrectly by the docstring checker. If you think this is the "
+            "case, you can manually check the docstrings and then add the object name to `OBJECTS_TO_IGNORE` in "
+            "`utils/check_docstrings.py`."
         )
         error_message += "\n" + "\n".join([f"- {name}" for name in failures])
     if len(to_clean) > 0:
@@ -1230,6 +1049,9 @@ def check_docstrings(overwrite: bool = False):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--fix_and_overwrite", action="store_true", help="Whether to fix inconsistencies.")
+    parser.add_argument(
+        "--check_all", action="store_true", help="Whether to check all files. By default, only checks the diff"
+    )
     args = parser.parse_args()
 
-    check_docstrings(overwrite=args.fix_and_overwrite)
+    check_docstrings(overwrite=args.fix_and_overwrite, check_all=args.check_all)

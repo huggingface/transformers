@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Speech2Text model. """
+"""Testing suite for the PyTorch Speech2Text model."""
 
 import copy
 import inspect
@@ -284,6 +284,18 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
 
     input_name = "input_features"
 
+    def _get_input_ids_and_config(self, batch_size=2):
+        config, input_ids, attention_mask = GenerationTesterMixin._get_input_ids_and_config(self)
+
+        # `input_ids` is actually `input_features` which is a 3D tensor.
+        # We must overwrite the mask to make it 2D since the original `_get_input_ids_and_config` creates an
+        # attention mask of the same shape as `input_ids`.
+        if len(attention_mask.shape) > 2:
+            sequence_length = input_ids.shape[1]
+            attention_mask = torch.ones((batch_size, sequence_length), dtype=torch.long, device=attention_mask.device)
+
+        return config, input_ids, attention_mask
+
     def setUp(self):
         self.model_tester = Speech2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Speech2TextConfig)
@@ -314,14 +326,15 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
         self.model_tester.check_encoder_decoder_model_standalone(*config_and_inputs)
 
-    # not implemented currently
+    @unittest.skip(reason="Not implemented currently")
     def test_inputs_embeds(self):
         pass
 
-    # training is not supported yet
+    @unittest.skip(reason="Training is not supported yet")
     def test_training(self):
         pass
 
+    @unittest.skip
     def test_training_gradient_checkpointing(self):
         pass
 
@@ -524,7 +537,7 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
             inputs_dict,
         ) = self.model_tester.prepare_config_and_inputs_for_common()
         if not self.test_resize_embeddings:
-            return
+            self.skipTest(reason="test_resize_embeddings is set to False")
 
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
@@ -572,13 +585,13 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
             inputs_dict,
         ) = self.model_tester.prepare_config_and_inputs_for_common()
         if not self.test_resize_embeddings:
-            return
+            self.skipTest(reason="test_resize_embeddings is set to False")
 
         original_config.tie_word_embeddings = False
 
         # if model cannot untied embeddings -> leave test
         if original_config.tie_word_embeddings:
-            return
+            self.skipTest(reason="Model cannot untie embeddings")
 
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
@@ -615,6 +628,7 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
             model(**self._prepare_for_class(inputs_dict, model_class))
 
+    @unittest.skip
     def test_generate_without_input_ids(self):
         pass
 
@@ -633,7 +647,9 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
             num_interleave, dim=0
         )
         input_ids = input_ids[:, :, 0]
-        input_ids = torch.zeros_like(input_ids[:, :1], dtype=torch.long) + model._get_decoder_start_token_id()
+        generation_config = copy.deepcopy(model.generation_config)
+        model._prepare_special_tokens(generation_config)
+        input_ids = torch.zeros_like(input_ids[:, :1]) + generation_config.decoder_start_token_id
         attention_mask = None
         return encoder_outputs, input_ids, attention_mask
 
@@ -681,7 +697,7 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
 
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:
-            return
+            self.skipTest(reason="test_torchscript is set to False")
 
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
         configs_no_init.torchscript = True
@@ -759,7 +775,7 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
         # Allow missing keys since TF doesn't cache the sinusoidal embeddings in an attribute
         super().test_pt_tf_model_equivalence(allow_missing_keys=allow_missing_keys)
 
-    @unittest.skip("Test failing,  @RocketNight is looking into it")
+    @unittest.skip(reason="Test failing,  @RocketNight is looking into it")
     def test_tf_from_pt_safetensors(self):
         pass
 

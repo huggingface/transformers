@@ -35,7 +35,7 @@ practices that help to achieve optimal results more consistently.
 This guide covers the prompt engineering best practices to help you craft better LLM prompts and solve various NLP tasks. 
 You'll learn:
 
-- [Basics of prompting](#basic-prompts)
+- [Basics of prompting](#basics-of-prompting)
 - [Best practices of LLM prompting](#best-practices-of-llm-prompting)
 - [Advanced prompting techniques: few-shot prompting and chain-of-thought](#advanced-prompting-techniques)
 - [When to fine-tune instead of prompting](#prompting-vs-fine-tuning)
@@ -76,11 +76,11 @@ Run inference with decoder-only models with the `text-generation` pipeline:
 
 >>> torch.manual_seed(0) # doctest: +IGNORE_RESULT
 
->>> generator = pipeline('text-generation', model = 'gpt2')
+>>> generator = pipeline('text-generation', model = 'openai-community/gpt2')
 >>> prompt = "Hello, I'm a language model"
 
 >>> generator(prompt, max_length = 30)
-[{'generated_text': "Hello, I'm a language model expert, so I'm a big believer in the concept that I know very well and then I try to look into"}]
+[{'generated_text': "Hello, I'm a language model programmer so you can use some of my stuff. But you also need some sort of a C program to run."}]
 ```
 
 To run inference with an encoder-decoder, use the `text2text-generation` pipeline:
@@ -284,7 +284,7 @@ the leading word or phrase (`"Answer:"`) to nudge the model to start generating 
 
 >>> for seq in sequences:
 ...     print(f"Result: {seq['generated_text']}")
-Result: Modern tools are used, such as immersion blenders
+Result: Modern tools often used to make gazpacho include
 ```
 
 #### Reasoning

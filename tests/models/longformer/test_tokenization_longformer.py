@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the Longformer tokenizer. """
-
+"""Testing suite for the Longformer tokenizer."""
 
 import itertools
 import json
@@ -28,8 +27,9 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 
 @require_tokenizers
-# Copied from tests.models.roberta.test_tokenization_roberta.RobertaTokenizationTest with roberta-base->allenai/longformer-base-4096,Roberta->Longformer,roberta->longformer,
+# Copied from tests.models.roberta.test_tokenization_roberta.RobertaTokenizationTest with FacebookAI/roberta-base->allenai/longformer-base-4096,Roberta->Longformer,roberta->longformer,
 class LongformerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "allenai/longformer-base-4096"
     # Ignore copy
     tokenizer_class = LongformerTokenizer
     test_slow_tokenizer = True
@@ -166,6 +166,7 @@ class LongformerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         first_char = tokenizer.convert_ids_to_tokens(encoded[mask_loc + 1])[0]
         self.assertNotEqual(first_char, space_encoding)
 
+    @unittest.skip
     def test_pretokenized_inputs(self):
         pass
 

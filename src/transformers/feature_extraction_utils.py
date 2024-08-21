@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
- Feature extraction saving/loading class for common feature extractors.
+Feature extraction saving/loading class for common feature extractors.
 """
 
 import copy
@@ -31,6 +31,7 @@ from .utils import (
     PushToHubMixin,
     TensorType,
     add_model_info_to_auto_map,
+    add_model_info_to_custom_pipelines,
     cached_file,
     copy_func,
     download_url,
@@ -136,8 +137,15 @@ class BatchFeature(UserDict):
             import torch  # noqa
 
             def as_tensor(value):
-                if isinstance(value, (list, tuple)) and len(value) > 0 and isinstance(value[0], np.ndarray):
-                    value = np.array(value)
+                if isinstance(value, (list, tuple)) and len(value) > 0:
+                    if isinstance(value[0], np.ndarray):
+                        value = np.array(value)
+                    elif (
+                        isinstance(value[0], (list, tuple))
+                        and len(value[0]) > 0
+                        and isinstance(value[0][0], np.ndarray)
+                    ):
+                        value = np.array(value)
                 return torch.tensor(value)
 
             is_tensor = torch.is_tensor
@@ -281,8 +289,7 @@ class FeatureExtractionMixin(PushToHubMixin):
                 This can be either:
 
                 - a string, the *model id* of a pretrained feature_extractor hosted inside a model repo on
-                  huggingface.co. Valid model ids can be located at the root-level, like `bert-base-uncased`, or
-                  namespaced under a user or organization name, like `dbmdz/bert-base-german-cased`.
+                  huggingface.co.
                 - a path to a *directory* containing a feature extractor file saved using the
                   [`~feature_extraction_utils.FeatureExtractionMixin.save_pretrained`] method, e.g.,
                   `./my_model_directory/`.
@@ -294,9 +301,9 @@ class FeatureExtractionMixin(PushToHubMixin):
             force_download (`bool`, *optional*, defaults to `False`):
                 Whether or not to force to (re-)download the feature extractor files and override the cached versions
                 if they exist.
-            resume_download (`bool`, *optional*, defaults to `False`):
-                Whether or not to delete incompletely received file. Attempts to resume the download if such a file
-                exists.
+            resume_download:
+                Deprecated and ignored. All downloads are now resumed by default when possible.
+                Will be removed in v5 of Transformers.
             proxies (`Dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
@@ -452,8 +459,9 @@ class FeatureExtractionMixin(PushToHubMixin):
         """
         cache_dir = kwargs.pop("cache_dir", None)
         force_download = kwargs.pop("force_download", False)
-        resume_download = kwargs.pop("resume_download", False)
+        resume_download = kwargs.pop("resume_download", None)
         proxies = kwargs.pop("proxies", None)
+        subfolder = kwargs.pop("subfolder", None)
         token = kwargs.pop("token", None)
         use_auth_token = kwargs.pop("use_auth_token", None)
         local_files_only = kwargs.pop("local_files_only", False)
@@ -503,6 +511,7 @@ class FeatureExtractionMixin(PushToHubMixin):
                     proxies=proxies,
                     resume_download=resume_download,
                     local_files_only=local_files_only,
+                    subfolder=subfolder,
                     token=token,
                     user_agent=user_agent,
                     revision=revision,
@@ -538,10 +547,15 @@ class FeatureExtractionMixin(PushToHubMixin):
                 f"loading configuration file {feature_extractor_file} from cache at {resolved_feature_extractor_file}"
             )
 
-        if "auto_map" in feature_extractor_dict and not is_local:
-            feature_extractor_dict["auto_map"] = add_model_info_to_auto_map(
-                feature_extractor_dict["auto_map"], pretrained_model_name_or_path
-            )
+        if not is_local:
+            if "auto_map" in feature_extractor_dict:
+                feature_extractor_dict["auto_map"] = add_model_info_to_auto_map(
+                    feature_extractor_dict["auto_map"], pretrained_model_name_or_path
+                )
+            if "custom_pipelines" in feature_extractor_dict:
+                feature_extractor_dict["custom_pipelines"] = add_model_info_to_custom_pipelines(
+                    feature_extractor_dict["custom_pipelines"], pretrained_model_name_or_path
+                )
 
         return feature_extractor_dict, kwargs
 
@@ -565,16 +579,16 @@ class FeatureExtractionMixin(PushToHubMixin):
         """
         return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
 
-        feature_extractor = cls(**feature_extractor_dict)
-
         # Update feature_extractor with kwargs if needed
         to_remove = []
         for key, value in kwargs.items():
-            if hasattr(feature_extractor, key):
-                setattr(feature_extractor, key, value)
+            if key in feature_extractor_dict:
+                feature_extractor_dict[key] = value
                 to_remove.append(key)
         for key in to_remove:
             kwargs.pop(key, None)
+
+        feature_extractor = cls(**feature_extractor_dict)
 
         logger.info(f"Feature extractor {feature_extractor}")
         if return_unused_kwargs:

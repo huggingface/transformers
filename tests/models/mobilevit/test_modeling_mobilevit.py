@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch MobileViT model. """
-
+"""Testing suite for the PyTorch MobileViT model."""
 
 import unittest
 
@@ -30,7 +29,6 @@ if is_torch_available():
     import torch
 
     from transformers import MobileViTForImageClassification, MobileViTForSemanticSegmentation, MobileViTModel
-    from transformers.models.mobilevit.modeling_mobilevit import MOBILEVIT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -188,7 +186,7 @@ class MobileViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     )
     pipeline_model_mapping = (
         {
-            "feature-extraction": MobileViTModel,
+            "image-feature-extraction": MobileViTModel,
             "image-classification": MobileViTForImageClassification,
             "image-segmentation": MobileViTForSemanticSegmentation,
         }
@@ -213,7 +211,7 @@ class MobileViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         pass
 
     @unittest.skip(reason="MobileViT does not support input and output embeddings")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     @unittest.skip(reason="MobileViT does not output attentions")
@@ -272,9 +270,9 @@ class MobileViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in MOBILEVIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = MobileViTModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "apple/mobilevit-small"
+        model = MobileViTModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

@@ -42,19 +42,6 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "mosaicml/mpt-7b"
 _CONFIG_FOR_DOC = "MptConfig"
 
-MPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "mosaicml/mpt-7b",
-    "mosaicml/mpt-7b-storywriter",
-    "mosaicml/mpt-7b-instruct",
-    "mosaicml/mpt-7b-8k",
-    "mosaicml/mpt-7b-8k-instruct",
-    "mosaicml/mpt-7b-8k-chat",
-    "mosaicml/mpt-30b",
-    "mosaicml/mpt-30b-instruct",
-    "mosaicml/mpt-30b-chat",
-    # See all MPT models at https://huggingface.co/models?filter=mpt
-]
-
 
 def build_mpt_alibi_tensor(num_heads, sequence_length, alibi_bias_max=8, device=None):
     r"""
@@ -66,14 +53,14 @@ def build_mpt_alibi_tensor(num_heads, sequence_length, alibi_bias_max=8, device=
     alibi = torch.arange(1 - sequence_length, 1, dtype=torch.int32, device=device).view(1, 1, 1, sequence_length)
     num_heads_power_of_2 = 2 ** math.ceil(math.log2(num_heads))
 
-    base = torch.arange(1, num_heads_power_of_2 + 1, dtype=torch.float32, device=device)
+    base = torch.arange(1, num_heads_power_of_2 + 1, dtype=torch.int64, device=device).float()
     base = base * (alibi_bias_max / num_heads_power_of_2)
 
     slopes = 1.0 / torch.pow(2, base)
-    slopes = slopes.view(1, num_heads, 1, 1)
+    slopes = slopes.view(1, num_heads_power_of_2, 1, 1)
 
     if num_heads_power_of_2 != num_heads:
-        slopes = torch.concat([slopes[1::2], slopes[::2]])[:num_heads]
+        slopes = torch.concat([slopes[:, 1::2, ...], slopes[:, ::2, ...]], dim=1)[:, :num_heads, ...]
 
     alibi = alibi * slopes
     return alibi.squeeze(0)
@@ -95,6 +82,7 @@ class MptAttention(nn.Module):
             self.softmax_scale = 1 / math.sqrt(self.hidden_size / self.n_heads)
 
         self.attn_dropout_p = config.attn_config.attn_pdrop
+        self.clip_qkv = config.attn_config.clip_qkv
         self.Wqkv = nn.Linear(self.hidden_size, 3 * self.hidden_size, bias=False)
         self.out_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
 
@@ -108,6 +96,9 @@ class MptAttention(nn.Module):
         batch_size, seq_length = hidden_states.shape[:2]
 
         mixed_qkv = self.Wqkv(hidden_states)
+        if self.clip_qkv:
+            mixed_qkv = mixed_qkv.clamp(min=-self.clip_qkv, max=self.clip_qkv)
+
         query_states, key_states, value_states = mixed_qkv.chunk(3, dim=2)
         query_states = query_states.reshape(batch_size, seq_length, self.n_heads, self.head_dim).transpose(1, 2)
         key_states = key_states.reshape(batch_size, seq_length, self.n_heads, self.head_dim).transpose(1, 2)
@@ -735,7 +726,7 @@ class MptForSequenceClassification(MptPreTrainedModel):
                 sequence_lengths = sequence_lengths.to(logits.device)
             else:
                 sequence_lengths = -1
-                logger.warning(
+                logger.warning_once(
                     f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
                     "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
                 )

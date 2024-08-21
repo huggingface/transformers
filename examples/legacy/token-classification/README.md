@@ -34,7 +34,7 @@ Let's define some variables that we need for further pre-processing steps and tr
 
 ```bash
 export MAX_LENGTH=128
-export BERT_MODEL=bert-base-multilingual-cased
+export BERT_MODEL=google-bert/bert-base-multilingual-cased
 ```
 
 Run the pre-processing script on training, dev and test datasets:
@@ -92,7 +92,7 @@ Instead of passing all parameters via commandline arguments, the `run_ner.py` sc
 {
     "data_dir": ".",
     "labels": "./labels.txt",
-    "model_name_or_path": "bert-base-multilingual-cased",
+    "model_name_or_path": "google-bert/bert-base-multilingual-cased",
     "output_dir": "germeval-model",
     "max_seq_length": 128,
     "num_train_epochs": 3,
@@ -222,7 +222,7 @@ Let's define some variables that we need for further pre-processing steps:
 
 ```bash
 export MAX_LENGTH=128
-export BERT_MODEL=bert-large-cased
+export BERT_MODEL=google-bert/bert-large-cased
 ```
 
 Here we use the English BERT large model for fine-tuning.
@@ -250,7 +250,7 @@ This configuration file looks like:
 {
     "data_dir": "./data_wnut_17",
     "labels": "./data_wnut_17/labels.txt",
-    "model_name_or_path": "bert-large-cased",
+    "model_name_or_path": "google-bert/bert-large-cased",
     "output_dir": "wnut-17-model-1",
     "max_seq_length": 128,
     "num_train_epochs": 3,

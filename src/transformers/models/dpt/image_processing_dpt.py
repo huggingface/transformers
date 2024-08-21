@@ -35,8 +35,9 @@ from ...image_utils import (
     make_list_of_images,
     to_numpy_array,
     valid_images,
+    validate_preprocess_arguments,
 )
-from ...utils import TensorType, is_vision_available, logging
+from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
 
 
 if is_torch_available():
@@ -56,7 +57,7 @@ def get_resize_output_image_size(
     multiple: int,
     input_data_format: Optional[Union[str, ChannelDimension]] = None,
 ) -> Tuple[int, int]:
-    def constraint_to_multiple_of(val, multiple, min_val=0, max_val=None):
+    def constrain_to_multiple_of(val, multiple, min_val=0, max_val=None):
         x = round(val / multiple) * multiple
 
         if max_val is not None and x > max_val:
@@ -85,8 +86,8 @@ def get_resize_output_image_size(
             # fit height
             scale_width = scale_height
 
-    new_height = constraint_to_multiple_of(scale_height * input_height, multiple=multiple)
-    new_width = constraint_to_multiple_of(scale_width * input_width, multiple=multiple)
+    new_height = constrain_to_multiple_of(scale_height * input_height, multiple=multiple)
+    new_width = constrain_to_multiple_of(scale_width * input_width, multiple=multiple)
 
     return (new_height, new_width)
 
@@ -264,6 +265,7 @@ class DPTImageProcessor(BaseImageProcessor):
 
         return pad(image, ((pad_size_left, pad_size_right), (pad_size_top, pad_size_bottom)), data_format=data_format)
 
+    @filter_out_non_signature_kwargs()
     def preprocess(
         self,
         images: ImageInput,
@@ -282,7 +284,6 @@ class DPTImageProcessor(BaseImageProcessor):
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
     ) -> PIL.Image.Image:
         """
         Preprocess an image or batch of images.
@@ -354,19 +355,18 @@ class DPTImageProcessor(BaseImageProcessor):
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
-
-        if do_resize and size is None or resample is None:
-            raise ValueError("Size and resample must be specified if do_resize is True.")
-
-        if do_rescale and rescale_factor is None:
-            raise ValueError("Rescale factor must be specified if do_rescale is True.")
-
-        if do_normalize and (image_mean is None or image_std is None):
-            raise ValueError("Image mean and std must be specified if do_normalize is True.")
-
-        if do_pad and size_divisor is None:
-            raise ValueError("Size divisibility must be specified if do_pad is True.")
-
+        validate_preprocess_arguments(
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+            do_pad=do_pad,
+            size_divisibility=size_divisor,
+            do_resize=do_resize,
+            size=size,
+            resample=resample,
+        )
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
 

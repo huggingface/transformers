@@ -29,11 +29,6 @@ if is_torch_available():
     import torch
 
     from transformers import DPRContextEncoder, DPRQuestionEncoder, DPRReader, DPRReaderTokenizer
-    from transformers.models.dpr.modeling_dpr import (
-        DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
-        DPR_QUESTION_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
-        DPR_READER_PRETRAINED_MODEL_ARCHIVE_LIST,
-    )
 
 
 class DPRModelTester:
@@ -230,21 +225,21 @@ class DPRModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = DPRContextEncoder.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "facebook/dpr-ctx_encoder-single-nq-base"
+        model = DPRContextEncoder.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
-        for model_name in DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = DPRContextEncoder.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "facebook/dpr-ctx_encoder-single-nq-base"
+        model = DPRContextEncoder.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
-        for model_name in DPR_QUESTION_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = DPRQuestionEncoder.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "facebook/dpr-ctx_encoder-single-nq-base"
+        model = DPRQuestionEncoder.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
-        for model_name in DPR_READER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = DPRReader.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "facebook/dpr-ctx_encoder-single-nq-base"
+        model = DPRReader.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @require_torch

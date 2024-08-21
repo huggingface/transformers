@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" BARK model configuration"""
+"""BARK model configuration"""
 
 import os
 from typing import Dict, Optional, Union
@@ -24,11 +24,6 @@ from ..auto import CONFIG_MAPPING
 
 logger = logging.get_logger(__name__)
 
-
-BARK_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "suno/bark-small": "https://huggingface.co/suno/bark-small/resolve/main/config.json",
-    "suno/bark": "https://huggingface.co/suno/bark/resolve/main/config.json",
-}
 
 BARK_SUBMODELCONFIG_START_DOCSTRING = """
     This is the configuration class to store the configuration of a [`{model}`]. It is used to instantiate the model

@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch CTRL model."""
+"""PyTorch CTRL model."""
 
 from typing import Optional, Tuple, Union
 
@@ -33,11 +33,6 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "CTRLConfig"
 
-CTRL_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "Salesforce/ctrl"
-    # See all CTRL models at https://huggingface.co/models?filter=ctrl
-]
-
 
 def angle_defn(pos, i, d_model_size):
     angle_rates = 1 / torch.pow(10000, (2 * (i // 2)) / d_model_size)
@@ -47,8 +42,8 @@ def angle_defn(pos, i, d_model_size):
 def positional_encoding(position, d_model_size, dtype):
     # create the sinusoidal pattern for the positional encoding
     angle_rads = angle_defn(
-        torch.arange(position, dtype=dtype).unsqueeze(1),
-        torch.arange(d_model_size, dtype=dtype).unsqueeze(0),
+        torch.arange(position, dtype=torch.int64).to(dtype).unsqueeze(1),
+        torch.arange(d_model_size, dtype=torch.int64).to(dtype).unsqueeze(0),
         d_model_size,
     )
 
@@ -726,7 +721,7 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
         >>> labels = torch.tensor(1)
         >>> loss = model(**inputs, labels=labels).loss
         >>> round(loss.item(), 2)
-        0.35
+        0.93
         ```
 
         Example of multi-label classification:
@@ -802,7 +797,7 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
                 sequence_lengths = sequence_lengths.to(logits.device)
             else:
                 sequence_lengths = -1
-                logger.warning(
+                logger.warning_once(
                     f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
                     "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
                 )

@@ -20,12 +20,6 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 Hugging Faceでは、コミュニティの多くの人々に積極的にモデルを追加する力を与えようと努力しており、
 このガイドをまとめて、PyTorchモデルを追加するプロセスを説明します（[PyTorchがインストールされていることを確認してください](https://pytorch.org/get-started/locally/)）。
 
-<Tip>
-
-TensorFlowモデルを実装する興味がある場合は、[🤗 TransformersモデルをTensorFlowに変換する方法](add_tensorflow_model)ガイドを参照してみてください！
-
-</Tip>
-
 この過程で、以下のことを学びます：
 
 - オープンソースのベストプラクティスに関する洞察
@@ -313,14 +307,15 @@ cd transformers
 [このセクション](#write-a-conversion-script)で説明されているように、変換スクリプトを追加するだけで済みます。
 この場合、既存のモデルの完全なモデルアーキテクチャを再利用できます。
 
-それ以外の場合、新しいモデルの生成を開始します。ここで2つの選択肢があります：
 
-- `transformers-cli add-new-model-like`を使用して既存のモデルのような新しいモデルを追加します
-- `transformers-cli add-new-model`を使用して、テンプレートから新しいモデルを追加します（モデルのタイプに応じてBERTまたはBartのように見えます）
+それ以外の場合は、新しいモデルの生成を開始しましょう。 次のスクリプトを使用して、以下から始まるモデルを追加することをお勧めします。
+既存のモデル:
 
-どちらの場合でも、モデルの基本情報を入力するための質問事項が表示されます。
-2番目のコマンドを実行するには、`cookiecutter`をインストールする必要があります。
-詳細については[こちら](https://github.com/huggingface/transformers/tree/main/templates/adding_a_new_model)をご覧ください。
+```bash
+transformers-cli add-new-model-like
+```
+
+モデルの基本情報を入力するためのアンケートが表示されます。
 
 **主要な huggingface/transformers リポジトリでプルリクエストを開く**
 
@@ -430,7 +425,7 @@ def _init_weights(self, module):
 ```py
 def _init_weights(self, module):
     """Initialize the weights"""
-    if isinstnace(module, Wav2Vec2ForPreTraining):
+    if isinstance(module, Wav2Vec2ForPreTraining):
         module.project_hid.reset_parameters()
         module.project_q.reset_parameters()
         module.project_hid._is_hf_initialized = True
@@ -571,7 +566,7 @@ model.save_pretrained("/path/to/converted/checkpoint/folder")
 
 **7. 順伝播（forward pass）の実装**
 
-🤗 Transformers実装で事前学習済みの重みを正しく読み込んだ後、順伝播が正しく実装されていることを確認する必要があります。[元のリポジトリを理解する](#34-run-a-pretrained-checkpoint-using-the-original-repository)で、元のリポジトリを使用してモデルの順伝播を実行するスクリプトをすでに作成しました。今度は、元のリポジトリの代わりに🤗 Transformers実装を使用して類似のスクリプトを作成する必要があります。以下のようになります：
+🤗 Transformers実装で事前学習済みの重みを正しく読み込んだ後、順伝播が正しく実装されていることを確認する必要があります。[元のリポジトリを理解する](#3-4-run-a-pretrained-checkpoint-using-the-original-repository)で、元のリポジトリを使用してモデルの順伝播を実行するスクリプトをすでに作成しました。今度は、元のリポジトリの代わりに🤗 Transformers実装を使用して類似のスクリプトを作成する必要があります。以下のようになります：
 
 ```python
 model = BrandNewBertModel.from_pretrained("/path/to/converted/checkpoint/folder")

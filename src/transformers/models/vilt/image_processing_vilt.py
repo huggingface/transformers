@@ -32,8 +32,9 @@ from ...image_utils import (
     make_list_of_images,
     to_numpy_array,
     valid_images,
+    validate_preprocess_arguments,
 )
-from ...utils import TensorType, is_vision_available, logging
+from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
 
 
 if is_vision_available():
@@ -194,7 +195,7 @@ class ViltImageProcessor(BaseImageProcessor):
     @classmethod
     def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
         """
-        Overrides the `from_dict` method from the base class to make sure `reduce_labels` is updated if image processor
+        Overrides the `from_dict` method from the base class to make sure `pad_and_return_pixel_mask` is updated if image processor
         is created using from_dict and kwargs e.g. `ViltImageProcessor.from_pretrained(checkpoint,
         pad_and_return_pixel_mask=False)`
         """
@@ -225,7 +226,7 @@ class ViltImageProcessor(BaseImageProcessor):
                 Image to resize.
             size (`Dict[str, int]`):
                 Controls the size of the output image. Should be of the form `{"shortest_edge": int}`.
-            size_divisor (`int`, defaults to 32):
+            size_divisor (`int`, *optional*, defaults to 32):
                 The image is resized to a size that is a multiple of this value.
             resample (`PILImageResampling` filter, *optional*, defaults to `PILImageResampling.BICUBIC`):
                 Resampling filter to use when resiizing the image.
@@ -251,7 +252,6 @@ class ViltImageProcessor(BaseImageProcessor):
             **kwargs,
         )
 
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor._pad_image
     def _pad_image(
         self,
         image: np.ndarray,
@@ -279,7 +279,6 @@ class ViltImageProcessor(BaseImageProcessor):
         )
         return padded_image
 
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.pad
     def pad(
         self,
         images: List[np.ndarray],
@@ -335,6 +334,7 @@ class ViltImageProcessor(BaseImageProcessor):
 
         return BatchFeature(data=data, tensor_type=return_tensors)
 
+    @filter_out_non_signature_kwargs()
     def preprocess(
         self,
         images: ImageInput,
@@ -351,7 +351,6 @@ class ViltImageProcessor(BaseImageProcessor):
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
     ) -> PIL.Image.Image:
         """
         Preprocess an image or batch of images.
@@ -423,14 +422,18 @@ class ViltImageProcessor(BaseImageProcessor):
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
 
-        if do_resize and size is None or resample is None:
-            raise ValueError("Size and resample must be specified if do_resize is True.")
-
-        if do_rescale and rescale_factor is None:
-            raise ValueError("Rescale factor must be specified if do_rescale is True.")
-
-        if do_normalize and (image_mean is None or image_std is None):
-            raise ValueError("Image mean and std must be specified if do_normalize is True.")
+        # Here the pad() method does not require any additional argument as it takes the maximum of (height, width).
+        # Hence, it does not need to be passed to a validate_preprocess_arguments() method.
+        validate_preprocess_arguments(
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+            do_resize=do_resize,
+            size=size,
+            resample=resample,
+        )
 
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]

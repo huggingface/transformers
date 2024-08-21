@@ -30,7 +30,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import CODEGEN_PRETRAINED_MODEL_ARCHIVE_LIST, AutoTokenizer, CodeGenForCausalLM, CodeGenModel
+    from transformers import AutoTokenizer, CodeGenForCausalLM, CodeGenModel
 
 
 class CodeGenModelTester:
@@ -456,9 +456,9 @@ class CodeGenModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in CODEGEN_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = CodeGenModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "Salesforce/codegen-350M-nl"
+        model = CodeGenModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @require_torch

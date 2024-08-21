@@ -58,6 +58,7 @@ class TvpImageProcessingTester(unittest.TestCase):
         num_channels=3,
         num_frames=2,
     ):
+        super().__init__()
         self.do_resize = do_resize
         self.size = size
         self.do_center_crop = do_center_crop
@@ -127,6 +128,7 @@ class TvpImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = TvpImageProcessor if is_vision_available() else None
 
     def setUp(self):
+        super().setUp()
         self.image_processor_tester = TvpImageProcessingTester(self)
 
     @property

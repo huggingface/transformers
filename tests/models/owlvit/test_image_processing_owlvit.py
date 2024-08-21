@@ -44,6 +44,7 @@ class OwlViTImageProcessingTester(unittest.TestCase):
         image_std=[0.26862954, 0.26130258, 0.27577711],
         do_convert_rgb=True,
     ):
+        super().__init__()
         self.parent = parent
         self.batch_size = batch_size
         self.num_channels = num_channels
@@ -92,6 +93,7 @@ class OwlViTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = OwlViTImageProcessor if is_vision_available() else None
 
     def setUp(self):
+        super().setUp()
         self.image_processor_tester = OwlViTImageProcessingTester(self)
 
     @property

@@ -78,7 +78,7 @@ def get_processor():
         include_top=False,
         resample=Image.BILINEAR,
     )
-    tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+    tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-uncased")
     tokenizer.model_max_length = 64
     processor = AlignProcessor(image_processor=image_processor, tokenizer=tokenizer)
     return processor

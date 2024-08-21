@@ -30,8 +30,9 @@ from ...image_utils import (
     make_list_of_images,
     to_numpy_array,
     valid_images,
+    validate_preprocess_arguments,
 )
-from ...utils import TensorType, logging
+from ...utils import TensorType, filter_out_non_signature_kwargs, logging
 
 
 logger = logging.get_logger(__name__)
@@ -121,6 +122,7 @@ class GLPNImageProcessor(BaseImageProcessor):
         )
         return image
 
+    @filter_out_non_signature_kwargs()
     def preprocess(
         self,
         images: Union["PIL.Image.Image", TensorType, List["PIL.Image.Image"], List[TensorType]],
@@ -131,7 +133,6 @@ class GLPNImageProcessor(BaseImageProcessor):
         return_tensors: Optional[Union[TensorType, str]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
     ) -> BatchFeature:
         """
         Preprocess the given images.
@@ -173,13 +174,21 @@ class GLPNImageProcessor(BaseImageProcessor):
         size_divisor = size_divisor if size_divisor is not None else self.size_divisor
         resample = resample if resample is not None else self.resample
 
-        if do_resize and size_divisor is None:
-            raise ValueError("size_divisor is required for resizing")
-
         images = make_list_of_images(images)
 
         if not valid_images(images):
-            raise ValueError("Invalid image(s)")
+            raise ValueError(
+                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
+                "torch.Tensor, tf.Tensor or jax.ndarray."
+            )
+
+        # Here, the rescale() method uses a constant rescale_factor. It does not need to be validated
+        # with a rescale_factor.
+        validate_preprocess_arguments(
+            do_resize=do_resize,
+            size=size_divisor,  # Here, size_divisor is used as a parameter for optimal resizing instead of size.
+            resample=resample,
+        )
 
         # All transformations expect numpy arrays.
         images = [to_numpy_array(img) for img in images]

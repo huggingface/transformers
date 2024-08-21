@@ -38,7 +38,7 @@ Wheelファイルは、以下のPythonバージョン用に利用可能です:
 | 1.11.0            |            | √          | √          | √          | √           |
 | 1.10.0            | √          | √          | √          | √          |             |
 
-```
+```bash
 pip install oneccl_bind_pt=={pytorch_version} -f https://developer.intel.com/ipex-whl-stable-cpu
 ```
 
@@ -70,13 +70,13 @@ oneccl_bindings_for_pytorchはMPIツールセットと一緒にインストー�
 
 
 for Intel® oneCCL >= 1.12.0
-```
+```bash
 oneccl_bindings_for_pytorch_path=$(python -c "from oneccl_bindings_for_pytorch import cwd; print(cwd)")
 source $oneccl_bindings_for_pytorch_path/env/setvars.sh
 ```
 
 for Intel® oneCCL whose version < 1.12.0
-```
+```bash
 torch_ccl_path=$(python -c "import torch; import torch_ccl; import os;  print(os.path.abspath(os.path.dirname(torch_ccl.__file__)))")
 source $torch_ccl_path/env/setvars.sh
 ```
@@ -100,7 +100,7 @@ IPEXは、Float32およびBFloat16の両方でCPUトレーニングのパフォ�
  export MASTER_ADDR=127.0.0.1
  mpirun -n 2 -genv OMP_NUM_THREADS=23 \
  python3 run_qa.py \
- --model_name_or_path bert-large-uncased \
+ --model_name_or_path google-bert/bert-large-uncased \
  --dataset_name squad \
  --do_train \
  --do_eval \
@@ -134,7 +134,7 @@ node0では、各ノードのIPアドレスを含む構成ファイルを作成�
  mpirun -f hostfile -n 4 -ppn 2 \
  -genv OMP_NUM_THREADS=23 \
  python3 run_qa.py \
- --model_name_or_path bert-large-uncased \
+ --model_name_or_path google-bert/bert-large-uncased \
  --dataset_name squad \
  --do_train \
  --do_eval \

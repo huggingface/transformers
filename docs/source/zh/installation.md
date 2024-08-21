@@ -70,9 +70,9 @@ pip install 'transformers[tf-cpu]'
 <Tip warning={true}>
 
 M1 / ARM用户
-    
+
 在安装 TensorFlow 2.0 前，你需要安装以下库：
-```
+```bash
 brew install cmake
 brew install pkg-config
 ```
@@ -147,10 +147,10 @@ git pull
 
 ## 使用 conda 安装
 
-从 conda 的 `huggingface` 频道安装：
+从 conda 的 `conda-forge` 频道安装：
 
 ```bash
-conda install -c huggingface transformers
+conda install conda-forge::transformers
 ```
 
 ## 缓存设置
@@ -169,7 +169,7 @@ conda install -c huggingface transformers
 
 ## 离线模式
 
-🤗 Transformers 可以仅使用本地文件在防火墙或离线环境中运行。设置环境变量 `TRANSFORMERS_OFFLINE=1` 以启用该行为。
+🤗 Transformers 可以仅使用本地文件在防火墙或离线环境中运行。设置环境变量 `HF_HUB_OFFLINE=1` 以启用该行为。
 
 <Tip>
 
@@ -180,14 +180,14 @@ conda install -c huggingface transformers
 例如，你通常会使用以下命令对外部实例进行防火墙保护的的普通网络上运行程序：
 
 ```bash
-python examples/pytorch/translation/run_translation.py --model_name_or_path t5-small --dataset_name wmt16 --dataset_config ro-en ...
+python examples/pytorch/translation/run_translation.py --model_name_or_path google-t5/t5-small --dataset_name wmt16 --dataset_config ro-en ...
 ```
 
 在离线环境中运行相同的程序：
 
 ```bash
-HF_DATASETS_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
-python examples/pytorch/translation/run_translation.py --model_name_or_path t5-small --dataset_name wmt16 --dataset_config ro-en ...
+HF_DATASETS_OFFLINE=1 HF_HUB_OFFLINE=1 \
+python examples/pytorch/translation/run_translation.py --model_name_or_path google-t5/t5-small --dataset_name wmt16 --dataset_config ro-en ...
 ```
 
 现在脚本可以应该正常运行，而无需挂起或等待超时，因为它知道只应查找本地文件。

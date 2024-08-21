@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Logging utilities."""
-
+"""Logging utilities."""
 
 import functools
 import logging
@@ -51,7 +50,7 @@ log_levels = {
 
 _default_log_level = logging.WARNING
 
-_tqdm_active = True
+_tqdm_active = not hf_hub_utils.are_progress_bars_disabled()
 
 
 def _get_default_logging_level():
@@ -330,6 +329,21 @@ def warning_once(self, *args, **kwargs):
 
 
 logging.Logger.warning_once = warning_once
+
+
+@functools.lru_cache(None)
+def info_once(self, *args, **kwargs):
+    """
+    This method is identical to `logger.info()`, but will emit the info with the same message only once
+
+    Note: The cache is for the function arguments, so 2 different callers using the same arguments will hit the cache.
+    The assumption here is that all warning messages are unique across the code. If they aren't then need to switch to
+    another type of cache that includes the caller frame information in the hashing function.
+    """
+    self.info(*args, **kwargs)
+
+
+logging.Logger.info_once = info_once
 
 
 class EmptyTqdm:

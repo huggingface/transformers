@@ -22,9 +22,7 @@ from ...utils import (
 )
 
 
-_import_structure = {
-    "configuration_convnext": ["CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvNextConfig", "ConvNextOnnxConfig"]
-}
+_import_structure = {"configuration_convnext": ["ConvNextConfig", "ConvNextOnnxConfig"]}
 
 try:
     if not is_vision_available():
@@ -42,7 +40,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_convnext"] = [
-        "CONVNEXT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "ConvNextForImageClassification",
         "ConvNextModel",
         "ConvNextPreTrainedModel",
@@ -62,7 +59,7 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_convnext import CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvNextConfig, ConvNextOnnxConfig
+    from .configuration_convnext import ConvNextConfig, ConvNextOnnxConfig
 
     try:
         if not is_vision_available():
@@ -80,7 +77,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_convnext import (
-            CONVNEXT_PRETRAINED_MODEL_ARCHIVE_LIST,
             ConvNextBackbone,
             ConvNextForImageClassification,
             ConvNextModel,

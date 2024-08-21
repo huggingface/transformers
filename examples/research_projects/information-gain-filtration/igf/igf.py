@@ -69,9 +69,9 @@ def compute_perplexity(model, test_data, context_len):
     return perplexity
 
 
-def load_gpt2(model_name="gpt2"):
+def load_gpt2(model_name="openai-community/gpt2"):
     """
-    load original gpt2 and save off for quicker loading
+    load original openai-community/gpt2 and save off for quicker loading
 
     Args:
         model_name: GPT-2

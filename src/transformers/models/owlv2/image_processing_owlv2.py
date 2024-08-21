@@ -37,9 +37,11 @@ from ...image_utils import (
     make_list_of_images,
     to_numpy_array,
     valid_images,
+    validate_preprocess_arguments,
 )
 from ...utils import (
     TensorType,
+    filter_out_non_signature_kwargs,
     is_scipy_available,
     is_torch_available,
     is_vision_available,
@@ -115,7 +117,7 @@ def _preprocess_resize_output_shape(image, output_shape):
             channels is preserved.
 
     Returns
-        image (`np.ndarray):
+        image (`np.ndarray`):
             The input image, but with additional singleton dimensions appended in the case where `len(output_shape) >
             input.ndim`.
         output_shape (`Tuple`):
@@ -330,6 +332,7 @@ class Owlv2ImageProcessor(BaseImageProcessor):
         )
         return image
 
+    @filter_out_non_signature_kwargs()
     def preprocess(
         self,
         images: ImageInput,
@@ -344,7 +347,6 @@ class Owlv2ImageProcessor(BaseImageProcessor):
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
     ) -> PIL.Image.Image:
         """
         Preprocess an image or batch of images.
@@ -405,15 +407,18 @@ class Owlv2ImageProcessor(BaseImageProcessor):
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
-
-        if do_resize and size is None:
-            raise ValueError("Size must be specified if do_resize is True.")
-
-        if do_rescale and rescale_factor is None:
-            raise ValueError("Rescale factor must be specified if do_rescale is True.")
-
-        if do_normalize and (image_mean is None or image_std is None):
-            raise ValueError("Image mean and std must be specified if do_normalize is True.")
+        # Here, pad and resize methods are different from the rest of image processors
+        # as they don't have any resampling in resize()
+        # or pad size in pad() (the maximum of (height, width) is taken instead).
+        # hence, these arguments don't need to be passed in validate_preprocess_arguments.
+        validate_preprocess_arguments(
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+            size=size,
+        )
 
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
@@ -460,7 +465,6 @@ class Owlv2ImageProcessor(BaseImageProcessor):
         data = {"pixel_values": images}
         return BatchFeature(data=data, tensor_type=return_tensors)
 
-    # Copied from transformers.models.owlvit.image_processing_owlvit.OwlViTImageProcessor.post_process_object_detection
     def post_process_object_detection(
         self, outputs, threshold: float = 0.1, target_sizes: Union[TensorType, List[Tuple]] = None
     ):
@@ -504,7 +508,11 @@ class Owlv2ImageProcessor(BaseImageProcessor):
             else:
                 img_h, img_w = target_sizes.unbind(1)
 
-            scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(boxes.device)
+            # Rescale coordinates, image is padded to square for inference,
+            # that is why we need to scale boxes to the max size
+            size = torch.max(img_h, img_w)
+            scale_fct = torch.stack([size, size, size, size], dim=1).to(boxes.device)
+
             boxes = boxes * scale_fct[:, None, :]
 
         results = []
@@ -541,9 +549,9 @@ class Owlv2ImageProcessor(BaseImageProcessor):
         """
         logits, target_boxes = outputs.logits, outputs.target_pred_boxes
 
-        if len(logits) != len(target_sizes):
+        if target_sizes is not None and len(logits) != len(target_sizes):
             raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the logits")
-        if target_sizes.shape[1] != 2:
+        if target_sizes is not None and target_sizes.shape[1] != 2:
             raise ValueError("Each element of target_sizes must contain the size (h, w) of each image of the batch")
 
         probs = torch.max(logits, dim=-1)
@@ -564,9 +572,14 @@ class Owlv2ImageProcessor(BaseImageProcessor):
                     scores[idx][ious > nms_threshold] = 0.0
 
         # Convert from relative [0, 1] to absolute [0, height] coordinates
-        img_h, img_w = target_sizes.unbind(1)
-        scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(target_boxes.device)
-        target_boxes = target_boxes * scale_fct[:, None, :]
+        if target_sizes is not None:
+            if isinstance(target_sizes, List):
+                img_h = torch.tensor([i[0] for i in target_sizes])
+                img_w = torch.tensor([i[1] for i in target_sizes])
+            else:
+                img_h, img_w = target_sizes.unbind(1)
+            scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(target_boxes.device)
+            target_boxes = target_boxes * scale_fct[:, None, :]
 
         # Compute box display alphas based on prediction scores
         results = []

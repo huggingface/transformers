@@ -33,7 +33,13 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import Conv1D, find_pruneable_heads_and_indices, prune_conv1d_layer
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils import (
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+    replace_return_docstrings,
+    torch_float,
+)
 from .configuration_imagegpt import ImageGPTConfig
 
 
@@ -41,13 +47,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "openai/imagegpt-small"
 _CONFIG_FOR_DOC = "ImageGPTConfig"
-
-IMAGEGPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "openai/imagegpt-small",
-    "openai/imagegpt-medium",
-    "openai/imagegpt-large",
-    # See all Image GPT models at https://huggingface.co/models?filter=imagegpt
-]
 
 
 def load_tf_weights_in_imagegpt(model, config, imagegpt_checkpoint_path):
@@ -236,7 +235,7 @@ class ImageGPTAttention(nn.Module):
         attn_weights = torch.matmul(query, key.transpose(-1, -2))
 
         if self.scale_attn_weights:
-            attn_weights = attn_weights / (float(value.size(-1)) ** 0.5)
+            attn_weights = attn_weights / torch_float(value.size(-1) ** 0.5)
 
         # Layer-wise attention scaling
         if self.scale_attn_by_inverse_layer_idx:
@@ -495,6 +494,7 @@ class ImageGPTPreTrainedModel(PreTrainedModel):
     base_model_prefix = "transformer"
     main_input_name = "input_ids"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["ImageGPTBlock"]
 
     def __init__(self, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)

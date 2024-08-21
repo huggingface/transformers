@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch ViTMatte model."""
+"""PyTorch ViTMatte model."""
 
 from dataclasses import dataclass
 from typing import Optional, Tuple
@@ -20,7 +20,6 @@ from typing import Optional, Tuple
 import torch
 from torch import nn
 
-from ... import AutoBackbone
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     ModelOutput,
@@ -28,13 +27,8 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
+from ...utils.backbone_utils import load_backbone
 from .configuration_vitmatte import VitMatteConfig
-
-
-VITMATTE_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "hustvl/vitmatte-small-composition-1k",
-    # See all VitMatte models at https://huggingface.co/models?filter=vitmatte
-]
 
 
 # General docstring
@@ -78,6 +72,7 @@ class VitMattePreTrainedModel(PreTrainedModel):
     config_class = VitMatteConfig
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
+    _no_split_modules = []
 
     def _init_weights(self, module):
         if isinstance(module, nn.Conv2d):
@@ -120,7 +115,12 @@ class VitMatteConvStream(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        in_channels = config.backbone_config.num_channels
+        # We use a default in-case there isn't a backbone config set. This is for backwards compatibility and
+        # to enable loading HF backbone models.
+        in_channels = 4
+        if config.backbone_config is not None:
+            in_channels = config.backbone_config.num_channels
+
         out_channels = config.convstream_hidden_sizes
 
         self.convs = nn.ModuleList()
@@ -259,7 +259,7 @@ class VitMatteForImageMatting(VitMattePreTrainedModel):
         super().__init__(config)
         self.config = config
 
-        self.backbone = AutoBackbone.from_config(config.backbone_config)
+        self.backbone = load_backbone(config)
         self.decoder = VitMatteDetailCaptureModule(config)
 
         # Initialize weights and apply final processing
@@ -315,16 +315,16 @@ class VitMatteForImageMatting(VitMattePreTrainedModel):
         )
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
 
+        loss = None
+        if labels is not None:
+            raise NotImplementedError("Training is not yet supported")
+
         outputs = self.backbone.forward_with_filtered_kwargs(
             pixel_values, output_hidden_states=output_hidden_states, output_attentions=output_attentions
         )
 
         features = outputs.feature_maps[-1]
         alphas = self.decoder(features, pixel_values)
-
-        loss = None
-        if labels is not None:
-            raise NotImplementedError("Training is not yet supported")
 
         if not return_dict:
             output = (alphas,) + outputs[1:]

@@ -33,14 +33,6 @@ else:
 logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "tokenizer.model", "tokenizer_file": "tokenizer.json"}
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "hf-internal-testing/llama-tokenizer": "https://huggingface.co/hf-internal-testing/llama-tokenizer/resolve/main/tokenizer.model",
-    },
-    "tokenizer_file": {
-        "hf-internal-testing/llama-tokenizer": "https://huggingface.co/hf-internal-testing/llama-tokenizer/resolve/main/tokenizer_config.json",
-    },
-}
 B_INST, E_INST = "[INST]", "[/INST]"
 B_SYS, E_SYS = "<<SYS>>\n", "\n<</SYS>>\n\n"
 
@@ -99,11 +91,35 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
         add_eos_token (`bool`, *optional*, defaults to `False`):
             Whether or not to add an `eos_token` at the end of sequences.
         use_default_system_prompt (`bool`, *optional*, defaults to `False`):
-            Whether or not the default system prompt for Llama should be used.
+            Whether or not the default system prompt for Llama should be used
+        legacy (`bool`, *optional*):
+            Whether or not the `legacy` behavior of the tokenizer should be used. Legacy is before the merge of #24622
+            and #25224 which includes fixes to properly handle tokens that appear after special tokens.
+            Make sure to also set `from_slow` to `True`.
+            A simple example:
+
+            - `legacy=True`:
+            ```python
+            >>> from transformers import LlamaTokenizerFast
+
+            >>> tokenizer = LlamaTokenizerFast.from_pretrained("huggyllama/llama-7b", legacy=True, from_slow=True)
+            >>> tokenizer.encode("Hello <s>.") # 869 is '▁.'
+            [1, 15043, 29871, 1, 869]
+            ```
+            - `legacy=False`:
+            ```python
+            >>> from transformers import LlamaTokenizerFast
+
+            >>> tokenizer = LlamaTokenizerFast.from_pretrained("huggyllama/llama-7b", legacy=False, from_slow=True)
+            >>> tokenizer.encode("Hello <s>.")  # 29889 is '.'
+            [1, 15043, 29871, 1, 29889]
+            ```
+            Checkout the [pull request](https://github.com/huggingface/transformers/pull/24565) for more details.
+        add_prefix_space (`bool`, *optional*):
+            Whether or not the tokenizer should automatically add a prefix space
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     slow_tokenizer_class = LlamaTokenizer
     padding_side = "left"
     model_input_names = ["input_ids", "attention_mask"]
@@ -119,8 +135,25 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
         add_bos_token=True,
         add_eos_token=False,
         use_default_system_prompt=False,
+        legacy=None,
+        add_prefix_space=None,
         **kwargs,
     ):
+        if legacy is None:
+            logger.warning_once(
+                f"You are using the default legacy behaviour of the {self.__class__}. This is"
+                " expected, and simply means that the `legacy` (previous) behavior will be used so nothing changes for you."
+                " If you want to use the new behaviour, set `legacy=False`. This should only be set if you understand what it"
+                " means, and thoroughly read the reason why this was added as explained in"
+                " https://github.com/huggingface/transformers/pull/24565 - if you loaded a llama tokenizer from a GGUF file"
+                " you can ignore this message."
+            )
+            legacy = True
+        self.legacy = legacy
+
+        if add_prefix_space is not None:
+            kwargs["from_slow"] = True
+
         super().__init__(
             vocab_file=vocab_file,
             tokenizer_file=tokenizer_file,
@@ -131,6 +164,8 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
             add_bos_token=add_bos_token,
             add_eos_token=add_eos_token,
             use_default_system_prompt=use_default_system_prompt,
+            add_prefix_space=add_prefix_space,
+            legacy=legacy,
             **kwargs,
         )
         self._add_bos_token = add_bos_token
@@ -205,67 +240,6 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
             copyfile(self.vocab_file, out_vocab_file)
 
         return (out_vocab_file,)
-
-    @property
-    # Copied from transformers.models.llama.tokenization_llama.LlamaTokenizer.default_chat_template
-    def default_chat_template(self):
-        """
-        LLaMA uses [INST] and [/INST] to indicate user messages, and <<SYS>> and <</SYS>> to indicate system messages.
-        Assistant messages do not have special tokens, because LLaMA chat models are generally trained with strict
-        user/assistant/user/assistant message ordering, and so assistant messages can be identified from the ordering
-        rather than needing special tokens. The system message is partly 'embedded' in the first user message, which
-        results in an unusual token ordering when it is present. This template should definitely be changed if you wish
-        to fine-tune a model with more flexible role ordering!
-
-        The output should look something like:
-
-        <bos>[INST] B_SYS SystemPrompt E_SYS Prompt [/INST] Answer <eos><bos>[INST] Prompt [/INST] Answer <eos>
-        <bos>[INST] Prompt [/INST]
-
-        The reference for this chat template is [this code
-        snippet](https://github.com/facebookresearch/llama/blob/556949fdfb72da27c2f4a40b7f0e4cf0b8153a28/llama/generation.py#L320-L362)
-        in the original repository.
-        """
-        logger.warning_once(
-            "\nNo chat template is defined for this tokenizer - using the default template "
-            f"for the {self.__class__.__name__} class. If the default is not appropriate for "
-            "your model, please set `tokenizer.chat_template` to an appropriate template. "
-            "See https://huggingface.co/docs/transformers/main/chat_templating for more information.\n"
-        )
-        template = (
-            "{% if messages[0]['role'] == 'system' %}"
-            "{% set loop_messages = messages[1:] %}"  # Extract system message if it's present
-            "{% set system_message = messages[0]['content'] %}"
-            "{% elif USE_DEFAULT_PROMPT == true and not '<<SYS>>' in messages[0]['content'] %}"
-            "{% set loop_messages = messages %}"  # Or use the default system message if the flag is set
-            "{% set system_message = 'DEFAULT_SYSTEM_MESSAGE' %}"
-            "{% else %}"
-            "{% set loop_messages = messages %}"
-            "{% set system_message = false %}"
-            "{% endif %}"
-            "{% for message in loop_messages %}"  # Loop over all non-system messages
-            "{% if (message['role'] == 'user') != (loop.index0 % 2 == 0) %}"
-            "{{ raise_exception('Conversation roles must alternate user/assistant/user/assistant/...') }}"
-            "{% endif %}"
-            "{% if loop.index0 == 0 and system_message != false %}"  # Embed system message in first message
-            "{% set content = '<<SYS>>\\n' + system_message + '\\n<</SYS>>\\n\\n' + message['content'] %}"
-            "{% else %}"
-            "{% set content = message['content'] %}"
-            "{% endif %}"
-            "{% if message['role'] == 'user' %}"  # After all of that, handle messages/roles in a fairly normal way
-            "{{ bos_token + '[INST] ' + content.strip() + ' [/INST]' }}"
-            "{% elif message['role'] == 'system' %}"
-            "{{ '<<SYS>>\\n' + content.strip() + '\\n<</SYS>>\\n\\n' }}"
-            "{% elif message['role'] == 'assistant' %}"
-            "{{ ' '  + content.strip() + ' ' + eos_token }}"
-            "{% endif %}"
-            "{% endfor %}"
-        )
-        template = template.replace("USE_DEFAULT_PROMPT", "true" if self.use_default_system_prompt else "false")
-        default_message = DEFAULT_SYSTEM_PROMPT.replace("\n", "\\n").replace("'", "\\'")
-        template = template.replace("DEFAULT_SYSTEM_MESSAGE", default_message)
-
-        return template
 
     # TODO ArthurZ let's rely on the template processor instead, refactor all fast tokenizers
     # Copied from transformers.models.llama.tokenization_llama.LlamaTokenizer.build_inputs_with_special_tokens

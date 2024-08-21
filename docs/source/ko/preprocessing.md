@@ -54,7 +54,7 @@ pip install datasets
 ```py
 >>> from transformers import AutoTokenizer
 
->>> tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
+>>> tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-cased")
 ```
 
 그 다음으로 텍스트를 토크나이저에 넣어주세요:

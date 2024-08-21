@@ -16,9 +16,16 @@ import os
 import tempfile
 import unittest
 
-from transformers import BertConfig, is_torch_available
+from transformers import AutoTokenizer, BertConfig, is_torch_available
 from transformers.models.auto import get_values
-from transformers.testing_utils import CaptureLogger, require_torch, require_torch_accelerator, slow, torch_device
+from transformers.testing_utils import (
+    CaptureLogger,
+    require_torch,
+    require_torch_accelerator,
+    require_torch_sdpa,
+    slow,
+    torch_device,
+)
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -42,7 +49,6 @@ if is_torch_available():
         BertModel,
         logging,
     )
-    from transformers.models.bert.modeling_bert import BERT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class BertModelTester:
@@ -459,6 +465,7 @@ class BertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         else {}
     )
     fx_compatible = True
+    model_split_percents = [0.5, 0.8, 0.9]
 
     # special case for ForPreTraining model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -494,6 +501,11 @@ class BertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def test_model_as_decoder(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
         self.model_tester.create_and_check_model_as_decoder(*config_and_inputs)
+
+    @unittest.skip(reason="Generate needs input ids")
+    def test_inputs_embeds_matches_input_ids_with_generate(self):
+        # generate only works with input ids for bertforcausalLM
+        pass
 
     def test_model_as_decoder_with_default_input_mask(self):
         # This regression test was failing with PyTorch < 1.3
@@ -596,9 +608,9 @@ class BertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in BERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = BertModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "google-bert/bert-base-uncased"
+        model = BertModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     @slow
     @require_torch_accelerator
@@ -607,7 +619,7 @@ class BertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         for model_class in self.all_model_classes:
             # BertForMultipleChoice behaves incorrectly in JIT environments.
             if model_class == BertForMultipleChoice:
-                return
+                self.skipTest(reason="BertForMultipleChoice behaves incorrectly in JIT environments.")
 
             config.torchscript = True
             model = model_class(config=config)
@@ -622,12 +634,85 @@ class BertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
                 loaded = torch.jit.load(os.path.join(tmp, "bert.pt"), map_location=torch_device)
                 loaded(inputs_dict["input_ids"].to(torch_device), inputs_dict["attention_mask"].to(torch_device))
 
+    # This test was copied from the common test_eager_matches_sdpa_generate(), but without low_cpu_mem_usage=True.
+    # TODO: Remove this and use the parent method (in common tests) once BERT supports low_cpu_mem_usage=True.
+    @require_torch_sdpa
+    @slow
+    def test_eager_matches_sdpa_generate(self):
+        max_new_tokens = 30
+
+        if len(self.all_generative_model_classes) == 0:
+            self.skipTest(f"{self.__class__.__name__} tests a model that does support generate: skipping this test")
+
+        for model_class in self.all_generative_model_classes:
+            if not model_class._supports_sdpa:
+                self.skipTest(f"{model_class.__name__} does not support SDPA")
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+            dummy_input = inputs_dict[model_class.main_input_name]
+            if dummy_input.dtype in [torch.float32, torch.bfloat16]:
+                dummy_input = dummy_input.to(torch.float16)
+
+            # make sure that all models have enough positions for generation
+            if hasattr(config, "max_position_embeddings"):
+                config.max_position_embeddings = max_new_tokens + dummy_input.shape[1] + 1
+
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(dummy_input))
+
+                model_sdpa = model_class.from_pretrained(
+                    tmpdirname,
+                    torch_dtype=torch.float16,
+                    # low_cpu_mem_usage=True,
+                ).to(torch_device)
+
+                self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
+
+                model_eager = model_class.from_pretrained(
+                    tmpdirname,
+                    torch_dtype=torch.float16,
+                    # low_cpu_mem_usage=True,
+                    attn_implementation="eager",
+                ).to(torch_device)
+
+                self.assertTrue(model_eager.config._attn_implementation == "eager")
+
+                for name, submodule in model_eager.named_modules():
+                    class_name = submodule.__class__.__name__
+                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
+                        raise ValueError("The eager model should not have SDPA attention layers")
+
+                has_sdpa = False
+                for name, submodule in model_sdpa.named_modules():
+                    class_name = submodule.__class__.__name__
+                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
+                        has_sdpa = True
+                        break
+                if not has_sdpa:
+                    raise ValueError("The SDPA model should have SDPA attention layers")
+
+                # Just test that a large cache works as expected
+                res_eager = model_eager.generate(
+                    dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=max_new_tokens, do_sample=False
+                )
+
+                res_sdpa = model_sdpa.generate(
+                    dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=max_new_tokens, do_sample=False
+                )
+
+                self.assertTrue(torch.allclose(res_eager, res_sdpa))
+
 
 @require_torch
 class BertModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_no_head_absolute_embedding(self):
-        model = BertModel.from_pretrained("bert-base-uncased")
+        model = BertModel.from_pretrained("google-bert/bert-base-uncased")
         input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]])
         attention_mask = torch.tensor([[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
         with torch.no_grad():
@@ -667,3 +752,36 @@ class BertModelIntegrationTest(unittest.TestCase):
         )
 
         self.assertTrue(torch.allclose(output[:, 1:4, 1:4], expected_slice, atol=1e-4))
+
+    def test_sdpa_ignored_mask(self):
+        pkv = []
+
+        model = BertModel.from_pretrained("hf-internal-testing/tiny-random-BertModel", attn_implementation="eager")
+        model_sdpa = BertModel.from_pretrained("hf-internal-testing/tiny-random-BertModel", attn_implementation="sdpa")
+
+        model = model.eval()
+        model_sdpa = model_sdpa.eval()
+
+        for _ in range(model.config.num_hidden_layers):
+            num_heads = model.config.num_attention_heads
+            head_dim = model.config.hidden_size // model.config.num_attention_heads
+            pkv.append([torch.rand(1, num_heads, 3, head_dim), torch.rand(1, num_heads, 3, head_dim)])
+
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-BertModel")
+        inp = tokenizer("I am in Paris and", return_tensors="pt")
+
+        del inp["attention_mask"]
+
+        with torch.no_grad():
+            res_eager = model(**inp)
+            res_sdpa = model_sdpa(**inp)
+            self.assertTrue(
+                torch.allclose(res_eager.last_hidden_state, res_sdpa.last_hidden_state, atol=1e-5, rtol=1e-4)
+            )
+
+            # Case where query length != kv_length.
+            res_eager = model(**inp, past_key_values=pkv)
+            res_sdpa = model_sdpa(**inp, past_key_values=pkv)
+            self.assertTrue(
+                torch.allclose(res_eager.last_hidden_state, res_sdpa.last_hidden_state, atol=1e-5, rtol=1e-4)
+            )

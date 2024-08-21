@@ -1,0 +1,77 @@
+name: Build pr ci-docker
+
+on:
+  push:
+    branches:
+      - push-ci-image # for now let's only build on this branch
+  repository_dispatch:
+  workflow_call:
+    inputs:
+      image_postfix:
+        required: true
+        type: string
+  schedule:
+    - cron: "6 0 * * *"
+
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    if: ${{ contains(github.event.head_commit.message, '[build-ci-image]') || contains(github.event.head_commit.message, '[push-ci-image]') && '!cancelled()' || github.event_name == 'schedule' }}
+
+    strategy:
+      matrix:
+        file: ["quality", "consistency", "custom-tokenizers", "torch-light", "tf-light", "exotic-models", "torch-tf-light", "torch-jax-light", "jax-light", "examples-torch",  "examples-tf"]
+    continue-on-error: true
+
+    steps:
+      -
+        name: Set tag
+        run: |
+              if ${{contains(github.event.head_commit.message, '[build-ci-image]')}}; then
+                  echo "TAG=huggingface/transformers-${{ matrix.file }}:dev" >> "$GITHUB_ENV" 
+                  echo "setting it to DEV!"
+              else
+                  echo "TAG=huggingface/transformers-${{ matrix.file }}" >> "$GITHUB_ENV"
+                  
+              fi
+      -
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      -
+        name: Check out code
+        uses: actions/checkout@v4
+      -
+        name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+      -
+        name: Build ${{ matrix.file }}.dockerfile
+        uses: docker/build-push-action@v5
+        with:
+          context: ./docker
+          build-args: |
+            REF=${{ github.sha }}
+          file: "./docker/${{ matrix.file }}.dockerfile"
+          push: ${{ contains(github.event.head_commit.message, 'ci-image]') ||  github.event_name == 'schedule' }}
+          tags: ${{ env.TAG }}
+
+  notify:
+    runs-on: ubuntu-22.04
+    if: ${{ contains(github.event.head_commit.message, '[build-ci-image]') || contains(github.event.head_commit.message, '[push-ci-image]') && '!cancelled()' || github.event_name == 'schedule' }}
+    steps:
+      - name: Post to Slack
+        if: ${{ contains(github.event.head_commit.message, '[push-ci-image]') && github.event_name != 'schedule' }}
+        uses: huggingface/hf-workflows/.github/actions/post-slack@main
+        with:
+          slack_channel: "#transformers-ci-circleci-images"
+          title: 🤗 New docker images for CircleCI are pushed.
+          status: ${{ job.status }}
+          slack_token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}

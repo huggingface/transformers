@@ -15,7 +15,6 @@
 """Convert MaskFormer checkpoints with ResNet backbone from the original repository. URL:
 https://github.com/facebookresearch/MaskFormer"""
 
-
 import argparse
 import json
 import pickle
@@ -296,8 +295,8 @@ def convert_maskformer_checkpoint(
         ignore_index = 65535
     else:
         ignore_index = 255
-    reduce_labels = True if "ade" in model_name else False
-    image_processor = MaskFormerImageProcessor(ignore_index=ignore_index, reduce_labels=reduce_labels)
+    do_reduce_labels = True if "ade" in model_name else False
+    image_processor = MaskFormerImageProcessor(ignore_index=ignore_index, do_reduce_labels=do_reduce_labels)
 
     inputs = image_processor(image, return_tensors="pt")
 

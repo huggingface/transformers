@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Informer model. """
+"""Testing suite for the PyTorch Informer model."""
 
 import inspect
 import tempfile
@@ -35,7 +35,11 @@ if is_torch_available():
     import torch
 
     from transformers import InformerConfig, InformerForPrediction, InformerModel
-    from transformers.models.informer.modeling_informer import InformerDecoder, InformerEncoder
+    from transformers.models.informer.modeling_informer import (
+        InformerDecoder,
+        InformerEncoder,
+        InformerSinusoidalPositionalEmbedding,
+    )
 
 
 @require_torch
@@ -164,6 +168,12 @@ class InformerModelTester:
 
         self.parent.assertTrue((encoder_last_hidden_state_2 - encoder_last_hidden_state).abs().max().item() < 1e-3)
 
+        embed_positions = InformerSinusoidalPositionalEmbedding(
+            config.context_length + config.prediction_length, config.d_model
+        )
+        self.parent.assertTrue(torch.equal(model.encoder.embed_positions.weight, embed_positions.weight))
+        self.parent.assertTrue(torch.equal(model.decoder.embed_positions.weight, embed_positions.weight))
+
         with tempfile.TemporaryDirectory() as tmpdirname:
             decoder = model.get_decoder()
             decoder.save_pretrained(tmpdirname)
@@ -188,7 +198,6 @@ class InformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     test_missing_keys = False
     test_torchscript = False
     test_inputs_embeds = False
-    test_model_common_attributes = False
 
     def setUp(self):
         self.model_tester = InformerModelTester(self)
@@ -269,14 +278,20 @@ class InformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
-    # Ignore since we have no tokens embeddings
+    @unittest.skip(reason="Informer does not have tokens embeddings")
     def test_resize_tokens_embeddings(self):
         pass
 
+    @unittest.skip
     def test_model_outputs_equivalence(self):
         pass
 
+    @unittest.skip
     def test_determinism(self):
+        pass
+
+    @unittest.skip(reason="randomly selects U keys while calculating attentions")
+    def test_batching_equivalence(self):
         pass
 
     @unittest.skip(
@@ -453,6 +468,10 @@ class InformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     @is_flaky()
     def test_retain_grad_hidden_states_attentions(self):
         super().test_retain_grad_hidden_states_attentions()
+
+    @unittest.skip(reason="Model does not have input embeddings")
+    def test_model_get_set_embeddings(self):
+        pass
 
 
 def prepare_batch(filename="train-batch.pt"):

@@ -72,7 +72,7 @@ def _test_wav2vec2_with_lm_invalid_pool(in_queue, out_queue, timeout):
     try:
         _ = in_queue.get(timeout=timeout)
 
-        ds = load_dataset("common_voice", "es", split="test", streaming=True)
+        ds = load_dataset("legacy-datasets/common_voice", "es", split="test", streaming=True, trust_remote_code=True)
         sample = next(iter(ds))
 
         resampled_audio = librosa.resample(sample["audio"]["array"], 48_000, 16_000)
@@ -585,7 +585,7 @@ class FlaxWav2Vec2ModelIntegrationTest(unittest.TestCase):
     @require_pyctcdecode
     @require_librosa
     def test_wav2vec2_with_lm(self):
-        ds = load_dataset("common_voice", "es", split="test", streaming=True)
+        ds = load_dataset("legacy-datasets/common_voice", "es", split="test", streaming=True, trust_remote_code=True)
         sample = next(iter(ds))
 
         resampled_audio = librosa.resample(sample["audio"]["array"], 48_000, 16_000)
@@ -604,7 +604,7 @@ class FlaxWav2Vec2ModelIntegrationTest(unittest.TestCase):
     @require_pyctcdecode
     @require_librosa
     def test_wav2vec2_with_lm_pool(self):
-        ds = load_dataset("common_voice", "es", split="test", streaming=True)
+        ds = load_dataset("legacy-datasets/common_voice", "es", split="test", streaming=True, trust_remote_code=True)
         sample = next(iter(ds))
 
         resampled_audio = librosa.resample(sample["audio"]["array"], 48_000, 16_000)

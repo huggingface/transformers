@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" OpenAI GPT configuration"""
+"""OpenAI GPT configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -21,15 +21,13 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP = {"openai-gpt": "https://huggingface.co/openai-gpt/resolve/main/config.json"}
-
 
 class OpenAIGPTConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`OpenAIGPTModel`] or a [`TFOpenAIGPTModel`]. It is
     used to instantiate a GPT model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the GPT
-    [openai-gpt](https://huggingface.co/openai-gpt) architecture from OpenAI.
+    [openai-community/openai-gpt](https://huggingface.co/openai-community/openai-gpt) architecture from OpenAI.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.

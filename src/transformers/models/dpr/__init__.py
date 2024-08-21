@@ -24,7 +24,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_dpr": ["DPR_PRETRAINED_CONFIG_ARCHIVE_MAP", "DPRConfig"],
+    "configuration_dpr": ["DPRConfig"],
     "tokenization_dpr": [
         "DPRContextEncoderTokenizer",
         "DPRQuestionEncoderTokenizer",
@@ -53,9 +53,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_dpr"] = [
-        "DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "DPR_QUESTION_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "DPR_READER_PRETRAINED_MODEL_ARCHIVE_LIST",
         "DPRContextEncoder",
         "DPRPretrainedContextEncoder",
         "DPRPreTrainedModel",
@@ -72,9 +69,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_tf_dpr"] = [
-        "TF_DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "TF_DPR_QUESTION_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "TF_DPR_READER_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFDPRContextEncoder",
         "TFDPRPretrainedContextEncoder",
         "TFDPRPretrainedQuestionEncoder",
@@ -85,7 +79,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_dpr import DPR_PRETRAINED_CONFIG_ARCHIVE_MAP, DPRConfig
+    from .configuration_dpr import DPRConfig
     from .tokenization_dpr import (
         DPRContextEncoderTokenizer,
         DPRQuestionEncoderTokenizer,
@@ -112,9 +106,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_dpr import (
-            DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            DPR_QUESTION_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            DPR_READER_PRETRAINED_MODEL_ARCHIVE_LIST,
             DPRContextEncoder,
             DPRPretrainedContextEncoder,
             DPRPreTrainedModel,
@@ -131,9 +122,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_tf_dpr import (
-            TF_DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            TF_DPR_QUESTION_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            TF_DPR_READER_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFDPRContextEncoder,
             TFDPRPretrainedContextEncoder,
             TFDPRPretrainedQuestionEncoder,

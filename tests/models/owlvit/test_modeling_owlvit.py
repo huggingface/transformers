@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch OwlViT model. """
-
+"""Testing suite for the PyTorch OwlViT model."""
 
 import inspect
 import os
@@ -50,7 +49,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import OwlViTForObjectDetection, OwlViTModel, OwlViTTextModel, OwlViTVisionModel
-    from transformers.models.owlvit.modeling_owlvit import OWLVIT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -162,7 +160,7 @@ class OwlViTVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -217,9 +215,9 @@ class OwlViTVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in OWLVIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = OwlViTVisionModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "google/owlvit-base-patch32"
+        model = OwlViTVisionModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 class OwlViTTextModelTester:
@@ -363,9 +361,9 @@ class OwlViTTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in OWLVIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = OwlViTTextModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "google/owlvit-base-patch32"
+        model = OwlViTTextModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 class OwlViTModelTester:
@@ -381,6 +379,7 @@ class OwlViTModelTester:
         self.is_training = is_training
         self.text_config = self.text_model_tester.get_config().to_dict()
         self.vision_config = self.vision_model_tester.get_config().to_dict()
+        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
 
     def prepare_config_and_inputs(self):
         text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
@@ -428,7 +427,10 @@ class OwlViTModelTester:
 class OwlViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (OwlViTModel,) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": OwlViTModel, "zero-shot-object-detection": OwlViTForObjectDetection}
+        {
+            "feature-extraction": OwlViTModel,
+            "zero-shot-object-detection": OwlViTForObjectDetection,
+        }
         if is_torch_available()
         else {}
     )
@@ -458,7 +460,7 @@ class OwlViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(reason="OwlViTModel does not have input/output embeddings")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     # override as the `logit_scale` parameter initilization is different for OWLVIT
@@ -487,7 +489,7 @@ class OwlViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:
-            return
+            self.skipTest(reason="test_torchscript is set to False")
 
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
         configs_no_init.torchscript = True
@@ -569,9 +571,9 @@ class OwlViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in OWLVIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = OwlViTModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "google/owlvit-base-patch32"
+        model = OwlViTModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 class OwlViTForObjectDetectionTester:
@@ -582,6 +584,7 @@ class OwlViTForObjectDetectionTester:
         self.is_training = is_training
         self.text_config = self.text_model_tester.get_config().to_dict()
         self.vision_config = self.vision_model_tester.get_config().to_dict()
+        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
 
     def prepare_config_and_inputs(self):
         text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
@@ -661,7 +664,7 @@ class OwlViTForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(reason="OwlViTModel does not have input/output embeddings")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     @unittest.skip(reason="Test_initialization is tested in individual model tests")
@@ -698,7 +701,7 @@ class OwlViTForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
 
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:
-            return
+            self.skipTest(reason="test_torchscript is set to False")
 
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
         configs_no_init.torchscript = True
@@ -765,9 +768,9 @@ class OwlViTForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in OWLVIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = OwlViTForObjectDetection.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "google/owlvit-base-patch32"
+        model = OwlViTForObjectDetection.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch VisionTextDualEncoder model. """
-
+"""Testing suite for the PyTorch VisionTextDualEncoder model."""
 
 import collections
 import tempfile
@@ -430,7 +429,7 @@ class DeiTRobertaModelTest(VisionTextDualEncoderMixin, unittest.TestCase):
             "text_choice_labels": choice_labels,
         }
 
-    # skip as DeiT is not available in Flax
+    @unittest.skip(reason="DeiT is not available in Flax")
     def test_pt_flax_equivalence(self):
         pass
 

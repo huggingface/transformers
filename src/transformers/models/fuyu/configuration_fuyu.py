@@ -12,7 +12,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Fuyu model configuration"""
+"""Fuyu model configuration"""
+
+import warnings
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -20,10 +22,6 @@ from ..auto import CONFIG_MAPPING
 
 
 logger = logging.get_logger(__name__)
-
-FUYU_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "adept/fuyu-8b": "https://huggingface.co/adept/fuyu-8b/resolve/main/config.json",
-}
 
 
 class FuyuConfig(PretrainedConfig):
@@ -161,7 +159,7 @@ class FuyuConfig(PretrainedConfig):
         text_model_type = text_config["model_type"] if "model_type" in text_config else "persimmon"
         self.text_config = CONFIG_MAPPING[text_model_type](**text_config)
 
-        self.vocab_size = vocab_size
+        self._vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.image_size = image_size
         self.patch_size = patch_size
@@ -190,7 +188,6 @@ class FuyuConfig(PretrainedConfig):
             **kwargs,
         )
 
-    # Copied from transformers.models.llama.configuration_llama.LlamaConfig._rope_scaling_validation
     def _rope_scaling_validation(self):
         """
         Validate the `rope_scaling` configuration.
@@ -200,8 +197,7 @@ class FuyuConfig(PretrainedConfig):
 
         if not isinstance(self.rope_scaling, dict) or len(self.rope_scaling) != 2:
             raise ValueError(
-                "`rope_scaling` must be a dictionary with with two fields, `type` and `factor`, "
-                f"got {self.rope_scaling}"
+                "`rope_scaling` must be a dictionary with two fields, `type` and `factor`, " f"got {self.rope_scaling}"
             )
         rope_scaling_type = self.rope_scaling.get("type", None)
         rope_scaling_factor = self.rope_scaling.get("factor", None)
@@ -211,3 +207,20 @@ class FuyuConfig(PretrainedConfig):
             )
         if rope_scaling_factor is None or not isinstance(rope_scaling_factor, float) or rope_scaling_factor <= 1.0:
             raise ValueError(f"`rope_scaling`'s factor field must be a float > 1, got {rope_scaling_factor}")
+
+    @property
+    def vocab_size(self):
+        warnings.warn(
+            "The `vocab_size` attribute is deprecated and will be removed in v4.44, Please use `text_config.vocab_size` instead.",
+            FutureWarning,
+        )
+        return self._vocab_size
+
+    @vocab_size.setter
+    def vocab_size(self, value):
+        self._vocab_size = value
+
+    def to_dict(self):
+        output = super().to_dict()
+        output.pop("_vocab_size", None)
+        return output

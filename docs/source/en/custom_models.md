@@ -34,6 +34,16 @@ Before we dive into the model, let's first write its configuration. The configur
 will contain all the necessary information to build the model. As we will see in the next section, the model can only
 take a `config` to be initialized, so we really need that object to be as complete as possible.
 
+<Tip>
+
+Models in the `transformers` library itself generally follow the convention that they accept a `config` object
+in their `__init__` method, and then pass the whole `config` to sub-layers in the model, rather than breaking the 
+config object into multiple arguments that are all passed individually to sub-layers. Writing your model in this 
+style results in simpler code with a clear "source of truth" for any hyperparameters, and also makes it easier
+to reuse code from other models in `transformers`.
+
+</Tip>
+
 In our example, we will take a couple of arguments of the ResNet class that we might want to tweak. Different
 configurations will then give us the different types of ResNets that are possible. We then just store those arguments,
 after checking the validity of a few of them.
@@ -300,7 +310,7 @@ Use `register_for_auto_class()` if you want the code files to be copied. If you 
 you don't need to call it. In cases where there's more than one auto class, you can modify the `config.json` directly using the 
 following structure:
 
-```
+```json
 "auto_map": {     
 	"AutoConfig": "<your-repo-name>--<config-name>",     
 	"AutoModel": "<your-repo-name>--<config-name>",

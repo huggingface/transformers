@@ -39,20 +39,53 @@ FlashAttention-2 is experimental and may change considerably in future versions.
 FlashAttention-2 is currently supported for the following architectures:
 * [Bark](https://huggingface.co/docs/transformers/model_doc/bark#transformers.BarkModel)
 * [Bart](https://huggingface.co/docs/transformers/model_doc/bart#transformers.BartModel)
+* [Chameleon](https://huggingface.co/docs/transformers/model_doc/chameleon#transformers.Chameleon)
+* [CLIP](https://huggingface.co/docs/transformers/model_doc/clip#transformers.CLIPModel)
+* [Cohere](https://huggingface.co/docs/transformers/model_doc/cohere#transformers.CohereModel)
+* [Dbrx](https://huggingface.co/docs/transformers/model_doc/dbrx#transformers.DbrxModel)
 * [DistilBert](https://huggingface.co/docs/transformers/model_doc/distilbert#transformers.DistilBertModel)
+* [Gemma](https://huggingface.co/docs/transformers/model_doc/gemma#transformers.GemmaModel)
+* [Gemma2](https://huggingface.co/docs/transformers/model_doc/gemma2#transformers.Gemma2Model)
+* [GPT2](https://huggingface.co/docs/transformers/model_doc/gpt2)
 * [GPTBigCode](https://huggingface.co/docs/transformers/model_doc/gpt_bigcode#transformers.GPTBigCodeModel)
 * [GPTNeo](https://huggingface.co/docs/transformers/model_doc/gpt_neo#transformers.GPTNeoModel)
 * [GPTNeoX](https://huggingface.co/docs/transformers/model_doc/gpt_neox#transformers.GPTNeoXModel)
+* [GPT-J](https://huggingface.co/docs/transformers/model_doc/gptj#transformers.GPTJModel)
+* [Idefics2](https://huggingface.co/docs/transformers/model_doc/idefics2#transformers.Idefics2Model)
 * [Falcon](https://huggingface.co/docs/transformers/model_doc/falcon#transformers.FalconModel)
+* [JetMoe](https://huggingface.co/docs/transformers/model_doc/jetmoe#transformers.JetMoeModel)
+* [Jamba](https://huggingface.co/docs/transformers/model_doc/jamba#transformers.JambaModel)
 * [Llama](https://huggingface.co/docs/transformers/model_doc/llama#transformers.LlamaModel)
 * [Llava](https://huggingface.co/docs/transformers/model_doc/llava)
+* [Llava-NeXT](https://huggingface.co/docs/transformers/model_doc/llava_next)
+* [Llava-NeXT-Video](https://huggingface.co/docs/transformers/model_doc/llava_next_video)
 * [VipLlava](https://huggingface.co/docs/transformers/model_doc/vipllava)
+* [VideoLlava](https://huggingface.co/docs/transformers/model_doc/video_llava)
+* [M2M100](https://huggingface.co/docs/transformers/model_doc/m2m_100)
 * [MBart](https://huggingface.co/docs/transformers/model_doc/mbart#transformers.MBartModel)
 * [Mistral](https://huggingface.co/docs/transformers/model_doc/mistral#transformers.MistralModel)
 * [Mixtral](https://huggingface.co/docs/transformers/model_doc/mixtral#transformers.MixtralModel)
+* [Musicgen](https://huggingface.co/docs/transformers/model_doc/musicgen#transformers.MusicgenModel)
+* [MusicGen Melody](https://huggingface.co/docs/transformers/model_doc/musicgen_melody#transformers.MusicgenMelodyModel)
+* [Nemotron](https://huggingface.co/docs/transformers/model_doc/nemotron)
+* [NLLB](https://huggingface.co/docs/transformers/model_doc/nllb)
+* [OLMo](https://huggingface.co/docs/transformers/model_doc/olmo#transformers.OlmoModel)
 * [OPT](https://huggingface.co/docs/transformers/model_doc/opt#transformers.OPTModel)
 * [Phi](https://huggingface.co/docs/transformers/model_doc/phi#transformers.PhiModel)
+* [Phi3](https://huggingface.co/docs/transformers/model_doc/phi3#transformers.Phi3Model)
+* [SigLIP](https://huggingface.co/docs/transformers/model_doc/siglip)
+* [StableLm](https://huggingface.co/docs/transformers/model_doc/stablelm#transformers.StableLmModel)
+* [Starcoder2](https://huggingface.co/docs/transformers/model_doc/starcoder2#transformers.Starcoder2Model)
+* [Qwen2](https://huggingface.co/docs/transformers/model_doc/qwen2#transformers.Qwen2Model)
+* [Qwen2Audio](https://huggingface.co/docs/transformers/model_doc/qwen2_audio#transformers.Qwen2AudioEncoder)
+* [Qwen2MoE](https://huggingface.co/docs/transformers/model_doc/qwen2_moe#transformers.Qwen2MoeModel)
 * [Whisper](https://huggingface.co/docs/transformers/model_doc/whisper#transformers.WhisperModel)
+* [Wav2Vec2](https://huggingface.co/docs/transformers/model_doc/wav2vec2#transformers.Wav2Vec2Model)
+* [Hubert](https://huggingface.co/docs/transformers/model_doc/hubert#transformers.HubertModel)
+* [data2vec_audio](https://huggingface.co/docs/transformers/main/en/model_doc/data2vec#transformers.Data2VecAudioModel)
+* [Sew](https://huggingface.co/docs/transformers/main/en/model_doc/sew#transformers.SEWModel)
+* [UniSpeech](https://huggingface.co/docs/transformers/v4.39.3/en/model_doc/unispeech#transformers.UniSpeechModel)
+* [unispeech_sat](https://huggingface.co/docs/transformers/v4.39.3/en/model_doc/unispeech-sat#transformers.UniSpeechSatModel)
 
 You can request to add FlashAttention-2 support for another model by opening a GitHub Issue or Pull Request.
 
@@ -70,7 +103,7 @@ We strongly suggest referring to the detailed [installation instructions](https:
 </hfoption>
 <hfoption id="AMD">
 
-FlashAttention-2 is also supported on AMD GPUs and current support is limited to **Instinct MI210** and **Instinct MI250**. We strongly suggest using this [Dockerfile](https://github.com/huggingface/optimum-amd/tree/main/docker/transformers-pytorch-amd-gpu-flash/Dockerfile) to use FlashAttention-2 on AMD GPUs.
+FlashAttention-2 is also supported on AMD GPUs and current support is limited to **Instinct MI210**, **Instinct MI250** and **Instinct MI300**. We strongly suggest using this [Dockerfile](https://github.com/huggingface/optimum-amd/tree/main/docker/transformers-pytorch-amd-gpu-flash/Dockerfile) to use FlashAttention-2 on AMD GPUs.
 
 </hfoption>
 </hfoptions>
@@ -85,8 +118,8 @@ model_id = "tiiuae/falcon-7b"
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 
 model = AutoModelForCausalLM.from_pretrained(
-    model_id, 
-    torch_dtype=torch.bfloat16, 
+    model_id,
+    torch_dtype=torch.bfloat16,
     attn_implementation="flash_attention_2",
 )
 ```
@@ -98,7 +131,7 @@ FlashAttention-2 can only be used when the model's dtype is `fp16` or `bf16`. Ma
 <br>
 
 You can also set `use_flash_attention_2=True` to enable FlashAttention-2 but it is deprecated in favor of `attn_implementation="flash_attention_2"`.
-  
+
 </Tip>
 
 FlashAttention-2 can be combined with other optimization techniques like quantization to further speedup inference. For example, you can combine FlashAttention-2 with 8-bit or 4-bit quantization:
@@ -112,14 +145,14 @@ tokenizer = AutoTokenizer.from_pretrained(model_id)
 
 # load in 8bit
 model = AutoModelForCausalLM.from_pretrained(
-    model_id, 
+    model_id,
     load_in_8bit=True,
     attn_implementation="flash_attention_2",
 )
 
 # load in 4bit
 model = AutoModelForCausalLM.from_pretrained(
-    model_id, 
+    model_id,
     load_in_4bit=True,
     attn_implementation="flash_attention_2",
 )
@@ -163,21 +196,68 @@ FlashAttention is more memory efficient, meaning you can train on much larger se
 
 ## PyTorch scaled dot product attention
 
-PyTorch's [`torch.nn.functional.scaled_dot_product_attention`](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html) (SDPA) can also call FlashAttention and memory-efficient attention kernels under the hood. SDPA support is currently being added natively in Transformers and is used by default for `torch>=2.1.1` when an implementation is available.
+PyTorch's [`torch.nn.functional.scaled_dot_product_attention`](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html) (SDPA) can also call FlashAttention and memory-efficient attention kernels under the hood. SDPA support is currently being added natively in Transformers and is used by default for `torch>=2.1.1` when an implementation is available. You may also set `attn_implementation="sdpa"` in `from_pretrained()` to explicitly request SDPA to be used.
 
 For now, Transformers supports SDPA inference and training for the following architectures:
+* [Audio Spectrogram Transformer](https://huggingface.co/docs/transformers/model_doc/audio-spectrogram-transformer#transformers.ASTModel)
 * [Bart](https://huggingface.co/docs/transformers/model_doc/bart#transformers.BartModel)
-* [GPTBigCode](https://huggingface.co/docs/transformers/model_doc/gpt_bigcode#transformers.GPTBigCodeModel)
+* [Bert](https://huggingface.co/docs/transformers/model_doc/bert#transformers.BertModel)
+* [Chameleon](https://huggingface.co/docs/transformers/model_doc/chameleon#transformers.Chameleon)
+* [CLIP](https://huggingface.co/docs/transformers/model_doc/clip#transformers.CLIPModel)
+* [Cohere](https://huggingface.co/docs/transformers/model_doc/cohere#transformers.CohereModel)
+* [Dbrx](https://huggingface.co/docs/transformers/model_doc/dbrx#transformers.DbrxModel)
+* [DeiT](https://huggingface.co/docs/transformers/model_doc/deit#transformers.DeiTModel)
+* [Dpr](https://huggingface.co/docs/transformers/model_doc/dpr#transformers.DprReader)
 * [Falcon](https://huggingface.co/docs/transformers/model_doc/falcon#transformers.FalconModel)
+* [Gemma](https://huggingface.co/docs/transformers/model_doc/gemma#transformers.GemmaModel)
+* [Gemma2](https://huggingface.co/docs/transformers/model_doc/gemma2#transformers.Gemma2Model)
+* [GPT2](https://huggingface.co/docs/transformers/model_doc/gpt2)
+* [GPTBigCode](https://huggingface.co/docs/transformers/model_doc/gpt_bigcode#transformers.GPTBigCodeModel)
+* [GPTNeoX](https://huggingface.co/docs/transformers/model_doc/gpt_neox#transformers.GPTNeoXModel)
+* [JetMoe](https://huggingface.co/docs/transformers/model_doc/jetmoe#transformers.JetMoeModel)
+* [Jamba](https://huggingface.co/docs/transformers/model_doc/jamba#transformers.JambaModel)
 * [Llama](https://huggingface.co/docs/transformers/model_doc/llama#transformers.LlamaModel)
+* [OLMo](https://huggingface.co/docs/transformers/model_doc/olmo#transformers.OlmoModel)
+* [PaliGemma](https://huggingface.co/docs/transformers/model_doc/paligemma#transformers.PaliGemmaForConditionalGeneration)
+* [Phi](https://huggingface.co/docs/transformers/model_doc/phi#transformers.PhiModel)
+* [Phi3](https://huggingface.co/docs/transformers/model_doc/phi3#transformers.Phi3Model)
 * [Idefics](https://huggingface.co/docs/transformers/model_doc/idefics#transformers.IdeficsModel)
 * [Whisper](https://huggingface.co/docs/transformers/model_doc/whisper#transformers.WhisperModel)
 * [Mistral](https://huggingface.co/docs/transformers/model_doc/mistral#transformers.MistralModel)
 * [Mixtral](https://huggingface.co/docs/transformers/model_doc/mixtral#transformers.MixtralModel)
+* [StableLm](https://huggingface.co/docs/transformers/model_doc/stablelm#transformers.StableLmModel)
+* [Starcoder2](https://huggingface.co/docs/transformers/model_doc/starcoder2#transformers.Starcoder2Model)
+* [Qwen2](https://huggingface.co/docs/transformers/model_doc/qwen2#transformers.Qwen2Model)
+* [Qwen2Audio](https://huggingface.co/docs/transformers/model_doc/qwen2_audio#transformers.Qwen2AudioEncoder)
+* [Qwen2MoE](https://huggingface.co/docs/transformers/model_doc/qwen2_moe#transformers.Qwen2MoeModel)
+* [Musicgen](https://huggingface.co/docs/transformers/model_doc/musicgen#transformers.MusicgenModel)
+* [MusicGen Melody](https://huggingface.co/docs/transformers/model_doc/musicgen_melody#transformers.MusicgenMelodyModel)
+* [Nemotron](https://huggingface.co/docs/transformers/model_doc/nemotron)
+* [ViT](https://huggingface.co/docs/transformers/model_doc/vit#transformers.ViTModel)
+* [ViTHybrid](https://huggingface.co/docs/transformers/model_doc/vit_hybrid#transformers.ViTHybridModel)
+* [ViTMAE](https://huggingface.co/docs/transformers/model_doc/vit_mae#transformers.ViTMAEModel)
+* [ViTMSN](https://huggingface.co/docs/transformers/model_doc/vit_msn#transformers.ViTMSNModel)
+* [VideoMAE](https://huggingface.co/docs/transformers/model_doc/videomae#transformers.VideoMAEModell)
+* [wav2vec2](https://huggingface.co/docs/transformers/model_doc/wav2vec2#transformers.Wav2Vec2Model)
+* [Hubert](https://huggingface.co/docs/transformers/model_doc/hubert#transformers.HubertModel)
+* [data2vec_audio](https://huggingface.co/docs/transformers/main/en/model_doc/data2vec#transformers.Data2VecAudioModel)
+* [SigLIP](https://huggingface.co/docs/transformers/model_doc/siglip)
+* [Sew](https://huggingface.co/docs/transformers/main/en/model_doc/sew#transformers.SEWModel)
+* [UniSpeech](https://huggingface.co/docs/transformers/v4.39.3/en/model_doc/unispeech#transformers.UniSpeechModel)
+* [unispeech_sat](https://huggingface.co/docs/transformers/v4.39.3/en/model_doc/unispeech-sat#transformers.UniSpeechSatModel)
+* [YOLOS](https://huggingface.co/docs/transformers/model_doc/yolos#transformers.YolosModel)
+
 
 <Tip>
 
-FlashAttention can only be used for models with the `fp16` or `bf16` torch type, so make sure to cast your model to the appropriate type first.
+FlashAttention can only be used for models with the `fp16` or `bf16` torch type, so make sure to cast your model to the appropriate type first. The memory-efficient attention backend is able to handle `fp32` models.
+
+</Tip>
+
+<Tip>
+
+SDPA does not support certain sets of attention parameters, such as `head_mask` and `output_attentions=True`.
+In that case, you should see a warning message and we will fall back to the (slower) eager implementation.
 
 </Tip>
 
@@ -189,8 +269,6 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 tokenizer = AutoTokenizer.from_pretrained("facebook/opt-350m")
 model = AutoModelForCausalLM.from_pretrained("facebook/opt-350m", torch_dtype=torch.float16).to("cuda")
-# convert the model to BetterTransformer
-model.to_bettertransformer()
 
 input_text = "Hello my dog is cute and"
 inputs = tokenizer(input_text, return_tensors="pt").to("cuda")
@@ -292,20 +370,20 @@ If you're curious and interested in learning more about the concepts underlying 
 To load a model in 8-bit for inference, use the `load_in_8bit` parameter. The `device_map` parameter is optional, but we recommend setting it to `"auto"` to allow 🤗 Accelerate to automatically and efficiently allocate the model given the available resources in the environment:
 
 ```py
-from transformers import AutoModelForCausalLM
+from transformers import AutoModelForCausalLM, BitsAndBytesConfig
 
 model_name = "bigscience/bloom-2b5"
-model_8bit = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", load_in_8bit=True)
+model_8bit = AutoModelForCausalLM.from_pretrained(model_name, quantization_config=BitsAndBytesConfig(load_in_8bit=True))
 ```
 
 If you're loading a model in 8-bit for text generation, you should use the [`~transformers.GenerationMixin.generate`] method instead of the [`Pipeline`] function which is not optimized for 8-bit models and will be slower. Some sampling strategies, like nucleus sampling, are also not supported by the [`Pipeline`] for 8-bit models. You should also place all inputs on the same device as the model:
 
 ```py
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
 model_name = "bigscience/bloom-2b5"
 tokenizer = AutoTokenizer.from_pretrained(model_name)
-model_8bit = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", load_in_8bit=True)
+model_8bit = AutoModelForCausalLM.from_pretrained(model_name, quantization_config=BitsAndBytesConfig(load_in_8bit=True))
 
 prompt = "Hello, my llama is cute"
 inputs = tokenizer(prompt, return_tensors="pt").to("cuda")
@@ -345,7 +423,7 @@ ORT is supported by 🤗 Optimum which can be used in 🤗 Transformers. You'll 
 from optimum.onnxruntime import ORTModelForSequenceClassification
 
 ort_model = ORTModelForSequenceClassification.from_pretrained(
-  "distilbert-base-uncased-finetuned-sst-2-english",
+  "distilbert/distilbert-base-uncased-finetuned-sst-2-english",
   export=True,
   provider="CUDAExecutionProvider",
 )
@@ -357,7 +435,7 @@ Now you're free to use the model for inference:
 from optimum.pipelines import pipeline
 from transformers import AutoTokenizer
 
-tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased-finetuned-sst-2-english")
+tokenizer = AutoTokenizer.from_pretrained("distilbert/distilbert-base-uncased-finetuned-sst-2-english")
 
 pipeline = pipeline(task="text-classification", model=ort_model, tokenizer=tokenizer, device="cuda:0")
 result = pipeline("Both the music and visual were astounding, not to mention the actors performance.")

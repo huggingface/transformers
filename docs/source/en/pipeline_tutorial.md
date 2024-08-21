@@ -54,7 +54,7 @@ speech-to-text.
 Not the result you had in mind? Check out some of the [most downloaded automatic speech recognition models](https://huggingface.co/models?pipeline_tag=automatic-speech-recognition&sort=trending) 
 on the Hub to see if you can get a better transcription.
 
-Let's try the [Whisper large-v2](https://huggingface.co/openai/whisper-large) model from OpenAI. Whisper was released 
+Let's try the [Whisper large-v2](https://huggingface.co/openai/whisper-large-v2) model from OpenAI. Whisper was released 
 2 years later than Wav2Vec2, and was trained on close to 10x more data. As such, it beats Wav2Vec2 on most downstream 
 benchmarks. It also has the added benefit of predicting punctuation and casing, neither of which are possible with  
 Wav2Vec2.
@@ -113,7 +113,9 @@ This will work regardless of whether you are using PyTorch or Tensorflow.
 transcriber = pipeline(model="openai/whisper-large-v2", device=0)
 ```
 
-If the model is too large for a single GPU and you are using PyTorch, you can set `device_map="auto"` to automatically 
+If the model is too large for a single GPU and you are using PyTorch, you can set `torch_dtype='float16'` to enable FP16 precision inference. Usually this would not cause significant performance drops but make sure you evaluate it on your models!
+
+Alternatively, you can set `device_map="auto"` to automatically 
 determine how to load and store the model weights. Using the `device_map` argument requires the 🤗 [Accelerate](https://huggingface.co/docs/accelerate)
 package:
 
@@ -167,9 +169,9 @@ for working on really long audio files (for example, subtitling entire movies or
 cannot handle on its own:
 
 ```python
->>> transcriber = pipeline(model="openai/whisper-large-v2", chunk_length_s=30, return_timestamps=True)
->>> transcriber("https://huggingface.co/datasets/sanchit-gandhi/librispeech_long/resolve/main/audio.wav")
-{'text': " Chapter 16. I might have told you of the beginning of this liaison in a few lines, but I wanted you to see every step by which we came.  I, too, agree to whatever Marguerite wished, Marguerite to be unable to live apart from me. It was the day after the evening...
+>>> transcriber = pipeline(model="openai/whisper-large-v2", chunk_length_s=30)
+>>> transcriber("https://huggingface.co/datasets/reach-vb/random-audios/resolve/main/ted_60.wav")
+{'text': " So in college, I was a government major, which means I had to write a lot of papers. Now, when a normal student writes a paper, they might spread the work out a little like this. So, you know. You get started maybe a little slowly, but you get enough done in the first week that with some heavier days later on, everything gets done and things stay civil. And I would want to do that like that. That would be the plan. I would have it all ready to go, but then actually the paper would come along, and then I would kind of do this. And that would happen every single paper. But then came my 90-page senior thesis, a paper you're supposed to spend a year on. I knew for a paper like that, my normal workflow was not an option, it was way too big a project. So I planned things out and I decided I kind of had to go something like this. This is how the year would go. So I'd start off light and I'd bump it up"}
 ```
 
 If you can't find a parameter that would really help you out, feel free to [request it](https://github.com/huggingface/transformers/issues/new?assignees=&labels=feature&template=feature-request.yml)!
@@ -185,7 +187,7 @@ def data():
         yield f"My example {i}"
 
 
-pipe = pipeline(model="gpt2", device=0)
+pipe = pipeline(model="openai-community/gpt2", device=0)
 generated_characters = 0
 for out in pipe(data()):
     generated_characters += len(out[0]["generated_text"])
@@ -270,11 +272,13 @@ For example, if you use this [invoice image](https://huggingface.co/spaces/impir
 >>> from transformers import pipeline
 
 >>> vqa = pipeline(model="impira/layoutlm-document-qa")
->>> vqa(
+>>> output = vqa(
 ...     image="https://huggingface.co/spaces/impira/docquery/resolve/2359223c1837a7587402bda0f2643382a6eefeab/invoice.png",
 ...     question="What is the invoice number?",
 ... )
-[{'score': 0.42515, 'answer': 'us-001', 'start': 16, 'end': 16}]
+>>> output[0]["score"] = round(output[0]["score"], 3)
+>>> output
+[{'score': 0.425, 'answer': 'us-001', 'start': 16, 'end': 16}]
 ```
 
 <Tip>
@@ -314,4 +318,29 @@ pipe = pipeline(model="facebook/opt-1.3b", device_map="auto", model_kwargs={"loa
 output = pipe("This is a cool example!", do_sample=True, top_p=0.95)
 ```
 
-Note that you can replace the checkpoint with any of the Hugging Face model that supports large model loading such as BLOOM!
+Note that you can replace the checkpoint with any Hugging Face model that supports large model loading, such as BLOOM.
+
+## Creating web demos from pipelines with `gradio`
+
+Pipelines are automatically supported in [Gradio](https://github.com/gradio-app/gradio/), a library that makes creating beautiful and user-friendly machine learning apps on the web a breeze. First, make sure you have Gradio installed:
+
+```
+pip install gradio
+```
+
+Then, you can create a web demo around an image classification pipeline (or any other pipeline) in a single line of code by calling Gradio's [`Interface.from_pipeline`](https://www.gradio.app/docs/interface#interface-from-pipeline) function to launch the pipeline. This creates an intuitive drag-and-drop interface in your browser:
+
+```py
+from transformers import pipeline
+import gradio as gr
+
+pipe = pipeline("image-classification", model="google/vit-base-patch16-224")
+
+gr.Interface.from_pipeline(pipe).launch()
+```
+
+
+![](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/panda-classification.png)
+
+By default, the web demo runs on a local server. If you'd like to share it with others, you can generate a temporary public
+link by setting `share=True` in `launch()`. You can also host your demo on [Hugging Face Spaces](https://huggingface.co/spaces) for a permanent link. 

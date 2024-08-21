@@ -31,8 +31,16 @@ from ...image_utils import (
     make_list_of_images,
     to_numpy_array,
     valid_images,
+    validate_preprocess_arguments,
 )
-from ...utils import TensorType, is_pytesseract_available, is_vision_available, logging, requires_backends
+from ...utils import (
+    TensorType,
+    filter_out_non_signature_kwargs,
+    is_pytesseract_available,
+    is_vision_available,
+    logging,
+    requires_backends,
+)
 
 
 if is_vision_available():
@@ -213,6 +221,7 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
             **kwargs,
         )
 
+    @filter_out_non_signature_kwargs()
     def preprocess(
         self,
         images: ImageInput,
@@ -230,7 +239,6 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
     ) -> PIL.Image.Image:
         """
         Preprocess an image or batch of images.
@@ -295,7 +303,6 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
         apply_ocr = apply_ocr if apply_ocr is not None else self.apply_ocr
         ocr_lang = ocr_lang if ocr_lang is not None else self.ocr_lang
         tesseract_config = tesseract_config if tesseract_config is not None else self.tesseract_config
-
         images = make_list_of_images(images)
 
         if not valid_images(images):
@@ -303,15 +310,16 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
-
-        if do_resize and size is None:
-            raise ValueError("Size must be specified if do_resize is True.")
-
-        if do_rescale and rescale_factor is None:
-            raise ValueError("Rescale factor must be specified if do_rescale is True.")
-
-        if do_normalize and (image_mean is None or image_std is None):
-            raise ValueError("If do_normalize is True, image_mean and image_std must be specified.")
+        validate_preprocess_arguments(
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+            do_resize=do_resize,
+            size=size,
+            resample=resample,
+        )
 
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]

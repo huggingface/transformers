@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" XLNet configuration"""
+"""XLNet configuration"""
 
 import warnings
 
@@ -23,18 +23,13 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "xlnet-base-cased": "https://huggingface.co/xlnet-base-cased/resolve/main/config.json",
-    "xlnet-large-cased": "https://huggingface.co/xlnet-large-cased/resolve/main/config.json",
-}
-
 
 class XLNetConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`XLNetModel`] or a [`TFXLNetModel`]. It is used to
     instantiate a XLNet model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the
-    [xlnet-large-cased](https://huggingface.co/xlnet-large-cased) architecture.
+    [xlnet/xlnet-large-cased](https://huggingface.co/xlnet/xlnet-large-cased) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.

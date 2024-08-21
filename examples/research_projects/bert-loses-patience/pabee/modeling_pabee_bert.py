@@ -13,8 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch BERT model with Patience-based Early Exit. """
-
+"""PyTorch BERT model with Patience-based Early Exit."""
 
 import logging
 
@@ -300,8 +299,8 @@ class BertForSequenceClassificationWithPabee(BertPreTrainedModel):
             from torch import nn
             import torch
 
-            tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-            model = BertForSequenceClassificationWithPabee.from_pretrained('bert-base-uncased')
+            tokenizer = BertTokenizer.from_pretrained('google-bert/bert-base-uncased')
+            model = BertForSequenceClassificationWithPabee.from_pretrained('google-bert/bert-base-uncased')
 
             input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
             labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1

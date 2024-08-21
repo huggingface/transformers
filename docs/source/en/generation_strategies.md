@@ -21,7 +21,7 @@ more. It also plays a role in a variety of mixed-modality applications that have
 and vision-to-text. Some of the models that can generate text include
 GPT2, XLNet, OpenAI GPT, CTRL, TransformerXL, XLM, Bart, T5, GIT, Whisper.
 
-Check out a few examples that use [`~transformers.generation_utils.GenerationMixin.generate`] method to produce
+Check out a few examples that use [`~generation.GenerationMixin.generate`] method to produce
 text outputs for different tasks:
 * [Text summarization](./tasks/summarization#inference)
 * [Image captioning](./model_doc/git#transformers.GitForCausalLM.forward.example)
@@ -54,12 +54,13 @@ When you load a model explicitly, you can inspect the generation configuration t
 ```python
 >>> from transformers import AutoModelForCausalLM
 
->>> model = AutoModelForCausalLM.from_pretrained("distilgpt2")
+>>> model = AutoModelForCausalLM.from_pretrained("distilbert/distilgpt2")
 >>> model.generation_config
 GenerationConfig {
-    "bos_token_id": 50256,
-    "eos_token_id": 50256,
+  "bos_token_id": 50256,
+  "eos_token_id": 50256
 }
+<BLANKLINE>
 ```
 
 Printing out the `model.generation_config` reveals only the values that are different from the default generation
@@ -87,7 +88,7 @@ to stop generation whenever the full generation exceeds some amount of time. To 
 - `num_beams`: by specifying a number of beams higher than 1, you are effectively switching from greedy search to
 beam search. This strategy evaluates several hypotheses at each time step and eventually chooses the hypothesis that
 has the overall highest probability for the entire sequence. This has the advantage of identifying high-probability
-sequences that start with a lower probability initial tokens and would've been ignored by the greedy search.
+sequences that start with a lower probability initial tokens and would've been ignored by the greedy search. Visualize how it works [here](https://huggingface.co/spaces/m-ric/beam_search_visualizer).
 - `do_sample`: if set to `True`, this parameter enables decoding strategies such as multinomial sampling, beam-search
 multinomial sampling, Top-K sampling and Top-p sampling. All these strategies select the next token from the probability
 distribution over the entire vocabulary with various strategy-specific adjustments.
@@ -121,8 +122,8 @@ one for summarization with beam search). You must have the right Hub permissions
 ```python
 >>> from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, GenerationConfig
 
->>> tokenizer = AutoTokenizer.from_pretrained("t5-small")
->>> model = AutoModelForSeq2SeqLM.from_pretrained("t5-small")
+>>> tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-small")
+>>> model = AutoModelForSeq2SeqLM.from_pretrained("google-t5/t5-small")
 
 >>> translation_generation_config = GenerationConfig(
 ...     num_beams=4,
@@ -162,8 +163,8 @@ your screen, one word at a time:
 ```python
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer, TextStreamer
 
->>> tok = AutoTokenizer.from_pretrained("gpt2")
->>> model = AutoModelForCausalLM.from_pretrained("gpt2")
+>>> tok = AutoTokenizer.from_pretrained("openai-community/gpt2")
+>>> model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
 >>> inputs = tok(["An increasing sequence: one,"], return_tensors="pt")
 >>> streamer = TextStreamer(tok)
 
@@ -172,12 +173,72 @@ your screen, one word at a time:
 An increasing sequence: one, two, three, four, five, six, seven, eight, nine, ten, eleven,
 ```
 
+
+## Watermarking
+
+The `generate()` supports watermarking the generated text by randomly marking a portion of tokens as "green".
+When generating the "green" will have a small 'bias' value added to their logits, thus having a higher chance to be generated.
+The watermarked text can be detected by calculating the proportion of "green" tokens in the text and estimating how likely it is
+statistically to obtain that amount of "green" tokens for human-generated text. This watermarking strategy was proposed in the paper
+["On the Reliability of Watermarks for Large Language Models"](https://arxiv.org/abs/2306.04634). For more information on
+the inner functioning of watermarking, it is recommended to refer to the paper.
+
+The watermarking can be used with any generative model in `tranformers` and does not require an extra classification model
+to detect watermarked text. To trigger watermarking, pass in a [`WatermarkingConfig`] with needed arguments directly to the
+`.generate()` method or add it to the [`GenerationConfig`]. Watermarked text can be later detected with a [`WatermarkDetector`].
+
+
+<Tip warning={true}>
+
+The WatermarkDetector internally relies on the proportion of "green" tokens, and whether generated text follows the coloring pattern.
+That is why it is recommended to strip off the prompt text, if it is much longer than the generated text.
+This also can have an effect when one sequence in the batch is a lot longer causing other rows to be padded.
+Additionally, the detector **must** be initiated with identical watermark configuration arguments used when generating.
+
+</Tip>
+
+Let's generate some text with watermarking. In the below code snippet, we set the bias to 2.5 which is a value that
+will be added to "green" tokens' logits. After generating watermarked text, we can pass it directly to the `WatermarkDetector`
+to check if the text is machine-generated (outputs `True` for machine-generated and `False` otherwise).
+
+```python
+>>> from transformers import AutoTokenizer, AutoModelForCausalLM, WatermarkDetector, WatermarkingConfig
+
+>>> model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
+>>> tok = AutoTokenizer.from_pretrained("openai-community/gpt2")
+>>> tok.pad_token_id = tok.eos_token_id
+>>> tok.padding_side = "left"
+
+>>> inputs = tok(["This is the beginning of a long story", "Alice and Bob are"], padding=True, return_tensors="pt")
+>>> input_len = inputs["input_ids"].shape[-1]
+
+>>> watermarking_config = WatermarkingConfig(bias=2.5, seeding_scheme="selfhash")
+>>> out = model.generate(**inputs, watermarking_config=watermarking_config, do_sample=False, max_length=20)
+
+>>> detector = WatermarkDetector(model_config=model.config, device="cpu", watermarking_config=watermarking_config)
+>>> detection_out = detector(out, return_dict=True)
+>>> detection_out.prediction
+array([True, True])
+```
+
+
 ## Decoding strategies
 
 Certain combinations of the `generate()` parameters, and ultimately `generation_config`, can be used to enable specific
-decoding strategies. If you are new to this concept, we recommend reading [this blog post that illustrates how common decoding strategies work](https://huggingface.co/blog/how-to-generate).
+decoding strategies. If you are new to this concept, we recommend reading
+[this blog post that illustrates how common decoding strategies work](https://huggingface.co/blog/how-to-generate).
 
 Here, we'll show some of the parameters that control the decoding strategies and illustrate how you can use them.
+
+<Tip>
+
+Selecting a given decoding strategy is not the only way you can influence the outcome of `generate()` with your model.
+The decoding strategies act based (mostly) on the logits, the distribution of probabilities for the next token, and
+thus selecting a good logits manipulation strategy can go a long way! In other words, manipulating the logits is another
+dimension you can act upon, in addition to selecting a decoding strategy. Popular logits manipulation strategies include
+`top_p`, `min_p`, and `repetition_penalty` -- you can check the full list in the [`GenerationConfig`] class.
+
+</Tip>
 
 ### Greedy Search
 
@@ -187,7 +248,7 @@ Here, we'll show some of the parameters that control the decoding strategies and
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
 
 >>> prompt = "I look forward to"
->>> checkpoint = "distilgpt2"
+>>> checkpoint = "distilbert/distilgpt2"
 
 >>> tokenizer = AutoTokenizer.from_pretrained(checkpoint)
 >>> inputs = tokenizer(prompt, return_tensors="pt")
@@ -208,7 +269,7 @@ The two main parameters that enable and control the behavior of contrastive sear
 ```python
 >>> from transformers import AutoTokenizer, AutoModelForCausalLM
 
->>> checkpoint = "gpt2-large"
+>>> checkpoint = "openai-community/gpt2-large"
 >>> tokenizer = AutoTokenizer.from_pretrained(checkpoint)
 >>> model = AutoModelForCausalLM.from_pretrained(checkpoint)
 
@@ -235,7 +296,7 @@ To enable multinomial sampling set `do_sample=True` and `num_beams=1`.
 >>> from transformers import AutoTokenizer, AutoModelForCausalLM, set_seed
 >>> set_seed(0)  # For reproducibility
 
->>> checkpoint = "gpt2-large"
+>>> checkpoint = "openai-community/gpt2-large"
 >>> tokenizer = AutoTokenizer.from_pretrained(checkpoint)
 >>> model = AutoModelForCausalLM.from_pretrained(checkpoint)
 
@@ -244,8 +305,7 @@ To enable multinomial sampling set `do_sample=True` and `num_beams=1`.
 
 >>> outputs = model.generate(**inputs, do_sample=True, num_beams=1, max_new_tokens=100)
 >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-['Today was an amazing day because when you go to the World Cup and you don\'t, or when you don\'t get invited,
-that\'s a terrible feeling."']
+["Today was an amazing day because we received these wonderful items by the way of a gift shop. The box arrived on a Thursday and I opened it on Monday afternoon to receive the gifts. Both bags featured pieces from all the previous years!\n\nThe box had lots of surprises in it, including some sweet little mini chocolate chips! I don't think I'd eat all of these. This was definitely one of the most expensive presents I have ever got, I actually got most of them for free!\n\nThe first package came"]
 ```
 
 ### Beam-search decoding
@@ -254,13 +314,19 @@ Unlike greedy search, beam-search decoding keeps several hypotheses at each time
 the hypothesis that has the overall highest probability for the entire sequence. This has the advantage of identifying high-probability
 sequences that start with lower probability initial tokens and would've been ignored by the greedy search.
 
+<a href="https://huggingface.co/spaces/m-ric/beam_search_visualizer" class="flex flex-col justify-center">
+    <img style="max-width: 90%; margin: auto;" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/beam_search.png"/>
+</a>
+
+You can visualize how beam-search decoding works in [this interactive demo](https://huggingface.co/spaces/m-ric/beam_search_visualizer): type your input sentence, and play with the parameters to see how the decoding beams change.
+
 To enable this decoding strategy, specify the `num_beams` (aka number of hypotheses to keep track of) that is greater than 1.
 
 ```python
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
 
 >>> prompt = "It is astonishing how one can"
->>> checkpoint = "gpt2-medium"
+>>> checkpoint = "openai-community/gpt2-medium"
 
 >>> tokenizer = AutoTokenizer.from_pretrained(checkpoint)
 >>> inputs = tokenizer(prompt, return_tensors="pt")
@@ -283,7 +349,7 @@ the `num_beams` greater than 1, and set `do_sample=True` to use this decoding st
 >>> set_seed(0)  # For reproducibility
 
 >>> prompt = "translate English to German: The house is wonderful."
->>> checkpoint = "t5-small"
+>>> checkpoint = "google-t5/t5-small"
 
 >>> tokenizer = AutoTokenizer.from_pretrained(checkpoint)
 >>> inputs = tokenizer(prompt, return_tensors="pt")
@@ -387,5 +453,64 @@ just like in multinomial sampling. However, in assisted decoding, reducing the t
 >>> assistant_model = AutoModelForCausalLM.from_pretrained(assistant_checkpoint)
 >>> outputs = model.generate(**inputs, assistant_model=assistant_model, do_sample=True, temperature=0.5)
 >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-['Alice and Bob are going to the same party. It is a small party, in a small']
+['Alice and Bob, a couple of friends of mine, who are both in the same office as']
 ```
+
+Alternativelly, you can also set the `prompt_lookup_num_tokens` to trigger n-gram based assisted decoding, as opposed
+to model based assisted decoding. You can read more about it [here](https://twitter.com/joao_gante/status/1747322413006643259).
+### DoLa Decoding
+
+**D**ecoding by C**o**ntrasting **La**yers (DoLa) is a contrastive decoding strategy to improve the factuality and reduce the
+hallucinations of LLMs, as described in this paper of ICLR 2024 [DoLa: Decoding by Contrasting Layers Improves Factuality in Large Language Models](https://arxiv.org/abs/2309.03883).
+
+DoLa is achieved by contrasting the differences in logits obtained from final
+layers versus earlier layers, thus amplify the factual knowledge localized to particular part of transformer layers.
+
+Do the following two steps to activate DoLa decoding when calling the `model.generate` function:
+1. Set the `dola_layers` argument, which can be either a string or a list of integers.
+    - If set to a string, it can be one of `low`, `high`.
+    - If set to a list of integers, it should be a list of layer indices between 0 and the total number of layers in the model. The 0-th layer is word embedding, and the 1st layer is the first transformer layer, and so on.
+2. Set `repetition_penalty = 1.2` is suggested to reduce repetition in DoLa decoding.
+
+See the following examples for DoLa decoding with the 32-layer LLaMA-7B model.
+
+```python
+>>> from transformers import AutoTokenizer, AutoModelForCausalLM, set_seed
+>>> import torch
+
+>>> tokenizer = AutoTokenizer.from_pretrained("huggyllama/llama-7b")
+>>> model = AutoModelForCausalLM.from_pretrained("huggyllama/llama-7b", torch_dtype=torch.float16)
+>>> device = 'cuda' if torch.cuda.is_available() else 'cpu'
+>>> model.to(device)
+>>> set_seed(42)
+
+>>> text = "On what date was the Declaration of Independence officially signed?"
+>>> inputs = tokenizer(text, return_tensors="pt").to(device)
+
+# Vanilla greddy decoding
+>>> vanilla_output = model.generate(**inputs, do_sample=False, max_new_tokens=50)
+>>> tokenizer.batch_decode(vanilla_output[:, inputs.input_ids.shape[-1]:], skip_special_tokens=True)
+['\nThe Declaration of Independence was signed on July 4, 1776.\nWhat was the date of the signing of the Declaration of Independence?\nThe Declaration of Independence was signed on July 4,']
+
+# DoLa decoding with contrasting higher part of layers (layers 16,18,...,30)
+>>> dola_high_output = model.generate(**inputs, do_sample=False, max_new_tokens=50, dola_layers='high')
+>>> tokenizer.batch_decode(dola_high_output[:, inputs.input_ids.shape[-1]:], skip_special_tokens=True)
+['\nJuly 4, 1776, when the Continental Congress voted to separate from Great Britain. The 56 delegates to the Continental Congress signed the Declaration on August 2, 1776.']
+
+# DoLa decoding with contrasting specific layers (layers 28 and 30)
+>>> dola_custom_output = model.generate(**inputs, do_sample=False, max_new_tokens=50, dola_layers=[28,30], repetition_penalty=1.2)
+>>> tokenizer.batch_decode(dola_custom_output[:, inputs.input_ids.shape[-1]:], skip_special_tokens=True)
+['\nIt was officially signed on 2 August 1776, when 56 members of the Second Continental Congress, representing the original 13 American colonies, voted unanimously for the resolution for independence. The 2']
+```
+
+#### Understanding the `dola_layers` argument
+
+`dola_layers` stands for the candidate layers in premature layer selection, as described in the DoLa paper. The selected premature layer will be contrasted with the final layer.
+
+Setting `dola_layers` to `'low'` or `'high'` will select the lower or higher part of the layers to contrast, respectively.
+- For `N`-layer models with `N <= 40` layers, the layers of `range(0, N // 2, 2)` and `range(N // 2, N, 2)` are used for `'low'` and `'high'` layers, respectively.
+- For models with `N > 40` layers, the layers of `range(0, 20, 2)` and `range(N - 20, N, 2)` are used for `'low'` and `'high'` layers, respectively.
+- If the model has tied word embeddings, we skip the word embeddings (0-th) layer and start from the 2nd layer, as the early exit from word embeddings will become identity function.
+- Set the `dola_layers` to a list of integers for layer indices to contrast manually specified layers. For example, setting `dola_layers=[28,30]` will contrast the final layer (32-th layer) with the 28-th and 30-th layers.
+
+The paper suggested that contrasting `'high'` layers to improve short-answer tasks like TruthfulQA, and contrasting `'low'` layers to improve all the other long-answer reasoning tasks, such as GSM8K, StrategyQA, FACTOR, and VicunaQA. Applying DoLa to smaller models like GPT-2 is not recommended, as the results shown in the Appendix N of the paper.

@@ -1,20 +1,21 @@
 """
- coding=utf-8
- Copyright 2018, Antonio Mendoza Hao Tan, Mohit Bansal
- Adapted From Facebook Inc, Detectron2 && Huggingface Co.
+coding=utf-8
+Copyright 2018, Antonio Mendoza Hao Tan, Mohit Bansal
+Adapted From Facebook Inc, Detectron2 && Huggingface Co.
 
- Licensed under the Apache License, Version 2.0 (the "License");
- you may not use this file except in compliance with the License.
- You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-     http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
- Unless required by applicable law or agreed to in writing, software
- distributed under the License is distributed on an "AS IS" BASIS,
- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- See the License for the specific language governing permissions and
- limitations under the License.import copy
- """
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.import copy
+"""
+
 import itertools
 import math
 import os
@@ -416,7 +417,7 @@ class ShapeSpec(namedtuple("_ShapeSpec", ["channels", "height", "width", "stride
         return super().__new__(cls, channels, height, width, stride)
 
 
-class Box2BoxTransform(object):
+class Box2BoxTransform:
     """
     This R-CNN transformation scales the box's width and height
     by exp(dw), exp(dh) and shifts a box's center by the offset
@@ -518,7 +519,7 @@ class Box2BoxTransform(object):
         return pred_boxes
 
 
-class Matcher(object):
+class Matcher:
     """
     This class assigns to each predicted "element" (e.g., a box) a ground-truth
     element. Each predicted element will have exactly zero or one matches; each
@@ -621,7 +622,7 @@ class Matcher(object):
         match_labels[pred_inds_with_highest_quality] = 1
 
 
-class RPNOutputs(object):
+class RPNOutputs:
     def __init__(
         self,
         box2box_transform,
@@ -1131,7 +1132,7 @@ class ROIPooler(nn.Module):
         return output
 
 
-class ROIOutputs(object):
+class ROIOutputs:
     def __init__(self, cfg, training=False):
         self.smooth_l1_beta = cfg.ROI_BOX_HEAD.SMOOTH_L1_BETA
         self.box2box_transform = Box2BoxTransform(weights=cfg.ROI_BOX_HEAD.BBOX_REG_WEIGHTS)

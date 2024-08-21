@@ -17,10 +17,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 
 _import_structure = {
-    "configuration_mask2former": [
-        "MASK2FORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "Mask2FormerConfig",
-    ],
+    "configuration_mask2former": ["Mask2FormerConfig"],
 }
 
 try:
@@ -38,14 +35,13 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_mask2former"] = [
-        "MASK2FORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
         "Mask2FormerForUniversalSegmentation",
         "Mask2FormerModel",
         "Mask2FormerPreTrainedModel",
     ]
 
 if TYPE_CHECKING:
-    from .configuration_mask2former import MASK2FORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, Mask2FormerConfig
+    from .configuration_mask2former import Mask2FormerConfig
 
     try:
         if not is_vision_available():
@@ -62,7 +58,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_mask2former import (
-            MASK2FORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             Mask2FormerForUniversalSegmentation,
             Mask2FormerModel,
             Mask2FormerPreTrainedModel,

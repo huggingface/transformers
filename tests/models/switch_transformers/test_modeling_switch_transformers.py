@@ -45,7 +45,6 @@ if is_torch_available():
         SwitchTransformersTop1Router,
     )
     from transformers.models.switch_transformers.modeling_switch_transformers import (
-        SWITCH_TRANSFORMERS_PRETRAINED_MODEL_ARCHIVE_LIST,
         load_balancing_loss_func,
         router_z_loss_func,
     )
@@ -560,7 +559,6 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
     all_generative_model_classes = (SwitchTransformersForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "conversational": SwitchTransformersForConditionalGeneration,
             "feature-extraction": SwitchTransformersModel,
             "summarization": SwitchTransformersForConditionalGeneration,
             "text2text-generation": SwitchTransformersForConditionalGeneration,
@@ -576,7 +574,7 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
     is_encoder_decoder = True
     test_torchscript = False
     # The small SWITCH_TRANSFORMERS model needs higher percentages for CPU/MP tests
-    model_split_percents = [0.8, 0.9]
+    model_split_percents = [0.5, 0.8, 0.9]
 
     def setUp(self):
         self.model_tester = SwitchTransformersModelTester(self)
@@ -670,11 +668,11 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in SWITCH_TRANSFORMERS_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = SwitchTransformersModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "google/switch-base-8"
+        model = SwitchTransformersModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
-    @unittest.skip("Test has a segmentation fault on torch 1.8.0")
+    @unittest.skip(reason="Test has a segmentation fault on torch 1.8.0")
     def test_export_to_onnx(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         model = SwitchTransformersModel(config_and_inputs[0]).to(torch_device)
@@ -722,8 +720,10 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
             attn_weights = out[attn_name] if attn_name == attention_names[0] else out[attn_name][-1]
             self.assertEqual(sum([w.sum().item() for w in attn_weights]), 0.0)
 
-    @unittest.skip("Does not work on the tiny model as we keep hitting edge cases.")
-    def test_disk_offload(self):
+    @unittest.skip(
+        reason="This architecure has tied weights by default and there is no way to remove it, check: https://github.com/huggingface/transformers/pull/31771#issuecomment-2210915245"
+    )
+    def test_load_save_without_tied_weights(self):
         pass
 
 
@@ -770,7 +770,7 @@ class SwitchTransformersEncoderOnlyModelTester:
         self.is_training = is_training
 
     def get_large_model_config(self):
-        return SwitchTransformersConfig.from_pretrained("switch_base_8")
+        return SwitchTransformersConfig.from_pretrained("google/switch-base-8")
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)
@@ -848,6 +848,12 @@ class SwitchTransformersEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase
     def test_model_fp16_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_fp16_forward(*config_and_inputs)
+
+    @unittest.skip(
+        reason="This architecure has tied weights by default and there is no way to remove it, check: https://github.com/huggingface/transformers/pull/31771#issuecomment-2210915245"
+    )
+    def test_load_save_without_tied_weights(self):
+        pass
 
 
 def use_task_specific_params(model, task):
@@ -1054,7 +1060,7 @@ class SwitchTransformerModelIntegrationTests(unittest.TestCase):
         hf_logits = model(input_ids, decoder_input_ids=decoder_input_ids).last_hidden_state.cpu()
         hf_logits = hf_logits[0, 0, :30]
 
-        torch.testing.assert_allclose(hf_logits, EXPECTED_MEAN_LOGITS, rtol=6e-3, atol=9e-3)
+        torch.testing.assert_close(hf_logits, EXPECTED_MEAN_LOGITS, rtol=6e-3, atol=9e-3)
 
     @unittest.skip(
         "Unless we stop stripping left and right by default for all special tokens, the expected ids obtained here will not match the original ones. Wait for https://github.com/huggingface/transformers/pull/23909 to be merged"
@@ -1065,7 +1071,7 @@ class SwitchTransformerModelIntegrationTests(unittest.TestCase):
         model = SwitchTransformersForConditionalGeneration.from_pretrained(
             "google/switch-base-8", torch_dtype=torch.bfloat16
         ).eval()
-        tokenizer = AutoTokenizer.from_pretrained("t5-small", use_fast=False, legacy=False)
+        tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-small", use_fast=False, legacy=False)
         model = model.to(torch_device)
 
         input_ids = tokenizer(
@@ -1093,7 +1099,7 @@ class SwitchTransformerModelIntegrationTests(unittest.TestCase):
         model = SwitchTransformersForConditionalGeneration.from_pretrained(
             "google/switch-base-8", torch_dtype=torch.bfloat16
         ).eval()
-        tokenizer = AutoTokenizer.from_pretrained("t5-small", use_fast=False, legacy=False)
+        tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-small", use_fast=False, legacy=False)
 
         inputs = [
             "A <extra_id_0> walks into a bar and orders a <extra_id_1> with <extra_id_2> pinch of <extra_id_3>."

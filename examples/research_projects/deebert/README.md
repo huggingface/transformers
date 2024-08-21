@@ -34,7 +34,7 @@ This is for evaluating fine-tuned DeeBERT models, given a number of different ea
 ## Citation
 
 Please cite our paper if you find the resource useful:
-```
+```bibtex
 @inproceedings{xin-etal-2020-deebert,
     title = "{D}ee{BERT}: Dynamic Early Exiting for Accelerating {BERT} Inference",
     author = "Xin, Ji  and

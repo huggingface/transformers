@@ -1,6 +1,6 @@
 name: "\U0001F680 Feature request"
 description: Submit a proposal/request for a new transformers feature
-labels: [ "feature" ]
+labels: [ "Feature request" ]
 body:
   - type: textarea
     id: feature-request
@@ -19,7 +19,7 @@ body:
       label: Motivation
       description: |
         Please outline the motivation for the proposal. Is your feature request related to a problem? e.g., I'm always frustrated when [...]. If this is related to another GitHub issue, please link here too.
-        
+
 
   - type: textarea
     id: contribution

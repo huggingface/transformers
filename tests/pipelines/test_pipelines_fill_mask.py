@@ -169,13 +169,13 @@ class FillMaskPipelineTests(unittest.TestCase):
     @slow
     @require_torch
     def test_large_model_pt(self):
-        unmasker = pipeline(task="fill-mask", model="distilroberta-base", top_k=2, framework="pt")
+        unmasker = pipeline(task="fill-mask", model="distilbert/distilroberta-base", top_k=2, framework="pt")
         self.run_large_test(unmasker)
 
     @slow
     @require_tf
     def test_large_model_tf(self):
-        unmasker = pipeline(task="fill-mask", model="distilroberta-base", top_k=2, framework="tf")
+        unmasker = pipeline(task="fill-mask", model="distilbert/distilroberta-base", top_k=2, framework="tf")
         self.run_large_test(unmasker)
 
     def run_large_test(self, unmasker):
@@ -251,11 +251,11 @@ class FillMaskPipelineTests(unittest.TestCase):
         unmasker.tokenizer.pad_token = None
         self.run_pipeline_test(unmasker, [])
 
-    def get_test_pipeline(self, model, tokenizer, processor):
+    def get_test_pipeline(self, model, tokenizer, processor, torch_dtype="float32"):
         if tokenizer is None or tokenizer.mask_token_id is None:
-            self.skipTest("The provided tokenizer has no mask token, (probably reformer or wav2vec2)")
+            self.skipTest(reason="The provided tokenizer has no mask token, (probably reformer or wav2vec2)")
 
-        fill_masker = FillMaskPipeline(model=model, tokenizer=tokenizer)
+        fill_masker = FillMaskPipeline(model=model, tokenizer=tokenizer, torch_dtype=torch_dtype)
         examples = [
             f"This is another {tokenizer.mask_token} test",
         ]

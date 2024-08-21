@@ -54,7 +54,7 @@
 #
 # CUDA_VISIBLE_DEVICES=0 python ./scripts/benchmark/trainer-benchmark.py \
 # --base-cmd \
-# ' examples/pytorch/translation/run_translation.py --model_name_or_path t5-small \
+# ' examples/pytorch/translation/run_translation.py --model_name_or_path google-t5/t5-small \
 # --output_dir output_dir --do_train --label_smoothing 0.1 --logging_strategy no \
 # --save_strategy no --per_device_train_batch_size 32 --max_source_length 512 \
 # --max_target_length 512 --num_train_epochs 1 --overwrite_output_dir \
@@ -147,7 +147,7 @@ def get_original_command(max_width=80, full_python_path=False):
     Return the original command line string that can be replayed nicely and wrapped for 80 char width.
 
     Args:
-        max_width (`int`, `optional`, defaults to 80):
+        max_width (`int`, *optional*, defaults to 80):
             The width to wrap for.
         full_python_path (`bool`, `optional`, defaults to `False`):
              Whether to replicate the full path or just the last segment (i.e. `python`).

@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-""" Fine-tuning a 🤗 Transformers CTC adapter model for automatic speech recognition"""
+"""Fine-tuning a 🤗 Transformers CTC adapter model for automatic speech recognition"""
 
 import functools
 import json
@@ -53,7 +53,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.37.0.dev0")
+check_min_version("4.45.0.dev0")
 
 require_version("datasets>=1.18.0", "To fix: pip install -r examples/pytorch/speech-recognition/requirements.txt")
 
@@ -146,7 +146,7 @@ class DataTrainingArguments:
                 " should be trained on in ISO 693-3 code, e.g. `tur` for Turkish"
                 " Wav2Vec2's MMS ISO codes can be looked up here: https://dl.fbaipublicfiles.com/mms/misc/language_coverage_mms.html"
                 " If you are not training the adapter layers on a language, simply choose"
-                " another accronym that fits your data."
+                " another acronym that fits your data."
             )
         },
     )
@@ -241,19 +241,13 @@ class DataTrainingArguments:
             )
         },
     )
-    use_auth_token: bool = field(
-        default=None,
-        metadata={
-            "help": "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token` instead."
-        },
-    )
     trust_remote_code: bool = field(
         default=False,
         metadata={
             "help": (
-                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option"
-                "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
-                "execute code present on the Hub on your local machine."
+                "Whether to trust the execution of code from datasets/models defined on the Hub."
+                " This option should only be set to `True` for repositories you trust and in which you have read the"
+                " code, as it will execute code present on the Hub on your local machine."
             )
         },
     )
@@ -391,15 +385,6 @@ def main():
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
-    if data_args.use_auth_token is not None:
-        warnings.warn(
-            "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token` instead.",
-            FutureWarning,
-        )
-        if data_args.token is not None:
-            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
-        data_args.token = data_args.use_auth_token
-
     # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
     # information sent is the one passed as arguments along with your Python/PyTorch versions.
     send_example_telemetry("run_speech_recognition_ctc_adapter", model_args, data_args)
@@ -449,6 +434,7 @@ def main():
             data_args.dataset_config_name,
             split=data_args.train_split_name,
             token=data_args.token,
+            trust_remote_code=data_args.trust_remote_code,
         )
 
         if data_args.audio_column_name not in raw_datasets["train"].column_names:
@@ -474,6 +460,7 @@ def main():
             data_args.dataset_config_name,
             split=data_args.eval_split_name,
             token=data_args.token,
+            trust_remote_code=data_args.trust_remote_code,
         )
 
         if data_args.max_eval_samples is not None:
@@ -702,7 +689,7 @@ def main():
     # instantiate a data collator and the trainer
 
     # Define evaluation metrics during training, *i.e.* word error rate, character error rate
-    eval_metrics = {metric: evaluate.load(metric) for metric in data_args.eval_metrics}
+    eval_metrics = {metric: evaluate.load(metric, cache_dir=model_args.cache_dir) for metric in data_args.eval_metrics}
 
     # for large datasets it is advised to run the preprocessing on a
     # single machine first with ``args.preprocessing_only`` since there will mostly likely

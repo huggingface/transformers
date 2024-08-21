@@ -14,7 +14,6 @@
 # limitations under the License.
 """PyTorch TAPAS model."""
 
-
 import enum
 import math
 import os
@@ -56,39 +55,6 @@ if not is_torch_greater_or_equal_than_1_12:
 _CONFIG_FOR_DOC = "TapasConfig"
 _CHECKPOINT_FOR_DOC = "google/tapas-base"
 
-TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    # large models
-    "google/tapas-large",
-    "google/tapas-large-finetuned-sqa",
-    "google/tapas-large-finetuned-wtq",
-    "google/tapas-large-finetuned-wikisql-supervised",
-    "google/tapas-large-finetuned-tabfact",
-    # base models
-    "google/tapas-base",
-    "google/tapas-base-finetuned-sqa",
-    "google/tapas-base-finetuned-wtq",
-    "google/tapas-base-finetuned-wikisql-supervised",
-    "google/tapas-base-finetuned-tabfact",
-    # small models
-    "google/tapas-small",
-    "google/tapas-small-finetuned-sqa",
-    "google/tapas-small-finetuned-wtq",
-    "google/tapas-small-finetuned-wikisql-supervised",
-    "google/tapas-small-finetuned-tabfact",
-    # mini models
-    "google/tapas-mini",
-    "google/tapas-mini-finetuned-sqa",
-    "google/tapas-mini-finetuned-wtq",
-    "google/tapas-mini-finetuned-wikisql-supervised",
-    "google/tapas-mini-finetuned-tabfact",
-    # tiny models
-    "google/tapas-tiny",
-    "google/tapas-tiny-finetuned-sqa",
-    "google/tapas-tiny-finetuned-wtq",
-    "google/tapas-tiny-finetuned-wikisql-supervised",
-    "google/tapas-tiny-finetuned-tabfact",
-    # See all TAPAS models at https://huggingface.co/models?filter=tapas
-]
 
 EPSILON_ZERO_DIVISION = 1e-10
 CLOSE_ENOUGH_TO_LOG_ZERO = -10000.0
@@ -729,6 +695,9 @@ class TapasLMPredictionHead(nn.Module):
         # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
         self.decoder.bias = self.bias
 
+    def _tie_weights(self):
+        self.decoder.bias = self.bias
+
     def forward(self, hidden_states):
         hidden_states = self.transform(hidden_states)
         hidden_states = self.decoder(hidden_states)
@@ -755,6 +724,7 @@ class TapasPreTrainedModel(PreTrainedModel):
     config_class = TapasConfig
     base_model_prefix = "tapas"
     supports_gradient_checkpointing = True
+    _supports_param_buffer_assignment = False
 
     # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights
     def _init_weights(self, module):
@@ -1008,6 +978,7 @@ class TapasForMaskedLM(TapasPreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.cls.predictions.decoder = new_embeddings
+        self.cls.predictions.bias = new_embeddings.bias
 
     @add_start_docstrings_to_model_forward(TAPAS_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=MaskedLMOutput, config_class=_CONFIG_FOR_DOC)
@@ -1579,7 +1550,7 @@ class AverageApproximationFunction(str, enum.Enum):
 # Beginning of everything related to segmented tensors
 
 
-class IndexMap(object):
+class IndexMap:
     """Index grouping entries within a tensor."""
 
     def __init__(self, indices, num_segments, batch_dims=0):

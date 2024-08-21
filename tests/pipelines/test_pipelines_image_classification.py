@@ -18,6 +18,7 @@ from transformers import (
     MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
     TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
     PreTrainedTokenizerBase,
+    is_torch_available,
     is_vision_available,
 )
 from transformers.pipelines import ImageClassificationPipeline, pipeline
@@ -33,6 +34,9 @@ from transformers.testing_utils import (
 
 from .test_pipelines_common import ANY
 
+
+if is_torch_available():
+    import torch
 
 if is_vision_available():
     from PIL import Image
@@ -51,8 +55,10 @@ class ImageClassificationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING
     tf_model_mapping = TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING
 
-    def get_test_pipeline(self, model, tokenizer, processor):
-        image_classifier = ImageClassificationPipeline(model=model, image_processor=processor, top_k=2)
+    def get_test_pipeline(self, model, tokenizer, processor, torch_dtype="float32"):
+        image_classifier = ImageClassificationPipeline(
+            model=model, image_processor=processor, top_k=2, torch_dtype=torch_dtype
+        )
         examples = [
             Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png"),
             "http://images.cocodataset.org/val2017/000000039769.jpg",
@@ -177,6 +183,30 @@ class ImageClassificationPipelineTests(unittest.TestCase):
 
         self.assertIs(image_classifier.tokenizer, tokenizer)
 
+    @require_torch
+    def test_torch_float16_pipeline(self):
+        image_classifier = pipeline(
+            "image-classification", model="hf-internal-testing/tiny-random-vit", torch_dtype=torch.float16
+        )
+        outputs = image_classifier("http://images.cocodataset.org/val2017/000000039769.jpg")
+
+        self.assertEqual(
+            nested_simplify(outputs, decimals=3),
+            [{"label": "LABEL_1", "score": 0.574}, {"label": "LABEL_0", "score": 0.426}],
+        )
+
+    @require_torch
+    def test_torch_bfloat16_pipeline(self):
+        image_classifier = pipeline(
+            "image-classification", model="hf-internal-testing/tiny-random-vit", torch_dtype=torch.bfloat16
+        )
+        outputs = image_classifier("http://images.cocodataset.org/val2017/000000039769.jpg")
+
+        self.assertEqual(
+            nested_simplify(outputs, decimals=3),
+            [{"label": "LABEL_1", "score": 0.574}, {"label": "LABEL_0", "score": 0.426}],
+        )
+
     @slow
     @require_torch
     def test_perceiver(self):
@@ -220,4 +250,50 @@ class ImageClassificationPipelineTests(unittest.TestCase):
                 {"score": 0.0324, "label": "remote control, remote"},
                 {"score": 0.0096, "label": "quilt, comforter, comfort, puff"},
             ],
+        )
+
+    @slow
+    @require_torch
+    def test_multilabel_classification(self):
+        small_model = "hf-internal-testing/tiny-random-vit"
+
+        # Sigmoid is applied for multi-label classification
+        image_classifier = pipeline("image-classification", model=small_model)
+        image_classifier.model.config.problem_type = "multi_label_classification"
+
+        outputs = image_classifier("http://images.cocodataset.org/val2017/000000039769.jpg")
+        self.assertEqual(
+            nested_simplify(outputs, decimals=4),
+            [{"label": "LABEL_1", "score": 0.5356}, {"label": "LABEL_0", "score": 0.4612}],
+        )
+
+        outputs = image_classifier(
+            [
+                "http://images.cocodataset.org/val2017/000000039769.jpg",
+                "http://images.cocodataset.org/val2017/000000039769.jpg",
+            ]
+        )
+        self.assertEqual(
+            nested_simplify(outputs, decimals=4),
+            [
+                [{"label": "LABEL_1", "score": 0.5356}, {"label": "LABEL_0", "score": 0.4612}],
+                [{"label": "LABEL_1", "score": 0.5356}, {"label": "LABEL_0", "score": 0.4612}],
+            ],
+        )
+
+    @slow
+    @require_torch
+    def test_function_to_apply(self):
+        small_model = "hf-internal-testing/tiny-random-vit"
+
+        # Sigmoid is applied for multi-label classification
+        image_classifier = pipeline("image-classification", model=small_model)
+
+        outputs = image_classifier(
+            "http://images.cocodataset.org/val2017/000000039769.jpg",
+            function_to_apply="sigmoid",
+        )
+        self.assertEqual(
+            nested_simplify(outputs, decimals=4),
+            [{"label": "LABEL_1", "score": 0.5356}, {"label": "LABEL_0", "score": 0.4612}],
         )

@@ -22,7 +22,7 @@ from ..utils import (
     logging,
     requires_backends,
 )
-from .base import PIPELINE_INIT_ARGS, Pipeline
+from .base import Pipeline, build_pipeline_init_args
 
 
 if is_vision_available():
@@ -36,7 +36,7 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
-@add_end_docstrings(PIPELINE_INIT_ARGS)
+@add_end_docstrings(build_pipeline_init_args(has_image_processor=True))
 class ImageToImagePipeline(Pipeline):
     """
     Image to Image pipeline using any `AutoModelForImageToImage`. This pipeline generates an image based on a previous
@@ -119,6 +119,8 @@ class ImageToImagePipeline(Pipeline):
     def preprocess(self, image, timeout=None):
         image = load_image(image, timeout=timeout)
         inputs = self.image_processor(images=[image], return_tensors="pt")
+        if self.framework == "pt":
+            inputs = inputs.to(self.torch_dtype)
         return inputs
 
     def postprocess(self, model_outputs):

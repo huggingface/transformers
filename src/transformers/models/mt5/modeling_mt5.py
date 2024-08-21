@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch mT5 model."""
+"""PyTorch mT5 model."""
 
 import copy
 import math
@@ -32,6 +32,7 @@ from ...modeling_outputs import (
     Seq2SeqModelOutput,
     Seq2SeqQuestionAnsweringModelOutput,
     Seq2SeqSequenceClassifierOutput,
+    TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
@@ -54,6 +55,11 @@ _CONFIG_FOR_DOC = "MT5Config"
 _CHECKPOINT_FOR_DOC = "mt5-small"
 
 
+####################################################
+# This dict contains ids and associated url
+# for the pretrained weights provided with the models
+####################################################
+
 PARALLELIZE_DOCSTRING = r"""
     This is an experimental feature and is a subject to change at a moment's notice.
 
@@ -61,7 +67,7 @@ PARALLELIZE_DOCSTRING = r"""
     it will evenly distribute blocks across all devices.
 
     Args:
-        device_map (`Dict[int, list]`, optional, defaults to None):
+        device_map (`Dict[int, list]`, *optional*):
             A dictionary that maps attention modules to devices. Note that the embedding module and LMHead are always
             automatically mapped to the first device (for esoteric reasons). That means that the first device should
             have fewer attention modules mapped to it than other devices. For reference, the mt5 models have the
@@ -546,7 +552,7 @@ class MT5Block(nn.Module):
             if len(past_key_value) != expected_num_past_key_values:
                 raise ValueError(
                     f"There should be {expected_num_past_key_values} past states. "
-                    f"{'2 (past / key) for cross attention. ' if expected_num_past_key_values == 4 else ''}"
+                    f"{'2 (key / value) for cross attention. ' if expected_num_past_key_values == 4 else ''}"
                     f"Got {len(past_key_value)} past key / value states"
                 )
 
@@ -804,6 +810,10 @@ class MT5PreTrainedModel(PreTrainedModel):
             if hasattr(module, "qa_outputs"):
                 module.qa_outputs.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
                 module.qa_outputs.bias.data.zero_()
+        elif isinstance(module, MT5ForTokenClassification):
+            if hasattr(module, "classifier"):
+                module.classifier.weight.data.normal_(mean=0.0, std=factor * 1.0)
+                module.classifier.bias.data.zero_()
         elif isinstance(module, MT5ClassificationHead):
             module.dense.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
             if hasattr(module.dense, "bias") and module.dense.bias is not None:
@@ -1334,7 +1344,6 @@ class MT5Model(MT5PreTrainedModel):
 
     model_type = "mt5"
     config_class = MT5Config
-    _keys_to_ignore_on_load_missing = ["decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight"]
     _keys_to_ignore_on_load_unexpected = ["decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight"]
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
@@ -1426,7 +1435,7 @@ class MT5Model(MT5PreTrainedModel):
 
     @add_start_docstrings_to_model_forward(MT5_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
-    # Copied from transformers.models.t5.modeling_t5.T5Model.forward with T5->MT5, t5->mt5
+    # Copied from transformers.models.t5.modeling_t5.T5Model.forward with google-t5/->google/, T5->MT5, t5->mt5
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1453,8 +1462,8 @@ class MT5Model(MT5PreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, MT5Model
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("mt5-small")
-        >>> model = MT5Model.from_pretrained("mt5-small")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/mt5-small")
+        >>> model = MT5Model.from_pretrained("google/mt5-small")
 
         >>> input_ids = tokenizer(
         ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"
@@ -1656,7 +1665,7 @@ class MT5ForConditionalGeneration(MT5PreTrainedModel):
 
     @add_start_docstrings_to_model_forward(MT5_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
-    # Copied from transformers.models.t5.modeling_t5.T5ForConditionalGeneration.forward with T5->MT5, t5->mt5
+    # Copied from transformers.models.t5.modeling_t5.T5ForConditionalGeneration.forward with google-t5/->google/, T5->MT5, t5->mt5
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1689,8 +1698,8 @@ class MT5ForConditionalGeneration(MT5PreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, MT5ForConditionalGeneration
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("mt5-small")
-        >>> model = MT5ForConditionalGeneration.from_pretrained("mt5-small")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/mt5-small")
+        >>> model = MT5ForConditionalGeneration.from_pretrained("google/mt5-small")
 
         >>> # training
         >>> input_ids = tokenizer("The <extra_id_0> walks in <extra_id_1> park", return_tensors="pt").input_ids
@@ -1981,7 +1990,7 @@ class MT5EncoderModel(MT5PreTrainedModel):
 
     @add_start_docstrings_to_model_forward(MT5_ENCODER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
-    # Copied from transformers.models.t5.modeling_t5.T5EncoderModel.forward with T5->MT5, t5->mt5
+    # Copied from transformers.models.t5.modeling_t5.T5EncoderModel.forward with google-t5/->google/, T5->MT5, t5->mt5
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -2000,8 +2009,8 @@ class MT5EncoderModel(MT5PreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, MT5EncoderModel
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("mt5-small")
-        >>> model = MT5EncoderModel.from_pretrained("mt5-small")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/mt5-small")
+        >>> model = MT5EncoderModel.from_pretrained("google/mt5-small")
         >>> input_ids = tokenizer(
         ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"
         ... ).input_ids  # Batch size 1
@@ -2155,6 +2164,80 @@ class MT5ForSequenceClassification(MT5PreTrainedModel):
             encoder_last_hidden_state=outputs.encoder_last_hidden_state,
             encoder_hidden_states=outputs.encoder_hidden_states,
             encoder_attentions=outputs.encoder_attentions,
+        )
+
+
+@add_start_docstrings(
+    """
+    MT5 Encoder Model with a token classification head on top (a linear layer on top of the hidden-states output)
+    e.g. for Named-Entity-Recognition (NER) tasks.
+    """,
+    MT5_START_DOCSTRING,
+)
+class MT5ForTokenClassification(MT5PreTrainedModel):
+    _tied_weights_keys = ["transformer.encoder.embed_tokens.weight"]
+
+    # Copied from transformers.models.t5.modeling_t5.T5ForTokenClassification.__init__ with T5->MT5
+    def __init__(self, config: MT5Config):
+        super().__init__(config)
+        self.num_labels = config.num_labels
+
+        self.transformer = MT5EncoderModel(config)
+        self.dropout = nn.Dropout(config.classifier_dropout)
+        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @add_start_docstrings_to_model_forward(MT5_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=TokenClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    # Copied from transformers.models.t5.modeling_t5.T5ForTokenClassification.forward with T5->MT5
+    def forward(
+        self,
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        labels: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple[torch.Tensor], TokenClassifierOutput]:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
+        Returns:
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.transformer(
+            input_ids,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        hidden_states = outputs[0]
+        hidden_states = self.dropout(hidden_states)
+        logits = self.classifier(hidden_states)
+
+        loss = None
+        if labels is not None:
+            loss_fct = CrossEntropyLoss()
+            loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+
+        if not return_dict:
+            output = (logits, outputs[2:-1])
+            return ((loss,) + output) if loss is not None else output
+
+        return TokenClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 

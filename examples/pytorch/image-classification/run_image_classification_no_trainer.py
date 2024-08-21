@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Finetuning any 🤗 Transformers model for image classification leveraging 🤗 Accelerate."""
+"""Finetuning any 🤗 Transformers model for image classification leveraging 🤗 Accelerate."""
+
 import argparse
 import json
 import logging
@@ -27,7 +28,7 @@ from accelerate import Accelerator
 from accelerate.logging import get_logger
 from accelerate.utils import set_seed
 from datasets import load_dataset
-from huggingface_hub import Repository, create_repo
+from huggingface_hub import HfApi
 from torch.utils.data import DataLoader
 from torchvision.transforms import (
     CenterCrop,
@@ -48,7 +49,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.37.0.dev0")
+check_min_version("4.45.0.dev0")
 
 logger = get_logger(__name__)
 
@@ -149,12 +150,11 @@ def parse_args():
     parser.add_argument("--hub_token", type=str, help="The token to use to push to the Model Hub.")
     parser.add_argument(
         "--trust_remote_code",
-        type=bool,
-        default=False,
+        action="store_true",
         help=(
-            "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option"
-            "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
-            "execute code present on the Hub on your local machine."
+            "Whether to trust the execution of code from datasets/models defined on the Hub."
+            " This option should only be set to `True` for repositories you trust and in which you have read the"
+            " code, as it will execute code present on the Hub on your local machine."
         ),
     )
     parser.add_argument(
@@ -188,6 +188,18 @@ def parse_args():
         "--ignore_mismatched_sizes",
         action="store_true",
         help="Whether or not to enable to load a pretrained model whose head dimensions are different.",
+    )
+    parser.add_argument(
+        "--image_column_name",
+        type=str,
+        default="image",
+        help="The name of the dataset column containing the image data. Defaults to 'image'.",
+    )
+    parser.add_argument(
+        "--label_column_name",
+        type=str,
+        default="label",
+        help="The name of the dataset column containing the labels. Defaults to 'label'.",
     )
     args = parser.parse_args()
 
@@ -252,9 +264,8 @@ def main():
             if repo_name is None:
                 repo_name = Path(args.output_dir).absolute().name
             # Create repo and retrieve repo_id
-            repo_id = create_repo(repo_name, exist_ok=True, token=args.hub_token).repo_id
-            # Clone repo locally
-            repo = Repository(args.output_dir, clone_from=repo_id, token=args.hub_token)
+            api = HfApi()
+            repo_id = api.create_repo(repo_name, exist_ok=True, token=args.hub_token).repo_id
 
             with open(os.path.join(args.output_dir, ".gitignore"), "w+") as gitignore:
                 if "step_*" not in gitignore:
@@ -272,7 +283,7 @@ def main():
     # download the dataset.
     if args.dataset_name is not None:
         # Downloading and loading a dataset from the hub.
-        dataset = load_dataset(args.dataset_name, task="image-classification")
+        dataset = load_dataset(args.dataset_name, trust_remote_code=args.trust_remote_code)
     else:
         data_files = {}
         if args.train_dir is not None:
@@ -282,11 +293,23 @@ def main():
         dataset = load_dataset(
             "imagefolder",
             data_files=data_files,
-            cache_dir=args.cache_dir,
-            task="image-classification",
         )
         # See more about loading custom images at
         # https://huggingface.co/docs/datasets/v2.0.0/en/image_process#imagefolder.
+
+    dataset_column_names = dataset["train"].column_names if "train" in dataset else dataset["validation"].column_names
+    if args.image_column_name not in dataset_column_names:
+        raise ValueError(
+            f"--image_column_name {args.image_column_name} not found in dataset '{args.dataset_name}'. "
+            "Make sure to set `--image_column_name` to the correct audio column - one of "
+            f"{', '.join(dataset_column_names)}."
+        )
+    if args.label_column_name not in dataset_column_names:
+        raise ValueError(
+            f"--label_column_name {args.label_column_name} not found in dataset '{args.dataset_name}'. "
+            "Make sure to set `--label_column_name` to the correct text column - one of "
+            f"{', '.join(dataset_column_names)}."
+        )
 
     # If we don't have a validation split, split off a percentage of train as validation.
     args.train_val_split = None if "validation" in dataset.keys() else args.train_val_split
@@ -297,7 +320,7 @@ def main():
 
     # Prepare label mappings.
     # We'll include these in the model's config to get human readable labels in the Inference API.
-    labels = dataset["train"].features["labels"].names
+    labels = dataset["train"].features[args.label_column_name].names
     label2id = {label: str(i) for i, label in enumerate(labels)}
     id2label = {str(i): label for i, label in enumerate(labels)}
 
@@ -356,12 +379,16 @@ def main():
 
     def preprocess_train(example_batch):
         """Apply _train_transforms across a batch."""
-        example_batch["pixel_values"] = [train_transforms(image.convert("RGB")) for image in example_batch["image"]]
+        example_batch["pixel_values"] = [
+            train_transforms(image.convert("RGB")) for image in example_batch[args.image_column_name]
+        ]
         return example_batch
 
     def preprocess_val(example_batch):
         """Apply _val_transforms across a batch."""
-        example_batch["pixel_values"] = [val_transforms(image.convert("RGB")) for image in example_batch["image"]]
+        example_batch["pixel_values"] = [
+            val_transforms(image.convert("RGB")) for image in example_batch[args.image_column_name]
+        ]
         return example_batch
 
     with accelerator.main_process_first():
@@ -377,7 +404,7 @@ def main():
     # DataLoaders creation:
     def collate_fn(examples):
         pixel_values = torch.stack([example["pixel_values"] for example in examples])
-        labels = torch.tensor([example["labels"] for example in examples])
+        labels = torch.tensor([example[args.label_column_name] for example in examples])
         return {"pixel_values": pixel_values, "labels": labels}
 
     train_dataloader = DataLoader(
@@ -410,8 +437,10 @@ def main():
     lr_scheduler = get_scheduler(
         name=args.lr_scheduler_type,
         optimizer=optimizer,
-        num_warmup_steps=args.num_warmup_steps * args.gradient_accumulation_steps,
-        num_training_steps=args.max_train_steps * args.gradient_accumulation_steps,
+        num_warmup_steps=args.num_warmup_steps * accelerator.num_processes,
+        num_training_steps=args.max_train_steps
+        if overrode_max_train_steps
+        else args.max_train_steps * accelerator.num_processes,
     )
 
     # Prepare everything with our `accelerator`.
@@ -531,10 +560,12 @@ def main():
                         )
                         if accelerator.is_main_process:
                             image_processor.save_pretrained(args.output_dir)
-                            repo.push_to_hub(
-                                commit_message=f"Training in progress {completed_steps} steps",
-                                blocking=False,
-                                auto_lfs_prune=True,
+                            api.upload_folder(
+                                commit_message=f"Training in progress epoch {epoch}",
+                                folder_path=args.output_dir,
+                                repo_id=repo_id,
+                                repo_type="model",
+                                token=args.hub_token,
                             )
 
             if completed_steps >= args.max_train_steps:
@@ -573,8 +604,12 @@ def main():
             )
             if accelerator.is_main_process:
                 image_processor.save_pretrained(args.output_dir)
-                repo.push_to_hub(
-                    commit_message=f"Training in progress epoch {epoch}", blocking=False, auto_lfs_prune=True
+                api.upload_folder(
+                    commit_message=f"Training in progress epoch {epoch}",
+                    folder_path=args.output_dir,
+                    repo_id=repo_id,
+                    repo_type="model",
+                    token=args.hub_token,
                 )
 
         if args.checkpointing_steps == "epoch":
@@ -595,8 +630,13 @@ def main():
         if accelerator.is_main_process:
             image_processor.save_pretrained(args.output_dir)
             if args.push_to_hub:
-                repo.push_to_hub(commit_message="End of training", auto_lfs_prune=True)
-
+                api.upload_folder(
+                    commit_message="End of training",
+                    folder_path=args.output_dir,
+                    repo_id=repo_id,
+                    repo_type="model",
+                    token=args.hub_token,
+                )
             all_results = {f"eval_{k}": v for k, v in eval_metric.items()}
             with open(os.path.join(args.output_dir, "all_results.json"), "w") as f:
                 json.dump(all_results, f)

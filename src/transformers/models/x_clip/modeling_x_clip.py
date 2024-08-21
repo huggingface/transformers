@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch X-CLIP model."""
-
+"""PyTorch X-CLIP model."""
 
 from copy import copy
 from dataclasses import dataclass
@@ -40,11 +39,6 @@ from .configuration_x_clip import XCLIPConfig, XCLIPTextConfig, XCLIPVisionConfi
 logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "microsoft/xclip-base-patch32"
-
-XCLIP_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/xclip-base-patch32",
-    # See all X-CLIP models at https://huggingface.co/models?filter=x-clip
-]
 
 
 # contrastive loss function, adapted from
@@ -205,7 +199,7 @@ class XCLIPAttention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         causal_attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         """Input shape: Batch x Time x Channel"""
 
         bsz, tgt_len, embed_dim = hidden_states.size()
@@ -294,7 +288,7 @@ class XCLIPMLP(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPEncoderLayer with CLIP->XCLIP
+# Copied from transformers.models.altclip.modeling_altclip.AltCLIPEncoderLayer with AltCLIP->XCLIP
 class XCLIPEncoderLayer(nn.Module):
     def __init__(self, config: XCLIPConfig):
         super().__init__()
@@ -615,7 +609,7 @@ X_CLIP_INPUTS_DOCSTRING = r"""
 """
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPEncoder with CLIP->XCLIP
+# Copied from transformers.models.altclip.modeling_altclip.AltCLIPEncoder with AltCLIP->XCLIP
 class XCLIPEncoder(nn.Module):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
@@ -1248,13 +1242,13 @@ class XCLIPModel(XCLIPPreTrainedModel):
         super().__init__(config)
 
         if not isinstance(config.text_config, XCLIPTextConfig):
-            raise ValueError(
+            raise TypeError(
                 "config.text_config is expected to be of type XCLIPTextConfig but is of type"
                 f" {type(config.text_config)}."
             )
 
         if not isinstance(config.vision_config, XCLIPVisionConfig):
-            raise ValueError(
+            raise TypeError(
                 "config.vision_config is expected to be of type XCLIPVisionConfig but is of type"
                 f" {type(config.vision_config)}."
             )

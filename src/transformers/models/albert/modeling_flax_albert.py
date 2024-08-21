@@ -47,7 +47,7 @@ from .configuration_albert import AlbertConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "albert-base-v2"
+_CHECKPOINT_FOR_DOC = "albert/albert-base-v2"
 _CONFIG_FOR_DOC = "AlbertConfig"
 
 
@@ -754,8 +754,8 @@ FLAX_ALBERT_FOR_PRETRAINING_DOCSTRING = """
     ```python
     >>> from transformers import AutoTokenizer, FlaxAlbertForPreTraining
 
-    >>> tokenizer = AutoTokenizer.from_pretrained("albert-base-v2")
-    >>> model = FlaxAlbertForPreTraining.from_pretrained("albert-base-v2")
+    >>> tokenizer = AutoTokenizer.from_pretrained("albert/albert-base-v2")
+    >>> model = FlaxAlbertForPreTraining.from_pretrained("albert/albert-base-v2")
 
     >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="np")
     >>> outputs = model(**inputs)

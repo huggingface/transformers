@@ -29,8 +29,9 @@ from ...image_utils import (
     make_list_of_images,
     to_numpy_array,
     valid_images,
+    validate_preprocess_arguments,
 )
-from ...utils import TensorType, is_vision_available, logging
+from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
 
 
 if is_vision_available():
@@ -172,6 +173,7 @@ class ImageGPTImageProcessor(BaseImageProcessor):
         image = image - 1
         return image
 
+    @filter_out_non_signature_kwargs()
     def preprocess(
         self,
         images: ImageInput,
@@ -184,7 +186,6 @@ class ImageGPTImageProcessor(BaseImageProcessor):
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[Union[str, ChannelDimension]] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
     ) -> PIL.Image.Image:
         """
         Preprocess an image or batch of images.
@@ -243,8 +244,13 @@ class ImageGPTImageProcessor(BaseImageProcessor):
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
 
-        if do_resize and size is None or resample is None:
-            raise ValueError("Size and resample must be specified if do_resize is True.")
+        # Here, normalize() is using a constant factor to divide pixel values.
+        # hence, the method does not need iamge_mean and image_std.
+        validate_preprocess_arguments(
+            do_resize=do_resize,
+            size=size,
+            resample=resample,
+        )
 
         if do_color_quantize and clusters is None:
             raise ValueError("Clusters must be specified if do_color_quantize is True.")

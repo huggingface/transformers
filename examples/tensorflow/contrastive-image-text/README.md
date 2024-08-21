@@ -65,7 +65,7 @@ Finally, we can run the example script to train the model:
 python examples/tensorflow/contrastive-image-text/run_clip.py \
     --output_dir ./clip-roberta-finetuned \
     --vision_model_name_or_path openai/clip-vit-base-patch32 \
-    --text_model_name_or_path roberta-base \
+    --text_model_name_or_path FacebookAI/roberta-base \
     --data_dir $PWD/data \
     --dataset_name ydshieh/coco_dataset_script \
     --dataset_config_name=2017 \

@@ -15,7 +15,7 @@ rendered properly in your Markdown viewer.
 
 # Come creare una pipeline personalizzata?
 
-In questa guida, scopriremo come creare una pipeline personalizzata e condividerla sull' [Hub](hf.co/models) o aggiungerla nella libreria
+In questa guida, scopriremo come creare una pipeline personalizzata e condividerla sull' [Hub](https://hf.co/models) o aggiungerla nella libreria
 Transformers.
 
 Innanzitutto, è necessario decidere gli input grezzi che la pipeline sarà in grado di accettare. Possono essere strings, raw bytes,
@@ -202,14 +202,10 @@ from transformers import pipeline
 classifier = pipeline("pair-classification", model="sgugger/finetuned-bert-mrpc")
 ```
 
-Successivamente possiamo condividerlo sull'Hub usando il metodo `save_pretrained` in un `Repository`:
+Successivamente possiamo condividerlo sull'Hub usando il metodo `push_to_hub`
 
 ```py
-from huggingface_hub import Repository
-
-repo = Repository("test-dynamic-pipeline", clone_from="{your_username}/test-dynamic-pipeline")
-classifier.save_pretrained("test-dynamic-pipeline")
-repo.push_to_hub()
+classifier.push_to_hub("test-dynamic-pipeline")
 ```
 
 Questo codice copierà il file dove è stato definitp `PairClassificationPipeline` all'interno della cartella `"test-dynamic-pipeline"`,

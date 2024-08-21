@@ -128,9 +128,9 @@ class ModelArguments:
         default=False,
         metadata={
             "help": (
-                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option "
-                "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
-                "execute code present on the Hub on your local machine."
+                "Whether to trust the execution of code from datasets/models defined on the Hub."
+                " This option should only be set to `True` for repositories you trust and in which you have read the"
+                " code, as it will execute code present on the Hub on your local machine."
             )
         },
     )
@@ -274,7 +274,11 @@ def main():
     # download the dataset.
     if data_args.dataset_name is not None:
         # Downloading and loading a dataset from the hub.
-        raw_datasets = load_dataset(data_args.dataset_name, data_args.dataset_config_name)
+        raw_datasets = load_dataset(
+            data_args.dataset_name,
+            data_args.dataset_config_name,
+            trust_remote_code=model_args.trust_remote_code,
+        )
     else:
         data_files = {}
         if data_args.train_file is not None:
@@ -569,6 +573,15 @@ def parse_args():
         help= "The configuration name of the dataset to use (via the datasets library).",
     )
     parser.add_argument(
+        "--trust_remote_code",
+        action="store_true",
+        help=(
+            "Whether to trust the execution of code from datasets/models defined on the Hub."
+            " This option should only be set to `True` for repositories you trust and in which you have read the"
+            " code, as it will execute code present on the Hub on your local machine."
+        ),
+    )
+    parser.add_argument(
         "--train_file", type=str, default=None, help="A csv or a json file containing the training data."
     )
     parser.add_argument(
@@ -580,7 +593,7 @@ def parse_args():
         default=128,
         help=(
             "The maximum total input sequence length after tokenization. Sequences longer than this will be truncated,"
-            " sequences shorter will be padded if `--pad_to_max_lengh` is passed."
+            " sequences shorter will be padded if `--pad_to_max_length` is passed."
         ),
     )
     parser.add_argument(
@@ -725,14 +738,17 @@ def main():
     # download the dataset.
     if args.dataset_name is not None:
         # Downloading and loading a dataset from the hub.
-        raw_datasets = load_dataset(args.dataset_name, args.dataset_config_name)
+        raw_datasets = load_dataset(
+            args.dataset_name, args.dataset_config_name, trust_remote_code=args.trust_remote_code
+        )
     else:
         data_files = {}
         if args.train_file is not None:
             data_files["train"] = args.train_file
+            extension = args.train_file.split(".")[-1]
         if args.validation_file is not None:
             data_files["validation"] = args.validation_file
-        extension = args.train_file.split(".")[-1]
+            extension = args.validation_file.split(".")[-1]
         raw_datasets = load_dataset(extension, data_files=data_files)
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
     # https://huggingface.co/docs/datasets/loading_datasets.

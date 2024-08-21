@@ -25,6 +25,7 @@ from ...test_tokenization_common import TokenizerTesterMixin, slow
 
 
 class ClvpTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "susnato/clvp_dev"
     tokenizer_class = ClvpTokenizer
     test_rust_tokenizer = False
     from_pretrained_kwargs = {"add_prefix_space": True}
@@ -101,7 +102,7 @@ class ClvpTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     # Copied from transformers.tests.models.gpt2.test_tokenization_gpt2.GPT2TokenizationTest.test_rust_and_python_full_tokenizers
     def test_rust_and_python_full_tokenizers(self):
         if not self.test_rust_tokenizer:
-            return
+            self.skipTest(reason="test_rust_tokenizer is set to False")
 
         tokenizer = self.get_tokenizer()
         rust_tokenizer = self.get_rust_tokenizer(add_prefix_space=True)

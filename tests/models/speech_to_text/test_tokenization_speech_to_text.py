@@ -37,6 +37,7 @@ ES_CODE = 10
 @require_sentencepiece
 @require_tokenizers
 class SpeechToTextTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "facebook/s2t-small-librispeech-asr"
     tokenizer_class = Speech2TextTokenizer
     test_rust_tokenizer = False
     test_sentencepiece = True

@@ -68,6 +68,27 @@ class TextToAudioPipelineTests(unittest.TestCase):
 
     @slow
     @require_torch
+    def test_medium_seamless_m4t_pt(self):
+        speech_generator = pipeline(task="text-to-audio", model="facebook/hf-seamless-m4t-medium", framework="pt")
+
+        for forward_params in [{"tgt_lang": "eng"}, {"return_intermediate_token_ids": True, "tgt_lang": "eng"}]:
+            outputs = speech_generator("This is a test", forward_params=forward_params)
+            self.assertEqual({"audio": ANY(np.ndarray), "sampling_rate": 16000}, outputs)
+
+            # test two examples side-by-side
+            outputs = speech_generator(["This is a test", "This is a second test"], forward_params=forward_params)
+            audio = [output["audio"] for output in outputs]
+            self.assertEqual([ANY(np.ndarray), ANY(np.ndarray)], audio)
+
+            # test batching
+            outputs = speech_generator(
+                ["This is a test", "This is a second test"], forward_params=forward_params, batch_size=2
+            )
+            audio = [output["audio"] for output in outputs]
+            self.assertEqual([ANY(np.ndarray), ANY(np.ndarray)], audio)
+
+    @slow
+    @require_torch
     def test_small_bark_pt(self):
         speech_generator = pipeline(task="text-to-audio", model="suno/bark-small", framework="pt")
 
@@ -229,8 +250,8 @@ class TextToAudioPipelineTests(unittest.TestCase):
         outputs = music_generator("This is a test", forward_params=forward_params, generate_kwargs=generate_kwargs)
         self.assertListEqual(outputs["audio"].tolist(), audio.tolist())
 
-    def get_test_pipeline(self, model, tokenizer, processor):
-        speech_generator = TextToAudioPipeline(model=model, tokenizer=tokenizer)
+    def get_test_pipeline(self, model, tokenizer, processor, torch_dtype="float32"):
+        speech_generator = TextToAudioPipeline(model=model, tokenizer=tokenizer, torch_dtype=torch_dtype)
         return speech_generator, ["This is a test", "Another test"]
 
     def run_pipeline_test(self, speech_generator, _):

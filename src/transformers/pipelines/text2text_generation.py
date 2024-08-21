@@ -3,7 +3,7 @@ import warnings
 
 from ..tokenization_utils import TruncationStrategy
 from ..utils import add_end_docstrings, is_tf_available, is_torch_available, logging
-from .base import PIPELINE_INIT_ARGS, Pipeline
+from .base import Pipeline, build_pipeline_init_args
 
 
 if is_tf_available():
@@ -22,7 +22,7 @@ class ReturnType(enum.Enum):
     TEXT = 1
 
 
-@add_end_docstrings(PIPELINE_INIT_ARGS)
+@add_end_docstrings(build_pipeline_init_args(has_tokenizer=True))
 class Text2TextGenerationPipeline(Pipeline):
     """
     Pipeline for text to text generation using seq2seq models.
@@ -154,7 +154,7 @@ class Text2TextGenerationPipeline(Pipeline):
                 max_length instead of throwing an error down the line.
             generate_kwargs:
                 Additional keyword arguments to pass along to the generate method of the model (see the generate method
-                corresponding to your framework [here](./model#generative-models)).
+                corresponding to your framework [here](./main_classes/text_generation)).
 
         Return:
             A list or a list of list of `dict`: Each result comes as a dictionary with the following keys:
@@ -213,7 +213,7 @@ class Text2TextGenerationPipeline(Pipeline):
         return records
 
 
-@add_end_docstrings(PIPELINE_INIT_ARGS)
+@add_end_docstrings(build_pipeline_init_args(has_tokenizer=True))
 class SummarizationPipeline(Text2TextGenerationPipeline):
     """
     Summarize news articles and other documents.
@@ -222,7 +222,7 @@ class SummarizationPipeline(Text2TextGenerationPipeline):
     `"summarization"`.
 
     The models that this pipeline can use are models that have been fine-tuned on a summarization task, which is
-    currently, '*bart-large-cnn*', '*t5-small*', '*t5-base*', '*t5-large*', '*t5-3b*', '*t5-11b*'. See the up-to-date
+    currently, '*bart-large-cnn*', '*google-t5/t5-small*', '*google-t5/t5-base*', '*google-t5/t5-large*', '*google-t5/t5-3b*', '*google-t5/t5-11b*'. See the up-to-date
     list of available models on [huggingface.co/models](https://huggingface.co/models?filter=summarization). For a list
     of available parameters, see the [following
     documentation](https://huggingface.co/docs/transformers/en/main_classes/text_generation#transformers.generation.GenerationMixin.generate)
@@ -235,7 +235,7 @@ class SummarizationPipeline(Text2TextGenerationPipeline):
     summarizer("An apple a day, keeps the doctor away", min_length=5, max_length=20)
 
     # use t5 in tf
-    summarizer = pipeline("summarization", model="t5-base", tokenizer="t5-base", framework="tf")
+    summarizer = pipeline("summarization", model="google-t5/t5-base", tokenizer="google-t5/t5-base", framework="tf")
     summarizer("An apple a day, keeps the doctor away", min_length=5, max_length=20)
     ```"""
 
@@ -257,7 +257,7 @@ class SummarizationPipeline(Text2TextGenerationPipeline):
                 Whether or not to clean up the potential extra spaces in the text output.
             generate_kwargs:
                 Additional keyword arguments to pass along to the generate method of the model (see the generate method
-                corresponding to your framework [here](./model#generative-models)).
+                corresponding to your framework [here](./main_classes/text_generation)).
 
         Return:
             A list or a list of list of `dict`: Each result comes as a dictionary with the following keys:
@@ -283,7 +283,7 @@ class SummarizationPipeline(Text2TextGenerationPipeline):
             )
 
 
-@add_end_docstrings(PIPELINE_INIT_ARGS)
+@add_end_docstrings(build_pipeline_init_args(has_tokenizer=True))
 class TranslationPipeline(Text2TextGenerationPipeline):
     """
     Translates from one language to another.
@@ -359,7 +359,7 @@ class TranslationPipeline(Text2TextGenerationPipeline):
                 for single pair translation models
             generate_kwargs:
                 Additional keyword arguments to pass along to the generate method of the model (see the generate method
-                corresponding to your framework [here](./model#generative-models)).
+                corresponding to your framework [here](./main_classes/text_generation)).
 
         Return:
             A list or a list of list of `dict`: Each result comes as a dictionary with the following keys:

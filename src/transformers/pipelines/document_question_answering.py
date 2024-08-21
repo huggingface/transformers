@@ -25,7 +25,7 @@ from ..utils import (
     is_vision_available,
     logging,
 )
-from .base import PIPELINE_INIT_ARGS, ChunkPipeline
+from .base import ChunkPipeline, build_pipeline_init_args
 from .question_answering import select_starts_ends
 
 
@@ -98,7 +98,7 @@ class ModelType(ExplicitEnum):
     VisionEncoderDecoder = "vision_encoder_decoder"
 
 
-@add_end_docstrings(PIPELINE_INIT_ARGS)
+@add_end_docstrings(build_pipeline_init_args(has_image_processor=True, has_tokenizer=True))
 class DocumentQuestionAnsweringPipeline(ChunkPipeline):
     # TODO: Update task_summary docs to include an example with document QA and then update the first sentence
     """
@@ -294,7 +294,10 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
         if input.get("image", None) is not None:
             image = load_image(input["image"], timeout=timeout)
             if self.image_processor is not None:
-                image_features.update(self.image_processor(images=image, return_tensors=self.framework))
+                image_inputs = self.image_processor(images=image, return_tensors=self.framework)
+                if self.framework == "pt":
+                    image_inputs = image_inputs.to(self.torch_dtype)
+                image_features.update(image_inputs)
             elif self.feature_extractor is not None:
                 image_features.update(self.feature_extractor(images=image, return_tensors=self.framework))
             elif self.model_type == ModelType.VisionEncoderDecoder:
@@ -375,7 +378,7 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
             # p_mask: mask with 1 for token than cannot be in the answer (0 for token which can be in an answer)
             # We put 0 on the tokens from the context and 1 everywhere else (question and special tokens)
             # This logic mirrors the logic in the question_answering pipeline
-            p_mask = [[tok != 1 for tok in encoding.sequence_ids(span_id)] for span_id in range(num_spans)]
+            p_mask = np.array([[tok != 1 for tok in encoding.sequence_ids(span_id)] for span_id in range(num_spans)])
             for span_idx in range(num_spans):
                 if self.framework == "pt":
                     span_encoding = {k: torch.tensor(v[span_idx : span_idx + 1]) for (k, v) in encoding.items()}
@@ -419,14 +422,14 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
                     "is_last": span_idx == num_spans - 1,
                 }
 
-    def _forward(self, model_inputs):
+    def _forward(self, model_inputs, **generate_kwargs):
         p_mask = model_inputs.pop("p_mask", None)
         word_ids = model_inputs.pop("word_ids", None)
         words = model_inputs.pop("words", None)
         is_last = model_inputs.pop("is_last", False)
 
         if self.model_type == ModelType.VisionEncoderDecoder:
-            model_outputs = self.model.generate(**model_inputs)
+            model_outputs = self.model.generate(**model_inputs, **generate_kwargs)
         else:
             model_outputs = self.model(**model_inputs)
 

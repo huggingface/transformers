@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch BLIP-2 model. """
-
+"""Testing suite for the PyTorch BLIP-2 model."""
 
 import inspect
 import tempfile
@@ -32,6 +31,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_torch_available, is_vision_available
 
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
@@ -48,7 +48,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import Blip2ForConditionalGeneration, Blip2Model, Blip2VisionModel
-    from transformers.models.blip_2.modeling_blip_2 import BLIP_2_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -163,7 +162,7 @@ class Blip2VisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -188,9 +187,11 @@ class Blip2VisionModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    @unittest.skip
     def test_training(self):
         pass
 
+    @unittest.skip
     def test_training_gradient_checkpointing(self):
         pass
 
@@ -216,9 +217,9 @@ class Blip2VisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in BLIP_2_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = Blip2VisionModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "Salesforce/blip2-opt-2.7b"
+        model = Blip2VisionModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 class Blip2QFormerModelTester:
@@ -390,6 +391,8 @@ class Blip2ForConditionalGenerationDecoderOnlyModelTester:
         self.vision_model_tester = Blip2VisionModelTester(parent, **vision_kwargs)
         self.qformer_model_tester = Blip2QFormerModelTester(parent, **qformer_kwargs)
         self.text_model_tester = Blip2TextModelDecoderOnlyTester(parent, **text_kwargs)
+        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
+        self.seq_length = self.text_model_tester.seq_length  # need seq_length for common tests
         self.is_training = is_training
         self.num_query_tokens = num_query_tokens
 
@@ -433,7 +436,7 @@ class Blip2ForConditionalGenerationDecoderOnlyModelTester:
 
 
 @require_torch
-class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, unittest.TestCase):
+class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (Blip2ForConditionalGeneration,) if is_torch_available() else ()
     fx_compatible = False
     test_head_masking = False
@@ -462,7 +465,7 @@ class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, unittest.Te
         pass
 
     @unittest.skip(reason="Blip2Model does not have input/output embeddings")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     @unittest.skip(reason="There's no base Blip2Model")
@@ -502,9 +505,9 @@ class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, unittest.Te
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in BLIP_2_PRETRAINED_MODEL_ARCHIVE_LIST:
-            model = Blip2ForConditionalGeneration.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "Salesforce/blip2-opt-2.7b"
+        model = Blip2ForConditionalGeneration.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # this class is based on `T5ModelTester` found in tests/models/t5/test_modeling_t5.py
@@ -616,6 +619,8 @@ class Blip2ModelTester:
         self.vision_model_tester = Blip2VisionModelTester(parent, **vision_kwargs)
         self.qformer_model_tester = Blip2QFormerModelTester(parent, **qformer_kwargs)
         self.text_model_tester = Blip2TextModelTester(parent, **text_kwargs)
+        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
+        self.seq_length = self.text_model_tester.seq_length  # need seq_length for common tests
         self.is_training = is_training
         self.num_query_tokens = num_query_tokens
 
@@ -681,7 +686,7 @@ class Blip2ModelTester:
 
 
 @require_torch
-class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (Blip2ForConditionalGeneration, Blip2Model) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
@@ -719,7 +724,7 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(reason="Blip2Model does not have input/output embeddings")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     @unittest.skip(reason="There's no base Blip2Model")
@@ -763,9 +768,9 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in BLIP_2_PRETRAINED_MODEL_ARCHIVE_LIST:
-            model = Blip2ForConditionalGeneration.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "Salesforce/blip2-opt-2.7b"
+        model = Blip2ForConditionalGeneration.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def test_get_text_features(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -867,7 +872,8 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
         prompt = "Question: which city is this? Answer:"
         inputs = processor(images=image, text=prompt, return_tensors="pt").to(torch_device, dtype=torch.float16)
 
-        predictions = model.generate(**inputs)
+        # max_length for BLIP includes prompt length from now on, use max_new_tokens
+        predictions = model.generate(**inputs, max_new_tokens=11)
         generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[0].strip()
 
         # Test output
@@ -876,6 +882,22 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
             [2, 24, 18, 45, 10, 343, 6, 24, 18, 10, 4105, 50118],
         )
         self.assertEqual(generated_text, "it's not a city, it's a beach")
+
+    def test_inference_interpolate_pos_encoding(self):
+        processor = Blip2Processor.from_pretrained("Salesforce/blip2-opt-2.7b")
+        model = Blip2ForConditionalGeneration.from_pretrained(
+            "Salesforce/blip2-opt-2.7b", torch_dtype=torch.float16
+        ).to(torch_device)
+        processor.image_processor.size = {"height": 500, "width": 500}
+
+        image = prepare_img()
+        inputs = processor(images=image, return_tensors="pt").to(torch_device)
+
+        predictions = model.generate(**inputs, interpolate_pos_encoding=True)
+        generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[0].strip()
+
+        self.assertEqual(predictions[0].tolist(), [2, 102, 693, 8, 2335, 15, 5, 4105, 50118])
+        self.assertEqual(generated_text, "a woman and dog on the beach")
 
     def test_inference_opt_batched_beam_search(self):
         processor = Blip2Processor.from_pretrained("Salesforce/blip2-opt-2.7b")
@@ -989,7 +1011,7 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
 
         # prepare image
         image = prepare_img()
-        inputs = processor(images=image, return_tensors="pt").to(0, dtype=torch.float16)
+        inputs = processor(images=image, return_tensors="pt").to(f"{torch_device}:0", dtype=torch.float16)
 
         predictions = model.generate(**inputs)
         generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[0].strip()
@@ -1000,7 +1022,7 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
 
         # image and context
         prompt = "Question: which city is this? Answer:"
-        inputs = processor(images=image, text=prompt, return_tensors="pt").to(0, dtype=torch.float16)
+        inputs = processor(images=image, text=prompt, return_tensors="pt").to(f"{torch_device}:0", dtype=torch.float16)
 
         predictions = model.generate(**inputs)
         generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[0].strip()
@@ -1011,3 +1033,33 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
             [0, 3, 7, 152, 67, 839, 1],
         )
         self.assertEqual(generated_text, "san diego")
+
+    def test_expansion_in_processing(self):
+        processor = Blip2Processor.from_pretrained("Salesforce/blip2-opt-2.7b")
+        model = Blip2ForConditionalGeneration.from_pretrained(
+            "Salesforce/blip2-opt-2.7b", torch_dtype=torch.float16
+        ).to(torch_device)
+
+        image = prepare_img()
+        prompt = "Question: which city is this? Answer:"
+
+        # Make sure we will go the legacy path by setting these args to None
+        processor.num_query_tokens = None
+        model.config.image_token_index = None
+        inputs = processor(images=image, text=prompt, return_tensors="pt").to(torch_device, dtype=torch.float16)
+
+        predictions = model.generate(**inputs, do_sample=False, max_new_tokens=15)
+        generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[0].strip()
+
+        # Add args to the config to trigger new logic when inputs are expanded in processing file
+        processor.num_query_tokens = model.config.num_query_tokens
+        processor.tokenizer.add_special_tokens({"additional_special_tokens": ["<image>"]})
+        model.config.image_token_index = len(processor.tokenizer) - 1
+        model.resize_token_embeddings(processor.tokenizer.vocab_size, pad_to_multiple_of=64)
+
+        # Generate again with new inputs
+        inputs = processor(images=image, text=prompt, return_tensors="pt").to(torch_device, dtype=torch.float16)
+        predictions_expanded = model.generate(**inputs, do_sample=False, max_new_tokens=15)
+        generated_text_expanded = processor.batch_decode(predictions_expanded, skip_special_tokens=True)[0].strip()
+
+        self.assertTrue(generated_text_expanded == generated_text)

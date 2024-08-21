@@ -130,10 +130,10 @@ Il tuo ambiente Python troverà la versione `main` di 🤗 Transformers alla pro
 
 ## Installazione con conda
 
-Installazione dal canale conda `huggingface`:
+Installazione dal canale conda `conda-forge`:
 
 ```bash
-conda install -c huggingface transformers
+conda install conda-forge::transformers
 ```
 
 ## Impostazione della cache
@@ -152,7 +152,7 @@ I modelli pre-allenati sono scaricati e memorizzati localmente nella cache in: `
 
 ## Modalità Offline
 
-🤗 Transformers può essere eseguita in un ambiente firewalled o offline utilizzando solo file locali. Imposta la variabile d'ambiente `TRANSFORMERS_OFFLINE=1` per abilitare questo comportamento.
+🤗 Transformers può essere eseguita in un ambiente firewalled o offline utilizzando solo file locali. Imposta la variabile d'ambiente `HF_HUB_OFFLINE=1` per abilitare questo comportamento.
 
 <Tip>
 
@@ -163,14 +163,14 @@ Aggiungi [🤗 Datasets](https://huggingface.co/docs/datasets/) al tuo flusso di
 Ad esempio, in genere si esegue un programma su una rete normale, protetta da firewall per le istanze esterne, con il seguente comando:
 
 ```bash
-python examples/pytorch/translation/run_translation.py --model_name_or_path t5-small --dataset_name wmt16 --dataset_config ro-en ...
+python examples/pytorch/translation/run_translation.py --model_name_or_path google-t5/t5-small --dataset_name wmt16 --dataset_config ro-en ...
 ```
 
 Esegui lo stesso programma in un'istanza offline con:
 
 ```bash
-HF_DATASETS_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
-python examples/pytorch/translation/run_translation.py --model_name_or_path t5-small --dataset_name wmt16 --dataset_config ro-en ...
+HF_DATASETS_OFFLINE=1 HF_HUB_OFFLINE=1 \
+python examples/pytorch/translation/run_translation.py --model_name_or_path google-t5/t5-small --dataset_name wmt16 --dataset_config ro-en ...
 ```
 
 Lo script viene ora eseguito senza bloccarsi o attendere il timeout, perché sa di dover cercare solo file locali.

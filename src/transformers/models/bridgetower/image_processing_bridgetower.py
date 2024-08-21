@@ -32,8 +32,9 @@ from ...image_utils import (
     is_scaled_image,
     to_numpy_array,
     valid_images,
+    validate_preprocess_arguments,
 )
-from ...utils import TensorType, is_vision_available, logging
+from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
 
 
 if is_vision_available():
@@ -128,7 +129,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden by the
             `do_resize` parameter in the `preprocess` method.
-        size (`Dict[str, int]` *optional*, defaults to 288):
+        size (`Dict[str, int]` *optional*, defaults to `{'shortest_edge': 288}`):
             Resize the shorter side of the input to `size["shortest_edge"]`. The longer side will be limited to under
             `int((1333 / 800) * size["shortest_edge"])` while preserving the aspect ratio. Only has an effect if
             `do_resize` is set to `True`. Can be overridden by the `size` parameter in the `preprocess` method.
@@ -158,6 +159,9 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         do_center_crop (`bool`, *optional*, defaults to `True`):
             Whether to center crop the image. Can be overridden by the `do_center_crop` parameter in the `preprocess`
             method.
+        crop_size (`Dict[str, int]`, *optional*):
+            Desired output size when applying center-cropping. Only has an effect if `do_center_crop` is set to `True`.
+            Can be overridden by the `crop_size` parameter in the `preprocess` method. If unset defaults to `size`,
         do_pad (`bool`, *optional*, defaults to `True`):
             Whether to pad the image to the `(max_height, max_width)` of the images in the batch. Can be overridden by
             the `do_pad` parameter in the `preprocess` method.
@@ -168,7 +172,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Dict[str, int] = 288,
+        size: Dict[str, int] = None,
         size_divisor: int = 32,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         do_rescale: bool = True,
@@ -177,6 +181,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         do_center_crop: bool = True,
+        crop_size: Dict[str, int] = None,
         do_pad: bool = True,
         **kwargs,
     ) -> None:
@@ -198,6 +203,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         self.image_std = image_std if image_std is not None else OPENAI_CLIP_STD
         self.do_pad = do_pad
         self.do_center_crop = do_center_crop
+        self.crop_size = crop_size
 
     # Copied from transformers.models.vilt.image_processing_vilt.ViltImageProcessor.resize
     def resize(
@@ -222,7 +228,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
                 Image to resize.
             size (`Dict[str, int]`):
                 Controls the size of the output image. Should be of the form `{"shortest_edge": int}`.
-            size_divisor (`int`, defaults to 32):
+            size_divisor (`int`, *optional*, defaults to 32):
                 The image is resized to a size that is a multiple of this value.
             resample (`PILImageResampling` filter, *optional*, defaults to `PILImageResampling.BICUBIC`):
                 Resampling filter to use when resiizing the image.
@@ -280,7 +286,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
             **kwargs,
         )
 
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor._pad_image
+    # Copied from transformers.models.vilt.image_processing_vilt.ViltImageProcessor._pad_image
     def _pad_image(
         self,
         image: np.ndarray,
@@ -308,7 +314,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         )
         return padded_image
 
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.pad
+    # Copied from transformers.models.vilt.image_processing_vilt.ViltImageProcessor.pad
     def pad(
         self,
         images: List[np.ndarray],
@@ -364,6 +370,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
 
         return BatchFeature(data=data, tensor_type=return_tensors)
 
+    @filter_out_non_signature_kwargs()
     def preprocess(
         self,
         images: ImageInput,
@@ -378,10 +385,10 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         image_std: Optional[Union[float, List[float]]] = None,
         do_pad: Optional[bool] = None,
         do_center_crop: Optional[bool] = None,
+        crop_size: Dict[str, int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
     ) -> PIL.Image.Image:
         """
         Preprocess an image or batch of images.
@@ -417,6 +424,9 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
             do_center_crop (`bool`, *optional*, defaults to `self.do_center_crop`):
                 Whether to center crop the image. If the input size is smaller than `crop_size` along any edge, the
                 image is padded with 0's and then center cropped.
+            crop_size (`Dict[str, int]`, *optional*, defaults to `self.crop_size`):
+                Size of the image after center crop. If one edge the image is smaller than `crop_size`, it will be
+                padded with zeros and then cropped
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                     - Unset: Return a list of `np.ndarray`.
@@ -446,6 +456,11 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         image_std = image_std if image_std is not None else self.image_std
         do_pad = do_pad if do_pad is not None else self.do_pad
         do_center_crop if do_center_crop is not None else self.do_center_crop
+        # For backwards compatibility. Initial version of this processor was cropping to the "size" argument, which
+        # it should default to if crop_size is undefined.
+        crop_size = (
+            crop_size if crop_size is not None else (self.crop_size if self.crop_size is not None else self.size)
+        )
 
         size = size if size is not None else self.size
         size = get_size_dict(size, default_to_square=False)
@@ -458,16 +473,21 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
-
-        if do_resize and size is None or resample is None:
-            raise ValueError("Size and resample must be specified if do_resize is True.")
-
-        if do_rescale and rescale_factor is None:
-            raise ValueError("Rescale factor must be specified if do_rescale is True.")
-
-        if do_normalize and (image_mean is None or image_std is None):
-            raise ValueError("Image mean and std must be specified if do_normalize is True.")
-
+        # Here, crop_size is used only if it is set, else size will be used.
+        validate_preprocess_arguments(
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+            do_pad=do_pad,
+            size_divisibility=size_divisor,
+            do_center_crop=do_center_crop,
+            crop_size=crop_size,
+            do_resize=do_resize,
+            size=size,
+            resample=resample,
+        )
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
 
@@ -491,7 +511,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
 
         if do_center_crop:
             images = [
-                self.center_crop(image=image, size=size, input_data_format=input_data_format) for image in images
+                self.center_crop(image=image, size=crop_size, input_data_format=input_data_format) for image in images
             ]
 
         if do_rescale:

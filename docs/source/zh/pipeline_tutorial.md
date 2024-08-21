@@ -175,7 +175,7 @@ def data():
         yield f"My example {i}"
 
 
-pipe = pipeline(model="gpt2", device=0)
+pipe = pipeline(model="openai-community/gpt2", device=0)
 generated_characters = 0
 for out in pipe(data()):
     generated_characters += len(out[0]["generated_text"])
@@ -257,11 +257,13 @@ for out in pipe(KeyDataset(dataset, "audio")):
 >>> from transformers import pipeline
 
 >>> vqa = pipeline(model="impira/layoutlm-document-qa")
->>> vqa(
+>>> output = vqa(
 ...     image="https://huggingface.co/spaces/impira/docquery/resolve/2359223c1837a7587402bda0f2643382a6eefeab/invoice.png",
 ...     question="What is the invoice number?",
 ... )
-[{'score': 0.42515, 'answer': 'us-001', 'start': 16, 'end': 16}]
+>>> output[0]["score"] = round(output[0]["score"], 3)
+>>> output
+[{'score': 0.425, 'answer': 'us-001', 'start': 16, 'end': 16}]
 ```
 
 <Tip>

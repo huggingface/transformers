@@ -25,7 +25,7 @@ from ...utils import (
 
 _import_structure = {
     "auto_factory": ["get_values"],
-    "configuration_auto": ["ALL_PRETRAINED_CONFIG_ARCHIVE_MAP", "CONFIG_MAPPING", "MODEL_NAMES_MAPPING", "AutoConfig"],
+    "configuration_auto": ["CONFIG_MAPPING", "MODEL_NAMES_MAPPING", "AutoConfig"],
     "feature_extraction_auto": ["FEATURE_EXTRACTOR_MAPPING", "AutoFeatureExtractor"],
     "image_processing_auto": ["IMAGE_PROCESSOR_MAPPING", "AutoImageProcessor"],
     "processing_auto": ["PROCESSOR_MAPPING", "AutoProcessor"],
@@ -49,8 +49,10 @@ else:
         "MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING",
         "MODEL_FOR_DEPTH_ESTIMATION_MAPPING",
         "MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING",
+        "MODEL_FOR_IMAGE_MAPPING",
         "MODEL_FOR_IMAGE_SEGMENTATION_MAPPING",
         "MODEL_FOR_IMAGE_TO_IMAGE_MAPPING",
+        "MODEL_FOR_KEYPOINT_DETECTION_MAPPING",
         "MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING",
         "MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING",
         "MODEL_FOR_MASKED_LM_MAPPING",
@@ -91,6 +93,7 @@ else:
         "AutoModelForImageSegmentation",
         "AutoModelForImageToImage",
         "AutoModelForInstanceSegmentation",
+        "AutoModelForKeypointDetection",
         "AutoModelForMaskGeneration",
         "AutoModelForTextEncoding",
         "AutoModelForMaskedImageModeling",
@@ -210,7 +213,7 @@ else:
 
 if TYPE_CHECKING:
     from .auto_factory import get_values
-    from .configuration_auto import ALL_PRETRAINED_CONFIG_ARCHIVE_MAP, CONFIG_MAPPING, MODEL_NAMES_MAPPING, AutoConfig
+    from .configuration_auto import CONFIG_MAPPING, MODEL_NAMES_MAPPING, AutoConfig
     from .feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING, AutoFeatureExtractor
     from .image_processing_auto import IMAGE_PROCESSOR_MAPPING, AutoImageProcessor
     from .processing_auto import PROCESSOR_MAPPING, AutoProcessor
@@ -233,9 +236,11 @@ if TYPE_CHECKING:
             MODEL_FOR_DEPTH_ESTIMATION_MAPPING,
             MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING,
             MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
+            MODEL_FOR_IMAGE_MAPPING,
             MODEL_FOR_IMAGE_SEGMENTATION_MAPPING,
             MODEL_FOR_IMAGE_TO_IMAGE_MAPPING,
             MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING,
+            MODEL_FOR_KEYPOINT_DETECTION_MAPPING,
             MODEL_FOR_MASK_GENERATION_MAPPING,
             MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING,
             MODEL_FOR_MASKED_LM_MAPPING,
@@ -276,6 +281,7 @@ if TYPE_CHECKING:
             AutoModelForImageSegmentation,
             AutoModelForImageToImage,
             AutoModelForInstanceSegmentation,
+            AutoModelForKeypointDetection,
             AutoModelForMaskedImageModeling,
             AutoModelForMaskedLM,
             AutoModelForMaskGeneration,

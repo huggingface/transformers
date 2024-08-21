@@ -23,7 +23,7 @@ rendered properly in your Markdown viewer.
 在开始之前，确保你已经安装了所有必要的库：
 
 ```bash
-!pip install transformers datasets
+!pip install transformers datasets evaluate accelerate
 ```
 
 你还需要安装喜欢的机器学习框架：
@@ -73,7 +73,7 @@ pip install tensorflow
 >>> classifier = pipeline("sentiment-analysis")
 ```
 
-[`pipeline`] 会下载并缓存一个用于情感分析的默认的[预训练模型](https://huggingface.co/distilbert-base-uncased-finetuned-sst-2-english)和分词器。现在你可以在目标文本上使用 `classifier` 了：
+[`pipeline`] 会下载并缓存一个用于情感分析的默认的[预训练模型](https://huggingface.co/distilbert/distilbert-base-uncased-finetuned-sst-2-english)和分词器。现在你可以在目标文本上使用 `classifier` 了：
 
 ```py
 >>> classifier("We are very happy to show you the 🤗 Transformers library.")
@@ -379,7 +379,7 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 ```py
 >>> from transformers import AutoConfig
 
->>> my_config = AutoConfig.from_pretrained("distilbert-base-uncased", n_heads=12)
+>>> my_config = AutoConfig.from_pretrained("distilbert/distilbert-base-uncased", n_heads=12)
 ```
 
 <frameworkcontent>
@@ -416,7 +416,7 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
    ```py
    >>> from transformers import AutoModelForSequenceClassification
 
-   >>> model = AutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased")
+   >>> model = AutoModelForSequenceClassification.from_pretrained("distilbert/distilbert-base-uncased")
    ```
 
 2. [`TrainingArguments`] 含有你可以修改的模型超参数，比如学习率，批次大小和训练时的迭代次数。如果你没有指定训练参数，那么它会使用默认值：
@@ -438,7 +438,7 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
    ```py
    >>> from transformers import AutoTokenizer
 
-   >>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
+   >>> tokenizer = AutoTokenizer.from_pretrained("distilbert/distilbert-base-uncased")
    ```
 
 4. 加载一个数据集：
@@ -495,7 +495,7 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 
 你可以通过子类化 [`Trainer`] 中的方法来自定义训练循环。这样你就可以自定义像损失函数，优化器和调度器这样的特性。查阅 [`Trainer`] 参考手册了解哪些方法能够被子类化。
 
-另一个自定义训练循环的方式是通过[回调](./main_classes/callbacks)。你可以使用回调来与其他库集成，查看训练循环来报告进度或提前结束训练。回调不会修改训练循环。如果想自定义损失函数等，就需要子类化 [`Trainer`] 了。
+另一个自定义训练循环的方式是通过[回调](./main_classes/callback)。你可以使用回调来与其他库集成，查看训练循环来报告进度或提前结束训练。回调不会修改训练循环。如果想自定义损失函数等，就需要子类化 [`Trainer`] 了。
 
 ## 使用 Tensorflow 训练
 
@@ -506,7 +506,7 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
    ```py
    >>> from transformers import TFAutoModelForSequenceClassification
 
-   >>> model = TFAutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased")
+   >>> model = TFAutoModelForSequenceClassification.from_pretrained("distilbert/distilbert-base-uncased")
    ```
 
 2. 一个预处理类，比如分词器，特征提取器或者处理器：
@@ -514,7 +514,7 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
    ```py
    >>> from transformers import AutoTokenizer
 
-   >>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
+   >>> tokenizer = AutoTokenizer.from_pretrained("distilbert/distilbert-base-uncased")
    ```
 
 3. 创建一个给数据集分词的函数

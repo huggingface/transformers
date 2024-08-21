@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch InstructBLIP model. """
-
+"""Testing suite for the PyTorch InstructBLIP model."""
 
 import inspect
 import tempfile
@@ -39,6 +38,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_torch_available, is_vision_available
 
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
@@ -53,7 +53,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import InstructBlipForConditionalGeneration, InstructBlipVisionModel
-    from transformers.models.instructblip.modeling_instructblip import INSTRUCTBLIP_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -166,7 +165,7 @@ class InstructBlipVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -221,9 +220,9 @@ class InstructBlipVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in INSTRUCTBLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = InstructBlipVisionModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "Salesforce/instructblip-flan-t5-xl"
+        model = InstructBlipVisionModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 class InstructBlipQFormerModelTester:
@@ -397,6 +396,8 @@ class InstructBlipForConditionalGenerationDecoderOnlyModelTester:
         self.vision_model_tester = InstructBlipVisionModelTester(parent, **vision_kwargs)
         self.qformer_model_tester = InstructBlipQFormerModelTester(parent, **qformer_kwargs)
         self.text_model_tester = InstructBlipTextModelDecoderOnlyTester(parent, **text_kwargs)
+        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
+        self.seq_length = self.text_model_tester.seq_length  # need seq_length for common tests
         self.is_training = is_training
         self.num_query_tokens = num_query_tokens
 
@@ -451,7 +452,7 @@ class InstructBlipForConditionalGenerationDecoderOnlyModelTester:
 
 
 @require_torch
-class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, unittest.TestCase):
+class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (InstructBlipForConditionalGeneration,) if is_torch_available() else ()
     fx_compatible = False
     test_head_masking = False
@@ -484,7 +485,7 @@ class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, unit
         pass
 
     @unittest.skip(reason="InstructBlipModel does not have input/output embeddings")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     @unittest.skip(reason="There's no base InstructBlipModel")
@@ -524,9 +525,9 @@ class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, unit
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in INSTRUCTBLIP_PRETRAINED_MODEL_ARCHIVE_LIST:
-            model = InstructBlipForConditionalGeneration.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "Salesforce/instructblip-flan-t5-xl"
+        model = InstructBlipForConditionalGeneration.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats
@@ -558,20 +559,22 @@ class InstructBlipModelIntegrationTest(unittest.TestCase):
             logits = model(**inputs).logits
 
         expected_slice = torch.tensor(
-            [[-3.4902, -12.5078, 8.4141], [-5.1211, -12.1328, 7.8281], [-4.0312, -13.5938, 9.1172]],
+            [[-3.3926, -12.2969, 8.4922], [-5.0195, -11.9531, 8.1406], [-4.0039, -13.3594, 9.2578]],
             device=torch_device,
         )
+
         self.assertTrue(torch.allclose(logits[0, :3, :3].float(), expected_slice, atol=1e-3))
 
         # verify generation
         outputs = model.generate(**inputs, max_new_tokens=30)
         generated_text = processor.batch_decode(outputs, skip_special_tokens=True)[0].strip()
 
-        expected_outputs = [2, 450, 22910, 9565, 310, 445, 1967, 338, 393, 263, 767, 338, 13977, 292, 22095, 373, 278, 1250, 310, 263, 13328, 20134, 29963, 1550, 19500, 1623, 263, 19587, 4272, 11952, 29889]  # fmt: skip
+        expected_outputs = [2, 450, 22910, 9565, 310, 445, 1967, 338, 393, 263, 767, 338, 13977, 292, 22095, 373, 278, 1250, 310, 263, 13328, 20134, 29963, 1550, 372, 338, 19500, 1623, 263, 19587, 4272]  # fmt: off
+
         self.assertEqual(outputs[0].tolist(), expected_outputs)
         self.assertEqual(
             generated_text,
-            "The unusual aspect of this image is that a man is ironing clothes on the back of a yellow SUV while driving down a busy city street.",
+            "The unusual aspect of this image is that a man is ironing clothes on the back of a yellow SUV while it is driving down a busy city",
         )
 
     def test_inference_flant5_xl(self):
@@ -605,8 +608,64 @@ class InstructBlipModelIntegrationTest(unittest.TestCase):
         generated_text = processor.batch_decode(outputs, skip_special_tokens=True)[0]
 
         expected_outputs = [0, 37, 1023, 9850, 7, 3, 9, 388, 3575, 53, 4954, 30, 8, 223, 13, 3, 9, 4459, 4049, 16, 8, 2214, 13, 3, 9, 3164, 690, 2815, 5, 37, 388, 19, 5119, 3, 9, 4459, 8677, 28, 3, 9, 2756, 4459, 6177, 6, 11, 3, 88, 19, 338, 46, 3575, 53, 1476, 12, 743, 112, 2491, 5, 37, 1023, 19, 7225, 788, 12, 8, 685, 24, 34, 1267, 3, 9, 388, 3575, 53, 4954, 30, 8, 223, 13, 3, 9, 4049, 16, 8, 2214, 13, 3, 9, 3164, 690, 2815, 5, 94, 19, 487, 24, 8, 388, 19, 1119, 12, 1097, 540, 57, 692, 112, 10428, 30, 8, 223, 13, 8, 4049, 6, 68, 34, 19, 92, 487, 24, 3, 88, 19, 1119, 12, 1097, 97, 57, 692, 112, 10428, 30, 8, 223, 13, 8, 4049, 16, 8, 2214, 13, 3, 9, 3164, 690, 2815, 5, 3, 13865, 13, 8, 1053, 21, 8, 388, 31, 7, 2874, 6, 34, 19, 964, 24, 3, 88, 19, 1119, 12, 1097, 97, 57, 692, 112, 10428, 30, 8, 223, 13, 8, 4049, 16, 8, 2214, 13, 3, 9, 3164, 690, 2815, 5, 1]  # fmt: skip
+
+        expected_outputs = [0, 37, 7225, 1023, 9850, 7, 3, 9, 388, 3575, 53, 4954, 30, 8, 223, 13, 3, 9, 4459, 4049, 16, 8, 2214, 13, 3, 9, 3164, 690, 2815, 5, 37, 388, 19, 5119, 3, 9, 4459, 8677, 28, 46, 3575, 53, 1476, 5223, 12, 34, 6, 15495, 24, 3, 88, 19, 692, 112, 293, 10428, 44, 234, 1066, 145, 338, 3, 9, 50, 1106, 3522, 144, 42, 2192, 7919, 31, 7, 5, 37, 1023, 92, 1267, 3, 9, 381, 13, 119, 3203, 16, 8, 2458, 6, 379, 14264, 6, 9256, 7, 6, 11, 11718, 7, 5, 1]  # fmt: skip
+
         self.assertEqual(outputs[0].tolist(), expected_outputs)
         self.assertEqual(
             generated_text,
-            "The image depicts a man ironing clothes on the back of a yellow van in the middle of a busy city street. The man is wearing a yellow shirt with a bright yellow tie, and he is using an ironing board to complete his task. The image is unusual due to the fact that it shows a man ironing clothes on the back of a van in the middle of a busy city street. It is possible that the man is trying to save money by doing his laundry on the back of the van, but it is also possible that he is trying to save time by doing his laundry on the back of the van in the middle of a busy city street. Regardless of the reason for the man's actions, it is clear that he is trying to save time by doing his laundry on the back of the van in the middle of a busy city street.",
+            "The unusual image depicts a man ironing clothes on the back of a yellow van in the middle of a busy city street. The man is wearing a yellow shirt with an ironing board attached to it, suggesting that he is doing his own laundry at home rather than using a laundromat or dry cleaner's. The image also shows a number of other vehicles in the background, including buses, taxis, and motorcycles.",
         )
+
+    def test_inference_interpolate_pos_encoding(self):
+        processor = InstructBlipProcessor.from_pretrained("Salesforce/instructblip-flan-t5-xl")
+        model = InstructBlipForConditionalGeneration.from_pretrained(
+            "Salesforce/instructblip-flan-t5-xl",
+            torch_dtype=torch.bfloat16,
+            low_cpu_mem_usage=True,
+        ).to(torch_device)
+        processor.image_processor.size = {"height": 500, "width": 500}
+
+        image = prepare_img()
+        prompt = "What's in the image?"
+        inputs = processor(images=image, text=prompt, return_tensors="pt").to(torch_device)
+
+        predictions = model.generate(**inputs, interpolate_pos_encoding=True)
+        generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[0].strip()
+
+        self.assertEqual(
+            predictions[0].tolist(), [0, 37, 1023, 753, 3, 9, 2335, 3823, 30, 8, 2608, 28, 3, 9, 1782, 5, 1]
+        )
+        self.assertEqual(generated_text, "The image features a woman sitting on the beach with a dog.")
+
+    def test_expansion_in_processing(self):
+        processor = InstructBlipProcessor.from_pretrained("Salesforce/instructblip-flan-t5-xl")
+        model = InstructBlipForConditionalGeneration.from_pretrained(
+            "Salesforce/instructblip-flan-t5-xl",
+            torch_dtype=torch.bfloat16,
+            low_cpu_mem_usage=True,
+        ).to(torch_device)
+
+        image = prepare_img()
+        prompt = "What's in the image?"
+
+        # Make sure we will go the legacy path by setting these args to None
+        processor.num_query_tokens = None
+        model.config.image_token_index = None
+        inputs = processor(images=image, text=prompt, return_tensors="pt").to(torch_device, dtype=torch.float16)
+
+        predictions = model.generate(**inputs, do_sample=False, max_new_tokens=15)
+        generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[0].strip()
+
+        # Add args to the config to trigger new logic when inputs are expanded in processing file
+        processor.num_query_tokens = model.config.num_query_tokens
+        processor.tokenizer.add_special_tokens({"additional_special_tokens": ["<image>"]})
+        model.config.image_token_index = len(processor.tokenizer) - 1
+        model.resize_token_embeddings(processor.tokenizer.vocab_size, pad_to_multiple_of=64)
+
+        # Generate again with new inputs
+        inputs = processor(images=image, text=prompt, return_tensors="pt").to(torch_device, dtype=torch.float16)
+        predictions_expanded = model.generate(**inputs, do_sample=False, max_new_tokens=15)
+        generated_text_expanded = processor.batch_decode(predictions_expanded, skip_special_tokens=True)[0].strip()
+
+        self.assertTrue(generated_text_expanded == generated_text)

@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Hubert model configuration"""
+"""Hubert model configuration"""
 
 import functools
 import operator
@@ -22,11 +22,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/hubert-base-ls960": "https://huggingface.co/facebook/hubert-base-ls960/resolve/main/config.json",
-    # See all Hubert models at https://huggingface.co/models?filter=hubert
-}
 
 
 class HubertConfig(PretrainedConfig):
@@ -63,7 +58,7 @@ class HubertConfig(PretrainedConfig):
         attention_dropout(`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention probabilities.
         final_dropout (`float`, *optional*, defaults to 0.1):
-            The dropout probabilitiy for the final projection layer of [`Wav2Vec2ForCTC`].
+            The dropout probability for the final projection layer of [`Wav2Vec2ForCTC`].
         layerdrop (`float`, *optional*, defaults to 0.1):
             The LayerDrop probability. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556) for more
             details.

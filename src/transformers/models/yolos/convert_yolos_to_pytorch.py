@@ -14,7 +14,6 @@
 # limitations under the License.
 """Convert YOLOS checkpoints from the original repository. URL: https://github.com/hustvl/YOLOS"""
 
-
 import argparse
 import json
 from pathlib import Path

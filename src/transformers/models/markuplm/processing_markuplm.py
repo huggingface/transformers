@@ -15,6 +15,7 @@
 """
 Processor class for MarkupLM.
 """
+
 from typing import Optional, Union
 
 from ...file_utils import TensorType

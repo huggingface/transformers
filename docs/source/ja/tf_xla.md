@@ -88,8 +88,8 @@ from transformers.utils import check_min_version
 check_min_version("4.21.0")
 
 
-tokenizer = AutoTokenizer.from_pretrained("gpt2", padding_side="left", pad_token="</s>")
-model = TFAutoModelForCausalLM.from_pretrained("gpt2")
+tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2", padding_side="left", pad_token="</s>")
+model = TFAutoModelForCausalLM.from_pretrained("openai-community/gpt2")
 input_string = ["TensorFlow is"]
 
 # One line to create an XLA generation function
@@ -118,8 +118,8 @@ XLAを有効にした関数（上記の`xla_generate()`など）を初めて実�
 import tensorflow as tf
 from transformers import AutoTokenizer, TFAutoModelForCausalLM
 
-tokenizer = AutoTokenizer.from_pretrained("gpt2", padding_side="left", pad_token="</s>")
-model = TFAutoModelForCausalLM.from_pretrained("gpt2")
+tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2", padding_side="left", pad_token="</s>")
+model = TFAutoModelForCausalLM.from_pretrained("openai-community/gpt2")
 input_string = ["TensorFlow is"]
 
 xla_generate = tf.function(model.generate, jit_compile=True)
@@ -139,8 +139,8 @@ import time
 import tensorflow as tf
 from transformers import AutoTokenizer, TFAutoModelForCausalLM
 
-tokenizer = AutoTokenizer.from_pretrained("gpt2", padding_side="left", pad_token="</s>")
-model = TFAutoModelForCausalLM.from_pretrained("gpt2")
+tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2", padding_side="left", pad_token="</s>")
+model = TFAutoModelForCausalLM.from_pretrained("openai-community/gpt2")
 
 xla_generate = tf.function(model.generate, jit_compile=True)
 

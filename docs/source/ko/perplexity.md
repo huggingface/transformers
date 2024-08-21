@@ -72,7 +72,7 @@ $$\text{PPL}(X) = \exp \left\{ {-\frac{1}{t}\sum_i^t \log p_\theta (x_i|x_{<i}) 
 from transformers import GPT2LMHeadModel, GPT2TokenizerFast
 
 device = "cuda"
-model_id = "gpt2-large"
+model_id = "openai-community/gpt2-large"
 model = GPT2LMHeadModel.from_pretrained(model_id).to(device)
 tokenizer = GPT2TokenizerFast.from_pretrained(model_id)
 ```

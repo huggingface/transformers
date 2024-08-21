@@ -41,6 +41,7 @@ class PvtImageProcessingTester(unittest.TestCase):
         image_mean=[0.485, 0.456, 0.406],
         image_std=[0.229, 0.224, 0.225],
     ):
+        super().__init__()
         size = size if size is not None else {"height": 18, "width": 18}
         self.parent = parent
         self.batch_size = batch_size
@@ -84,6 +85,7 @@ class PvtImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = PvtImageProcessor if is_vision_available() else None
 
     def setUp(self):
+        super().setUp()
         self.image_processor_tester = PvtImageProcessingTester(self)
 
     @property

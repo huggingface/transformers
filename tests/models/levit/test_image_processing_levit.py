@@ -43,6 +43,7 @@ class LevitImageProcessingTester(unittest.TestCase):
         image_mean=[0.5, 0.5, 0.5],
         image_std=[0.5, 0.5, 0.5],
     ):
+        super().__init__()
         size = size if size is not None else {"shortest_edge": 18}
         crop_size = crop_size if crop_size is not None else {"height": 18, "width": 18}
         self.parent = parent
@@ -91,6 +92,7 @@ class LevitImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = LevitImageProcessor if is_vision_available() else None
 
     def setUp(self):
+        super().setUp()
         self.image_processor_tester = LevitImageProcessingTester(self)
 
     @property

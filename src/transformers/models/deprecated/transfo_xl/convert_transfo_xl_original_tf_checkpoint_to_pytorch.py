@@ -14,7 +14,6 @@
 # limitations under the License.
 """Convert Transformer XL checkpoint and datasets."""
 
-
 import argparse
 import os
 import pickle

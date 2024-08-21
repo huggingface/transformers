@@ -25,11 +25,25 @@ customize it to your needs if you need extra processing on your datasets.
 It will either run on a datasets hosted on our [hub](https://huggingface.co/datasets) or with your own text files for
 training and validation, you might just need to add some tweaks in the data preprocessing.
 
+### Using your own data
+
+If you use your own data, the script expects the following format of the data -
+
+```bash
+{
+    "chunk_tags": [11, 12, 12, 21, 13, 11, 11, 21, 13, 11, 12, 13, 11, 21, 22, 11, 12, 17, 11, 21, 17, 11, 12, 12, 21, 22, 22, 13, 11, 0],
+    "id": "0",
+    "ner_tags": [0, 3, 4, 0, 0, 0, 0, 0, 0, 7, 0, 0, 0, 0, 0, 7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    "pos_tags": [12, 22, 22, 38, 15, 22, 28, 38, 15, 16, 21, 35, 24, 35, 37, 16, 21, 15, 24, 41, 15, 16, 21, 21, 20, 37, 40, 35, 21, 7],
+    "tokens": ["The", "European", "Commission", "said", "on", "Thursday", "it", "disagreed", "with", "German", "advice", "to", "consumers", "to", "shun", "British", "lamb", "until", "scientists", "determine", "whether", "mad", "cow", "disease", "can", "be", "transmitted", "to", "sheep", "."]
+}
+```
+
 The following example fine-tunes BERT on CoNLL-2003:
 
 ```bash
 python run_ner.py \
-  --model_name_or_path bert-base-uncased \
+  --model_name_or_path google-bert/bert-base-uncased \
   --dataset_name conll2003 \
   --output_dir /tmp/test-ner \
   --do_train \
@@ -42,7 +56,7 @@ To run on your own training and validation files, use the following command:
 
 ```bash
 python run_ner.py \
-  --model_name_or_path bert-base-uncased \
+  --model_name_or_path google-bert/bert-base-uncased \
   --train_file path_to_train_file \
   --validation_file path_to_validation_file \
   --output_dir /tmp/test-ner \
@@ -84,7 +98,7 @@ then
 export TASK_NAME=ner
 
 python run_ner_no_trainer.py \
-  --model_name_or_path bert-base-cased \
+  --model_name_or_path google-bert/bert-base-cased \
   --dataset_name conll2003 \
   --task_name $TASK_NAME \
   --max_length 128 \
@@ -112,7 +126,7 @@ that will check everything is ready for training. Finally, you can launch traini
 export TASK_NAME=ner
 
 accelerate launch run_ner_no_trainer.py \
-  --model_name_or_path bert-base-cased \
+  --model_name_or_path google-bert/bert-base-cased \
   --dataset_name conll2003 \
   --task_name $TASK_NAME \
   --max_length 128 \
