@@ -20,12 +20,19 @@ from datetime import datetime
 from functools import lru_cache
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union, get_args, get_origin, get_type_hints
 
-import jinja2
-from jinja2 import nodes
-from jinja2.exceptions import TemplateError
-from jinja2.ext import Extension
-from jinja2.sandbox import ImmutableSandboxedEnvironment
 from packaging import version
+
+from .import_utils import is_jinja_available
+
+
+if is_jinja_available():
+    import jinja2
+    # from jinja2 import nodes
+    # from jinja2.exceptions import TemplateError
+    # from jinja2.ext import Extension
+    # from jinja2.sandbox import ImmutableSandboxedEnvironment
+else:
+    jinja2 = None
 
 
 BASIC_TYPES = (int, float, str, bool, Any, type(None), ...)
@@ -326,49 +333,6 @@ def get_json_schema(func: Callable) -> Dict:
     return {"type": "function", "function": output}
 
 
-class AssistantTracker(Extension):
-    # This extension is used to track the indices of assistant-generated tokens in the rendered chat
-    tags = {"generation"}
-
-    def __init__(self, environment: ImmutableSandboxedEnvironment):
-        # The class is only initiated by jinja.
-        super().__init__(environment)
-        environment.extend(activate_tracker=self.activate_tracker)
-        self._rendered_blocks = None
-        self._generation_indices = None
-
-    def parse(self, parser: jinja2.parser.Parser) -> jinja2.nodes.CallBlock:
-        lineno = next(parser.stream).lineno
-        body = parser.parse_statements(["name:endgeneration"], drop_needle=True)
-        return nodes.CallBlock(self.call_method("_generation_support"), [], [], body).set_lineno(lineno)
-
-    @jinja2.pass_eval_context
-    def _generation_support(self, context: jinja2.nodes.EvalContext, caller: jinja2.runtime.Macro) -> str:
-        rv = caller()
-        if self.is_active():
-            # Only track generation indices if the tracker is active
-            start_index = len("".join(self._rendered_blocks))
-            end_index = start_index + len(rv)
-            self._generation_indices.append((start_index, end_index))
-        return rv
-
-    def is_active(self) -> bool:
-        return self._rendered_blocks or self._generation_indices
-
-    @contextmanager
-    def activate_tracker(self, rendered_blocks: List[int], generation_indices: List[int]):
-        try:
-            if self.is_active():
-                raise ValueError("AssistantTracker should not be reused before closed")
-            self._rendered_blocks = rendered_blocks
-            self._generation_indices = generation_indices
-
-            yield
-        finally:
-            self._rendered_blocks = None
-            self._generation_indices = None
-
-
 def _render_with_assistant_indices(
     compiled_template, messages, tools, documents, add_generation_prompt, **template_kwargs
 ):
@@ -389,13 +353,55 @@ def _render_with_assistant_indices(
 
 @lru_cache
 def _compile_jinja_template(chat_template):
+    class AssistantTracker(jinja2.ext.Extension):
+        # This extension is used to track the indices of assistant-generated tokens in the rendered chat
+        tags = {"generation"}
+
+        def __init__(self, environment: jinja2.sandbox.ImmutableSandboxedEnvironment):
+            # The class is only initiated by jinja.
+            super().__init__(environment)
+            environment.extend(activate_tracker=self.activate_tracker)
+            self._rendered_blocks = None
+            self._generation_indices = None
+
+        def parse(self, parser: jinja2.parser.Parser) -> jinja2.nodes.CallBlock:
+            lineno = next(parser.stream).lineno
+            body = parser.parse_statements(["name:endgeneration"], drop_needle=True)
+            return jinja2.nodes.CallBlock(self.call_method("_generation_support"), [], [], body).set_lineno(lineno)
+
+        @jinja2.pass_eval_context
+        def _generation_support(self, context: jinja2.nodes.EvalContext, caller: jinja2.runtime.Macro) -> str:
+            rv = caller()
+            if self.is_active():
+                # Only track generation indices if the tracker is active
+                start_index = len("".join(self._rendered_blocks))
+                end_index = start_index + len(rv)
+                self._generation_indices.append((start_index, end_index))
+            return rv
+
+        def is_active(self) -> bool:
+            return self._rendered_blocks or self._generation_indices
+
+        @contextmanager
+        def activate_tracker(self, rendered_blocks: List[int], generation_indices: List[int]):
+            try:
+                if self.is_active():
+                    raise ValueError("AssistantTracker should not be reused before closed")
+                self._rendered_blocks = rendered_blocks
+                self._generation_indices = generation_indices
+
+                yield
+            finally:
+                self._rendered_blocks = None
+                self._generation_indices = None
+
     if version.parse(jinja2.__version__) < version.parse("3.1.0"):
         raise ImportError(
             "apply_chat_template requires jinja2>=3.1.0 to be installed. Your version is " f"{jinja2.__version__}."
         )
 
     def raise_exception(message):
-        raise TemplateError(message)
+        raise jinja2.exceptions.TemplateError(message)
 
     def tojson(x, ensure_ascii=False, indent=None, separators=None, sort_keys=False):
         # We override the built-in tojson filter because Jinja's default filter escapes HTML characters
@@ -405,7 +411,7 @@ def _compile_jinja_template(chat_template):
     def strftime_now(format):
         return datetime.now().strftime(format)
 
-    jinja_env = ImmutableSandboxedEnvironment(
+    jinja_env = jinja2.sandbox.ImmutableSandboxedEnvironment(
         trim_blocks=True, lstrip_blocks=True, extensions=[AssistantTracker, jinja2.ext.loopcontrols]
     )
     jinja_env.filters["tojson"] = tojson
