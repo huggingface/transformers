@@ -1589,7 +1589,7 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
         temperature = 10000
         scale = 2 * math.pi
 
-        dim_t = torch.arange(num_pos_feats, dtype=torch.int64, device=proposals.device).to(proposals.dtype)
+        dim_t = torch.arange(num_pos_feats, dtype=torch.int64, device=proposals.device).float()
         dim_t = temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / num_pos_feats)
         # batch_size, num_queries, 4
         proposals = proposals.sigmoid() * scale
