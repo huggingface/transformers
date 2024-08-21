@@ -27,7 +27,7 @@ from .import_utils import is_jinja_available
 
 if is_jinja_available():
     import jinja2
-    from jinja2.ext import Extension
+    from jinja2.ext import Extension  # jinja2.ext.Extension fails because the module is not correctly initialized
 else:
     jinja2 = None
     Extension = None
