@@ -53,8 +53,8 @@ class Qwen2AudioProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
-        audios: Union[np.ndarray, List[np.ndarray]] = None,
+        text: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
+        audios: Optional[Union[np.ndarray, List[np.ndarray]]] = None,
         padding: Union[bool, str, PaddingStrategy] = False,
         sampling_rate: Optional[int] = None,
         **kwargs,

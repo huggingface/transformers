@@ -16,11 +16,25 @@
 Speech processor class for Wav2Vec2-BERT
 """
 
+import sys
 import warnings
+from typing import List, Optional, Union
 
-from ...processing_utils import ProcessorMixin
+from ...feature_extraction_utils import BatchFeature
+from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from ...tokenization_utils_base import AudioInput, PreTokenizedInput, TextInput
 from ..seamless_m4t.feature_extraction_seamless_m4t import SeamlessM4TFeatureExtractor
 from ..wav2vec2.tokenization_wav2vec2 import Wav2Vec2CTCTokenizer
+
+
+if sys.version_info >= (3, 11):
+    from typing import Unpack
+else:
+    from typing_extensions import Unpack
+
+
+class Wav2Vec2BertProcessorKwargs(ProcessingKwargs, total=False):
+    _defaults = {}
 
 
 class Wav2Vec2BertProcessor(ProcessorMixin):
@@ -38,11 +52,9 @@ class Wav2Vec2BertProcessor(ProcessorMixin):
             An instance of [`PreTrainedTokenizer`]. The tokenizer is a required input.
     """
 
+    attributes = ["feature_extractor", "tokenizer"]
     feature_extractor_class = "SeamlessM4TFeatureExtractor"
     tokenizer_class = "AutoTokenizer"
-
-    def __init__(self, feature_extractor, tokenizer):
-        super().__init__(feature_extractor, tokenizer)
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
@@ -63,7 +75,14 @@ class Wav2Vec2BertProcessor(ProcessorMixin):
 
             return cls(feature_extractor=feature_extractor, tokenizer=tokenizer)
 
-    def __call__(self, audio=None, text=None, **kwargs):
+    def __call__(
+        self,
+        audio: Optional[AudioInput] = None,
+        text: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
+        images=None,
+        videos=None,
+        **kwargs: Unpack[Wav2Vec2BertProcessorKwargs],
+    ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and audio(s). This method forwards the `audio`
         and `kwargs` arguments to SeamlessM4TFeatureExtractor's [`~SeamlessM4TFeatureExtractor.__call__`] if `audio` is not
@@ -71,17 +90,15 @@ class Wav2Vec2BertProcessor(ProcessorMixin):
         PreTrainedTokenizer's [`~PreTrainedTokenizer.__call__`] if `text` is not `None`. Please refer to the doctsring of the above two methods for more information.
 
         Args:
-            text (`str`, `List[str]`, `List[List[str]]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            audio (`np.ndarray`, `torch.Tensor`, `List[np.ndarray]`, `List[torch.Tensor]`):
+            audio (`AudioInput`, *optional*):
                 The audio or batch of audios to be prepared. Each audio can be NumPy array or PyTorch tensor. In case
                 of a NumPy array/PyTorch tensor, each audio should be of shape (C, T), where C is a number of channels,
                 and T the sample length of the audio.
-            kwargs (*optional*):
-                Remaining dictionary of keyword arguments that will be passed to the feature extractor and/or the
-                tokenizer.
+            text (`TextInput`, `PreTokenizedInput`, `List[TextInput]`, `List[PreTokenizedInput]`, *optional*):
+                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
+                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
+                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
+
         Returns:
             [`BatchEncoding`]: A [`BatchEncoding`] with the following fields:
             - **input_features** -- Audio input features to be fed to a model. Returned when `audio` is not `None`.
@@ -91,23 +108,26 @@ class Wav2Vec2BertProcessor(ProcessorMixin):
             - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None` and `audio` is `None`.
         """
 
-        sampling_rate = kwargs.pop("sampling_rate", None)
-
         if audio is None and text is None:
             raise ValueError("You need to specify either an `audio` or `text` input to process.")
 
-        if audio is not None:
-            inputs = self.feature_extractor(audio, sampling_rate=sampling_rate, **kwargs)
-        if text is not None:
-            encodings = self.tokenizer(text, **kwargs)
+        output_kwargs = self._merge_kwargs(
+            Wav2Vec2BertProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
 
-        if text is None:
-            return inputs
-        elif audio is None:
-            return encodings
-        else:
-            inputs["labels"] = encodings["input_ids"]
-            return inputs
+        data = {}
+        if audio is not None:
+            audio_features = self.feature_extractor(audio, **output_kwargs["audio_kwargs"])
+            data.update(audio_features)
+        if text is not None:
+            text_features = self.tokenizer(text, **output_kwargs["text_kwargs"])
+            if audio is not None:
+                data["labels"] = text_features["input_ids"]
+            else:
+                data.update(text_features)
+        return BatchFeature(data, tensor_type=output_kwargs["common_kwargs"].get("return_tensors"))
 
     def pad(self, input_features=None, labels=None, **kwargs):
         """

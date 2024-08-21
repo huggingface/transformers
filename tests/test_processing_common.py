@@ -132,17 +132,16 @@ class ProcessorTesterMixin:
     @require_vision
     @require_torch
     def test_tokenizer_defaults_preserved_by_kwargs(self):
-        if "image_processor" not in self.processor_class.attributes:
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+        if "tokenizer" not in self.processor_class.attributes:
+            self.skipTest(f"tokenizer attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
         processor_components["tokenizer"] = self.get_component("tokenizer", max_length=117, padding="max_length")
 
         processor = self.processor_class(**processor_components)
         self.skip_processor_without_typed_kwargs(processor)
         input_str = "lower newer"
-        image_input = self.prepare_image_inputs()
 
-        inputs = processor(text=input_str, images=image_input, return_tensors="pt")
+        inputs = processor(text=input_str, return_tensors="pt")
         self.assertEqual(inputs[self.text_data_arg_name].shape[-1], 117)
 
     @require_torch
@@ -194,19 +193,16 @@ class ProcessorTesterMixin:
     @require_vision
     @require_torch
     def test_kwargs_overrides_default_tokenizer_kwargs(self):
-        if "image_processor" not in self.processor_class.attributes:
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+        if "tokenizer" not in self.processor_class.attributes:
+            self.skipTest(f"tokenizer attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
         processor_components["tokenizer"] = self.get_component("tokenizer", padding="longest")
 
         processor = self.processor_class(**processor_components)
         self.skip_processor_without_typed_kwargs(processor)
         input_str = "lower newer"
-        image_input = self.prepare_image_inputs()
 
-        inputs = processor(
-            text=input_str, images=image_input, return_tensors="pt", max_length=112, padding="max_length"
-        )
+        inputs = processor(text=input_str, return_tensors="pt", max_length=112, padding="max_length")
         self.assertEqual(inputs[self.text_data_arg_name].shape[-1], 112)
 
     @require_torch

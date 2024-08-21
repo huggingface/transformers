@@ -19,14 +19,16 @@ import shutil
 import tempfile
 import unittest
 
-from transformers import is_speech_available, is_torch_available
+from transformers import SpeechT5Processor, is_speech_available, is_torch_available
 from transformers.models.speecht5 import SpeechT5Tokenizer
-from transformers.testing_utils import get_tests_dir, require_torch
+from transformers.testing_utils import get_tests_dir, require_torch, require_torchaudio
 from transformers.utils import FEATURE_EXTRACTOR_NAME
+
+from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_speech_available() and is_torch_available():
-    from transformers import SpeechT5FeatureExtractor, SpeechT5Processor
+    from transformers import SpeechT5FeatureExtractor
 
     from .test_feature_extraction_speecht5 import floats_list
 
@@ -35,7 +37,10 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece_bpe_char.model")
 
 
 @require_torch
-class SpeechT5ProcessorTest(unittest.TestCase):
+@require_torchaudio
+class SpeechT5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    processor_class = SpeechT5Processor
+
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
 
