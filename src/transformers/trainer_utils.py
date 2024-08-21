@@ -425,7 +425,7 @@ class SchedulerType(ExplicitEnum):
        - "reduce_lr_on_plateau" = get_reduce_on_plateau_schedule
        - "cosine_with_min_lr" = get_cosine_with_min_lr_schedule_with_warmup
        - "warmup_stable_decay" = get_wsd_schedule
-    """ 
+    """
     LINEAR = "linear"
     COSINE = "cosine"
     COSINE_WITH_RESTARTS = "cosine_with_restarts"
