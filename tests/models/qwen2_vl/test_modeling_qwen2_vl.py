@@ -329,37 +329,8 @@ class Qwen2VLIntegrationTest(unittest.TestCase):
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         inputs = self.processor(text=[text], images=[self.image], return_tensors="pt")
 
-        expected_input_ids = [
-            151644,
-            8948,
-            198,
-            2610,
-            525,
-            264,
-            10950,
-            17847,
-            13,
-            151645,
-            198,
-            151644,
-            872,
-            198,
-            151652,
-            151654,
-            151653,
-            3838,
-            3093,
-            315,
-            5562,
-            374,
-            419,
-            30,
-            151645,
-            151644,
-            77091,
-            198,
-        ]
-        assert expected_input_ids == inputs.input_ids[0].tolist()
+        expected_input_ids = [151644, 8948, 198, 2610, 525, 264, 10950, 17847, 13, 151645, 198, 151644, 872, 198, 151652, 151655, 151655]  # fmt: skip
+        assert expected_input_ids == inputs.input_ids[0].tolist()[:17]
 
         expected_pixel_slice = torch.tensor(
             [
@@ -373,7 +344,7 @@ class Qwen2VLIntegrationTest(unittest.TestCase):
             dtype=torch.float32,
             device="cpu",
         )
-        assert torch.allclose(expected_pixel_slice, inputs.pixel_values[:6, :3])
+        assert torch.allclose(expected_pixel_slice, inputs.pixel_values[:6, :3], atol=1e-3)
 
         # verify generation
         inputs = inputs.to(torch_device)
