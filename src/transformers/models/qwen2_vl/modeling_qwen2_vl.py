@@ -237,16 +237,16 @@ class PatchEmbed(nn.Module):
         super().__init__()
         self.patch_size = patch_size
         self.temporal_patch_size = temporal_patch_size
+        self.in_channels = in_channels
         self.embed_dim = embed_dim
 
         kernel_size = [temporal_patch_size, patch_size, patch_size]
         self.proj = nn.Conv3d(in_channels, embed_dim, kernel_size=kernel_size, stride=kernel_size, bias=False)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        seqlen = x.shape[0]
         target_dtype = self.proj.weight.dtype
-        x = x.view(seqlen, -1, self.temporal_patch_size, self.patch_size, self.patch_size)
-        x = self.proj(x.to(dtype=target_dtype)).view(seqlen, self.embed_dim)
+        x = x.view(-1, self.in_channels, self.temporal_patch_size, self.patch_size, self.patch_size)
+        x = self.proj(x.to(dtype=target_dtype)).view(-1, self.embed_dim)
         return x
 
 
@@ -1550,6 +1550,8 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel):
                 pixel_values = pixel_values.type(self.visual.get_dtype())
                 image_embeds = self.visual(pixel_values, grid_thw=image_grid_thw).to(inputs_embeds.device)
                 image_mask = input_ids == self.config.image_token_id
+                if self.training:
+                    inputs_embeds = inputs_embeds.clone()
                 inputs_embeds[image_mask] = image_embeds
             if pixel_values_videos is not None:
                 pixel_values_videos = pixel_values_videos.type(self.visual.get_dtype())
