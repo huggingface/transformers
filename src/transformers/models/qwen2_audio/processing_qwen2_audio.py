@@ -16,13 +16,29 @@
 Processor class for Qwen2Audio.
 """
 
+import sys
 from typing import List, Optional, Union
 
-import numpy as np
-
 from ...feature_extraction_utils import BatchFeature
-from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import PaddingStrategy, PreTokenizedInput, TextInput
+from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from ...tokenization_utils_base import AudioInput, PreTokenizedInput, TextInput
+
+
+if sys.version_info >= (3, 11):
+    from typing import Unpack
+else:
+    from typing_extensions import Unpack
+
+
+class Qwen2AudioProcessorKwargs(ProcessingKwargs, total=False):
+    _defaults = {
+        "text_kwargs": {
+            "padding": False,
+        },
+        "audio_kwargs": {
+            "padding": False,
+        },
+    }
 
 
 class Qwen2AudioProcessor(ProcessorMixin):
@@ -38,8 +54,8 @@ class Qwen2AudioProcessor(ProcessorMixin):
         tokenizer ([`Qwen2TokenizerFast`], *optional*):
             The tokenizer is a required input.
         chat_template (`Optional[str]`, *optional*):
-                The Jinja template to use for formatting the conversation. If not provided, the default chat template
-                is used.
+            The Jinja template to use for formatting the conversation. If not provided, the default chat template
+            is used.
     """
 
     attributes = ["feature_extractor", "tokenizer"]
@@ -54,10 +70,10 @@ class Qwen2AudioProcessor(ProcessorMixin):
     def __call__(
         self,
         text: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
-        audios: Optional[Union[np.ndarray, List[np.ndarray]]] = None,
-        padding: Union[bool, str, PaddingStrategy] = False,
-        sampling_rate: Optional[int] = None,
-        **kwargs,
+        audios: Optional[AudioInput] = None,
+        images=None,
+        videos=None,
+        **kwargs: Unpack[Qwen2AudioProcessorKwargs],
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and audio(s). This method forwards the `text`
@@ -67,39 +83,44 @@ class Qwen2AudioProcessor(ProcessorMixin):
         of the above two methods for more information.
 
         Args:
-            text (`str`, `List[str]`, `List[List[str]]`):
+            text (`TextInput`, `PreTokenizedInput`, `List[TextInput]`, `List[PreTokenizedInput]`, *optional*):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            audios (`np.ndarray`, `List[np.ndarray]`):
+            audios (`AudioInput`, *optional*):
                 The audio or batch of audios to be prepared. Each audio can be a NumPy array.
-            padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
-                Select a strategy to pad the returned sequences (according to the model's padding side and padding
-                index) among:
-                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
-                  sequence if provided).
-                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
-                  acceptable input length for the model if that argument is not provided.
-                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
-                  lengths).
-            sampling_rate (`int`, defaults to 16000):
-                The sampling rate at which the audio files should be digitalized expressed in hertz (Hz).
+
+        Returns:
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
+
+            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
+            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
+              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
+              `None`).
+            - **input_features** -- Audio input features to be fed to a model. Returned when `audios` is not `None`.
         """
 
         if text is None:
             raise ValueError("You need to specify either a `text` input to process.")
-        inputs = self.tokenizer(text, padding=padding, **kwargs)
+
+        output_kwargs = self._merge_kwargs(
+            Qwen2AudioProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
+        # Temporary fix for "paddding_side" in init_kwargs
+        _ = output_kwargs["text_kwargs"].pop("padding_side", None)
+
+        data = self.tokenizer(text, **output_kwargs["text_kwargs"])
 
         if audios is not None:
-            audio_inputs = self.feature_extractor(
-                audios, sampling_rate=sampling_rate, return_attention_mask=True, padding="max_length", **kwargs
-            )
+            audio_inputs = self.feature_extractor(audios, **output_kwargs["audio_kwargs"])
             audio_inputs["feature_attention_mask"] = audio_inputs.pop(
                 "attention_mask"
             )  # rename attention_mask to prevent conflicts later on
-            inputs.update(audio_inputs)
+            data.update(audio_inputs)
 
-        return BatchFeature(data={**inputs})
+        return BatchFeature(data={**data}, tensor_type=output_kwargs["common_kwargs"].get("return_tensors"))
 
     def batch_decode(self, *args, **kwargs):
         """

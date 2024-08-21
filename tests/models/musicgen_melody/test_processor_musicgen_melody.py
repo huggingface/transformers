@@ -20,13 +20,15 @@ import unittest
 
 import numpy as np
 
-from transformers import T5Tokenizer, T5TokenizerFast
+from transformers import MusicgenMelodyProcessor, T5Tokenizer, T5TokenizerFast
 from transformers.testing_utils import require_sentencepiece, require_torch, require_torchaudio
 from transformers.utils.import_utils import is_torchaudio_available
 
+from ...test_processing_common import ProcessorTesterMixin
+
 
 if is_torchaudio_available():
-    from transformers import MusicgenMelodyFeatureExtractor, MusicgenMelodyProcessor
+    from transformers import MusicgenMelodyFeatureExtractor
 
 
 global_rng = random.Random()
@@ -51,17 +53,20 @@ def floats_list(shape, scale=1.0, rng=None, name=None):
 @require_sentencepiece
 @require_torchaudio
 # Copied from tests.models.musicgen.test_processing_musicgen.MusicgenProcessorTest with Musicgen->MusicgenMelody, Encodec->MusicgenMelody, padding_mask->attention_mask, input_values->input_features
-class MusicgenMelodyProcessorTest(unittest.TestCase):
+class MusicgenMelodyProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    from_pretrained_id = "facebook/musicgen-melody"
+    processor_class = MusicgenMelodyProcessor
+
     def setUp(self):
-        # Ignore copy
-        self.checkpoint = "facebook/musicgen-melody"
         self.tmpdirname = tempfile.mkdtemp()
+        processor = MusicgenMelodyProcessor.from_pretrained(self.from_pretrained_id)
+        processor.save_pretrained(self.tmpdirname)
 
     def get_tokenizer(self, **kwargs):
-        return T5Tokenizer.from_pretrained(self.checkpoint, **kwargs)
+        return T5Tokenizer.from_pretrained(self.from_pretrained_id, **kwargs)
 
     def get_feature_extractor(self, **kwargs):
-        return MusicgenMelodyFeatureExtractor.from_pretrained(self.checkpoint, **kwargs)
+        return MusicgenMelodyFeatureExtractor.from_pretrained(self.from_pretrained_id, **kwargs)
 
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)

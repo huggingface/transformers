@@ -16,7 +16,44 @@
 Audio/Text processor class for SeamlessM4T
 """
 
-from ...processing_utils import ProcessorMixin
+import sys
+from typing import List, Optional, Union
+
+from ...feature_extraction_utils import BatchFeature
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, TextKwargs
+from ...tokenization_utils_base import AudioInput, PreTokenizedInput, TextInput
+
+
+if sys.version_info >= (3, 11):
+    from typing import Unpack
+else:
+    from typing_extensions import Unpack
+
+
+class SeamlessM4TProcessorAudioKwargs(TextKwargs, total=False):
+    do_normalize_per_mel_bins: Optional[bool]
+
+
+class SeamlessM4TProcessorTextKwargs(TextKwargs, total=False):
+    src_lang: Optional[str]
+    tgt_lang: Optional[str]
+
+
+class SeamlessM4TProcessorKwargs(ProcessingKwargs, total=False):
+    text_kwargs: SeamlessM4TProcessorTextKwargs
+    audio_kwargs: SeamlessM4TProcessorAudioKwargs
+    _defaults = {
+        "text_kwargs": {
+            "padding": True,
+            "pad_to_multiple_of": 2,
+        },
+        "audio_kwargs": {
+            "do_normalize_per_mel_bins": True,
+            "padding": True,
+            "pad_to_multiple_of": 2,
+            "truncation": True,
+        },
+    }
 
 
 class SeamlessM4TProcessor(ProcessorMixin):
@@ -41,7 +78,14 @@ class SeamlessM4TProcessor(ProcessorMixin):
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
 
-    def __call__(self, text=None, audios=None, src_lang=None, tgt_lang=None, **kwargs):
+    def __call__(
+        self,
+        text: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
+        audios: Optional[AudioInput] = None,
+        images=None,
+        videos=None,
+        **kwargs: Unpack[SeamlessM4TProcessorKwargs],
+    ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and audio(s). This method forwards the `text`
         and `kwargs` arguments to SeamlessM4TTokenizerFast's [`~SeamlessM4TTokenizerFast.__call__`] if `text` is not
@@ -50,24 +94,17 @@ class SeamlessM4TProcessor(ProcessorMixin):
         to the doctsring of the above two methods for more information.
 
         Args:
-            text (`str`, `List[str]`, `List[List[str]]`):
+            text (`TextInput`, `PreTokenizedInput`, `List[TextInput]`, `List[PreTokenizedInput]`, *optional*):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            audios (`np.ndarray`, `torch.Tensor`, `List[np.ndarray]`, `List[torch.Tensor]`):
+            audios (`AudioInput`, *optional*):
                 The audio or batch of audios to be prepared. Each audio can be NumPy array or PyTorch tensor. In case
                 of a NumPy array/PyTorch tensor, each audio should be of shape (C, T), where C is a number of channels,
                 and T the sample length of the audio.
-            src_lang (`str`, *optional*):
-                The language code of the input texts/audios. If not specified, the last `src_lang` specified will be
-                used.
-            tgt_lang (`str`, *optional*):
-                The code of the target language. If not specified, the last `tgt_lang` specified will be used.
-            kwargs (*optional*):
-                Remaining dictionary of keyword arguments that will be passed to the feature extractor and/or the
-                tokenizer.
+
         Returns:
-            [`BatchEncoding`]: A [`BatchEncoding`] with the following fields:
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 
             - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
             - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
@@ -75,7 +112,6 @@ class SeamlessM4TProcessor(ProcessorMixin):
               `None`).
             - **input_features** -- Audio input features to be fed to a model. Returned when `audios` is not `None`.
         """
-        sampling_rate = kwargs.pop("sampling_rate", None)
 
         if text is None and audios is None:
             raise ValueError("You have to specify either text or audios. Both cannot be none.")
@@ -83,18 +119,21 @@ class SeamlessM4TProcessor(ProcessorMixin):
             raise ValueError(
                 "Text and audios are mututally exclusive when passed to `SeamlessM4T`. Specify one or another."
             )
-        elif text is not None:
-            if tgt_lang is not None:
-                self.tokenizer.tgt_lang = tgt_lang
-            if src_lang is not None:
-                self.tokenizer.src_lang = src_lang
-            encoding = self.tokenizer(text, **kwargs)
 
-            return encoding
+        output_kwargs = self._merge_kwargs(
+            SeamlessM4TProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
 
-        else:
-            encoding = self.feature_extractor(audios, sampling_rate=sampling_rate, **kwargs)
-            return encoding
+        data = {}
+        if text is not None:
+            text_features = self.tokenizer(text, **output_kwargs["text_kwargs"])
+            data.update(text_features)
+        if audios is not None:
+            audio_features = self.feature_extractor(audios, **output_kwargs["audio_kwargs"])
+            data.update(audio_features)
+        return BatchFeature(data, tensor_type=output_kwargs["common_kwargs"].get("return_tensors"))
 
     def batch_decode(self, *args, **kwargs):
         """

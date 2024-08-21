@@ -19,21 +19,32 @@ import unittest
 from transformers import ClapFeatureExtractor, ClapProcessor, RobertaTokenizer, RobertaTokenizerFast
 from transformers.testing_utils import require_sentencepiece, require_torchaudio
 
+from ...test_processing_common import ProcessorTesterMixin
 from .test_feature_extraction_clap import floats_list
 
 
 @require_torchaudio
 @require_sentencepiece
-class ClapProcessorTest(unittest.TestCase):
+class ClapProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    from_pretrained_id = "laion/clap-htsat-unfused"
+    processor_class = ClapProcessor
+
     def setUp(self):
-        self.checkpoint = "laion/clap-htsat-unfused"
         self.tmpdirname = tempfile.mkdtemp()
+        processor = ClapProcessor.from_pretrained(self.from_pretrained_id)
+        processor.save_pretrained(self.tmpdirname)
+
+    def get_component(self, attribute, **kwargs):
+        assert attribute in self.processor_class.attributes
+        if attribute == "tokenizer":
+            return self.get_tokenizer(**kwargs)
+        return super().get_component(attribute, **kwargs)
 
     def get_tokenizer(self, **kwargs):
-        return RobertaTokenizer.from_pretrained(self.checkpoint, **kwargs)
+        return RobertaTokenizer.from_pretrained(self.from_pretrained_id, **kwargs)
 
     def get_feature_extractor(self, **kwargs):
-        return ClapFeatureExtractor.from_pretrained(self.checkpoint, **kwargs)
+        return ClapFeatureExtractor.from_pretrained(self.from_pretrained_id, **kwargs)
 
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)

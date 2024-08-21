@@ -140,8 +140,9 @@ class ProcessorTesterMixin:
         processor = self.processor_class(**processor_components)
         self.skip_processor_without_typed_kwargs(processor)
         input_str = "lower newer"
+        image_input = self.prepare_image_inputs() if "image_processor" in self.processor_class.attributes else None
 
-        inputs = processor(text=input_str, return_tensors="pt")
+        inputs = processor(text=input_str, images=image_input, return_tensors="pt")
         self.assertEqual(inputs[self.text_data_arg_name].shape[-1], 117)
 
     @require_torch
@@ -201,8 +202,11 @@ class ProcessorTesterMixin:
         processor = self.processor_class(**processor_components)
         self.skip_processor_without_typed_kwargs(processor)
         input_str = "lower newer"
+        image_input = self.prepare_image_inputs() if "image_processor" in self.processor_class.attributes else None
 
-        inputs = processor(text=input_str, return_tensors="pt", max_length=112, padding="max_length")
+        inputs = processor(
+            text=input_str, images=image_input, return_tensors="pt", max_length=112, padding="max_length"
+        )
         self.assertEqual(inputs[self.text_data_arg_name].shape[-1], 112)
 
     @require_torch

@@ -16,8 +16,22 @@
 Audio/Text processor class for CLAP
 """
 
-from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import BatchEncoding
+import sys
+from typing import List, Optional, Union
+
+from ...feature_extraction_utils import BatchFeature
+from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from ...tokenization_utils_base import AudioInput, PreTokenizedInput, TextInput
+
+
+if sys.version_info >= (3, 11):
+    from typing import Unpack
+else:
+    from typing_extensions import Unpack
+
+
+class ClapProcessorKwargs(ProcessingKwargs, total=False):
+    _defaults = {}
 
 
 class ClapProcessor(ProcessorMixin):
@@ -40,7 +54,14 @@ class ClapProcessor(ProcessorMixin):
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
 
-    def __call__(self, text=None, audios=None, return_tensors=None, **kwargs):
+    def __call__(
+        self,
+        text: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
+        audios: Optional[AudioInput] = None,
+        images=None,
+        videos=None,
+        **kwargs: Unpack[ClapProcessorKwargs],
+    ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and audio(s). This method forwards the `text`
         and `kwargs` arguments to RobertaTokenizerFast's [`~RobertaTokenizerFast.__call__`] if `text` is not `None` to
@@ -49,25 +70,17 @@ class ClapProcessor(ProcessorMixin):
         doctsring of the above two methods for more information.
 
         Args:
-            text (`str`, `List[str]`, `List[List[str]]`):
+            text (`TextInput`, `PreTokenizedInput`, `List[TextInput]`, `List[PreTokenizedInput]`, *optional*):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            audios (`np.ndarray`, `torch.Tensor`, `List[np.ndarray]`, `List[torch.Tensor]`):
+            audio (`AudioInput`, *optional*):
                 The audio or batch of audios to be prepared. Each audio can be NumPy array or PyTorch tensor. In case
                 of a NumPy array/PyTorch tensor, each audio should be of shape (C, T), where C is a number of channels,
                 and T the sample length of the audio.
 
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
-
         Returns:
-            [`BatchEncoding`]: A [`BatchEncoding`] with the following fields:
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 
             - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
             - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
@@ -75,26 +88,24 @@ class ClapProcessor(ProcessorMixin):
               `None`).
             - **audio_features** -- Audio features to be fed to a model. Returned when `audios` is not `None`.
         """
-        sampling_rate = kwargs.pop("sampling_rate", None)
 
         if text is None and audios is None:
             raise ValueError("You have to specify either text or audios. Both cannot be none.")
 
+        output_kwargs = self._merge_kwargs(
+            ClapProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
+
+        data = {}
         if text is not None:
-            encoding = self.tokenizer(text, return_tensors=return_tensors, **kwargs)
-
+            text_features = self.tokenizer(text, **output_kwargs["text_kwargs"])
+            data.update(text_features)
         if audios is not None:
-            audio_features = self.feature_extractor(
-                audios, sampling_rate=sampling_rate, return_tensors=return_tensors, **kwargs
-            )
-
-        if text is not None and audios is not None:
-            encoding.update(audio_features)
-            return encoding
-        elif text is not None:
-            return encoding
-        else:
-            return BatchEncoding(data=dict(**audio_features), tensor_type=return_tensors)
+            audio_features = self.feature_extractor(audios, **output_kwargs["audio_kwargs"])
+            data.update(audio_features)
+        return BatchFeature(data=data, tensor_type=output_kwargs["common_kwargs"].get("return_tensors"))
 
     def batch_decode(self, *args, **kwargs):
         """

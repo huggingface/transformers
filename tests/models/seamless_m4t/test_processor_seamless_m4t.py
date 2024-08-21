@@ -21,25 +21,48 @@ from transformers.models.seamless_m4t import (
     SeamlessM4TTokenizer,
     SeamlessM4TTokenizerFast,
 )
-from transformers.testing_utils import require_torch
+from transformers.testing_utils import require_torch, require_vision
 
+from ...test_processing_common import ProcessorTesterMixin
 from .test_feature_extraction_seamless_m4t import floats_list
 
 
 @require_torch
-class SeamlessM4TProcessorTest(unittest.TestCase):
+class SeamlessM4TProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    from_pretrained_id = "facebook/hf-seamless-m4t-medium"
+    processor_class = SeamlessM4TProcessor
+
     def setUp(self):
-        self.checkpoint = "facebook/hf-seamless-m4t-medium"
         self.tmpdirname = tempfile.mkdtemp()
+        processor = self.processor_class.from_pretrained(self.from_pretrained_id)
+        processor.save_pretrained(self.tmpdirname)
 
     def get_tokenizer(self, **kwargs):
-        return SeamlessM4TTokenizer.from_pretrained(self.checkpoint, **kwargs)
+        return SeamlessM4TTokenizer.from_pretrained(self.from_pretrained_id, **kwargs)
 
     def get_feature_extractor(self, **kwargs):
-        return SeamlessM4TFeatureExtractor.from_pretrained(self.checkpoint, **kwargs)
+        return SeamlessM4TFeatureExtractor.from_pretrained(self.from_pretrained_id, **kwargs)
 
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
+
+    @require_vision
+    @require_torch
+    def test_tokenizer_defaults_preserved_by_kwargs(self):
+        if "tokenizer" not in self.processor_class.attributes:
+            self.skipTest(f"tokenizer attribute not present in {self.processor_class}")
+        processor_components = self.prepare_components()
+        processor_components["tokenizer"] = self.get_component(
+            "tokenizer", max_length=117, padding="max_length", pad_to_multiple_of=1
+        )
+
+        processor = self.processor_class(**processor_components)
+        self.skip_processor_without_typed_kwargs(processor)
+        input_str = "lower newer"
+        image_input = self.prepare_image_inputs() if "image_processor" in self.processor_class.attributes else None
+
+        inputs = processor(text=input_str, images=image_input, return_tensors="pt")
+        self.assertEqual(inputs[self.text_data_arg_name].shape[-1], 117)
 
     def test_save_load_pretrained_default(self):
         tokenizer = self.get_tokenizer()
