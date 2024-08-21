@@ -1336,6 +1336,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         self.assertIn("Detected DeepSpeed ZeRO-3", cs.err)
 
     @parameterized.expand([2, 4, 8, 16])
+    @require_torch_accelerator
     @require_torch_multi_accelerator
     def test_deepspeed_sp(self, sp_size):
         # Check if deepspeed_sp is enabled
