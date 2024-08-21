@@ -648,6 +648,12 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
         if isinstance(token_ids, int):
             token_ids = [token_ids]
+        
+        if any(token_id > self.vocab_size for token_id in token_ids):
+            logger.warning_once(
+                f"OOV tokens {[token_id for token_id in token_ids if token_id > self.vocab_size]} in the fast tokenizer. "
+            )
+
         text = self._tokenizer.decode(token_ids, skip_special_tokens=skip_special_tokens)
 
         clean_up_tokenization_spaces = (
