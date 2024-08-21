@@ -90,6 +90,12 @@ def clip_boxes(box, box_size: Tuple[int, int]):
 
 
 def compute_score(boxes):
+    """
+    Compute logit scores per class for each box (proposal) and an array of class indices
+    corresponding to each proposal, flattened across the proposal_num.
+    The indices in `classes` will later be used to filter and match the predicted classes
+    with the input class names.
+    """
     num_classes = boxes.shape[2]
     proposal_num = boxes.shape[1]
     scores = torch.sigmoid(boxes)
@@ -98,9 +104,9 @@ def compute_score(boxes):
 
 
 def _post_process_boxes_for_image(
-    boxes,
-    scores,
-    predicted_classes,
+    boxes: TensorType,
+    scores: TensorType,
+    predicted_classes: TensorType,
     classes: List[str],
     image_size: Tuple[int, int],
     num_classes: int,
@@ -111,13 +117,13 @@ def _post_process_boxes_for_image(
     """
     Filter predicted results using given thresholds and NMS.
     Args:
-        boxes (Tensor): A Tensor of predicted class-specific or class-agnostic
+        boxes (torch.Tensor): A Tensor of predicted class-specific or class-agnostic
             boxes for the image. Shape : (num_queries, max_num_classes_in_batch * 4) if doing
             class-specific regression, or (num_queries, 4) if doing class-agnostic
             regression.
-        scores (Tensor): A Tensor of predicted class scores for the image.
+        scores (torch.Tensor): A Tensor of predicted class scores for the image.
             Shape : (num_queries, max_num_classes_in_batch + 1)
-        predicted_classes (Tensor): A Tensor of predicted classes for the image.
+        predicted_classes (torch.Tensor): A Tensor of predicted classes for the image.
             Shape : (num_queries * (max_num_classes_in_batch + 1),)
         classes (List[str]): The input classes names.
         image_size (tuple): A tuple of (height, width) for the image.
@@ -202,15 +208,15 @@ class OmDetTurboProcessor(ProcessorMixin):
         **kwargs: Unpack[OmDetTurboProcessorKwargs],
     ) -> BatchFeature:
         """
-        This method uses [*DetrImageProcessor.__call__*] method to prepare image(s) for the model, and
-        [*CLIPTokenizerFast.__call__*] to prepare text for the model.
+        This method uses [*DetrImageProcessor.__call__] method to prepare image(s) for the model, and
+        [CLIPTokenizerFast.__call__] to prepare text for the model.
 
         Please refer to the docstring of the above two methods for more information.
 
         Args:
             images (`ImageInput`):
                Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255.
-            text (`Union[List[str], List[List[str]]]`):
+            text (`Union[str, List[str], List[List[str]]]`):
                 The classes used to limit the scope of the open vocabulary detection. Expects a list of strings or a list
                 of list of strings.
                 Examples: ["cat", "dog", "bird"].
@@ -220,7 +226,7 @@ class OmDetTurboProcessor(ProcessorMixin):
                 When not provided, the default task is "Detect [class1], [class2], [class3]" etc.
         """
         if images is None or text is None:
-            raise ValueError("You have to specify `images`, `text`.")
+            raise ValueError("You have to specify both `images` and `text`")
 
         output_kwargs = self._merge_kwargs(
             OmDetTurboProcessorKwargs,
@@ -228,7 +234,10 @@ class OmDetTurboProcessor(ProcessorMixin):
             **kwargs,
         )
 
-        if not isinstance(text[0], (list, tuple)):
+        if isinstance(text, str):
+            text = text.strip(" ").split(",")
+
+        if not (len(text) and isinstance(text[0], (list, tuple))):
             text = [text]
 
         task = output_kwargs["text_kwargs"].pop("task", None)
@@ -237,10 +246,10 @@ class OmDetTurboProcessor(ProcessorMixin):
         elif not isinstance(task, (list, tuple)):
             task = [task]
 
-        classes = text
-
         encoding_image_processor = self.image_processor(images, **output_kwargs["images_kwargs"])
         tasks_encoding = self.tokenizer(text=task, **output_kwargs["text_kwargs"])
+
+        classes = text
 
         classes_structure = torch.tensor([len(class_single) for class_single in classes], dtype=torch.long)
         classes_flattened = [class_single for class_batch in classes for class_single in class_batch]
@@ -249,7 +258,7 @@ class OmDetTurboProcessor(ProcessorMixin):
         encoding = BatchFeature()
         encoding.update({f"tasks_{key}": value for key, value in tasks_encoding.items()})
         encoding.update({f"classes_{key}": value for key, value in classes_encoding.items()})
-        encoding.update({"structure": classes_structure})
+        encoding.update({"classes_structure": classes_structure})
         encoding.update(encoding_image_processor)
 
         return encoding
@@ -276,8 +285,8 @@ class OmDetTurboProcessor(ProcessorMixin):
         classes: Union[List[str], List[List[str]]],
         score_threshold: float = 0.3,
         nms_threshold: float = 0.5,
-        target_sizes: Union[TensorType, List[Tuple]] = None,
-        max_num_det=None,
+        target_sizes: Optional[Union[TensorType, List[Tuple]]] = None,
+        max_num_det: Optional[int] = None,
     ):
         """
         Converts the raw output of [`OmDetTurboForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
@@ -287,12 +296,13 @@ class OmDetTurboProcessor(ProcessorMixin):
             outputs ([`OmDetTurboObjectDetectionOutput`]):
                 Raw outputs of the model.
             classes (Union[List[str], List[List[str]]]): The input classes names.
-            score_threshold (float): Only return detections with a confidence score exceeding this
+            score_threshold (float, defaults to 0.3): Only return detections with a confidence score exceeding this
                 threshold.
-            nms_threshold (float):  The threshold to use for box non-maximum suppression. Value in [0, 1].
-            target_sizes (`torch.Tensor` or `List[Tuple[int, int]]`, *optional*):
+            nms_threshold (float, defaults to 0.5):  The threshold to use for box non-maximum suppression. Value in [0, 1].
+            target_sizes (`torch.Tensor` or `List[Tuple[int, int]]`, *optional*, defaults to None):
                 Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size
-                `(width, height)` of each image in the batch. If unset, predictions will not be resized.
+                `(height, width)` of each image in the batch. If unset, predictions will not be resized.
+            max_num_det (int, *optional*, defaults to None): The maximum number of detections to return.
         Returns:
             `List[Dict]`: A list of dictionaries, each dictionary containing the scores, classes and boxes for an image
             in the batch as predicted by the model.
@@ -302,6 +312,33 @@ class OmDetTurboProcessor(ProcessorMixin):
 
         boxes_logits = outputs.decoder_coord_logits
         scores_logits = outputs.decoder_class_logits
+
+        # Inputs consistency check
+        if target_sizes is None:
+            height = (
+                self.image_processor.size["height"]
+                if "height" in self.image_processor.size
+                else self.image_processor.size["shortest_edge"]
+            )
+            width = (
+                self.image_processor.size["width"]
+                if "width" in self.image_processor.size
+                else self.image_processor.size["longest_edge"]
+            )
+            target_sizes = ((height, width),) * len(boxes_logits)
+        elif len(target_sizes[0]) != 2:
+            raise ValueError(
+                "Each element of target_sizes must contain the size (height, width) of each image of the batch"
+            )
+        if len(target_sizes) != len(boxes_logits):
+            raise ValueError("Make sure that you pass in as many target sizes as output sequences")
+        if len(classes) != len(boxes_logits):
+            raise ValueError("Make sure that you pass in as many classes group as output sequences")
+
+        # Convert target_sizes to list for easier handling
+        if isinstance(target_sizes, torch.Tensor):
+            target_sizes = target_sizes.tolist()
+
         scores, predicted_classes = compute_score(scores_logits)
         num_classes = scores_logits.shape[2]
         results = []

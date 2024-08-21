@@ -33,9 +33,9 @@ The original code can be found [here](https://github.com/om-ai-lab/OmDet).
 
 ## Usage tips
 
-One specificity of OmDet-Turbo compared to other zero-shot object detection models, such as [Grounding DINO](grounding-dino), is the decoupled classes and prompt embedding structure that allows caching of text embeddings. This means that the model needs both classes and task as inputs, where classes is a list of objects we want to detect and task is the grounded text used to guide open-vocabulary detection. This approach limits the scope of the open-vocabulary detection and makes the decoding process faster.
+One unique property of OmDet-Turbo compared to other zero-shot object detection models, such as [Grounding DINO](grounding-dino), is the decoupled classes and prompt embedding structure that allows caching of text embeddings. This means that the model needs both classes and task as inputs, where classes is a list of objects we want to detect and task is the grounded text used to guide open-vocabulary detection. This approach limits the scope of the open-vocabulary detection and makes the decoding process faster.
 
-[`OmDetTurboProcessor`] is used to prepare the classes, task and image triplet. The task input is optional, and when not provided, it will default to `"Detect [class1], [class2], [class3], ..."` . To process the results from the model, one can use post_process_grounded_object_detection from [`OmDetTurboProcessor`]. Notably, this function takes in the input classes, as unlike other zero-shot object detection models, the decoupling of classes and task embeddings means that no decoding of the predicted class embeddings is needed in the post-processing step, and the predicted classes can be matched to the inputted ones directly.
+[`OmDetTurboProcessor`] is used to prepare the classes, task and image triplet. The task input is optional, and when not provided, it will default to `"Detect [class1], [class2], [class3], ..."`. To process the results from the model, one can use `post_process_grounded_object_detection` from [`OmDetTurboProcessor`]. Notably, this function takes in the input classes, as unlike other zero-shot object detection models, the decoupling of classes and task embeddings means that no decoding of the predicted class embeddings is needed in the post-processing step, and the predicted classes can be matched to the inputted ones directly.
 
 ## Usage example
 
@@ -87,28 +87,35 @@ OmDet-Turbo can perform batched multi-image inference, with support for differen
 >>> from io import BytesIO
 >>> from PIL import Image
 >>> from transformers import AutoProcessor, OmDetTurboForObjectDetection
+
 >>> processor = AutoProcessor.from_pretrained("yonigozlan/omdet-turbo-tiny")
 >>> model = OmDetTurboForObjectDetection.from_pretrained("yonigozlan/omdet-turbo-tiny")
+
 >>> url1 = "http://images.cocodataset.org/val2017/000000039769.jpg"
 >>> image1 = Image.open(BytesIO(requests.get(url1).content)).convert("RGB")
 >>> classes1 = ["cat", "remote"]
 >>> task1 = "Detect {}.".format(", ".join(classes1))
+
 >>> url2 = "http://images.cocodataset.org/train2017/000000257813.jpg"
 >>> image2 = Image.open(BytesIO(requests.get(url2).content)).convert("RGB")
 >>> classes2 = ["boat"]
 >>> task2 = "Detect all the boat in the image."
+
 >>> url3 = "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
 >>> image3 = Image.open(BytesIO(requests.get(url3).content)).convert("RGB")
 >>> classes3 = ["statue", "trees"]
 >>> task3 = "Focus on the foreground, detect statue and trees."
+
 >>> inputs = processor(
 ...     images=[image1, image2, image3],
 ...     text=[classes1, classes2, classes3],
 ...     task=[task1, task2, task3],
 ...     return_tensors="pt",
 ... )
+
 >>> with torch.no_grad():
 ...     outputs = model(**inputs)
+
 >>> # convert outputs (bounding boxes and class logits)
 >>> results = processor.post_process_grounded_object_detection(
 ...     outputs,
@@ -117,6 +124,7 @@ OmDet-Turbo can perform batched multi-image inference, with support for differen
 ...     score_threshold=0.2,
 ...     nms_threshold=0.3,
 ... )
+
 >>> for i, result in enumerate(results):
 ...     for score, class_name, box in zip(
 ...         result["scores"], result["classes"], result["boxes"]

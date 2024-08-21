@@ -59,7 +59,7 @@ class OmDetTurboProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "tasks_attention_mask",
             "classes_input_ids",
             "classes_attention_mask",
-            "structure",
+            "classes_structure",
             "pixel_values",
             "pixel_mask",
         ]
@@ -96,8 +96,7 @@ class OmDetTurboProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
 
     def get_fake_omdet_turbo_classes(self):
-        input_classes = [f"class{i}" for i in range(self.num_queries)]
-        return [input_classes] * self.batch_size
+        return [[f"class{i}_{j}" for i in range(self.num_queries)] for j in range(self.batch_size)]
 
     def test_post_process_grounded_object_detection(self):
         image_processor = self.get_image_processor()

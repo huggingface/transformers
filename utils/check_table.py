@@ -174,11 +174,11 @@ MODEL_NAMES_WITH_SAME_CONFIG = {
     "XLSR-Wav2Vec2": "Wav2Vec2",
 }
 MODEL_NAMES_TO_IGNORE = [
-    "CLIPVisionModel",
-    "SiglipVisionModel",
     "ChineseCLIPVisionModel",
-    "Qwen2AudioEncoder",
     "CLIPTextModel",
+    "CLIPVisionModel",
+    "Qwen2AudioEncoder",
+    "SiglipVisionModel",
 ]
 
 

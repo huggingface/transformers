@@ -14,7 +14,9 @@
 # limitations under the License.
 """Testing suite for the PyTorch OmDet-Turbo model."""
 
+import copy
 import unittest
+from io import BytesIO
 
 import requests
 
@@ -59,11 +61,11 @@ class OmDetTurboModelTester:
         num_classes=3,
         use_timm_backbone=False,
         backbone=None,
-        apply_layernorm=False,
+        apply_layernorm_after_vision_backbone=False,
         image_size=224,
         text_projection_in_dim=16,
         text_projection_out_dim=16,
-        class_dim=16,
+        class_embed_dim=16,
         hidden_size=8,
         num_hidden_layers=2,
         num_attention_heads=2,
@@ -83,11 +85,11 @@ class OmDetTurboModelTester:
         self.num_classes = num_classes
         self.use_timm_backbone = use_timm_backbone
         self.backbone = backbone
-        self.apply_layernorm = apply_layernorm
+        self.apply_layernorm_after_vision_backbone = apply_layernorm_after_vision_backbone
         self.image_size = image_size
         self.text_projection_in_dim = text_projection_in_dim
         self.text_projection_out_dim = text_projection_out_dim
-        self.class_dim = class_dim
+        self.class_embed_dim = class_embed_dim
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
@@ -112,7 +114,7 @@ class OmDetTurboModelTester:
         input_ids_classes = input_ids_classes.to(torch_device)
         attention_mask_tasks = torch.ones_like(input_ids_tasks, device=torch_device)
         attention_mask_classes = torch.ones_like(input_ids_classes, device=torch_device)
-        structure_classes = torch.ones(self.batch_size, dtype=torch.long, device=torch_device) * self.num_classes
+        classes_structure = torch.ones(self.batch_size, dtype=torch.long, device=torch_device) * self.num_classes
         encoding = BatchFeature()
         encoding.update(
             {
@@ -121,7 +123,7 @@ class OmDetTurboModelTester:
                 "classes_attention_mask": attention_mask_classes,
                 "tasks_input_ids": input_ids_tasks,
                 "tasks_attention_mask": attention_mask_tasks,
-                "structure": structure_classes,
+                "classes_structure": classes_structure,
             }
         )
         config = self.get_config()
@@ -151,7 +153,7 @@ class OmDetTurboModelTester:
             backbone_config=backbone_config,
             use_timm_backbone=self.use_timm_backbone,
             backbone=self.backbone,
-            apply_layernorm=self.apply_layernorm,
+            apply_layernorm_after_vision_backbone=self.apply_layernorm_after_vision_backbone,
             decoder_num_layers=self.num_hidden_layers,
             image_size=self.image_size,
             encoder_in_channels=self.encoder_in_channels,
@@ -163,9 +165,9 @@ class OmDetTurboModelTester:
             decoder_num_points=self.decoder_n_points,
             num_feature_levels=self.num_feature_levels,
             encoder_dim_feedforward=self.encoder_dim_feedforward,
-            task_encoder_feedforward_dim=self.encoder_dim_feedforward,
+            task_encoder_hidden_dim=self.encoder_dim_feedforward,
             decoder_dim_feedforward=self.encoder_dim_feedforward,
-            class_dim=self.class_dim,
+            class_embed_dim=self.class_embed_dim,
             text_projection_in_dim=self.text_projection_in_dim,
             text_projection_out_dim=self.text_projection_out_dim,
             encoder_hidden_dim=self.hidden_size,
@@ -194,14 +196,11 @@ class OmDetTurboModelTester:
 class OmDetTurboModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (OmDetTurboForObjectDetection,) if is_torch_available() else ()
     is_encoder_decoder = True
-    test_torchscript = False
     test_pruning = False
     test_head_masking = False
-    test_missing_keys = False
     pipeline_model_mapping = (
         {"zero-shot-object-detection": OmDetTurboForObjectDetection} if is_torch_available() else {}
     )
-    maxDiff = None
 
     # special case for head models
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -229,29 +228,127 @@ class OmDetTurboModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="OmDet-Turbo does not use decoder_outputs")
-    def test_save_load_low_cpu_mem_usage(self):
+    @unittest.skip(reason="OmDet-Turbo does not have 'input_ids' and 'attention_mask'")
+    def test_torchscript_output_attentions(self):
         pass
 
-    @unittest.skip(reason="OmDet-Turbo does not use decoder_outputs")
-    def test_save_load_low_cpu_mem_usage_checkpoints(self):
+    @unittest.skip(reason="OmDet-Turbo does not have 'input_ids' and 'attention_mask'")
+    def test_torchscript_output_hidden_states(self):
         pass
 
-    @unittest.skip(reason="OmDet-Turbo does not use decoder_outputs")
-    def test_save_load_low_cpu_mem_usage_no_safetensors(self):
+    @unittest.skip(reason="OmDet-Turbo does not have 'input_ids' and 'attention_mask'")
+    def test_torchscript_simple(self):
         pass
 
-    @unittest.skip(reason="OmDet-Turbo does not have a get_input_embeddings method")
-    def test_model_get_set_embeddings(self):
+    @unittest.skip(reason="OmDet-Turbo does not have 'input_ids' and 'attention_mask'")
+    def test_torchscript_output_hidden_state(self):
         pass
 
-    @unittest.skip(reason="OmDet-Turbo does not use token embeddings")
     def test_resize_tokens_embeddings(self):
-        pass
+        # rewrite as OmDet-Turbo does not have "input_ids" and "decoder_input_ids"
+        (
+            original_config,
+            inputs_dict,
+        ) = self.model_tester.prepare_config_and_inputs_for_common()
+        if not self.test_resize_embeddings:
+            self.skipTest(reason="test_resize_embeddings is set to `False`")
 
-    @unittest.skip(reason="Feed forward chunking is not implemented")
-    def test_feed_forward_chunking(self):
-        pass
+        for model_class in self.all_model_classes:
+            config = copy.deepcopy(original_config)
+            model = model_class(config)
+            model.to(torch_device)
+            model_embed_pre_resize = model.get_input_embeddings()
+            type_model_embed_pre_resize = type(model_embed_pre_resize)
+
+            if self.model_tester.is_training is False:
+                model.eval()
+
+            model_vocab_size = config.text_config.vocab_size if hasattr(config, "text_config") else config.vocab_size
+            # Retrieve the embeddings and clone theme
+            model_embed = model.resize_token_embeddings(model_vocab_size)
+            cloned_embeddings = model_embed.weight.clone()
+
+            # Check that resizing the token embeddings with a larger vocab size increases the model's vocab size
+            model_embed = model.resize_token_embeddings(model_vocab_size + 10)
+            new_model_vocab_size = (
+                model.config.text_config.vocab_size
+                if hasattr(model.config, "text_config")
+                else model.config.vocab_size
+            )
+            self.assertEqual(new_model_vocab_size, model_vocab_size + 10)
+            # Check that it actually resizes the embeddings matrix
+            self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] + 10)
+            # Check to make sure the type of embeddings returned post resizing is same as type of input
+            type_model_embed_post_resize = type(model_embed)
+            self.assertEqual(type_model_embed_pre_resize, type_model_embed_post_resize)
+            # Check that the model can still do a forward pass successfully (every parameter should be resized)
+            model(**self._prepare_for_class(inputs_dict, model_class))
+
+            # Check that resizing the token embeddings with a smaller vocab size decreases the model's vocab size
+            model_embed = model.resize_token_embeddings(model_vocab_size - 15)
+            new_model_vocab_size = (
+                model.config.text_config.vocab_size
+                if hasattr(model.config, "text_config")
+                else model.config.vocab_size
+            )
+            self.assertEqual(new_model_vocab_size, model_vocab_size - 15)
+            # Check that it actually resizes the embeddings matrix
+            self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] - 15)
+
+            # Check that the model can still do a forward pass successfully (every parameter should be resized)
+            # Input ids should be clamped to the maximum size of the vocabulary
+            inputs_dict["tasks_input_ids"].clamp_(max=model_vocab_size - 15 - 1)
+
+            # make sure that classes_input_ids are resized as well
+            if "classes_input_ids" in inputs_dict:
+                inputs_dict["classes_input_ids"].clamp_(max=model_vocab_size - 15 - 1)
+            model(**self._prepare_for_class(inputs_dict, model_class))
+
+            # Check that adding and removing tokens has not modified the first part of the embedding matrix.
+            models_equal = True
+            for p1, p2 in zip(cloned_embeddings, model_embed.weight):
+                if p1.data.ne(p2.data).sum() > 0:
+                    models_equal = False
+
+            self.assertTrue(models_equal)
+
+            config = copy.deepcopy(original_config)
+            model = model_class(config)
+            model.to(torch_device)
+
+            model_vocab_size = config.text_config.vocab_size if hasattr(config, "text_config") else config.vocab_size
+            model.resize_token_embeddings(model_vocab_size + 10, pad_to_multiple_of=1)
+            new_model_vocab_size = (
+                model.config.text_config.vocab_size
+                if hasattr(model.config, "text_config")
+                else model.config.vocab_size
+            )
+            self.assertTrue(new_model_vocab_size + 10, model_vocab_size)
+
+            model_embed = model.resize_token_embeddings(model_vocab_size, pad_to_multiple_of=64)
+            new_model_vocab_size = (
+                model.config.text_config.vocab_size
+                if hasattr(model.config, "text_config")
+                else model.config.vocab_size
+            )
+            self.assertTrue(model_embed.weight.shape[0] // 64, 0)
+
+            self.assertTrue(model_embed.weight.shape[0], new_model_vocab_size)
+            self.assertTrue(new_model_vocab_size, model.language_backbone.model)
+
+            model_embed = model.resize_token_embeddings(model_vocab_size + 13, pad_to_multiple_of=64)
+            self.assertTrue(model_embed.weight.shape[0] // 64, 0)
+
+            # Check that resizing a model to a multiple of pad_to_multiple leads to a model of exactly that size
+            target_dimension = 128
+            model_embed = model.resize_token_embeddings(target_dimension, pad_to_multiple_of=64)
+            self.assertTrue(model_embed.weight.shape[0], target_dimension)
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "Asking to pad the embedding matrix to a multiple of `1.3`, which is not and integer. Please make sure to pass an integer",
+            ):
+                model.resize_token_embeddings(model_vocab_size, pad_to_multiple_of=1.3)
 
     # Overwrite as `init_reference_points` is not batch dependent and contains `inf` values
     def test_batching_equivalence(self):
@@ -548,6 +645,25 @@ def prepare_text():
     return classes, task
 
 
+def prepare_img_batched():
+    url1 = "http://images.cocodataset.org/val2017/000000039769.jpg"
+    url2 = "http://images.cocodataset.org/train2017/000000257813.jpg"
+    url3 = "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
+
+    return [Image.open(BytesIO(requests.get(url).content)).convert("RGB") for url in [url1, url2, url3]]
+
+
+def prepare_text_batched():
+    classes1 = ["cat", "remote"]
+    classes2 = ["boat"]
+    classes3 = ["statue", "trees", "torch"]
+
+    task1 = "Detect {}.".format(", ".join(classes1))
+    task2 = "Detect all the boat in the image."
+    task3 = "Focus on the foreground, detect statue, torch and trees."
+    return [classes1, classes2, classes3], [task1, task2, task3]
+
+
 @require_timm
 @require_vision
 @slow
@@ -595,6 +711,107 @@ class OmDetTurboModelIntegrationTests(unittest.TestCase):
 
         expected_classes = ["remote", "cat", "remote", "cat"]
         self.assertListEqual(results["classes"], expected_classes)
+
+    def test_inference_object_detection_head_no_task(self):
+        model = OmDetTurboForObjectDetection.from_pretrained("yonigozlan/omdet-turbo-tiny").to(torch_device)
+
+        processor = self.default_processor
+        image = prepare_img()
+        classes, _ = prepare_text()
+        encoding = processor(images=image, text=classes, return_tensors="pt").to(torch_device)
+
+        with torch.no_grad():
+            outputs = model(**encoding)
+
+        expected_shape_coord_logits = torch.Size((1, model.config.num_queries, 4))
+        expected_shape_class_logits = torch.Size((1, model.config.num_queries, 2))
+        self.assertEqual(outputs.decoder_coord_logits.shape, expected_shape_coord_logits)
+        self.assertEqual(outputs.decoder_class_logits.shape, expected_shape_class_logits)
+
+        expected_class_logits = torch.tensor([[[0.9427, -2.5958], [0.2105, -3.4569], [-2.6364, -4.1610]]]).to(
+            torch_device
+        )
+        expected_coord_logits = torch.tensor(
+            [[[0.2550, 0.5501, 0.4738, 0.8745], [0.7695, 0.4121, 0.4603, 0.7244], [0.7691, 0.4117, 0.4603, 0.7214]]]
+        ).to(torch_device)
+
+        self.assertTrue(torch.allclose(outputs.decoder_class_logits[:3, :3], expected_class_logits, atol=1e-1))
+        self.assertTrue(torch.allclose(outputs.decoder_coord_logits[:3, :3], expected_coord_logits, atol=1e-3))
+
+        # verify grounded postprocessing
+        results = processor.post_process_grounded_object_detection(
+            outputs, classes=[classes], target_sizes=[image.size[::-1]]
+        )[0]
+        expected_scores = torch.tensor([0.7675, 0.7196, 0.5634, 0.5524]).to(torch_device)
+        expected_slice_boxes = torch.tensor([39.8870, 70.3522, 176.7424, 118.0354]).to(torch_device)
+
+        self.assertEqual(len(results["scores"]), 4)
+        self.assertTrue(torch.allclose(results["scores"], expected_scores, atol=1e-2))
+        self.assertTrue(torch.allclose(results["boxes"][0, :], expected_slice_boxes, atol=1e-2))
+
+        expected_classes = ["remote", "cat", "remote", "cat"]
+        self.assertListEqual(results["classes"], expected_classes)
+
+    def test_inference_object_detection_head_batched(self):
+        torch_device = "cpu"
+        model = OmDetTurboForObjectDetection.from_pretrained("yonigozlan/omdet-turbo-tiny").to(torch_device)
+
+        processor = self.default_processor
+        images_batched = prepare_img_batched()
+        classes_batched, tasks_batched = prepare_text_batched()
+        encoding = processor(images=images_batched, text=classes_batched, task=tasks_batched, return_tensors="pt").to(
+            torch_device
+        )
+
+        with torch.no_grad():
+            outputs = model(**encoding)
+
+        expected_shape_coord_logits = torch.Size((len(images_batched), model.config.num_queries, 4))
+        expected_shape_class_logits = torch.Size((len(images_batched), model.config.num_queries, 3))
+        self.assertEqual(outputs.decoder_coord_logits.shape, expected_shape_coord_logits)
+        self.assertEqual(outputs.decoder_class_logits.shape, expected_shape_class_logits)
+
+        expected_class_logits = torch.tensor(
+            [[[0.9427, -2.5958, -7.7601]], [[-2.3408, -9.3516, -9.3516]], [[1.0740, -2.3315, -1.1885]]]
+        ).to(torch_device)
+
+        expected_coord_logits = torch.tensor(
+            [[[0.2550, 0.5501, 0.4738]], [[0.2535, 0.6006, 0.0353]], [[0.3742, 0.3337, 0.0666]]]
+        ).to(torch_device)
+
+        self.assertTrue(torch.allclose(outputs.decoder_class_logits[:, :1, :3], expected_class_logits, atol=1e-1))
+        self.assertTrue(torch.allclose(outputs.decoder_coord_logits[:, :1, :3], expected_coord_logits, atol=1e-3))
+
+        # verify grounded postprocessing
+        results = processor.post_process_grounded_object_detection(
+            outputs,
+            classes=classes_batched,
+            target_sizes=[image.size[::-1] for image in images_batched],
+            score_threshold=0.2,
+        )
+        expected_scores = torch.tensor([0.7675, 0.3016, 0.7454]).to(torch_device)
+        expected_slice_boxes = torch.tensor(
+            [
+                [39.8870, 70.3522, 176.7424, 118.0354],
+                [146.5446, 219.7132, 209.6983, 251.0456],
+                [545.3470, 209.9055, 651.9860, 502.1882],
+            ]
+        ).to(torch_device)
+
+        self.assertListEqual([len(result["scores"]) for result in results], [4, 4, 6])
+        self.assertTrue(
+            torch.allclose(torch.stack([result["scores"][0] for result in results]), expected_scores, atol=1e-2)
+        )
+        self.assertTrue(
+            torch.allclose(torch.stack([result["boxes"][0, :] for result in results]), expected_slice_boxes, atol=1e-2)
+        )
+
+        expected_classes = [
+            ["remote", "cat", "remote", "cat"],
+            ["boat", "boat", "boat", "boat"],
+            ["statue", "trees", "trees", "torch", "statue", "statue"],
+        ]
+        self.assertListEqual([result["classes"] for result in results], expected_classes)
 
     @require_torch_gpu
     def test_inference_object_detection_head_equivalence_cpu_gpu(self):

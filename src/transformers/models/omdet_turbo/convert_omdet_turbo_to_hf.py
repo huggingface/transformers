@@ -55,7 +55,7 @@ def get_omdet_turbo_config(model_name, use_timm_backbone):
         text_config={"model_type": "clip_text_model"},
         use_timm_backbone=use_timm_backbone,
         backbone="swin_tiny_patch4_window7_224" if use_timm_backbone else None,
-        apply_layernorm=True if use_timm_backbone else False,
+        apply_layernorm_after_vision_backbone=True if use_timm_backbone else False,
         use_pretrained_backbone=False,
     )
 

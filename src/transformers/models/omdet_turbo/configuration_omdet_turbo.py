@@ -41,12 +41,13 @@ class OmDetTurboConfig(PretrainedConfig):
         use_timm_backbone (`bool`, *optional*, defaults to `True`):
             Whether to use the timm for the vision backbone.
         backbone (`str`, *optional*, defaults to `"swin_tiny_patch4_window7_224"`):
-            The name of the timm vision backbone to use.
+            The name of the pretrained vision backbone to use. If `use_pretrained_backbone=False` a randomly initialized
+            backbone with the same architecture `backbone` is used.
         backbone_kwargs (`dict`, *optional*):
-            Additional kwargs for the timm vision backbone.
+            Additional kwargs for the vision backbone.
         use_pretrained_backbone (`bool`, *optional*, defaults to `False`):
-            Whether to use a pretrained timm vision backbone.
-        apply_layernorm (`bool`, *optional*, defaults to `True`):
+            Whether to use a pretrained vision backbone.
+        apply_layernorm_after_vision_backbone (`bool`, *optional*, defaults to `True`):
             Whether to apply layer normalization on the feature maps of the vision backbone output.
         image_size (`int`, *optional*, defaults to 640):
             The size (resolution) of each image.
@@ -62,23 +63,24 @@ class OmDetTurboConfig(PretrainedConfig):
             The input dimension for the text projection.
         text_projection_out_dim (`int`, *optional*, defaults to 512):
             The output dimension for the text projection.
-        task_encoder_feedforward_dim (`int`, *optional*, defaults to 1024):
+        task_encoder_hidden_dim (`int`, *optional*, defaults to 1024):
             The feedforward dimension for the task encoder.
-        class_dim (`int`, *optional*, defaults to 512):
+        class_embed_dim (`int`, *optional*, defaults to 512):
             The dimension of the classes embeddings.
         class_distance_type (`str`, *optional*, defaults to `"cosine"`):
             The type of of distance to compare predicted classes to projected classes embeddings.
+            Can be `"cosine"` or `"dot"`.
         num_queries (`int`, *optional*, defaults to 900):
             The number of queries.
         csp_activation (`str`, *optional*, defaults to `"silu"`):
             The activation function of the Cross Stage Partial (CSP) networks of the encoder.
         conv_norm_activation (`str`, *optional*, defaults to `"gelu"`):
             The activation function of the ConvNormLayer layers of the encoder.
-        ffn_encoder_activation (`str`, *optional*, defaults to `"relu"`):
+        encoder_feedforward_activation (`str`, *optional*, defaults to `"relu"`):
             The activation function for the feedforward network of the encoder.
-        activation_dropout (`float`, *optional*, defaults to 0.0):
+        encoder_feedforward_dropout (`float`, *optional*, defaults to 0.0):
             The dropout rate following the activation of the encoder feedforward network.
-        dropout (`float`, *optional*, defaults to 0.0):
+        encoder_dropout (`float`, *optional*, defaults to 0.0):
             The dropout rate of the encoder multi-head attention module.
         hidden_expansion (`int`, *optional*, defaults to 1):
             The hidden expansion of the CSP networks in the encoder.
@@ -122,7 +124,7 @@ class OmDetTurboConfig(PretrainedConfig):
         eval_size (`Tuple[int, int]`, *optional*):
             Height and width used to computes the effective height and width of the position embeddings after taking
             into account the stride (see RTDetr).
-        learn_init_query (`bool`, *optional*, defaults to `False`):
+        learn_initial_query (`bool`, *optional*, defaults to `False`):
             Whether to learn the initial query.
         cache_size (`int`, *optional*, defaults to 100):
             The cache size for the classes and prompts caches.
@@ -161,7 +163,7 @@ class OmDetTurboConfig(PretrainedConfig):
         backbone="swin_tiny_patch4_window7_224",
         backbone_kwargs=None,
         use_pretrained_backbone=False,
-        apply_layernorm=True,
+        apply_layernorm_after_vision_backbone=True,
         image_size=640,
         disable_custom_kernels=False,
         layer_norm_eps=1e-5,
@@ -169,15 +171,15 @@ class OmDetTurboConfig(PretrainedConfig):
         init_std=0.02,
         text_projection_in_dim=512,
         text_projection_out_dim=512,
-        task_encoder_feedforward_dim=1024,
-        class_dim=512,
+        task_encoder_hidden_dim=1024,
+        class_embed_dim=512,
         class_distance_type="cosine",
         num_queries=900,
         csp_activation="silu",
         conv_norm_activation="gelu",
-        ffn_encoder_activation="relu",
-        activation_dropout=0.0,
-        dropout=0.0,
+        encoder_feedforward_activation="relu",
+        encoder_feedforward_dropout=0.0,
+        encoder_dropout=0.0,
         hidden_expansion=1,
         vision_features_channels=[256, 256, 256],
         encoder_hidden_dim=256,
@@ -198,7 +200,7 @@ class OmDetTurboConfig(PretrainedConfig):
         decoder_num_points=4,
         decoder_dropout=0.0,
         eval_size=None,
-        learn_init_query=False,
+        learn_initial_query=False,
         cache_size=100,
         is_encoder_decoder=True,
         **kwargs,
@@ -242,13 +244,18 @@ class OmDetTurboConfig(PretrainedConfig):
             text_model_type = text_config.pop("model_type")
             text_config = CONFIG_MAPPING[text_model_type](**text_config)
 
+        if class_distance_type not in ["cosine", "dot"]:
+            raise ValueError(
+                f"Invalid `class_distance_type`. It should be either `cosine` or `dot`, but got {class_distance_type}."
+            )
+
         self.text_config = text_config
         self.backbone_config = backbone_config
         self.use_timm_backbone = use_timm_backbone
         self.backbone = backbone
         self.backbone_kwargs = backbone_kwargs
         self.use_pretrained_backbone = use_pretrained_backbone
-        self.apply_layernorm = apply_layernorm
+        self.apply_layernorm_after_vision_backbone = apply_layernorm_after_vision_backbone
         self.image_size = image_size
         self.disable_custom_kernels = disable_custom_kernels
         self.layer_norm_eps = layer_norm_eps
@@ -256,15 +263,15 @@ class OmDetTurboConfig(PretrainedConfig):
         self.init_std = init_std
         self.text_projection_in_dim = text_projection_in_dim
         self.text_projection_out_dim = text_projection_out_dim
-        self.task_encoder_feedforward_dim = task_encoder_feedforward_dim
-        self.class_dim = class_dim
+        self.task_encoder_hidden_dim = task_encoder_hidden_dim
+        self.class_embed_dim = class_embed_dim
         self.class_distance_type = class_distance_type
         self.num_queries = num_queries
         self.csp_activation = csp_activation
         self.conv_norm_activation = conv_norm_activation
-        self.ffn_encoder_activation = ffn_encoder_activation
-        self.activation_dropout = activation_dropout
-        self.dropout = dropout
+        self.encoder_feedforward_activation = encoder_feedforward_activation
+        self.encoder_feedforward_dropout = encoder_feedforward_dropout
+        self.encoder_dropout = encoder_dropout
         self.hidden_expansion = hidden_expansion
         self.vision_features_channels = vision_features_channels
         self.encoder_hidden_dim = encoder_hidden_dim
@@ -285,7 +292,7 @@ class OmDetTurboConfig(PretrainedConfig):
         self.decoder_num_points = decoder_num_points
         self.decoder_dropout = decoder_dropout
         self.eval_size = eval_size
-        self.learn_init_query = learn_init_query
+        self.learn_initial_query = learn_initial_query
         self.cache_size = cache_size
         self.is_encoder_decoder = is_encoder_decoder
 
