@@ -2760,15 +2760,19 @@ class GroundingDinoLoss(nn.Module):
         """
         Create one_hot based on the matching indices
         """
-        class_labels = [target["class_labels"] for target in targets]
         logits = outputs["logits"]
-        label_maps = outputs["label_maps"]
+        # Add offsets to class_labels to select the correct label map
+        class_labels = torch.cat(
+            [
+                target["class_labels"][J] + len(outputs["label_maps"][i]) if i > 0 else target["class_labels"][J]
+                for i, (target, (_, J)) in enumerate(zip(targets, indices))
+            ]
+        )
+        label_maps = torch.cat(outputs["label_maps"], dim=0)
 
+        idx = self._get_source_permutation_idx(indices)
         target_classes_onehot = torch.zeros_like(logits, device=logits.device, dtype=torch.long)
-
-        for i, (source, target) in enumerate(indices):
-            labels = class_labels[i][target]
-            target_classes_onehot[i, source] = label_maps[i][labels].to(torch.long)
+        target_classes_onehot[idx] = label_maps[class_labels].to(torch.long)
 
         return target_classes_onehot
 
