@@ -1854,7 +1854,9 @@ class GenerationTesterMixin:
                 },
             ]
 
-            for generation_kwargs in strategies:
+            for i, generation_kwargs in enumerate(strategies):
+                if i == 1 and model_class._is_stateful:
+                    self.skipTest(reason="Stateful models don't support assisted generation")
                 # Setting num_logits_to_keep at 0 keeps all logits (old behavior)
                 with_all_logits = model.generate(
                     input_ids, attention_mask=attention_mask, **generation_kwargs, num_logits_to_keep=0
