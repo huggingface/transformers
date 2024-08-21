@@ -1037,15 +1037,17 @@ class PretrainedConfig(PushToHubMixin):
         for parameter_name, default_global_value in self._get_global_generation_defaults().items():
             if hasattr(self_decoder_config, parameter_name):
                 is_default_in_config = is_default_generation_value = None
-                # Two cases in which is okay for the model config to hold generation config parameters:
-                # 1. If we have a default config, then the instance should hold the same generation defaults
+                parameter_value = getattr(self_decoder_config, parameter_name)
+                # Three cases in which is okay for the model config to hold generation config parameters:
+                # 1. The parameter is set to `None`, effectivelly delegating its value to the generation config
+                if parameter_value is None:
+                    continue
+                # 2. If we have a default config, then the instance should hold the same generation defaults
                 if default_config is not None:
-                    is_default_in_config = getattr(self_decoder_config, parameter_name) == getattr(
-                        default_config, parameter_name
-                    )
-                # 2. if we don't have a default config, then the instance should hold the global generation defaults
+                    is_default_in_config = parameter_value == getattr(default_config, parameter_name)
+                # 3. if we don't have a default config, then the instance should hold the global generation defaults
                 else:
-                    is_default_generation_value = getattr(self_decoder_config, parameter_name) == default_global_value
+                    is_default_generation_value = parameter_value == default_global_value
 
                 is_non_default = (is_default_in_config is False) or (
                     is_default_in_config is None and is_default_generation_value is False
