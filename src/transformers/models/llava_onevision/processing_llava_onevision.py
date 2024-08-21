@@ -158,7 +158,7 @@ class LlavaOnevisionProcessor(ProcessorMixin):
         if images is not None:
             image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
 
-            image_sizes = iter(reversed(image_inputs["image_sizes"]))
+            image_sizes = iter(image_inputs["image_sizes"])
             height, width = get_image_size(
                 to_numpy_array(image_inputs["pixel_values"][0][0]),
                 channel_dim=output_kwargs["images_kwargs"].get("data_format"),
@@ -168,7 +168,7 @@ class LlavaOnevisionProcessor(ProcessorMixin):
         if videos is not None:
             video_inputs = self.video_processor(videos, **output_kwargs["videos_kwargs"])
 
-            image_sizes = iter(reversed(video_inputs["image_sizes_videos"]))
+            image_sizes = iter(video_inputs["image_sizes_videos"])
             one_video = to_numpy_array(video_inputs["pixel_values_videos"][0])
             height, width = get_image_size(one_video[0], channel_dim=output_kwargs["images_kwargs"].get("data_format"))
             num_frames = one_video.shape[0]  # frame dim is always after batch dim
