@@ -1326,23 +1326,40 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertEqual(second_dataloader, second_dataloader_repeated)
 
     @require_liger_kernel
-    def test_apply_liger_kernel(self):
+    def test_use_liger_kernel_patching(self):
         # Test that the model code actually gets patched with Liger kernel
         from liger_kernel.transformers.rms_norm import LigerRMSNorm
 
         from transformers.models.llama import modeling_llama
 
         config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
-        tiny_model = LlamaForCausalLM(config)
+        tiny_llama = LlamaForCausalLM(config)
 
         args = TrainingArguments(
             "./test",
             use_liger_kernel=True,
         )
-        Trainer(tiny_model, args)
+        Trainer(tiny_llama, args)
 
         # Check that one of the Llama model layers has been correctly patched with Liger kernel
         self.assertEqual(modeling_llama.LlamaRMSNorm, LigerRMSNorm)
+
+    @require_liger_kernel
+    @require_torch_gpu
+    def test_use_liger_kernel_trainer(self):
+        # Check that trainer still works with liger kernel applied
+        config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
+        tiny_llama = LlamaForCausalLM(config)
+
+        x = torch.randint(0, 100, (128,))
+        train_dataset = RepeatDataset(x)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            args = TrainingArguments(tmpdir, learning_rate=1e-2, logging_steps=5, max_steps=20, use_liger_kernel=True)
+            trainer = Trainer(tiny_llama, args, train_dataset=train_dataset)
+
+            # Check this works
+            _ = trainer.train()
 
     @require_lomo
     @require_torch_gpu
