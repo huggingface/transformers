@@ -569,10 +569,10 @@ class GitModelIntegrationTest(unittest.TestCase):
         # allowing to interpolate the pre-trained position embeddings in order to use
         # the model on higher resolutions. The DINO model by Facebook AI leverages this
         # to visualize self-attention on higher resolution images.
-        model = GitModel.from_pretrained("openai/clip-vit-base-patch32").to(torch_device)
+        model = GitModel.from_pretrained("microsoft/git-base").to(torch_device)
 
         processor = GitProcessor.from_pretrained(
-            "openai/clip-vit-base-patch32", size={"height": 180, "width": 180}, crop_size={"height": 180, "width": 180}
+            "microsoft/git-base", size={"height": 180, "width": 180}, crop_size={"height": 180, "width": 180}
         )
 
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
