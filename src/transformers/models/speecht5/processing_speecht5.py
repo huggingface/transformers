@@ -60,6 +60,9 @@ class SpeechT5Processor(ProcessorMixin):
     feature_extractor_class = "SpeechT5FeatureExtractor"
     tokenizer_class = "SpeechT5Tokenizer"
 
+    def __init__(self, feature_extractor, tokenizer):
+        super().__init__(feature_extractor, tokenizer)
+
     def __call__(
         self,
         audio: Optional[AudioInput] = None,

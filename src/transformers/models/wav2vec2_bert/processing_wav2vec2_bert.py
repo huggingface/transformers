@@ -56,6 +56,9 @@ class Wav2Vec2BertProcessor(ProcessorMixin):
     feature_extractor_class = "SeamlessM4TFeatureExtractor"
     tokenizer_class = "AutoTokenizer"
 
+    def __init__(self, feature_extractor, tokenizer):
+        super().__init__(feature_extractor, tokenizer)
+
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
         try:
