@@ -1539,6 +1539,7 @@ class NumpyDataCollatorIntegrationTest(unittest.TestCase):
             {"input_ids": [30, 31, 32, 33, 34, 35, 36]},
         ]
 
+        # reset_position_ids = True, reset_attention_mask = False
         data_collator = DataCollatorWithFlattening(return_tensors="np")
         batch = data_collator(features)
         self.assertEqual(batch["input_ids"].shape, (1, 16))
@@ -1549,6 +1550,32 @@ class NumpyDataCollatorIntegrationTest(unittest.TestCase):
         self.assertIn("position_ids", batch)
         self.assertEqual(batch["position_ids"].shape, (1, 16))
         self.assertEqual(batch["position_ids"][0].tolist(), [0, 1, 2, 0, 1, 2, 3, 4, 5, 0, 1, 2, 3, 4, 5, 6])
+
+        # reset_position_ids = True, reset_attention_mask = True
+        data_collator = DataCollatorWithFlattening(reset_attention_mask=True,return_tensors="np")
+        batch = data_collator(features)
+        self.assertEqual(batch["input_ids"].shape, (1, 16))
+        self.assertEqual(
+            batch["input_ids"][0].tolist(), [10, 11, 12, 20, 21, 22, 23, 24, 25, 30, 31, 32, 33, 34, 35, 36]
+        )
+        self.assertIn("attention_mask", batch)
+        self.assertEqual(batch["attention_mask"].shape, (1, 3))
+        self.assertEqual(batch["attention_mask"][0].tolist(), [3, 6, 7])
+        self.assertIn("position_ids", batch)
+        self.assertEqual(batch["position_ids"].shape, (1, 16))
+        self.assertEqual(batch["position_ids"][0].tolist(), [0, 1, 2, 0, 1, 2, 3, 4, 5, 0, 1, 2, 3, 4, 5, 6])
+
+        # reset_position_ids = False, reset_attention_mask = True
+        data_collator = DataCollatorWithFlattening(reset_attention_mask=True, reset_position_ids=False,return_tensors="np")
+        batch = data_collator(features)
+        self.assertEqual(batch["input_ids"].shape, (1, 16))
+        self.assertEqual(
+            batch["input_ids"][0].tolist(), [10, 11, 12, 20, 21, 22, 23, 24, 25, 30, 31, 32, 33, 34, 35, 36]
+        )
+        self.assertIn("attention_mask", batch)
+        self.assertEqual(batch["attention_mask"].shape, (1, 3))
+        self.assertEqual(batch["attention_mask"][0].tolist(), [3, 6, 7])
+        self.assertNotIn("position_ids", batch)
 
     def test_data_collator_for_token_classification(self):
         tokenizer = BertTokenizer(self.vocab_file)

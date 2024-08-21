@@ -1622,9 +1622,16 @@ class DataCollatorWithFlattening(DefaultDataCollator):
     - no padding will be added, returns `input_ids`, `labels` and `position_ids`
     """
 
-    def __init__(self, *args, return_position_ids=True, **kwargs):
+    def __init__(self, *args, reset_position_ids=True, reset_attention_mask=False, **kwargs):
         super().__init__(*args, **kwargs)
-        self.return_position_ids = return_position_ids
+        if 'return_position_ids' in kwargs:
+            warnings.warn(
+                "The `return_position_ids` argument is deprecated and will be removed in a future version, "
+                "use `reset_position_ids` instead.",
+            )
+            reset_position_ids = kwargs.pop("return_position_ids")
+        self.reset_position_ids = reset_position_ids
+        self.reset_attention_mask = reset_attention_mask
         warnings.warn(
             "Using `DataCollatorWithFlattening` will flatten the entire mini batch into single long sequence."
             "Make sure your attention computation is able to handle it!"
@@ -1635,14 +1642,22 @@ class DataCollatorWithFlattening(DefaultDataCollator):
             return_tensors = self.return_tensors
         is_labels_provided = "labels" in features[0]
         ret = {"input_ids": [], "labels": []}
-        if self.return_position_ids:
+        if self.reset_position_ids:
             ret.update({"position_ids": []})
+        if self.reset_attention_mask:
+            ret.update({"attention_mask": []})
         for idx in range(0, len(features)):
             ret["input_ids"] += features[idx]["input_ids"]
             if is_labels_provided:
                 ret["labels"] += [-100] + features[idx]["labels"][1:]
             else:
                 ret["labels"] += [-100] + features[idx]["input_ids"][1:]
-            if self.return_position_ids:
+            if self.reset_position_ids:
                 ret["position_ids"] += list(range(len(features[idx]["input_ids"])))
+            if self.reset_attention_mask:
+                ret["attention_mask"].append(len(features[idx]["input_ids"]))
+        
+        if self.reset_attention_mask:
+            # If there is none zero in attention_mask, it will be misunderstood as a full attention matrix.
+            ret["attention_mask"].append(0.0)
         return default_data_collator([ret], return_tensors)
