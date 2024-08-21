@@ -1170,6 +1170,9 @@ class WhisperGenerationMixin:
         return return_dict_in_generate
 
     def _set_return_timestamps(self, return_timestamps, is_shortform, generation_config):
+        if return_timestamps is None and hasattr(generation_config, "return_timestamps"):
+            return_timestamps = generation_config.return_timestamps
+
         if not is_shortform:
             if return_timestamps is False:
                 raise ValueError(
