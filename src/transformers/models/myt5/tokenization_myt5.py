@@ -208,7 +208,6 @@ class MyT5Tokenizer(PreTrainedTokenizer):
             **kwargs,
         )
 
-    # Copied from transformers.models.byt5.tokenization_byt5.ByT5Tokenizer.vocab_size
     @property
     def vocab_size(self):
         return self._utf_vocab_size
