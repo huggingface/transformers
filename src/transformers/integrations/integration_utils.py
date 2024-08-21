@@ -1129,12 +1129,11 @@ class CometCallback(TrainerCallback):
     def on_predict(self, args, state, control, metrics, **kwargs):
         if not self._initialized:
             self.setup(args, state, model=None)
-        if state.is_world_process_zero:
-            if self._experiment is not None:
-                rewritten_metrics = rewrite_logs(metrics)
-                self._experiment.__internal_api__log_metrics__(
-                    rewritten_metrics, step=state.global_step, epoch=state.epoch, framework="transformers"
-                )
+        if state.is_world_process_zero and self._experiment is not None:
+            rewritten_metrics = rewrite_logs(metrics)
+            self._experiment.__internal_api__log_metrics__(
+                rewritten_metrics, step=state.global_step, epoch=state.epoch, framework="transformers"
+            )
 
 
 class AzureMLCallback(TrainerCallback):
