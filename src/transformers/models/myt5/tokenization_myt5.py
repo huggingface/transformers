@@ -258,7 +258,6 @@ class MyT5Tokenizer(PreTrainedTokenizer):
         else:
             return token_ids + [self.eos_token_id]
 
-    # Copied from transformers.models.byt5.tokenization_byt5.ByT5Tokenizer.create_token_type_ids_from_sequences
     def create_token_type_ids_from_sequences(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
