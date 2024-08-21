@@ -1833,7 +1833,7 @@ class GenerationTesterMixin:
             if "num_logits_to_keep" not in set(inspect.signature(model_class.forward).parameters.keys()):
                 self.skipTest(reason="This model does not support `num_logits_to_keep` argument.")
 
-            config, input_ids, attention_mask = self._get_input_ids_and_config()
+            config, input_ids, attention_mask = self._get_input_ids_and_config(batch_size=1)
             config.use_cache = True
             config.is_decoder = True
 
