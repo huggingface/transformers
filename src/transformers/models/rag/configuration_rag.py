@@ -127,7 +127,7 @@ class RagConfig(PretrainedConfig):
         if "question_encoder" not in kwargs or "generator" not in kwargs:
             raise ValueError(
                 f"A configuraton of type {self.model_type} cannot be instantiated because "
-                f"not both `question_encoder` and `generator` sub-configurations are passed, but only {kwargs}"
+                f"both `question_encoder` and `generator` sub-configurations were not passed, only {kwargs}"
             )
         question_encoder_config = kwargs.pop("question_encoder")
         question_encoder_model_type = question_encoder_config.pop("model_type")
