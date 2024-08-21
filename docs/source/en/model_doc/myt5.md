@@ -21,6 +21,9 @@ rendered properly in your Markdown viewer.
 The myt5 model was proposed in [MYTE: Morphology-Driven Byte Encoding for Better and Fairer Multilingual Language Modeling](https://arxiv.org/pdf/2403.10691.pdf) by Tomasz Limisiewicz, Terra Blevins, Hila Gonen, Orevaoghene Ahia, and Luke Zettlemoyer.
 MyT5 (**My**te **T5**) is a multilingual language model based on T5 architecture.
 The model uses a **m**orphologically-driven **byte** (**MYTE**) representation described in our paper.
+**MYTE** uses codepoints corresponding to morphemes in contrast to characters used in UTF-8 encoding.
+As a pre-requisite, we used unsupervised morphological segmentation ([Morfessor](https://aclanthology.org/E14-2006.pdf)) to obtain morpheme inventories for 99 languages.
+However, the morphological segmentation step is not needed when using the pre-defined morpheme inventory from the hub (see: [Tomli/myt5-base](https://huggingface.co/Tomlim/myt5-base)).
 
 The abstract from the paper is the following:
 
