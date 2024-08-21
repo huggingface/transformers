@@ -4843,7 +4843,7 @@ class ModelTesterMixin:
             self.assertEqual(tuple(last_token_logits.shape), (batch_size, 1, vocab_size))
 
             # Assert the last tokens are actually the same
-            self.assertTrue(torch.allclose(all_logits[:, -1, :], last_token_logits))
+            self.assertTrue(torch.allclose(all_logits[:, -1:, :], last_token_logits))
 
 
 global_rng = random.Random()
