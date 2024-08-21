@@ -314,7 +314,7 @@ class Trainer:
             default to [`default_data_collator`] if no `tokenizer` is provided, an instance of
             [`DataCollatorWithPadding`] otherwise.
         eval_data_collator (`typing.Union[DataCollator, NoneType]`, *optional*):
-            The function to use to form a batch from a list of elements of `eval_dataset` and `train_dataset`. Will
+            The function to use to form a batch from a list of elements of `eval_dataset` and `test_dataset`. Will
             default to `data_collator` if no `eval_data_collator` is provided.
         train_dataset (Union[`torch.utils.data.Dataset`, `torch.utils.data.IterableDataset`, `datasets.Dataset`], *optional*):
             The dataset to use for training. If it is a [`~datasets.Dataset`], columns not accepted by the
