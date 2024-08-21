@@ -389,6 +389,15 @@ The model has called the function with valid arguments, in the format requested 
 inferred that we're most likely referring to the Paris in France, and it remembered that, as the home of SI units,
 the temperature in France should certainly be displayed in Celsius.
 
+<Tip>
+
+The output format above is specific to the `Hermes-2-Pro` model we're using in this example. Other models may emit different
+tool call formats, and you may need to do some manual parsing at this step. For example, `Llama-3.1` models will emit
+slightly different JSON, with `parameters` instead of `arguments`. Regardless of the format the model outputs, you 
+should add the tool call to the conversation in the format below, with `tool_calls`, `function` and `arguments` keys. 
+
+</Tip>
+
 Next, let's append the model's tool call to the conversation.
 
 ```python
