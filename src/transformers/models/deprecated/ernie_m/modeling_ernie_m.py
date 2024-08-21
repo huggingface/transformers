@@ -86,7 +86,6 @@ class ErnieMEmbeddings(nn.Module):
         return embeddings
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfAttention with Bert->ErnieM,self.value->self.v_proj,self.key->self.k_proj,self.query->self.q_proj
 class ErnieMSelfAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
@@ -380,7 +379,6 @@ class ErnieMEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.bert.modeling_bert.BertPooler with Bert->ErnieM
 class ErnieMPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -599,7 +597,6 @@ class ErnieMModel(ErnieMPreTrainedModel):
     ERNIE_M_START_DOCSTRING,
 )
 class ErnieMForSequenceClassification(ErnieMPreTrainedModel):
-    # Copied from transformers.models.bert.modeling_bert.BertForSequenceClassification.__init__ with Bert->ErnieM,bert->ernie_m
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -701,7 +698,6 @@ class ErnieMForSequenceClassification(ErnieMPreTrainedModel):
     ERNIE_M_START_DOCSTRING,
 )
 class ErnieMForMultipleChoice(ErnieMPreTrainedModel):
-    # Copied from transformers.models.bert.modeling_bert.BertForMultipleChoice.__init__ with Bert->ErnieM,bert->ernie_m
     def __init__(self, config):
         super().__init__(config)
 
@@ -791,7 +787,6 @@ class ErnieMForMultipleChoice(ErnieMPreTrainedModel):
     ERNIE_M_START_DOCSTRING,
 )
 class ErnieMForTokenClassification(ErnieMPreTrainedModel):
-    # Copied from transformers.models.bert.modeling_bert.BertForTokenClassification.__init__ with Bert->ErnieM,bert->ernie_m
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -872,7 +867,6 @@ class ErnieMForTokenClassification(ErnieMPreTrainedModel):
     ERNIE_M_START_DOCSTRING,
 )
 class ErnieMForQuestionAnswering(ErnieMPreTrainedModel):
-    # Copied from transformers.models.bert.modeling_bert.BertForQuestionAnswering.__init__ with Bert->ErnieM,bert->ernie_m
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -968,7 +962,6 @@ class ErnieMForQuestionAnswering(ErnieMPreTrainedModel):
     compute `start_prob` and `end_prob`, designed for Universal Information Extraction.""",
     ERNIE_M_START_DOCSTRING,
 )
-# Copied from paddlenlp.transformers.ernie_m.modeling.UIEM
 class ErnieMForInformationExtraction(ErnieMPreTrainedModel):
     def __init__(self, config):
         super(ErnieMForInformationExtraction, self).__init__(config)

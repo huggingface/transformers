@@ -28,8 +28,8 @@ An agent is a system that uses an LLM as its engine, and it has access to functi
 These *tools* are functions for performing a task, and they contain all necessary description for the agent to properly use them.
 
 The agent can be programmed to:
-- devise a series of actions/tools and run them all at once like the `CodeAgent` for example
-- plan and execute actions/tools one by one and wait for the outcome of each action before launching the next one like the `ReactJsonAgent` for example
+- devise a series of actions/tools and run them all at once like the [`CodeAgent`] for example
+- plan and execute actions/tools one by one and wait for the outcome of each action before launching the next one like the [`ReactJsonAgent`] for example
 
 ### Types of agents
 
@@ -42,15 +42,15 @@ This agent has a planning step, then generates python code to execute all its ac
 This is the go-to agent to solve reasoning tasks, since the ReAct framework ([Yao et al., 2022](https://huggingface.co/papers/2210.03629)) makes it really efficient to think on the basis of its previous observations.
 
 We implement two versions of ReactJsonAgent: 
-- [`~ReactJsonAgent`] generates tool calls as a JSON in its output.
-- [`~ReactCodeAgent`] is a new type of ReactJsonAgent that generates its tool calls as blobs of code, which works really well for LLMs that have strong coding performance.
+- [`ReactJsonAgent`] generates tool calls as a JSON in its output.
+- [`ReactCodeAgent`] is a new type of ReactJsonAgent that generates its tool calls as blobs of code, which works really well for LLMs that have strong coding performance.
 
 > [!TIP]
 > Read [Open-source LLMs as LangChain Agents](https://huggingface.co/blog/open-source-llms-as-agents) blog post to learn more the ReAct agent.
 
 ![Framework of a React Agent](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/blog/open-source-llms-as-agents/ReAct.png)
 
-For example, here is how a ReAct agent would work its way through the following question.
+For example, here is how a ReAct Code agent would work its way through the following question.
 
 ```py3
 >>> agent.run(
@@ -119,12 +119,14 @@ def llm_engine(messages, stop_sequences=["Task"]) -> str:
 ```
 
 You could use any `llm_engine` method as long as:
-1. it follows the [messages format](./chat_templating.md) for its input (`List[Dict[str, str]]`) and returns a `str`
-2. it stops generating outputs at the sequences passed in the argument `stop`
+1. it follows the [messages format](./chat_templating.md) (`List[Dict[str, str]]`) for its input `messages`, and it returns a `str`.
+2. it stops generating outputs at the sequences passed in the argument `stop_sequences`
 
-You also need a `tools` argument which accepts a list of `Tools`. You can provide an empty list for `tools`, but use the default toolbox with the optional argument `add_base_tools=True`.
+Additionally, `llm_engine` can also take a `grammar` argument. In the case where you specify a `grammar` upon agent initialization, this argument will be passed to the calls to llm_engine, with the `grammar` that you defined upon initialization, to allow [constrained generation](https://huggingface.co/docs/text-generation-inference/conceptual/guidance) in order to force properly-formatted agent outputs.
 
-Now you can create an agent, like `CodeAgent`, and run it. For convenience, we also provide the `HfEngine` class that uses `huggingface_hub.InferenceClient` under the hood.
+You will also need a `tools` argument which accepts a list of `Tools` - it can be an empty list. You can also add the default toolbox on top of your `tools` list by defining the optional argument `add_base_tools=True`.
+
+Now you can create an agent, like [`CodeAgent`], and run it. For convenience, we also provide the [`HfEngine`] class that uses `huggingface_hub.InferenceClient` under the hood.
 
 ```python
 from transformers import CodeAgent, HfEngine
@@ -139,7 +141,7 @@ agent.run(
 ```
 
 This will be handy in case of emergency baguette need!
-You can even leave the argument `llm_engine` undefined, and an [~HfEngine] will be created by default.
+You can even leave the argument `llm_engine` undefined, and an [`HfEngine`] will be created by default.
 
 ```python
 from transformers import CodeAgent
@@ -181,13 +183,27 @@ You can also run an agent consecutively for different tasks: each time the attri
 A Python interpreter executes the code on a set of inputs passed along with your tools.
 This should be safe because the only functions that can be called are the tools you provided (especially if it's only tools by Hugging Face) and the print function, so you're already limited in what can be executed.
 
-The Python interpreter also doesn't allow any attribute lookup or imports (which shouldn't be needed for passing inputs/outputs to a small set of functions) so all the most obvious attacks shouldn't be an issue.
+The Python interpreter also doesn't allow imports by default outside of a safe list, so all the most obvious attacks shouldn't be an issue.
+You can still authorize additional imports by passing the authorized modules as a list of strings in argument `additional_authorized_imports` upon initialization of your [`ReactCodeAgent`] or [`CodeAgent`]:
+
+```py
+>>> from transformers import ReactCodeAgent
+
+>>> agent = ReactCodeAgent(tools=[], additional_authorized_imports=['requests', 'bs4'])
+>>> agent.run("Could you get me the title of the page at url 'https://huggingface.co/blog'?")
+
+(...)
+'Hugging Face – Blog'
+```
 
 The execution will stop at any code trying to perform an illegal operation or if there is a regular Python error with the code generated by the agent.
 
+> [!WARNING]
+> The LLM can generate arbitrary code that will then be executed: do not add any unsafe imports!
+
 ### The system prompt
 
-An agent, or rather the LLM that drives the agent, generates an output based on the system prompt. The system prompt can be customized and tailored to the intended task. For example, check the system prompt for the `ReactCodeAgent` (below version is slightly simplified).
+An agent, or rather the LLM that drives the agent, generates an output based on the system prompt. The system prompt can be customized and tailored to the intended task. For example, check the system prompt for the [`ReactCodeAgent`] (below version is slightly simplified).
 
 ```text
 You will be given a task to solve as best you can.
@@ -242,11 +258,18 @@ agent = ReactJsonAgent(tools=[PythonInterpreterTool()], system_prompt="{your_cus
 > Please make sure to define the `<<tool_descriptions>>` string somewhere in the `template` so the agent is aware 
 of the available tools.
 
+
+### Inspecting an agent run
+
+Here are a few useful attributes to inspect what happened after a run:
+- `agent.logs` stores the fine-grained logs of the agent. At every step of the agent's run, everything gets stored in a dictionary that then is appended to `agent.logs`.
+- Running `agent.write_inner_memory_from_logs()` creates an inner memory of the agent's logs for the LLM to view, as a list of chat messages. This method goes over each step of the log and only stores what it's interested in as a message: for instance, it will save the system prompt and task in separate messages, then for each step it will store the LLM output as a message, and the tool call output as another message. Use this if you want a higher-level view of what has happened - but not every log will be transcripted by this method.
+
 ## Tools
 
 A tool is an atomic function to be used by an agent.
 
-You can for instance check the [~PythonInterpreterTool]: it has a name, a description, input descriptions, an output type, and a `__call__` method to perform the action.
+You can for instance check the [`PythonInterpreterTool`]: it has a name, a description, input descriptions, an output type, and a `__call__` method to perform the action.
 
 When the agent is initialized, the tool attributes are used to generate a tool description which is baked into the agent's system prompt. This lets the agent know which tools it can use and why.
 
@@ -259,7 +282,7 @@ Transformers comes with a default toolbox for empowering agents, that you can ad
 - **Speech to text**: given an audio recording of a person talking, transcribe the speech into text ([Whisper](./model_doc/whisper))
 - **Text to speech**: convert text to speech ([SpeechT5](./model_doc/speecht5))
 - **Translation**: translates a given sentence from source language to target language.
-- **Python code interpreter**: runs your the LLM generated Python code in a secure environment. This tool will only be added to [~ReactJsonAgent] if you use `add_base_tools=True`, since code-based tools can already execute Python code
+- **Python code interpreter**: runs your the LLM generated Python code in a secure environment. This tool will only be added to [`ReactJsonAgent`] if you use `add_base_tools=True`, since code-based tools can already execute Python code
 
 
 You can manually use a tool by calling the [`load_tool`] function and a task to perform.
@@ -365,7 +388,7 @@ And the output:
 `"The most downloaded model for the 'text-to-video' task is ByteDance/AnimateDiff-Lightning."`
 
 
-### Manage agent toolbox
+### Manage your agent's toolbox
 
 If you have already initialized an agent, it is inconvenient to reinitialize it from scratch with a tool you want to use. With Transformers, you can manage an agent's toolbox by adding or replacing a tool.
 
@@ -487,4 +510,55 @@ search_tool = Tool.from_langchain(load_tools(["serpapi"])[0])
 agent = ReactCodeAgent(tools=[search_tool])
 
 agent.run("How many more blocks (also denoted as layers) in BERT base encoder than the encoder from the architecture proposed in Attention is All You Need?")
+```
+
+## Gradio interface
+
+You can leverage `gradio.Chatbot`to display your agent's thoughts using `stream_to_gradio`, here is an example:
+
+```py
+import gradio as gr
+from transformers import (
+    load_tool,
+    ReactCodeAgent,
+    HfEngine,
+    stream_to_gradio,
+)
+
+# Import tool from Hub
+image_generation_tool = load_tool("m-ric/text-to-image")
+
+llm_engine = HfEngine("meta-llama/Meta-Llama-3-70B-Instruct")
+
+# Initialize the agent with the image generation tool
+agent = ReactCodeAgent(tools=[image_generation_tool], llm_engine=llm_engine)
+
+
+def interact_with_agent(task):
+    messages = []
+    messages.append(gr.ChatMessage(role="user", content=task))
+    yield messages
+    for msg in stream_to_gradio(agent, task):
+        messages.append(msg)
+        yield messages + [
+            gr.ChatMessage(role="assistant", content="⏳ Task not finished yet!")
+        ]
+    yield messages
+
+
+with gr.Blocks() as demo:
+    text_input = gr.Textbox(lines=1, label="Chat Message", value="Make me a picture of the Statue of Liberty.")
+    submit = gr.Button("Run illustrator agent!")
+    chatbot = gr.Chatbot(
+        label="Agent",
+        type="messages",
+        avatar_images=(
+            None,
+            "https://em-content.zobj.net/source/twitter/53/robot-face_1f916.png",
+        ),
+    )
+    submit.click(interact_with_agent, [text_input], [chatbot])
+
+if __name__ == "__main__":
+    demo.launch()
 ```

@@ -51,6 +51,7 @@ class DonutImageProcessingTester(unittest.TestCase):
         image_mean=[0.5, 0.5, 0.5],
         image_std=[0.5, 0.5, 0.5],
     ):
+        super().__init__()
         self.parent = parent
         self.batch_size = batch_size
         self.num_channels = num_channels
@@ -99,6 +100,7 @@ class DonutImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = DonutImageProcessor if is_vision_available() else None
 
     def setUp(self):
+        super().setUp()
         self.image_processor_tester = DonutImageProcessingTester(self)
 
     @property

@@ -41,12 +41,17 @@ SPECIAL_CASES_TO_ALLOW = {
         "expert_layer_offset",
         "expert_layer_period",
     ],
+    "Qwen2Config": ["use_sliding_window"],
+    "Qwen2MoeConfig": ["use_sliding_window"],
+    "Gemma2Config": ["tie_word_embeddings"],
     # used to compute the property `self.chunk_length`
     "EncodecConfig": ["overlap"],
     # used to compute the property `self.layers_block_type`
     "RecurrentGemmaConfig": ["block_types"],
     # used as in the config to define `intermediate_size`
     "MambaConfig": ["expand"],
+    # used as in the config to define `intermediate_size`
+    "FalconMambaConfig": ["expand"],
     # used as `self.bert_model = BertModel(config, ...)`
     "DPRConfig": True,
     "FuyuConfig": True,

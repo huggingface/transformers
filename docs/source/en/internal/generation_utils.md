@@ -158,9 +158,6 @@ generation.
 [[autodoc]] LogitsProcessorList
     - __call__
 
-[[autodoc]] LogitsWarper
-    - __call__
-
 [[autodoc]] MinLengthLogitsProcessor
     - __call__
 
@@ -386,14 +383,38 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
     - get_seq_length
     - reorder_cache
 
+[[autodoc]] OffloadedCache
+    - update
+    - prefetch_layer
+    - evict_previous_layer
+
 [[autodoc]] StaticCache
     - update
     - get_seq_length
     - reset
 
+[[autodoc]] HybridCache
+    - update
+    - get_seq_length
+    - reset
+
+[[autodoc]] SlidingWindowCache
+    - update
+    - reset
+
+[[autodoc]] EncoderDecoderCache
+    - get_seq_length
+    - to_legacy_cache
+    - from_legacy_cache
+    - reset
+    - reorder_cache
+
+[[autodoc]] MambaCache
+    - update_conv_state
+    - update_ssm_state
+    - reset
 
 ## Watermark Utils
 
 [[autodoc]] WatermarkDetector
     - __call__
-

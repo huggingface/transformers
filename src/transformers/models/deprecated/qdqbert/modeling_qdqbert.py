@@ -142,7 +142,6 @@ def load_tf_weights_in_qdqbert(model, tf_checkpoint_path):
     return model
 
 
-# Copied from transformers.models.bert.modeling_bert.BertEmbeddings with Bert -> QDQBert
 class QDQBertEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
 
@@ -628,7 +627,6 @@ class QDQBertEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.bert.modeling_bert.BertPooler with Bert -> QDQBert
 class QDQBertPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -644,7 +642,6 @@ class QDQBertPooler(nn.Module):
         return pooled_output
 
 
-# Copied from transformers.models.bert.modeling_bert.BertPredictionHeadTransform with Bert -> QDQBert
 class QDQBertPredictionHeadTransform(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -697,7 +694,6 @@ class QDQBertOnlyMLMHead(nn.Module):
         return prediction_scores
 
 
-# Copied from transformers.models.bert.modeling_bert.BertOnlyNSPHead with Bert -> QDQBert
 class QDQBertOnlyNSPHead(nn.Module):
     def __init__(self, config):
         super().__init__()

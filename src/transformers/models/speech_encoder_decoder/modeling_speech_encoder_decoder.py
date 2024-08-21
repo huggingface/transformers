@@ -181,6 +181,7 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
     base_model_prefix = "speech_encoder_decoder"
     main_input_name = "inputs"
     supports_gradient_checkpointing = True
+    _supports_param_buffer_assignment = False
 
     def __init__(
         self,

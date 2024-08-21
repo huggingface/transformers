@@ -346,7 +346,6 @@ class NezhaSelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert->Nezha
 class NezhaSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -410,7 +409,6 @@ class NezhaAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->Nezha
 class NezhaIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -426,7 +424,6 @@ class NezhaIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertOutput with Bert->Nezha
 class NezhaOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -527,7 +524,6 @@ class NezhaLayer(nn.Module):
         return layer_output
 
 
-# Copied from transformers.models.bert.modeling_bert.BertEncoder with Bert->Nezha
 class NezhaEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -621,7 +617,6 @@ class NezhaEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.bert.modeling_bert.BertPooler with Bert->Nezha
 class NezhaPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -637,7 +632,6 @@ class NezhaPooler(nn.Module):
         return pooled_output
 
 
-# Copied from transformers.models.bert.modeling_bert.BertPredictionHeadTransform with Bert->Nezha
 class NezhaPredictionHeadTransform(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -655,7 +649,6 @@ class NezhaPredictionHeadTransform(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertLMPredictionHead with Bert->Nezha
 class NezhaLMPredictionHead(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -679,7 +672,6 @@ class NezhaLMPredictionHead(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertOnlyMLMHead with Bert->Nezha
 class NezhaOnlyMLMHead(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -690,7 +682,6 @@ class NezhaOnlyMLMHead(nn.Module):
         return prediction_scores
 
 
-# Copied from transformers.models.bert.modeling_bert.BertOnlyNSPHead with Bert->Nezha
 class NezhaOnlyNSPHead(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -701,7 +692,6 @@ class NezhaOnlyNSPHead(nn.Module):
         return seq_relationship_score
 
 
-# Copied from transformers.models.bert.modeling_bert.BertPreTrainingHeads with Bert->Nezha
 class NezhaPreTrainingHeads(nn.Module):
     def __init__(self, config):
         super().__init__()

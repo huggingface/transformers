@@ -44,7 +44,6 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "XLMProphetNetConfig"
 
 
-# Copied from src.transformers.models.prophetnet.modeling_prophetnet.PROPHETNET_START_DOCSTRING with ProphetNetConfig->XLMProphetNetConfig
 XLM_PROPHETNET_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -64,7 +63,6 @@ XLM_PROPHETNET_START_DOCSTRING = r"""
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
-# Copied from src.transformers.models.prophetnet.modeling_prophetnet.PROPHETNET_INPUTS_DOCSTRING with ProphetNet->XLMProphetNet
 XLM_PROPHETNET_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -139,7 +137,6 @@ XLM_PROPHETNET_INPUTS_DOCSTRING = r"""
 """
 
 
-# Copied from src.transformers.models.prophetnet.modeling_prophetnet.PROPHETNET_STANDALONE_INPUTS_DOCSTRING with ProphetNet->XLMProphetNet
 XLM_PROPHETNET_STANDALONE_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -174,7 +171,6 @@ XLM_PROPHETNET_STANDALONE_INPUTS_DOCSTRING = r"""
 """
 
 
-# Copied from transformers.models.prophetnet.modeling_prophetnet.softmax
 def softmax(hidden_state, dim, onnx_trace=False):
     if onnx_trace:
         return nn.functional.softmax(hidden_state.float(), dim=dim)
@@ -182,7 +178,6 @@ def softmax(hidden_state, dim, onnx_trace=False):
         return nn.functional.softmax(hidden_state, dim=dim, dtype=torch.float32)
 
 
-# Copied from transformers.models.prophetnet.modeling_prophetnet.ngram_attention_bias
 def ngram_attention_bias(sequence_length, ngram, device, dtype):
     """
     This function computes the bias for the predict stream
@@ -200,7 +195,6 @@ def ngram_attention_bias(sequence_length, ngram, device, dtype):
     return torch.cat([left_block, right_block], dim=2)
 
 
-# Copied from transformers.models.prophetnet.modeling_prophetnet.compute_relative_buckets
 def compute_relative_buckets(num_buckets, max_distance, relative_positions, is_bidirectional=False):
     """
     This function computes individual parts of the relative position buckets. For more detail, see paper.
@@ -228,7 +222,6 @@ def compute_relative_buckets(num_buckets, max_distance, relative_positions, is_b
     return rel_positions_bucket
 
 
-# Copied from transformers.models.prophetnet.modeling_prophetnet.compute_all_stream_relative_buckets
 def compute_all_stream_relative_buckets(num_buckets, max_distance, position_ids):
     """
     This function computes both main and predict relative position buckets. For more detail, see paper.
@@ -253,7 +246,6 @@ def compute_all_stream_relative_buckets(num_buckets, max_distance, position_ids)
 
 
 @dataclass
-# Copied from transformers.models.prophetnet.modeling_prophetnet.ProphetNetSeq2SeqLMOutput with ProphetNet->XLMProphetNet all-casing
 class XLMProphetNetSeq2SeqLMOutput(ModelOutput):
     """
     Base class for sequence-to-sequence language models outputs.
@@ -339,7 +331,6 @@ class XLMProphetNetSeq2SeqLMOutput(ModelOutput):
 
 
 @dataclass
-# Copied from transformers.models.prophetnet.modeling_prophetnet.ProphetNetSeq2SeqModelOutput with ProphetNet->XLMProphetNet all-casing
 class XLMProphetNetSeq2SeqModelOutput(ModelOutput):
     """
     Base class for model encoder's outputs that also contains : pre-computed hidden states that can speed up sequential
@@ -426,7 +417,6 @@ class XLMProphetNetSeq2SeqModelOutput(ModelOutput):
 
 
 @dataclass
-# Copied from transformers.models.prophetnet.modeling_prophetnet.ProphetNetDecoderModelOutput with ProphetNet->XLMProphetNet all-casing
 class XLMProphetNetDecoderModelOutput(ModelOutput):
     """
     Base class for model's outputs that may also contain a past key/values (to speed up sequential decoding).
@@ -487,7 +477,6 @@ class XLMProphetNetDecoderModelOutput(ModelOutput):
 
 
 @dataclass
-# Copied from transformers.models.prophetnet.modeling_prophetnet.ProphetNetDecoderLMOutput with ProphetNet->XLMProphetNet all-casing
 class XLMProphetNetDecoderLMOutput(ModelOutput):
     """
     Base class for model's outputs that may also contain a past key/values (to speed up sequential decoding).
@@ -549,7 +538,6 @@ class XLMProphetNetDecoderLMOutput(ModelOutput):
     cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
-# Copied from transformers.models.prophetnet.modeling_prophetnet.ProphetNetPreTrainedModel with ProphetNet->XLMProphetNet
 class XLMProphetNetPreTrainedModel(PreTrainedModel):
     config_class = XLMProphetNetConfig
     base_model_prefix = "prophetnet"
@@ -588,7 +576,6 @@ class XLMProphetNetPreTrainedModel(PreTrainedModel):
         return shifted_input_ids
 
 
-# Copied from transformers.models.prophetnet.modeling_prophetnet.ProphetNetPositionalEmbeddings with ProphetNet->XLMProphetNet
 class XLMProphetNetPositionalEmbeddings(nn.Embedding):
     """
     This module learns positional embeddings up to a fixed maximum size. Padding ids are ignored by either offsetting
@@ -632,7 +619,6 @@ class XLMProphetNetPositionalEmbeddings(nn.Embedding):
         return super().forward(position_ids)
 
 
-# Copied from transformers.models.prophetnet.modeling_prophetnet.ProphetNetAttention with ProphetNet->XLMProphetNet
 class XLMProphetNetAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -762,7 +748,6 @@ class XLMProphetNetAttention(nn.Module):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
-# Copied from transformers.models.prophetnet.modeling_prophetnet.ProphetNetFeedForward with ProphetNet->XLMProphetNet
 class XLMProphetNetFeedForward(nn.Module):
     """
     This is the residual two feed-forward layer block based on the original Transformer implementation.
@@ -786,7 +771,6 @@ class XLMProphetNetFeedForward(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.prophetnet.modeling_prophetnet.ProphetNetNgramSelfAttention with ProphetNet->XLMProphetNet
 class XLMProphetNetNgramSelfAttention(nn.Module):
     def __init__(self, config: XLMProphetNetConfig):
         super().__init__()
@@ -1106,7 +1090,6 @@ class XLMProphetNetNgramSelfAttention(nn.Module):
         return predict_relative_pos_embeddings
 
 
-# Copied from transformers.models.prophetnet.modeling_prophetnet.ProphetNetEncoderLayer with ProphetNet->XLMProphetNet, Prophetnet->XLMProphetnet
 class XLMProphetNetEncoderLayer(nn.Module):
     """
     Encoder block for XLMProphetnet
@@ -1150,7 +1133,6 @@ class XLMProphetNetEncoderLayer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.prophetnet.modeling_prophetnet.ProphetNetDecoderLayer with Prophetnet->XLMProphetnet, ProphetNet->XLMProphetNet
 class XLMProphetNetDecoderLayer(nn.Module):
     """
     Decoder block for XLMProphetnet
@@ -1239,7 +1221,6 @@ class XLMProphetNetDecoderLayer(nn.Module):
     "The standalone encoder part of the XLMProphetNetModel.",
     XLM_PROPHETNET_START_DOCSTRING,
 )
-# Copied from transformers.models.prophetnet.modeling_prophetnet.ProphetNetEncoder with microsoft/prophetnet-large-uncased->patrickvonplaten/xprophetnet-large-uncased-standalone, ProphetNet->XLMProphetNet, PROPHETNET->XLM_PROPHETNET
 class XLMProphetNetEncoder(XLMProphetNetPreTrainedModel):
     r"""
     word_embeddings  (`torch.nn.Embeddings` of shape `(config.vocab_size, config.hidden_size)`, *optional*):
@@ -1374,7 +1355,6 @@ class XLMProphetNetEncoder(XLMProphetNetPreTrainedModel):
     "The standalone decoder part of the XLMProphetNetModel.",
     XLM_PROPHETNET_START_DOCSTRING,
 )
-# Copied from transformers.models.prophetnet.modeling_prophetnet.ProphetNetDecoder with microsoft/prophetnet-large-uncased->patrickvonplaten/xprophetnet-large-uncased-standalone, ProphetNet->XLMProphetNet, PROPHETNET->XLM_PROPHETNET,
 class XLMProphetNetDecoder(XLMProphetNetPreTrainedModel):
     r"""
     word_embeddings  (`torch.nn.Embeddings` of shape `(config.vocab_size, config.hidden_size)`, *optional*):
@@ -1743,7 +1723,6 @@ class XLMProphetNetDecoder(XLMProphetNetPreTrainedModel):
     "The bare XLMProphetNet Model outputting raw hidden-states without any specific head on top.",
     XLM_PROPHETNET_START_DOCSTRING,
 )
-# Copied from transformers.models.prophetnet.modeling_prophetnet.ProphetNetModel with microsoft/prophetnet-large-uncased->patrickvonplaten/xprophetnet-large-uncased-standalone, ProphetNet->XLMProphetNet, PROPHETNET->XLM_PROPHETNET
 class XLMProphetNetModel(XLMProphetNetPreTrainedModel):
     _tied_weights_keys = ["encoder.word_embeddings.weight", "decoder.word_embeddings.weight"]
 
@@ -1878,7 +1857,6 @@ class XLMProphetNetModel(XLMProphetNetPreTrainedModel):
     "The XLMProphetNet Model with a language modeling head. Can be used for sequence generation tasks.",
     XLM_PROPHETNET_START_DOCSTRING,
 )
-# Copied from transformers.models.prophetnet.modeling_prophetnet.ProphetNetForConditionalGeneration with microsoft/prophetnet-large-uncased->patrickvonplaten/xprophetnet-large-uncased-standalone, ProphetNet->XLMProphetNet, PROPHETNET->XLM_PROPHETNET
 class XLMProphetNetForConditionalGeneration(XLMProphetNetPreTrainedModel):
     _tied_weights_keys = ["encoder.word_embeddings.weight", "decoder.word_embeddings.weight", "lm_head.weight"]
 
@@ -2073,7 +2051,6 @@ class XLMProphetNetForConditionalGeneration(XLMProphetNetPreTrainedModel):
         return self._shift_right(labels)
 
     @staticmethod
-    # Copied from transformers.models.bart.modeling_bart.BartForConditionalGeneration._reorder_cache
     def _reorder_cache(past_key_values, beam_idx):
         reordered_past = ()
         for layer_past in past_key_values:
@@ -2096,7 +2073,6 @@ class XLMProphetNetForConditionalGeneration(XLMProphetNetPreTrainedModel):
     " language modeling.",
     XLM_PROPHETNET_START_DOCSTRING,
 )
-# Copied from transformers.models.prophetnet.modeling_prophetnet.ProphetNetForCausalLM with microsoft/prophetnet-large-uncased->patrickvonplaten/xprophetnet-large-uncased-standalone, ProphetNet->XLMProphetNet, PROPHETNET->XLM_PROPHETNET
 class XLMProphetNetForCausalLM(XLMProphetNetPreTrainedModel):
     _tied_weights_keys = [
         "prophetnet.word_embeddings.weight",
@@ -2329,7 +2305,6 @@ class XLMProphetNetForCausalLM(XLMProphetNetPreTrainedModel):
         }
 
     @staticmethod
-    # Copied from transformers.models.bart.modeling_bart.BartForCausalLM._reorder_cache
     def _reorder_cache(past_key_values, beam_idx):
         reordered_past = ()
         for layer_past in past_key_values:
@@ -2339,7 +2314,6 @@ class XLMProphetNetForCausalLM(XLMProphetNetPreTrainedModel):
         return reordered_past
 
 
-# Copied from transformers.models.prophetnet.modeling_prophetnet.ProphetNetDecoderWrapper with ProphetNet->XLMProphetNet, prophetnet->XLMProphetNet
 class XLMProphetNetDecoderWrapper(XLMProphetNetPreTrainedModel):
     """
     This is a wrapper class, so that [`XLMProphetNetForCausalLM`] can correctly be loaded from pretrained XLMProphetNet

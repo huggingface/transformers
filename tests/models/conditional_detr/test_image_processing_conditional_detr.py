@@ -18,6 +18,8 @@ import json
 import pathlib
 import unittest
 
+import numpy as np
+
 from transformers.testing_utils import require_torch, require_vision, slow
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -87,6 +89,8 @@ class ConditionalDetrImageProcessingTester(unittest.TestCase):
             image = image_inputs[0]
             if isinstance(image, Image.Image):
                 w, h = image.size
+            elif isinstance(image, np.ndarray):
+                h, w = image.shape[0], image.shape[1]
             else:
                 h, w = image.shape[1], image.shape[2]
             if w < h:
@@ -131,6 +135,7 @@ class ConditionalDetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcess
     image_processing_class = ConditionalDetrImageProcessor if is_vision_available() else None
 
     def setUp(self):
+        super().setUp()
         self.image_processor_tester = ConditionalDetrImageProcessingTester(self)
 
     @property
@@ -537,3 +542,55 @@ class ConditionalDetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcess
         )
         inputs = image_processor(images=[image_1, image_2], return_tensors="pt")
         self.assertEqual(inputs["pixel_values"].shape, torch.Size([2, 3, 150, 100]))
+
+    def test_longest_edge_shortest_edge_resizing_strategy(self):
+        image_1 = torch.ones([958, 653, 3], dtype=torch.uint8)
+
+        # max size is set; width < height;
+        # do_pad=False, longest_edge=640, shortest_edge=640, image=958x653 -> 640x436
+        image_processor = ConditionalDetrImageProcessor(
+            size={"longest_edge": 640, "shortest_edge": 640},
+            do_pad=False,
+        )
+        inputs = image_processor(images=[image_1], return_tensors="pt")
+        self.assertEqual(inputs["pixel_values"].shape, torch.Size([1, 3, 640, 436]))
+
+        image_2 = torch.ones([653, 958, 3], dtype=torch.uint8)
+        # max size is set; height < width;
+        # do_pad=False, longest_edge=640, shortest_edge=640, image=653x958 -> 436x640
+        image_processor = ConditionalDetrImageProcessor(
+            size={"longest_edge": 640, "shortest_edge": 640},
+            do_pad=False,
+        )
+        inputs = image_processor(images=[image_2], return_tensors="pt")
+        self.assertEqual(inputs["pixel_values"].shape, torch.Size([1, 3, 436, 640]))
+
+        image_3 = torch.ones([100, 120, 3], dtype=torch.uint8)
+        # max size is set; width == size; height > max_size;
+        # do_pad=False, longest_edge=118, shortest_edge=100, image=120x100 -> 118x98
+        image_processor = ConditionalDetrImageProcessor(
+            size={"longest_edge": 118, "shortest_edge": 100},
+            do_pad=False,
+        )
+        inputs = image_processor(images=[image_3], return_tensors="pt")
+        self.assertEqual(inputs["pixel_values"].shape, torch.Size([1, 3, 98, 118]))
+
+        image_4 = torch.ones([128, 50, 3], dtype=torch.uint8)
+        # max size is set; height == size; width < max_size;
+        # do_pad=False, longest_edge=256, shortest_edge=50, image=50x128 -> 50x128
+        image_processor = ConditionalDetrImageProcessor(
+            size={"longest_edge": 256, "shortest_edge": 50},
+            do_pad=False,
+        )
+        inputs = image_processor(images=[image_4], return_tensors="pt")
+        self.assertEqual(inputs["pixel_values"].shape, torch.Size([1, 3, 128, 50]))
+
+        image_5 = torch.ones([50, 50, 3], dtype=torch.uint8)
+        # max size is set; height == width; width < max_size;
+        # do_pad=False, longest_edge=117, shortest_edge=50, image=50x50 -> 50x50
+        image_processor = ConditionalDetrImageProcessor(
+            size={"longest_edge": 117, "shortest_edge": 50},
+            do_pad=False,
+        )
+        inputs = image_processor(images=[image_5], return_tensors="pt")
+        self.assertEqual(inputs["pixel_values"].shape, torch.Size([1, 3, 50, 50]))

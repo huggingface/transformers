@@ -155,7 +155,7 @@ class CircleCIJob:
                     elif self.name in ["flax","torch","tf"]:
                         name = self.name if self.name != "torch" else ""
                         if self.name == "torch":
-                            all_tests = glob.glob(f"tests/models/**/test_modeling_{name}*.py", recursive=True) 
+                            all_tests = glob.glob(f"tests/models/**/test_modeling_{name}*.py", recursive=True)
                             filtered = [k for k in all_tests if ("_tf_") not in k and "_flax_" not in k]
                             expanded_tests.extend(filtered)
                         else:
@@ -163,7 +163,7 @@ class CircleCIJob:
                     else:
                         expanded_tests.extend(glob.glob("tests/models/**/test_modeling*.py", recursive=True))
                 elif test == "tests/pipelines":
-                    expanded_tests.extend(glob.glob("tests/models/**/test_modeling*.py", recursive=True)) 
+                    expanded_tests.extend(glob.glob("tests/models/**/test_modeling*.py", recursive=True))
                 else:
                     expanded_tests.append(test)
             tests = " ".join(expanded_tests)
@@ -248,7 +248,7 @@ torch_job = CircleCIJob(
     docker_image=[{"image": "huggingface/transformers-torch-light"}],
     install_steps=["uv venv && uv pip install ."],
     parallelism=6,
-    pytest_num_workers=16
+    pytest_num_workers=4
 )
 
 tokenization_job = CircleCIJob(
@@ -256,7 +256,7 @@ tokenization_job = CircleCIJob(
     docker_image=[{"image": "huggingface/transformers-torch-light"}],
     install_steps=["uv venv && uv pip install ."],
     parallelism=6,
-    pytest_num_workers=16
+    pytest_num_workers=4
 )
 
 
@@ -265,7 +265,7 @@ tf_job = CircleCIJob(
     docker_image=[{"image":"huggingface/transformers-tf-light"}],
     install_steps=["uv venv", "uv pip install -e."],
     parallelism=6,
-    pytest_num_workers=16,
+    pytest_num_workers=4,
 )
 
 
@@ -274,7 +274,7 @@ flax_job = CircleCIJob(
     docker_image=[{"image":"huggingface/transformers-jax-light"}],
     install_steps=["uv venv && uv pip install ."],
     parallelism=6,
-    pytest_num_workers=16
+    pytest_num_workers=4
 )
 
 
@@ -326,7 +326,7 @@ examples_tensorflow_job = CircleCIJob(
     "examples_tensorflow",
     cache_name="tensorflow_examples",
     docker_image=[{"image":"huggingface/transformers-examples-tf"}],
-    install_steps=["uv venv && uv pip install ."],
+    install_steps=["uv venv && uv pip install . && uv pip install -r examples/tensorflow/_tests_requirements.txt"],
     parallelism=8
 )
 

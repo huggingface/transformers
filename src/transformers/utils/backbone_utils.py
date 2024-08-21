@@ -17,7 +17,11 @@
 
 import enum
 import inspect
-from typing import Iterable, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Iterable, List, Optional, Tuple, Union
+
+
+if TYPE_CHECKING:
+    from ..configuration_utils import PretrainedConfig
 
 
 class BackboneType(enum.Enum):
@@ -309,7 +313,6 @@ def load_backbone(config):
     use_pretrained_backbone = getattr(config, "use_pretrained_backbone", None)
     backbone_checkpoint = getattr(config, "backbone", None)
     backbone_kwargs = getattr(config, "backbone_kwargs", None)
-
     backbone_kwargs = {} if backbone_kwargs is None else backbone_kwargs
 
     if backbone_kwargs and backbone_config is not None:
@@ -352,3 +355,23 @@ def load_backbone(config):
             backbone_config = AutoConfig.from_pretrained(backbone_checkpoint, **backbone_kwargs)
         backbone = AutoBackbone.from_config(config=backbone_config)
     return backbone
+
+
+def verify_backbone_config_arguments(
+    use_timm_backbone: bool,
+    use_pretrained_backbone: bool,
+    backbone: Optional[str],
+    backbone_config: Optional[Union[dict, "PretrainedConfig"]],
+    backbone_kwargs: Optional[dict],
+):
+    """
+    Verify that the config arguments to be passed to load_backbone are valid
+    """
+    if backbone_config is not None and backbone is not None:
+        raise ValueError("You can't specify both `backbone` and `backbone_config`.")
+
+    if backbone_config is not None and use_timm_backbone:
+        raise ValueError("You can't specify both `backbone_config` and `use_timm_backbone`.")
+
+    if backbone_kwargs is not None and backbone_kwargs and backbone_config is not None:
+        raise ValueError("You can't specify both `backbone_kwargs` and `backbone_config`.")

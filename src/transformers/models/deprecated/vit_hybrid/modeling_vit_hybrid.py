@@ -51,7 +51,6 @@ class ViTHybridEmbeddings(nn.Module):
     Construct the CLS token, position and patch embeddings. Optionally, also the mask token.
     """
 
-    # Copied from transformers.models.vit.modeling_vit.ViTEmbeddings.__init__ with ViT->ViTHybrid
     def __init__(self, config: ViTHybridConfig, use_mask_token: bool = False) -> None:
         super().__init__()
 
@@ -186,7 +185,6 @@ class ViTHybridPatchEmbeddings(nn.Module):
         return embeddings
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTSelfAttention with ViT->ViTHybrid
 class ViTHybridSelfAttention(nn.Module):
     def __init__(self, config: ViTHybridConfig) -> None:
         super().__init__()
@@ -247,7 +245,6 @@ class ViTHybridSelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTSdpaSelfAttention with ViT->ViTHybrid
 class ViTHybridSdpaSelfAttention(ViTHybridSelfAttention):
     def __init__(self, config: ViTHybridConfig) -> None:
         super().__init__(config)
@@ -279,7 +276,6 @@ class ViTHybridSdpaSelfAttention(ViTHybridSelfAttention):
         return context_layer, None
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTSelfOutput with ViT->ViTHybrid
 class ViTHybridSelfOutput(nn.Module):
     """
     The residual connection is defined in ViTHybridLayer instead of here (as is the case with other models), due to the
@@ -298,7 +294,6 @@ class ViTHybridSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->ViTHybrid
 class ViTHybridAttention(nn.Module):
     def __init__(self, config: ViTHybridConfig) -> None:
         super().__init__()
@@ -338,14 +333,12 @@ class ViTHybridAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTSdpaAttention with ViT->ViTHybrid
 class ViTHybridSdpaAttention(ViTHybridAttention):
     def __init__(self, config: ViTHybridConfig) -> None:
         super().__init__(config)
         self.attention = ViTHybridSdpaSelfAttention(config)
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTIntermediate with ViT->ViTHybrid
 class ViTHybridIntermediate(nn.Module):
     def __init__(self, config: ViTHybridConfig) -> None:
         super().__init__()
@@ -362,7 +355,6 @@ class ViTHybridIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTOutput with ViT->ViTHybrid
 class ViTHybridOutput(nn.Module):
     def __init__(self, config: ViTHybridConfig) -> None:
         super().__init__()
@@ -427,7 +419,6 @@ class ViTHybridLayer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTEncoder with ViT->ViTHybrid
 class ViTHybridEncoder(nn.Module):
     def __init__(self, config: ViTHybridConfig) -> None:
         super().__init__()
@@ -479,7 +470,6 @@ class ViTHybridEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTPreTrainedModel with ViT->ViTHybrid
 class ViTHybridPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -558,7 +548,6 @@ VIT_INPUTS_DOCSTRING = r"""
     "The bare ViT Hybrid Model transformer outputting raw hidden-states without any specific head on top.",
     VIT_START_DOCSTRING,
 )
-# Copied from transformers.models.vit.modeling_vit.ViTModel with ViT->ViTHybrid
 class ViTHybridModel(ViTHybridPreTrainedModel):
     def __init__(self, config: ViTHybridConfig, add_pooling_layer: bool = True, use_mask_token: bool = False):
         super().__init__(config)
@@ -654,7 +643,6 @@ class ViTHybridModel(ViTHybridPreTrainedModel):
         )
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTPooler with ViT->ViTHybrid
 class ViTHybridPooler(nn.Module):
     def __init__(self, config: ViTHybridConfig):
         super().__init__()
@@ -677,7 +665,6 @@ class ViTHybridPooler(nn.Module):
     """,
     VIT_START_DOCSTRING,
 )
-# Copied from transformers.models.vit.modeling_vit.ViTForImageClassification with ViT->ViTHybrid
 class ViTHybridForImageClassification(ViTHybridPreTrainedModel):
     def __init__(self, config: ViTHybridConfig) -> None:
         super().__init__(config)

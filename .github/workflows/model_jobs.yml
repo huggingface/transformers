@@ -12,6 +12,12 @@ on:
       slice_id:
         required: true
         type: number
+      runner:
+        required: true
+        type: string
+      docker:
+        required: true
+        type: string
 
 env:
   HF_HOME: /mnt/cache
@@ -31,12 +37,13 @@ jobs:
   run_models_gpu:
     name: " "
     strategy:
+      max-parallel: 8
       fail-fast: false
       matrix:
         folders: ${{ fromJson(inputs.folder_slices)[inputs.slice_id] }}
-    runs-on: ['${{ inputs.machine_type }}', nvidia-gpu, t4, daily-ci]
+    runs-on: ['${{ inputs.machine_type }}', nvidia-gpu, t4, '${{ inputs.runner }}']
     container:
-      image: huggingface/transformers-all-latest-gpu
+      image: ${{ inputs.docker }}
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
       - name: Echo input and matrix info
@@ -65,6 +72,18 @@ jobs:
         working-directory: /transformers
         run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
 
+      - name: Update / Install some packages (for Past CI)
+        if: ${{ contains(inputs.docker, '-past-') }}
+        working-directory: /transformers
+        run: |
+          python3 -m pip install -U datasets
+
+      - name: Update / Install some packages (for Past CI)
+        if: ${{ contains(inputs.docker, '-past-') && contains(inputs.docker, '-pytorch-') }}
+        working-directory: /transformers
+        run: |
+          python3 -m pip install --no-cache-dir git+https://github.com/huggingface/accelerate@main#egg=accelerate
+
       - name: NVIDIA-SMI
         run: |
           nvidia-smi
@@ -80,7 +99,7 @@ jobs:
 
       - name: Run all tests on GPU
         working-directory: /transformers
-        run: python3 -m pytest -rs -v --make-reports=${{ inputs.machine_type }}_run_models_gpu_${{ matrix.folders }}_test_reports tests/${{ matrix.folders }}
+        run: python3 -m pytest -rsfE -v --make-reports=${{ inputs.machine_type }}_run_models_gpu_${{ matrix.folders }}_test_reports tests/${{ matrix.folders }}
 
       - name: Failure short reports
         if: ${{ failure() }}
