@@ -27,12 +27,10 @@ from .import_utils import is_jinja_available
 
 if is_jinja_available():
     import jinja2
-    # from jinja2 import nodes
-    # from jinja2.exceptions import TemplateError
-    # from jinja2.ext import Extension
-    # from jinja2.sandbox import ImmutableSandboxedEnvironment
+    from jinja2.ext import Extension
 else:
     jinja2 = None
+    Extension = None
 
 
 BASIC_TYPES = (int, float, str, bool, Any, type(None), ...)
