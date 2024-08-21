@@ -336,6 +336,18 @@ class TextGenerationPipelineTests(unittest.TestCase):
         output = text_generator(prompt, stop_sequence=" fe")
         self.assertEqual(output, [{"generated_text": "Hello I believe in fe"}])
 
+    def test_custom_code_with_string_tokenizer(self):
+        # This test checks for an edge case - tokenizer loading used to fail when using a custom code model
+        # with a separate tokenizer that was passed as a repo name rather than a tokenizer object.
+        # See https://github.com/huggingface/transformers/issues/31669
+        text_generator = pipeline(
+            "text-generation",
+            model="Rocketknight1/fake-custom-model-test",
+            tokenizer="Rocketknight1/fake-custom-model-test",
+            trust_remote_code=True,
+        )
+        self.assertIsInstance(text_generator, TextGenerationPipeline)  # Assert successful loading
+
     def run_pipeline_test(self, text_generator, _):
         model = text_generator.model
         tokenizer = text_generator.tokenizer
