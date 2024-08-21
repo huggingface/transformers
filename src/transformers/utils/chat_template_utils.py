@@ -27,10 +27,10 @@ from .import_utils import is_jinja_available
 
 if is_jinja_available():
     import jinja2
-    from jinja2.ext import Extension  # jinja2.ext.Extension fails because the module is not correctly initialized
+    from jinja2.ext import Extension
+    from jinja2.sandbox import ImmutableSandboxedEnvironment
 else:
     jinja2 = None
-    Extension = None
 
 
 BASIC_TYPES = (int, float, str, bool, Any, type(None), ...)
@@ -351,11 +351,11 @@ def _render_with_assistant_indices(
 
 @lru_cache
 def _compile_jinja_template(chat_template):
-    class AssistantTracker(jinja2.ext.Extension):
+    class AssistantTracker(Extension):
         # This extension is used to track the indices of assistant-generated tokens in the rendered chat
         tags = {"generation"}
 
-        def __init__(self, environment: jinja2.sandbox.ImmutableSandboxedEnvironment):
+        def __init__(self, environment: ImmutableSandboxedEnvironment):
             # The class is only initiated by jinja.
             super().__init__(environment)
             environment.extend(activate_tracker=self.activate_tracker)
@@ -409,7 +409,7 @@ def _compile_jinja_template(chat_template):
     def strftime_now(format):
         return datetime.now().strftime(format)
 
-    jinja_env = jinja2.sandbox.ImmutableSandboxedEnvironment(
+    jinja_env = ImmutableSandboxedEnvironment(
         trim_blocks=True, lstrip_blocks=True, extensions=[AssistantTracker, jinja2.ext.loopcontrols]
     )
     jinja_env.filters["tojson"] = tojson
