@@ -1301,7 +1301,7 @@ class JambaModel(JambaPreTrainedModel):
             position_ids = cache_position.unsqueeze(0)
 
         causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, cache_position)
-        mamba_mask = None if attention_mask is not None and torch.all(attention_mask == 1) else attention_mask
+        mamba_mask = self._update_mamba_mask(attention_mask, cache_position)
 
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
@@ -1409,6 +1409,17 @@ class JambaModel(JambaPreTrainedModel):
             causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
 
         return causal_mask
+
+    def _update_mamba_mask(self, attention_mask, cache_position):
+        mamba_mask = attention_mask
+
+        # No need for zeroing states when
+        # 1. Cached forward
+        # 2. Attending to all inputs
+        if cache_position[0] > 0 or (attention_mask is not None and torch.all(attention_mask == 1)):
+            mamba_mask = None
+
+        return mamba_mask
 
 
 # Adapted from transformers.models.mixtral.modeling_mixtral.MixtralForCausalLM with MIXTRAL->JAMBA, Mixtral->Jamba
