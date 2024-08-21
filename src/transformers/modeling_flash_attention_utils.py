@@ -163,7 +163,7 @@ def _upad_input(
     """
     batch_size, kv_seq_len, num_key_value_heads, head_dim = key_layer.shape
     # concatenated sequences in the training mode
-    if any(attention_mask > 1) and query_length != 1 and query_length == kv_seq_len:
+    if (attention_mask > 1).any() and query_length != 1 and query_length == kv_seq_len:
         indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data_for_concatenated_sequences(attention_mask, query_length)
     else:
         indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(attention_mask)
