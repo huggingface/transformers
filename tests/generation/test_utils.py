@@ -1828,6 +1828,41 @@ class GenerationTesterMixin:
                 output_compiled = compiled_generate(model_inputs, generation_config=generation_config)
                 self.assertListEqual(output_dynamic.tolist(), output_compiled.tolist())
 
+    def test_generate_with_num_logits_to_keep(self):
+        for model_class in self.all_generative_model_classes:
+            if "num_logits_to_keep" not in set(inspect.signature(model_class.forward).parameters.keys()):
+                self.skipTest(reason="This model does not support `num_logits_to_keep` argument.")
+
+            config, input_ids, attention_mask = self._get_input_ids_and_config()
+            config.use_cache = True
+            config.is_decoder = True
+
+            model = model_class(config).to(torch_device).eval()
+            assistant_model = model
+            # All generation methods (except assisted decoding) rely on always extracting the last token logits of the
+            # full logits matrix, so testing out only greedy search and assisted decoding is enough (if it works,
+            # other methods will work as well)
+            strategies = [
+                {
+                    "max_new_tokens": 10,
+                    "do_sample": False,
+                },
+                {
+                    "max_new_tokens": 10,
+                    "do_sample": False,
+                    "assistant_model": assistant_model,
+                },
+            ]
+
+            for generation_kwargs in strategies:
+                # Setting num_logits_to_keep at 0 keeps all logits (old behavior)
+                with_all_logits = model.generate(
+                    input_ids, attention_mask=attention_mask, **generation_kwargs, num_logits_to_keep=0
+                )
+                # By default, num_logits_to_keep is automatically set to 1 if not provided (new behavior)
+                without_all_logits = model.generate(input_ids, attention_mask=attention_mask, **generation_kwargs)
+                self.assertListEqual(with_all_logits.tolist(), without_all_logits.tolist())
+
     def _check_outputs(self, output, input_ids, config, use_cache=False, num_return_sequences=1):
         batch_size, seq_length = input_ids.shape
         num_sequences_in_output = batch_size * num_return_sequences
