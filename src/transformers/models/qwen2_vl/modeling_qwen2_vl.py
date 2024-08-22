@@ -284,29 +284,35 @@ class VisionFlashAttention2(nn.Module):
         self.qkv = nn.Linear(dim, dim * 3, bias=True)
         self.proj = nn.Linear(dim, dim)
 
-    def forward(self, x: torch.Tensor, cu_seqlens: torch.Tensor, rotary_pos_emb: torch.Tensor = None) -> torch.Tensor:
-        L, _ = x.shape
-        q, k, v = self.qkv(x).reshape(L, 3, self.num_heads, -1).permute(1, 0, 2, 3).unbind(0)
+    def forward(
+        self, hidden_states: torch.Tensor, cu_seqlens: torch.Tensor, rotary_pos_emb: torch.Tensor = None
+    ) -> torch.Tensor:
+        seq_length = hidden_states.shape[0]
+        q, k, v = self.qkv(hidden_states).reshape(seq_length, 3, self.num_heads, -1).permute(1, 0, 2, 3).unbind(0)
         if rotary_pos_emb is not None:
             q = apply_rotary_pos_emb_vision(q.unsqueeze(0), rotary_pos_emb).squeeze(0)
             k = apply_rotary_pos_emb_vision(k.unsqueeze(0), rotary_pos_emb).squeeze(0)
 
         max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
-        x = flash_attn_varlen_func(q, k, v, cu_seqlens, cu_seqlens, max_seqlen, max_seqlen).reshape(L, -1)
-        x = self.proj(x)
-        return x
+        attn_output = flash_attn_varlen_func(q, k, v, cu_seqlens, cu_seqlens, max_seqlen, max_seqlen).reshape(
+            seq_length, -1
+        )
+        attn_output = self.proj(attn_output)
+        return attn_output
 
 
-class VisionSpdaAttention(nn.Module):
+class VisionSdpaAttention(nn.Module):
     def __init__(self, dim: int, num_heads: int = 16) -> None:
         super().__init__()
         self.num_heads = num_heads
         self.qkv = nn.Linear(dim, dim * 3, bias=True)
         self.proj = nn.Linear(dim, dim)
 
-    def forward(self, x: torch.Tensor, cu_seqlens: torch.Tensor, rotary_pos_emb: torch.Tensor = None) -> torch.Tensor:
-        L, _ = x.shape
-        q, k, v = self.qkv(x).reshape(L, 3, self.num_heads, -1).permute(1, 0, 2, 3).unbind(0)
+    def forward(
+        self, hidden_states: torch.Tensor, cu_seqlens: torch.Tensor, rotary_pos_emb: torch.Tensor = None
+    ) -> torch.Tensor:
+        seq_length = hidden_states.shape[0]
+        q, k, v = self.qkv(hidden_states).reshape(seq_length, 3, self.num_heads, -1).permute(1, 0, 2, 3).unbind(0)
         if rotary_pos_emb is not None:
             q = apply_rotary_pos_emb_vision(q.unsqueeze(0), rotary_pos_emb).squeeze(0)
             k = apply_rotary_pos_emb_vision(k.unsqueeze(0), rotary_pos_emb).squeeze(0)
@@ -325,15 +331,15 @@ class VisionSpdaAttention(nn.Module):
                     is_causal=False,
                 )
             )
-        x = torch.cat(attn_outputs, dim=1).transpose(0, 1).reshape(L, -1)
-        x = self.proj(x)
-        return x
+        attn_output = torch.cat(attn_outputs, dim=1).transpose(0, 1).reshape(seq_length, -1)
+        attn_output = self.proj(attn_output)
+        return attn_output
 
 
 QWEN2_VL_VISION_ATTENTION_CLASSES = {
-    "eager": VisionSpdaAttention,
+    "eager": VisionSdpaAttention,
     "flash_attention_2": VisionFlashAttention2,
-    "sdpa": VisionSpdaAttention,
+    "sdpa": VisionSdpaAttention,
 }
 
 
@@ -349,10 +355,12 @@ class Qwen2VLVisionBlock(nn.Module):
         )
         self.mlp = VisionMlp(dim=config.embed_dim, hidden_dim=mlp_hidden_dim, hidden_act=config.hidden_act)
 
-    def forward(self, x, cu_seqlens, rotary_pos_emb) -> torch.Tensor:
-        x = x + self.attn(self.norm1(x), cu_seqlens=cu_seqlens, rotary_pos_emb=rotary_pos_emb)
-        x = x + self.mlp(self.norm2(x))
-        return x
+    def forward(self, hidden_states, cu_seqlens, rotary_pos_emb) -> torch.Tensor:
+        hidden_states = hidden_states + self.attn(
+            self.norm1(hidden_states), cu_seqlens=cu_seqlens, rotary_pos_emb=rotary_pos_emb
+        )
+        hidden_states = hidden_states + self.mlp(self.norm2(hidden_states))
+        return hidden_states
 
 
 # Copied from transformers.models.llama.modeling_llama._prepare_4d_causal_attention_mask_with_cache_position
