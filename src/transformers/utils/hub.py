@@ -660,7 +660,14 @@ def has_file(
             proxies=proxies,
             timeout=10,
         )
-    except OfflineModeIsEnabled:
+    except (requests.exceptions.SSLError, requests.exceptions.ProxyError):
+        # Actually raise for those subclasses of ConnectionError
+        raise
+    except (
+        requests.exceptions.ConnectionError,
+        requests.exceptions.Timeout,
+        OfflineModeIsEnabled,
+    ):
         return has_file_in_cache
 
     try:
