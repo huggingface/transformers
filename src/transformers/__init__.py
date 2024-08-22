@@ -1218,7 +1218,7 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     _import_structure["image_processing_utils_fast"] = ["BaseImageProcessorFast"]
-    _import_structure["models.ijepa"].append("IJEPAImageProcessorFast")
+    _import_structure["models.ijepa"].append("IJepaImageProcessorFast")
     _import_structure["models.vit"].append("ViTImageProcessorFast")
 
 # PyTorch-backed objects

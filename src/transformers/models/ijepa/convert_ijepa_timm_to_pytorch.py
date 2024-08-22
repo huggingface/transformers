@@ -32,6 +32,7 @@ from transformers import (
 )
 from transformers.utils import logging
 
+
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
@@ -128,10 +129,7 @@ def create_rename_keys(config, base_model=False):
         )
 
         # if just the base model, we should remove "ijepa" from all keys that start with "ijepa"
-        rename_keys = [
-            (pair[0], pair[1][4:]) if pair[1].startswith("ijepa") else pair
-            for pair in rename_keys
-        ]
+        rename_keys = [(pair[0], pair[1][4:]) if pair[1].startswith("ijepa") else pair for pair in rename_keys]
     else:
         # layernorm + classification head
         rename_keys.extend(
@@ -157,24 +155,20 @@ def read_in_q_k_v(state_dict, config, base_model=False):
         in_proj_weight = state_dict.pop(f"blocks.{i}.attn.qkv.weight")
         in_proj_bias = state_dict.pop(f"blocks.{i}.attn.qkv.bias")
         # next, add query, keys and values (in that order) to the state dict
-        state_dict[
-            f"{prefix}encoder.layer.{i}.attention.attention.query.weight"
-        ] = in_proj_weight[: config.hidden_size, :]
-        state_dict[
-            f"{prefix}encoder.layer.{i}.attention.attention.query.bias"
-        ] = in_proj_bias[: config.hidden_size]
-        state_dict[
-            f"{prefix}encoder.layer.{i}.attention.attention.key.weight"
-        ] = in_proj_weight[config.hidden_size : config.hidden_size * 2, :]
-        state_dict[
-            f"{prefix}encoder.layer.{i}.attention.attention.key.bias"
-        ] = in_proj_bias[config.hidden_size : config.hidden_size * 2]
-        state_dict[
-            f"{prefix}encoder.layer.{i}.attention.attention.value.weight"
-        ] = in_proj_weight[-config.hidden_size :, :]
-        state_dict[
-            f"{prefix}encoder.layer.{i}.attention.attention.value.bias"
-        ] = in_proj_bias[-config.hidden_size :]
+        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.query.weight"] = in_proj_weight[
+            : config.hidden_size, :
+        ]
+        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.query.bias"] = in_proj_bias[: config.hidden_size]
+        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.key.weight"] = in_proj_weight[
+            config.hidden_size : config.hidden_size * 2, :
+        ]
+        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.key.bias"] = in_proj_bias[
+            config.hidden_size : config.hidden_size * 2
+        ]
+        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.value.weight"] = in_proj_weight[
+            -config.hidden_size :, :
+        ]
+        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.value.bias"] = in_proj_bias[-config.hidden_size :]
 
 
 def remove_classification_head_(state_dict):
@@ -212,48 +206,33 @@ def convert_ijepa_checkpoint(ijepa_name, pytorch_dump_folder_path):
     # detect unsupported IJEPA models in transformers
     # fc_norm is present
     if not isinstance(getattr(timm_model, "fc_norm", None), torch.nn.Identity):
-        raise ValueError(
-            f"{ijepa_name} is not supported in transformers because of the presence of fc_norm."
-        )
+        raise ValueError(f"{ijepa_name} is not supported in transformers because of the presence of fc_norm.")
 
     # use of global average pooling in combination (or without) class token
     if getattr(timm_model, "global_pool", None) == "avg":
-        raise ValueError(
-            f"{ijepa_name} is not supported in transformers because of use of global average pooling."
-        )
+        raise ValueError(f"{ijepa_name} is not supported in transformers because of use of global average pooling.")
 
     # CLIP style ijepa with norm_pre layer present
-    if "clip" in ijepa_name and not isinstance(
-        getattr(timm_model, "norm_pre", None), torch.nn.Identity
-    ):
+    if "clip" in ijepa_name and not isinstance(getattr(timm_model, "norm_pre", None), torch.nn.Identity):
         raise ValueError(
             f"{ijepa_name} is not supported in transformers because it's a CLIP style IJEPA with norm_pre layer."
         )
 
     # SigLIP style ijepa with attn_pool layer present
-    if (
-        "siglip" in ijepa_name
-        and getattr(timm_model, "global_pool", None) == "map"
-    ):
+    if "siglip" in ijepa_name and getattr(timm_model, "global_pool", None) == "map":
         raise ValueError(
             f"{ijepa_name} is not supported in transformers because it's a SigLIP style IJEPA with attn_pool."
         )
 
     # use of layer scale in IJEPA model blocks
-    if not isinstance(
-        getattr(timm_model.blocks[0], "ls1", None), torch.nn.Identity
-    ) or not isinstance(
+    if not isinstance(getattr(timm_model.blocks[0], "ls1", None), torch.nn.Identity) or not isinstance(
         getattr(timm_model.blocks[0], "ls2", None), torch.nn.Identity
     ):
-        raise ValueError(
-            f"{ijepa_name} is not supported in transformers because it uses a layer scale in its blocks."
-        )
+        raise ValueError(f"{ijepa_name} is not supported in transformers because it uses a layer scale in its blocks.")
 
     # Hybrid ResNet-IJEPAs
     if not isinstance(timm_model.patch_embed, timm.layers.PatchEmbed):
-        raise ValueError(
-            f"{ijepa_name} is not supported in transformers because it is a hybrid ResNet-IJEPA."
-        )
+        raise ValueError(f"{ijepa_name} is not supported in transformers because it is a hybrid ResNet-IJEPA.")
 
     # get patch size and image size from the patch embedding submodule
     config.patch_size = timm_model.patch_embed.patch_size[0]
@@ -271,15 +250,10 @@ def convert_ijepa_checkpoint(ijepa_name, pytorch_dump_folder_path):
         # infer ImageNet subset from timm model
         imagenet_subset = infer_imagenet_subset(timm_model)
         dataset_info = ImageNetInfo(imagenet_subset)
-        config.id2label = {
-            i: dataset_info.index_to_label_name(i)
-            for i in range(dataset_info.num_classes())
-        }
+        config.id2label = {i: dataset_info.index_to_label_name(i) for i in range(dataset_info.num_classes())}
         config.label2id = {v: k for k, v in config.id2label.items()}
     else:
-        print(
-            f"{ijepa_name} is going to be converted as a feature extractor only."
-        )
+        print(f"{ijepa_name} is going to be converted as a feature extractor only.")
         base_model = True
 
     # load state_dict of original model
@@ -312,9 +286,7 @@ def convert_ijepa_checkpoint(ijepa_name, pytorch_dump_folder_path):
     if base_model:
         timm_pooled_output = timm_model.forward_features(pixel_values)
         assert timm_pooled_output.shape == outputs.last_hidden_state.shape
-        assert torch.allclose(
-            timm_pooled_output, outputs.last_hidden_state, atol=1e-1
-        )
+        assert torch.allclose(timm_pooled_output, outputs.last_hidden_state, atol=1e-1)
     else:
         timm_logits = timm_model(pixel_values)
         assert timm_logits.shape == outputs.logits.shape

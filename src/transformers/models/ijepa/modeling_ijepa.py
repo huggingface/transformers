@@ -42,6 +42,7 @@ from ...utils import (
 )
 from .configuration_ijepa import IJepaConfig
 
+
 logger = logging.get_logger(__name__)
 
 # General docstring
@@ -56,34 +57,22 @@ _IMAGE_CLASS_CHECKPOINT = "google/ijepa-base-patch16-224"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "Egyptian cat"
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTEmbeddings with ViT->IJEPA
 class IJepaEmbeddings(nn.Module):
     """
-    Construct the CLS token, position and patch embeddings. Optionally, also the mask token.
+    Construct the position and patch embeddings. Optionally, also the mask token.
     """
 
-    def __init__(
-        self, config: IJepaConfig, use_mask_token: bool = False
-    ) -> None:
+    def __init__(self, config: IJepaConfig, use_mask_token: bool = False) -> None:
         super().__init__()
 
-        self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
-        self.mask_token = (
-            nn.Parameter(torch.zeros(1, 1, config.hidden_size))
-            if use_mask_token
-            else None
-        )
+        self.mask_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size)) if use_mask_token else None
         self.patch_embeddings = IJepaPatchEmbeddings(config)
         num_patches = self.patch_embeddings.num_patches
-        self.position_embeddings = nn.Parameter(
-            torch.randn(1, num_patches + 1, config.hidden_size)
-        )
+        self.position_embeddings = nn.Parameter(torch.randn(1, num_patches + 1, config.hidden_size))
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.config = config
 
-    def interpolate_pos_encoding(
-        self, embeddings: torch.Tensor, height: int, width: int
-    ) -> torch.Tensor:
+    def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
         """
         This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher
         resolution images.
@@ -120,14 +109,9 @@ class IJepaEmbeddings(nn.Module):
             mode="bicubic",
             align_corners=False,
         )
-        assert (
-            int(h0) == patch_pos_embed.shape[-2]
-            and int(w0) == patch_pos_embed.shape[-1]
-        )
+        assert int(h0) == patch_pos_embed.shape[-2] and int(w0) == patch_pos_embed.shape[-1]
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
-        return torch.cat(
-            (class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1
-        )
+        return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1)
 
     def forward(
         self,
@@ -135,10 +119,8 @@ class IJepaEmbeddings(nn.Module):
         bool_masked_pos: Optional[torch.BoolTensor] = None,
         interpolate_pos_encoding: bool = False,
     ) -> torch.Tensor:
-        batch_size, num_channels, height, width = pixel_values.shape
-        embeddings = self.patch_embeddings(
-            pixel_values, interpolate_pos_encoding=interpolate_pos_encoding
-        )
+        batch_size, _, height, width = pixel_values.shape
+        embeddings = self.patch_embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
 
         if bool_masked_pos is not None:
             seq_length = embeddings.shape[1]
@@ -147,15 +129,9 @@ class IJepaEmbeddings(nn.Module):
             mask = bool_masked_pos.unsqueeze(-1).type_as(mask_tokens)
             embeddings = embeddings * (1.0 - mask) + mask_tokens * mask
 
-        # add the [CLS] token to the embedded patch tokens
-        cls_tokens = self.cls_token.expand(batch_size, -1, -1)
-        embeddings = torch.cat((cls_tokens, embeddings), dim=1)
-
         # add positional encoding to each token
         if interpolate_pos_encoding:
-            embeddings = embeddings + self.interpolate_pos_encoding(
-                embeddings, height, width
-            )
+            embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
         else:
             embeddings = embeddings + self.position_embeddings
 
@@ -177,19 +153,9 @@ class IJepaPatchEmbeddings(nn.Module):
         image_size, patch_size = config.image_size, config.patch_size
         num_channels, hidden_size = config.num_channels, config.hidden_size
 
-        image_size = (
-            image_size
-            if isinstance(image_size, collections.abc.Iterable)
-            else (image_size, image_size)
-        )
-        patch_size = (
-            patch_size
-            if isinstance(patch_size, collections.abc.Iterable)
-            else (patch_size, patch_size)
-        )
-        num_patches = (image_size[1] // patch_size[1]) * (
-            image_size[0] // patch_size[0]
-        )
+        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
+        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
+        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
         self.image_size = image_size
         self.patch_size = patch_size
         self.num_channels = num_channels
@@ -227,32 +193,19 @@ class IJepaPatchEmbeddings(nn.Module):
 class IJepaSelfAttention(nn.Module):
     def __init__(self, config: IJepaConfig) -> None:
         super().__init__()
-        if (
-            config.hidden_size % config.num_attention_heads != 0
-            and not hasattr(config, "embedding_size")
-        ):
+        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
                 f"The hidden size {config.hidden_size,} is not a multiple of the number of attention "
                 f"heads {config.num_attention_heads}."
             )
 
         self.num_attention_heads = config.num_attention_heads
-        self.attention_head_size = int(
-            config.hidden_size / config.num_attention_heads
-        )
-        self.all_head_size = (
-            self.num_attention_heads * self.attention_head_size
-        )
+        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
+        self.all_head_size = self.num_attention_heads * self.attention_head_size
 
-        self.query = nn.Linear(
-            config.hidden_size, self.all_head_size, bias=config.qkv_bias
-        )
-        self.key = nn.Linear(
-            config.hidden_size, self.all_head_size, bias=config.qkv_bias
-        )
-        self.value = nn.Linear(
-            config.hidden_size, self.all_head_size, bias=config.qkv_bias
-        )
+        self.query = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
+        self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
+        self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
@@ -277,13 +230,9 @@ class IJepaSelfAttention(nn.Module):
         query_layer = self.transpose_for_scores(mixed_query_layer)
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
-        attention_scores = torch.matmul(
-            query_layer, key_layer.transpose(-1, -2)
-        )
+        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
 
-        attention_scores = attention_scores / math.sqrt(
-            self.attention_head_size
-        )
+        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
 
         # Normalize the attention scores to probabilities.
         attention_probs = nn.functional.softmax(attention_scores, dim=-1)
@@ -299,16 +248,10 @@ class IJepaSelfAttention(nn.Module):
         context_layer = torch.matmul(attention_probs, value_layer)
 
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
-        new_context_layer_shape = context_layer.size()[:-2] + (
-            self.all_head_size,
-        )
+        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.view(new_context_layer_shape)
 
-        outputs = (
-            (context_layer, attention_probs)
-            if output_attentions
-            else (context_layer,)
-        )
+        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 
         return outputs
 
@@ -342,9 +285,7 @@ class IJepaSdpaSelfAttention(IJepaSelfAttention):
         )
 
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
-        new_context_layer_shape = context_layer.size()[:-2] + (
-            self.all_head_size,
-        )
+        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.view(new_context_layer_shape)
 
         return context_layer, None
@@ -362,9 +303,7 @@ class IJepaSelfOutput(nn.Module):
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(
-        self, hidden_states: torch.Tensor, input_tensor: torch.Tensor
-    ) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
@@ -396,13 +335,8 @@ class IJepaAttention(nn.Module):
         self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
 
         # Update hyper params and store pruned heads
-        self.attention.num_attention_heads = (
-            self.attention.num_attention_heads - len(heads)
-        )
-        self.attention.all_head_size = (
-            self.attention.attention_head_size
-            * self.attention.num_attention_heads
-        )
+        self.attention.num_attention_heads = self.attention.num_attention_heads - len(heads)
+        self.attention.all_head_size = self.attention.attention_head_size * self.attention.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(
@@ -411,15 +345,11 @@ class IJepaAttention(nn.Module):
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
-        self_outputs = self.attention(
-            hidden_states, head_mask, output_attentions
-        )
+        self_outputs = self.attention(hidden_states, head_mask, output_attentions)
 
         attention_output = self.output(self_outputs[0], hidden_states)
 
-        outputs = (attention_output,) + self_outputs[
-            1:
-        ]  # add attentions if we output them
+        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
 
 
@@ -454,9 +384,7 @@ class IJepaOutput(nn.Module):
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(
-        self, hidden_states: torch.Tensor, input_tensor: torch.Tensor
-    ) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
@@ -479,17 +407,11 @@ class IJepaLayer(nn.Module):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = IJEPA_ATTENTION_CLASSES[config._attn_implementation](
-            config
-        )
+        self.attention = IJEPA_ATTENTION_CLASSES[config._attn_implementation](config)
         self.intermediate = IJepaIntermediate(config)
         self.output = IJepaOutput(config)
-        self.layernorm_before = nn.LayerNorm(
-            config.hidden_size, eps=config.layer_norm_eps
-        )
-        self.layernorm_after = nn.LayerNorm(
-            config.hidden_size, eps=config.layer_norm_eps
-        )
+        self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(
         self,
@@ -498,16 +420,12 @@ class IJepaLayer(nn.Module):
         output_attentions: bool = False,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
         self_attention_outputs = self.attention(
-            self.layernorm_before(
-                hidden_states
-            ),  # in IJEPA, layernorm is applied before self-attention
+            self.layernorm_before(hidden_states),  # in IJEPA, layernorm is applied before self-attention
             head_mask,
             output_attentions=output_attentions,
         )
         attention_output = self_attention_outputs[0]
-        outputs = self_attention_outputs[
-            1:
-        ]  # add self attentions if we output attention weights
+        outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
         # first residual connection
         hidden_states = attention_output + hidden_states
@@ -529,9 +447,7 @@ class IJepaEncoder(nn.Module):
     def __init__(self, config: IJepaConfig) -> None:
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList(
-            [IJepaLayer(config) for _ in range(config.num_hidden_layers)]
-        )
+        self.layer = nn.ModuleList([IJepaLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
     def forward(
@@ -559,9 +475,7 @@ class IJepaEncoder(nn.Module):
                     output_attentions,
                 )
             else:
-                layer_outputs = layer_module(
-                    hidden_states, layer_head_mask, output_attentions
-                )
+                layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions)
 
             hidden_states = layer_outputs[0]
 
@@ -588,7 +502,7 @@ class IJepaEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTPreTrainedModel with ViT->IJEPA,vit->ijepa
+# Copied from transformers.models.vit.modeling_vit.ViTPreTrainedModel with ViT->IJepa,vit->ijepa
 class IJepaPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -602,9 +516,7 @@ class IJepaPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["IJepaEmbeddings", "IJepaLayer"]
     _supports_sdpa = True
 
-    def _init_weights(
-        self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]
-    ) -> None:
+    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
@@ -684,14 +596,10 @@ class IJepaModel(IJepaPreTrainedModel):
         super().__init__(config)
         self.config = config
 
-        self.embeddings = IJepaEmbeddings(
-            config, use_mask_token=use_mask_token
-        )
+        self.embeddings = IJepaEmbeddings(config, use_mask_token=use_mask_token)
         self.encoder = IJepaEncoder(config)
 
-        self.layernorm = nn.LayerNorm(
-            config.hidden_size, eps=config.layer_norm_eps
-        )
+        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.pooler = IJepaPooler(config) if add_pooling_layer else None
 
         # Initialize weights and apply final processing
@@ -730,21 +638,11 @@ class IJepaModel(IJepaPreTrainedModel):
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`, *optional*):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
         """
-        output_attentions = (
-            output_attentions
-            if output_attentions is not None
-            else self.config.output_attentions
-        )
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
-            output_hidden_states
-            if output_hidden_states is not None
-            else self.config.output_hidden_states
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = (
-            return_dict
-            if return_dict is not None
-            else self.config.use_return_dict
-        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -754,14 +652,10 @@ class IJepaModel(IJepaPreTrainedModel):
         # attention_probs has shape bsz x n_heads x N x N
         # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        head_mask = self.get_head_mask(
-            head_mask, self.config.num_hidden_layers
-        )
+        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
         # TODO: maybe have a cleaner way to cast the input (from `ImageProcessor` side?)
-        expected_dtype = (
-            self.embeddings.patch_embeddings.projection.weight.dtype
-        )
+        expected_dtype = self.embeddings.patch_embeddings.projection.weight.dtype
         if pixel_values.dtype != expected_dtype:
             pixel_values = pixel_values.to(expected_dtype)
 
@@ -780,16 +674,10 @@ class IJepaModel(IJepaPreTrainedModel):
         )
         sequence_output = encoder_outputs[0]
         sequence_output = self.layernorm(sequence_output)
-        pooled_output = (
-            self.pooler(sequence_output) if self.pooler is not None else None
-        )
+        pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
         if not return_dict:
-            head_outputs = (
-                (sequence_output, pooled_output)
-                if pooled_output is not None
-                else (sequence_output,)
-            )
+            head_outputs = (sequence_output, pooled_output) if pooled_output is not None else (sequence_output,)
             return head_outputs + encoder_outputs[1:]
 
         return BaseModelOutputWithPooling(
@@ -819,7 +707,7 @@ class IJepaPooler(nn.Module):
 @add_start_docstrings(
     """
     I-JEPA Model transformer with an image classification head on top (a linear layer on top of the final hidden state of
-    the [CLS] token) e.g. for ImageNet.
+    the average pooling of the output) e.g. for ImageNet.
 
     <Tip>
 
@@ -840,11 +728,7 @@ class IJepaForImageClassification(IJepaPreTrainedModel):
         self.ijepa = IJepaModel(config, add_pooling_layer=False)
 
         # Classifier head
-        self.classifier = (
-            nn.Linear(config.hidden_size, config.num_labels)
-            if config.num_labels > 0
-            else nn.Identity()
-        )
+        self.classifier = nn.Linear(config.hidden_size, config.num_labels) if config.num_labels > 0 else nn.Identity()
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -872,11 +756,7 @@ class IJepaForImageClassification(IJepaPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = (
-            return_dict
-            if return_dict is not None
-            else self.config.use_return_dict
-        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.ijepa(
             pixel_values,
@@ -898,9 +778,7 @@ class IJepaForImageClassification(IJepaPreTrainedModel):
             if self.config.problem_type is None:
                 if self.num_labels == 1:
                     self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (
-                    labels.dtype == torch.long or labels.dtype == torch.int
-                ):
+                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
                     self.config.problem_type = "single_label_classification"
                 else:
                     self.config.problem_type = "multi_label_classification"
@@ -913,9 +791,7 @@ class IJepaForImageClassification(IJepaPreTrainedModel):
                     loss = loss_fct(logits, labels)
             elif self.config.problem_type == "single_label_classification":
                 loss_fct = CrossEntropyLoss()
-                loss = loss_fct(
-                    logits.view(-1, self.num_labels), labels.view(-1)
-                )
+                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
             elif self.config.problem_type == "multi_label_classification":
                 loss_fct = BCEWithLogitsLoss()
                 loss = loss_fct(logits, labels)

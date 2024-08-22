@@ -20,6 +20,7 @@ from ...utils import (
     is_torchvision_available,
 )
 
+
 _import_structure = {"configuration_ijepa": ["IJepaConfig", "IJepaOnnxConfig"]}
 
 try:
@@ -28,9 +29,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["image_processing_ijepa_fast"] = [
-        "IJepaImageProcessorFast"
-    ]
+    _import_structure["image_processing_ijepa_fast"] = ["IJepaImageProcessorFast"]
 
 try:
     if not is_torch_available():

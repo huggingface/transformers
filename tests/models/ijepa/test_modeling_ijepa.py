@@ -36,6 +36,7 @@ from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
+
 if is_torch_available():
     import torch
     from torch import nn
@@ -112,9 +113,7 @@ class IJepaModelTester:
 
         labels = None
         if self.use_labels:
-            labels = ids_tensor(
-                [self.batch_size], self.type_sequence_label_size
-            )
+            labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
 
         config = self.get_config()
 
@@ -148,9 +147,7 @@ class IJepaModelTester:
             (self.batch_size, self.seq_length, self.hidden_size),
         )
 
-    def create_and_check_for_image_classification(
-        self, config, pixel_values, labels
-    ):
+    def create_and_check_for_image_classification(self, config, pixel_values, labels):
         config.num_labels = self.type_sequence_label_size
         model = IJepaForImageClassification(config)
         model.to(torch_device)
@@ -167,9 +164,7 @@ class IJepaModelTester:
         model.to(torch_device)
         model.eval()
 
-        pixel_values = floats_tensor(
-            [self.batch_size, 1, self.image_size, self.image_size]
-        )
+        pixel_values = floats_tensor([self.batch_size, 1, self.image_size, self.image_size])
         result = model(pixel_values)
         self.parent.assertEqual(
             result.logits.shape,
@@ -246,15 +241,11 @@ class IJepaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def test_for_masked_image_modeling(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_masked_image_modeling(
-            *config_and_inputs
-        )
+        self.model_tester.create_and_check_for_masked_image_modeling(*config_and_inputs)
 
     def test_for_image_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_image_classification(
-            *config_and_inputs
-        )
+        self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
 
     @slow
     def test_model_from_pretrained(self):
@@ -274,25 +265,15 @@ def prepare_img():
 class IJepaModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return (
-            IJepaImageProcessor.from_pretrained(
-                "google/ijepa-base-patch16-224"
-            )
-            if is_vision_available()
-            else None
-        )
+        return IJepaImageProcessor.from_pretrained("google/ijepa-base-patch16-224") if is_vision_available() else None
 
     @slow
     def test_inference_image_classification_head(self):
-        model = IJepaForImageClassification.from_pretrained(
-            "google/ijepa-base-patch16-224"
-        ).to(torch_device)
+        model = IJepaForImageClassification.from_pretrained("google/ijepa-base-patch16-224").to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()
-        inputs = image_processor(images=image, return_tensors="pt").to(
-            torch_device
-        )
+        inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
 
         # forward pass
         with torch.no_grad():
@@ -302,13 +283,9 @@ class IJepaModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([-0.2744, 0.8215, -0.0836]).to(
-            torch_device
-        )
+        expected_slice = torch.tensor([-0.2744, 0.8215, -0.0836]).to(torch_device)
 
-        self.assertTrue(
-            torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4)
-        )
+        self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
 
     @slow
     def test_inference_interpolate_pos_encoding(self):
@@ -316,13 +293,9 @@ class IJepaModelIntegrationTest(unittest.TestCase):
         # allowing to interpolate the pre-trained position embeddings in order to use
         # the model on higher resolutions. The DINO model by Facebook AI leverages this
         # to visualize self-attention on higher resolution images.
-        model = IJepaModel.from_pretrained("facebook/dino-ijepas8").to(
-            torch_device
-        )
+        model = IJepaModel.from_pretrained("facebook/dino-ijepas8").to(torch_device)
 
-        image_processor = IJepaImageProcessor.from_pretrained(
-            "facebook/dino-ijepas8", size=480
-        )
+        image_processor = IJepaImageProcessor.from_pretrained("facebook/dino-ijepas8", size=480)
         image = prepare_img()
         inputs = image_processor(images=image, return_tensors="pt")
         pixel_values = inputs.pixel_values.to(torch_device)
@@ -343,11 +316,7 @@ class IJepaModelIntegrationTest(unittest.TestCase):
             ]
         ).to(torch_device)
 
-        self.assertTrue(
-            torch.allclose(
-                outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4
-            )
-        )
+        self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
 
     @slow
     @require_accelerate

@@ -630,6 +630,7 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("efficientnet", "EfficientNetForImageClassification"),
         ("focalnet", "FocalNetForImageClassification"),
         ("hiera", "HieraForImageClassification"),
+        ("ijepa", "IJepaForImageClassification"),
         ("imagegpt", "ImageGPTForImageClassification"),
         (
             "levit",
