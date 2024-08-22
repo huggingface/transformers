@@ -522,7 +522,7 @@ class ProcessorMixin(PushToHubMixin):
                 token=kwargs.get("token"),
             )
 
-        if set(self.to_dict().keys()) == {"processor_class"}:
+        if set(processor_dict.keys()) == {"processor_class"}:
             return []
         return [output_processor_file]
 
