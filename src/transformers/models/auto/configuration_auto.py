@@ -474,7 +474,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("mpnet", "MPNet"),
         ("mpt", "MPT"),
         ("mra", "MRA"),
-        ("msclap", "MSMSClap"),
+        ("msclap", "MSClap"),
         ("mt5", "MT5"),
         ("musicgen", "MusicGen"),
         ("musicgen_melody", "MusicGen Melody"),
