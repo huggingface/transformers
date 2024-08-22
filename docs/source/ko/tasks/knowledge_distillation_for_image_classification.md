@@ -85,7 +85,7 @@ class ImageDistilTrainer(Trainer):
         soft_teacher = F.softmax(teacher_output.logits / self.temperature, dim=-1)
         soft_student = F.log_softmax(student_output.logits / self.temperature, dim=-1)
 
-        # Compute the loss
+        # 손실(loss) 계산
         distillation_loss = self.loss_function(soft_student, soft_teacher) * (self.temperature ** 2)
 
         # Compute the true label loss
