@@ -768,7 +768,7 @@ class RwkvForCausalLM(RwkvPreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.head = new_embeddings
 
-    def prepare_inputs_for_generation(self, input_ids, state=None, inputs_embeds=None, **kwargs):
+    def prepare_inputs_for_generation(self, input_ids, state=None, inputs_embeds=None, use_cache=None, **kwargs):
         # only last token for inputs_ids if the state is passed along.
         if state is not None:
             input_ids = input_ids[:, -1].unsqueeze(-1)
@@ -780,6 +780,7 @@ class RwkvForCausalLM(RwkvPreTrainedModel):
             model_inputs = {"input_ids": input_ids}
 
         model_inputs["state"] = state
+        model_inputs["use_cache"] = use_cache
         return model_inputs
 
     @add_start_docstrings_to_model_forward(RWKV_INPUTS_DOCSTRING)
