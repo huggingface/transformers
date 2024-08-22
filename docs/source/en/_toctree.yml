@@ -416,6 +416,8 @@
         title: HerBERT
       - local: model_doc/ibert
         title: I-BERT
+      - local: model_doc/jais
+        title: JAIS
       - local: model_doc/jamba
         title: Jamba
       - local: model_doc/jetmoe
