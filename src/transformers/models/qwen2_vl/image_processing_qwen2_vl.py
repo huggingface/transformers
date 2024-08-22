@@ -79,6 +79,7 @@ def make_batched_images(images) -> List[List[ImageInput]]:
     raise ValueError(f"Could not make batched images from {images}")
 
 
+# Copied from transformers.models.llava_next_video.image_processing_llava_next_video.make_batched_videos
 def make_batched_videos(videos) -> List[VideoInput]:
     if isinstance(videos, (list, tuple)) and isinstance(videos[0], (list, tuple)) and is_valid_image(videos[0][0]):
         return videos
