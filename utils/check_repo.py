@@ -257,7 +257,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "LukeForEntitySpanClassification",
     "MgpstrModel",
     "MSClapTextModelWithProjection",
-    "MSClapAudioModelWithProjection", 
+    "MSClapAudioModelWithProjection",
     "OpenAIGPTDoubleHeadsModel",
     "OwlViTTextModel",
     "OwlViTVisionModel",
