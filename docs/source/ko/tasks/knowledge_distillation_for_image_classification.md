@@ -88,7 +88,7 @@ class ImageDistilTrainer(Trainer):
         # 손실(loss) 계산
         distillation_loss = self.loss_function(soft_student, soft_teacher) * (self.temperature ** 2)
 
-        # Compute the true label loss
+        # 실제 레이블 손실 계산
         student_target_loss = student_output.loss
 
         # Calculate final loss
