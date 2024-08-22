@@ -2222,8 +2222,9 @@ class TrainingArguments:
                     device = torch.device("mps:0")
                 else:
                     device = torch.device(
-                        "cuda:0" if torch.cuda.is_available() else os.environ.get("ACCELERATE_TORCH_DEVICE", "cpu")
+                        "cuda:0" if torch.cuda.is_available() else "cpu"
                     )
+                # Removed os.environ.get("ACCELERATE_TORCH_DEVICE",.. as tensorflow tests were failing with it
                 # Sometimes the line in the postinit has not been run before we end up here, so just checking we're not at
                 # the default value.
                 self._n_gpu = torch.cuda.device_count()
