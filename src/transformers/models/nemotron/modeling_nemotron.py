@@ -1089,7 +1089,7 @@ class NemotronForCausalLM(NemotronPreTrainedModel):
             )
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         logits = self.lm_head(hidden_states[:, -num_logits_to_keep:, :])
-        # TODO: remove the float() operation in v4.45
+        # TODO: remove the float() operation in v4.46
         logits = logits.float()
 
         loss = None
