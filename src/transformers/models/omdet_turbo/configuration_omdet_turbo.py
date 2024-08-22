@@ -90,8 +90,6 @@ class OmDetTurboConfig(PretrainedConfig):
             The hidden dimension of the encoder.
         encoder_in_channels (`List(int)`, *optional*, defaults to `[192, 384, 768]`):
             The input channels for the encoder.
-        encoder_feat_strides (`List(int)`, *optional*, defaults to `[8, 16, 32]`):
-            The feature strides for the encoder.
         encoder_projection_indices (`List(int)`, *optional*, defaults to `[2]`):
             The indices of the input features projected by each layers.
         encoder_attention_heads (`int`, *optional*, defaults to 8):
@@ -184,7 +182,6 @@ class OmDetTurboConfig(PretrainedConfig):
         vision_features_channels=[256, 256, 256],
         encoder_hidden_dim=256,
         encoder_in_channels=[192, 384, 768],
-        encoder_feat_strides=[8, 16, 32],
         encoder_projection_indices=[2],
         encoder_attention_heads=8,
         encoder_normalize_before=False,
@@ -276,7 +273,6 @@ class OmDetTurboConfig(PretrainedConfig):
         self.vision_features_channels = vision_features_channels
         self.encoder_hidden_dim = encoder_hidden_dim
         self.encoder_in_channels = encoder_in_channels
-        self.encoder_feat_strides = encoder_feat_strides
         self.encoder_projection_indices = encoder_projection_indices
         self.encoder_attention_heads = encoder_attention_heads
         self.encoder_normalize_before = encoder_normalize_before
