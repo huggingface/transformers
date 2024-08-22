@@ -49,6 +49,7 @@ from .utils import (
     is_torch_bf16_gpu_available,
     is_torch_mlu_available,
     is_torch_mps_available,
+    is_torch_musa_available,
     is_torch_neuroncore_available,
     is_torch_npu_available,
     is_torch_tf32_available,
@@ -153,6 +154,7 @@ class OptimizerNames(ExplicitEnum):
     ADAMW_APEX_FUSED = "adamw_apex_fused"
     ADAFACTOR = "adafactor"
     ADAMW_ANYPRECISION = "adamw_anyprecision"
+    ADAMW_TORCH_4BIT = "adamw_torch_4bit"
     SGD = "sgd"
     ADAGRAD = "adagrad"
     ADAMW_BNB = "adamw_bnb_8bit"
@@ -175,6 +177,7 @@ class OptimizerNames(ExplicitEnum):
     GALORE_ADAFACTOR_LAYERWISE = "galore_adafactor_layerwise"
     LOMO = "lomo"
     ADALOMO = "adalomo"
+    GROKADAMW = "grokadamw"
 
 
 # Sometimes users will pass in a `str` repr of a dict in the CLI
@@ -609,8 +612,9 @@ class TrainingArguments:
 
             The options should be separated by whitespaces.
         optim (`str` or [`training_args.OptimizerNames`], *optional*, defaults to `"adamw_torch"`):
-            The optimizer to use: adamw_hf, adamw_torch, adamw_torch_fused, adamw_apex_fused, adamw_anyprecision or
-            adafactor.
+            The optimizer to use, such as "adamw_hf", "adamw_torch", "adamw_torch_fused", "adamw_apex_fused", "adamw_anyprecision",
+            "adafactor". See `OptimizerNames` in [training_args.py](https://github.com/huggingface/transformers/blob/main/src/transformers/training_args.py)
+            for a full list of optimizers.
         optim_args (`str`, *optional*):
             Optional arguments that are supplied to AnyPrecisionAdamW.
         group_by_length (`bool`, *optional*, defaults to `False`):
@@ -770,7 +774,7 @@ class TrainingArguments:
             If not `None`, this will activate NEFTune noise embeddings. This can drastically improve model performance
             for instruction fine-tuning. Check out the [original paper](https://arxiv.org/abs/2310.05914) and the
             [original code](https://github.com/neelsjain/NEFTune). Support transformers `PreTrainedModel` and also
-            `PeftModel` from peft.
+            `PeftModel` from peft. The original paper used values in the range [5.0, 15.0].
         optim_target_modules (`Union[str, List[str]]`, *optional*):
             The target modules to optimize, i.e. the module names that you would like to train, right now this is used only for GaLore algorithm
             https://arxiv.org/abs/2403.03507
@@ -1089,7 +1093,7 @@ class TrainingArguments:
         default=None,
         metadata={
             "help": "The backend to be used for distributed training",
-            "choices": ["nccl", "gloo", "mpi", "ccl", "hccl", "cncl"],
+            "choices": ["nccl", "gloo", "mpi", "ccl", "hccl", "cncl", "mccl"],
         },
     )
     tpu_num_cores: Optional[int] = field(
@@ -1816,8 +1820,8 @@ class TrainingArguments:
                 " during training"
             )
 
-        if not isinstance(self.warmup_steps, int) or self.warmup_steps < 0 or 0 < self.warmup_steps <= 1:
-            raise ValueError("warmup_steps must be either 0 or > 1")
+        if not isinstance(self.warmup_steps, int) or self.warmup_steps < 0:
+            raise ValueError("warmup_steps must be of type int and must be 0 or a positive integer.")
 
         if isinstance(self.fsdp, bool):
             self.fsdp = [FSDPOption.FULL_SHARD] if self.fsdp else ""
@@ -1902,7 +1906,7 @@ class TrainingArguments:
                 warnings.warn("`--xla_fsdp_grad_ckpt` is useful only when `--xla` is set to true.")
 
         # accelerate integration for FSDP
-        if len(self.fsdp) > 0 and not self.fsdp_config["xla"]:
+        if len(self.fsdp) > 0 and is_accelerate_available("0.28.0"):
             os.environ["ACCELERATE_USE_FSDP"] = "true"
             from accelerate.utils.constants import (
                 FSDP_AUTO_WRAP_POLICY,
@@ -1913,10 +1917,8 @@ class TrainingArguments:
             for fsdp_option in self.fsdp:
                 if fsdp_option.upper() in FSDP_SHARDING_STRATEGY:
                     # set environment variable for FSDP sharding strategy
-                    os.environ[f"{prefix}SHARDING_STRATEGY"] = (
-                        str(FSDP_SHARDING_STRATEGY.index(fsdp_option.upper()) + 1)
-                        if is_accelerate_available("0.26.0")
-                        else fsdp_option.upper()
+                    os.environ[f"{prefix}SHARDING_STRATEGY"] = str(
+                        FSDP_SHARDING_STRATEGY.index(fsdp_option.upper()) + 1
                     )
                 elif fsdp_option == FSDPOption.OFFLOAD:
                     os.environ[f"{prefix}OFFLOAD_PARAMS"] = "true"
@@ -1968,7 +1970,9 @@ class TrainingArguments:
             # - must be run very last in arg parsing, since it will use a lot of these settings.
             # - must be run before the model is created.
             if not is_accelerate_available():
-                raise ValueError("--deepspeed requires Accelerate to be installed: `pip install accelerate`.")
+                raise ValueError(
+                    f"--deepspeed requires Accelerate to be installed: `pip install 'accelerate>={ACCELERATE_MIN_VERSION}'`."
+                )
             from transformers.integrations.deepspeed import HfTrainerDeepSpeedConfig
 
             # will be used later by the Trainer
@@ -2102,7 +2106,7 @@ class TrainingArguments:
             if not is_accelerate_available():
                 raise ImportError(
                     f"Using the `Trainer` with `PyTorch` requires `accelerate>={ACCELERATE_MIN_VERSION}`: "
-                    "Please run `pip install transformers[torch]` or `pip install accelerate -U`"
+                    "Please run `pip install transformers[torch]` or `pip install 'accelerate>={ACCELERATE_MIN_VERSION}'`"
                 )
         # We delay the init of `PartialState` to the end for clarity
         accelerator_state_kwargs = {"enabled": True, "use_configured_state": False}
@@ -2198,6 +2202,9 @@ class TrainingArguments:
             elif is_torch_mlu_available():
                 device = torch.device("mlu:0")
                 torch.mlu.set_device(device)
+            elif is_torch_musa_available():
+                device = torch.device("musa:0")
+                torch.musa.set_device(device)
             elif is_torch_npu_available():
                 device = torch.device("npu:0")
                 torch.npu.set_device(device)

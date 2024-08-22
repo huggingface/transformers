@@ -190,9 +190,9 @@ class GenerationConfig(PushToHubMixin):
             triggers a [disjunctive constraint](https://github.com/huggingface/transformers/issues/14081), where one
             can allow different forms of each word.
         renormalize_logits (`bool`, *optional*, defaults to `False`):
-            Whether to renormalize the logits after applying all the logits processors or warpers (including the custom
+            Whether to renormalize the logits after applying all the logits processors (including the custom
             ones). It's highly recommended to set this flag to `True` as the search algorithms suppose the score logits
-            are normalized but some logit processors or warpers break the normalization.
+            are normalized but some logit processors break the normalization.
         constraints (`List[Constraint]`, *optional*):
             Custom constraints that can be added to the generation to ensure that the output will contain the use of
             certain tokens as defined by `Constraint` objects, in the most sensible way possible.
