@@ -19,8 +19,6 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The Qwen2_VL is a major update to our [Qwen-VL](https://arxiv.org/pdf/2308.12966) model from the Qwen team. 
-
 The [Qwen2_VL](https://qwenlm.github.io/blog/qwen2-vl/) is a major update to our [Qwen-VL](https://arxiv.org/pdf/2308.12966) model from the Qwen team. 
 
 The abstract from the blog is the following:
