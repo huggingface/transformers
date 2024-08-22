@@ -40,7 +40,7 @@ else:
     _import_structure["modeling_jais"] = [
         "JAISPreTrainedModel",
         "JAISModel",
-        "JAISForCausalLM",
+        "JAISLMHeadModel",
         "JAISForSequenceClassification",
         "JAISForTokenClassification",
     ]
