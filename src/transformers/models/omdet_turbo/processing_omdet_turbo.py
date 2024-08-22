@@ -218,12 +218,14 @@ class OmDetTurboProcessor(ProcessorMixin):
                Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255.
             text (`Union[str, List[str], List[List[str]]]`):
                 The classes used to limit the scope of the open vocabulary detection. Expects a list of strings or a list
-                of list of strings.
-                Examples: ["cat", "dog", "bird"].
+                of list of strings. Batched classes can be of different lengths.
+                Examples: ["cat", "dog", "bird"], [["cat", "dog", "bird"], ["hat", "person"], ["car"]]
+        Kwargs:
             task (`Union[str, List[str], TextInput, PreTokenizedInput]`):
                 The grounded text used to guide open vocabulary detection. Expects a single string or a list of strings.
-                Examples: "Detect a cat, a dog, and a bird.", "Detect everything."
+                Examples: "Detect a cat, a dog, and a bird.",[ "Detect everything.", "Detect trees and flowers."]
                 When not provided, the default task is "Detect [class1], [class2], [class3]" etc.
+            ...
         """
         if images is None or text is None:
             raise ValueError("You have to specify both `images` and `text`")

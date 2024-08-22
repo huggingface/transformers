@@ -94,9 +94,6 @@ class OmDetTurboConfig(PretrainedConfig):
             The indices of the input features projected by each layers.
         encoder_attention_heads (`int`, *optional*, defaults to 8):
             The number of attention heads for the encoder.
-        encoder_normalize_before (`bool`, *optional*, defaults to `False`):
-            Determine whether to apply layer normalization in the transformer encoder layer before self-attention and
-            feed-forward modules.
         encoder_dim_feedforward (`int`, *optional*, defaults to 2048):
             The feedforward dimension for the encoder.
         encoder_layers (`int`, *optional*, defaults to 1):
@@ -184,7 +181,6 @@ class OmDetTurboConfig(PretrainedConfig):
         encoder_in_channels=[192, 384, 768],
         encoder_projection_indices=[2],
         encoder_attention_heads=8,
-        encoder_normalize_before=False,
         encoder_dim_feedforward=2048,
         encoder_layers=1,
         positional_encoding_temperature=10000,
@@ -275,7 +271,6 @@ class OmDetTurboConfig(PretrainedConfig):
         self.encoder_in_channels = encoder_in_channels
         self.encoder_projection_indices = encoder_projection_indices
         self.encoder_attention_heads = encoder_attention_heads
-        self.encoder_normalize_before = encoder_normalize_before
         self.encoder_dim_feedforward = encoder_dim_feedforward
         self.encoder_layers = encoder_layers
         self.positional_encoding_temperature = positional_encoding_temperature

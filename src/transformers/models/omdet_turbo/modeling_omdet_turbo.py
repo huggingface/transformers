@@ -657,7 +657,6 @@ class OmDetTurboMultiheadAttention(nn.Module):
 class OmDetTurboEncoderLayer(nn.Module):
     def __init__(self, config: OmDetTurboConfig):
         super().__init__()
-        self.encoder_normalize_before = config.encoder_normalize_before
         self.self_attn = OmDetTurboMultiheadAttention(
             config,
             hidden_size=config.encoder_hidden_dim,
@@ -696,8 +695,6 @@ class OmDetTurboEncoderLayer(nn.Module):
                 returned tensors for more detail.
         """
         residual = hidden_states
-        if self.encoder_normalize_before:
-            hidden_states = self.self_attn_layer_norm(hidden_states)
         query = key = self.with_pos_embed(hidden_states, position_embeddings)
 
         hidden_states = self.self_attn(
@@ -710,18 +707,14 @@ class OmDetTurboEncoderLayer(nn.Module):
         hidden_states, attentions = hidden_states if output_attentions else (hidden_states[0], None)
         hidden_states = self.dropout(hidden_states)
         hidden_states = residual + hidden_states
-        if self.encoder_normalize_before:
-            hidden_states = self.final_layer_norm(hidden_states)
-        else:
-            hidden_states = self.self_attn_layer_norm(hidden_states)
+        hidden_states = self.self_attn_layer_norm(hidden_states)
         residual = hidden_states
         hidden_states = self.activation_fn(self.fc1(hidden_states))
         hidden_states = self.encoder_feedforward_dropout(hidden_states)
         hidden_states = self.fc2(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = residual + hidden_states
-        if not self.encoder_normalize_before:
-            hidden_states = self.final_layer_norm(hidden_states)
+        hidden_states = self.final_layer_norm(hidden_states)
         if self.training:
             if torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any():
                 clamp_value = torch.finfo(hidden_states.dtype).max - 1000
