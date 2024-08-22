@@ -656,6 +656,20 @@ class Gemma2PreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
+    @classmethod
+    def _check_and_enable_sdpa(cls, config, hard_check_only: bool = False):
+        """
+        Overloads `PreTrainedModel._check_and_enable_sdpa` so as to DISABLE torch SDPA by default on Gemma2 models.
+        SDPA reduces the model performance on Gemma2 because of the logits softcapping.
+        """
+        config = super()._check_and_enable_sdpa(config, hard_check_only=hard_check_only)
+
+        # if using the default path -> swap sdpa by eager
+        if not hard_check_only and config._attn_implementation == "sdpa":
+            config._attn_implementation = "eager"
+
+        return config
+
 
 _CONFIG_FOR_DOC = "Gemma2Config"
 
