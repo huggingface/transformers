@@ -119,7 +119,8 @@ def create_rename_keys_vision(state_dict, config):
     ########################################## DECODER - START
     for layer_name, params in state_dict.items():
         if layer_name.startswith("decoder"):
-            layer_name_replace = layer_name.replace("input_proj", "channel_projection_layers")
+            layer_name_replace = layer_name.replace("decoder.decoder.layers", "decoder.layers")
+            layer_name_replace = layer_name_replace.replace("input_proj", "channel_projection_layers")
             layer_name_replace = layer_name_replace.replace("query_pos_head", "query_position_head")
             layer_name_replace = layer_name_replace.replace("enc_bbox_head", "encoder_bbox_head")
             layer_name_replace = layer_name_replace.replace("enc_output", "encoder_vision_features")
@@ -222,17 +223,15 @@ def read_in_q_k_v_decoder(state_dict, config):
     for layer_num in range(config.decoder_num_layers):
         embed_dim = config.decoder_hidden_dim
         # read in weights + bias of input projection layer (in original implementation, this is a single matrix + bias)
-        in_proj_weight = state_dict.pop(f"decoder.decoder.layers.{layer_num}.self_attn.in_proj_weight")
-        in_proj_bias = state_dict.pop(f"decoder.decoder.layers.{layer_num}.self_attn.in_proj_bias")
+        in_proj_weight = state_dict.pop(f"decoder.layers.{layer_num}.self_attn.in_proj_weight")
+        in_proj_bias = state_dict.pop(f"decoder.layers.{layer_num}.self_attn.in_proj_bias")
         # next, add query, keys and values (in that order) to the state dict
-        state_dict[f"decoder.decoder.layers.{layer_num}.self_attn.query.weight"] = in_proj_weight[:embed_dim, :]
-        state_dict[f"decoder.decoder.layers.{layer_num}.self_attn.query.bias"] = in_proj_bias[:embed_dim]
-        state_dict[f"decoder.decoder.layers.{layer_num}.self_attn.key.weight"] = in_proj_weight[
-            embed_dim : embed_dim * 2, :
-        ]
-        state_dict[f"decoder.decoder.layers.{layer_num}.self_attn.key.bias"] = in_proj_bias[embed_dim : embed_dim * 2]
-        state_dict[f"decoder.decoder.layers.{layer_num}.self_attn.value.weight"] = in_proj_weight[-embed_dim:, :]
-        state_dict[f"decoder.decoder.layers.{layer_num}.self_attn.value.bias"] = in_proj_bias[-embed_dim:]
+        state_dict[f"decoder.layers.{layer_num}.self_attn.query.weight"] = in_proj_weight[:embed_dim, :]
+        state_dict[f"decoder.layers.{layer_num}.self_attn.query.bias"] = in_proj_bias[:embed_dim]
+        state_dict[f"decoder.layers.{layer_num}.self_attn.key.weight"] = in_proj_weight[embed_dim : embed_dim * 2, :]
+        state_dict[f"decoder.layers.{layer_num}.self_attn.key.bias"] = in_proj_bias[embed_dim : embed_dim * 2]
+        state_dict[f"decoder.layers.{layer_num}.self_attn.value.weight"] = in_proj_weight[-embed_dim:, :]
+        state_dict[f"decoder.layers.{layer_num}.self_attn.value.bias"] = in_proj_bias[-embed_dim:]
 
 
 def run_test(model, processor):

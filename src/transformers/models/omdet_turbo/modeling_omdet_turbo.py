@@ -1083,155 +1083,6 @@ class OmDetTurboDeformableTransformerDecoderLayer(nn.Module):
         )
 
 
-def _cosine_similarity_scaled(a, b, logit_scale):
-    a = a / a.norm(dim=2, keepdim=True).clamp_min(1e-12)
-    b = b / b.norm(dim=1, keepdim=True).clamp_min(1e-12)
-    logit_scale = logit_scale.exp()
-    logits_per_image = logit_scale * torch.bmm(a, b)
-    return logits_per_image
-
-
-def get_class_similarity(class_distance_type, cls_feature, class_proj):
-    logit_scale = torch.tensor(1 / 0.07).log()
-    if class_distance_type == "cosine":
-        class_logits = _cosine_similarity_scaled(cls_feature, class_proj, logit_scale)
-    elif class_distance_type == "dot":
-        class_logits = torch.bmm(cls_feature, class_proj)
-    else:
-        raise Exception("Unknown class_distance_type {}".format(class_distance_type))
-    return class_logits
-
-
-def _inverse_sigmoid(x, eps=1e-5):
-    x = x.clamp(min=0, max=1)
-    x1 = x.clamp(min=eps)
-    x2 = (1 - x).clamp(min=eps)
-    return torch.log(x1 / x2)
-
-
-class OmDetTurboDeformableTransformerDecoder(nn.Module):
-    """
-    Deformable Transformer Decoder.
-    """
-
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.layers = nn.ModuleList(
-            [OmDetTurboDeformableTransformerDecoderLayer(config) for _ in range(config.decoder_num_layers)]
-        )
-        self.class_distance_type = config.class_distance_type
-        self.decoder_num_layers = config.decoder_num_layers
-
-    def forward(
-        self,
-        decoder_embeddings,
-        reference_points,
-        vision_features,
-        vision_shapes,
-        class_features,
-        task_features,
-        bbox_head,
-        class_head,
-        query_position_head,
-        attention_mask=None,
-        output_attentions=None,
-        output_hidden_states=None,
-    ):
-        """
-        Args:
-            decoder_embeddings (`torch.FloatTensor`): The query embeddings of shape
-                `(batch_size, num_queries, decoder_hidden_dim)`.
-            reference_points (`torch.FloatTensor`): The reference points for the deformable attention mechanism of
-                shape `(batch_size, num_queries, 4)`.
-            vision_features (`torch.FloatTensor`): The sequence of vision features. shape depends on the vision
-                backbone.
-            vision_shapes (`List[Tuple[int]]`): The shapes of the vision features.
-            class_features (`torch.FloatTensor`): The sequence of class features of shape
-                `(class_sequence_length, batch_size, class_embed_dim)`.
-            task_features (`torch.FloatTensor`): The sequence of task features of shape
-                `(task_sequence_length, batch_size, decoder_hidden_dim)`.
-            bbox_head (`nn.ModuleList`): The sequence of bounding box prediction heads.
-            class_head (`nn.ModuleList`): The sequence of class prediction heads.
-            query_position_head (`nn.Module`): The query position head.
-            attention_mask (`torch.FloatTensor`, *optional*): The attention mask of shape
-                `(batch_size, 1, num_queries + task_sequence_length, num_queries + task_sequence_length)`.
-            output_attentions (`bool`, *optional*): Whether or not to return the attentions tensors of all attention
-                layers. See `attentions` under returned tensors for more detail.
-            output_hidden_states (`bool`, *optional*): Whether or not to return the hidden states of all layers. See
-                `hidden_states` under returned tensors for more detail.
-        """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
-        all_hidden_states = () if output_hidden_states else None
-        all_attns = () if output_attentions else None
-        all_self_attns = () if output_attentions else None
-        all_cross_attns = () if output_attentions else None
-        predicted_class_features = decoder_embeddings
-
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (predicted_class_features,)
-        decoder_bboxes = []
-        decoder_class_logits = []
-        last_refined_bbox = None
-        reference_points = reference_points.sigmoid()
-        for i, layer in enumerate(self.layers):
-            predicted_class_features, task_features, self_attention, cross_attention = layer(
-                predicted_class_features,
-                task_features,
-                reference_points,
-                vision_features,
-                vision_shapes,
-                attention_mask=attention_mask,
-                query_position=query_position_head(reference_points),
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-            )
-            if output_attentions:
-                all_self_attns = all_self_attns + (self_attention,)
-                all_cross_attns = all_cross_attns + (cross_attention,)
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (predicted_class_features,)
-
-            refined_bbox = torch.sigmoid(bbox_head[i](predicted_class_features) + _inverse_sigmoid(reference_points))
-            original_class_projected = class_head[i](class_features).permute(1, 2, 0)
-            if self.training:
-                decoder_class_logits.append(
-                    get_class_similarity(
-                        class_distance_type=self.class_distance_type,
-                        cls_feature=predicted_class_features,
-                        class_proj=original_class_projected,
-                    )
-                )
-                if i == 0:
-                    decoder_bboxes.append(refined_bbox)
-                else:
-                    decoder_bboxes.append(
-                        torch.sigmoid(bbox_head[i](predicted_class_features) + _inverse_sigmoid(last_refined_bbox))
-                    )
-            elif i == self.decoder_num_layers - 1:
-                decoder_class_logits.append(
-                    get_class_similarity(self.class_distance_type, predicted_class_features, original_class_projected)
-                )
-                decoder_bboxes.append(refined_bbox)
-                break
-            last_refined_bbox = refined_bbox
-            reference_points = refined_bbox.detach() if self.training else refined_bbox
-        if output_attentions:
-            all_attns += (all_self_attns, all_cross_attns)
-
-        return (
-            predicted_class_features,
-            torch.stack(decoder_bboxes),
-            torch.stack(decoder_class_logits),
-            all_attns,
-            all_hidden_states,
-        )
-
-
 class OmDetTurboPreTrainedModel(PreTrainedModel):
     config_class = OmDetTurboConfig
     base_model_prefix = "model"
@@ -1265,6 +1116,10 @@ class OmDetTurboPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=self.config.init_std)
             if module.bias is not None:
                 module.bias.data.zero_()
+
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, OmDetTurboDecoder):
+            module.gradient_checkpointing = value
 
     @staticmethod
     def _get_cache_key_at_index(input_ids, attention_mask, index):
@@ -1431,10 +1286,38 @@ OMDET_TURBO_INPUTS_DOCSTRING = r"""
         """
 
 
+def _cosine_similarity_scaled(a, b, logit_scale):
+    a = a / a.norm(dim=2, keepdim=True).clamp_min(1e-12)
+    b = b / b.norm(dim=1, keepdim=True).clamp_min(1e-12)
+    logit_scale = logit_scale.exp()
+    logits_per_image = logit_scale * torch.bmm(a, b)
+    return logits_per_image
+
+
+def get_class_similarity(class_distance_type, cls_feature, class_proj):
+    logit_scale = torch.tensor(1 / 0.07).log()
+    if class_distance_type == "cosine":
+        class_logits = _cosine_similarity_scaled(cls_feature, class_proj, logit_scale)
+    elif class_distance_type == "dot":
+        class_logits = torch.bmm(cls_feature, class_proj)
+    else:
+        raise Exception("Unknown class_distance_type {}".format(class_distance_type))
+    return class_logits
+
+
+def _inverse_sigmoid(x, eps=1e-5):
+    x = x.clamp(min=0, max=1)
+    x1 = x.clamp(min=eps)
+    x2 = (1 - x).clamp(min=eps)
+    return torch.log(x1 / x2)
+
+
 class OmDetTurboDecoder(OmDetTurboPreTrainedModel):
     def __init__(self, config: OmDetTurboConfig):
         self.config = config
         super().__init__(config)
+        self.gradient_checkpointing = False
+
         hidden_dim = config.decoder_hidden_dim
         self.num_queries = config.num_queries
         self.class_distance_type = config.class_distance_type
@@ -1450,8 +1333,11 @@ class OmDetTurboDecoder(OmDetTurboPreTrainedModel):
             self.task_project = nn.Linear(config.class_embed_dim, hidden_dim)
 
         # Transformer module
-        self.decoder = OmDetTurboDeformableTransformerDecoder(config)
-
+        # self.decoder = OmDetTurboDeformableTransformerDecoder(config)
+        self.layers = nn.ModuleList(
+            [OmDetTurboDeformableTransformerDecoderLayer(config) for _ in range(config.decoder_num_layers)]
+        )
+        self.decoder_num_layers = config.decoder_num_layers
         # decoder embedding
         if self.learn_initial_query:
             self.tgt_embed = nn.Embedding(self.num_queries, hidden_dim)
@@ -1583,6 +1469,22 @@ class OmDetTurboDecoder(OmDetTurboPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
     ):
+        """
+        Args:
+            vision_features (`torch.FloatTensor`): The sequence of vision features. shape depends on the vision
+                backbone.
+            class_features (`torch.FloatTensor`): The sequence of class features of shape
+                `(class_sequence_length, batch_size, class_embed_dim)`.
+            task_features (`torch.FloatTensor`): The sequence of task features of shape
+                `(task_sequence_length, batch_size, decoder_hidden_dim)`.
+            task_mask (`torch.LongTensor`): The mask for the task features of shape `(batch_size, task_sequence_length)`.
+            output_attentions (`bool`, *optional*): Whether or not to return the attentions tensors of all attention
+                layers. See `attentions` under returned tensors for more detail.
+            output_hidden_states (`bool`, *optional*): Whether or not to return the hidden states of all layers. See
+                `hidden_states` under returned tensors for more detail.
+            return_dict (`bool`, *optional*): Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain
+                tuple.
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1608,26 +1510,108 @@ class OmDetTurboDecoder(OmDetTurboPreTrainedModel):
         decoder_embeddings, reference_points, encoder_bboxes, encoder_class_similarity, init_reference_points = (
             self._get_decoder_input(vision_features, vision_shapes, class_features, denoise_embeddings, denoise_bboxes)
         )
-        last_hidden_state, decoder_bboxes, decoder_class_logits, attentions, hidden_states = self.decoder(
-            decoder_embeddings,
-            reference_points,
-            vision_features,
-            vision_shapes,
-            class_features,
-            task_features,
-            self.decoder_bbox_head,
-            self.decoder_class_head,
-            self.query_position_head,
-            attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-        )
+
+        all_hidden_states = () if output_hidden_states else None
+        all_attns = () if output_attentions else None
+        all_self_attns = () if output_attentions else None
+        all_cross_attns = () if output_attentions else None
+        predicted_class_features = decoder_embeddings
+
+        if output_hidden_states:
+            all_hidden_states = all_hidden_states + (predicted_class_features,)
+        decoder_bboxes = []
+        decoder_class_logits = []
+        last_refined_bbox = None
+        reference_points = reference_points.sigmoid()
+        for i, layer in enumerate(self.layers):
+            if self.gradient_checkpointing and self.training:
+                predicted_class_features, task_features, self_attention, cross_attention = (
+                    self._gradient_checkpointing_func(
+                        layer.__call__,
+                        predicted_class_features,
+                        task_features,
+                        reference_points,
+                        vision_features,
+                        vision_shapes,
+                        attention_mask=attention_mask,
+                        query_position=self.query_position_head(reference_points),
+                        output_attentions=output_attentions,
+                        output_hidden_states=output_hidden_states,
+                    )
+                )
+            else:
+                predicted_class_features, task_features, self_attention, cross_attention = layer(
+                    predicted_class_features,
+                    task_features,
+                    reference_points,
+                    vision_features,
+                    vision_shapes,
+                    attention_mask=attention_mask,
+                    query_position=self.query_position_head(reference_points),
+                    output_attentions=output_attentions,
+                    output_hidden_states=output_hidden_states,
+                )
+            if output_attentions:
+                all_self_attns = all_self_attns + (self_attention,)
+                all_cross_attns = all_cross_attns + (cross_attention,)
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (predicted_class_features,)
+
+            refined_bbox = torch.sigmoid(
+                self.decoder_bbox_head[i](predicted_class_features) + _inverse_sigmoid(reference_points)
+            )
+            original_class_projected = self.decoder_class_head[i](class_features).permute(1, 2, 0)
+            if self.training:
+                decoder_class_logits.append(
+                    get_class_similarity(
+                        class_distance_type=self.class_distance_type,
+                        cls_feature=predicted_class_features,
+                        class_proj=original_class_projected,
+                    )
+                )
+                if i == 0:
+                    decoder_bboxes.append(refined_bbox)
+                else:
+                    decoder_bboxes.append(
+                        torch.sigmoid(
+                            self.decoder_bbox_head[i](predicted_class_features) + _inverse_sigmoid(last_refined_bbox)
+                        )
+                    )
+            elif i == self.decoder_num_layers - 1:
+                decoder_class_logits.append(
+                    get_class_similarity(self.class_distance_type, predicted_class_features, original_class_projected)
+                )
+                decoder_bboxes.append(refined_bbox)
+                break
+            last_refined_bbox = refined_bbox
+            reference_points = refined_bbox.detach() if self.training else refined_bbox
+        if output_attentions:
+            all_attns += (all_self_attns, all_cross_attns)
+
+        last_hidden_state = predicted_class_features
+        decoder_bboxes = torch.stack(decoder_bboxes)
+        decoder_class_logits = torch.stack(decoder_class_logits)
+
+        # last_hidden_state, decoder_bboxes, decoder_class_logits, attentions, hidden_states = self.decoder(
+        #     decoder_embeddings,
+        #     reference_points,
+        #     vision_features,
+        #     vision_shapes,
+        #     class_features,
+        #     task_features,
+        #     self.decoder_bbox_head,
+        #     self.decoder_class_head,
+        #     self.query_position_head,
+        #     attention_mask=attention_mask,
+        #     output_attentions=output_attentions,
+        #     output_hidden_states=output_hidden_states,
+        # )
 
         if not return_dict:
             return (
                 last_hidden_state,
-                hidden_states,
-                attentions,
+                all_hidden_states,
+                all_attns,
                 decoder_bboxes,
                 decoder_class_logits,
                 encoder_bboxes,
@@ -1638,8 +1622,8 @@ class OmDetTurboDecoder(OmDetTurboPreTrainedModel):
 
         return OmDetTurboDecoderOutput(
             last_hidden_state=last_hidden_state,
-            hidden_states=hidden_states,
-            attentions=attentions,
+            hidden_states=all_hidden_states,
+            attentions=all_attns,
             decoder_coord_logits=decoder_bboxes[-1],
             decoder_class_logits=decoder_class_logits[-1],
             encoder_coord_logits=encoder_bboxes,
