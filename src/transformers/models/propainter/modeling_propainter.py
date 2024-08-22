@@ -102,30 +102,18 @@ class ProPainterResidualBlock(nn.Module):
                 nn.Conv2d(in_channels, channels, kernel_size=1, stride=stride), self.norm3)
 
 
-    def forward(self, hidden_states,output_hidden_states: bool = False,return_dict: bool = True):
-        all_hidden_states = () if output_hidden_states else None
+    def forward(self, hidden_states):
         residual = hidden_states
         residual = self.relu(self.norm1(self.conv1(residual)))
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (residual.half(),)
+
         residual = self.relu(self.norm2(self.conv2(residual)))
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (residual.half(),)
 
         if self.downsample is not None:
             hidden_states = self.downsample(hidden_states)
 
         hidden_states = self.relu(hidden_states+residual)
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states.half(),)
 
-        if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states] if v is not None)
-
-        return BaseModelOutputWithNoAttention(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-        )
+        return hidden_states
 
 class ProPainterBasicEncoder(nn.Module):
     def __init__(self, output_dim=128, norm_fn='batch', dropout=0.0):
@@ -171,8 +159,7 @@ class ProPainterBasicEncoder(nn.Module):
                 if m.bias is not None:
                     nn.init.constant_(m.bias, 0)
 
-    def forward(self, image ,output_hidden_states: bool = False,return_dict: bool = True):
-        all_hidden_states = () if output_hidden_states else None
+    def forward(self, image):
         # if input is list, combine batch dimension
         is_list = isinstance(image, tuple) or isinstance(image, list)
         if is_list:
@@ -180,24 +167,13 @@ class ProPainterBasicEncoder(nn.Module):
             image = torch.cat(image, dim=0)
 
         hidden_states = self.conv1(image)
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states.half(),)
         hidden_states = self.norm1(hidden_states)
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states.half(),)
         hidden_states = self.relu1(hidden_states)
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states.half(),)
 
         for resblock in self.resblocks:
-            resblock_output = resblock(hidden_states, output_hidden_states = output_hidden_states, return_dict = return_dict)
-            hidden_states, _all_hidden_states = resblock_output[0], resblock_output[1]
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (_all_hidden_states,)
+            hidden_states = resblock(hidden_states)
 
         hidden_states = self.conv2(hidden_states)
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states.half(),)
 
         if self.training and self.dropout is not None:
             hidden_states = self.dropout(hidden_states)
@@ -205,16 +181,7 @@ class ProPainterBasicEncoder(nn.Module):
         if is_list:
             hidden_states = torch.split(hidden_states, [batch_dim, batch_dim], dim=0)
 
-        if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states] if v is not None)
-
-        return BaseModelOutputWithNoAttention(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-        )
+        return hidden_states
 
 class ProPainterBasicMotionEncoder(nn.Module):
     def __init__(self, config):
@@ -226,36 +193,18 @@ class ProPainterBasicMotionEncoder(nn.Module):
         self.conv_flow2 = nn.Conv2d(128, 64, 3, padding=1)
         self.conv = nn.Conv2d(64+192, 128-2, 3, padding=1)
 
-    def forward(self, flow, corr,output_hidden_states: bool = False,return_dict: bool = True):
-        all_hidden_states = () if output_hidden_states else None
+    def forward(self, flow, corr):
         hidden_states_corr = F.relu(self.conv_corr1(corr))
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states_corr.half(),)
         hidden_states_corr = F.relu(self.conv_corr2(hidden_states_corr))
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states_corr.half(),)
         hidden_states_flow = F.relu(self.conv_flow1(flow))
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states_flow.half(),)
         hidden_states_flow = F.relu(self.conv_flow2(hidden_states_flow))
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states_flow.half(),)
 
         hidden_states = torch.cat([hidden_states_corr, hidden_states_flow], dim=1)
         hidden_states = F.relu(self.conv(hidden_states))
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states.half(),)
         hidden_states = torch.cat([hidden_states, flow], dim=1)
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states.half(),)
 
-        if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states] if v is not None)
 
-        return BaseModelOutputWithNoAttention(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-        )
+        return hidden_states
 
 class ProPainterSepConvGRU(nn.Module):
     def __init__(self, hidden_dim=128, input_dim=192+128):
@@ -269,48 +218,22 @@ class ProPainterSepConvGRU(nn.Module):
         self.convq2 = nn.Conv2d(hidden_dim+input_dim, hidden_dim, (5,1), padding=(2,0))
 
 
-    def forward(self, hidden_states, motion_features,output_hidden_states: bool = False,return_dict: bool = True):
-        all_hidden_states = () if output_hidden_states else None
+    def forward(self, hidden_states, motion_features):
         # horizontal
         hidden_states_motion_features = torch.cat([hidden_states, motion_features], dim=1)
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states_motion_features.half(),)
         z = torch.sigmoid(self.convz1(hidden_states_motion_features))
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (z.half(),)
         r = torch.sigmoid(self.convr1(hidden_states_motion_features))
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (r.half(),)
         q = torch.tanh(self.convq1(torch.cat([r*hidden_states, motion_features], dim=1)))
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (q.half(),)        
         hidden_states = (1-z) * hidden_states + z * q
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states.half(),)
         # vertical
         hidden_states_motion_features = torch.cat([hidden_states, motion_features], dim=1)
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states_motion_features.half(),)
         z = torch.sigmoid(self.convz2(hidden_states_motion_features))
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (z.half(),)
         r = torch.sigmoid(self.convr2(hidden_states_motion_features))
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (r.half(),)
         q = torch.tanh(self.convq2(torch.cat([r*hidden_states, motion_features], dim=1)))
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (q.half(),)    
         hidden_states = (1-z) * hidden_states + z * q
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states.half(),)
 
-        if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states] if v is not None)
 
-        return BaseModelOutputWithNoAttention(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-        )
+        return hidden_states
 
 class ProPainterFlowHead(nn.Module):
     def __init__(self, input_dim=128, hidden_dim=256):
@@ -319,22 +242,11 @@ class ProPainterFlowHead(nn.Module):
         self.conv2 = nn.Conv2d(hidden_dim, 2, 3, padding=1)
         self.relu = nn.ReLU(inplace=True)
 
-    def forward(self, hidden_states,output_hidden_states: bool = False,return_dict: bool = True):
-        all_hidden_states = () if output_hidden_states else None
+    def forward(self, hidden_states):
         hidden_states = self.relu(self.conv1(hidden_states))
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states.half(),)
         hidden_states = self.conv2(hidden_states)
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states.half(),)
 
-        if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states] if v is not None)
-
-        return BaseModelOutputWithNoAttention(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-        )
+        return hidden_states
 
 class ProPainterBasicUpdateBlock(nn.Module):
     def __init__(self, config, hidden_dim=128, input_dim=128):
@@ -349,30 +261,15 @@ class ProPainterBasicUpdateBlock(nn.Module):
             nn.ReLU(inplace=True),
             nn.Conv2d(256, 64*9, 1, padding=0))
 
-    def forward(self, net, inp, corr, flow,output_hidden_states: bool = False,return_dict: bool = True):
-        all_hidden_states = () if output_hidden_states else None
-        encoder_outputs = self.encoder(flow, corr, output_hidden_states = output_hidden_states, return_dict = return_dict)
-        motion_features, _all_hidden_states = encoder_outputs[0], encoder_outputs[1]
+    def forward(self, net, inp, corr, flow):
+        motion_features = self.encoder(flow, corr)
         inp = torch.cat([inp, motion_features], dim=1)
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (inp.half(),)
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (_all_hidden_states,)
 
-        gru_output = self.gru(net, inp, output_hidden_states = output_hidden_states, return_dict = return_dict)
-        net, _all_hidden_states  = gru_output[0], gru_output[1]
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (_all_hidden_states,)
-        flow_head_outputs = self.flow_head(net, output_hidden_states = output_hidden_states, return_dict = return_dict)
-        delta_flow, _all_hidden_states = flow_head_outputs[0], flow_head_outputs[1]
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (_all_hidden_states,)
-
+        net = self.gru(net, inp)
+        delta_flow = self.flow_head(net)
         # scale mask to balence gradients
         mask = .25 * self.mask(net)
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (mask.half(),)
-        return net, mask, delta_flow, all_hidden_states
+        return net, mask, delta_flow
 
 
 def coords_grid(batch_size, height, width):
@@ -484,20 +381,15 @@ class ProPainterRaftOpticalFlow(nn.Module):
         up_flow = up_flow.permute(0, 1, 4, 2, 5, 3)
         return up_flow.reshape(N, 2, 8*height, 8*width)
 
-    def _forward(self, image1, image2, iters=12, flow_init=None,output_hidden_states: bool = False,return_dict: bool = True):
+    def _forward(self, image1, image2, iters=12, flow_init=None):
         """ Estimate optical flow between pair of frames """
-        all_hidden_states = () if output_hidden_states else None
 
         image1 = image1.contiguous()
         image2 = image2.contiguous()
 
         # run the feature network
         with autocast(enabled=False):
-            feature_network_output = self.feature_network([image1, image2],output_hidden_states,return_dict)
-            fmaps, _all_hidden_states = feature_network_output[0], feature_network_output[1]
-            fmap1, fmap2 = fmaps
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (_all_hidden_states,)
+            fmap1, fmap2 = self.feature_network([image1, image2])
 
         fmap1 = fmap1.float()
         fmap2 = fmap2.float()
@@ -507,10 +399,7 @@ class ProPainterRaftOpticalFlow(nn.Module):
 
         # run the context network
         with autocast(enabled=False):
-            context_network_output = self.context_network(image1,output_hidden_states,return_dict)
-            context_network_out, _all_hidden_states = context_network_output[0], context_network_output[1]
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (_all_hidden_states,)
+            context_network_out = self.context_network(image1)
             net, inp = torch.split(context_network_out, [self.hidden_dim, self.context_dim], dim=1)
             net = torch.tanh(net)
             inp = torch.relu(inp)
@@ -526,9 +415,7 @@ class ProPainterRaftOpticalFlow(nn.Module):
 
             flow = coords1 - coords0
             with autocast(enabled=False):
-                net, up_mask, delta_flow, _all_hidden_states = self.update_block(net, inp, corr, flow,output_hidden_states,return_dict)
-                if output_hidden_states:
-                    all_hidden_states = all_hidden_states + (_all_hidden_states,)
+                net, up_mask, delta_flow = self.update_block(net, inp, corr, flow)
 
             # F(t+1) = F(t) + \Delta(t)
             coords1 = coords1 + delta_flow
@@ -540,35 +427,21 @@ class ProPainterRaftOpticalFlow(nn.Module):
             else:
                 flow_up = self.upsample_flow(coords1 - coords0, up_mask)
 
+        return coords1 - coords0, flow_up
 
-        return coords1 - coords0, flow_up, all_hidden_states
-
-    def forward(self, gt_local_frames, iters=20,output_hidden_states: bool = False,return_dict: bool = True):
-        all_hidden_states = () if output_hidden_states else None
-
+    def forward(self, gt_local_frames, iters=20):
         batch_size, temporal_length, num_channels, height, width = gt_local_frames.size()
 
         gt_local_frames_1 = gt_local_frames[:, :-1, :, :, :].reshape(-1, num_channels, height, width)
         gt_local_frames_2 = gt_local_frames[:, 1:, :, :, :].reshape(-1, num_channels, height, width)
 
-        _, gt_flows_forward, _all_hidden_states = self._forward(gt_local_frames_1, gt_local_frames_2, iters,output_hidden_states,return_dict)
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (_all_hidden_states,)
-        _, gt_flows_backward, _all_hidden_states = self._forward(gt_local_frames_2, gt_local_frames_1, iters,output_hidden_states,return_dict)
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (_all_hidden_states,)
+        _, gt_flows_forward = self._forward(gt_local_frames_1, gt_local_frames_2, iters)
+        _, gt_flows_backward = self._forward(gt_local_frames_2, gt_local_frames_1, iters)
 
-        
         gt_flows_forward = gt_flows_forward.view(batch_size, temporal_length-1, 2, height, width)
         gt_flows_backward = gt_flows_backward.view(batch_size, temporal_length-1, 2, height, width)
 
-        if not return_dict:
-            return tuple(v for v in [(gt_flows_forward, gt_flows_backward), all_hidden_states] if v is not None)
-
-        return BaseModelOutputWithNoAttention(
-            last_hidden_state=(gt_flows_forward, gt_flows_backward),
-            hidden_states=all_hidden_states,
-        )
+        return gt_flows_forward, gt_flows_backward
 
 class ProPainterP3DBlock(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size, stride, padding, use_residual=0, bias=True):
@@ -615,34 +488,15 @@ class ProPainterEdgeDetection(nn.Module):
 
         self.out_layer = nn.Conv2d(intermediate_channel, out_channel, 1, 1, 0)
 
-    def forward(self, flow, output_hidden_states: bool = False,return_dict: bool = True):
-        all_hidden_states = () if output_hidden_states else None
+    def forward(self, flow):
         flow = self.projection(flow)
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (flow.half(),)
         edge = self.intermediate_layer_1(flow)
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (edge.half(),)
         edge = self.intermediate_layer_2(edge)
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (edge.half(),)
         edge = self.relu(flow + edge)
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (edge.half(),)
         edge = self.out_layer(edge)
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (edge.half(),)
         edge = torch.sigmoid(edge)
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (edge.half(),)
 
-        if not return_dict:
-            return tuple(v for v in [edge, all_hidden_states] if v is not None)
-
-        return BaseModelOutputWithNoAttention(
-            last_hidden_state=edge,
-            hidden_states=all_hidden_states,
-        )
+        return edge
 
 class ProPainterBidirectionalPropagationFlowComplete(nn.Module):
     def __init__(self, num_channels):
@@ -664,12 +518,11 @@ class ProPainterBidirectionalPropagationFlowComplete(nn.Module):
 
         self.fusion = nn.Conv2d(2 * num_channels, num_channels, 1, 1, 0)
 
-    def forward(self, hidden_states, output_hidden_states: bool = False,return_dict: bool = True):
+    def forward(self, hidden_states):
         """
         hidden_states shape : [batch_size, timesteps, num_channels, height, width]
         return [batch_size, timesteps, num_channels, height, width]
         """
-        all_hidden_states = () if output_hidden_states else None
 
         batch_size, timesteps, _, height, width = hidden_states.shape
         features = {}
@@ -701,10 +554,7 @@ class ProPainterBidirectionalPropagationFlowComplete(nn.Module):
 
                     cond = torch.cat([cond_n1, feat_current, cond_n2], dim=1) # condition information, cond(flow warped 1st/2nd feature)
                     feature_propagation = torch.cat([feature_propagation, feat_n2], dim=1) # two order feature_propagation -1 & -2
-                    deform_align_outputs = self.deform_align[module_name](feature_propagation, cond, output_hidden_states = output_hidden_states, return_dict = return_dict)
-                    feature_propagation, _all_hidden_states = deform_align_outputs[0], deform_align_outputs[1]
-                    if output_hidden_states:
-                        all_hidden_states = all_hidden_states + (_all_hidden_states,)
+                    feature_propagation = self.deform_align[module_name](feature_propagation, cond)
                 # fuse current features
                 feat = [feat_current] + \
                     [features[k][idx] for k in features if k not in ['spatial', module_name]] \
@@ -713,10 +563,7 @@ class ProPainterBidirectionalPropagationFlowComplete(nn.Module):
                 feat = torch.cat(feat, dim=1)
                 # embed current features
                 feature_propagation = feature_propagation + self.backbone[module_name](feat)
-                if output_hidden_states:
-                    all_hidden_states = all_hidden_states + (feature_propagation.half(),)
                 features[module_name].append(feature_propagation)
-
             # end for
             if 'backward' in module_name:
                 features[module_name] = features[module_name][::-1]
@@ -728,13 +575,8 @@ class ProPainterBidirectionalPropagationFlowComplete(nn.Module):
             outputs.append(self.fusion(align_feats))
 
         hidden_states = torch.stack(outputs, dim=1) + hidden_states
-        if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states] if v is not None)
 
-        return BaseModelOutputWithNoAttention(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-        )
+        return hidden_states
 
 def flow_warp(features,
               flow,
@@ -817,12 +659,11 @@ class ProPainterBidirectionalPropagationInPaint(nn.Module):
     def binary_mask(self, mask, th=0.1):
         return torch.where(mask > th, 1, 0).to(mask)
 
-    def forward(self, masked_frames, flows_forward, flows_backward, mask, interpolation='bilinear', output_hidden_states: bool = False,return_dict: bool = True):
+    def forward(self, masked_frames, flows_forward, flows_backward, mask, interpolation='bilinear'):
         """
         masked_frames shape : [batch_size, timesteps, num_channels, height, width]
         return [batch_size, timesteps, num_channels, height, width]
         """
-        all_hidden_states = () if output_hidden_states else None
 
         # For backward warping, pred_flows_forward for backward feature propagation, pred_flows_backward for forward feature propagation
         batch_size, timesteps, num_channels, height, width = masked_frames.shape
@@ -864,10 +705,7 @@ class ProPainterBidirectionalPropagationInPaint(nn.Module):
 
                     if self.learnable:
                         cond = torch.cat([feat_current, feat_warped, flow_prop, flow_vaild_mask, mask_current], dim=1)
-                        deform_align_outputs = self.deform_align[module_name](feat_prop, cond, flow_prop, output_hidden_states = output_hidden_states, return_dict = return_dict)
-                        feat_prop, _all_hidden_states = deform_align_outputs[0], deform_align_outputs[1]
-                        if output_hidden_states:
-                            all_hidden_states = all_hidden_states + (_all_hidden_states,)
+                        feat_prop = self.deform_align[module_name](feat_prop, cond, flow_prop)
                         mask_prop = mask_current
                     else:
                         mask_prop_valid = flow_warp(mask_prop, flow_prop.permute(0, 2, 3, 1))
@@ -882,12 +720,9 @@ class ProPainterBidirectionalPropagationInPaint(nn.Module):
                 if self.learnable:
                     feat = torch.cat([feat_current, feat_prop, mask_current], dim=1)
                     feat_prop = feat_prop + self.backbone[module_name](feat)
-                    if output_hidden_states:
-                        all_hidden_states = all_hidden_states + (feat_prop.half(),)
 
                 features[module_name].append(feat_prop)
                 masks[module_name].append(mask_prop)
-
             # end for
             if 'backward' in module_name:
                 features[module_name] = features[module_name][::-1]
@@ -905,7 +740,7 @@ class ProPainterBidirectionalPropagationInPaint(nn.Module):
             outputs = outputs_f
 
         return outputs_b.view(batch_size, -1, num_channels, height, width), outputs_f.view(batch_size, -1, num_channels, height, width), \
-               outputs.view(batch_size, -1, num_channels, height, width), masks_f, all_hidden_states
+               outputs.view(batch_size, -1, num_channels, height, width), masks_f
 
 class ProPainterDeconv(nn.Module):
     def __init__(self,
@@ -979,11 +814,8 @@ class ProPainterDeformableAlignment(ProPainterModulatedDeformConv2d):
             nn.Conv2d(self.out_channels, 27 * self.deform_groups, 3, 1, 1),
         )
 
-    def forward(self, features_propagation, cond_features, flow, output_hidden_states: bool = False,return_dict: bool = True):
-        all_hidden_states = () if output_hidden_states else None
+    def forward(self, features_propagation, cond_features, flow):
         output = self.conv_offset(cond_features)
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (output.half(),)
         output1, output2, mask = torch.chunk(output, 3, dim=1)
 
         # offset
@@ -995,16 +827,8 @@ class ProPainterDeformableAlignment(ProPainterModulatedDeformConv2d):
         hidden_states = torchvision.ops.deform_conv2d(features_propagation, offset, self.weight, self.bias, 
                                              self.stride, self.padding,
                                              self.dilation, mask)
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states.half(),)
 
-        if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states] if v is not None)
-
-        return BaseModelOutputWithNoAttention(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-        )
+        return hidden_states
 
 class ProPainterSecondOrderDeformableAlignment(ProPainterModulatedDeformConv2d):
     """Second-order deformable alignment module."""
@@ -1023,11 +847,8 @@ class ProPainterSecondOrderDeformableAlignment(ProPainterModulatedDeformConv2d):
             nn.Conv2d(self.out_channels, 27 * self.deform_groups, 3, 1, 1),
         )
 
-    def forward(self, features, extra_features, output_hidden_states: bool = False,return_dict: bool = True):
-        all_hidden_states = () if output_hidden_states else None
+    def forward(self, features, extra_features):
         output = self.conv_offset(extra_features)
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (output.half(),)
         output1, output2, mask = torch.chunk(output, 3, dim=1)
 
         # offset
@@ -1041,16 +862,8 @@ class ProPainterSecondOrderDeformableAlignment(ProPainterModulatedDeformConv2d):
         hidden_states = torchvision.ops.deform_conv2d(features, offset, self.weight, self.bias, 
                                              self.stride, self.padding,
                                              self.dilation, mask)
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states.half(),)
 
-        if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states] if v is not None)
-
-        return BaseModelOutputWithNoAttention(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-        )
+        return hidden_states
 
 
 class ProPainterRecurrentFlowCompleteNet(nn.Module):
@@ -1111,8 +924,7 @@ class ProPainterRecurrentFlowCompleteNet(nn.Module):
         # edge loss
         self.edgeDetector = ProPainterEdgeDetection(in_channel=2, out_channel=1, intermediate_channel=16)
 
-    def forward(self, masked_flows, masks, output_hidden_states: bool = False,return_dict: bool = True):
-        all_hidden_states = () if output_hidden_states else None
+    def forward(self, masked_flows, masks):
         batch_size, timesteps, _, height, width = masked_flows.size()
         masked_flows = masked_flows.permute(0,2,1,3,4)
         masks = masks.permute(0,2,1,3,4)
@@ -1120,69 +932,38 @@ class ProPainterRecurrentFlowCompleteNet(nn.Module):
         inputs = torch.cat((masked_flows, masks), dim=1)
         
         downsample_inputs = self.downsample(inputs)
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (downsample_inputs.half(),)
 
         features_enc1 = self.encoder1(downsample_inputs)
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (features_enc1.half(),)
         features_enc2 = self.encoder2(features_enc1) # batch_size num_channels timesteps height width
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (features_enc2.half(),)
         features_intermediate = self.intermediate_dilation(features_enc2) # batch_size num_channels timesteps height width
         features_intermediate = features_intermediate.permute(0,2,1,3,4) # batch_size timesteps num_channels height width
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (features_intermediate.half(),)
 
-        feature_propagation_module_outputs = self.feature_propagation_module(features_intermediate, output_hidden_states = output_hidden_states, return_dict = return_dict)
-        features_prop, _all_hidden_states = feature_propagation_module_outputs[0], feature_propagation_module_outputs[1]
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (_all_hidden_states,)
+        features_prop = self.feature_propagation_module(features_intermediate)
         features_prop = features_prop.view(-1, 128, height//8, width//8) # batch_size*timesteps num_channels height width
 
         _, num_channels, _, h_f, w_f = features_enc1.shape
         features_enc1 = features_enc1.permute(0,2,1,3,4).contiguous().view(-1, num_channels, h_f, w_f) # batch_size*timesteps num_channels height width
         features_dec2 = self.decoder2(features_prop) + features_enc1
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (features_dec2.half(),)
 
         _, num_channels, _, h_f, w_f = downsample_inputs.shape
         downsample_inputs = downsample_inputs.permute(0,2,1,3,4).contiguous().view(-1, num_channels, h_f, w_f) # batch_size*timesteps num_channels height width
 
         features_dec1 = self.decoder1(features_dec2)
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (features_dec1.half(),)
 
         flow = self.upsample(features_dec1)
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (flow.half(),)
-        # if self.training:
-        edge_detector_outputs = self.edgeDetector(flow)
-        edge, _all_hidden_states = edge_detector_outputs[0], edge_detector_outputs[1]
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (_all_hidden_states,)
+        edge = self.edgeDetector(flow)
         edge = edge.view(batch_size, timesteps, 1, height, width)
-        # else:
-        #     edge = None
 
         flow = flow.view(batch_size, timesteps, 2, height, width)
 
-        if not return_dict:
-            return tuple(v for v in [(flow, edge), all_hidden_states] if v is not None)
+        return flow, edge
 
-        return BaseModelOutputWithNoAttention(
-            last_hidden_state=(flow, edge),
-            hidden_states=all_hidden_states,
-        )        
-
-    def forward_bidirect_flow(self, masked_flows_bi, masks, output_hidden_states: bool = False,return_dict: bool = True):
+    def forward_bidirect_flow(self, masked_flows_bi, masks):
         """
         Args:
             masked_flows_bi: [masked_flows_f, masked_flows_b] | (batch_size, timesteps-1, 2, height, width), (batch_size, timesteps-1, 2, height, width)
             masks: batch_size, timesteps, 1, height, width
         """
-        all_hidden_states = () if output_hidden_states else None
-
         masks_forward = masks[:, :-1, ...].contiguous()
         masks_backward = masks[:, 1:, ...].contiguous()
 
@@ -1191,31 +972,17 @@ class ProPainterRecurrentFlowCompleteNet(nn.Module):
         masked_flows_backward = masked_flows_bi[1] * (1-masks_backward)
         
         # -- completion --
-        outputs = self.forward(masked_flows_forward, masks_forward, output_hidden_states = output_hidden_states, return_dict = return_dict)
-        pred_flows_forward, pred_edges_forward = outputs[0]
-        _all_hidden_states = outputs[1]
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (_all_hidden_states,)
+        pred_flows_forward, pred_edges_forward = self.forward(masked_flows_forward, masks_forward)
 
         # backward
         masked_flows_backward = torch.flip(masked_flows_backward, dims=[1])
         masks_backward = torch.flip(masks_backward, dims=[1])
-        outputs = self.forward(masked_flows_backward, masks_backward, output_hidden_states = output_hidden_states, return_dict = return_dict)
-        pred_flows_backward, pred_edges_backward = outputs[0]
-        _all_hidden_states = outputs[1]
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (_all_hidden_states,)
+        pred_flows_backward, pred_edges_backward = self.forward(masked_flows_backward, masks_backward)
         pred_flows_backward = torch.flip(pred_flows_backward, dims=[1])
         if self.training:
             pred_edges_backward = torch.flip(pred_edges_backward, dims=[1])
 
-        if not return_dict:
-            return tuple(v for v in [([pred_flows_forward, pred_flows_backward], [pred_edges_forward, pred_edges_backward]), all_hidden_states] if v is not None)
-
-        return BaseModelOutputWithNoAttention(
-            last_hidden_state=([pred_flows_forward, pred_flows_backward], [pred_edges_forward, pred_edges_backward]),
-            hidden_states=all_hidden_states,
-        )
+        return [pred_flows_forward, pred_flows_backward], [pred_edges_forward, pred_edges_backward]
 
 
     def combine_flow(self, masked_flows_bi, pred_flows_bi, masks):
@@ -1254,9 +1021,7 @@ class ProPainterEncoder(nn.Module):
             nn.LeakyReLU(negative_slope, inplace=True)
         ])
 
-    def forward(self, masked_inputs, output_hidden_states: bool = False,return_dict: bool = True):
-        all_hidden_states = () if output_hidden_states else None
-
+    def forward(self, masked_inputs):
         batch_size, _, _, _ = masked_inputs.size()
         features = masked_inputs
         for i, layer in enumerate(self.layers):
@@ -1269,16 +1034,8 @@ class ProPainterEncoder(nn.Module):
                 feature = features.view(batch_size, group, -1, height, width)
                 features = torch.cat([masked_inputs, feature], 2).view(batch_size, -1, height, width)
             features = layer(features)
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (features.half(),)
 
-        if not return_dict:
-            return tuple(v for v in [features, all_hidden_states] if v is not None)
-
-        return BaseModelOutputWithNoAttention(
-            last_hidden_state=features,
-            hidden_states=all_hidden_states,
-        )
+        return features
 
 class ProPainterSoftSplit(nn.Module):
     def __init__(self, num_channels, hidden_size, kernel_size, stride, padding):
@@ -1292,8 +1049,7 @@ class ProPainterSoftSplit(nn.Module):
         input_features = reduce((lambda x, y: x * y), kernel_size) * num_channels
         self.embedding = nn.Linear(input_features, hidden_size)
 
-    def forward(self, hidden_states, batch_size, output_size, output_hidden_states: bool = False,return_dict: bool = True):
-        all_hidden_states = () if output_hidden_states else None
+    def forward(self, hidden_states, batch_size, output_size):
         features_height = int((output_size[0] + 2 * self.padding[0] -
                    (self.kernel_size[0] - 1) - 1) / self.stride[0] + 1)
         features_width = int((output_size[1] + 2 * self.padding[1] -
@@ -1301,20 +1057,10 @@ class ProPainterSoftSplit(nn.Module):
 
         hidden_states = self.unfold(hidden_states)
         hidden_states = hidden_states.permute(0, 2, 1)
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states.half(),)
         hidden_states = self.embedding(hidden_states)
         hidden_states = hidden_states.view(batch_size, -1, features_height, features_width, hidden_states.size(2))
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states.half(),)
 
-        if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states] if v is not None)
-
-        return BaseModelOutputWithNoAttention(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-        )
+        return hidden_states
 
 class ProPainterSoftComp(nn.Module):
     def __init__(self, num_channels, hidden_size, kernel_size, stride, padding):
@@ -1331,34 +1077,20 @@ class ProPainterSoftComp(nn.Module):
                                    stride=1,
                                    padding=1)
 
-    def forward(self, hidden_states, timestep, output_size, output_hidden_states: bool = False,return_dict: bool = True):
-        all_hidden_states = () if output_hidden_states else None
-
+    def forward(self, hidden_states, timestep, output_size):
         num_batch_, _, _, _, channel_ = hidden_states.shape
         hidden_states = hidden_states.view(num_batch_, -1, channel_)
         hidden_states = self.embedding(hidden_states)   
         batch_size, _, num_channels = hidden_states.size()
         hidden_states = hidden_states.view(batch_size * timestep, -1, num_channels).permute(0, 2, 1)
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states.half(),)
         hidden_states = F.fold(hidden_states,
                       output_size=output_size,
                       kernel_size=self.kernel_size,
                       stride=self.stride,
                       padding=self.padding)
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states.half(),)
         hidden_states = self.bias_conv(hidden_states)
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states.half(),)
 
-        if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states] if v is not None)
-
-        return BaseModelOutputWithNoAttention(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-        )
+        return hidden_states
 
 # Copied from transformers.models.swin.modeling_swin.window_partition
 def window_partition(input_feature, window_size, num_attention_heads):
@@ -1417,7 +1149,7 @@ class ProPainterSparseWindowAttention(nn.Module):
         self.max_pool = nn.MaxPool2d(window_size, window_size, (0, 0))
 
 
-    def forward(self, hidden_states, mask=None, token_indices=None, output_attentions: bool = False,output_hidden_states: bool = False,return_dict: bool = True):
+    def forward(self, hidden_states, mask=None, token_indices=None, output_attentions: bool = False):
         all_self_attentions = () if output_attentions else None
 
         batch_size, timesteps, height, width, num_channels = hidden_states.shape # 20 36
@@ -1514,8 +1246,6 @@ class ProPainterSparseWindowAttention(nn.Module):
                 att_t = (window_query_t @ window_key_t.transpose(-2, -1)) * (1.0 / math.sqrt(window_query_t.size(-1)))
                 att_t = F.softmax(att_t, dim=-1)
                 att_t = self.attn_drop(att_t)
-                if output_attentions:
-                    all_self_attentions = all_self_attentions + (att_t.half())
                 y_t = att_t @ window_value_t 
                 
                 output[i, mask_ind_i] = y_t.view(-1, self.num_attention_heads, timesteps, window_height*window_width, channel_head)
@@ -1531,11 +1261,12 @@ class ProPainterSparseWindowAttention(nn.Module):
             att_s = (window_query_s @ window_key_s.transpose(-2, -1)) * (1.0 / math.sqrt(window_query_s.size(-1)))
             att_s = F.softmax(att_s, dim=-1)
             att_s = self.attn_drop(att_s)
-            if output_attentions:
-                all_self_attentions = all_self_attentions + (att_s.half())
             y_s = att_s @ window_value_s
             output[i, unmask_ind_i] = y_s
-
+        _att_t = att_t
+        _att_s = att_s
+        if output_attentions:
+            all_self_attentions = all_self_attentions + (_att_t,) + (_att_s,)
         # re-assemble all head outputs side by side
         output = output.view(batch_size, n_window_height, n_window_width, self.num_attention_heads, timesteps, window_height, window_width, channel_head)
         output = output.permute(0, 4, 1, 5, 2, 6, 3, 7).contiguous().view(batch_size, timesteps, new_height, new_width, num_channels)
@@ -1558,8 +1289,7 @@ class ProPainterFusionFeedForward(nn.Module):
         self.token_to_token_params = token_to_token_params
         self.kernel_shape = reduce((lambda x, y: x * y), token_to_token_params['kernel_size']) # 49
 
-    def forward(self, hidden_states, output_size, output_hidden_states: bool = False,return_dict: bool = True):
-        all_hidden_states = () if output_hidden_states else None
+    def forward(self, hidden_states, output_size):
 
         num_vecs = 1
         for i, d in enumerate(self.token_to_token_params['kernel_size']):
@@ -1567,8 +1297,6 @@ class ProPainterFusionFeedForward(nn.Module):
                            (d - 1) - 1) / self.token_to_token_params['stride'][i] + 1)
 
         hidden_states = self.fc1(hidden_states)
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states.half(),)
         batch_size, timestep, num_channel = hidden_states.size()
         normalizer = hidden_states.new_ones(batch_size, timestep, self.kernel_shape).view(-1, num_vecs, self.kernel_shape).permute(0, 2, 1)
         normalizer = F.fold(normalizer,
@@ -1582,26 +1310,14 @@ class ProPainterFusionFeedForward(nn.Module):
                    kernel_size=self.token_to_token_params['kernel_size'],
                    padding=self.token_to_token_params['padding'],
                    stride=self.token_to_token_params['stride'])
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states.half(),)
         hidden_states = F.unfold(hidden_states / normalizer,
                      kernel_size=self.token_to_token_params['kernel_size'],
                      padding=self.token_to_token_params['padding'],
                      stride=self.token_to_token_params['stride']).permute(
                          0, 2, 1).contiguous().view(batch_size, timestep, num_channel)
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states.half(),)
         hidden_states = self.fc2(hidden_states)
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states.half(),)
 
-        if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states] if v is not None)
-
-        return BaseModelOutputWithNoAttention(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-        )
+        return hidden_states
 
 class ProPainterTemporalSparseTransformerBlock(nn.Module):
     def __init__(self, hidden_size, num_attention_heads, window_size, pool_size,
@@ -1613,7 +1329,7 @@ class ProPainterTemporalSparseTransformerBlock(nn.Module):
         self.layer_norm2 = layer_norm(hidden_size)
         self.mlp = ProPainterFusionFeedForward(hidden_size, token_to_token_params=token_to_token_params)
 
-    def forward(self, image_tokens, fold_x_size, mask=None, token_indices=None, output_attentions: bool = False,output_hidden_states: bool = False,return_dict: bool = True):
+    def forward(self, image_tokens, fold_x_size, mask=None, token_indices=None, output_attentions: bool = False):
         """
         Args:
             image_tokens: shape [batch_size, timesteps, height, width, num_channels]
@@ -1622,36 +1338,23 @@ class ProPainterTemporalSparseTransformerBlock(nn.Module):
         Returns:
             out_tokens: shape [batch_size, timesteps, height, width, 1]
         """
-        all_hidden_states = () if output_hidden_states else None
 
         batch_size, timesteps, height, width, num_channels = image_tokens.shape # 20 36
 
         shortcut = image_tokens
         image_tokens = self.layer_norm1(image_tokens)
-        att_x, all_self_attentions = self.attention(image_tokens, mask, token_indices, output_attentions = output_attentions, output_hidden_states = output_hidden_states, return_dict = return_dict)
+        att_x, all_self_attentions = self.attention(image_tokens, mask, token_indices, output_attentions = output_attentions)
 
         # FFN
         image_tokens = shortcut + att_x
         y = self.layer_norm2(image_tokens)
-        mlp_outputs = self.mlp(y.view(batch_size, timesteps * height * width, num_channels), fold_x_size, output_hidden_states = output_hidden_states, return_dict = return_dict)
-        hidden_states, _all_hidden_states = mlp_outputs[0], mlp_outputs[1]
+        hidden_states = self.mlp(y.view(batch_size, timesteps * height * width, num_channels), fold_x_size)
         hidden_states = hidden_states.view(batch_size, timesteps, height, width, num_channels)
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (_all_hidden_states,)
+
 
         image_tokens = image_tokens + hidden_states
-        
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (image_tokens.half(),)
 
-        if not return_dict:
-            return tuple(v for v in [image_tokens, all_hidden_states, all_self_attentions] if v is not None)
-
-        return BaseModelOutput(
-            last_hidden_state=image_tokens,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions
-        )
+        return image_tokens, all_self_attentions
 
 class ProPainterTemporalSparseTransformer(nn.Module):
     def __init__(self, hidden_size, num_attention_heads, window_size, pool_size, num_hidden_layers, token_to_token_params=None):
@@ -1673,7 +1376,6 @@ class ProPainterTemporalSparseTransformer(nn.Module):
         Returns:
             out_tokens: shape [batch_size, timesteps, height, width, num_channels]
         """
-        all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
         assert self.num_hidden_layers % t_dilation == 0, 'wrong t_dilation input.'
@@ -1681,21 +1383,11 @@ class ProPainterTemporalSparseTransformer(nn.Module):
         token_indices = [torch.arange(i, timesteps, t_dilation) for i in range(t_dilation)] * (self.num_hidden_layers // t_dilation)
 
         for i in range(0, self.num_hidden_layers):
-            transformer_outputs = self.transformer[i](image_tokens, fold_x_size, local_mask, token_indices[i], output_attentions = output_attentions, output_hidden_states = output_hidden_states, return_dict = return_dict)
-            image_tokens, _all_hidden_states, _all_self_attentions = transformer_outputs[0], transformer_outputs[1], transformer_outputs[2]
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (_all_hidden_states,)
+            image_tokens, _all_self_attentions = self.transformer[i](image_tokens, fold_x_size, local_mask, token_indices[i], output_attentions = output_attentions)
             if output_attentions:
                 all_self_attentions = all_self_attentions + (_all_self_attentions,)
 
-        if not return_dict:
-            return tuple(v for v in [image_tokens, all_hidden_states, all_self_attentions] if v is not None)
-
-        return BaseModelOutput(
-            last_hidden_state=image_tokens,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions
-        )
+        return image_tokens,all_self_attentions
 
 class ProPainterInpaintGenerator(nn.Module):
     def __init__(self,config):
@@ -1735,16 +1427,10 @@ class ProPainterInpaintGenerator(nn.Module):
                                                 num_hidden_layers=config.num_hidden_layers,
                                                 token_to_token_params=token_to_token_params)
 
-    def img_propagation(self, masked_frames, completed_flows, masks, interpolation='nearest', output_hidden_states: bool = False,return_dict: bool = True):
-        _, _, prop_frames, updated_masks, all_hidden_states = self.img_prop_module(masked_frames, completed_flows[0], completed_flows[1], masks, interpolation, output_hidden_states = output_hidden_states, return_dict = return_dict)
+    def img_propagation(self, masked_frames, completed_flows, masks, interpolation='nearest'):
+        _, _, prop_frames, updated_masks = self.img_prop_module(masked_frames, completed_flows[0], completed_flows[1], masks, interpolation)
 
-        if not return_dict:
-            return tuple(v for v in [(prop_frames, updated_masks), all_hidden_states] if v is not None)
-
-        return BaseModelOutputWithNoAttention(
-            last_hidden_state=(prop_frames, updated_masks),
-            hidden_states=all_hidden_states,
-        )
+        return prop_frames, updated_masks
 
     def forward(self, masked_frames, completed_flows, masks_in, masks_updated, num_local_frames, interpolation='bilinear', t_dilation=2, output_attentions: bool = False,output_hidden_states: bool = False,return_dict: bool = True):
         """
@@ -1759,12 +1445,9 @@ class ProPainterInpaintGenerator(nn.Module):
         batch_size, timestep, _, original_height, original_width = masked_frames.size()
 
         # extracting features
-        encoder_outputs = self.encoder(torch.cat([masked_frames.view(batch_size * timestep, 3, original_height, original_width),
+        encoder_hidden_states = self.encoder(torch.cat([masked_frames.view(batch_size * timestep, 3, original_height, original_width),
                                         masks_in.view(batch_size * timestep, 1, original_height, original_width),
-                                        masks_updated.view(batch_size * timestep, 1, original_height, original_width)], dim=1), output_hidden_states = output_hidden_states, return_dict = return_dict)
-        encoder_hidden_states, _all_hidden_states = encoder_outputs[0], encoder_outputs[1]
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (_all_hidden_states,)
+                                        masks_updated.view(batch_size * timestep, 1, original_height, original_width)], dim=1))        
         _, num_channels, height, width = encoder_hidden_states.size()
         local_features = encoder_hidden_states.view(batch_size, timestep, num_channels, height, width)[:, :local_timestep, ...]
         ref_features = encoder_hidden_states.view(batch_size, timestep, num_channels, height, width)[:, local_timestep:, ...]
@@ -1784,30 +1467,19 @@ class ProPainterInpaintGenerator(nn.Module):
             mask_pool_l = self.max_pool(ds_mask_in_local.view(-1, 1, height, width))
             mask_pool_l = mask_pool_l.view(batch_size, local_timestep, 1, mask_pool_l.size(-2), mask_pool_l.size(-1))
 
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (mask_pool_l.half(),)
-
         prop_mask_in = torch.cat([ds_mask_in_local, ds_mask_updated_local], dim=2)
-        _, _, local_features, _, _all_hidden_states = self.feature_propagation_module(local_features, ds_flows_f, ds_flows_b, prop_mask_in, interpolation, output_attentions = output_attentions, output_hidden_states = output_hidden_states, return_dict = return_dict)
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (_all_hidden_states,)
+        _, _, local_features, _ = self.feature_propagation_module(local_features, ds_flows_f, ds_flows_b, prop_mask_in, interpolation)
         encoder_hidden_states = torch.cat((local_features, ref_features), dim=1)
 
-        soft_split_outputs = self.soft_split(encoder_hidden_states.view(-1, num_channels, height, width), batch_size, fold_feat_size, output_hidden_states = output_hidden_states, return_dict = return_dict)
-        trans_feat, _all_hidden_states = soft_split_outputs[0], soft_split_outputs[1]
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (_all_hidden_states,)
+        trans_feat = self.soft_split(encoder_hidden_states.view(-1, num_channels, height, width), batch_size, fold_feat_size)
         mask_pool_l = mask_pool_l.permute(0,1,3,4,2).contiguous()
-        transformers_outputs = self.transformers(trans_feat, fold_feat_size, mask_pool_l, t_dilation=t_dilation, output_attentions = output_attentions, output_hidden_states = output_hidden_states, return_dict = return_dict)
-        trans_feat, _all_hidden_states, _all_self_attentions = transformers_outputs[0], transformers_outputs[1], transformers_outputs[2]
+        trans_feat, _all_self_attentions = self.transformers(trans_feat, fold_feat_size, mask_pool_l, t_dilation=t_dilation, output_attentions = output_attentions, output_hidden_states = output_hidden_states, return_dict = return_dict)
+        _trans_feat = trans_feat
         if output_hidden_states:
-            all_hidden_states = all_hidden_states + (_all_hidden_states,)
+            all_hidden_states = all_hidden_states + (_trans_feat,)
         if output_attentions:
                 all_self_attentions = all_self_attentions + (_all_self_attentions,)
-        soft_comp_outputs = self.soft_comp(trans_feat, timestep, fold_feat_size, output_hidden_states = output_hidden_states, return_dict = return_dict)
-        trans_feat, _all_hidden_states = soft_comp_outputs[0], soft_comp_outputs[1]
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (_all_hidden_states,)
+        trans_feat = self.soft_comp(trans_feat, timestep, fold_feat_size)
         trans_feat = trans_feat.view(batch_size, timestep, -1, height, width)
 
         encoder_hidden_states = encoder_hidden_states + trans_feat
@@ -1819,8 +1491,9 @@ class ProPainterInpaintGenerator(nn.Module):
             output = self.decoder(encoder_hidden_states[:, :local_timestep].view(-1, num_channels, height, width))
             output = torch.tanh(output).view(batch_size, local_timestep, 3, original_height, original_width)
 
+        _output = output
         if output_hidden_states:
-            all_hidden_states = all_hidden_states + (output.half(),)
+            all_hidden_states = all_hidden_states + (_output,)
 
         if not return_dict:
             return tuple(v for v in [output, all_hidden_states, all_self_attentions] if v is not None)
@@ -3327,15 +3000,12 @@ class ProPainterModel(ProPainterPreTrainedModel):
             for f in range(0, self.video_length, short_clip_len):
                 end_f = min(self.video_length, f + short_clip_len)
                 if f == 0:
-                    optical_flow_model_outputs = self.optical_flow_model(pixel_values[:,f:end_f], iters=self.config.raft_iter)
-                    flows_f, flows_b = optical_flow_model_outputs[0]
-                    _all_hidden_states = optical_flow_model_outputs[1]
+                    flows_f, flows_b = self.optical_flow_model(pixel_values[:,f:end_f], iters=self.config.raft_iter)
                 else:
-                    optical_flow_model_outputs = self.optical_flow_model(pixel_values[:,f-1:end_f], iters=self.config.raft_iter)
-                    flows_f, flows_b = optical_flow_model_outputs[0]
-                    _all_hidden_states = optical_flow_model_outputs[1]
+                    flows_f, flows_b = self.optical_flow_model(pixel_values[:,f-1:end_f], iters=self.config.raft_iter)
+                _flows_f, _flows_b = flows_f, flows_b
                 if output_hidden_states:
-                    all_hidden_states = all_hidden_states + (_all_hidden_states,)
+                    all_hidden_states = all_hidden_states + (_flows_f,_flows_b,)
                 gt_flows_f_list.append(flows_f)
                 gt_flows_b_list.append(flows_b)
                 torch.cuda.empty_cache()
@@ -3344,12 +3014,13 @@ class ProPainterModel(ProPainterPreTrainedModel):
             gt_flows_b = torch.cat(gt_flows_b_list, dim=1)
             gt_flows_bi = (gt_flows_f, gt_flows_b)
         else:
-            optical_flow_model_outputs = self.optical_flow_model(pixel_values, iters=self.config.raft_iter)
-            gt_flows_bi, all_hidden_states = optical_flow_model_outputs[0], optical_flow_model_outputs[1]
+            gt_flows_bi = self.optical_flow_model(pixel_values, iters=self.config.raft_iter)
+            all_hidden_states = gt_flows_bi
+            all_hidden_states = all_hidden_states
             torch.cuda.empty_cache()
         return gt_flows_bi, all_hidden_states
     
-    def complete_flow(self,gt_flows_bi, flow_masks, output_hidden_states: bool = False,return_dict: bool = True):        
+    def complete_flow(self,gt_flows_bi, flow_masks, output_hidden_states: bool = False):        
         flow_length = gt_flows_bi[0].size(1)
         if flow_length > self.config.subvideo_length:
             all_hidden_states = () if output_hidden_states else None
@@ -3360,13 +3031,12 @@ class ProPainterModel(ProPainterPreTrainedModel):
                 e_f = min(flow_length, f + self.config.subvideo_length + pad_len)
                 pad_len_s = max(0, f) - s_f
                 pad_len_e = e_f - min(flow_length, f + self.config.subvideo_length)
-                flow_completion_net_outputs = self.flow_completion_net.forward_bidirect_flow(
+                pred_flows_bi_sub, pred_edges_bi = self.flow_completion_net.forward_bidirect_flow(
                     (gt_flows_bi[0][:, s_f:e_f], gt_flows_bi[1][:, s_f:e_f]), 
-                    flow_masks[:, s_f:e_f+1], output_hidden_states = output_hidden_states, return_dict = return_dict)
-                pred_flows_bi_sub, pred_edges_bi = flow_completion_net_outputs[0]
-                _all_hidden_states = flow_completion_net_outputs[1]
+                    flow_masks[:, s_f:e_f+1])
+                _pred_flows_bi_sub, _pred_edges_bi = pred_flows_bi_sub, pred_edges_bi
                 if output_hidden_states:
-                    all_hidden_states = all_hidden_states + (_all_hidden_states,)
+                    all_hidden_states = all_hidden_states + tuple(tensor for tensor in _pred_flows_bi_sub) + tuple(tensor for tensor in _pred_edges_bi)
 
                 pred_flows_bi_loss.append(pred_flows_bi_sub)
                 pred_edges_bi_loss.append(pred_edges_bi)
@@ -3386,9 +3056,9 @@ class ProPainterModel(ProPainterPreTrainedModel):
             pred_flows_bi_loss = torch.cat(pred_flows_bi_loss)
             pred_edges_bi_loss = torch.cat(pred_edges_bi_loss)
         else:
-            flow_completion_net_outputs = self.flow_completion_net.forward_bidirect_flow(gt_flows_bi, flow_masks, output_hidden_states = output_hidden_states, return_dict = return_dict)
-            pred_flows_bi, pred_edges_bi = flow_completion_net_outputs[0]
-            all_hidden_states = flow_completion_net_outputs[1]
+            pred_flows_bi, pred_edges_bi = self.flow_completion_net.forward_bidirect_flow(gt_flows_bi, flow_masks)
+            _pred_flows_bi, _pred_edges_bi = pred_flows_bi, pred_edges_bi
+            all_hidden_states = tuple(tensor for tensor in _pred_flows_bi) + tuple(tensor for tensor in _pred_edges_bi)
             pred_flows_bi_loss = pred_flows_bi
 
             pred_flows_bi = self.flow_completion_net.combine_flow(gt_flows_bi, pred_flows_bi, flow_masks)
@@ -3397,7 +3067,7 @@ class ProPainterModel(ProPainterPreTrainedModel):
 
         return pred_flows_bi, pred_flows_bi_loss, pred_edges_bi, all_hidden_states
 
-    def image_propagation(self,pixel_values,masks_dilated, pred_flows_bi,output_hidden_states: bool = False,return_dict: bool = True):
+    def image_propagation(self,pixel_values,masks_dilated, pred_flows_bi,output_hidden_states: bool = False):
         width, height = self.size
         masked_frames = pixel_values * (1 - masks_dilated)
         subvideo_length_img_prop = min(100, self.config.subvideo_length) # ensure a minimum of 100 frames for image propagation
@@ -3413,14 +3083,12 @@ class ProPainterModel(ProPainterPreTrainedModel):
 
                 batch_size, timesteps, _, _, _ = masks_dilated[:, s_f:e_f].size()
                 pred_flows_bi_sub = (pred_flows_bi[0][:, s_f:e_f-1], pred_flows_bi[1][:, s_f:e_f-1])
-                inpaint_generator_outputs = self.inpaint_generator.img_propagation(masked_frames[:, s_f:e_f], 
+                prop_imgs_sub, updated_local_masks_sub = self.inpaint_generator.img_propagation(masked_frames[:, s_f:e_f], 
                                                                     pred_flows_bi_sub, 
                                                                     masks_dilated[:, s_f:e_f], 
-                                                                    'nearest', output_hidden_states = output_hidden_states, return_dict = return_dict)
-                prop_imgs_sub, updated_local_masks_sub = inpaint_generator_outputs[0]
-                _all_hidden_states = inpaint_generator_outputs[1]
+                                                                    'nearest')
                 if output_hidden_states:
-                    all_hidden_states = all_hidden_states + (_all_hidden_states,)
+                    all_hidden_states = all_hidden_states + (prop_imgs_sub,)
                 updated_frames_sub = pixel_values[:, s_f:e_f] * (1 - masks_dilated[:, s_f:e_f]) + \
                                     prop_imgs_sub.view(batch_size, timesteps, 3, height, width) * masks_dilated[:, s_f:e_f]
                 updated_masks_sub = updated_local_masks_sub.view(batch_size, timesteps, 1, height, width)
@@ -3433,9 +3101,9 @@ class ProPainterModel(ProPainterPreTrainedModel):
             updated_masks = torch.cat(updated_masks, dim=1)
         else:
             batch_size, timesteps, _, _, _ = masks_dilated.size()
-            inpaint_generator_outputs = self.inpaint_generator.img_propagation(masked_frames, pred_flows_bi, masks_dilated, 'nearest', output_hidden_states = output_hidden_states, return_dict = return_dict)
-            prop_imgs, updated_local_masks = inpaint_generator_outputs[0]
-            all_hidden_states = inpaint_generator_outputs[1]
+            prop_imgs, updated_local_masks = self.inpaint_generator.img_propagation(masked_frames, pred_flows_bi, masks_dilated, 'nearest')
+            all_hidden_states = prop_imgs
+            all_hidden_states = all_hidden_states
             updated_frames = pixel_values * (1 - masks_dilated) + prop_imgs.view(batch_size, timesteps, 3, height, width) * masks_dilated
             updated_masks = updated_local_masks.view(batch_size, timesteps, 1, height, width)
             torch.cuda.empty_cache()
@@ -3473,7 +3141,9 @@ class ProPainterModel(ProPainterPreTrainedModel):
                 
                 # pred_img = selected_imgs # results of image propagation
                 inpaint_generator_outputs = self.inpaint_generator(selected_imgs, selected_pred_flows_bi, selected_masks, selected_update_masks, l_t, output_attentions = output_attentions, output_hidden_states = output_hidden_states, return_dict = return_dict)
-                pred_img, _all_hidden_states, _all_self_attentions = inpaint_generator_outputs[0], inpaint_generator_outputs[1], inpaint_generator_outputs[2]
+                pred_img  = inpaint_generator_outputs[0] if not return_dict else inpaint_generator_outputs.last_hidden_state
+                _all_hidden_states = inpaint_generator_outputs[1:2] if not return_dict else inpaint_generator_outputs.hidden_states
+                _all_self_attentions = inpaint_generator_outputs[2:] if not return_dict else inpaint_generator_outputs.attentions
                 if output_hidden_states:
                     all_hidden_states = all_hidden_states + (_all_hidden_states,)
                 if output_attentions:
@@ -3536,15 +3206,15 @@ class ProPainterModel(ProPainterPreTrainedModel):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (_all_hiddens_states,)
             
-            pred_flows_bi, pred_flows_bi_loss, pred_edges_bi, _all_hiddens_states = self.complete_flow(gt_flows_bi,flow_masks, output_attentions = output_attentions, output_hidden_states = output_hidden_states, return_dict = return_dict)
+            pred_flows_bi, pred_flows_bi_loss, pred_edges_bi, _all_hiddens_states = self.complete_flow(gt_flows_bi,flow_masks, output_hidden_states = output_hidden_states)
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (_all_hiddens_states,)
 
-            updated_frames,updated_masks, _all_hiddens_states = self.image_propagation(pixel_values,masks_dilated,pred_flows_bi)
+            updated_frames,updated_masks, _all_hiddens_states = self.image_propagation(pixel_values,masks_dilated,pred_flows_bi, output_hidden_states = output_hidden_states)
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (_all_hiddens_states,)
                 
-        comp_frames, pred_imgs_loss, _all_hiddens_states, _all_self_attentions = self.feature_propagation(updated_frames, updated_masks, masks_dilated, pred_flows_bi, pixel_values_inp)
+        comp_frames, pred_imgs_loss, _all_hiddens_states, _all_self_attentions = self.feature_propagation(updated_frames, updated_masks, masks_dilated, pred_flows_bi, pixel_values_inp, output_attentions = output_attentions, output_hidden_states = output_hidden_states, return_dict = return_dict)
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (_all_hiddens_states,)
