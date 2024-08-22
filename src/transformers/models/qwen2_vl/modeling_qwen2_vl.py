@@ -1345,7 +1345,7 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel):
                 height position_ids: [0, 1, 2, 3, 4]
                 width position_ids: [0, 1, 2, 3, 4]
 
-            For pure vision and text embedding sequence, we calculate 3D rotary position embedding for vision part
+            For vision and text embedding sequence, we calculate 3D rotary position embedding for vision part
             and 1D rotary position embeddin for text part.
             Examples:
                 Assume we have a video input with 3 temporal patches, 2 height patches and 2 width patches.
