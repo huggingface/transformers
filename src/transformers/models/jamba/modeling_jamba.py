@@ -1500,7 +1500,7 @@ class JambaForCausalLM(JambaPreTrainedModel):
             logits = self.lm_head(hidden_states[..., -num_logits_to_keep:, :])
         if labels is None and not is_torchdynamo_compiling:
             logger.warning_once(
-                "Starting from v4.45, the `logits` model output will have the same type as the model (except at train time, where it will always be FP32)"
+                "Starting from v4.46, the `logits` model output will have the same type as the model (except at train time, where it will always be FP32)"
             )
         # TODO: remove this float() operations in v4.44
         logits = logits.float()

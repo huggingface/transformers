@@ -1305,7 +1305,7 @@ class Qwen2MoeForCausalLM(Qwen2MoePreTrainedModel):
         hidden_states = outputs[0]
         if labels is None and not is_torchdynamo_compiling():
             logger.warning_once(
-                "Starting from v4.45, the `logits` model output will have the same type as the model (except at train time, where it will always be FP32)"
+                "Starting from v4.46, the `logits` model output will have the same type as the model (except at train time, where it will always be FP32)"
             )
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         # TODO: remove the float() operation in v4.45
