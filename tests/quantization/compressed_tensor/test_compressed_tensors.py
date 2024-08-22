@@ -52,7 +52,7 @@ class CompressedTensorsTest(unittest.TestCase):
 
     def _test_quantized_model(self, model_name: str):
         """Carry out generation"""
-        quantized_model = AutoModelForCausalLM.from_pretrained(model_name)
+        quantized_model = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto")
         tokenizer = AutoTokenizer.from_pretrained(model_name)
         device = quantized_model.device
         self.assertIsNotNone(

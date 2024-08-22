@@ -76,12 +76,6 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
 
         return [key for key in missing_keys if not _is_decompressed_key(key)]
 
-    def _process_model_before_weight_loading(self, model, **kwargs):
-        if self.quantization_config.quantization_config is not None:
-            from compressed_tensors.quantization import apply_quantization_config
-
-            apply_quantization_config(model, self.quantization_config.quantization_config)
-
     def _process_model_after_weight_loading(self, model, resolved_archive_file, **kwargs):
         self.compressor.decompress(model_path=resolved_archive_file, model=model)
 
