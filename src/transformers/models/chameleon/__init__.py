@@ -36,7 +36,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_chameleon"] = [
-        "ChameleonForCausalLM",
+        "ChameleonForConditionalGeneration",
         "ChameleonModel",
         "ChameleonPreTrainedModel",
         "ChameleonVQVAE",
@@ -62,7 +62,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_chameleon import (
-            ChameleonForCausalLM,
+            ChameleonForConditionalGeneration,
             ChameleonModel,
             ChameleonPreTrainedModel,
             ChameleonVQVAE,

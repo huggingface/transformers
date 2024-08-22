@@ -278,7 +278,7 @@ args = TrainingArguments(
     max_steps=100,
     per_device_train_batch_size=2,
     optim="galore_adamw",
-    optim_target_modules=["attn", "mlp"]
+    optim_target_modules=[r".*.attn.*", r".*.mlp.*"]
 )
 
 model_id = "google/gemma-2b"
@@ -315,7 +315,7 @@ args = TrainingArguments(
     max_steps=100,
     per_device_train_batch_size=2,
     optim="galore_adamw",
-    optim_target_modules=["attn", "mlp"],
+    optim_target_modules=[r".*.attn.*", r".*.mlp.*"],
     optim_args="rank=64, update_proj_gap=100, scale=0.10",
 )
 
@@ -359,7 +359,7 @@ args = TrainingArguments(
     max_steps=100,
     per_device_train_batch_size=2,
     optim="galore_adamw_layerwise",
-    optim_target_modules=["attn", "mlp"]
+    optim_target_modules=[r".*.attn.*", r".*.mlp.*"]
 )
 
 model_id = "google/gemma-2b"
@@ -431,6 +431,57 @@ trainer = trl.SFTTrainer(
 
 trainer.train()
 ```
+
+## GrokAdamW optimizer
+
+The GrokAdamW optimizer is designed to enhance training performance and stability, particularly for models that benefit from grokking signal functions. To use GrokAdamW, first install the optimizer package with `pip install grokadamw`.
+
+<Tip>
+
+GrokAdamW is particularly useful for models that require advanced optimization techniques to achieve better performance and stability.
+
+</Tip>
+
+Below is a simple script to demonstrate how to fine-tune [google/gemma-2b](https://huggingface.co/google/gemma-2b) on the IMDB dataset using the GrokAdamW optimizer:
+
+```python
+import torch
+import datasets
+from transformers import TrainingArguments, AutoTokenizer, AutoModelForCausalLM, Trainer
+
+# Load the IMDB dataset
+train_dataset = datasets.load_dataset('imdb', split='train')
+
+# Define the training arguments
+args = TrainingArguments(
+    output_dir="./test-grokadamw",
+    max_steps=1000,
+    per_device_train_batch_size=4,
+    optim="grokadamw",
+    logging_strategy="steps",
+    logging_steps=1,
+    learning_rate=2e-5,
+    save_strategy="no",
+    run_name="grokadamw-imdb",
+)
+
+# Load the model and tokenizer
+model_id = "google/gemma-2b"
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True).to(0)
+
+# Initialize the Trainer
+trainer = Trainer(
+    model=model,
+    args=args,
+    train_dataset=train_dataset,
+)
+
+# Train the model
+trainer.train()
+```
+
+This script demonstrates how to fine-tune the `google/gemma-2b` model on the IMDB dataset using the GrokAdamW optimizer. The `TrainingArguments` are configured to use GrokAdamW, and the dataset is passed to the `Trainer` for training.
 
 ## Accelerate and Trainer
 

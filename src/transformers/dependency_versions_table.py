@@ -3,7 +3,7 @@
 # 2. run `make deps_table_update``
 deps = {
     "Pillow": "Pillow>=10.0.1,<=15.0",
-    "accelerate": "accelerate>=0.21.0",
+    "accelerate": "accelerate>=0.26.0",
     "av": "av==9.2.0",
     "beautifulsoup4": "beautifulsoup4",
     "codecarbon": "codecarbon==1.2.0",
@@ -38,7 +38,7 @@ deps = {
     "librosa": "librosa",
     "nltk": "nltk",
     "natten": "natten>=0.14.6,<0.15.0",
-    "numpy": "numpy>=1.17,<2.0",
+    "numpy": "numpy>=1.17",
     "onnxconverter-common": "onnxconverter-common",
     "onnxruntime-tools": "onnxruntime-tools>=1.4.2",
     "onnxruntime": "onnxruntime>=1.4.0",
@@ -63,7 +63,7 @@ deps = {
     "rhoknp": "rhoknp>=1.1.0,<1.3.1",
     "rjieba": "rjieba",
     "rouge-score": "rouge-score!=0.0.7,!=0.0.8,!=0.1,!=0.1.1",
-    "ruff": "ruff==0.4.4",
+    "ruff": "ruff==0.5.1",
     "sacrebleu": "sacrebleu>=1.4.12,<2.0.0",
     "sacremoses": "sacremoses",
     "safetensors": "safetensors>=0.4.1",

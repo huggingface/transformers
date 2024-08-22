@@ -36,7 +36,7 @@ from transformers.testing_utils import TOKEN, USER, is_staging_test, require_tok
 from transformers.tokenization_utils import ExtensionsTrie, Trie
 
 
-sys.path.append(str(Path(__file__).parent.parent / "utils"))
+sys.path.append(str(Path(__file__).parent.parent.parent / "utils"))
 
 from test_module.custom_tokenization import CustomTokenizer  # noqa E402
 
@@ -84,7 +84,7 @@ class TokenizerUtilTester(unittest.TestCase):
     def test_legacy_load_from_one_file(self):
         # This test is for deprecated behavior and can be removed in v5
         try:
-            tmp_file = tempfile.mktemp()
+            tmp_file = tempfile.NamedTemporaryFile(delete=False).name
             with open(tmp_file, "wb") as f:
                 http_get("https://huggingface.co/albert/albert-base-v1/resolve/main/spiece.model", f)
 
@@ -118,110 +118,133 @@ class TokenizerPushToHubTester(unittest.TestCase):
         cls._token = TOKEN
         HfFolder.save_token(TOKEN)
 
-    @classmethod
-    def tearDownClass(cls):
+    @staticmethod
+    def _try_delete_repo(repo_id, token):
         try:
-            delete_repo(token=cls._token, repo_id="test-tokenizer")
-        except HTTPError:
-            pass
-
-        try:
-            delete_repo(token=cls._token, repo_id="valid_org/test-tokenizer-org")
-        except HTTPError:
-            pass
-
-        try:
-            delete_repo(token=cls._token, repo_id="test-dynamic-tokenizer")
-        except HTTPError:
+            # Reset repo
+            delete_repo(repo_id=repo_id, token=token)
+        except:  # noqa E722
             pass
 
     def test_push_to_hub(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
-            vocab_file = os.path.join(tmp_dir, "vocab.txt")
-            with open(vocab_file, "w", encoding="utf-8") as vocab_writer:
-                vocab_writer.write("".join([x + "\n" for x in self.vocab_tokens]))
-            tokenizer = BertTokenizer(vocab_file)
+            try:
+                tmp_repo = f"{USER}/test-tokenizer-{Path(tmp_dir).name}"
+                vocab_file = os.path.join(tmp_dir, "vocab.txt")
+                with open(vocab_file, "w", encoding="utf-8") as vocab_writer:
+                    vocab_writer.write("".join([x + "\n" for x in self.vocab_tokens]))
+                tokenizer = BertTokenizer(vocab_file)
 
-        tokenizer.push_to_hub("test-tokenizer", token=self._token)
-        new_tokenizer = BertTokenizer.from_pretrained(f"{USER}/test-tokenizer")
-        self.assertDictEqual(new_tokenizer.vocab, tokenizer.vocab)
+                tokenizer.push_to_hub(tmp_repo, token=self._token)
+                new_tokenizer = BertTokenizer.from_pretrained(tmp_repo)
+                self.assertDictEqual(new_tokenizer.vocab, tokenizer.vocab)
+            finally:
+                # Always (try to) delete the repo.
+                self._try_delete_repo(repo_id=tmp_repo, token=self._token)
 
-        try:
-            # Reset repo
-            delete_repo(token=self._token, repo_id="test-tokenizer")
-        except:  # noqa E722
-            pass
-
-        # Push to hub via save_pretrained
+    def test_push_to_hub_via_save_pretrained(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
-            tokenizer.save_pretrained(tmp_dir, repo_id="test-tokenizer", push_to_hub=True, token=self._token)
+            try:
+                tmp_repo = f"{USER}/test-tokenizer-{Path(tmp_dir).name}"
+                vocab_file = os.path.join(tmp_dir, "vocab.txt")
+                with open(vocab_file, "w", encoding="utf-8") as vocab_writer:
+                    vocab_writer.write("".join([x + "\n" for x in self.vocab_tokens]))
+                tokenizer = BertTokenizer(vocab_file)
 
-        new_tokenizer = BertTokenizer.from_pretrained(f"{USER}/test-tokenizer")
-        self.assertDictEqual(new_tokenizer.vocab, tokenizer.vocab)
+                # Push to hub via save_pretrained
+                tokenizer.save_pretrained(tmp_dir, repo_id=tmp_repo, push_to_hub=True, token=self._token)
+
+                new_tokenizer = BertTokenizer.from_pretrained(tmp_repo)
+                self.assertDictEqual(new_tokenizer.vocab, tokenizer.vocab)
+            finally:
+                # Always (try to) delete the repo.
+                self._try_delete_repo(repo_id=tmp_repo, token=self._token)
 
     def test_push_to_hub_in_organization(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
-            vocab_file = os.path.join(tmp_dir, "vocab.txt")
-            with open(vocab_file, "w", encoding="utf-8") as vocab_writer:
-                vocab_writer.write("".join([x + "\n" for x in self.vocab_tokens]))
-            tokenizer = BertTokenizer(vocab_file)
+            try:
+                tmp_repo = f"valid_org/test-tokenizer-{Path(tmp_dir).name}"
+                vocab_file = os.path.join(tmp_dir, "vocab.txt")
+                with open(vocab_file, "w", encoding="utf-8") as vocab_writer:
+                    vocab_writer.write("".join([x + "\n" for x in self.vocab_tokens]))
+                tokenizer = BertTokenizer(vocab_file)
 
-        tokenizer.push_to_hub("valid_org/test-tokenizer-org", token=self._token)
-        new_tokenizer = BertTokenizer.from_pretrained("valid_org/test-tokenizer-org")
-        self.assertDictEqual(new_tokenizer.vocab, tokenizer.vocab)
+                tokenizer.push_to_hub(tmp_repo, token=self._token)
+                new_tokenizer = BertTokenizer.from_pretrained(tmp_repo)
+                self.assertDictEqual(new_tokenizer.vocab, tokenizer.vocab)
+            finally:
+                # Always (try to) delete the repo.
+                self._try_delete_repo(repo_id=tmp_repo, token=self._token)
 
-        try:
-            # Reset repo
-            delete_repo(token=self._token, repo_id="valid_org/test-tokenizer-org")
-        except:  # noqa E722
-            pass
-
-        # Push to hub via save_pretrained
+    def test_push_to_hub_in_organization_via_save_pretrained(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
-            tokenizer.save_pretrained(
-                tmp_dir, repo_id="valid_org/test-tokenizer-org", push_to_hub=True, token=self._token
-            )
+            try:
+                tmp_repo = f"valid_org/test-tokenizer-{Path(tmp_dir).name}"
+                vocab_file = os.path.join(tmp_dir, "vocab.txt")
+                with open(vocab_file, "w", encoding="utf-8") as vocab_writer:
+                    vocab_writer.write("".join([x + "\n" for x in self.vocab_tokens]))
+                tokenizer = BertTokenizer(vocab_file)
 
-        new_tokenizer = BertTokenizer.from_pretrained("valid_org/test-tokenizer-org")
-        self.assertDictEqual(new_tokenizer.vocab, tokenizer.vocab)
+                # Push to hub via save_pretrained
+                tokenizer.save_pretrained(tmp_dir, repo_id=tmp_repo, push_to_hub=True, token=self._token)
+
+                new_tokenizer = BertTokenizer.from_pretrained(tmp_repo)
+                self.assertDictEqual(new_tokenizer.vocab, tokenizer.vocab)
+            finally:
+                # Always (try to) delete the repo.
+                self._try_delete_repo(repo_id=tmp_repo, token=self._token)
 
     @require_tokenizers
     def test_push_to_hub_dynamic_tokenizer(self):
-        CustomTokenizer.register_for_auto_class()
         with tempfile.TemporaryDirectory() as tmp_dir:
-            vocab_file = os.path.join(tmp_dir, "vocab.txt")
-            with open(vocab_file, "w", encoding="utf-8") as vocab_writer:
-                vocab_writer.write("".join([x + "\n" for x in self.vocab_tokens]))
-            tokenizer = CustomTokenizer(vocab_file)
+            try:
+                tmp_repo = f"{USER}/test-dynamic-tokenizer-{Path(tmp_dir).name}"
+                CustomTokenizer.register_for_auto_class()
 
-        # No fast custom tokenizer
-        tokenizer.push_to_hub("test-dynamic-tokenizer", token=self._token)
+                vocab_file = os.path.join(tmp_dir, "vocab.txt")
+                with open(vocab_file, "w", encoding="utf-8") as vocab_writer:
+                    vocab_writer.write("".join([x + "\n" for x in self.vocab_tokens]))
+                tokenizer = CustomTokenizer(vocab_file)
 
-        tokenizer = AutoTokenizer.from_pretrained(f"{USER}/test-dynamic-tokenizer", trust_remote_code=True)
-        # Can't make an isinstance check because the new_model.config is from the CustomTokenizer class of a dynamic module
-        self.assertEqual(tokenizer.__class__.__name__, "CustomTokenizer")
+                # No fast custom tokenizer
+                tokenizer.push_to_hub(tmp_repo, token=self._token)
 
-        # Fast and slow custom tokenizer
-        CustomTokenizerFast.register_for_auto_class()
+                tokenizer = AutoTokenizer.from_pretrained(tmp_repo, trust_remote_code=True)
+                # Can't make an isinstance check because the new_model.config is from the CustomTokenizer class of a dynamic module
+                self.assertEqual(tokenizer.__class__.__name__, "CustomTokenizer")
+            finally:
+                # Always (try to) delete the repo.
+                self._try_delete_repo(repo_id=tmp_repo, token=self._token)
+
+    @require_tokenizers
+    def test_push_to_hub_dynamic_tokenizer_with_both_slow_and_fast_classes(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
-            vocab_file = os.path.join(tmp_dir, "vocab.txt")
-            with open(vocab_file, "w", encoding="utf-8") as vocab_writer:
-                vocab_writer.write("".join([x + "\n" for x in self.vocab_tokens]))
+            try:
+                tmp_repo = f"{USER}/test-dynamic-tokenizer-{Path(tmp_dir).name}"
+                CustomTokenizer.register_for_auto_class()
 
-            bert_tokenizer = BertTokenizerFast.from_pretrained(tmp_dir)
-            bert_tokenizer.save_pretrained(tmp_dir)
-            tokenizer = CustomTokenizerFast.from_pretrained(tmp_dir)
+                # Fast and slow custom tokenizer
+                CustomTokenizerFast.register_for_auto_class()
 
-        tokenizer.push_to_hub("test-dynamic-tokenizer", token=self._token)
+                vocab_file = os.path.join(tmp_dir, "vocab.txt")
+                with open(vocab_file, "w", encoding="utf-8") as vocab_writer:
+                    vocab_writer.write("".join([x + "\n" for x in self.vocab_tokens]))
 
-        tokenizer = AutoTokenizer.from_pretrained(f"{USER}/test-dynamic-tokenizer", trust_remote_code=True)
-        # Can't make an isinstance check because the new_model.config is from the FakeConfig class of a dynamic module
-        self.assertEqual(tokenizer.__class__.__name__, "CustomTokenizerFast")
-        tokenizer = AutoTokenizer.from_pretrained(
-            f"{USER}/test-dynamic-tokenizer", use_fast=False, trust_remote_code=True
-        )
-        # Can't make an isinstance check because the new_model.config is from the FakeConfig class of a dynamic module
-        self.assertEqual(tokenizer.__class__.__name__, "CustomTokenizer")
+                bert_tokenizer = BertTokenizerFast.from_pretrained(tmp_dir)
+                bert_tokenizer.save_pretrained(tmp_dir)
+                tokenizer = CustomTokenizerFast.from_pretrained(tmp_dir)
+
+                tokenizer.push_to_hub(tmp_repo, token=self._token)
+
+                tokenizer = AutoTokenizer.from_pretrained(tmp_repo, trust_remote_code=True)
+                # Can't make an isinstance check because the new_model.config is from the FakeConfig class of a dynamic module
+                self.assertEqual(tokenizer.__class__.__name__, "CustomTokenizerFast")
+                tokenizer = AutoTokenizer.from_pretrained(tmp_repo, use_fast=False, trust_remote_code=True)
+                # Can't make an isinstance check because the new_model.config is from the FakeConfig class of a dynamic module
+                self.assertEqual(tokenizer.__class__.__name__, "CustomTokenizer")
+            finally:
+                # Always (try to) delete the repo.
+                self._try_delete_repo(repo_id=tmp_repo, token=self._token)
 
 
 class TrieTest(unittest.TestCase):
@@ -230,7 +253,6 @@ class TrieTest(unittest.TestCase):
         trie.add("Hello 友達")
         self.assertEqual(trie.data, {"H": {"e": {"l": {"l": {"o": {" ": {"友": {"達": {"": 1}}}}}}}}})
         trie.add("Hello")
-        trie.data
         self.assertEqual(trie.data, {"H": {"e": {"l": {"l": {"o": {"": 1, " ": {"友": {"達": {"": 1}}}}}}}}})
 
     def test_trie_split(self):
