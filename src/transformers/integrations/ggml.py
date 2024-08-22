@@ -181,7 +181,6 @@ GGUF_TOKENIZER_MAPPING = {
         "ggml.unknown_token_id": "unk_token_id",
         "ggml.padding_token_id": "pad_token_id",
         "ggml.add_space_prefix": "add_prefix_space",
-        "chat_template": "chat_template",
     },
     "tokenizer_config": {
         "chat_template": "chat_template",
@@ -562,7 +561,7 @@ class GGUFLlamaConverter(LlamaConverter):
     def __init__(self, tokenizer_dict):
         self.proto = GGUFTokenizerSkeleton(tokenizer_dict)
         self.original_tokenizer = self.proto
-        self.additional_kwargs = {"chat_template": tokenizer_dict["chat_template"]}
+        self.additional_kwargs = {}
         self.is_llama_3_tokenizer = getattr(self.proto, "tokenizer_type", "llama") != "llama"
 
     def vocab(self, proto):
@@ -674,7 +673,7 @@ class GGUFLlamaConverter(LlamaConverter):
 class GGUFQwen2Converter(Qwen2Converter):
     def __init__(self, tokenizer_dict):
         self.original_tokenizer = GGUFTokenizerSkeleton(tokenizer_dict)
-        self.additional_kwargs = {"chat_template": tokenizer_dict["chat_template"]}
+        self.additional_kwargs = {}
 
     def converted(self) -> Tokenizer:
         vocab = {word: i for i, word in enumerate(self.original_tokenizer.tokens)}
