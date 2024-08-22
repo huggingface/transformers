@@ -148,7 +148,7 @@ def rotate_half(x):
 
 
 def apply_multimodal_rotary_pos_emb(q, k, cos, sin, position_ids, mrope_section, unsqueeze_dim=1):
-    """Applies Rotary Position Embedding with Multimodal Sections to the query and key tensors.
+    """Applies Rotary Position Embedding with Multimodal Sections to the query and key tensors (https://qwenlm.github.io/blog/qwen2-vl/).
 
     Explanation:
         Multimodal 3D rotary position embedding is an extension to 1D rotary position embedding. The input embedding
@@ -1078,6 +1078,7 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
                 past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
             )
         if position_ids is None:
+            # the hard coded `3` is for temporal, height and width.
             position_ids = cache_position.view(1, 1, -1).expand(3, inputs_embeds.shape[0], -1)
 
         causal_mask = self._update_causal_mask(
