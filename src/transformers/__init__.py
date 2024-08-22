@@ -735,6 +735,7 @@ _import_structure = {
     "models.swinv2": ["Swinv2Config"],
     "models.switch_transformers": ["SwitchTransformersConfig"],
     "models.t5": ["T5Config"],
+    "models.hhemv2": ["HHEMv2Config"],
     "models.table_transformer": ["TableTransformerConfig"],
     "models.tapas": [
         "TapasConfig",
@@ -3325,6 +3326,14 @@ else:
             "load_tf_weights_in_t5",
         ]
     )
+    _import_structure["models.hhemv2"].extend(
+        [
+            "HHEMv2ForSequenceClassification",
+            "HHEMv2EncoderModel",
+            "HHEMv2PreTrainedModel",
+            "load_tf_weights_in_hhemv2",
+        ]
+    )
     _import_structure["models.table_transformer"].extend(
         [
             "TableTransformerForObjectDetection",
@@ -5491,6 +5500,7 @@ if TYPE_CHECKING:
         SwitchTransformersConfig,
     )
     from .models.t5 import T5Config
+    from .models.hhemv2 import HHEMv2Config
     from .models.table_transformer import (
         TableTransformerConfig,
     )
@@ -7684,6 +7694,12 @@ if TYPE_CHECKING:
             T5Model,
             T5PreTrainedModel,
             load_tf_weights_in_t5,
+        )
+        from .models.hhemv2 import (
+            HHEMv2ForSequenceClassification,
+            HHEMv2EncoderModel,
+            HHEMv2PreTrainedModel,
+            load_tf_weights_in_hhemv2,
         )
         from .models.table_transformer import (
             TableTransformerForObjectDetection,
