@@ -140,7 +140,7 @@ class IJepaEmbeddings(nn.Module):
         return embeddings
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTPatchEmbeddings with ViT->IJEPA
+# Copied from transformers.models.vit.modeling_vit.ViTPatchEmbeddings with ViT->IJepa
 class IJepaPatchEmbeddings(nn.Module):
     """
     This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
@@ -161,18 +161,9 @@ class IJepaPatchEmbeddings(nn.Module):
         self.num_channels = num_channels
         self.num_patches = num_patches
 
-        self.projection = nn.Conv2d(
-            num_channels,
-            hidden_size,
-            kernel_size=patch_size,
-            stride=patch_size,
-        )
+        self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
 
-    def forward(
-        self,
-        pixel_values: torch.Tensor,
-        interpolate_pos_encoding: bool = False,
-    ) -> torch.Tensor:
+    def forward(self, pixel_values: torch.Tensor, interpolate_pos_encoding: bool = False) -> torch.Tensor:
         batch_size, num_channels, height, width = pixel_values.shape
         if num_channels != self.num_channels:
             raise ValueError(
@@ -189,7 +180,7 @@ class IJepaPatchEmbeddings(nn.Module):
         return embeddings
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTSelfAttention with ViT->IJEPA
+# Copied from transformers.models.vit.modeling_vit.ViTSelfAttention with ViT->IJepa
 class IJepaSelfAttention(nn.Module):
     def __init__(self, config: IJepaConfig) -> None:
         super().__init__()
@@ -210,18 +201,12 @@ class IJepaSelfAttention(nn.Module):
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
     def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
-        new_x_shape = x.size()[:-1] + (
-            self.num_attention_heads,
-            self.attention_head_size,
-        )
+        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
         x = x.view(new_x_shape)
         return x.permute(0, 2, 1, 3)
 
     def forward(
-        self,
-        hidden_states,
-        head_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
+        self, hidden_states, head_mask: Optional[torch.Tensor] = None, output_attentions: bool = False
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
         mixed_query_layer = self.query(hidden_states)
 
@@ -256,17 +241,14 @@ class IJepaSelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTSdpaSelfAttention with ViT->IJEPA
+# Copied from transformers.models.vit.modeling_vit.ViTSdpaSelfAttention with ViT->IJepa
 class IJepaSdpaSelfAttention(IJepaSelfAttention):
     def __init__(self, config: IJepaConfig) -> None:
         super().__init__(config)
         self.attention_probs_dropout_prob = config.attention_probs_dropout_prob
 
     def forward(
-        self,
-        hidden_states,
-        head_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
+        self, hidden_states, head_mask: Optional[torch.Tensor] = None, output_attentions: bool = False
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
         mixed_query_layer = self.query(hidden_states)
 
@@ -291,7 +273,7 @@ class IJepaSdpaSelfAttention(IJepaSelfAttention):
         return context_layer, None
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTSelfOutput with ViT->IJEPA
+# Copied from transformers.models.vit.modeling_vit.ViTSelfOutput with ViT->IJepa
 class IJepaSelfOutput(nn.Module):
     """
     The residual connection is defined in IJepaLayer instead of here (as is the case with other models), due to the
@@ -310,7 +292,7 @@ class IJepaSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->IJEPA
+# Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->IJepa
 class IJepaAttention(nn.Module):
     def __init__(self, config: IJepaConfig) -> None:
         super().__init__()
@@ -322,10 +304,7 @@ class IJepaAttention(nn.Module):
         if len(heads) == 0:
             return
         heads, index = find_pruneable_heads_and_indices(
-            heads,
-            self.attention.num_attention_heads,
-            self.attention.attention_head_size,
-            self.pruned_heads,
+            heads, self.attention.num_attention_heads, self.attention.attention_head_size, self.pruned_heads
         )
 
         # Prune linear layers
@@ -353,14 +332,14 @@ class IJepaAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTSdpaAttention with ViT->IJEPA
+# Copied from transformers.models.vit.modeling_vit.ViTSdpaAttention with ViT->IJepa
 class IJepaSdpaAttention(IJepaAttention):
     def __init__(self, config: IJepaConfig) -> None:
         super().__init__(config)
         self.attention = IJepaSdpaSelfAttention(config)
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTIntermediate with ViT->IJEPA
+# Copied from transformers.models.vit.modeling_vit.ViTIntermediate with ViT->IJepa
 class IJepaIntermediate(nn.Module):
     def __init__(self, config: IJepaConfig) -> None:
         super().__init__()
@@ -377,7 +356,7 @@ class IJepaIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTOutput with ViT->IJEPA
+# Copied from transformers.models.vit.modeling_vit.ViTOutput with ViT->IJepa
 class IJepaOutput(nn.Module):
     def __init__(self, config: IJepaConfig) -> None:
         super().__init__()
@@ -399,7 +378,7 @@ IJEPA_ATTENTION_CLASSES = {
 }
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTLayer with VIT->IJEPA,ViT->IJEPA
+# Copied from transformers.models.vit.modeling_vit.ViTLayer with VIT->IJEPA,ViT->IJepa
 class IJepaLayer(nn.Module):
     """This corresponds to the Block class in the timm implementation."""
 
@@ -420,7 +399,7 @@ class IJepaLayer(nn.Module):
         output_attentions: bool = False,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
         self_attention_outputs = self.attention(
-            self.layernorm_before(hidden_states),  # in IJEPA, layernorm is applied before self-attention
+            self.layernorm_before(hidden_states),  # in IJepa, layernorm is applied before self-attention
             head_mask,
             output_attentions=output_attentions,
         )
@@ -430,7 +409,7 @@ class IJepaLayer(nn.Module):
         # first residual connection
         hidden_states = attention_output + hidden_states
 
-        # in IJEPA, layernorm is also applied after self-attention
+        # in IJepa, layernorm is also applied after self-attention
         layer_output = self.layernorm_after(hidden_states)
         layer_output = self.intermediate(layer_output)
 
@@ -442,7 +421,7 @@ class IJepaLayer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTEncoder with ViT->IJEPA
+# Copied from transformers.models.vit.modeling_vit.ViTEncoder with ViT->IJepa
 class IJepaEncoder(nn.Module):
     def __init__(self, config: IJepaConfig) -> None:
         super().__init__()
@@ -486,15 +465,7 @@ class IJepaEncoder(nn.Module):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(
-                v
-                for v in [
-                    hidden_states,
-                    all_hidden_states,
-                    all_self_attentions,
-                ]
-                if v is not None
-            )
+            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
         return BaseModelOutput(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
@@ -522,9 +493,7 @@ class IJepaPreTrainedModel(PreTrainedModel):
             # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
             # `trunc_normal_cpu` not implemented in `half` issues
             module.weight.data = nn.init.trunc_normal_(
-                module.weight.data.to(torch.float32),
-                mean=0.0,
-                std=self.config.initializer_range,
+                module.weight.data.to(torch.float32), mean=0.0, std=self.config.initializer_range
             ).to(module.weight.dtype)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -585,14 +554,9 @@ IJEPA_INPUTS_DOCSTRING = r"""
     "The bare I-JEPA Model transformer outputting raw hidden-states without any specific head on top.",
     IJEPA_START_DOCSTRING,
 )
-# Copied from transformers.models.vit.modeling_vit.ViTModel with VIT->IJEPA,ViT->IJEPA
+# Copied from transformers.models.vit.modeling_vit.ViTModel with VIT->IJEPA,ViT->IJepa
 class IJepaModel(IJepaPreTrainedModel):
-    def __init__(
-        self,
-        config: IJepaConfig,
-        add_pooling_layer: bool = True,
-        use_mask_token: bool = False,
-    ):
+    def __init__(self, config: IJepaConfig, add_pooling_layer: bool = True, use_mask_token: bool = False):
         super().__init__(config)
         self.config = config
 
@@ -660,9 +624,7 @@ class IJepaModel(IJepaPreTrainedModel):
             pixel_values = pixel_values.to(expected_dtype)
 
         embedding_output = self.embeddings(
-            pixel_values,
-            bool_masked_pos=bool_masked_pos,
-            interpolate_pos_encoding=interpolate_pos_encoding,
+            pixel_values, bool_masked_pos=bool_masked_pos, interpolate_pos_encoding=interpolate_pos_encoding
         )
 
         encoder_outputs = self.encoder(
@@ -688,7 +650,7 @@ class IJepaModel(IJepaPreTrainedModel):
         )
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTPooler with ViT->IJEPA
+# Copied from transformers.models.vit.modeling_vit.ViTPooler with ViT->IJepa
 class IJepaPooler(nn.Module):
     def __init__(self, config: IJepaConfig):
         super().__init__()
@@ -719,7 +681,7 @@ class IJepaPooler(nn.Module):
     """,
     IJEPA_START_DOCSTRING,
 )
-# Copied from transformers.models.vit.modeling_vit.ViTForImageClassification with VIT->IJEPA,ViT->IJEPA,vit->ijepa
+# Copied from transformers.models.vit.modeling_vit.ViTForImageClassification with VIT->IJEPA,ViT->IJepa,vit->ijepa
 class IJepaForImageClassification(IJepaPreTrainedModel):
     def __init__(self, config: IJepaConfig) -> None:
         super().__init__(config)
