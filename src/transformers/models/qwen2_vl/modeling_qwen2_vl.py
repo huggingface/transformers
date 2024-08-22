@@ -147,7 +147,7 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-def apply_multimodal_rotary_pos_emb(q, k, cos, sin, position_ids, mrope_section=None, unsqueeze_dim=1):
+def apply_multimodal_rotary_pos_emb(q, k, cos, sin, position_ids, mrope_section, unsqueeze_dim=1):
     """Applies Rotary Position Embedding with Multimodal Sections to the query and key tensors.
 
     Args:
@@ -170,19 +170,16 @@ def apply_multimodal_rotary_pos_emb(q, k, cos, sin, position_ids, mrope_section=
     Returns:
         `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
     """
-    if mrope_section:
-        cos = cos[position_ids]
-        sin = sin[position_ids]
-        mrope_section = mrope_section * 2
-        cos = torch.cat([m[i % 3] for i, m in enumerate(cos.split(mrope_section, dim=-1))], dim=-1).unsqueeze(
-            unsqueeze_dim
-        )
-        sin = torch.cat([m[i % 3] for i, m in enumerate(sin.split(mrope_section, dim=-1))], dim=-1).unsqueeze(
-            unsqueeze_dim
-        )
-    else:
-        cos = cos[position_ids].unsqueeze(unsqueeze_dim)
-        sin = sin[position_ids].unsqueeze(unsqueeze_dim)
+    cos = cos[position_ids]
+    sin = sin[position_ids]
+    mrope_section = mrope_section * 2
+    cos = torch.cat([m[i % 3] for i, m in enumerate(cos.split(mrope_section, dim=-1))], dim=-1).unsqueeze(
+        unsqueeze_dim
+    )
+    sin = torch.cat([m[i % 3] for i, m in enumerate(sin.split(mrope_section, dim=-1))], dim=-1).unsqueeze(
+        unsqueeze_dim
+    )
+
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
@@ -528,14 +525,9 @@ class Qwen2VLAttention(nn.Module):
             kv_seq_len += cache_position[0] + 1
 
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
-        if self.rope_scaling and "mrope_section" in self.rope_scaling:
-            query_states, key_states = apply_multimodal_rotary_pos_emb(
-                query_states, key_states, cos, sin, position_ids, self.rope_scaling["mrope_section"]
-            )
-        else:
-            query_states, key_states = apply_multimodal_rotary_pos_emb(
-                query_states, key_states, cos, sin, position_ids
-            )
+        query_states, key_states = apply_multimodal_rotary_pos_emb(
+            query_states, key_states, cos, sin, position_ids, self.rope_scaling["mrope_section"]
+        )
 
         if past_key_value is not None:
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}  # Specific to RoPE models
@@ -618,14 +610,9 @@ class Qwen2VLFlashAttention2(Qwen2VLAttention):
         rotary_seq_len = cache_position[-1]
         cos, sin = self.rotary_emb(value_states, seq_len=rotary_seq_len)
 
-        if self.rope_scaling and "mrope_section" in self.rope_scaling:
-            query_states, key_states = apply_multimodal_rotary_pos_emb(
-                query_states, key_states, cos, sin, position_ids, self.rope_scaling["mrope_section"]
-            )
-        else:
-            query_states, key_states = apply_multimodal_rotary_pos_emb(
-                query_states, key_states, cos, sin, position_ids
-            )
+        query_states, key_states = apply_multimodal_rotary_pos_emb(
+            query_states, key_states, cos, sin, position_ids, self.rope_scaling["mrope_section"]
+        )
 
         if past_key_value is not None:
             # Activate slicing cache only if the config has a value `sliding_windows` attribute
@@ -766,14 +753,9 @@ class Qwen2VLSdpaAttention(Qwen2VLAttention):
         if past_key_value is not None:
             kv_seq_len += cache_position[0] + 1
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
-        if self.rope_scaling and "mrope_section" in self.rope_scaling:
-            query_states, key_states = apply_multimodal_rotary_pos_emb(
-                query_states, key_states, cos, sin, position_ids, self.rope_scaling["mrope_section"]
-            )
-        else:
-            query_states, key_states = apply_multimodal_rotary_pos_emb(
-                query_states, key_states, cos, sin, position_ids
-            )
+        query_states, key_states = apply_multimodal_rotary_pos_emb(
+            query_states, key_states, cos, sin, position_ids, self.rope_scaling["mrope_section"]
+        )
 
         if past_key_value is not None:
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}  # Specific to RoPE models
