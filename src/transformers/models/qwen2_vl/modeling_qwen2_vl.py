@@ -317,21 +317,15 @@ class VisionSdpaAttention(nn.Module):
             q = apply_rotary_pos_emb_vision(q.unsqueeze(0), rotary_pos_emb).squeeze(0)
             k = apply_rotary_pos_emb_vision(k.unsqueeze(0), rotary_pos_emb).squeeze(0)
 
+        attention_mask = torch.zeros([1, seq_length, seq_length], device=q.device, dtype=torch.bool)
+        for i in range(1, len(cu_seqlens)):
+            attention_mask[..., cu_seqlens[i - 1] : cu_seqlens[i], cu_seqlens[i - 1] : cu_seqlens[i]] = True
         q = q.transpose(0, 1)
         k = k.transpose(0, 1)
         v = v.transpose(0, 1)
-        attn_outputs = []
-        for i in range(1, len(cu_seqlens)):
-            attn_outputs.append(
-                F.scaled_dot_product_attention(
-                    q[:, cu_seqlens[i - 1] : cu_seqlens[i], :],
-                    k[:, cu_seqlens[i - 1] : cu_seqlens[i], :],
-                    v[:, cu_seqlens[i - 1] : cu_seqlens[i], :],
-                    dropout_p=0.0,
-                    is_causal=False,
-                )
-            )
-        attn_output = torch.cat(attn_outputs, dim=1).transpose(0, 1).reshape(seq_length, -1)
+        attn_output = F.scaled_dot_product_attention(q, k, v, attention_mask, dropout_p=0.0)
+        attn_output = attn_output.transpose(0, 1)
+        attn_output = attn_output.reshape(seq_length, -1)
         attn_output = self.proj(attn_output)
         return attn_output
 
