@@ -9127,6 +9127,27 @@ class ViTPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class IJepaForImageClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class IJepaModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class IJepaPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class ViTMAEForPreTraining(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -9921,7 +9942,9 @@ def get_cosine_schedule_with_warmup(*args, **kwargs):
 
 
 def get_cosine_with_hard_restarts_schedule_with_warmup(*args, **kwargs):
-    requires_backends(get_cosine_with_hard_restarts_schedule_with_warmup, ["torch"])
+    requires_backends(
+        get_cosine_with_hard_restarts_schedule_with_warmup, ["torch"]
+    )
 
 
 def get_inverse_sqrt_schedule(*args, **kwargs):

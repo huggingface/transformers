@@ -476,6 +476,7 @@ _import_structure = {
     "models.ibert": ["IBertConfig"],
     "models.idefics": ["IdeficsConfig"],
     "models.idefics2": ["Idefics2Config"],
+    "models.ijepa": ["IJepaConfig"],
     "models.imagegpt": ["ImageGPTConfig"],
     "models.informer": ["InformerConfig"],
     "models.instructblip": [
@@ -1217,6 +1218,7 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     _import_structure["image_processing_utils_fast"] = ["BaseImageProcessorFast"]
+    _import_structure["models.ijepa"].append("IJEPAImageProcessorFast")
     _import_structure["models.vit"].append("ViTImageProcessorFast")
 
 # PyTorch-backed objects
@@ -2375,6 +2377,13 @@ else:
             "Idefics2Model",
             "Idefics2PreTrainedModel",
             "Idefics2Processor",
+        ]
+    )
+    _import_structure["models.ijepa"].extend(
+        [
+            "IJepaForImageClassification",
+            "IJepaModel",
+            "IJepaPreTrainedModel",
         ]
     )
     _import_structure["models.imagegpt"].extend(
@@ -4079,6 +4088,13 @@ else:
         ]
     )
 
+    _import_structure["models.ijepa"].extend(
+        [
+            "TFIJepaForImageClassification",
+            "TFIJepaModel",
+            "TFIJepaPreTrainedModel",
+        ]
+    )
     _import_structure["models.layoutlm"].extend(
         [
             "TFLayoutLMForMaskedLM",
@@ -4739,6 +4755,13 @@ else:
     _import_structure["models.vision_encoder_decoder"].append("FlaxVisionEncoderDecoderModel")
     _import_structure["models.vision_text_dual_encoder"].extend(["FlaxVisionTextDualEncoderModel"])
     _import_structure["models.vit"].extend(["FlaxViTForImageClassification", "FlaxViTModel", "FlaxViTPreTrainedModel"])
+    _import_structure["models.ijepa"].extend(
+        [
+            "FlaxIJepaForImageClassification",
+            "FlaxIJepaModel",
+            "FlaxIJepaPreTrainedModel",
+        ]
+    )
     _import_structure["models.wav2vec2"].extend(
         [
             "FlaxWav2Vec2ForCTC",
@@ -5219,6 +5242,7 @@ if TYPE_CHECKING:
         IdeficsConfig,
     )
     from .models.idefics2 import Idefics2Config
+    from .models.ijepa import IJepaConfig
     from .models.imagegpt import ImageGPTConfig
     from .models.informer import InformerConfig
     from .models.instructblip import (
@@ -5941,6 +5965,7 @@ if TYPE_CHECKING:
         from .models.grounding_dino import GroundingDinoImageProcessor
         from .models.idefics import IdeficsImageProcessor
         from .models.idefics2 import Idefics2ImageProcessor
+        from .models.ijepa import IJepaImageProcessor
         from .models.imagegpt import ImageGPTFeatureExtractor, ImageGPTImageProcessor
         from .models.instructblipvideo import InstructBlipVideoImageProcessor
         from .models.layoutlmv2 import (
@@ -6003,6 +6028,7 @@ if TYPE_CHECKING:
         from .utils.dummy_torchvision_objects import *
     else:
         from .image_processing_utils_fast import BaseImageProcessorFast
+        from .models.ijepa import IJepaImageProcessorFast
         from .models.vit import ViTImageProcessorFast
 
     # Modeling
@@ -6961,6 +6987,11 @@ if TYPE_CHECKING:
             Idefics2Model,
             Idefics2PreTrainedModel,
             Idefics2Processor,
+        )
+        from .models.ijepa import (
+            IJepaForImageClassification,
+            IJepaModel,
+            IJepaPreTrainedModel,
         )
         from .models.imagegpt import (
             ImageGPTForCausalImageModeling,
@@ -8307,6 +8338,11 @@ if TYPE_CHECKING:
             TFIdeficsModel,
             TFIdeficsPreTrainedModel,
         )
+        from .models.ijepa import (
+            TFIJepaForImageClassification,
+            TFIJepaModel,
+            TFIJepaPreTrainedModel,
+        )
         from .models.layoutlm import (
             TFLayoutLMForMaskedLM,
             TFLayoutLMForQuestionAnswering,
@@ -8773,6 +8809,11 @@ if TYPE_CHECKING:
             FlaxGPTJForCausalLM,
             FlaxGPTJModel,
             FlaxGPTJPreTrainedModel,
+        )
+        from .models.ijepa import (
+            FlaxIJepaForImageClassification,
+            FlaxIJepaModel,
+            FlaxIJepaPreTrainedModel,
         )
         from .models.llama import (
             FlaxLlamaForCausalLM,

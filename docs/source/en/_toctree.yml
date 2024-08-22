@@ -621,6 +621,8 @@
         title: GLPN
       - local: model_doc/hiera
         title: Hiera
+      - local: model_doc/ijepa
+        title: I-JEPA
       - local: model_doc/imagegpt
         title: ImageGPT
       - local: model_doc/levit
