@@ -80,7 +80,8 @@ class ImageDistilTrainer(Trainer):
         with torch.no_grad():
           teacher_output = self.teacher(**inputs)
 
-        # Compute soft targets for teacher and student
+        #  교사와 학생의 소프트 타겟(soft targets) 계산
+
         soft_teacher = F.softmax(teacher_output.logits / self.temperature, dim=-1)
         soft_student = F.log_softmax(student_output.logits / self.temperature, dim=-1)
 
