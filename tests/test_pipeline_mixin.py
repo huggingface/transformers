@@ -374,15 +374,8 @@ class PipelineTesterMixin:
 
         tokenizer = None
         if tokenizer_name is not None:
-            try:
-                tokenizer_class = getattr(transformers_module, tokenizer_name)
-                tokenizer = tokenizer_class.from_pretrained(repo_id, revision=commit)
-            except Exception:
-                logger.warning(
-                    f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')}_{torch_dtype} is skipped: "
-                    f"Could not load the tokenizer from `{repo_id}` with `{tokenizer_name}`."
-                )
-                self.skipTest(f"Could not load the tokenizer from {repo_id} with {tokenizer_name}.")
+            tokenizer_class = getattr(transformers_module, tokenizer_name)
+            tokenizer = tokenizer_class.from_pretrained(repo_id, revision=commit)
 
         # -------------------- Load processors --------------------
 
