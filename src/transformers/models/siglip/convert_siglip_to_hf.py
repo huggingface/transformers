@@ -49,6 +49,8 @@ model_name_to_checkpoint = {
     "siglip-base-patch16-256-i18n": "/Users/nielsrogge/Documents/SigLIP/webli_i18n_b16_256_66117334.npz",
     # so400m checkpoints
     "siglip-so400m-patch14-384": "/Users/nielsrogge/Documents/SigLIP/webli_en_so400m_384_58765454.npz",
+    "siglip-so400m-patch14-224": "/Users/mervenoyan/Desktop/siglips/webli_en_so400m_224_57633886.npz",
+#    "siglip-so400m-patch16-256": "/Users/mervenoyan/Desktop/siglips/webli_i18n_so400m_16_256_78061115.npz",
 }
 
 model_name_to_image_size = {
@@ -60,6 +62,8 @@ model_name_to_image_size = {
     "siglip-large-patch16-384": 384,
     "siglip-base-patch16-256-i18n": 256,
     "siglip-so400m-patch14-384": 384,
+    "siglip-so400m-patch14-224": 224,
+    "siglip-so400m-patch16-256": 256,
 }
 
 
@@ -366,9 +370,14 @@ def convert_siglip_checkpoint(model_name, pytorch_dump_folder_path, verify_logit
             )
         elif model_name == "siglip-so400m-patch14-384":
             expected_slice = torch.tensor([[-1.2441, -0.6649], [-0.7060, 0.7374]])
+
         elif model_name == "siglip-base-patch16-256-i18n":
             expected_slice = torch.tensor(
                 [[-0.9064, 0.1073], [-0.0299, 0.5304]],
+            )
+        elif model_name == "siglip-so400m-patch14-224-i18n":
+            expected_slice = torch.tensor(
+                [[-1.0836973,  1.1742821], [-0.7195749,  1.4370537]],
             )
 
         assert torch.allclose(outputs.logits_per_image[:3, :3], expected_slice, atol=1e-4)
