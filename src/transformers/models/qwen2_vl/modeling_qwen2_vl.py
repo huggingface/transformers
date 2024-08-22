@@ -1631,18 +1631,14 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel):
                     input_ids, image_grid_thw, video_grid_thw, attention_mask
                 )
             else:
-                B, L = input_ids.shape
+                batch_size, seq_length = input_ids.shape
                 delta = (
                     cache_position[0] + rope_deltas if cache_position is not None and rope_deltas is not None else 0
                 )
-                position_ids = (
-                    torch.arange(L, device=input_ids.device)
-                    .view(1, -1)
-                    .expand(B, -1)
-                    .add(delta)
-                    .unsqueeze(0)
-                    .expand(3, -1, -1)
-                )
+                position_ids = torch.arange(seq_length, device=input_ids.device)
+                position_ids = position_ids.view(1, -1).expand(batch_size, -1)
+                position_ids = position_ids.add(delta)
+                position_ids = position_ids.unsqueeze(0).expand(3, -1, -1)
 
         if cache_position[0] != 0:
             pixel_values = None
