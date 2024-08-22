@@ -14,7 +14,6 @@
 # limitations under the License.
 """Tokenization class for VITS."""
 
-
 import json
 import os
 import re

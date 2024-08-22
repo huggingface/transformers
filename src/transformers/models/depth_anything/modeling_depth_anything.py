@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Depth Anything model."""
-
+"""PyTorch Depth Anything model."""
 
 from typing import List, Optional, Tuple, Union
 
@@ -29,7 +28,7 @@ from ...file_utils import (
 from ...modeling_outputs import DepthEstimatorOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
-from ..auto import AutoBackbone
+from ...utils.backbone_utils import load_backbone
 from .configuration_depth_anything import DepthAnythingConfig
 
 
@@ -37,9 +36,6 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "DepthAnythingConfig"
-
-
-from ..deprecated._archive_maps import DEPTH_ANYTHING_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 DEPTH_ANYTHING_START_DOCSTRING = r"""
@@ -58,7 +54,6 @@ DEPTH_ANYTHING_INPUTS_DOCSTRING = r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`DPTImageProcessor.__call__`]
             for details.
-
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -302,7 +297,7 @@ class DepthAnythingNeck(nn.Module):
                 List of hidden states from the backbone.
         """
         if not isinstance(hidden_states, (tuple, list)):
-            raise ValueError("hidden_states should be a tuple or list of tensors")
+            raise TypeError("hidden_states should be a tuple or list of tensors")
 
         if len(hidden_states) != len(self.config.neck_hidden_sizes):
             raise ValueError("The number of hidden states should be equal to the number of neck hidden sizes.")
@@ -322,7 +317,8 @@ class DepthAnythingDepthEstimationHead(nn.Module):
     """
     Output head consisting of 3 convolutional layers. It progressively halves the feature dimension and upsamples
     the predictions to the input resolution after the first convolutional layer (details can be found in the DPT paper's
-    supplementary material).
+    supplementary material). The final activation function is either ReLU or Sigmoid, depending on the depth estimation
+    type (relative or metric). For metric depth estimation, the output is scaled by the maximum depth used during pretraining.
     """
 
     def __init__(self, config):
@@ -336,7 +332,13 @@ class DepthAnythingDepthEstimationHead(nn.Module):
         self.conv2 = nn.Conv2d(features // 2, config.head_hidden_size, kernel_size=3, stride=1, padding=1)
         self.activation1 = nn.ReLU()
         self.conv3 = nn.Conv2d(config.head_hidden_size, 1, kernel_size=1, stride=1, padding=0)
-        self.activation2 = nn.ReLU()
+        if config.depth_estimation_type == "relative":
+            self.activation2 = nn.ReLU()
+        elif config.depth_estimation_type == "metric":
+            self.activation2 = nn.Sigmoid()
+        else:
+            raise ValueError(f"Unknown depth estimation type: {config.depth_estimation_type}")
+        self.max_depth = config.max_depth
 
     def forward(self, hidden_states: List[torch.Tensor], patch_height, patch_width) -> torch.Tensor:
         hidden_states = hidden_states[self.head_in_index]
@@ -351,7 +353,7 @@ class DepthAnythingDepthEstimationHead(nn.Module):
         predicted_depth = self.conv2(predicted_depth)
         predicted_depth = self.activation1(predicted_depth)
         predicted_depth = self.conv3(predicted_depth)
-        predicted_depth = self.activation2(predicted_depth)
+        predicted_depth = self.activation2(predicted_depth) * self.max_depth
         predicted_depth = predicted_depth.squeeze(dim=1)  # shape (batch_size, height, width)
 
         return predicted_depth
@@ -364,10 +366,12 @@ class DepthAnythingDepthEstimationHead(nn.Module):
     DEPTH_ANYTHING_START_DOCSTRING,
 )
 class DepthAnythingForDepthEstimation(DepthAnythingPreTrainedModel):
+    _no_split_modules = ["DPTViTEmbeddings"]
+
     def __init__(self, config):
         super().__init__(config)
 
-        self.backbone = AutoBackbone.from_config(config.backbone_config)
+        self.backbone = load_backbone(config)
         self.neck = DepthAnythingNeck(config)
         self.head = DepthAnythingDepthEstimationHead(config)
 
@@ -424,6 +428,10 @@ class DepthAnythingForDepthEstimation(DepthAnythingPreTrainedModel):
         >>> formatted = (output * 255 / np.max(output)).astype("uint8")
         >>> depth = Image.fromarray(formatted)
         ```"""
+        loss = None
+        if labels is not None:
+            raise NotImplementedError("Training is not implemented yet")
+
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -443,10 +451,6 @@ class DepthAnythingForDepthEstimation(DepthAnythingPreTrainedModel):
         hidden_states = self.neck(hidden_states, patch_height, patch_width)
 
         predicted_depth = self.head(hidden_states, patch_height, patch_width)
-
-        loss = None
-        if labels is not None:
-            raise NotImplementedError("Training is not implemented yet")
 
         if not return_dict:
             if output_hidden_states:

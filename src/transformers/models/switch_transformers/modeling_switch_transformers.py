@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch SwitchTransformers model."""
-
+"""PyTorch SwitchTransformers model."""
 
 import copy
 import math
@@ -54,8 +53,6 @@ _CHECKPOINT_FOR_DOC = "google/switch-base-8"
 # This dict contains ids and associated url
 # for the pretrained weights provided with the models
 ####################################################
-
-from ..deprecated._archive_maps import SWITCH_TRANSFORMERS_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 def router_z_loss_func(router_logits: torch.Tensor) -> float:
@@ -297,9 +294,17 @@ class SwitchTransformersSparseMLP(nn.Module):
         # can be unchanged from one layer to another. That is why the hidden states are cloned before updating only the seleced ones.
 
         next_states = hidden_states.clone()
-        for idx, expert in enumerate(self.experts.values()):
-            token_indices = router_mask[:, :, idx].bool()
-            next_states[token_indices] = expert(hidden_states[token_indices]).to(next_states.dtype)
+
+        router_mask = router_mask.bool()
+        batch_size, seq_len, num_experts = router_mask.shape
+        idx_mask = router_mask.transpose(1, 2).reshape(batch_size * seq_len, num_experts).sum(dim=0)
+        idx_mask = torch.nonzero(idx_mask, as_tuple=True)[
+            0
+        ].tolist()  # length: number of "activated" expert / value: index
+        for idx in idx_mask:
+            next_states[router_mask[:, :, idx]] = getattr(self.experts, "expert_{}".format(idx))(
+                hidden_states[router_mask[:, :, idx]]
+            )
 
         hidden_states = router_probs * next_states
         return hidden_states, (router_logits, expert_index)
@@ -1721,6 +1726,8 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
 
             input_ids = input_ids[:, remove_prefix_length:]
 
+        output_router_logits = kwargs.get("output_router_logits", True)
+
         return {
             "decoder_input_ids": input_ids,
             "past_key_values": past_key_values,
@@ -1730,6 +1737,7 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
             "decoder_head_mask": decoder_head_mask,
             "cross_attn_head_mask": cross_attn_head_mask,
             "use_cache": use_cache,
+            "output_router_logits": output_router_logits,
         }
 
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):

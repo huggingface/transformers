@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization classes for GPTNeoXJapanese."""
+
 import collections
 import json
 import os
@@ -160,25 +161,6 @@ class GPTNeoXJapaneseTokenizer(PreTrainedTokenizer):
         out_string = "".join(tokens).strip()
         return out_string
 
-    @property
-    def default_chat_template(self):
-        """
-        A simple chat template that just adds BOS/EOS tokens around messages while discarding role information.
-        """
-        logger.warning_once(
-            "No chat template is set for this tokenizer, falling back to a default class-level template. "
-            "This is very error-prone, because models are often trained with templates different from the class "
-            "default! Default chat templates are a legacy feature and will be removed in Transformers v4.43, at which "
-            "point any code depending on them will stop working. We recommend setting a valid chat template before "
-            "then to ensure that this model continues working without issues."
-        )
-        return (
-            "{% for message in messages %}"
-            "{{ bos_token + eos_token + message.content + eos_token }}"
-            "{% endfor %}"
-            "{% if add_generation_prompt %} {{ bos_token + eos_token }} {% endif %}"
-        )
-
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         index = 0
         if os.path.isdir(save_directory):
@@ -210,7 +192,7 @@ class GPTNeoXJapaneseTokenizer(PreTrainedTokenizer):
         return vocab_file, emoji_file
 
 
-class SubWordJapaneseTokenizer(object):
+class SubWordJapaneseTokenizer:
     """
     https://github.com/tanreinama/Japanese-BPEEncoder_V2 This tokenizer class is under MIT Lisence according to the
     original repository.

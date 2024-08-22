@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch YOSO model. """
-
+"""Testing suite for the PyTorch YOSO model."""
 
 import unittest
 
@@ -354,6 +353,7 @@ class YosoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         model = YosoModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
+    @unittest.skip(reason="This model does not output attentions")
     def test_attention_outputs(self):
         return
 

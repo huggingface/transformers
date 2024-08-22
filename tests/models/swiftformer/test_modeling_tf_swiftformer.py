@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the TensorFlow SwiftFormer model. """
-
+"""Testing suite for the TensorFlow SwiftFormer model."""
 
 import inspect
 import unittest
@@ -36,7 +35,6 @@ if is_tf_available():
 
     from transformers import TFSwiftFormerForImageClassification, TFSwiftFormerModel
     from transformers.modeling_tf_utils import keras
-    from transformers.models.swiftformer.modeling_tf_swiftformer import TF_SWIFTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -144,6 +142,7 @@ class TFSwiftFormerModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.T
     test_head_masking = False
     has_attentions = False
     test_onnx = False
+    from_pretrained_id = "MBZUAI/swiftformer-xs"
 
     def setUp(self):
         self.model_tester = TFSwiftFormerModelTester(self)
@@ -194,9 +193,8 @@ class TFSwiftFormerModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.T
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TF_SWIFTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFSwiftFormerModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model = TFSwiftFormerModel.from_pretrained(self.from_pretrained_id)
+        self.assertIsNotNone(model)
 
     @unittest.skip(reason="TFSwiftFormer does not output attentions")
     def test_attention_outputs(self):

@@ -249,7 +249,6 @@ def measure_peak_memory_cpu(function: Callable[[], None], interval=0.5, device_i
     else:
 
         class MemoryMeasureProcess(Process):
-
             """
             `MemoryMeasureProcess` inherits from `Process` and overwrites its `run()` method. Used to measure the
             memory usage of a process

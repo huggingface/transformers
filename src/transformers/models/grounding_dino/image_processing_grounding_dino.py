@@ -105,21 +105,29 @@ def get_size_with_aspect_ratio(image_size, size, max_size=None) -> Tuple[int, in
             The maximum allowed output size.
     """
     height, width = image_size
+    raw_size = None
     if max_size is not None:
         min_original_size = float(min((height, width)))
         max_original_size = float(max((height, width)))
         if max_original_size / min_original_size * size > max_size:
-            size = int(round(max_size * min_original_size / max_original_size))
+            raw_size = max_size * min_original_size / max_original_size
+            size = int(round(raw_size))
 
     if (height <= width and height == size) or (width <= height and width == size):
-        return height, width
-
-    if width < height:
+        oh, ow = height, width
+    elif width < height:
         ow = size
-        oh = int(size * height / width)
+        if max_size is not None and raw_size is not None:
+            oh = int(raw_size * height / width)
+        else:
+            oh = int(size * height / width)
     else:
         oh = size
-        ow = int(size * width / height)
+        if max_size is not None and raw_size is not None:
+            ow = int(raw_size * width / height)
+        else:
+            ow = int(size * width / height)
+
     return (oh, ow)
 
 
@@ -150,6 +158,42 @@ def get_resize_output_image_size(
         return size
 
     return get_size_with_aspect_ratio(image_size, size, max_size)
+
+
+# Copied from transformers.models.detr.image_processing_detr.get_image_size_for_max_height_width
+def get_image_size_for_max_height_width(
+    input_image: np.ndarray,
+    max_height: int,
+    max_width: int,
+    input_data_format: Optional[Union[str, ChannelDimension]] = None,
+) -> Tuple[int, int]:
+    """
+    Computes the output image size given the input image and the maximum allowed height and width. Keep aspect ratio.
+    Important, even if image_height < max_height and image_width < max_width, the image will be resized
+    to at least one of the edges be equal to max_height or max_width.
+
+    For example:
+        - input_size: (100, 200), max_height: 50, max_width: 50 -> output_size: (25, 50)
+        - input_size: (100, 200), max_height: 200, max_width: 500 -> output_size: (200, 400)
+
+    Args:
+        input_image (`np.ndarray`):
+            The image to resize.
+        max_height (`int`):
+            The maximum allowed height.
+        max_width (`int`):
+            The maximum allowed width.
+        input_data_format (`ChannelDimension` or `str`, *optional*):
+            The channel dimension format of the input image. If not provided, it will be inferred from the input image.
+    """
+    image_size = get_image_size(input_image, input_data_format)
+    height, width = image_size
+    height_scale = max_height / height
+    width_scale = max_width / width
+    min_scale = min(height_scale, width_scale)
+    new_height = int(height * min_scale)
+    new_width = int(width * min_scale)
+    return new_height, new_width
 
 
 # Copied from transformers.models.detr.image_processing_detr.get_numpy_to_framework_fn
@@ -773,8 +817,16 @@ class GroundingDinoImageProcessor(BaseImageProcessor):
             Controls whether to resize the image's (height, width) dimensions to the specified `size`. Can be
             overridden by the `do_resize` parameter in the `preprocess` method.
         size (`Dict[str, int]` *optional*, defaults to `{"shortest_edge": 800, "longest_edge": 1333}`):
-            Size of the image's (height, width) dimensions after resizing. Can be overridden by the `size` parameter in
-            the `preprocess` method.
+            Size of the image's `(height, width)` dimensions after resizing. Can be overridden by the `size` parameter
+            in the `preprocess` method. Available options are:
+                - `{"height": int, "width": int}`: The image will be resized to the exact size `(height, width)`.
+                    Do NOT keep the aspect ratio.
+                - `{"shortest_edge": int, "longest_edge": int}`: The image will be resized to a maximum size respecting
+                    the aspect ratio and keeping the shortest edge less or equal to `shortest_edge` and the longest edge
+                    less or equal to `longest_edge`.
+                - `{"max_height": int, "max_width": int}`: The image will be resized to the maximum size respecting the
+                    aspect ratio and keeping the height less or equal to `max_height` and the width less or equal to
+                    `max_width`.
         resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
             Resampling filter to use if resizing the image.
         do_rescale (`bool`, *optional*, defaults to `True`):
@@ -798,8 +850,14 @@ class GroundingDinoImageProcessor(BaseImageProcessor):
             bounding boxes to the format `(center_x, center_y, width, height)` and in the range `[0, 1]`.
             Can be overridden by the `do_convert_annotations` parameter in the `preprocess` method.
         do_pad (`bool`, *optional*, defaults to `True`):
-            Controls whether to pad the image to the largest image in a batch and create a pixel mask. Can be
-            overridden by the `do_pad` parameter in the `preprocess` method.
+            Controls whether to pad the image. Can be overridden by the `do_pad` parameter in the `preprocess`
+            method. If `True`, padding will be applied to the bottom and right of the image with zeros.
+            If `pad_size` is provided, the image will be padded to the specified dimensions.
+            Otherwise, the image will be padded to the maximum height and width of the batch.
+        pad_size (`Dict[str, int]`, *optional*):
+            The size `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
+            provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
+            height and width in the batch.
     """
 
     model_input_names = ["pixel_values", "pixel_mask"]
@@ -818,6 +876,7 @@ class GroundingDinoImageProcessor(BaseImageProcessor):
         image_std: Union[float, List[float]] = None,
         do_convert_annotations: Optional[bool] = None,
         do_pad: bool = True,
+        pad_size: Optional[Dict[str, int]] = None,
         **kwargs,
     ) -> None:
         if "pad_and_return_pixel_mask" in kwargs:
@@ -851,6 +910,7 @@ class GroundingDinoImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
         self.do_pad = do_pad
+        self.pad_size = pad_size
         self._valid_processor_keys = [
             "images",
             "annotations",
@@ -866,6 +926,7 @@ class GroundingDinoImageProcessor(BaseImageProcessor):
             "image_mean",
             "image_std",
             "do_pad",
+            "pad_size",
             "format",
             "return_tensors",
             "data_format",
@@ -920,31 +981,6 @@ class GroundingDinoImageProcessor(BaseImageProcessor):
             raise ValueError(f"Format {format} is not supported.")
         return target
 
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.prepare
-    def prepare(self, image, target, return_segmentation_masks=None, masks_path=None):
-        logger.warning_once(
-            "The `prepare` method is deprecated and will be removed in a v4.33. "
-            "Please use `prepare_annotation` instead. Note: the `prepare_annotation` method "
-            "does not return the image anymore.",
-        )
-        target = self.prepare_annotation(image, target, return_segmentation_masks, masks_path, self.format)
-        return image, target
-
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.convert_coco_poly_to_mask
-    def convert_coco_poly_to_mask(self, *args, **kwargs):
-        logger.warning_once("The `convert_coco_poly_to_mask` method is deprecated and will be removed in v4.33. ")
-        return convert_coco_poly_to_mask(*args, **kwargs)
-
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.prepare_coco_detection
-    def prepare_coco_detection(self, *args, **kwargs):
-        logger.warning_once("The `prepare_coco_detection` method is deprecated and will be removed in v4.33. ")
-        return prepare_coco_detection_annotation(*args, **kwargs)
-
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.prepare_coco_panoptic
-    def prepare_coco_panoptic(self, *args, **kwargs):
-        logger.warning_once("The `prepare_coco_panoptic` method is deprecated and will be removed in v4.33. ")
-        return prepare_coco_panoptic_annotation(*args, **kwargs)
-
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.resize
     def resize(
         self,
@@ -963,8 +999,15 @@ class GroundingDinoImageProcessor(BaseImageProcessor):
             image (`np.ndarray`):
                 Image to resize.
             size (`Dict[str, int]`):
-                Dictionary containing the size to resize to. Can contain the keys `shortest_edge` and `longest_edge` or
-                `height` and `width`.
+                Size of the image's `(height, width)` dimensions after resizing. Available options are:
+                    - `{"height": int, "width": int}`: The image will be resized to the exact size `(height, width)`.
+                        Do NOT keep the aspect ratio.
+                    - `{"shortest_edge": int, "longest_edge": int}`: The image will be resized to a maximum size respecting
+                        the aspect ratio and keeping the shortest edge less or equal to `shortest_edge` and the longest edge
+                        less or equal to `longest_edge`.
+                    - `{"max_height": int, "max_width": int}`: The image will be resized to the maximum size respecting the
+                        aspect ratio and keeping the height less or equal to `max_height` and the width less or equal to
+                        `max_width`.
             resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
                 Resampling filter to use if resizing the image.
             data_format (`str` or `ChannelDimension`, *optional*):
@@ -983,18 +1026,27 @@ class GroundingDinoImageProcessor(BaseImageProcessor):
             max_size = None
         size = get_size_dict(size, max_size=max_size, default_to_square=False)
         if "shortest_edge" in size and "longest_edge" in size:
-            size = get_resize_output_image_size(
+            new_size = get_resize_output_image_size(
                 image, size["shortest_edge"], size["longest_edge"], input_data_format=input_data_format
             )
+        elif "max_height" in size and "max_width" in size:
+            new_size = get_image_size_for_max_height_width(
+                image, size["max_height"], size["max_width"], input_data_format=input_data_format
+            )
         elif "height" in size and "width" in size:
-            size = (size["height"], size["width"])
+            new_size = (size["height"], size["width"])
         else:
             raise ValueError(
                 "Size must contain 'height' and 'width' keys or 'shortest_edge' and 'longest_edge' keys. Got"
                 f" {size.keys()}."
             )
         image = resize(
-            image, size=size, resample=resample, data_format=data_format, input_data_format=input_data_format, **kwargs
+            image,
+            size=new_size,
+            resample=resample,
+            data_format=data_format,
+            input_data_format=input_data_format,
+            **kwargs,
         )
         return image
 
@@ -1138,6 +1190,7 @@ class GroundingDinoImageProcessor(BaseImageProcessor):
         data_format: Optional[ChannelDimension] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         update_bboxes: bool = True,
+        pad_size: Optional[Dict[str, int]] = None,
     ) -> BatchFeature:
         """
         Pads a batch of images to the bottom and right of the image with zeros to the size of largest height and width
@@ -1167,8 +1220,16 @@ class GroundingDinoImageProcessor(BaseImageProcessor):
                 Whether to update the bounding boxes in the annotations to match the padded images. If the
                 bounding boxes have not been converted to relative coordinates and `(centre_x, centre_y, width, height)`
                 format, the bounding boxes will not be updated.
+            pad_size (`Dict[str, int]`, *optional*):
+                The size `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
+                provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
+                height and width in the batch.
         """
-        pad_size = get_max_height_width(images, input_data_format=input_data_format)
+        pad_size = pad_size if pad_size is not None else self.pad_size
+        if pad_size is not None:
+            padded_size = (pad_size["height"], pad_size["width"])
+        else:
+            padded_size = get_max_height_width(images, input_data_format=input_data_format)
 
         annotation_list = annotations if annotations is not None else [None] * len(images)
         padded_images = []
@@ -1176,7 +1237,7 @@ class GroundingDinoImageProcessor(BaseImageProcessor):
         for image, annotation in zip(images, annotation_list):
             padded_image, padded_annotation = self._pad_image(
                 image,
-                pad_size,
+                padded_size,
                 annotation,
                 constant_values=constant_values,
                 data_format=data_format,
@@ -1190,7 +1251,7 @@ class GroundingDinoImageProcessor(BaseImageProcessor):
 
         if return_pixel_mask:
             masks = [
-                make_pixel_mask(image=image, output_size=pad_size, input_data_format=input_data_format)
+                make_pixel_mask(image=image, output_size=padded_size, input_data_format=input_data_format)
                 for image in images
             ]
             data["pixel_mask"] = masks
@@ -1225,6 +1286,7 @@ class GroundingDinoImageProcessor(BaseImageProcessor):
         return_tensors: Optional[Union[TensorType, str]] = None,
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        pad_size: Optional[Dict[str, int]] = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -1252,7 +1314,15 @@ class GroundingDinoImageProcessor(BaseImageProcessor):
             do_resize (`bool`, *optional*, defaults to self.do_resize):
                 Whether to resize the image.
             size (`Dict[str, int]`, *optional*, defaults to self.size):
-                Size of the image after resizing.
+                Size of the image's `(height, width)` dimensions after resizing. Available options are:
+                    - `{"height": int, "width": int}`: The image will be resized to the exact size `(height, width)`.
+                        Do NOT keep the aspect ratio.
+                    - `{"shortest_edge": int, "longest_edge": int}`: The image will be resized to a maximum size respecting
+                        the aspect ratio and keeping the shortest edge less or equal to `shortest_edge` and the longest edge
+                        less or equal to `longest_edge`.
+                    - `{"max_height": int, "max_width": int}`: The image will be resized to the maximum size respecting the
+                        aspect ratio and keeping the height less or equal to `max_height` and the width less or equal to
+                        `max_width`.
             resample (`PILImageResampling`, *optional*, defaults to self.resample):
                 Resampling filter to use when resizing the image.
             do_rescale (`bool`, *optional*, defaults to self.do_rescale):
@@ -1270,8 +1340,9 @@ class GroundingDinoImageProcessor(BaseImageProcessor):
             image_std (`float` or `List[float]`, *optional*, defaults to self.image_std):
                 Standard deviation to use when normalizing the image.
             do_pad (`bool`, *optional*, defaults to self.do_pad):
-                Whether to pad the image. If `True` will pad the images in the batch to the largest image in the batch
-                and create a pixel mask. Padding will be applied to the bottom and right of the image with zeros.
+                Whether to pad the image. If `True`, padding will be applied to the bottom and right of
+                the image with zeros. If `pad_size` is provided, the image will be padded to the specified
+                dimensions. Otherwise, the image will be padded to the maximum height and width of the batch.
             format (`str` or `AnnotationFormat`, *optional*, defaults to self.format):
                 Format of the annotations.
             return_tensors (`str` or `TensorType`, *optional*, defaults to self.return_tensors):
@@ -1287,6 +1358,10 @@ class GroundingDinoImageProcessor(BaseImageProcessor):
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
+            pad_size (`Dict[str, int]`, *optional*):
+                The size `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
+                provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
+                height and width in the batch.
         """
         if "pad_and_return_pixel_mask" in kwargs:
             logger.warning_once(
@@ -1316,6 +1391,7 @@ class GroundingDinoImageProcessor(BaseImageProcessor):
             self.do_convert_annotations if do_convert_annotations is None else do_convert_annotations
         )
         do_pad = self.do_pad if do_pad is None else do_pad
+        pad_size = self.pad_size if pad_size is None else pad_size
         format = self.format if format is None else format
 
         images = make_list_of_images(images)
@@ -1440,6 +1516,7 @@ class GroundingDinoImageProcessor(BaseImageProcessor):
                 input_data_format=input_data_format,
                 update_bboxes=do_convert_annotations,
                 return_tensors=return_tensors,
+                pad_size=pad_size,
             )
         else:
             images = [

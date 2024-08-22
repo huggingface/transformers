@@ -20,16 +20,16 @@ import json
 import os
 from dataclasses import dataclass
 from enum import Enum
+from inspect import Parameter, signature
 from typing import Any, Dict, List, Optional, Union
 
 from packaging import version
 
-from ..utils import is_auto_awq_available, is_torch_available, logging
+from ..utils import is_auto_awq_available, is_hqq_available, is_torch_available, is_torchao_available, logging
 
 
 if is_torch_available():
     import torch
-
 
 logger = logging.get_logger(__name__)
 
@@ -40,6 +40,10 @@ class QuantizationMethod(str, Enum):
     AWQ = "awq"
     AQLM = "aqlm"
     QUANTO = "quanto"
+    EETQ = "eetq"
+    HQQ = "hqq"
+    FBGEMM_FP8 = "fbgemm_fp8"
+    TORCHAO = "torchao"
 
 
 class AWQLinearVersion(str, Enum):
@@ -158,7 +162,7 @@ class QuantizationConfigMixin:
 
     def update(self, **kwargs):
         """
-        Updates attributes of this class instance with attributes from `kwargs` if they match existing atributtes,
+        Updates attributes of this class instance with attributes from `kwargs` if they match existing attributes,
         returning all the unused kwargs.
 
         Args:
@@ -177,6 +181,115 @@ class QuantizationConfigMixin:
         # Remove all the attributes that were updated, without modifying the input dict
         unused_kwargs = {key: value for key, value in kwargs.items() if key not in to_remove}
         return unused_kwargs
+
+
+@dataclass
+class HqqConfig(QuantizationConfigMixin):
+    """
+    This is wrapper around hqq's BaseQuantizeConfig.
+
+    Args:
+        nbits (`int`, *optional*, defaults to 4):
+            Number of bits. Supported values are (8, 4, 3, 2, 1).
+        group_size (`int`, *optional*, defaults to 64):
+            Group-size value. Supported values are any value that is divisble by weight.shape[axis]).
+        quant_zero (`bool`, *optional*, defaults to `True`):
+            Quantize the zero-point if set to `True`.
+        quant_scale (`bool`, *optional*, defaults to `False`):
+            Quantize the scaling if set to `True`.
+        offload_meta (`bool`, *optional*, defaults to `False`):
+            Offload the meta-data to the CPU if set to `True`.
+        view_as_float (`bool`, *optional*, defaults to `False`):
+            View the quantized weight as float (used in distributed training) if set to `True`.
+        axis (`int`, *optional*, defaults to 0):
+            Axis along which grouping is performed. Supported values are 0 or 1.
+        dynamic_config (dict, *optional*):
+            Parameters for dynamic configuration. The key is the name tag of the layer and the value is a quantization config.
+            If set, each layer specified by its id will use its dedicated quantization configuration.
+        skip_modules (`List[str]`, *optional*, defaults to `['lm_head']`):
+            List of `nn.Linear` layers to skip.
+        kwargs (`Dict[str, Any]`, *optional*):
+            Additional parameters from which to initialize the configuration object.
+    """
+
+    def __init__(
+        self,
+        nbits: int = 4,
+        group_size: int = 64,
+        quant_zero: bool = True,
+        quant_scale: bool = False,
+        offload_meta: bool = False,
+        view_as_float: bool = False,
+        axis: int = 0,
+        dynamic_config: Optional[dict] = None,
+        skip_modules: List[str] = ["lm_head"],
+        **kwargs,
+    ):
+        if is_hqq_available():
+            from hqq.core.quantize import BaseQuantizeConfig as HQQBaseQuantizeConfig
+
+        if axis not in [0, 1]:
+            raise ValueError("Invalid axis value. Only 0 and 1 are allowed.")
+
+        if dynamic_config is not None:
+            self.quant_config = {}
+            for key in dynamic_config:
+                self.quant_config[key] = HQQBaseQuantizeConfig(**dynamic_config[key])
+        else:
+            self.quant_config = HQQBaseQuantizeConfig(
+                **{
+                    "nbits": nbits,
+                    "group_size": group_size,
+                    "quant_zero": quant_zero,
+                    "quant_scale": quant_scale,
+                    "offload_meta": offload_meta,
+                    "view_as_float": view_as_float,
+                    "axis": axis,
+                }
+            )
+
+        self.quant_method = QuantizationMethod.HQQ
+        self.skip_modules = skip_modules
+
+        self.post_init()
+
+    def post_init(self):
+        r"""
+        Safety checker that arguments are correct - also replaces some NoneType arguments with their default values.
+        """
+        pass
+
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Serializes this instance to a Python dictionary. Returns:
+            `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
+        """
+        return self.quant_config
+
+    def __repr__(self):
+        config_dict = self.to_dict()
+        return f"{self.__class__.__name__} {json.dumps(config_dict, indent=2, sort_keys=True)}\n"
+
+    def to_diff_dict(self) -> Dict[str, Any]:
+        """
+        Removes all attributes from config which correspond to the default config attributes for better readability and
+        serializes to a Python dictionary.
+        Returns:
+            `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance,
+        """
+        config_dict = self.to_dict()
+
+        # get the default config dict
+        default_config_dict = HqqConfig().to_dict()
+
+        serializable_config_dict = {}
+
+        # only serialize values that differ from the default config
+        for key, value in config_dict.items():
+            if value != default_config_dict[key]:
+                serializable_config_dict[key] = value
+
+        return serializable_config_dict
 
 
 @dataclass
@@ -272,6 +385,10 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
         if bnb_4bit_quant_storage is None:
             self.bnb_4bit_quant_storage = torch.uint8
         elif isinstance(bnb_4bit_quant_storage, str):
+            if bnb_4bit_quant_storage not in ["float16", "float32", "int8", "uint8", "float64", "bfloat16"]:
+                raise ValueError(
+                    "`bnb_4bit_quant_storage` must be a valid string (one of 'float16', 'float32', 'int8', 'uint8', 'float64', 'bfloat16') "
+                )
             self.bnb_4bit_quant_storage = getattr(torch, bnb_4bit_quant_storage)
         elif isinstance(bnb_4bit_quant_storage, torch.dtype):
             self.bnb_4bit_quant_storage = bnb_4bit_quant_storage
@@ -290,7 +407,7 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
     @load_in_4bit.setter
     def load_in_4bit(self, value: bool):
         if not isinstance(value, bool):
-            raise ValueError("load_in_4bit must be a boolean")
+            raise TypeError("load_in_4bit must be a boolean")
 
         if self.load_in_8bit and value:
             raise ValueError("load_in_4bit and load_in_8bit are both True, but only one can be used at the same time")
@@ -303,7 +420,7 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
     @load_in_8bit.setter
     def load_in_8bit(self, value: bool):
         if not isinstance(value, bool):
-            raise ValueError("load_in_8bit must be a boolean")
+            raise TypeError("load_in_8bit must be a boolean")
 
         if self.load_in_4bit and value:
             raise ValueError("load_in_4bit and load_in_8bit are both True, but only one can be used at the same time")
@@ -314,30 +431,30 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
         Safety checker that arguments are correct - also replaces some NoneType arguments with their default values.
         """
         if not isinstance(self.load_in_4bit, bool):
-            raise ValueError("load_in_4bit must be a boolean")
+            raise TypeError("load_in_4bit must be a boolean")
 
         if not isinstance(self.load_in_8bit, bool):
-            raise ValueError("load_in_8bit must be a boolean")
+            raise TypeError("load_in_8bit must be a boolean")
 
         if not isinstance(self.llm_int8_threshold, float):
-            raise ValueError("llm_int8_threshold must be a float")
+            raise TypeError("llm_int8_threshold must be a float")
 
         if self.llm_int8_skip_modules is not None and not isinstance(self.llm_int8_skip_modules, list):
-            raise ValueError("llm_int8_skip_modules must be a list of strings")
+            raise TypeError("llm_int8_skip_modules must be a list of strings")
         if not isinstance(self.llm_int8_enable_fp32_cpu_offload, bool):
-            raise ValueError("llm_int8_enable_fp32_cpu_offload must be a boolean")
+            raise TypeError("llm_int8_enable_fp32_cpu_offload must be a boolean")
 
         if not isinstance(self.llm_int8_has_fp16_weight, bool):
-            raise ValueError("llm_int8_has_fp16_weight must be a boolean")
+            raise TypeError("llm_int8_has_fp16_weight must be a boolean")
 
         if self.bnb_4bit_compute_dtype is not None and not isinstance(self.bnb_4bit_compute_dtype, torch.dtype):
-            raise ValueError("bnb_4bit_compute_dtype must be torch.dtype")
+            raise TypeError("bnb_4bit_compute_dtype must be torch.dtype")
 
         if not isinstance(self.bnb_4bit_quant_type, str):
-            raise ValueError("bnb_4bit_quant_type must be a string")
+            raise TypeError("bnb_4bit_quant_type must be a string")
 
         if not isinstance(self.bnb_4bit_use_double_quant, bool):
-            raise ValueError("bnb_4bit_use_double_quant must be a boolean")
+            raise TypeError("bnb_4bit_use_double_quant must be a boolean")
 
         if self.load_in_4bit and not version.parse(importlib.metadata.version("bitsandbytes")) >= version.parse(
             "0.39.0"
@@ -428,7 +545,7 @@ class GPTQConfig(QuantizationConfigMixin):
                     using the [`~PreTrainedTokenizer.save_pretrained`] method, e.g., `./my_model_directory/`.
         dataset (`Union[List[str]]`, *optional*):
             The dataset used for quantization. You can provide your own dataset in a list of string or just use the
-            original datasets used in GPTQ paper ['wikitext2','c4','c4-new','ptb','ptb-new']
+            original datasets used in GPTQ paper ['wikitext2','c4','c4-new']
         group_size (`int`, *optional*, defaults to 128):
             The group size to use for quantization. Recommended value is 128 and -1 uses per-column quantization.
         damp_percent (`float`, *optional*, defaults to 0.1):
@@ -537,15 +654,20 @@ class GPTQConfig(QuantizationConfigMixin):
             raise ValueError("damp_percent must between 0 and 1.")
         if self.dataset is not None:
             if isinstance(self.dataset, str):
-                if self.dataset not in ["wikitext2", "c4", "c4-new", "ptb", "ptb-new"]:
+                if self.dataset in ["ptb", "ptb-new"]:
+                    raise ValueError(
+                        f"""{self.dataset} dataset was deprecated. You can only choose between
+                        ['wikitext2','c4','c4-new']"""
+                    )
+                if self.dataset not in ["wikitext2", "c4", "c4-new"]:
                     raise ValueError(
                         f"""You have entered a string value for dataset. You can only choose between
-                        ['wikitext2','c4','c4-new','ptb','ptb-new'], but we found {self.dataset}"""
+                        ['wikitext2','c4','c4-new'], but we found {self.dataset}"""
                     )
             elif not isinstance(self.dataset, list):
                 raise ValueError(
                     f"""dataset needs to be either a list of string or a value in
-                    ['wikitext2','c4','c4-new','ptb','ptb-new'], but we found {self.dataset}"""
+                    ['wikitext2','c4','c4-new'], but we found {self.dataset}"""
                 )
 
         if self.disable_exllama is None and self.use_exllama is None:
@@ -837,13 +959,13 @@ class AqlmConfig(QuantizationConfigMixin):
         Safety checker that arguments are correct - also replaces some NoneType arguments with their default values.
         """
         if not isinstance(self.in_group_size, int):
-            raise ValueError("in_group_size must be a float")
+            raise TypeError("in_group_size must be a float")
         if not isinstance(self.out_group_size, int):
-            raise ValueError("out_group_size must be a float")
+            raise TypeError("out_group_size must be a float")
         if not isinstance(self.num_codebooks, int):
-            raise ValueError("num_codebooks must be a float")
+            raise TypeError("num_codebooks must be a float")
         if not isinstance(self.nbits_per_codebook, int):
-            raise ValueError("nbits_per_codebook must be a float")
+            raise TypeError("nbits_per_codebook must be a float")
 
         if self.linear_weights_not_to_quantize is not None and not isinstance(
             self.linear_weights_not_to_quantize, list
@@ -893,3 +1015,149 @@ class QuantoConfig(QuantizationConfigMixin):
             raise ValueError(f"Only support weights in {accepted_weights} but found {self.weights}")
         if self.activations not in accepted_activations:
             raise ValueError(f"Only support weights in {accepted_activations} but found {self.activations}")
+
+
+@dataclass
+class EetqConfig(QuantizationConfigMixin):
+    """
+    This is a wrapper class about all possible attributes and features that you can play with a model that has been
+    loaded using `eetq`.
+
+    Args:
+        weights (`str`, *optional*, defaults to `"int8"`):
+            The target dtype for the weights. Supported value is only "int8"
+        modules_to_not_convert (`list`, *optional*, default to `None`):
+            The list of modules to not quantize, useful for quantizing models that explicitly require to have
+            some modules left in their original precision.
+    """
+
+    def __init__(
+        self,
+        weights: str = "int8",
+        modules_to_not_convert: Optional[List] = None,
+        **kwargs,
+    ):
+        self.quant_method = QuantizationMethod.EETQ
+        self.weights = weights
+        self.modules_to_not_convert = modules_to_not_convert
+        self.post_init()
+
+    def post_init(self):
+        r"""
+        Safety checker that arguments are correct
+        """
+        accepted_weights = ["int8"]
+        if self.weights not in accepted_weights:
+            raise ValueError(f"Only support weights in {accepted_weights} but found {self.weights}")
+
+
+@dataclass
+class FbgemmFp8Config(QuantizationConfigMixin):
+    """
+    This is a wrapper class about all possible attributes and features that you can play with a model that has been
+    loaded using fbgemm fp8 quantization.
+
+    Args:
+        activation_scale_ub (`float`, *optional*, defaults to 1200.0):
+            The activation scale upper bound. This is used when quantizing the input activation.
+        modules_to_not_convert (`list`, *optional*, default to `None`):
+            The list of modules to not quantize, useful for quantizing models that explicitly require to have
+            some modules left in their original precision.
+    """
+
+    def __init__(
+        self,
+        activation_scale_ub: float = 1200.0,
+        modules_to_not_convert: Optional[List] = None,
+        **kwargs,
+    ):
+        self.quant_method = QuantizationMethod.FBGEMM_FP8
+        self.activation_scale_ub = activation_scale_ub
+        self.modules_to_not_convert = modules_to_not_convert
+
+    def get_loading_attributes(self):
+        attibutes_dict = copy.deepcopy(self.__dict__)
+        loading_attibutes = ["activation_scale_ub"]
+        loading_attibutes_dict = {i: j for i, j in attibutes_dict.items() if i in loading_attibutes}
+        return loading_attibutes_dict
+
+
+@dataclass
+class TorchAoConfig(QuantizationConfigMixin):
+    """This is a config class for torchao quantization/sparsity techniques.
+
+    Args:
+        quant_type (`str`):
+            The type of quantization we want to use, currently supporting: `int4_weight_only`, `int8_weight_only` and `int8_dynamic_activation_int8_weight`.
+        modules_to_not_convert (`list`, *optional*, default to `None`):
+            The list of modules to not quantize, useful for quantizing models that explicitly require to have
+            some modules left in their original precision.
+        kwargs (`Dict[str, Any]`, *optional*):
+            The keyword arguments for the chosen type of quantization, for example, int4_weight_only quantization supports two keyword arguments
+            `group_size` and `inner_k_tiles` currently. More API examples and documentation of arguments can be found in
+            https://github.com/pytorch/ao/tree/main/torchao/quantization#other-available-quantization-techniques
+
+    Example:
+
+    ```python
+    quantization_config = TorchAoConfig("int4_weight_only", group_size=32)
+    # int4_weight_only quant is only working with *torch.bfloat16* dtype right now
+    model = AutoModelForCausalLM.from_pretrained(model_id, device_map="cuda", torch_dtype=torch.bfloat16, quantization_config=quantization_config)
+    ```
+    """
+
+    def __init__(self, quant_type: str, modules_to_not_convert: Optional[List] = None, **kwargs):
+        self.quant_method = QuantizationMethod.TORCHAO
+        self.quant_type = quant_type
+        self.modules_to_not_convert = modules_to_not_convert
+        self.kwargs = kwargs
+        self._STR_TO_METHOD = {}
+        if is_torchao_available():
+            from torchao.quantization import (
+                int4_weight_only,
+                int8_dynamic_activation_int8_weight,
+                int8_weight_only,
+            )
+
+            self._STR_TO_METHOD = {
+                "int4_weight_only": int4_weight_only,
+                "int8_weight_only": int8_weight_only,
+                "int8_dynamic_activation_int8_weight": int8_dynamic_activation_int8_weight,
+            }
+        else:
+            raise ValueError(
+                "TorchAoConfig requires torchao to be installed, please install with `pip install torchao`"
+            )
+
+        self.post_init()
+
+    def post_init(self):
+        r"""
+        Safety checker that arguments are correct - also replaces some NoneType arguments with their default values.
+        """
+        if not version.parse(importlib.metadata.version("torchao")) >= version.parse("0.4.0"):
+            raise ValueError("Requires torchao 0.4.0 version and above")
+
+        if self.quant_type not in self._STR_TO_METHOD.keys():
+            raise ValueError(
+                f"Requested quantization type: {self.quant_type} is not supported yet, please add support in TorchAoConfig and TorchAoHfQuantizer."
+            )
+
+        method = self._STR_TO_METHOD[self.quant_type]
+        sig = signature(method)
+        all_kwargs = [
+            param.name
+            for param in sig.parameters.values()
+            if param.kind in [Parameter.KEYWORD_ONLY, Parameter.POSITIONAL_OR_KEYWORD]
+        ]
+        for k in self.kwargs:
+            if k not in all_kwargs:
+                raise ValueError(
+                    f"Unexpected keyword arg: {k} for API: {method}, accepted keyword args are: {all_kwargs}"
+                )
+
+    def get_apply_tensor_subclass(self):
+        return self._STR_TO_METHOD[self.quant_type](**self.kwargs)
+
+    def __repr__(self):
+        return f"{self.quant_type}({', '.join(str(k) + '=' + str(v) for k, v in self.kwargs.items())})"

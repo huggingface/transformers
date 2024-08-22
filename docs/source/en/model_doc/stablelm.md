@@ -104,3 +104,8 @@ Now, to run the model with Flash Attention 2, refer to the snippet below:
 
 [[autodoc]] StableLmForSequenceClassification
     - forward
+
+## StableLmForTokenClassification
+
+[[autodoc]] StableLmForTokenClassification
+    - forward

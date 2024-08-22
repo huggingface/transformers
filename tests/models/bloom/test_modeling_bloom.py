@@ -344,7 +344,7 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     fx_compatible = True
     test_missing_keys = False
     test_pruning = False
-    test_torchscript = True  # torch.autograd functions seems to be not supported
+    test_torchscript = True  # torch.autograd functions seems not to be supported
 
     def setUp(self):
         self.model_tester = BloomModelTester(self)
@@ -389,7 +389,7 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_bloom_weight_initialization(*config_and_inputs)
 
-    @unittest.skip("Bloom has a non-standard KV cache format.")
+    @unittest.skip(reason="Bloom has a non-standard KV cache format.")
     def test_past_key_values_format(self):
         pass
 

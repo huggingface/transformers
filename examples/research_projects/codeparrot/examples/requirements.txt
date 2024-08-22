@@ -1,5 +1,5 @@
 datasets==2.3.2
-transformers==4.21.1
+transformers==4.38.0
 wandb==0.13.1
 evaluate==0.2.2
-scikit-learn==1.1.2
+scikit-learn==1.5.0

@@ -186,6 +186,7 @@ so we can just convert that directly to a NumPy array without tokenization!
 
 ```py
 from transformers import AutoTokenizer
+import numpy as np
 
 tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-cased")
 tokenized_data = tokenizer(dataset["sentence"], return_tensors="np", padding=True)

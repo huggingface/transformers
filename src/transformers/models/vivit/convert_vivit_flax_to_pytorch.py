@@ -15,6 +15,7 @@
 """Convert Flax ViViT checkpoints from the original repository to PyTorch. URL:
 https://github.com/google-research/scenic/tree/main/scenic/projects/vivit
 """
+
 import argparse
 import json
 import os.path

@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization classes for CPMAnt."""
+
 import collections
 import os
 from typing import List, Optional, Tuple
@@ -43,7 +44,7 @@ def load_vocab(vocab_file):
     return vocab
 
 
-class WordpieceTokenizer(object):
+class WordpieceTokenizer:
     def __init__(self, vocab, unk_token="<unk>", max_input_chars_per_word=200):
         self.vocab = vocab
         self.unk_token = unk_token

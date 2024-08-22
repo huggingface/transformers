@@ -14,6 +14,7 @@
 # limitations under the License.
 
 """Tokenization classes for Gemma."""
+
 import os
 from shutil import copyfile
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
@@ -197,7 +198,7 @@ class GemmaTokenizer(PreTrainedTokenizer):
         else:
             sub_texts = "".join(sub_texts)
 
-        return sub_texts
+        return sub_texts.replace(SPIECE_UNDERLINE, " ")
 
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (string) in a single string."""

@@ -22,9 +22,7 @@ Hyperparameters are taken from run_task_main.py and hparam_utils.py of the origi
 
 """
 
-
 from ...configuration_utils import PretrainedConfig
-from ..deprecated._archive_maps import TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class TapasConfig(PretrainedConfig):

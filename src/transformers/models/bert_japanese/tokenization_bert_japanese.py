@@ -14,7 +14,6 @@
 # limitations under the License.
 """Tokenization classes."""
 
-
 import collections
 import copy
 import os
@@ -692,7 +691,7 @@ class CharacterTokenizer:
 
 
 # Copied from transformers.models.bert.tokenization_bert.BasicTokenizer
-class BasicTokenizer(object):
+class BasicTokenizer:
     """
     Constructs a BasicTokenizer that will run basic tokenization (punctuation splitting, lower casing, etc.).
 
@@ -854,7 +853,7 @@ class BasicTokenizer(object):
 
 
 # Copied from transformers.models.bert.tokenization_bert.WordpieceTokenizer
-class WordpieceTokenizer(object):
+class WordpieceTokenizer:
     """Runs WordPiece tokenization."""
 
     def __init__(self, vocab, unk_token, max_input_chars_per_word=100):
@@ -911,7 +910,7 @@ class WordpieceTokenizer(object):
         return output_tokens
 
 
-class SentencepieceTokenizer(object):
+class SentencepieceTokenizer:
     """
     Runs sentencepiece tokenization. Based on transformers.models.albert.tokenization_albert.AlbertTokenizer.
     """

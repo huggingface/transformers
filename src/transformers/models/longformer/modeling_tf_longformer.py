@@ -14,7 +14,6 @@
 # limitations under the License.
 """Tensorflow Longformer model."""
 
-
 from __future__ import annotations
 
 import warnings
@@ -55,9 +54,6 @@ _CHECKPOINT_FOR_DOC = "allenai/longformer-base-4096"
 _CONFIG_FOR_DOC = "LongformerConfig"
 
 LARGE_NEGATIVE = -1e8
-
-
-from ..deprecated._archive_maps import TF_LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 @dataclass

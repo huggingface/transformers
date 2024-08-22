@@ -27,8 +27,9 @@ The abstract from the paper is the following:
 ## Usage tips
 
 - Usage of SigLIP is similar to [CLIP](clip). The main difference is the training loss, which does not require a global view of all the pairwise similarities of images and texts within a batch. One needs to apply the sigmoid activation function to the logits, rather than the softmax.
-- Training is not yet supported. If you want to fine-tune SigLIP or train from scratch, refer to the loss function from [OpenCLIP](https://github.com/mlfoundations/open_clip/blob/73ad04ae7fb93ede1c02dc9040a828634cb1edf1/src/open_clip/loss.py#L307), which leverages various `torch.distributed` utilities.
+- Training is supported but does not use `torch.distributed` utilities which may limit the scalability of batch size. However, DDP and FDSP works on single-node multi-gpu setup.
 - When using the standalone [`SiglipTokenizer`] or [`SiglipProcessor`], make sure to pass `padding="max_length"` as that's how the model was trained.
+- To get the same results as the pipeline, a prompt template of "This is a photo of {label}." should be used.
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/siglip_table.jpeg"
 alt="drawing" width="600"/>
@@ -59,7 +60,8 @@ The pipeline allows to use the model in a few lines of code:
 >>> image = Image.open(requests.get(url, stream=True).raw)
 
 >>> # inference
->>> outputs = image_classifier(image, candidate_labels=["2 cats", "a plane", "a remote"])
+>>> candidate_labels = ["2 cats", "a plane", "a remote"]
+>>> outputs = image_classifier(image, candidate_labels=candidate_labels)
 >>> outputs = [{"score": round(output["score"], 4), "label": output["label"] } for output in outputs]
 >>> print(outputs)
 [{'score': 0.1979, 'label': '2 cats'}, {'score': 0.0, 'label': 'a remote'}, {'score': 0.0, 'label': 'a plane'}]
@@ -81,7 +83,9 @@ If you want to do the pre- and postprocessing yourself, here's how to do that:
 >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 >>> image = Image.open(requests.get(url, stream=True).raw)
 
->>> texts = ["a photo of 2 cats", "a photo of 2 dogs"]
+>>> candidate_labels = ["2 cats", "2 dogs"]
+# follows the pipeline prompt template to get same results
+>>> candidate_labels = [f'This is a photo of {label}.' for label in candidate_labels]
 >>> # important: we pass `padding=max_length` since the model was trained with this
 >>> inputs = processor(text=texts, images=image, padding="max_length", return_tensors="pt")
 
@@ -102,6 +106,88 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 - Demo notebooks for SigLIP can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/SigLIP). 🌎
 
 If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
+
+
+## Combining SigLIP and Flash Attention 2
+
+First, make sure to install the latest version of Flash Attention 2.
+
+```bash
+pip install -U flash-attn --no-build-isolation
+```
+
+Make also sure that you have a hardware that is compatible with Flash-Attention 2. Read more about it in the official documentation of flash-attn repository. Make also sure to load your model in half-precision (e.g. `torch.float16``)
+
+To load and run a model using Flash Attention 2, refer to the snippet below:
+
+```python
+>>> import torch
+>>> import requests
+>>> from PIL import Image
+>>> from transformers import SiglipProcessor, SiglipModel
+>>> device = "cuda" # the device to load the model onto
+
+>>> model = SiglipModel.from_pretrained(
+...     "google/siglip-so400m-patch14-384",
+...     attn_implementation="flash_attention_2",
+...     torch_dtype=torch.float16,
+...     device_map=device,
+... )
+>>> processor = SiglipProcessor.from_pretrained("google/siglip-so400m-patch14-384")
+
+>>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+>>> image = Image.open(requests.get(url, stream=True).raw)
+
+>>> candidate_labels = ["2 cats", "2 dogs"]
+# follows the pipeline prompt template to get same results
+>>> candidate_labels = [f'This is a photo of {label}.' for label in candidate_labels]
+# important: we pass `padding=max_length` since the model was trained with this
+>>> inputs = processor(text=candidate_labels, images=image, padding="max_length", return_tensors="pt")
+>>> inputs.to(device)
+
+>>> with torch.no_grad():
+...     with torch.autocast(device):
+...         outputs = model(**inputs)
+
+>>> logits_per_image = outputs.logits_per_image
+>>> probs = torch.sigmoid(logits_per_image) # these are the probabilities
+>>> print(f"{probs[0][0]:.1%} that image 0 is '{candidate_labels[0]}'")
+51.3% that image 0 is 'This is a photo of 2 cats.'
+```
+
+
+## Using Scaled Dot Product Attention (SDPA)
+
+PyTorch includes a native scaled dot-product attention (SDPA) operator as part of `torch.nn.functional`. This function 
+encompasses several implementations that can be applied depending on the inputs and the hardware in use. See the 
+[official documentation](https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html) 
+or the [GPU Inference](https://huggingface.co/docs/transformers/main/en/perf_infer_gpu_one#pytorch-scaled-dot-product-attention)
+page for more information.
+
+You may set `attn_implementation="sdpa"` in `from_pretrained()` to explicitly request SDPA to be used. Make sure you have `torch>=2.1.1`.
+
+```python
+>>> from transformers import SiglipModel
+
+>>> model = SiglipModel.from_pretrained(
+...     "google/siglip-so400m-patch14-384",
+...     attn_implementation="sdpa",
+...     torch_dtype=torch.float16,
+...     device_map=device,
+... )
+```
+
+For the best speedups, we recommend loading the model in half-precision (e.g. `torch.float16` or `torch.bfloat16`).
+
+
+## Expected speedups
+
+Below is an expected speedup diagram that compares inference time between the native implementation in transformers using `google/siglip-so400m-patch14-384` checkpoint in `float16` precision and the Flash Attention 2 / SDPA version of the model using different batch sizes.
+
+<div style="text-align: center">
+<img src="https://i.imgur.com/cWm4rsn.png">
+</div>
+
 
 ## SiglipConfig
 

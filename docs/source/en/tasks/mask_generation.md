@@ -124,6 +124,7 @@ the processor.
 
 ```python
 from transformers import SamModel, SamProcessor
+import torch
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -147,7 +148,6 @@ masks = processor.image_processor.post_process_masks(outputs.pred_masks.cpu(), i
 We can visualize the three masks in the `masks` output.
 
 ```python
-import torch
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -211,7 +211,7 @@ import matplotlib.patches as patches
 fig, ax = plt.subplots()
 ax.imshow(image)
 
-rectangle = patches.Rectangle((2350, 1600, 500, 500, linewidth=2, edgecolor='r', facecolor='none')
+rectangle = patches.Rectangle((2350, 1600), 500, 500, linewidth=2, edgecolor='r', facecolor='none')
 ax.add_patch(rectangle)
 ax.axis("off")
 plt.show()

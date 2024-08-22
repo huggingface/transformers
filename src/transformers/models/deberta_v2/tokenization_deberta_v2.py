@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Tokenization class for model DeBERTa."""
+"""Tokenization class for model DeBERTa."""
 
 import os
 import unicodedata
@@ -518,4 +518,4 @@ def convert_to_unicode(text):
     elif isinstance(text, bytes):
         return text.decode("utf-8", "ignore")
     else:
-        raise ValueError(f"Unsupported string type: {type(text)}")
+        raise TypeError(f"Unsupported string type: {type(text)}")

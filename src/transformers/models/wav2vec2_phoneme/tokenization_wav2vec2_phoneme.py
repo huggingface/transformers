@@ -78,7 +78,6 @@ class Wav2Vec2PhonemeCTCTokenizerOutput(ModelOutput):
 
 
 class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
-
     """
     Constructs a Wav2Vec2PhonemeCTC tokenizer.
 

@@ -23,9 +23,6 @@ from transformers.utils import logging
 logger = logging.get_logger(__name__)
 
 
-from ..deprecated._archive_maps import PATCHTST_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
-
-
 class PatchTSTConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of an [`PatchTSTModel`]. It is used to instantiate an
@@ -70,8 +67,6 @@ class PatchTSTConfig(PretrainedConfig):
             A value added to the denominator for numerical stability of normalization.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout probability for the attention probabilities.
-        dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probability for all fully connected layers in the Transformer.
         positional_dropout (`float`, *optional*, defaults to 0.0):
             The dropout probability in the positional embedding layer.
         path_dropout (`float`, *optional*, defaults to 0.0):
@@ -170,7 +165,6 @@ class PatchTSTConfig(PretrainedConfig):
         norm_type: str = "batchnorm",
         norm_eps: float = 1e-05,
         attention_dropout: float = 0.0,
-        dropout: float = 0.0,
         positional_dropout: float = 0.0,
         path_dropout: float = 0.0,
         ff_dropout: float = 0.0,
@@ -212,7 +206,6 @@ class PatchTSTConfig(PretrainedConfig):
         self.num_attention_heads = num_attention_heads
         self.ffn_dim = ffn_dim
         self.num_hidden_layers = num_hidden_layers
-        self.dropout = dropout
         self.attention_dropout = attention_dropout
         self.share_embedding = share_embedding
         self.channel_attention = channel_attention

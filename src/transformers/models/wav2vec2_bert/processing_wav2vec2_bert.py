@@ -15,6 +15,7 @@
 """
 Speech processor class for Wav2Vec2-BERT
 """
+
 import warnings
 
 from ...processing_utils import ProcessorMixin

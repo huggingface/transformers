@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch LED model. """
-
+"""Testing suite for the PyTorch LED model."""
 
 import copy
 import tempfile
@@ -285,7 +284,6 @@ class LEDModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     all_generative_model_classes = (LEDForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "conversational": LEDForConditionalGeneration,
             "feature-extraction": LEDModel,
             "question-answering": LEDForQuestionAnswering,
             "summarization": LEDForConditionalGeneration,
@@ -380,8 +378,8 @@ class LEDModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         model.generate(input_ids, attention_mask=attention_mask)
         model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
 
+    @unittest.skip(reason="Longformer cannot keep gradients in attentions or hidden states")
     def test_retain_grad_hidden_states_attentions(self):
-        # longformer cannot keep gradients in attentions or hidden states
         return
 
     def test_attention_outputs(self):

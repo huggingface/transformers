@@ -166,9 +166,9 @@ def convert_t5x_to_pytorch(
 
             if scalable_attention:
                 # convert the rel_embedding of each layer
-                new[
-                    f"decoder.block.{i}.layer.0.SelfAttention.relative_attention_bias.weight"
-                ] = t5x_relpos_bias_lookup(old, i, "decoder").T
+                new[f"decoder.block.{i}.layer.0.SelfAttention.relative_attention_bias.weight"] = (
+                    t5x_relpos_bias_lookup(old, i, "decoder").T
+                )
 
         new["decoder.final_layer_norm.weight"] = old["decoder/decoder_norm/scale"]
 

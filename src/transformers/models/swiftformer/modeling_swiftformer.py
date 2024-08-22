@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch SwiftFormer model."""
-
+"""PyTorch SwiftFormer model."""
 
 import collections.abc
 from typing import Optional, Tuple, Union
@@ -50,9 +49,6 @@ _EXPECTED_OUTPUT_SHAPE = [1, 220, 7, 7]
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "MBZUAI/swiftformer-xs"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
-
-
-from ..deprecated._archive_maps import SWIFTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 class SwiftFormerPatchEmbedding(nn.Module):

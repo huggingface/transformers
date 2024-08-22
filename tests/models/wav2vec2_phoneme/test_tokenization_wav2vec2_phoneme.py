@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tests for the Wav2Vec2Phoneme tokenizer."""
+
 import json
 import os
 import unittest
@@ -324,19 +325,21 @@ class Wav2Vec2PhonemeCTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         outputs_char = [tokenizer.decode(ids, output_char_offsets=True) for ids in sample_ids]
         check_list_tuples_equal(outputs_char_batch, outputs_char)
 
-    @unittest.skip("Wav2Vec2PhonemeTokenizer always lower cases letters to correctly map to phonemes")
+    @unittest.skip(reason="Wav2Vec2PhonemeTokenizer always lower cases letters to correctly map to phonemes")
     def test_added_tokens_do_lower_case(self):
         pass
 
-    @unittest.skip("Wav2Vec2PhonemeTokenizer always puts spaces between phonemes")
+    @unittest.skip(reason="Wav2Vec2PhonemeTokenizer always puts spaces between phonemes")
     def test_encode_decode_with_spaces(self):
         pass
 
-    @unittest.skip("encodes to text to ids, but decodes ids to phonemes -> not possible to have internal consistency")
+    @unittest.skip(
+        reason="encodes to text to ids, but decodes ids to phonemes -> not possible to have internal consistency"
+    )
     def test_internal_consistency(self):
         pass
 
-    @unittest.skip("Wav2Vec2PhonemeModel has no max model length => no testing")
+    @unittest.skip(reason="Wav2Vec2PhonemeModel has no max model length => no testing")
     def test_add_tokens_tokenizer(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
@@ -388,11 +391,11 @@ class Wav2Vec2PhonemeCTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertEqual(tokens[0], tokenizer.eos_token_id)
                 self.assertEqual(tokens[-3], tokenizer.pad_token_id)
 
-    @unittest.skip("The tokenizer shouldn't be used to encode input IDs (except for labels), only to decode.")
+    @unittest.skip(reason="The tokenizer shouldn't be used to encode input IDs (except for labels), only to decode.")
     def test_tf_encode_plus_sent_to_model(self):
         pass
 
-    @unittest.skip("The tokenizer shouldn't be used to encode input IDs (except for labels), only to decode.")
+    @unittest.skip(reason="The tokenizer shouldn't be used to encode input IDs (except for labels), only to decode.")
     def test_torch_encode_plus_sent_to_model(self):
         pass
 

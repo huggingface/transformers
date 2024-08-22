@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Mask2Former model."""
+"""PyTorch Mask2Former model."""
 
 import math
 import warnings
@@ -53,9 +53,6 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "Mask2FormerConfig"
 _CHECKPOINT_FOR_DOC = "facebook/mask2former-swin-small-coco-instance"
 _IMAGE_PROCESSOR_FOR_DOC = "Mask2FormerImageProcessor"
-
-
-from ..deprecated._archive_maps import MASK2FORMER_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 @dataclass
@@ -1813,7 +1810,7 @@ class Mask2FormerMaskedAttentionDecoder(nn.Module):
             encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`):
                 Sequence of hidden-states at the output of the last layer of the encoder. Used in the
                 cross(masked)-attention of the decoder.
-            feature_size_list (`List[torch.Size]` ):
+            feature_size_list (`List[torch.Size]`):
                 This is a list containing shapes (height & width) of multi-scale features from the Pixel Decoder.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under

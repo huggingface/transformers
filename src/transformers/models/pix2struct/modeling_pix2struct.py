@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Pix2Struct modeling file"""
+"""Pix2Struct modeling file"""
 
 import math
 from typing import Dict, List, Optional, Tuple, Union
@@ -47,9 +47,6 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "Pix2StructConfig"
-
-
-from ..deprecated._archive_maps import PIX2STRUCT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # Adapted from transformers.models.t5.modeling_t5.T5LayerNorm with T5->Pix2Struct

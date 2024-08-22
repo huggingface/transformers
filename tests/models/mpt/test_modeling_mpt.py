@@ -422,7 +422,7 @@ class MptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_mpt_weight_initialization(*config_and_inputs)
 
-    @unittest.skip("For backward compatibility the lm_head is not in the model's state dict on the Hub.")
+    @unittest.skip(reason="For backward compatibility the lm_head is not in the model's state dict on the Hub.")
     def test_model_weights_reload_no_missing_tied_weights(self):
         pass
 
@@ -447,7 +447,7 @@ class MptIntegrationTests(unittest.TestCase):
         )
 
         input_text = "Hello"
-        expected_output = 'Hello, I\'m a new user of the forum. I have a question about the "Safety"'
+        expected_output = "Hello, I'm a new user of the forum. I have a question about the \"Solaris"
 
         inputs = tokenizer(input_text, return_tensors="pt")
         outputs = model.generate(**inputs, max_new_tokens=20)
@@ -465,9 +465,7 @@ class MptIntegrationTests(unittest.TestCase):
         )
 
         input_text = "Hello"
-        expected_output = (
-            "Hello and welcome to the first day of the new release countdown for the month of May!\nToday"
-        )
+        expected_output = "Hello and welcome to the first episode of the new podcast, The Frugal Feminist.\n"
 
         inputs = tokenizer(input_text, return_tensors="pt")
         outputs = model.generate(**inputs, max_new_tokens=20)
@@ -491,8 +489,8 @@ class MptIntegrationTests(unittest.TestCase):
         inputs = tokenizer(input_texts, return_tensors="pt", padding=True).to(torch_device)
 
         expected_output = [
-            "Hello my name is Tiffany and I am a mother of two beautiful children. I have been a nanny for over",
-            "Today I am going at the gym and then I am going to go to the grocery store and get some food. I am going to make",
+            "Hello my name is Tiffany and I am a mother of two beautiful children. I have been a nanny for the",
+            "Today I am going at the gym and then I am going to go to the grocery store. I am going to buy some food and some",
         ]
         outputs = model.generate(**inputs, max_new_tokens=20)
 
@@ -512,7 +510,7 @@ class MptIntegrationTests(unittest.TestCase):
 
         outputs = model(dummy_input, output_hidden_states=True)
 
-        expected_slice = torch.Tensor([-0.2539, -0.2178, -0.1953]).to(torch_device, torch.bfloat16)
+        expected_slice = torch.Tensor([-0.2520, -0.2178, -0.1953]).to(torch_device, torch.bfloat16)
         predicted_slice = outputs.hidden_states[-1][0, 0, :3]
 
         self.assertTrue(torch.allclose(expected_slice, predicted_slice, atol=1e-3, rtol=1e-3))

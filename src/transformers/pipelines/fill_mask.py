@@ -22,7 +22,7 @@ logger = logging.get_logger(__name__)
 @add_end_docstrings(
     build_pipeline_init_args(has_tokenizer=True),
     r"""
-        top_k (`int`, defaults to 5):
+        top_k (`int`, *optional*, defaults to 5):
             The number of predictions to return.
         targets (`str` or `List[str]`, *optional*):
             When passed, the model will limit the scores to the passed targets instead of looking up in the whole

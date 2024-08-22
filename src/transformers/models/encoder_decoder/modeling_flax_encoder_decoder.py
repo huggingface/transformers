@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Classes to support Flax Encoder-Decoder architectures"""
-
+"""Classes to support Flax Encoder-Decoder architectures"""
 
 import os
 from typing import Optional, Tuple, Union

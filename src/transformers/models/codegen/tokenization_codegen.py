@@ -14,7 +14,6 @@
 # limitations under the License.
 """Tokenization classes for CodeGen"""
 
-
 import json
 import os
 from functools import lru_cache

@@ -17,7 +17,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 
 _import_structure = {
-    "configuration_swinv2": ["SWINV2_PRETRAINED_CONFIG_ARCHIVE_MAP", "Swinv2Config"],
+    "configuration_swinv2": ["Swinv2Config"],
 }
 
 
@@ -28,7 +28,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_swinv2"] = [
-        "SWINV2_PRETRAINED_MODEL_ARCHIVE_LIST",
         "Swinv2ForImageClassification",
         "Swinv2ForMaskedImageModeling",
         "Swinv2Model",
@@ -38,7 +37,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_swinv2 import SWINV2_PRETRAINED_CONFIG_ARCHIVE_MAP, Swinv2Config
+    from .configuration_swinv2 import Swinv2Config
 
     try:
         if not is_torch_available():
@@ -47,7 +46,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_swinv2 import (
-            SWINV2_PRETRAINED_MODEL_ARCHIVE_LIST,
             Swinv2Backbone,
             Swinv2ForImageClassification,
             Swinv2ForMaskedImageModeling,

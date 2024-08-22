@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Blip model. """
-
+"""Testing suite for the PyTorch Blip model."""
 
 import inspect
 import os
@@ -169,7 +168,7 @@ class BlipVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -194,9 +193,11 @@ class BlipVisionModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    @unittest.skip
     def test_training(self):
         pass
 
+    @unittest.skip
     def test_training_gradient_checkpointing(self):
         pass
 
@@ -336,9 +337,11 @@ class BlipTextModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    @unittest.skip
     def test_training(self):
         pass
 
+    @unittest.skip
     def test_training_gradient_checkpointing(self):
         pass
 
@@ -463,7 +466,7 @@ class BlipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(reason="BlipModel does not have input/output embeddings")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     # override as the `logit_scale` parameter initilization is different for Blip
@@ -492,7 +495,7 @@ class BlipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:
-            return
+            self.skipTest(reason="test_torchscript is set to False")
 
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
         configs_no_init.torchscript = True
@@ -581,6 +584,63 @@ class BlipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         model_name = "Salesforce/blip-vqa-base"
         model = BlipModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
+
+    def test_get_image_features(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        keys_to_pop = ["input_ids", "attention_mask", "return_loss"]
+
+        for key in keys_to_pop:
+            inputs_dict.pop(key)
+
+        model = BlipModel(config).to(torch_device)
+        model.eval()
+        image_features = model.get_image_features(**inputs_dict)
+        self.assertEqual(
+            image_features.shape,
+            (
+                self.model_tester.batch_size,
+                model.projection_dim,
+            ),
+        )
+
+    def test_get_text_features(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        keys_to_pop = ["pixel_values", "return_loss"]
+
+        for key in keys_to_pop:
+            inputs_dict.pop(key)
+
+        model = BlipModel(config).to(torch_device)
+        model.eval()
+        text_features = model.get_text_features(**inputs_dict)
+        self.assertEqual(
+            text_features.shape,
+            (
+                self.model_tester.batch_size,
+                model.projection_dim,
+            ),
+        )
+
+    def test_get_multimodal_features(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        keys_to_pop = ["return_loss"]
+
+        for key in keys_to_pop:
+            inputs_dict.pop(key)
+
+        model = BlipModel(config).to(torch_device)
+        model.eval()
+        multimodal_features = model.get_multimodal_features(**inputs_dict)
+        self.assertEqual(
+            multimodal_features.shape,
+            (
+                self.model_tester.batch_size,
+                model.projection_dim,
+            ),
+        )
 
     def test_pt_tf_model_equivalence(self):
         super().test_pt_tf_model_equivalence(allow_missing_keys=True)
@@ -811,7 +871,7 @@ class BlipVQAModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(reason="BlipModel does not have input/output embeddings")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
 
@@ -845,7 +905,7 @@ class BlipTextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(reason="BlipModel does not have input/output embeddings")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     def test_forward_signature(self):
@@ -876,7 +936,7 @@ class BlipTextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_training(self):
         if not self.model_tester.is_training:
-            return
+            self.skipTest(reason="ModelTester is not setup for training")
 
         for model_class in self.all_model_classes[:-1]:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -895,7 +955,7 @@ class BlipTextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_training_gradient_checkpointing(self):
         if not self.model_tester.is_training:
-            return
+            self.skipTest(reason="ModelTester is not setup for training")
 
         for model_class in self.all_model_classes[:-1]:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -952,7 +1012,7 @@ class BlipTextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
 
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:
-            return
+            self.skipTest(reason="test_torchscript is set to False")
 
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
         configs_no_init.torchscript = True
@@ -1073,7 +1133,7 @@ class BlipTextImageModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(reason="BlipModel does not have input/output embeddings")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     def test_forward_signature(self):
@@ -1104,7 +1164,7 @@ class BlipTextImageModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_training(self):
         if not self.model_tester.is_training:
-            return
+            self.skipTest(reason="ModelTester is not setup for training")
 
         for model_class in self.all_model_classes[:-1]:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -1123,7 +1183,7 @@ class BlipTextImageModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_training_gradient_checkpointing(self):
         if not self.model_tester.is_training:
-            return
+            self.skipTest(reason="ModelTester is not setup for training")
 
         for model_class in self.all_model_classes[:-1]:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -1168,7 +1228,7 @@ class BlipTextImageModelTest(ModelTesterMixin, unittest.TestCase):
 
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:
-            return
+            self.skipTest(reason="test_torchscript is set to False")
 
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
         configs_no_init.torchscript = True
@@ -1323,6 +1383,20 @@ class BlipModelIntegrationTest(unittest.TestCase):
             predictions[0].tolist(),
             [30522, 1037, 3861, 1997, 1037, 2450, 1998, 2014, 3899, 2006, 1996, 3509, 102],
         )
+
+    def test_inference_interpolate_pos_encoding(self):
+        model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base").to(torch_device)
+        processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
+        processor.image_processor.size = {"height": 500, "width": 500}
+
+        image = prepare_img()
+        inputs = processor(images=image, return_tensors="pt").to(torch_device)
+
+        predictions = model.generate(**inputs, interpolate_pos_encoding=True)
+        generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[0].strip()
+
+        self.assertEqual(predictions[0].tolist(), [30522, 1037, 2450, 3564, 2006, 1996, 3509, 2007, 1037, 3899, 102])
+        self.assertEqual(generated_text, "a woman sitting on the beach with a dog")
 
     def test_inference_vqa(self):
         model = BlipForQuestionAnswering.from_pretrained("Salesforce/blip-vqa-base").to(torch_device)

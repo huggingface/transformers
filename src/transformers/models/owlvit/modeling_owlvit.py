@@ -12,9 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch OWL-ViT model."""
+"""PyTorch OWL-ViT model."""
 
-import warnings
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any, Dict, Optional, Tuple, Union
@@ -47,8 +46,6 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "google/owlvit-base-patch32"
 
 # See all OwlViT models at https://huggingface.co/models?filter=owlvit
-
-from ..deprecated._archive_maps import OWLVIT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # Copied from transformers.models.clip.modeling_clip.contrastive_loss with clip->owlvit
@@ -454,7 +451,7 @@ class OwlViTMLP(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPEncoderLayer with CLIP->OwlViT
+# Copied from transformers.models.altclip.modeling_altclip.AltCLIPEncoderLayer with AltCLIP->OwlViT
 class OwlViTEncoderLayer(nn.Module):
     def __init__(self, config: OwlViTConfig):
         super().__init__()
@@ -1001,13 +998,13 @@ class OwlViTModel(OwlViTPreTrainedModel):
         super().__init__(config)
 
         if not isinstance(config.text_config, OwlViTTextConfig):
-            raise ValueError(
+            raise TypeError(
                 "config.text_config is expected to be of type OwlViTTextConfig but is of type"
                 f" {type(config.text_config)}."
             )
 
         if not isinstance(config.vision_config, OwlViTVisionConfig):
-            raise ValueError(
+            raise TypeError(
                 "config.vision_config is expected to be of type OwlViTVisionConfig but is of type"
                 f" {type(config.vision_config)}."
             )
@@ -1182,16 +1179,7 @@ class OwlViTModel(OwlViTPreTrainedModel):
         if return_loss:
             loss = owlvit_loss(logits_per_text)
 
-        if return_base_image_embeds:
-            warnings.warn(
-                "`return_base_image_embeds` is deprecated and will be removed in v4.27 of Transformers, one can"
-                " obtain the base (unprojected) image embeddings from outputs.vision_model_output.",
-                FutureWarning,
-            )
-            last_hidden_state = vision_outputs[0]
-            image_embeds = self.vision_model.post_layernorm(last_hidden_state)
-        else:
-            text_embeds = text_embeds_norm
+        text_embeds = text_embeds_norm
 
         if not return_dict:
             output = (logits_per_image, logits_per_text, text_embeds, image_embeds, text_outputs, vision_outputs)
@@ -1269,8 +1257,7 @@ class OwlViTClassPredictionHead(nn.Module):
             if query_mask.ndim > 1:
                 query_mask = torch.unsqueeze(query_mask, dim=-2)
 
-            pred_logits = pred_logits.to(torch.float64)
-            pred_logits = torch.where(query_mask == 0, -1e6, pred_logits)
+            pred_logits = torch.where(query_mask == 0, torch.finfo(pred_logits.dtype).min, pred_logits)
             pred_logits = pred_logits.to(torch.float32)
 
         return (pred_logits, image_class_embeds)

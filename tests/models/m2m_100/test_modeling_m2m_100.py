@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch M2M100 model. """
-
+"""Testing suite for the PyTorch M2M100 model."""
 
 import copy
 import tempfile
@@ -244,7 +243,6 @@ class M2M100ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     all_generative_model_classes = (M2M100ForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "conversational": M2M100ForConditionalGeneration,
             "feature-extraction": M2M100Model,
             "summarization": M2M100ForConditionalGeneration,
             "text2text-generation": M2M100ForConditionalGeneration,
@@ -332,6 +330,12 @@ class M2M100ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         model.half()
         model.generate(input_ids, attention_mask=attention_mask)
         model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
+
+    @unittest.skip(
+        reason="This architecure has tied weights by default and there is no way to remove it, check: https://github.com/huggingface/transformers/pull/31771#issuecomment-2210915245"
+    )
+    def test_load_save_without_tied_weights(self):
+        pass
 
 
 def _long_tensor(tok_lst):

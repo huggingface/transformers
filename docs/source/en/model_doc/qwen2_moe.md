@@ -75,3 +75,8 @@ In the following, we demonstrate how to use `Qwen1.5-MoE-A2.7B-Chat` for the inf
 
 [[autodoc]] Qwen2MoeForSequenceClassification
     - forward
+
+## Qwen2MoeForTokenClassification
+
+[[autodoc]] Qwen2MoeForTokenClassification
+    - forward

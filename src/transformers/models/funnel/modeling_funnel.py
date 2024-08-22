@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Funnel Transformer model."""
+"""PyTorch Funnel Transformer model."""
 
 import os
 from dataclasses import dataclass
@@ -48,9 +48,6 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "FunnelConfig"
 _CHECKPOINT_FOR_DOC = "funnel-transformer/small"
-
-
-from ..deprecated._archive_maps import FUNNEL_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 INF = 1e6
@@ -972,8 +969,7 @@ class FunnelBaseModel(FunnelPreTrainedModel):
             token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 
         # TODO: deal with head_mask
-        if inputs_embeds is None:
-            inputs_embeds = self.embeddings(input_ids)
+        inputs_embeds = self.embeddings(input_ids, inputs_embeds=inputs_embeds)
 
         encoder_outputs = self.encoder(
             inputs_embeds,
@@ -1048,8 +1044,7 @@ class FunnelModel(FunnelPreTrainedModel):
             token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 
         # TODO: deal with head_mask
-        if inputs_embeds is None:
-            inputs_embeds = self.embeddings(input_ids)
+        inputs_embeds = self.embeddings(input_ids, inputs_embeds=inputs_embeds)
 
         encoder_outputs = self.encoder(
             inputs_embeds,

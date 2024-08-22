@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Configuration base class and utilities."""
-
+"""Configuration base class and utilities."""
 
 import copy
 import json
@@ -455,6 +454,7 @@ class TrainingSummary:
         metric_mapping = infer_metric_tags_from_eval_results(self.eval_results)
 
         metadata = {}
+        metadata = _insert_value(metadata, "library_name", "transformers")
         metadata = _insert_values_as_list(metadata, "language", self.language)
         metadata = _insert_value(metadata, "license", self.license)
         if self.finetuned_from is not None and isinstance(self.finetuned_from, str) and len(self.finetuned_from) > 0:

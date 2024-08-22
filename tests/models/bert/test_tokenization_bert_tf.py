@@ -50,7 +50,7 @@ class BertTokenizationTest(unittest.TestCase):
 
         self.test_sentences = [
             "This is a straightforward English test sentence.",
-            "This one has some weird characters\rto\nsee\r\nif  those\u00E9break things.",
+            "This one has some weird characters\rto\nsee\r\nif  those\u00e9break things.",
             "Now we're going to add some Chinese: 一 二 三 一二三",
             "And some much more rare Chinese: 齉 堃 齉堃",
             "Je vais aussi écrire en français pour tester les accents",

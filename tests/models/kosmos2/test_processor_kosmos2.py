@@ -17,6 +17,7 @@ import os
 import shutil
 import tempfile
 import unittest
+from tempfile import TemporaryDirectory
 
 import numpy as np
 import pytest
@@ -83,6 +84,15 @@ class Kosmos2ProcessorTest(unittest.TestCase):
         image_inputs = [Image.fromarray(np.moveaxis(x, 0, -1)) for x in image_inputs]
 
         return image_inputs
+
+    def test_image_procesor_load_save_reload(self):
+        # make sure load from Hub repo. -> save -> reload locally work
+        image_processor = CLIPImageProcessor.from_pretrained("microsoft/kosmos-2-patch14-224")
+        with TemporaryDirectory() as tmp_dir:
+            image_processor.save_pretrained(tmp_dir)
+            reloaded_image_processor = CLIPImageProcessor.from_pretrained(tmp_dir)
+            assert image_processor.to_dict() == reloaded_image_processor.to_dict()
+            assert image_processor.to_json_string() == reloaded_image_processor.to_json_string()
 
     def test_save_load_pretrained_additional_features(self):
         processor = Kosmos2Processor(tokenizer=self.get_tokenizer(), image_processor=self.get_image_processor())

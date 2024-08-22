@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Flax Gemma model."""
+
 from typing import Optional, Tuple
 
 import flax.linen as nn

@@ -281,7 +281,7 @@ containing the corresponding speaker embedding.
 ```py
 >>> import os
 >>> import torch
->>> from speechbrain.pretrained import EncoderClassifier
+>>> from speechbrain.inference.classifiers import EncoderClassifier
 
 >>> spk_model_name = "speechbrain/spkrec-xvect-voxceleb"
 

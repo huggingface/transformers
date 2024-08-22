@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # 使用脚本进行训练
 
-除了 🤗 Transformers [notebooks](./noteboks/README)，还有示例脚本演示了如何使用[PyTorch](https://github.com/huggingface/transformers/tree/main/examples/pytorch)、[TensorFlow](https://github.com/huggingface/transformers/tree/main/examples/tensorflow)或[JAX/Flax](https://github.com/huggingface/transformers/tree/main/examples/flax)训练模型以解决特定任务。
+除了 🤗 Transformers [notebooks](./notebooks)，还有示例脚本演示了如何使用[PyTorch](https://github.com/huggingface/transformers/tree/main/examples/pytorch)、[TensorFlow](https://github.com/huggingface/transformers/tree/main/examples/tensorflow)或[JAX/Flax](https://github.com/huggingface/transformers/tree/main/examples/flax)训练模型以解决特定任务。
 
 您还可以在这些示例中找到我们在[研究项目](https://github.com/huggingface/transformers/tree/main/examples/research_projects)和[遗留示例](https://github.com/huggingface/transformers/tree/main/examples/legacy)中使用过的脚本，这些脚本主要是由社区贡献的。这些脚本已不再被积极维护，需要使用特定版本的🤗 Transformers， 可能与库的最新版本不兼容。
 

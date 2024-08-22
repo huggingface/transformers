@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TensorFlow Wav2Vec2 model."""
-
+"""TensorFlow Wav2Vec2 model."""
 
 from __future__ import annotations
 
@@ -51,9 +50,6 @@ _HIDDEN_STATES_START_POSITION = 2
 
 _CHECKPOINT_FOR_DOC = "facebook/wav2vec2-base-960h"
 _CONFIG_FOR_DOC = "Wav2Vec2Config"
-
-
-from ..deprecated._archive_maps import TF_WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 LARGE_NEGATIVE = -1e8
@@ -1675,6 +1671,8 @@ class TFWav2Vec2ForCTC(TFWav2Vec2PreTrainedModel):
 
         >>> loss = model(input_values, labels=labels).loss
         ```"""
+        if labels is not None and tf.reduce_max(labels) >= self.config.vocab_size:
+            raise ValueError(f"Label values must be <= vocab_size: {self.config.vocab_size}")
 
         outputs = self.wav2vec2(
             input_values=input_values,
@@ -1694,9 +1692,6 @@ class TFWav2Vec2ForCTC(TFWav2Vec2PreTrainedModel):
         logits = self.lm_head(hidden_states)
 
         if labels is not None:
-            if tf.reduce_max(labels) >= self.config.vocab_size:
-                raise ValueError(f"Label values must be <= vocab_size: {self.config.vocab_size}")
-
             attention_mask = (
                 attention_mask if attention_mask is not None else tf.ones_like(input_values, dtype=tf.float32)
             )

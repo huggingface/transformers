@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch YOLOS model. """
-
+"""Testing suite for the PyTorch YOLOS model."""
 
 import unittest
 
@@ -62,6 +61,7 @@ class YolosModelTester:
         scope=None,
         n_targets=8,
         num_detection_tokens=10,
+        attn_implementation="eager",
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -83,6 +83,7 @@ class YolosModelTester:
         self.scope = scope
         self.n_targets = n_targets
         self.num_detection_tokens = num_detection_tokens
+        self.attn_implementation = attn_implementation
         # we set the expected sequence length (which is used in several tests)
         # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token) + num_detection_tokens
         num_patches = (image_size[1] // patch_size) * (image_size[0] // patch_size)
@@ -123,6 +124,7 @@ class YolosModelTester:
             initializer_range=self.initializer_range,
             num_detection_tokens=self.num_detection_tokens,
             num_labels=self.num_labels,
+            attn_implementation=self.attn_implementation,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
@@ -204,11 +206,11 @@ class YolosModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    @unittest.skip(reason="YOLOS does not use inputs_embeds")
     def test_inputs_embeds(self):
-        # YOLOS does not use inputs_embeds
         pass
 
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:

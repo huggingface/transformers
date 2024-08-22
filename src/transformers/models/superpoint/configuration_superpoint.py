@@ -19,10 +19,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-SUPERPOINT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "magic-leap-community/superpoint": "https://huggingface.co/magic-leap-community/superpoint/blob/main/config.json"
-}
-
 
 class SuperPointConfig(PretrainedConfig):
     r"""

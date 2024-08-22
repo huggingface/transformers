@@ -1080,7 +1080,7 @@ def build(config_class, models_to_create, output_dir):
             it. Models in different frameworks with the same architecture will be saved in the same subdirectory.
     """
     if data["training_ds"] is None or data["testing_ds"] is None:
-        ds = load_dataset("wikitext", "wikitext-2-raw-v1")
+        ds = load_dataset("Salesforce/wikitext", "wikitext-2-raw-v1")
         data["training_ds"] = ds["train"]
         data["testing_ds"] = ds["test"]
 

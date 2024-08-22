@@ -23,7 +23,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_led": ["LED_PRETRAINED_CONFIG_ARCHIVE_MAP", "LEDConfig"],
+    "configuration_led": ["LEDConfig"],
     "tokenization_led": ["LEDTokenizer"],
 }
 
@@ -42,7 +42,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_led"] = [
-        "LED_PRETRAINED_MODEL_ARCHIVE_LIST",
         "LEDForConditionalGeneration",
         "LEDForQuestionAnswering",
         "LEDForSequenceClassification",
@@ -61,7 +60,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_led import LED_PRETRAINED_CONFIG_ARCHIVE_MAP, LEDConfig
+    from .configuration_led import LEDConfig
     from .tokenization_led import LEDTokenizer
 
     try:
@@ -79,7 +78,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_led import (
-            LED_PRETRAINED_MODEL_ARCHIVE_LIST,
             LEDForConditionalGeneration,
             LEDForQuestionAnswering,
             LEDForSequenceClassification,

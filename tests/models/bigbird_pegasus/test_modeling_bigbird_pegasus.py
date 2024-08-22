@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch BigBirdPegasus model. """
-
+"""Testing suite for the PyTorch BigBirdPegasus model."""
 
 import copy
 import tempfile
@@ -254,7 +253,6 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
     all_generative_model_classes = (BigBirdPegasusForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "conversational": BigBirdPegasusForConditionalGeneration,
             "feature-extraction": BigBirdPegasusModel,
             "question-answering": BigBirdPegasusForQuestionAnswering,
             "summarization": BigBirdPegasusForConditionalGeneration,
@@ -337,14 +335,15 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
 
     def test_generate_without_input_ids(self):
         if self.model_tester.attention_type == "block_sparse":
-            # this test can never pass for BigBird-block-sparse attention since input_ids must be multiple of block_size
-            return
+            self.skipTest(
+                "Cannot pass for BigBird-block-sparse attention since input_ids must be multiple of block_size"
+            )
         super().test_generate_without_input_ids()
 
     def test_retain_grad_hidden_states_attentions(self):
         if self.model_tester.attention_type == "block_sparse":
             # this test can't pass since attention matrix (which is getting returned) can't have gradients (& just 0 at many locations)
-            return
+            self.skipTest(reason="Cannot pass since returned attention matrix can't have gradients")
         super().test_retain_grad_hidden_states_attentions()
 
     # BigBirdPegasusForSequenceClassification does not support inputs_embeds
@@ -476,6 +475,12 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
         outputs2 = model(**input_dict)["logits"]
 
         self.assertTrue(torch.allclose(outputs1, outputs2, atol=1e-5))
+
+    @unittest.skip(
+        reason="This architecure has tied weights by default and there is no way to remove it, check: https://github.com/huggingface/transformers/pull/31771#issuecomment-2210915245"
+    )
+    def test_load_save_without_tied_weights(self):
+        pass
 
 
 @require_torch
@@ -813,6 +818,6 @@ class BigBirdPegasusStandaloneDecoderModelTest(ModelTesterMixin, GenerationTeste
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_attention_mask_past(*config_and_inputs)
 
+    @unittest.skip("Decoder cannot retain gradients")
     def test_retain_grad_hidden_states_attentions(self):
-        # decoder cannot keep gradients
         return

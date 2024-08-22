@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch VideoMAE model. """
-
+"""Testing suite for the PyTorch VideoMAE model."""
 
 import copy
 import unittest
@@ -70,6 +69,7 @@ class VideoMAEModelTester:
         initializer_range=0.02,
         mask_ratio=0.9,
         scope=None,
+        attn_implementation="eager",
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -91,6 +91,7 @@ class VideoMAEModelTester:
         self.initializer_range = initializer_range
         self.mask_ratio = mask_ratio
         self.scope = scope
+        self.attn_implementation = attn_implementation
 
         # in VideoMAE, the number of tokens equals num_frames/tubelet_size * num_patches per frame
         self.num_patches_per_frame = (image_size // patch_size) ** 2
@@ -132,6 +133,7 @@ class VideoMAEModelTester:
             decoder_intermediate_size=self.intermediate_size,
             decoder_num_attention_heads=self.num_attention_heads,
             decoder_num_hidden_layers=self.num_hidden_layers,
+            attn_implementation=self.attn_implementation,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
@@ -197,7 +199,8 @@ class VideoMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             # hence we define a single mask, which we then repeat for each example in the batch
             mask = torch.ones((self.model_tester.num_masks,))
             mask = torch.cat([mask, torch.zeros(self.model_tester.seq_length - mask.size(0))])
-            bool_masked_pos = mask.expand(self.model_tester.batch_size, -1).bool()
+            batch_size = inputs_dict["pixel_values"].shape[0]
+            bool_masked_pos = mask.expand(batch_size, -1).bool()
             inputs_dict["bool_masked_pos"] = bool_masked_pos.to(torch_device)
 
         if return_labels:
@@ -217,7 +220,7 @@ class VideoMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     def test_inputs_embeds(self):
         pass
 
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -242,7 +245,7 @@ class VideoMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     def test_attention_outputs(self):
         if not self.has_attentions:
-            pass
+            self.skipTest(reason="Model does not have attentions")
 
         else:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch BigBird model. """
-
+"""Testing suite for the PyTorch BigBird model."""
 
 import unittest
 
@@ -717,7 +716,7 @@ class BigBirdModelIntegrationTest(unittest.TestCase):
         """
 
         if not self.test_attention_probs:
-            return
+            self.skipTest("test_attention_probs is set to False")
 
         model = BigBirdModel.from_pretrained(
             "google/bigbird-roberta-base", attention_type="block_sparse", num_random_blocks=3, block_size=16

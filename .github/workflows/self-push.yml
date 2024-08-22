@@ -385,19 +385,19 @@ jobs:
         working-directory: /workspace/transformers
         # TODO: Here we pass all tests in the 2 folders for simplicity. It's better to pass only the identified tests.
         run: |
-          python -m pytest -n 1 --dist=loadfile -v --make-reports=${{ matrix.machine_type }}_tests_torch_cuda_extensions_gpu tests/deepspeed tests/extended
+          python -m pytest -n 1 --dist=loadfile -v --make-reports=${{ matrix.machine_type }}_run_torch_cuda_extensions_gpu_test_reports tests/deepspeed tests/extended
 
       - name: Failure short reports
         if: ${{ failure() }}
         continue-on-error: true
-        run: cat /workspace/transformers/reports/${{ matrix.machine_type }}_tests_torch_cuda_extensions_gpu/failures_short.txt
+        run: cat /workspace/transformers/reports/${{ matrix.machine_type }}_run_torch_cuda_extensions_gpu_test_reports/failures_short.txt
 
-      - name: "Test suite reports artifacts: ${{ matrix.machine_type }}_run_tests_torch_cuda_extensions_gpu_test_reports"
+      - name: "Test suite reports artifacts: ${{ matrix.machine_type }}_run_torch_cuda_extensions_gpu_test_reports"
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.machine_type }}_run_tests_torch_cuda_extensions_gpu_test_reports
-          path: /workspace/transformers/reports/${{ matrix.machine_type }}_tests_torch_cuda_extensions_gpu
+          name: ${{ matrix.machine_type }}_run_torch_cuda_extensions_gpu_test_reports
+          path: /workspace/transformers/reports/${{ matrix.machine_type }}_run_torch_cuda_extensions_gpu_test_reports
 
   run_tests_torch_cuda_extensions_multi_gpu:
     name: Torch CUDA extension tests
@@ -475,19 +475,19 @@ jobs:
         working-directory: /workspace/transformers
         # TODO: Here we pass all tests in the 2 folders for simplicity. It's better to pass only the identified tests.
         run: |
-          python -m pytest -n 1 --dist=loadfile -v --make-reports=${{ matrix.machine_type }}_tests_torch_cuda_extensions_gpu tests/deepspeed tests/extended
+          python -m pytest -n 1 --dist=loadfile -v --make-reports=${{ matrix.machine_type }}_run_torch_cuda_extensions_gpu_test_reports tests/deepspeed tests/extended
 
       - name: Failure short reports
         if: ${{ failure() }}
         continue-on-error: true
-        run: cat /workspace/transformers/reports/${{ matrix.machine_type }}_tests_torch_cuda_extensions_gpu/failures_short.txt
+        run: cat /workspace/transformers/reports/${{ matrix.machine_type }}_run_torch_cuda_extensions_gpu_test_reports/failures_short.txt
 
-      - name: "Test suite reports artifacts: ${{ matrix.machine_type }}_run_tests_torch_cuda_extensions_gpu_test_reports"
+      - name: "Test suite reports artifacts: ${{ matrix.machine_type }}_run_torch_cuda_extensions_gpu_test_reports"
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.machine_type }}_run_tests_torch_cuda_extensions_gpu_test_reports
-          path: /workspace/transformers/reports/${{ matrix.machine_type }}_tests_torch_cuda_extensions_gpu
+          name: ${{ matrix.machine_type }}_run_torch_cuda_extensions_gpu_test_reports
+          path: /workspace/transformers/reports/${{ matrix.machine_type }}_run_torch_cuda_extensions_gpu_test_reports
 
   send_results:
     name: Send results to webhook
@@ -563,6 +563,7 @@ jobs:
         # We pass `needs.setup.outputs.matrix` as the argument. A processing in `notification_service.py` to change
         # `models/bert` to `models_bert` is required, as the artifact names use `_` instead of `/`.
         run: |
-          pip install slack_sdk
+          pip install huggingface_hub
+          pip install slack_sdk 
           pip show slack_sdk
           python utils/notification_service.py "${{ needs.setup.outputs.matrix }}"

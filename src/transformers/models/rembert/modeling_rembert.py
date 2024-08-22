@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch RemBERT model."""
-
+"""PyTorch RemBERT model."""
 
 import math
 import os
@@ -51,9 +50,6 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "RemBertConfig"
 _CHECKPOINT_FOR_DOC = "google/rembert"
-
-
-from ..deprecated._archive_maps import REMBERT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 def load_tf_weights_in_rembert(model, config, tf_checkpoint_path):

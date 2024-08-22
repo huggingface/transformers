@@ -19,6 +19,7 @@ URL: https://github.com/facebookresearch/segment-anything.
 
 Also supports converting the SlimSAM checkpoints from https://github.com/czg1225/SlimSAM/tree/master.
 """
+
 import argparse
 import re
 

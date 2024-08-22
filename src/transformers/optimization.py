@@ -387,6 +387,73 @@ def get_cosine_with_min_lr_schedule_with_warmup(
     return LambdaLR(optimizer, lr_lambda, last_epoch)
 
 
+def _get_wsd_scheduler_lambda(
+    current_step: int,
+    *,
+    num_warmup_steps: int,
+    num_stable_steps: int,
+    num_decay_steps: int,
+    num_cycles: float,
+    min_lr_ratio: float,
+):
+    if current_step < num_warmup_steps:
+        return float(current_step) / float(max(1, num_warmup_steps))
+    if current_step < num_warmup_steps + num_stable_steps:
+        return 1.0
+    if current_step < num_warmup_steps + num_stable_steps + num_decay_steps:
+        progress = float(current_step - num_warmup_steps - num_stable_steps) / float(max(1, num_decay_steps))
+        value = max(0.0, 0.5 * (1.0 + math.cos(math.pi * float(num_cycles) * 2.0 * progress)))
+        return (1.0 - min_lr_ratio) * value + min_lr_ratio
+    return min_lr_ratio
+
+
+def get_wsd_schedule(
+    optimizer: Optimizer,
+    num_warmup_steps: int,
+    num_stable_steps: int,
+    num_decay_steps: int,
+    min_lr_ratio: float = 0,
+    num_cycles: float = 0.5,
+    last_epoch: int = -1,
+):
+    """
+    Create a schedule with a learning rate that has three stages:
+    1. linear increase from 0 to initial lr.
+    2. constant lr (equal to initial lr).
+    3. decrease following the values of the cosine function between the initial lr set in the optimizer to
+       a fraction of initial lr.
+
+    Args:
+        optimizer ([`~torch.optim.Optimizer`]):
+            The optimizer for which to schedule the learning rate.
+        num_warmup_steps (`int`):
+            The number of steps for the warmup phase.
+        num_stable_steps (`int`):
+            The number of steps for the stable phase.
+        num_decay_steps (`int`):
+            The number of steps for the cosine annealing phase.
+        min_lr_ratio (`float`, *optional*, defaults to 0):
+            The minimum learning rate as a ratio of the initial learning rate.
+        num_cycles (`float`, *optional*, defaults to 0.5):
+            The number of waves in the cosine schedule (the defaults is to just decrease from the max value to 0
+            following a half-cosine).
+        last_epoch (`int`, *optional*, defaults to -1):
+            The index of the last epoch when resuming training.
+
+    Return:
+        `torch.optim.lr_scheduler.LambdaLR` with the appropriate schedule.
+    """
+    lr_lambda = partial(
+        _get_wsd_scheduler_lambda,
+        num_warmup_steps=num_warmup_steps,
+        num_stable_steps=num_stable_steps,
+        num_decay_steps=num_decay_steps,
+        min_lr_ratio=min_lr_ratio,
+        num_cycles=num_cycles,
+    )
+    return LambdaLR(optimizer, lr_lambda, last_epoch)
+
+
 TYPE_TO_SCHEDULER_FUNCTION = {
     SchedulerType.LINEAR: get_linear_schedule_with_warmup,
     SchedulerType.COSINE: get_cosine_schedule_with_warmup,
@@ -397,6 +464,7 @@ TYPE_TO_SCHEDULER_FUNCTION = {
     SchedulerType.INVERSE_SQRT: get_inverse_sqrt_schedule,
     SchedulerType.REDUCE_ON_PLATEAU: get_reduce_on_plateau_schedule,
     SchedulerType.COSINE_WITH_MIN_LR: get_cosine_with_min_lr_schedule_with_warmup,
+    SchedulerType.WARMUP_STABLE_DECAY: get_wsd_schedule,
 }
 
 
@@ -451,7 +519,7 @@ def get_scheduler(
             if param.requires_grad:
                 param.register_post_accumulate_grad_hook(scheduler_hook)
 
-        return LayerWiseDummyScheduler()
+        return LayerWiseDummyScheduler(optimizer_dict=optimizer_dict, lr=optimizer.defaults["lr"])
 
     if name == SchedulerType.CONSTANT:
         return schedule_func(optimizer)
@@ -471,6 +539,9 @@ def get_scheduler(
 
     if name == SchedulerType.INVERSE_SQRT:
         return schedule_func(optimizer, num_warmup_steps=num_warmup_steps)
+
+    if name == SchedulerType.WARMUP_STABLE_DECAY:
+        return schedule_func(optimizer, num_warmup_steps=num_warmup_steps, **scheduler_specific_kwargs)
 
     # All other schedulers require `num_training_steps`
     if num_training_steps is None:

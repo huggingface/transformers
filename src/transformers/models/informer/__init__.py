@@ -18,10 +18,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 
 _import_structure = {
-    "configuration_informer": [
-        "INFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "InformerConfig",
-    ],
+    "configuration_informer": ["InformerConfig"],
 }
 
 try:
@@ -31,7 +28,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_informer"] = [
-        "INFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
         "InformerForPrediction",
         "InformerModel",
         "InformerPreTrainedModel",
@@ -39,7 +35,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_informer import INFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, InformerConfig
+    from .configuration_informer import InformerConfig
 
     try:
         if not is_torch_available():
@@ -48,7 +44,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_informer import (
-            INFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             InformerForPrediction,
             InformerModel,
             InformerPreTrainedModel,

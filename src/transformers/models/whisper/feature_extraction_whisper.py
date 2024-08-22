@@ -15,6 +15,7 @@
 """
 Feature extractor class for Whisper
 """
+
 from typing import List, Optional, Union
 
 import numpy as np
@@ -43,16 +44,16 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
     Fourier Transform` which should match pytorch's `torch.stft` equivalent.
 
     Args:
-        feature_size (`int`, defaults to 80):
+        feature_size (`int`, *optional*, defaults to 80):
             The feature dimension of the extracted features.
-        sampling_rate (`int`, defaults to 16000):
+        sampling_rate (`int`, *optional*, defaults to 16000):
             The sampling rate at which the audio files should be digitalized expressed in hertz (Hz).
-        hop_length (`int`, defaults to 160):
+        hop_length (`int`, *optional*, defaults to 160):
             Length of the overlaping windows for the STFT used to obtain the Mel Frequency coefficients.
-        chunk_length (`int`, defaults to 30):
+        chunk_length (`int`, *optional*, defaults to 30):
             The maximum number of chuncks of `sampling_rate` samples used to trim and pad longer or shorter audio
             sequences.
-        n_fft (`int`, defaults to 400):
+        n_fft (`int`, *optional*, defaults to 400):
             Size of the Fourier transform.
         padding_value (`float`, *optional*, defaults to 0.0):
             Padding value used to pad the audio. Should correspond to silences.
@@ -188,6 +189,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         sampling_rate: Optional[int] = None,
         do_normalize: Optional[bool] = None,
         device: Optional[str] = "cpu",
+        return_token_timestamps: Optional[bool] = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -229,7 +231,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
                 The sampling rate at which the `raw_speech` input was sampled. It is strongly recommended to pass
                 `sampling_rate` at the forward call to prevent silent errors and allow automatic speech recognition
                 pipeline.
-            padding_value (`float`, defaults to 0.0):
+            padding_value (`float`, *optional*, defaults to 0.0):
                 The value that is used to fill the padding values / vectors.
             do_normalize (`bool`, *optional*, defaults to `False`):
                 Whether or not to zero-mean unit-variance normalize the input. Normalizing can help to significantly
@@ -237,6 +239,9 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
             device (`str`, *optional*, defaults to `'cpu'`):
                 Specifies the device for computation of the log-mel spectrogram of audio signals in the
                 `_torch_extract_fbank_features` method. (e.g., "cpu", "cuda")
+            return_token_timestamps (`bool`, *optional*, defaults to `None`):
+                Whether or not to return the number of frames of the input raw_speech.
+                These num_frames can be used by the model to compute word level timestamps.
         """
 
         if sampling_rate is not None:
@@ -302,12 +307,16 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
 
         if isinstance(input_features[0], List):
             padded_inputs["input_features"] = [np.asarray(feature, dtype=np.float32) for feature in input_features]
+
         else:
             padded_inputs["input_features"] = input_features
 
         if return_attention_mask:
             # rescale from sample (48000) to feature (3000)
             padded_inputs["attention_mask"] = padded_inputs["attention_mask"][:, :: self.hop_length]
+
+        if return_token_timestamps is not None:
+            padded_inputs["num_frames"] = [len(raw_speech_i) // self.hop_length for raw_speech_i in raw_speech]
 
         if return_tensors is not None:
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)

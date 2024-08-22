@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Classes to support Encoder-Decoder architectures"""
-
+"""Classes to support Encoder-Decoder architectures"""
 
 import gc
 import inspect
@@ -179,6 +178,7 @@ class EncoderDecoderModel(PreTrainedModel):
     base_model_prefix = "encoder_decoder"
     main_input_name = "input_ids"
     supports_gradient_checkpointing = True
+    _supports_param_buffer_assignment = False
 
     def __init__(
         self,
@@ -209,12 +209,12 @@ class EncoderDecoderModel(PreTrainedModel):
         if encoder is None:
             from ..auto.modeling_auto import AutoModel
 
-            encoder = AutoModel.from_config(config.encoder)
+            encoder = AutoModel.from_config(config.encoder, attn_implementation=config._attn_implementation)
 
         if decoder is None:
             from ..auto.modeling_auto import AutoModelForCausalLM
 
-            decoder = AutoModelForCausalLM.from_config(config.decoder)
+            decoder = AutoModelForCausalLM.from_config(config.decoder, attn_implementation=config._attn_implementation)
 
         self.encoder = encoder
         self.decoder = decoder

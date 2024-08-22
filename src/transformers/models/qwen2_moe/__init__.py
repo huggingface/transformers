@@ -21,7 +21,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_qwen2_moe": ["QWEN2MOE_PRETRAINED_CONFIG_ARCHIVE_MAP", "Qwen2MoeConfig"],
+    "configuration_qwen2_moe": ["Qwen2MoeConfig"],
 }
 
 
@@ -36,11 +36,12 @@ else:
         "Qwen2MoeModel",
         "Qwen2MoePreTrainedModel",
         "Qwen2MoeForSequenceClassification",
+        "Qwen2MoeForTokenClassification",
     ]
 
 
 if TYPE_CHECKING:
-    from .configuration_qwen2_moe import QWEN2MOE_PRETRAINED_CONFIG_ARCHIVE_MAP, Qwen2MoeConfig
+    from .configuration_qwen2_moe import Qwen2MoeConfig
 
     try:
         if not is_torch_available():
@@ -51,6 +52,7 @@ if TYPE_CHECKING:
         from .modeling_qwen2_moe import (
             Qwen2MoeForCausalLM,
             Qwen2MoeForSequenceClassification,
+            Qwen2MoeForTokenClassification,
             Qwen2MoeModel,
             Qwen2MoePreTrainedModel,
         )

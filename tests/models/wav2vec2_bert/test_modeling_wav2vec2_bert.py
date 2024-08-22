@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Wav2Vec2-BERT model. """
+"""Testing suite for the PyTorch Wav2Vec2-BERT model."""
+
 import tempfile
 import unittest
 
@@ -556,7 +557,7 @@ class Wav2Vec2BertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
 
     # Ignore copy
     @unittest.skip(reason="Wav2Vec2Bert has no inputs_embeds")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     # Ignore copy

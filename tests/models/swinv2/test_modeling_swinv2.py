@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Swinv2 model. """
+"""Testing suite for the PyTorch Swinv2 model."""
+
 import collections
 import inspect
 import unittest
@@ -228,15 +229,16 @@ class Swinv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = Swinv2ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Swinv2Config, embed_dim=37)
+        self.config_tester = ConfigTester(
+            self,
+            config_class=Swinv2Config,
+            embed_dim=37,
+            has_text_modality=False,
+            common_properties=["image_size", "patch_size", "num_channels"],
+        )
 
     def test_config(self):
-        self.config_tester.create_and_test_config_to_json_string()
-        self.config_tester.create_and_test_config_to_json_file()
-        self.config_tester.create_and_test_config_from_and_save_pretrained()
-        self.config_tester.create_and_test_config_with_num_labels()
-        self.config_tester.check_config_can_be_init_without_params()
-        self.config_tester.check_config_arguments_init()
+        self.config_tester.run_common_tests()
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -255,7 +257,7 @@ class Swinv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -484,6 +486,46 @@ class Swinv2ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.logits.shape, expected_shape)
         expected_slice = torch.tensor([-0.3947, -0.4306, 0.0026]).to(torch_device)
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
+
+    @slow
+    def test_inference_fp16(self):
+        model = Swinv2ForImageClassification.from_pretrained(
+            "microsoft/swinv2-tiny-patch4-window8-256", torch_dtype=torch.float16
+        ).to(torch_device)
+        image_processor = self.default_image_processor
+
+        image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+        inputs = image_processor(images=image, return_tensors="pt").to(model.dtype).to(torch_device)
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(**inputs)
+
+        # verify the logits
+        expected_shape = torch.Size((1, 1000))
+        self.assertEqual(outputs.logits.shape, expected_shape)
+        expected_slice = torch.tensor([-0.3938, -0.4290, 0.0020], dtype=model.dtype).to(torch_device)
+        self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
+
+    @slow
+    def test_inference_interpolate_pos_encoding(self):
+        # Swinv2 models have an `interpolate_pos_encoding` argument in their forward method,
+        # allowing to interpolate the pre-trained position embeddings in order to use
+        # the model on higher resolutions.
+        model = Swinv2Model.from_pretrained("microsoft/swinv2-tiny-patch4-window8-256").to(torch_device)
+
+        image_processor = self.default_image_processor
+        image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+        inputs = image_processor(images=image, size={"height": 481, "width": 481}, return_tensors="pt")
+        pixel_values = inputs.pixel_values.to(torch_device)
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(pixel_values, interpolate_pos_encoding=True)
+
+        # verify the logits
+        expected_shape = torch.Size((1, 256, 768))
+        self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
 
 @require_torch

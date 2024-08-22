@@ -285,6 +285,23 @@ class MixedInt8Test(BaseMixedInt8Test):
 
         self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
 
+    def test_generate_quality_dequantize(self):
+        r"""
+        Test that loading the model and dequantizing it produce correct results
+        """
+        bnb_config = BitsAndBytesConfig(load_in_8bit=True)
+
+        model_8bit = AutoModelForCausalLM.from_pretrained(
+            self.model_name, quantization_config=bnb_config, device_map="auto"
+        )
+
+        model_8bit.dequantize()
+
+        encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
+        output_sequences = model_8bit.generate(input_ids=encoded_input["input_ids"].to(0), max_new_tokens=10)
+
+        self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
+
     def test_raise_if_config_and_load_in_8bit(self):
         r"""
         Test that loading the model with the config and `load_in_8bit` raises an error
@@ -809,7 +826,7 @@ class MixedInt8TestTraining(BaseMixedInt8Test):
 
     def test_training(self):
         if version.parse(importlib.metadata.version("bitsandbytes")) < version.parse("0.37.0"):
-            return
+            self.skipTest(reason="This test requires bitsandbytes>=0.37.0")
 
         # Step 1: freeze all parameters
         model = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_8bit=True)

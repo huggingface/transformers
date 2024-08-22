@@ -14,9 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
- Tokenization classes for Transformer XL model. Adapted from https://github.com/kimiyoung/transformer-xl.
+Tokenization classes for Transformer XL model. Adapted from https://github.com/kimiyoung/transformer-xl.
 """
-
 
 import glob
 import os
@@ -512,7 +511,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
             return symbols
 
 
-class LMOrderedIterator(object):
+class LMOrderedIterator:
     def __init__(self, data, bsz, bptt, device="cpu", ext_len=None):
         """
         data -- LongTensor -- the LongTensor is strictly ordered
@@ -571,7 +570,7 @@ class LMOrderedIterator(object):
         return self.get_fixlen_iter()
 
 
-class LMShuffledIterator(object):
+class LMShuffledIterator:
     def __init__(self, data, bsz, bptt, device="cpu", ext_len=None, shuffle=False):
         """
         data -- list[LongTensor] -- there is no order among the LongTensors
@@ -680,7 +679,7 @@ class LMMultiFileIterator(LMShuffledIterator):
                 yield batch
 
 
-class TransfoXLCorpus(object):
+class TransfoXLCorpus:
     @classmethod
     @torch_only_method
     def from_pretrained(cls, pretrained_model_name_or_path, cache_dir=None, *inputs, **kwargs):

@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """PyTorch SuperPoint model."""
+
 from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 
@@ -38,8 +39,6 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "SuperPointConfig"
 
 _CHECKPOINT_FOR_DOC = "magic-leap-community/superpoint"
-
-SUPERPOINT_PRETRAINED_MODEL_ARCHIVE_LIST = ["magic-leap-community/superpoint"]
 
 
 def remove_keypoints_from_borders(

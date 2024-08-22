@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch SeamlessM4Tv2 model."""
-
+"""PyTorch SeamlessM4Tv2 model."""
 
 import copy
 import math
@@ -49,14 +48,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = ""
 _CONFIG_FOR_DOC = "SeamlessM4Tv2Config"
-
-
-from ..deprecated._archive_maps import SEAMLESS_M4T_V2_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
-SPEECHT5_PRETRAINED_HIFIGAN_CONFIG_ARCHIVE_MAP = {
-    "microsoft/speecht5_hifigan": "https://huggingface.co/microsoft/speecht5_hifigan/resolve/main/config.json",
-}
 
 
 @dataclass
@@ -797,6 +788,8 @@ class SeamlessM4Tv2ConformerEncoder(nn.Module):
                         layer.__call__,
                         hidden_states,
                         attention_mask,
+                        output_attentions,
+                        conv_attention_mask,
                     )
                 else:
                     layer_outputs = layer(
@@ -944,6 +937,20 @@ class SeamlessM4Tv2ConformerAdapter(nn.Module):
 
 
 ############ TEXT / UNITS related code ################
+
+
+# Copied from transformers.models.m2m_100.modeling_m2m_100.M2M100ScaledWordEmbedding with M2M100->SeamlessM4Tv2
+class SeamlessM4Tv2ScaledWordEmbedding(nn.Embedding):
+    """
+    This module overrides nn.Embeddings' forward by multiplying with embeddings scale.
+    """
+
+    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, embed_scale: Optional[float] = 1.0):
+        super().__init__(num_embeddings, embedding_dim, padding_idx)
+        self.embed_scale = embed_scale
+
+    def forward(self, input_ids: torch.Tensor):
+        return super().forward(input_ids) * self.embed_scale
 
 
 # Copied from transformers.models.m2m_100.modeling_m2m_100.M2M100SinusoidalPositionalEmbedding
@@ -1753,9 +1760,11 @@ class SeamlessM4Tv2Encoder(SeamlessM4Tv2PreTrainedModel):
         self.max_source_positions = config.max_position_embeddings
 
         if not self.is_t2u_encoder:
-            self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
+            embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
 
-            self.embed_tokens = nn.Embedding(config.vocab_size, embed_dim, self.padding_idx)
+            self.embed_tokens = SeamlessM4Tv2ScaledWordEmbedding(
+                config.vocab_size, embed_dim, self.padding_idx, embed_scale=embed_scale
+            )
 
             if embed_tokens is not None:
                 self.embed_tokens.weight = embed_tokens.weight
@@ -1848,7 +1857,7 @@ class SeamlessM4Tv2Encoder(SeamlessM4Tv2PreTrainedModel):
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
+            inputs_embeds = self.embed_tokens(input_ids)
 
         if not self.is_t2u_encoder:
             embed_pos = self.embed_positions(input)
@@ -1932,14 +1941,18 @@ class SeamlessM4Tv2Decoder(SeamlessM4Tv2PreTrainedModel):
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
         self.max_target_positions = config.max_position_embeddings
-        self.embed_scale = math.sqrt(config.hidden_size) if config.scale_embedding else 1.0
+        embed_scale = math.sqrt(config.hidden_size) if config.scale_embedding else 1.0
 
         if embed_tokens is not None:
             # if embed_tokens defined, use its shape instead
-            self.embed_tokens = nn.Embedding(embed_tokens.num_embeddings, embed_tokens.embedding_dim, self.padding_idx)
+            self.embed_tokens = SeamlessM4Tv2ScaledWordEmbedding(
+                embed_tokens.num_embeddings, embed_tokens.embedding_dim, self.padding_idx, embed_scale=embed_scale
+            )
             self.embed_tokens.weight = embed_tokens.weight
         else:
-            self.embed_tokens = nn.Embedding(self.vocab_size, config.hidden_size, self.padding_idx)
+            self.embed_tokens = SeamlessM4Tv2ScaledWordEmbedding(
+                self.vocab_size, config.hidden_size, self.padding_idx, embed_scale=embed_scale
+            )
 
         self.embed_positions = SeamlessM4Tv2SinusoidalPositionalEmbedding(
             self.max_target_positions,
@@ -2058,7 +2071,7 @@ class SeamlessM4Tv2Decoder(SeamlessM4Tv2PreTrainedModel):
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
         if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
+            inputs_embeds = self.embed_tokens(input_ids)
 
         attention_mask = _prepare_4d_causal_attention_mask(
             attention_mask, input_shape, inputs_embeds, past_key_values_length
@@ -3409,6 +3422,7 @@ class SeamlessM4Tv2ForSpeechToText(SeamlessM4Tv2PreTrainedModel):
         """
         text_decoder_input_ids = kwargs.pop("decoder_input_ids", None)
         # overwrite text_decoder_input_ids if tgt_lang is passed. The latter gets priority over decoder_input_ids.
+        input_features = input_features if input_features is not None else kwargs.pop("inputs")
         if tgt_lang is not None:
             inputs = kwargs.get("input_embeds") if input_features is None else input_features
             inputs = (

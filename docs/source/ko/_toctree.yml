@@ -27,6 +27,8 @@
     title: 에이전트
   - local: llm_tutorial
     title: 대규모 언어 모델로 생성하기
+  - local: in_translation
+    title: (번역중)Chatting with Transformers
   title: 튜토리얼
 - sections:
   - isExpanded: false
@@ -71,12 +73,12 @@
         title: 제로샷(zero-shot) 이미지 분류
       - local: tasks/monocular_depth_estimation
         title: 단일 영상 기반 깊이 추정
-      - local: in_translation
-        title: (번역중) Image-to-Image
-      - local: in_translation
-        title: (번역중) Image Feature Extraction
-      - local: in_translation
-        title: (번역중) Mask Generation
+      - local: tasks/image_to_image
+        title: Image-to-Image
+      - local: tasks/image_feature_extraction
+        title: 이미지 특징 추출
+      - local: tasks/mask_generation
+        title: 마스크 생성
       - local: in_translation
         title: (번역중) Knowledge Distillation for Computer Vision
     title: 컴퓨터 비전
@@ -98,11 +100,11 @@
     title: 생성
   - isExpanded: false
     sections:
-    - local: in_translation
-      title: (번역중) Image tasks with IDEFICS
-    - local: in_translation
-      title: (번역중) LLM prompting guide
-    title: (번역중) 프롬프팅
+    - local: tasks/idefics
+      title: IDEFICS를 이용한 이미지 작업
+    - local: tasks/prompting
+      title: 대규모 언어 모델 프롬프팅 가이드
+    title: 프롬프팅
   title: 태스크 가이드
 - sections:
   - local: fast_tokenizers
@@ -113,10 +115,10 @@
     title: 모델별 API 사용하기
   - local: custom_models
     title: 사용자 정의 모델 공유하기
-  - local: in_translation
-    title: (번역중) Templates for chat models
-  - local: in_translation
-    title: (번역중) Trainer
+  - local: chat_templating
+    title: 챗봇 템플릿 익히기
+  - local: trainer
+    title: Trainer 사용하기
   - local: sagemaker
     title: Amazon SageMaker에서 학습 실행하기
   - local: serialization
@@ -131,27 +133,69 @@
     title: (번역중) Notebooks with examples
   - local: community
     title: 커뮤니티 리소스
-  - local: custom_tools
-    title: 사용자 정의 도구와 프롬프트
   - local: troubleshooting
     title: 문제 해결
   - local: in_translation
-    title: (번역중) Contribute new quantization method
+    title: (번역중) Interoperability with GGUF files
   title: (번역중) 개발자 가이드
+- sections:
+  - local: in_translation
+    title: (번역중) Getting started
+  - local: quantization/bitsandbytes
+    title: bitsandbytes
+  - local: in_translation
+    title: (번역중) GPTQ
+  - local: quantization/awq
+    title: AWQ
+  - local: in_translation
+    title: (번역중) AQLM
+  - local: in_translation
+    title: (번역중) Quanto
+  - local: in_translation
+    title: (번역중) EETQ
+  - local: in_translation
+    title: (번역중) HQQ
+  - local: in_translation
+    title: (번역중) Optimum
+  - local: in_translation
+    title: (번역중) Contribute new quantization method
+  title: (번역중) 경량화 메소드
+- sections:
+  - local: in_translation
+    title: (번역중) Getting started
+  - local: in_translation
+    title: (번역중) bitsandbytes
+  - local: quantization/gptq
+    title: GPTQ
+  - local: in_translation
+    title: (번역중) AWQ
+  - local: in_translation
+    title: (번역중) AQLM
+  - local: quantization/quanto
+    title: Quanto
+  - local: quantization/eetq
+    title: EETQ
+  - local: in_translation
+    title: (번역중) HQQ
+  - local: in_translation
+    title: (번역중) Optimum
+  - local: in_translation
+    title: (번역중) Contribute new quantization method
+  title: (번역중) 경량화 메소드
 - sections:
   - local: performance
     title: 성능 및 확장성
   - local: in_translation
-    title: (번역중) Quantization
+    title: (번역중) LLM inference optimization
   - sections:
     - local: in_translation
-      title: (번역중) Training on one GPU
+      title: (번역중) Methods and tools for efficient training on a single GPU
     - local: perf_train_gpu_many
       title: 다중 GPU에서 훈련 진행하기
-    - local: in_translation
-      title: (번역중) Fully Sharded Data Parallel
-    - local: in_translation
-      title: (번역중) DeepSpeed
+    - local: deepspeed
+      title: DeepSpeed
+    - local: fsdp
+      title: 완전 분할 데이터 병렬 처리
     - local: perf_train_cpu
       title: CPU에서 훈련
     - local: perf_train_cpu_many
@@ -185,15 +229,13 @@
       title: 🤗 Transformers에 기여하는 방법
     - local: add_new_model
       title: 🤗 Transformers에 새로운 모델을 추가하는 방법
-    - local: add_tensorflow_model
-      title: 어떻게 🤗 Transformers 모델을 TensorFlow로 변환하나요?
     - local: add_new_pipeline
       title: 어떻게 🤗 Transformers에 파이프라인을 추가하나요?
     - local: testing
       title: 테스트
     - local: pr_checks
       title: Pull Request에 대한 검사
-  title: (번역중) 기여하기
+  title: 기여하기
 - sections:
   - local: philosophy
     title: 이념과 목표
@@ -219,13 +261,13 @@
     title: 추론 웹 서버를 위한 파이프라인
   - local: model_memory_anatomy
     title: 모델 학습 해부하기
-  - local: in_translation
-    title: (번역중) Getting the most out of LLMs
+  - local: llm_tutorial_optimization
+    title: LLM을 최대한 활용하기
   title: (번역중) 개념 가이드
 - sections:
   - sections:
-    - local: in_translation
-      title: (번역중) Agents and Tools
+    - local: main_classes/agent
+      title: 에이전트와 도구
     - local: in_translation
       title: (번역중) Auto Classes
     - local: in_translation
@@ -260,8 +302,8 @@
       title: (번역중) Tokenizer
     - local: in_translation
       title: (번역중) Trainer
-    - local: in_translation
-      title: (번역중) DeepSpeed
+    - local: deepspeed
+      title: DeepSpeed
     - local: in_translation
       title: (번역중) Feature Extractor
     - local: in_translation

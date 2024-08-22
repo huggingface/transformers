@@ -14,6 +14,7 @@
 
 import ast
 import collections
+import datetime
 import functools
 import json
 import operator
@@ -26,9 +27,11 @@ from typing import Dict, List, Optional, Union
 import requests
 from get_ci_error_statistics import get_jobs
 from get_previous_daily_ci import get_last_daily_ci_reports
+from huggingface_hub import HfApi
 from slack_sdk import WebClient
 
 
+api = HfApi()
 client = WebClient(token=os.environ["CI_SLACK_BOT_TOKEN"])
 
 NON_MODEL_TEST_MODULES = [
@@ -416,7 +419,7 @@ class Message:
             reports=sorted_model_reports,
             to_truncate=False,
         )
-        file_path = os.path.join(os.getcwd(), "prev_ci_results/model_failures_report.txt")
+        file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/model_failures_report.txt")
         with open(file_path, "w", encoding="UTF-8") as fp:
             fp.write(model_failures_report)
 
@@ -426,18 +429,18 @@ class Message:
             reports=sorted_module_reports,
             to_truncate=False,
         )
-        file_path = os.path.join(os.getcwd(), "prev_ci_results/module_failures_report.txt")
+        file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/module_failures_report.txt")
         with open(file_path, "w", encoding="UTF-8") as fp:
             fp.write(module_failures_report)
 
         if self.prev_ci_artifacts is not None:
-            # if the last run produces artifact named `prev_ci_results`
+            # if the last run produces artifact named `ci_results_{job_name}`
             if (
-                "prev_ci_results" in self.prev_ci_artifacts
-                and "model_failures_report.txt" in self.prev_ci_artifacts["prev_ci_results"]
+                f"ci_results_{job_name}" in self.prev_ci_artifacts
+                and "model_failures_report.txt" in self.prev_ci_artifacts[f"ci_results_{job_name}"]
             ):
                 # Compute the difference of the previous/current (model failure) table
-                prev_model_failures = self.prev_ci_artifacts["prev_ci_results"]["model_failures_report.txt"]
+                prev_model_failures = self.prev_ci_artifacts[f"ci_results_{job_name}"]["model_failures_report.txt"]
                 entries_changed = self.compute_diff_for_failure_reports(model_failures_report, prev_model_failures)
                 if len(entries_changed) > 0:
                     # Save the complete difference
@@ -447,7 +450,7 @@ class Message:
                         reports=entries_changed,
                         to_truncate=False,
                     )
-                    file_path = os.path.join(os.getcwd(), "prev_ci_results/changed_model_failures_report.txt")
+                    file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/changed_model_failures_report.txt")
                     with open(file_path, "w", encoding="UTF-8") as fp:
                         fp.write(diff_report)
 
@@ -516,6 +519,39 @@ class Message:
         new_failure_blocks = self.get_new_model_failure_blocks(with_header=False)
         if len(new_failure_blocks) > 0:
             blocks.extend(new_failure_blocks)
+
+        # To save the list of new model failures
+        extra_blocks = self.get_new_model_failure_blocks(to_truncate=False)
+        if extra_blocks:
+            failure_text = extra_blocks[-1]["text"]["text"]
+            file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/new_model_failures.txt")
+            with open(file_path, "w", encoding="UTF-8") as fp:
+                fp.write(failure_text)
+
+            # upload results to Hub dataset
+            file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/new_model_failures.txt")
+            commit_info = api.upload_file(
+                path_or_fileobj=file_path,
+                path_in_repo=f"{datetime.datetime.today().strftime('%Y-%m-%d')}/ci_results_{job_name}/new_model_failures.txt",
+                repo_id="hf-internal-testing/transformers_daily_ci",
+                repo_type="dataset",
+                token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
+            )
+            url = f"https://huggingface.co/datasets/hf-internal-testing/transformers_daily_ci/raw/{commit_info.oid}/{datetime.datetime.today().strftime('%Y-%m-%d')}/ci_results_{job_name}/new_model_failures.txt"
+
+            block = {
+                "type": "section",
+                "text": {
+                    "type": "plain_text",
+                    "text": "bonjour",
+                },
+                "accessory": {
+                    "type": "button",
+                    "text": {"type": "plain_text", "text": "Check New model failures"},
+                    "url": url,
+                },
+            }
+            blocks.append(block)
 
         return json.dumps(blocks)
 
@@ -636,18 +672,18 @@ class Message:
             {"type": "section", "text": {"type": "mrkdwn", "text": failure_text}},
         ]
 
-    def get_new_model_failure_blocks(self, with_header=True):
+    def get_new_model_failure_blocks(self, with_header=True, to_truncate=True):
         if self.prev_ci_artifacts is None:
-            return {}
+            return []
 
         sorted_dict = sorted(self.model_results.items(), key=lambda t: t[0])
 
         prev_model_results = {}
         if (
-            "prev_ci_results" in self.prev_ci_artifacts
-            and "model_results.json" in self.prev_ci_artifacts["prev_ci_results"]
+            f"ci_results_{job_name}" in self.prev_ci_artifacts
+            and "model_results.json" in self.prev_ci_artifacts[f"ci_results_{job_name}"]
         ):
-            prev_model_results = json.loads(self.prev_ci_artifacts["prev_ci_results"]["model_results.json"])
+            prev_model_results = json.loads(self.prev_ci_artifacts[f"ci_results_{job_name}"]["model_results.json"])
 
         all_failure_lines = {}
         for job, job_result in sorted_dict:
@@ -675,6 +711,8 @@ class Message:
                         all_failure_lines[new_text].append(f"<{url}|{device}>" if url is not None else device)
 
         MAX_ERROR_TEXT = 3000 - len("[Truncated]") - len("```New model failures```\n\n")
+        if not to_truncate:
+            MAX_ERROR_TEXT = float("inf")
         failure_text = ""
         for line, devices in all_failure_lines.items():
             new_text = failure_text + f"{'|'.join(devices)} gpu\n{line}"
@@ -879,7 +917,7 @@ if __name__ == "__main__":
     # To find the PR number in a commit title, for example, `Add AwesomeFormer model (#99999)`
     pr_number_re = re.compile(r"\(#(\d+)\)$")
 
-    title = f"🤗 Results of the {ci_event} tests."
+    title = f"🤗 Results of {ci_event} - {os.getenv('CI_TEST_JOB')}."
     # Add Commit/PR title with a link for push CI
     # (check the title in 2 env. variables - depending on the CI is triggered via `push` or `workflow_run` event)
     ci_title_push = os.environ.get("CI_TITLE_PUSH")
@@ -992,13 +1030,13 @@ if __name__ == "__main__":
             "job_link": {},
         }
         for model in models
-        if f"run_all_tests_gpu_{model}_test_reports" in available_artifacts
+        if f"run_models_gpu_{model}_test_reports" in available_artifacts
     }
 
     unclassified_model_failures = []
 
     for model in model_results.keys():
-        for artifact_path in available_artifacts[f"run_all_tests_gpu_{model}_test_reports"].paths:
+        for artifact_path in available_artifacts[f"run_models_gpu_{model}_test_reports"].paths:
             artifact = retrieve_artifact(artifact_path["path"], artifact_path["gpu"])
             if "stats" in artifact:
                 # Link to the GitHub Action job
@@ -1052,10 +1090,10 @@ if __name__ == "__main__":
 
     # Additional runs
     additional_files = {
-        "PyTorch pipelines": "run_tests_torch_pipeline_gpu",
-        "TensorFlow pipelines": "run_tests_tf_pipeline_gpu",
-        "Examples directory": "run_examples_gpu",
-        "Torch CUDA extension tests": "run_tests_torch_cuda_extensions_gpu_test_reports",
+        "PyTorch pipelines": "run_pipelines_torch_gpu_test_reports",
+        "TensorFlow pipelines": "run_pipelines_tf_gpu_test_reports",
+        "Examples directory": "run_examples_gpu_test_reports",
+        "Torch CUDA extension tests": "run_torch_cuda_extensions_gpu_test_reports",
     }
 
     if ci_event in ["push", "Nightly CI"] or ci_event.startswith("Past CI"):
@@ -1075,7 +1113,7 @@ if __name__ == "__main__":
         "run_pipelines_torch_gpu": "PyTorch pipelines",
         "run_pipelines_tf_gpu": "TensorFlow pipelines",
         "run_examples_gpu": "Examples directory",
-        "run_all_tests_torch_cuda_extensions_gpu": "Torch CUDA extension tests",
+        "run_torch_cuda_extensions_gpu": "Torch CUDA extension tests",
     }
 
     # Remove some entries in `additional_files` if they are not concerned.
@@ -1133,34 +1171,69 @@ if __name__ == "__main__":
                         )
 
     # Let's only check the warning for the model testing job. Currently, the job `run_extract_warnings` is only run
-    # when `inputs.job` (in the workflow file) is `run_tests_gpu`. The reason is: otherwise we need to save several
+    # when `inputs.job` (in the workflow file) is `run_models_gpu`. The reason is: otherwise we need to save several
     # artifacts with different names which complicates the logic for an insignificant part of the CI workflow reporting.
     selected_warnings = []
-    if job_name == "run_tests_gpu":
+    if job_name == "run_models_gpu":
         if "warnings_in_ci" in available_artifacts:
             directory = available_artifacts["warnings_in_ci"].paths[0]["path"]
             with open(os.path.join(directory, "selected_warnings.json")) as fp:
                 selected_warnings = json.load(fp)
 
-    if not os.path.isdir(os.path.join(os.getcwd(), "prev_ci_results")):
-        os.makedirs(os.path.join(os.getcwd(), "prev_ci_results"))
+    if not os.path.isdir(os.path.join(os.getcwd(), f"ci_results_{job_name}")):
+        os.makedirs(os.path.join(os.getcwd(), f"ci_results_{job_name}"))
+
+    target_workflow = "huggingface/transformers/.github/workflows/self-scheduled-caller.yml@refs/heads/main"
+    is_scheduled_ci_run = os.environ.get("CI_WORKFLOW_REF") == target_workflow
 
     # Only the model testing job is concerned: this condition is to avoid other jobs to upload the empty list as
     # results.
-    if job_name == "run_tests_gpu":
-        with open("prev_ci_results/model_results.json", "w", encoding="UTF-8") as fp:
+    if job_name == "run_models_gpu":
+        with open(f"ci_results_{job_name}/model_results.json", "w", encoding="UTF-8") as fp:
             json.dump(model_results, fp, indent=4, ensure_ascii=False)
 
+        # upload results to Hub dataset (only for the scheduled daily CI run on `main`)
+        if is_scheduled_ci_run:
+            api.upload_file(
+                path_or_fileobj=f"ci_results_{job_name}/model_results.json",
+                path_in_repo=f"{datetime.datetime.today().strftime('%Y-%m-%d')}/ci_results_{job_name}/model_results.json",
+                repo_id="hf-internal-testing/transformers_daily_ci",
+                repo_type="dataset",
+                token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
+            )
+
+    # Must have the same keys as in `additional_results`.
+    # The values are used as the file names where to save the corresponding CI job results.
+    test_to_result_name = {
+        "PyTorch pipelines": "torch_pipeline",
+        "TensorFlow pipelines": "tf_pipeline",
+        "Examples directory": "example",
+        "Torch CUDA extension tests": "deepspeed",
+    }
+    for job, job_result in additional_results.items():
+        with open(f"ci_results_{job_name}/{test_to_result_name[job]}_results.json", "w", encoding="UTF-8") as fp:
+            json.dump(job_result, fp, indent=4, ensure_ascii=False)
+
+        # upload results to Hub dataset (only for the scheduled daily CI run on `main`)
+        if is_scheduled_ci_run:
+            api.upload_file(
+                path_or_fileobj=f"ci_results_{job_name}/{test_to_result_name[job]}_results.json",
+                path_in_repo=f"{datetime.datetime.today().strftime('%Y-%m-%d')}/ci_results_{job_name}/{test_to_result_name[job]}_results.json",
+                repo_id="hf-internal-testing/transformers_daily_ci",
+                repo_type="dataset",
+                token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
+            )
+
     prev_ci_artifacts = None
-    target_workflow = "huggingface/transformers/.github/workflows/self-scheduled.yml@refs/heads/main"
-    if os.environ.get("CI_WORKFLOW_REF") == target_workflow:
-        # Get the last previously completed CI's failure tables
-        artifact_names = ["prev_ci_results"]
-        output_dir = os.path.join(os.getcwd(), "previous_reports")
-        os.makedirs(output_dir, exist_ok=True)
-        prev_ci_artifacts = get_last_daily_ci_reports(
-            artifact_names=artifact_names, output_dir=output_dir, token=os.environ["ACCESS_REPO_INFO_TOKEN"]
-        )
+    if is_scheduled_ci_run:
+        if job_name == "run_models_gpu":
+            # Get the last previously completed CI's failure tables
+            artifact_names = [f"ci_results_{job_name}"]
+            output_dir = os.path.join(os.getcwd(), "previous_reports")
+            os.makedirs(output_dir, exist_ok=True)
+            prev_ci_artifacts = get_last_daily_ci_reports(
+                artifact_names=artifact_names, output_dir=output_dir, token=os.environ["ACCESS_REPO_INFO_TOKEN"]
+            )
 
     message = Message(
         title,

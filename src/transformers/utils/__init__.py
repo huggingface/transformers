@@ -21,6 +21,7 @@ from packaging import version
 
 from .. import __version__
 from .backbone_utils import BackboneConfigMixin, BackboneMixin
+from .chat_template_utils import DocstringParsingException, TypeHintParsingException, get_json_schema
 from .constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 from .doc import (
     add_code_sample_docstrings,
@@ -37,9 +38,11 @@ from .generic import (
     PaddingStrategy,
     TensorType,
     add_model_info_to_auto_map,
+    add_model_info_to_custom_pipelines,
     cached_property,
     can_return_loss,
     expand_dims,
+    filter_out_non_signature_kwargs,
     find_labels,
     flatten_dict,
     infer_framework,
@@ -57,6 +60,8 @@ from .generic import (
     tensor_size,
     to_numpy,
     to_py_obj,
+    torch_float,
+    torch_int,
     transpose,
     working_or_temp_dir,
 )
@@ -119,15 +124,21 @@ from .import_utils import (
     is_datasets_available,
     is_decord_available,
     is_detectron2_available,
+    is_eetq_available,
     is_essentia_available,
     is_faiss_available,
+    is_fbgemm_gpu_available,
     is_flash_attn_2_available,
+    is_flash_attn_greater_or_equal,
     is_flash_attn_greater_or_equal_2_10,
     is_flax_available,
     is_fsdp_available,
     is_ftfy_available,
     is_g2p_en_available,
     is_galore_torch_available,
+    is_gguf_available,
+    is_grokadamw_available,
+    is_hqq_available,
     is_in_notebook,
     is_ipex_available,
     is_jieba_available,
@@ -137,6 +148,7 @@ from .import_utils import (
     is_keras_nlp_available,
     is_levenshtein_available,
     is_librosa_available,
+    is_lomo_available,
     is_mlx_available,
     is_natten_available,
     is_ninja_available,
@@ -183,11 +195,13 @@ from .import_utils import (
     is_torch_bf16_gpu_available,
     is_torch_compile_available,
     is_torch_cuda_available,
+    is_torch_deterministic,
     is_torch_fp16_available_on_device,
     is_torch_fx_available,
     is_torch_fx_proxy,
     is_torch_mlu_available,
     is_torch_mps_available,
+    is_torch_musa_available,
     is_torch_neuroncore_available,
     is_torch_npu_available,
     is_torch_sdpa_available,
@@ -196,6 +210,7 @@ from .import_utils import (
     is_torch_tpu_available,
     is_torch_xla_available,
     is_torch_xpu_available,
+    is_torchao_available,
     is_torchaudio_available,
     is_torchdistx_available,
     is_torchdynamo_available,
@@ -228,6 +243,7 @@ CONFIG_NAME = "config.json"
 FEATURE_EXTRACTOR_NAME = "preprocessor_config.json"
 IMAGE_PROCESSOR_NAME = FEATURE_EXTRACTOR_NAME
 PROCESSOR_NAME = "processor_config.json"
+CHAT_TEMPLATE_NAME = "chat_template.json"
 GENERATION_CONFIG_NAME = "generation_config.json"
 MODEL_CARD_NAME = "modelcard.json"
 

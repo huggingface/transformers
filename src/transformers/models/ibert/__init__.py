@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING
 from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
 
 
-_import_structure = {"configuration_ibert": ["IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "IBertConfig", "IBertOnnxConfig"]}
+_import_structure = {"configuration_ibert": ["IBertConfig", "IBertOnnxConfig"]}
 
 try:
     if not is_torch_available():
@@ -26,7 +26,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_ibert"] = [
-        "IBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "IBertForMaskedLM",
         "IBertForMultipleChoice",
         "IBertForQuestionAnswering",
@@ -37,7 +36,7 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_ibert import IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, IBertConfig, IBertOnnxConfig
+    from .configuration_ibert import IBertConfig, IBertOnnxConfig
 
     try:
         if not is_torch_available():
@@ -46,7 +45,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_ibert import (
-            IBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             IBertForMaskedLM,
             IBertForMultipleChoice,
             IBertForQuestionAnswering,

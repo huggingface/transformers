@@ -13,9 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
- TF 2.0 XLM model.
+TF 2.0 XLM model.
 """
-
 
 from __future__ import annotations
 
@@ -65,9 +64,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "FacebookAI/xlm-mlm-en-2048"
 _CONFIG_FOR_DOC = "XLMConfig"
-
-
-from ..deprecated._archive_maps import TF_XLM_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 def create_sinusoidal_embeddings(n_pos, dim, out):

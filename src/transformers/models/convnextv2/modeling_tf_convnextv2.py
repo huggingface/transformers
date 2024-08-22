@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TF 2.0 ConvNextV2 model."""
-
+"""TF 2.0 ConvNextV2 model."""
 
 from __future__ import annotations
 
@@ -176,7 +175,7 @@ class TFConvNextV2Layer(keras.layers.Layer):
             Model configuration class.
         dim (`int`):
             Number of input channels.
-        drop_path (`float`, defaults to 0.0):
+        drop_path (`float`, *optional*, defaults to 0.0):
             Stochastic depth rate.
     """
 

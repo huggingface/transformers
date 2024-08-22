@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Grounding DINO model."""
+"""PyTorch Grounding DINO model."""
 
 import copy
 import math
@@ -73,7 +73,7 @@ def load_cuda_kernels():
 
     global MultiScaleDeformableAttention
 
-    root = Path(__file__).resolve().parent.parent.parent / "kernels" / "grounding_dino"
+    root = Path(__file__).resolve().parent.parent.parent / "kernels" / "deformable_detr"
     src_files = [
         root / filename
         for filename in [
@@ -151,11 +151,6 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "GroundingDinoConfig"
 _CHECKPOINT_FOR_DOC = "IDEA-Research/grounding-dino-tiny"
-
-GROUNDING_DINO_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "IDEA-Research/grounding-dino-tiny",
-    # See all Grounding DINO models at https://huggingface.co/models?filter=grounding-dino
-]
 
 
 @dataclass
@@ -468,7 +463,14 @@ class GroundingDinoConvEncoder(nn.Module):
             self.model.feature_info.channels() if config.use_timm_backbone else self.model.channels
         )
 
-        backbone_model_type = config.backbone if config.use_timm_backbone else config.backbone_config.model_type
+        backbone_model_type = None
+        if config.backbone is not None:
+            backbone_model_type = config.backbone
+        elif config.backbone_config is not None:
+            backbone_model_type = config.backbone_config.model_type
+        else:
+            raise ValueError("Either `backbone` or `backbone_config` should be provided in the config")
+
         if "resnet" in backbone_model_type:
             for name, parameter in self.model.named_parameters():
                 if config.use_timm_backbone:
@@ -818,7 +820,7 @@ class GroundingDinoTextEnhancerLayer(nn.Module):
             attention_masks = attention_masks[:, None, :, :]
             attention_masks = attention_masks.repeat(1, self.num_heads, 1, 1)
 
-            dtype = torch.float16
+            dtype = hidden_states.dtype
             attention_masks = attention_masks.to(dtype=dtype)  # fp16 compatibility
             attention_masks = (1.0 - attention_masks) * torch.finfo(dtype).min
 
@@ -1425,12 +1427,11 @@ class GroundingDinoDecoderLayer(nn.Module):
 
         # Cross-Attention Text
         queries = self.with_pos_embed(hidden_states, position_embeddings)
-
         hidden_states, text_cross_attn_weights = self.encoder_attn_text(
             queries=queries,
             keys=text_encoder_hidden_states,
             values=text_encoder_hidden_states,
-            # attention_mask=text_encoder_attention_mask, # TODO fix cross-attention mask here
+            attention_mask=text_encoder_attention_mask,
             output_attentions=True,
         )
 
@@ -1579,7 +1580,7 @@ GROUNDING_DINO_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using [`AutoTokenizer`]. See [`GroundingDinoTokenizer.__call__`] for details.
+            Indices can be obtained using [`AutoTokenizer`]. See [`BertTokenizer.__call__`] for details.
 
         token_type_ids (`torch.LongTensor` of shape `(batch_size, text_sequence_length)`, *optional*):
             Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
@@ -1893,6 +1894,16 @@ class GroundingDinoDecoder(GroundingDinoPreTrainedModel):
         intermediate = ()
         intermediate_reference_points = ()
 
+        if text_encoder_attention_mask is not None:
+            dtype = text_encoder_hidden_states.dtype
+
+            text_encoder_attention_mask = text_encoder_attention_mask[:, None, None, :]
+            text_encoder_attention_mask = text_encoder_attention_mask.repeat(
+                1, self.config.decoder_attention_heads, self.config.num_queries, 1
+            )
+            text_encoder_attention_mask = text_encoder_attention_mask.to(dtype=dtype)
+            text_encoder_attention_mask = text_encoder_attention_mask * torch.finfo(dtype).min
+
         for idx, decoder_layer in enumerate(self.layers):
             num_coordinates = reference_points.shape[-1]
             if num_coordinates == 4:
@@ -2104,7 +2115,9 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
             )
 
         # Create text backbone
-        self.text_backbone = AutoModel.from_config(config.text_config, add_pooling_layer=False)
+        self.text_backbone = AutoModel.from_config(
+            config.text_config, add_pooling_layer=False, attn_implementation=config._attn_implementation
+        )
         self.text_projection = nn.Linear(config.text_config.hidden_size, config.d_model)
 
         if config.embedding_init_target or not config.two_stage:
@@ -2604,7 +2617,7 @@ def sigmoid_focal_loss(inputs, targets, num_boxes, alpha: float = 0.25, gamma: f
 
 
 # Copied from transformers.models.detr.modeling_detr.NestedTensor
-class NestedTensor(object):
+class NestedTensor:
     def __init__(self, tensors, mask: Optional[Tensor]):
         self.tensors = tensors
         self.mask = mask

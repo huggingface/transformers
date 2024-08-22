@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" VisionTextDualEncoder model configuration"""
-
+"""VisionTextDualEncoder model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -43,9 +42,9 @@ class VisionTextDualEncoderConfig(PretrainedConfig):
 
     Args:
         projection_dim (`int`, *optional*, defaults to 512):
-            Dimentionality of text and vision projection layers.
+            Dimensionality of text and vision projection layers.
         logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
-            The inital value of the *logit_scale* paramter. Default is used as per the original CLIP implementation.
+            The initial value of the *logit_scale* parameter. Default is used as per the original CLIP implementation.
         kwargs (*optional*):
             Dictionary of keyword arguments.
 

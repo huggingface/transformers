@@ -51,7 +51,7 @@ from transformers.utils.versions import require_version
 logger = logging.getLogger(__name__)
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.41.0.dev0")
+check_min_version("4.45.0.dev0")
 
 require_version("datasets>=2.0.0", "To fix: pip install -r examples/pytorch/semantic-segmentation/requirements.txt")
 
@@ -109,6 +109,10 @@ class DataTrainingArguments:
             )
         },
     )
+    do_reduce_labels: Optional[bool] = field(
+        default=False,
+        metadata={"help": "Whether or not to reduce all labels by 1 and replace background by 255."},
+    )
     reduce_labels: Optional[bool] = field(
         default=False,
         metadata={"help": "Whether or not to reduce all labels by 1 and replace background by 255."},
@@ -118,6 +122,12 @@ class DataTrainingArguments:
         if self.dataset_name is None and (self.train_dir is None and self.validation_dir is None):
             raise ValueError(
                 "You must specify either a dataset name from the hub or a train and/or validation directory."
+            )
+        if self.reduce_labels:
+            self.do_reduce_labels = self.reduce_labels
+            warnings.warn(
+                "The `reduce_labels` argument is deprecated and will be removed in v4.45. Please use `do_reduce_labels` instead.",
+                FutureWarning,
             )
 
 
@@ -151,19 +161,13 @@ class ModelArguments:
             )
         },
     )
-    use_auth_token: bool = field(
-        default=None,
-        metadata={
-            "help": "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token` instead."
-        },
-    )
     trust_remote_code: bool = field(
         default=False,
         metadata={
             "help": (
-                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option "
-                "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
-                "execute code present on the Hub on your local machine."
+                "Whether to trust the execution of code from datasets/models defined on the Hub."
+                " This option should only be set to `True` for repositories you trust and in which you have read the"
+                " code, as it will execute code present on the Hub on your local machine."
             )
         },
     )
@@ -181,15 +185,6 @@ def main():
         model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
-
-    if model_args.use_auth_token is not None:
-        warnings.warn(
-            "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token` instead.",
-            FutureWarning,
-        )
-        if model_args.token is not None:
-            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
-        model_args.token = model_args.use_auth_token
 
     # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
     # information sent is the one passed as arguments along with your Python/PyTorch versions.
@@ -238,7 +233,9 @@ def main():
     # In distributed training, the load_dataset function guarantees that only one local process can concurrently
     # download the dataset.
     # TODO support datasets from local folders
-    dataset = load_dataset(data_args.dataset_name, cache_dir=model_args.cache_dir)
+    dataset = load_dataset(
+        data_args.dataset_name, cache_dir=model_args.cache_dir, trust_remote_code=model_args.trust_remote_code
+    )
 
     # Rename column names to standardized names (only "image" and "label" need to be present)
     if "pixel_values" in dataset["train"].column_names:
@@ -319,14 +316,12 @@ def main():
     )
     image_processor = AutoImageProcessor.from_pretrained(
         model_args.image_processor_name or model_args.model_name_or_path,
+        do_reduce_labels=data_args.do_reduce_labels,
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
         token=model_args.token,
         trust_remote_code=model_args.trust_remote_code,
     )
-    # `reduce_labels` is a property of dataset labels, in case we use image_processor
-    # pretrained on another dataset we should override the default setting
-    image_processor.do_reduce_labels = data_args.reduce_labels
 
     # Define transforms to be applied to each image and target.
     if "shortest_edge" in image_processor.size:
@@ -338,7 +333,7 @@ def main():
         [
             A.Lambda(
                 name="reduce_labels",
-                mask=reduce_labels_transform if data_args.reduce_labels else None,
+                mask=reduce_labels_transform if data_args.do_reduce_labels else None,
                 p=1.0,
             ),
             # pad image with 255, because it is ignored by loss
@@ -353,7 +348,7 @@ def main():
         [
             A.Lambda(
                 name="reduce_labels",
-                mask=reduce_labels_transform if data_args.reduce_labels else None,
+                mask=reduce_labels_transform if data_args.do_reduce_labels else None,
                 p=1.0,
             ),
             A.Resize(height=height, width=width, p=1.0),

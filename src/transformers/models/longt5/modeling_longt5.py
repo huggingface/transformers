@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch LongT5 model."""
-
+"""PyTorch LongT5 model."""
 
 import copy
 import math
@@ -51,8 +50,6 @@ _CONFIG_FOR_DOC = "LongT5Config"
 _CHECKPOINT_FOR_DOC = "google/long-t5-local-base"
 
 # TODO: Update before the merge
-
-from ..deprecated._archive_maps import LONGT5_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 def _pad_to_multiple(x: torch.Tensor, block_len: int, dim: int, pad_value: int = 0) -> torch.Tensor:

@@ -9,6 +9,8 @@ import numpy as np
 import torch
 from torch.nn import functional as F
 
+from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_4
+
 from ..tokenization_utils_base import PreTrainedTokenizerBase
 from ..utils import add_start_docstrings, logging
 
@@ -98,7 +100,7 @@ class MaxNewTokensCriteria(StoppingCriteria):
 
     def __init__(self, start_length: int, max_new_tokens: int):
         warnings.warn(
-            "The class `MaxNewTokensCriteria` is deprecated. "
+            "The class `MaxNewTokensCriteria` is deprecated and will be removed in v4.43. "
             f"Please use `MaxLengthCriteria(max_length={start_length + max_new_tokens})` "
             "with `max_length = start_length + max_new_tokens` instead.",
             FutureWarning,
@@ -372,10 +374,11 @@ class StopStringCriteria(StoppingCriteria):
         token_valid_positions, token_end_overlaps = StopStringCriteria._stop_string_get_matching_positions(
             token_list, token_indices, stop_strings
         )
-
-        max_valid_positions = max(
-            len(val) for positions in token_valid_positions.values() for val in positions.values()
-        )
+        all_valid_positions = [len(val) for positions in token_valid_positions.values() for val in positions.values()]
+        # In some cases, tokens may have no valid internal positions (such as single-character stop strings), so
+        # we need a fallback to handle this case
+        max_valid_positions = max(all_valid_positions) if all_valid_positions else 1
+        # There should always be at least one valid end_len, however, so no fallback needed here
         max_valid_end_lens = max(len(val) for positions in token_end_overlaps.values() for val in positions.values())
         vec_size = len(stop_strings) * (max_valid_positions + max_valid_end_lens) + 1
         gather_vec = np.full((len(token_list), vec_size), dtype=np.int32, fill_value=-1)
@@ -387,9 +390,9 @@ class StopStringCriteria(StoppingCriteria):
             # Since this is lots of very small assignments of lists, we build it with numpy rather
             # than torch for speed + simplicity, then convert to torch at the end
             for token_idx, valid_positions in positions.items():
-                gather_vec[
-                    token_idx, max_valid_positions * i : max_valid_positions * i + len(valid_positions)
-                ] = valid_positions
+                gather_vec[token_idx, max_valid_positions * i : max_valid_positions * i + len(valid_positions)] = (
+                    valid_positions
+                )
             for token_idx, possible_end_lens in end_lens.items():
                 gather_vec[
                     token_idx,
@@ -470,25 +473,40 @@ class EosTokenCriteria(StoppingCriteria):
     By default, it uses the `model.generation_config.eos_token_id`.
 
     Args:
-        eos_token_id (`Union[int, List[int]]`):
-            The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
+        eos_token_id (`Union[int, List[int], torch.Tensor]`):
+            The id(s) of the *end-of-sequence* token.
     """
 
-    def __init__(self, eos_token_id: Union[int, List[int]]):
-        if isinstance(eos_token_id, int):
-            eos_token_id = [eos_token_id]
-        self.eos_token_id = torch.tensor(eos_token_id)
+    def __init__(self, eos_token_id: Union[int, List[int], torch.Tensor]):
+        if not isinstance(eos_token_id, torch.Tensor):
+            if isinstance(eos_token_id, int):
+                eos_token_id = [eos_token_id]
+            eos_token_id = torch.tensor(eos_token_id)
+        self.eos_token_id = eos_token_id
 
     @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> torch.BoolTensor:
-        is_done = torch.isin(input_ids[:, -1], self.eos_token_id.to(input_ids.device))
+        self.eos_token_id = self.eos_token_id.to(input_ids.device)
+        if input_ids.device.type == "mps" and not is_torch_greater_or_equal_than_2_4:
+            # TODO: remove this workaround when we stop supporting torch<=2.3
+            # https://github.com/pytorch/pytorch/issues/77764#issuecomment-2067838075
+            is_done = (
+                input_ids[:, -1]
+                .tile(self.eos_token_id.shape[0], 1)
+                .eq(self.eos_token_id.unsqueeze(1))
+                .sum(dim=0)
+                .bool()
+                .squeeze()
+            )
+        else:
+            is_done = torch.isin(input_ids[:, -1], self.eos_token_id)
         return is_done
 
 
 class StoppingCriteriaList(list):
     @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> torch.BoolTensor:
-        is_done = torch.full((input_ids.shape[0],), False, device=input_ids.device)
+        is_done = torch.full((input_ids.shape[0],), False, device=input_ids.device, dtype=torch.bool)
         for criteria in self:
             is_done = is_done | criteria(input_ids, scores, **kwargs)
         return is_done

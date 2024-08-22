@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch BLIP-2 model. """
-
+"""Testing suite for the PyTorch BLIP-2 model."""
 
 import inspect
 import tempfile
@@ -163,7 +162,7 @@ class Blip2VisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -188,9 +187,11 @@ class Blip2VisionModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    @unittest.skip
     def test_training(self):
         pass
 
+    @unittest.skip
     def test_training_gradient_checkpointing(self):
         pass
 
@@ -464,7 +465,7 @@ class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationT
         pass
 
     @unittest.skip(reason="Blip2Model does not have input/output embeddings")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     @unittest.skip(reason="There's no base Blip2Model")
@@ -723,7 +724,7 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixi
         pass
 
     @unittest.skip(reason="Blip2Model does not have input/output embeddings")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     @unittest.skip(reason="There's no base Blip2Model")
@@ -882,6 +883,22 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
         )
         self.assertEqual(generated_text, "it's not a city, it's a beach")
 
+    def test_inference_interpolate_pos_encoding(self):
+        processor = Blip2Processor.from_pretrained("Salesforce/blip2-opt-2.7b")
+        model = Blip2ForConditionalGeneration.from_pretrained(
+            "Salesforce/blip2-opt-2.7b", torch_dtype=torch.float16
+        ).to(torch_device)
+        processor.image_processor.size = {"height": 500, "width": 500}
+
+        image = prepare_img()
+        inputs = processor(images=image, return_tensors="pt").to(torch_device)
+
+        predictions = model.generate(**inputs, interpolate_pos_encoding=True)
+        generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[0].strip()
+
+        self.assertEqual(predictions[0].tolist(), [2, 102, 693, 8, 2335, 15, 5, 4105, 50118])
+        self.assertEqual(generated_text, "a woman and dog on the beach")
+
     def test_inference_opt_batched_beam_search(self):
         processor = Blip2Processor.from_pretrained("Salesforce/blip2-opt-2.7b")
         model = Blip2ForConditionalGeneration.from_pretrained(
@@ -1016,3 +1033,33 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
             [0, 3, 7, 152, 67, 839, 1],
         )
         self.assertEqual(generated_text, "san diego")
+
+    def test_expansion_in_processing(self):
+        processor = Blip2Processor.from_pretrained("Salesforce/blip2-opt-2.7b")
+        model = Blip2ForConditionalGeneration.from_pretrained(
+            "Salesforce/blip2-opt-2.7b", torch_dtype=torch.float16
+        ).to(torch_device)
+
+        image = prepare_img()
+        prompt = "Question: which city is this? Answer:"
+
+        # Make sure we will go the legacy path by setting these args to None
+        processor.num_query_tokens = None
+        model.config.image_token_index = None
+        inputs = processor(images=image, text=prompt, return_tensors="pt").to(torch_device, dtype=torch.float16)
+
+        predictions = model.generate(**inputs, do_sample=False, max_new_tokens=15)
+        generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[0].strip()
+
+        # Add args to the config to trigger new logic when inputs are expanded in processing file
+        processor.num_query_tokens = model.config.num_query_tokens
+        processor.tokenizer.add_special_tokens({"additional_special_tokens": ["<image>"]})
+        model.config.image_token_index = len(processor.tokenizer) - 1
+        model.resize_token_embeddings(processor.tokenizer.vocab_size, pad_to_multiple_of=64)
+
+        # Generate again with new inputs
+        inputs = processor(images=image, text=prompt, return_tensors="pt").to(torch_device, dtype=torch.float16)
+        predictions_expanded = model.generate(**inputs, do_sample=False, max_new_tokens=15)
+        generated_text_expanded = processor.batch_decode(predictions_expanded, skip_special_tokens=True)[0].strip()
+
+        self.assertTrue(generated_text_expanded == generated_text)

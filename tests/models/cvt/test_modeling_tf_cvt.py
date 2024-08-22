@@ -1,5 +1,4 @@
-""" Testing suite for the Tensorflow CvT model. """
-
+"""Testing suite for the Tensorflow CvT model."""
 
 from __future__ import annotations
 

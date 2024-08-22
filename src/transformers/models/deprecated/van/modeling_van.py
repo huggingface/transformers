@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Visual Attention Network (VAN) model."""
+"""PyTorch Visual Attention Network (VAN) model."""
 
 import math
 from collections import OrderedDict
@@ -48,10 +48,6 @@ _IMAGE_CLASS_CHECKPOINT = "Visual-Attention-Network/van-base"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
-from .._archive_maps import VAN_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
-# Copied from transformers.models.convnext.modeling_convnext.drop_path
 def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
@@ -72,7 +68,6 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
     return output
 
 
-# Copied from transformers.models.convnext.modeling_convnext.ConvNextDropPath with ConvNext->Van
 class VanDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 

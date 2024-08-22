@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
- Feature extraction saving/loading class for common feature extractors.
+Feature extraction saving/loading class for common feature extractors.
 """
 
 import copy
@@ -31,6 +31,7 @@ from .utils import (
     PushToHubMixin,
     TensorType,
     add_model_info_to_auto_map,
+    add_model_info_to_custom_pipelines,
     cached_file,
     copy_func,
     download_url,
@@ -136,8 +137,15 @@ class BatchFeature(UserDict):
             import torch  # noqa
 
             def as_tensor(value):
-                if isinstance(value, (list, tuple)) and len(value) > 0 and isinstance(value[0], np.ndarray):
-                    value = np.array(value)
+                if isinstance(value, (list, tuple)) and len(value) > 0:
+                    if isinstance(value[0], np.ndarray):
+                        value = np.array(value)
+                    elif (
+                        isinstance(value[0], (list, tuple))
+                        and len(value[0]) > 0
+                        and isinstance(value[0][0], np.ndarray)
+                    ):
+                        value = np.array(value)
                 return torch.tensor(value)
 
             is_tensor = torch.is_tensor
@@ -293,9 +301,9 @@ class FeatureExtractionMixin(PushToHubMixin):
             force_download (`bool`, *optional*, defaults to `False`):
                 Whether or not to force to (re-)download the feature extractor files and override the cached versions
                 if they exist.
-            resume_download (`bool`, *optional*, defaults to `False`):
-                Whether or not to delete incompletely received file. Attempts to resume the download if such a file
-                exists.
+            resume_download:
+                Deprecated and ignored. All downloads are now resumed by default when possible.
+                Will be removed in v5 of Transformers.
             proxies (`Dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
@@ -451,7 +459,7 @@ class FeatureExtractionMixin(PushToHubMixin):
         """
         cache_dir = kwargs.pop("cache_dir", None)
         force_download = kwargs.pop("force_download", False)
-        resume_download = kwargs.pop("resume_download", False)
+        resume_download = kwargs.pop("resume_download", None)
         proxies = kwargs.pop("proxies", None)
         subfolder = kwargs.pop("subfolder", None)
         token = kwargs.pop("token", None)
@@ -539,10 +547,15 @@ class FeatureExtractionMixin(PushToHubMixin):
                 f"loading configuration file {feature_extractor_file} from cache at {resolved_feature_extractor_file}"
             )
 
-        if "auto_map" in feature_extractor_dict and not is_local:
-            feature_extractor_dict["auto_map"] = add_model_info_to_auto_map(
-                feature_extractor_dict["auto_map"], pretrained_model_name_or_path
-            )
+        if not is_local:
+            if "auto_map" in feature_extractor_dict:
+                feature_extractor_dict["auto_map"] = add_model_info_to_auto_map(
+                    feature_extractor_dict["auto_map"], pretrained_model_name_or_path
+                )
+            if "custom_pipelines" in feature_extractor_dict:
+                feature_extractor_dict["custom_pipelines"] = add_model_info_to_custom_pipelines(
+                    feature_extractor_dict["custom_pipelines"], pretrained_model_name_or_path
+                )
 
         return feature_extractor_dict, kwargs
 

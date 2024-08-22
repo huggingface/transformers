@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License
-""" Tokenization classes for mLUKE."""
-
+"""Tokenization classes for mLUKE."""
 
 import itertools
 import json
@@ -722,7 +721,7 @@ class MLukeTokenizer(PreTrainedTokenizer):
     # Copied from transformers.models.luke.tokenization_luke.LukeTokenizer._check_entity_input_format
     def _check_entity_input_format(self, entities: Optional[EntityInput], entity_spans: Optional[EntitySpanInput]):
         if not isinstance(entity_spans, list):
-            raise ValueError("entity_spans should be given as a list")
+            raise TypeError("entity_spans should be given as a list")
         elif len(entity_spans) > 0 and not isinstance(entity_spans[0], tuple):
             raise ValueError(
                 "entity_spans should be given as a list of tuples containing the start and end character indices"

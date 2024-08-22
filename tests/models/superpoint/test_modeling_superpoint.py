@@ -27,7 +27,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        SUPERPOINT_PRETRAINED_MODEL_ARCHIVE_LIST,
         SuperPointForKeypointDetection,
     )
 
@@ -121,29 +120,27 @@ class SuperPointModelTest(ModelTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     test_head_masking = False
     has_attentions = False
+    from_pretrained_id = "magic-leap-community/superpoint"
 
     def setUp(self):
         self.model_tester = SuperPointModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=SuperPointConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self,
+            config_class=SuperPointConfig,
+            has_text_modality=False,
+            hidden_size=37,
+            common_properties=["encoder_hidden_sizes", "decoder_hidden_size"],
+        )
 
     def test_config(self):
-        self.create_and_test_config_common_properties()
-        self.config_tester.create_and_test_config_to_json_string()
-        self.config_tester.create_and_test_config_to_json_file()
-        self.config_tester.create_and_test_config_from_and_save_pretrained()
-        self.config_tester.create_and_test_config_with_num_labels()
-        self.config_tester.check_config_can_be_init_without_params()
-        self.config_tester.check_config_arguments_init()
-
-    def create_and_test_config_common_properties(self):
-        return
+        self.config_tester.run_common_tests()
 
     @unittest.skip(reason="SuperPointForKeypointDetection does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
     @unittest.skip(reason="SuperPointForKeypointDetection does not support input and output embeddings")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     @unittest.skip(reason="SuperPointForKeypointDetection does not use feedforward chunking")
@@ -222,9 +219,8 @@ class SuperPointModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in SUPERPOINT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = SuperPointForKeypointDetection.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model = SuperPointForKeypointDetection.from_pretrained(self.from_pretrained_id)
+        self.assertIsNotNone(model)
 
     def test_forward_labels_should_be_none(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

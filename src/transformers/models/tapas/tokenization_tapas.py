@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Tokenization class for TAPAS model."""
-
+"""Tokenization class for TAPAS model."""
 
 import collections
 import datetime
@@ -1250,7 +1249,7 @@ class TapasTokenizer(PreTrainedTokenizer):
                 Total number of table columns
             max_length (`int`):
                 Total maximum length.
-            truncation_strategy (`str` or [`TapasTruncationStrategy`]):
+            truncation_strategy (`str` or [`TapasTruncationStrategy]`):
                 Truncation strategy to use. Seeing as this method should only be called when truncating, the only
                 available strategy is the `"drop_rows_to_fit"` strategy.
 
@@ -1962,7 +1961,7 @@ class TapasTokenizer(PreTrainedTokenizer):
 
 
 # Copied from transformers.models.bert.tokenization_bert.BasicTokenizer
-class BasicTokenizer(object):
+class BasicTokenizer:
     """
     Constructs a BasicTokenizer that will run basic tokenization (punctuation splitting, lower casing, etc.).
 
@@ -2124,7 +2123,7 @@ class BasicTokenizer(object):
 
 
 # Copied from transformers.models.bert.tokenization_bert.WordpieceTokenizer
-class WordpieceTokenizer(object):
+class WordpieceTokenizer:
     """Runs WordPiece tokenization."""
 
     def __init__(self, vocab, unk_token, max_input_chars_per_word=100):

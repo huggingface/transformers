@@ -65,7 +65,7 @@ def find_pretrained_model(src_lang: str, tgt_lang: str) -> List[str]:
     """Find models that can accept src_lang as input and return tgt_lang as output."""
     prefix = "Helsinki-NLP/opus-mt-"
     model_list = list_models()
-    model_ids = [x.modelId for x in model_list if x.modelId.startswith("Helsinki-NLP")]
+    model_ids = [x.id for x in model_list if x.id.startswith("Helsinki-NLP")]
     src_and_targ = [
         remove_prefix(m, prefix).lower().split("-") for m in model_ids if "+" not in m
     ]  # + cant be loaded.
@@ -621,6 +621,10 @@ class OpusState:
             decoder_wemb_tensor = nn.Parameter(torch.FloatTensor(self.dec_wemb))
             bias_tensor = nn.Parameter(torch.FloatTensor(self.final_bias))
             model.model.decoder.embed_tokens.weight = decoder_wemb_tensor
+
+        # handle tied embeddings, otherwise "from_pretrained" loads them incorrectly
+        if self.cfg["tied-embeddings"]:
+            model.lm_head.weight.data = model.model.decoder.embed_tokens.weight.data.clone()
 
         model.final_logits_bias = bias_tensor
 

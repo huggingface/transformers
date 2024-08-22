@@ -26,7 +26,6 @@ from ...utils import (
 
 _import_structure = {
     "configuration_clip": [
-        "CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "CLIPConfig",
         "CLIPOnnxConfig",
         "CLIPTextConfig",
@@ -60,7 +59,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_clip"] = [
-        "CLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
         "CLIPModel",
         "CLIPPreTrainedModel",
         "CLIPTextModel",
@@ -77,7 +75,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_tf_clip"] = [
-        "TF_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFCLIPModel",
         "TFCLIPPreTrainedModel",
         "TFCLIPTextModel",
@@ -103,7 +100,6 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_clip import (
-        CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CLIPConfig,
         CLIPOnnxConfig,
         CLIPTextConfig,
@@ -136,7 +132,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_clip import (
-            CLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
             CLIPForImageClassification,
             CLIPModel,
             CLIPPreTrainedModel,
@@ -153,7 +148,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_tf_clip import (
-            TF_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFCLIPModel,
             TFCLIPPreTrainedModel,
             TFCLIPTextModel,

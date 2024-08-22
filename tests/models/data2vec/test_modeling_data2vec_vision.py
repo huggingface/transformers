@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Data2VecVision model. """
-
+"""Testing suite for the PyTorch Data2VecVision model."""
 
 import unittest
 
@@ -197,8 +196,8 @@ class Data2VecVisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    @unittest.skip(reason="Data2VecVision does not use inputs_embeds")
     def test_inputs_embeds(self):
-        # Data2VecVision does not use inputs_embeds
         pass
 
     @require_torch_multi_gpu
@@ -208,7 +207,7 @@ class Data2VecVisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
     def test_multi_gpu_data_parallel_forward(self):
         pass
 
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -227,7 +226,7 @@ class Data2VecVisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
 
     def test_training(self):
         if not self.model_tester.is_training:
-            return
+            self.skipTest(reason="model_tester.is_training is set to False")
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
@@ -246,7 +245,7 @@ class Data2VecVisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
     def test_training_gradient_checkpointing(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         if not self.model_tester.is_training:
-            return
+            self.skipTest(reason="model_tester.is_training is set to False")
 
         config.use_cache = False
         config.return_dict = True
@@ -342,3 +341,30 @@ class Data2VecVisionModelIntegrationTest(unittest.TestCase):
 
         expected_top2 = [model.config.label2id[i] for i in ["remote control, remote", "tabby, tabby cat"]]
         self.assertEqual(logits[0].topk(2).indices.cpu().tolist(), expected_top2)
+
+    @slow
+    def test_inference_interpolate_pos_encoding(self):
+        model_name = "facebook/data2vec-vision-base-ft1k"
+        model = Data2VecVisionModel.from_pretrained(model_name, **{"use_absolute_position_embeddings": True}).to(
+            torch_device
+        )
+
+        image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+        processor = BeitImageProcessor.from_pretrained("facebook/data2vec-vision-base-ft1k")
+        inputs = processor(images=image, return_tensors="pt", size={"height": 480, "width": 480})
+        pixel_values = inputs.pixel_values.to(torch_device)
+
+        # with interpolate_pos_encoding being False an exception should be raised with higher resolution
+        # images than what the model supports.
+        self.assertFalse(processor.do_center_crop)
+        with torch.no_grad():
+            with self.assertRaises(ValueError, msg="doesn't match model"):
+                model(pixel_values, interpolate_pos_encoding=False)
+
+        # with interpolate_pos_encoding being True the model should process the higher resolution image
+        # successfully and produce the expected output.
+        with torch.no_grad():
+            outputs = model(pixel_values, interpolate_pos_encoding=True)
+
+        expected_shape = torch.Size((1, 1801, 768))
+        self.assertEqual(outputs.last_hidden_state.shape, expected_shape)

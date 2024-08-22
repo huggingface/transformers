@@ -21,7 +21,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_starcoder2": ["STARCODER2_PRETRAINED_CONFIG_ARCHIVE_MAP", "Starcoder2Config"],
+    "configuration_starcoder2": ["Starcoder2Config"],
 }
 
 
@@ -36,11 +36,12 @@ else:
         "Starcoder2Model",
         "Starcoder2PreTrainedModel",
         "Starcoder2ForSequenceClassification",
+        "Starcoder2ForTokenClassification",
     ]
 
 
 if TYPE_CHECKING:
-    from .configuration_starcoder2 import STARCODER2_PRETRAINED_CONFIG_ARCHIVE_MAP, Starcoder2Config
+    from .configuration_starcoder2 import Starcoder2Config
 
     try:
         if not is_torch_available():
@@ -51,6 +52,7 @@ if TYPE_CHECKING:
         from .modeling_starcoder2 import (
             Starcoder2ForCausalLM,
             Starcoder2ForSequenceClassification,
+            Starcoder2ForTokenClassification,
             Starcoder2Model,
             Starcoder2PreTrainedModel,
         )

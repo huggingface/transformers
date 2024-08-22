@@ -18,6 +18,9 @@ import json
 import pathlib
 import unittest
 
+import numpy as np
+from parameterized import parameterized
+
 from transformers.testing_utils import require_torch, require_vision, slow
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -87,6 +90,8 @@ class YolosImageProcessingTester(unittest.TestCase):
             image = image_inputs[0]
             if isinstance(image, Image.Image):
                 width, height = image.size
+            elif isinstance(image, np.ndarray):
+                height, width = image.shape[0], image.shape[1]
             else:
                 height, width = image.shape[1], image.shape[2]
 
@@ -98,7 +103,7 @@ class YolosImageProcessingTester(unittest.TestCase):
                 if max_original_size / min_original_size * size > max_size:
                     size = int(round(max_size * min_original_size / max_original_size))
 
-            if width < height and width != size:
+            if width <= height and width != size:
                 height = int(size * height / width)
                 width = size
             elif height < width and height != size:
@@ -141,6 +146,7 @@ class YolosImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMix
     image_processing_class = YolosImageProcessor if is_vision_available() else None
 
     def setUp(self):
+        super().setUp()
         self.image_processor_tester = YolosImageProcessingTester(self)
 
     @property
@@ -183,17 +189,32 @@ class YolosImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMix
             torch.allclose(encoded_images_with_method["pixel_values"], encoded_images["pixel_values"], atol=1e-4)
         )
 
-    def test_resize_max_size_respected(self):
+    @parameterized.expand(
+        [
+            ((3, 100, 1500), 1333, 800),
+            ((3, 400, 400), 1333, 800),
+            ((3, 1500, 1500), 1333, 800),
+            ((3, 800, 1333), 1333, 800),
+            ((3, 1333, 800), 1333, 800),
+            ((3, 800, 800), 400, 400),
+        ]
+    )
+    def test_resize_max_size_respected(self, image_size, longest_edge, shortest_edge):
         image_processor = self.image_processing_class(**self.image_processor_dict)
 
         # create torch tensors as image
-        image = torch.randint(0, 256, (3, 100, 1500), dtype=torch.uint8)
+        image = torch.randint(0, 256, image_size, dtype=torch.uint8)
         processed_image = image_processor(
-            image, size={"longest_edge": 1333, "shortest_edge": 800}, do_pad=False, return_tensors="pt"
+            image,
+            size={"longest_edge": longest_edge, "shortest_edge": shortest_edge},
+            do_pad=False,
+            return_tensors="pt",
         )["pixel_values"]
 
-        self.assertTrue(processed_image.shape[-1] <= 1333)
-        self.assertTrue(processed_image.shape[-2] <= 800)
+        shape = list(processed_image.shape[-2:])
+        max_size, min_size = max(shape), min(shape)
+        self.assertTrue(max_size <= 1333, f"Expected max_size <= 1333, got image shape {shape}")
+        self.assertTrue(min_size <= 800, f"Expected min_size <= 800, got image shape {shape}")
 
     @slow
     def test_call_pytorch_with_coco_detection_annotations(self):
@@ -529,3 +550,50 @@ class YolosImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMix
         ).T
         self.assertTrue(torch.allclose(encoding["labels"][0]["boxes"], expected_boxes_0, rtol=1))
         self.assertTrue(torch.allclose(encoding["labels"][1]["boxes"], expected_boxes_1, rtol=1))
+
+    # Copied from tests.models.detr.test_image_processing_detr.DetrImageProcessingTest.test_max_width_max_height_resizing_and_pad_strategy with Detr->Yolos
+    def test_max_width_max_height_resizing_and_pad_strategy(self):
+        image_1 = torch.ones([200, 100, 3], dtype=torch.uint8)
+
+        # do_pad=False, max_height=100, max_width=100, image=200x100 -> 100x50
+        image_processor = YolosImageProcessor(
+            size={"max_height": 100, "max_width": 100},
+            do_pad=False,
+        )
+        inputs = image_processor(images=[image_1], return_tensors="pt")
+        self.assertEqual(inputs["pixel_values"].shape, torch.Size([1, 3, 100, 50]))
+
+        # do_pad=False, max_height=300, max_width=100, image=200x100 -> 200x100
+        image_processor = YolosImageProcessor(
+            size={"max_height": 300, "max_width": 100},
+            do_pad=False,
+        )
+        inputs = image_processor(images=[image_1], return_tensors="pt")
+
+        # do_pad=True, max_height=100, max_width=100, image=200x100 -> 100x100
+        image_processor = YolosImageProcessor(
+            size={"max_height": 100, "max_width": 100}, do_pad=True, pad_size={"height": 100, "width": 100}
+        )
+        inputs = image_processor(images=[image_1], return_tensors="pt")
+        self.assertEqual(inputs["pixel_values"].shape, torch.Size([1, 3, 100, 100]))
+
+        # do_pad=True, max_height=300, max_width=100, image=200x100 -> 300x100
+        image_processor = YolosImageProcessor(
+            size={"max_height": 300, "max_width": 100},
+            do_pad=True,
+            pad_size={"height": 301, "width": 101},
+        )
+        inputs = image_processor(images=[image_1], return_tensors="pt")
+        self.assertEqual(inputs["pixel_values"].shape, torch.Size([1, 3, 301, 101]))
+
+        ### Check for batch
+        image_2 = torch.ones([100, 150, 3], dtype=torch.uint8)
+
+        # do_pad=True, max_height=150, max_width=100, images=[200x100, 100x150] -> 150x100
+        image_processor = YolosImageProcessor(
+            size={"max_height": 150, "max_width": 100},
+            do_pad=True,
+            pad_size={"height": 150, "width": 100},
+        )
+        inputs = image_processor(images=[image_1, image_2], return_tensors="pt")
+        self.assertEqual(inputs["pixel_values"].shape, torch.Size([2, 3, 150, 100]))

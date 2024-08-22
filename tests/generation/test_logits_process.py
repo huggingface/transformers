@@ -42,6 +42,7 @@ if is_torch_available():
         LogitsProcessorList,
         MinLengthLogitsProcessor,
         MinNewTokensLengthLogitsProcessor,
+        MinPLogitsWarper,
         NoBadWordsLogitsProcessor,
         NoRepeatNGramLogitsProcessor,
         PrefixConstrainedLogitsProcessor,
@@ -52,6 +53,7 @@ if is_torch_available():
         TopPLogitsWarper,
         TypicalLogitsWarper,
         UnbatchedClassifierFreeGuidanceLogitsProcessor,
+        WatermarkLogitsProcessor,
     )
     from transformers.generation.logits_process import BarkEosPrioritizerLogitsProcessor
 
@@ -67,7 +69,7 @@ class LogitsProcessorTest(unittest.TestCase):
         batch_size = 4
         eos_token_id = 0
 
-        min_dist_processor = MinLengthLogitsProcessor(min_length=10, eos_token_id=eos_token_id)
+        min_dist_processor = MinLengthLogitsProcessor(min_length=10, eos_token_id=eos_token_id, device=torch_device)
 
         # check that min length is applied at length 5
         input_ids = ids_tensor((batch_size, 5), vocab_size=20)
@@ -89,7 +91,7 @@ class LogitsProcessorTest(unittest.TestCase):
         # check that first input is skipped (min new length applying)
         input_ids = ids_tensor((batch_size, 5), vocab_size=20)
         new_min_dist_processor = MinNewTokensLengthLogitsProcessor(
-            prompt_length_to_skip=input_ids.shape[-1], min_new_tokens=3, eos_token_id=eos_token_id
+            prompt_length_to_skip=input_ids.shape[-1], min_new_tokens=3, eos_token_id=eos_token_id, device=torch_device
         )
 
         expected_eos_scores_before_min_length = batch_size * [-float("inf")]
@@ -304,6 +306,52 @@ class LogitsProcessorTest(unittest.TestCase):
         # first batch should keep three tokens, second batch would keep only 1, but due to `min_tokens_to_keep=2` keeps 2.
         self.assertListEqual((filtered_dist != 0.0).to(torch.long).sum(dim=-1).tolist(), [3, 2])
 
+    def test_min_p_dist_warper(self):
+        input_ids = None
+        vocab_size = 10
+        batch_size = 2
+
+        # create distribution and take log (inverse to Softmax as taken in MinPLogitsWarper)
+        dist = torch.log(
+            torch.tensor(
+                [
+                    [0.9, 0.0274, 0.047, 0.0274],  # two tokens should be kept (0.047 > 0.9*0.05=0.045)
+                    [0.15, 0.3, 0.3, 0.25],  # all should be kept -- no high-probability token
+                    [0.97, 0.01, 0.01, 0.01],  # only the first token should be kept
+                ],
+                device=torch_device,
+                dtype=torch.float,
+            )
+        )
+
+        min_p_warp = MinPLogitsWarper(0.05)
+        filtered_dist = torch.exp(min_p_warp(input_ids, dist))
+
+        # exp (-inf) => 0
+        EXPECTED_FILTERED_DIST = torch.tensor(
+            [[0.9, 0.0, 0.047, 0.0], [0.15, 0.3, 0.3, 0.25], [0.97, 0.0, 0.0, 0.0]],
+            device=torch_device,
+            dtype=torch.float,
+        )
+        self.assertTrue(torch.allclose(filtered_dist, EXPECTED_FILTERED_DIST, atol=1e-3))
+
+        # processor should not change logits in-place
+        self.assertFalse(torch.all(min_p_warp(input_ids, dist) == dist))
+
+        # check edge cases with negative and extreme logits
+        ramp_logits = torch.arange(vocab_size, device=torch_device, dtype=torch.float) - (vocab_size // 2)
+        ramp_logits = ramp_logits.unsqueeze(0).repeat(batch_size, 1)
+
+        # make ramp_logits more extreme
+        ramp_logits[1] = ramp_logits[1] * 100.0
+
+        # make sure at least 2 tokens are kept
+        min_p_warp = MinPLogitsWarper(0.9, min_tokens_to_keep=2, filter_value=0.0)
+        filtered_dist = min_p_warp(input_ids, ramp_logits)
+
+        # first batch should keep two tokens, second batch would keep only 1, but due to `min_tokens_to_keep=2` keeps 2.
+        self.assertListEqual((filtered_dist != 0.0).to(torch.long).sum(dim=-1).tolist(), [2, 2])
+
     def test_typical_dist_warper(self):
         input_ids = None
         vocab_size = 10
@@ -402,7 +450,7 @@ class LogitsProcessorTest(unittest.TestCase):
             torch.tensor([[0.0, 0.1, 0.8, 0.1], [0.01, 0.04, 0.9, 0.05]], device=torch_device, dtype=torch.float)
         )
 
-        eta_warp = EtaLogitsWarper(0.0625)
+        eta_warp = EtaLogitsWarper(0.0625, device=torch_device)
         filtered_dist = torch.exp(eta_warp(input_ids, dist))
 
         # dist should be filtered to only keep values with proba >= min(0.0625, sqrt(0.0625) * e^-H(p))
@@ -426,7 +474,7 @@ class LogitsProcessorTest(unittest.TestCase):
         ramp_logits[1] = ramp_logits[1] * 100.0
 
         # make sure at least 2 tokens are kept
-        eta_warp = EtaLogitsWarper(0.1, min_tokens_to_keep=2, filter_value=0.0)
+        eta_warp = EtaLogitsWarper(0.1, min_tokens_to_keep=2, filter_value=0.0, device=torch_device)
         filtered_dist = eta_warp(input_ids, ramp_logits)
 
         # first batch should keep 2 tokens, second batch would keep only 1, but due to `min_tokens_to_keep=2` keeps 2.
@@ -592,7 +640,7 @@ class LogitsProcessorTest(unittest.TestCase):
         scores_comp = scores.clone()
 
         # instantiate all dist processors
-        min_dist_proc = MinLengthLogitsProcessor(min_length=10, eos_token_id=eos_token_id)
+        min_dist_proc = MinLengthLogitsProcessor(min_length=10, eos_token_id=eos_token_id, device=torch_device)
         temp_dist_warp = TemperatureLogitsWarper(temperature=0.5)
         rep_penalty_proc = RepetitionPenaltyLogitsProcessor(penalty=2.0)
         top_k_warp = TopKLogitsWarper(3)
@@ -719,7 +767,9 @@ class LogitsProcessorTest(unittest.TestCase):
         eos_token_id = 0
         max_length = 5
 
-        logits_processor = ForcedEOSTokenLogitsProcessor(max_length=max_length, eos_token_id=eos_token_id)
+        logits_processor = ForcedEOSTokenLogitsProcessor(
+            max_length=max_length, eos_token_id=eos_token_id, device=torch_device
+        )
 
         # check that all scores are -inf except the eos_token_id when max_length-1 is reached
         input_ids = ids_tensor((batch_size, 4), vocab_size=20)
@@ -879,7 +929,7 @@ class LogitsProcessorTest(unittest.TestCase):
         scores = self._get_uniform_logits(2, 4)
         scores[0][eos_token_id] = -6  ## less than log(min_eos_p)
 
-        esp = BarkEosPrioritizerLogitsProcessor(eos_token_id=eos_token_id, min_eos_p=min_eos_p)
+        esp = BarkEosPrioritizerLogitsProcessor(eos_token_id=eos_token_id, min_eos_p=min_eos_p, device=torch_device)
         actual_scores = esp(input_ids, scores)
         expected_scores_list = [
             scores[0].tolist(),
@@ -895,10 +945,33 @@ class LogitsProcessorTest(unittest.TestCase):
         scores = self._get_uniform_logits(2, 4)
         scores[0][eos_token_id] = -6  ## less than log(min_eos_p)
 
-        esp = BarkEosPrioritizerLogitsProcessor(eos_token_id=eos_token_id, min_eos_p=min_eos_p)
+        esp = BarkEosPrioritizerLogitsProcessor(eos_token_id=eos_token_id, min_eos_p=min_eos_p, device=torch_device)
         actual_scores = esp(input_ids, scores)
         expected_scores_list = [
             scores[0].tolist(),
             [float("-inf"), float("-inf"), scores[0][0], scores[0][0]],
         ]
         self.assertListEqual(actual_scores.tolist(), expected_scores_list)
+
+    def test_watermarking_processor(self):
+        batch_size = 3
+        vocab_size = 20
+
+        input_ids = ids_tensor((batch_size, 5), vocab_size=20)
+        scores = self._get_uniform_logits(batch_size, vocab_size)
+
+        # raise error if incorrect seeding_scheme is passed
+        with self.assertRaises(ValueError):
+            WatermarkLogitsProcessor(vocab_size=vocab_size, device="cpu", seeding_scheme="hash")
+
+        # raise error if the greenlist_ratio in not in range (0.0, 1.0)
+        with self.assertRaises(ValueError):
+            WatermarkLogitsProcessor(vocab_size=vocab_size, device="cpu", greenlist_ratio=1.2)
+
+        watermark = WatermarkLogitsProcessor(vocab_size=vocab_size, device=input_ids.device)
+
+        # use fixed id for last token, needed for reprodicibility and tests
+        input_ids[:, -1] = 10
+        scores_wo_bias = scores[:, -1].clone()
+        out = watermark(input_ids=input_ids, scores=scores)
+        self.assertTrue((out[:, 1] == scores_wo_bias + watermark.bias).all())

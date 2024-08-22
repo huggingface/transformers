@@ -18,7 +18,6 @@
 compute the adaptive mask.
 Built on top of `transformers.models.bert.modeling_bert`"""
 
-
 import logging
 import math
 

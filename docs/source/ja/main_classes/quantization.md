@@ -245,12 +245,12 @@ model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto", load_i
 
 ```python
 # pip install transformers accelerate bitsandbytes
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
 model_id = "bigscience/bloom-1b7"
 
 tokenizer = AutoTokenizer.from_pretrained(model_id)
-model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto", load_in_8bit=True)
+model = AutoModelForCausalLM.from_pretrained(model_id, quantization_config=BitsAndBytesConfig(load_in_8bit=True))
 ```
 
 次に、通常 [`PreTrainedModel`] を使用するのと同じようにモデルを使用します。
@@ -321,9 +321,9 @@ model_double_quant = AutoModelForCausalLM.from_pretrained(model_id, quantization
 この機能を使用できるようにするには、必ず `bitsandbytes>0.37.2` を使用してください (この記事の執筆時点では、`bitsandbytes==0.38.0.post1` でテストしました)。
 
 ```python
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
-model = AutoModelForCausalLM.from_pretrained("bigscience/bloom-560m", device_map="auto", load_in_8bit=True)
+model = AutoModelForCausalLM.from_pretrained("bigscience/bloom-560m", quantization_config=BitsAndBytesConfig(load_in_8bit=True))
 tokenizer = AutoTokenizer.from_pretrained("bigscience/bloom-560m")
 
 model.push_to_hub("bloom-560m-8bit")

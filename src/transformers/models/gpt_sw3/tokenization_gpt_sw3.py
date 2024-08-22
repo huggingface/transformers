@@ -294,26 +294,3 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
         """
 
         return self.sp_model.decode(token_ids)
-
-    @property
-    def default_chat_template(self):
-        """
-        This chat template formats messages like an instant messenger chat log, with "User:" and "Bot:" strings
-        preceding messages. BOS tokens are added between all messages.
-        """
-        logger.warning_once(
-            "No chat template is set for this tokenizer, falling back to a default class-level template. "
-            "This is very error-prone, because models are often trained with templates different from the class "
-            "default! Default chat templates are a legacy feature and will be removed in Transformers v4.43, at which "
-            "point any code depending on them will stop working. We recommend setting a valid chat template before "
-            "then to ensure that this model continues working without issues."
-        )
-        return (
-            "{{ eos_token }}{{ bos_token }}"
-            "{% for message in messages %}"
-            "{% if message['role'] == 'user' %}{{ 'User: ' + message['content']}}"
-            "{% else %}{{ 'Bot: ' + message['content']}}{% endif %}"
-            "{{ message['text'] }}{{ bos_token }}"
-            "{% endfor %}"
-            "Bot:"
-        )

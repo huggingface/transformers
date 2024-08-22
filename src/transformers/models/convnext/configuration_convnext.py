@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" ConvNeXT model configuration"""
+"""ConvNeXT model configuration"""
 
 from collections import OrderedDict
 from typing import Mapping
@@ -28,9 +28,6 @@ from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_feat
 logger = logging.get_logger(__name__)
 
 
-from ..deprecated._archive_maps import CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
-
-
 class ConvNextConfig(BackboneConfigMixin, PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ConvNextModel`]. It is used to instantiate an
@@ -44,9 +41,9 @@ class ConvNextConfig(BackboneConfigMixin, PretrainedConfig):
     Args:
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
-        patch_size (`int`, optional, defaults to 4):
+        patch_size (`int`, *optional*, defaults to 4):
             Patch size to use in the patch embedding layer.
-        num_stages (`int`, optional, defaults to 4):
+        num_stages (`int`, *optional*, defaults to 4):
             The number of stages in the model.
         hidden_sizes (`List[int]`, *optional*, defaults to [96, 192, 384, 768]):
             Dimensionality (hidden size) at each stage.
