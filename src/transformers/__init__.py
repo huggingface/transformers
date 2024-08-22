@@ -5220,6 +5220,7 @@ if TYPE_CHECKING:
         GroupViTVisionConfig,
     )
     from .models.herbert import HerbertTokenizer
+    from .models.hhemv2 import HHEMv2Config
     from .models.hiera import HieraConfig
     from .models.hubert import HubertConfig
     from .models.ibert import IBertConfig
@@ -5517,7 +5518,6 @@ if TYPE_CHECKING:
         SwitchTransformersConfig,
     )
     from .models.t5 import T5Config
-    from .models.hhemv2 import HHEMv2Config
     from .models.table_transformer import (
         TableTransformerConfig,
     )
@@ -6937,6 +6937,11 @@ if TYPE_CHECKING:
             GroupViTTextModel,
             GroupViTVisionModel,
         )
+        from .models.hhemv2 import (
+            HHEMv2ForSequenceClassification,
+            HHEMv2PreTrainedModel,
+            load_tf_weights_in_hhemv2,
+        )
         from .models.hiera import (
             HieraBackbone,
             HieraForImageClassification,
@@ -7715,11 +7720,6 @@ if TYPE_CHECKING:
             T5Model,
             T5PreTrainedModel,
             load_tf_weights_in_t5,
-        )
-        from .models.hhemv2 import (
-            HHEMv2ForSequenceClassification,
-            HHEMv2PreTrainedModel,
-            load_tf_weights_in_hhemv2,
         )
         from .models.table_transformer import (
             TableTransformerForObjectDetection,

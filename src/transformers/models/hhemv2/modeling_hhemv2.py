@@ -14,10 +14,8 @@
 # limitations under the License.
 """PyTorch HHEMv2 model."""
 
-import copy
 import math
 import os
-import warnings
 from typing import Optional, Tuple, Union
 
 import torch
@@ -25,8 +23,6 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...modeling_outputs import (
-    BaseModelOutput,
-    BaseModelOutputWithPastAndCrossAttentions,
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
@@ -39,7 +35,6 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ...utils.model_parallel_utils import assert_device_map, get_device_map
 from ..auto.tokenization_auto import AutoTokenizer
 from ..t5 import T5ForTokenClassification
 from .configuration_hhemv2 import HHEMv2Config
@@ -60,6 +55,7 @@ _CHECKPOINT_FOR_DOC = "vectara/hallucination_evaluation_model"
 # This is a conversion method from TF 1.0 to PyTorch
 # More details: https://medium.com/huggingface/from-tensorflow-to-pytorch-265f40ef2a28
 ####################################################
+
 
 def load_tf_weights_in_hhemv2(model, config, tf_checkpoint_path):
     """Load tf checkpoints in a pytorch model."""
@@ -219,6 +215,7 @@ def load_tf_weights_in_hhemv2(model, config, tf_checkpoint_path):
 #     ```
 # """
 
+
 class HHEMv2LayerNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
@@ -259,6 +256,7 @@ except Exception:
 
 ALL_LAYERNORM_LAYERS.append(HHEMv2LayerNorm)
 
+
 class HHEMv2DenseActDense(nn.Module):
     def __init__(self, config: HHEMv2Config):
         super().__init__()
@@ -279,6 +277,7 @@ class HHEMv2DenseActDense(nn.Module):
             hidden_states = hidden_states.to(self.wo.weight.dtype)
         hidden_states = self.wo(hidden_states)
         return hidden_states
+
 
 class HHEMv2DenseGatedActDense(nn.Module):
     def __init__(self, config: HHEMv2Config):
@@ -308,6 +307,7 @@ class HHEMv2DenseGatedActDense(nn.Module):
         hidden_states = self.wo(hidden_states)
         return hidden_states
 
+
 class HHEMv2LayerFF(nn.Module):
     def __init__(self, config: HHEMv2Config):
         super().__init__()
@@ -324,6 +324,7 @@ class HHEMv2LayerFF(nn.Module):
         forwarded_states = self.DenseReluDense(forwarded_states)
         hidden_states = hidden_states + self.dropout(forwarded_states)
         return hidden_states
+
 
 class HHEMv2Attention(nn.Module):
     def __init__(self, config: HHEMv2Config, has_relative_attention_bias=False):
@@ -559,6 +560,7 @@ class HHEMv2Attention(nn.Module):
             outputs = outputs + (attn_weights,)
         return outputs
 
+
 class HHEMv2LayerSelfAttention(nn.Module):
     def __init__(self, config, has_relative_attention_bias=False):
         super().__init__()
@@ -589,6 +591,7 @@ class HHEMv2LayerSelfAttention(nn.Module):
         hidden_states = hidden_states + self.dropout(attention_output[0])
         outputs = (hidden_states,) + attention_output[1:]  # add attentions if we output them
         return outputs
+
 
 class HHEMv2LayerCrossAttention(nn.Module):
     def __init__(self, config):
@@ -624,6 +627,7 @@ class HHEMv2LayerCrossAttention(nn.Module):
         layer_output = hidden_states + self.dropout(attention_output[0])
         outputs = (layer_output,) + attention_output[1:]  # add attentions if we output them
         return outputs
+
 
 class HHEMv2Block(nn.Module):
     def __init__(self, config, has_relative_attention_bias=False):
@@ -748,6 +752,7 @@ class HHEMv2Block(nn.Module):
 
         return outputs  # hidden-states, present_key_value_states, (self-attention position bias), (self-attention weights), (cross-attention position bias), (cross-attention weights)
 
+
 class HHEMv2ClassificationHead(nn.Module):
     """Head for sentence-level classification tasks."""
 
@@ -764,6 +769,7 @@ class HHEMv2ClassificationHead(nn.Module):
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.out_proj(hidden_states)
         return hidden_states
+
 
 class HHEMv2PreTrainedModel(PreTrainedModel):
     """
@@ -866,6 +872,7 @@ class HHEMv2PreTrainedModel(PreTrainedModel):
 
         return shifted_input_ids
 
+
 HHEMV2_START_DOCSTRING = r"""
 
     HHEM-2.1-open is a major upgrade to [HHEM-1.0-Open](https://huggingface.co/vectara/hallucination_evaluation_model/tree/hhem-1.0-open)
@@ -880,14 +887,15 @@ HHEMV2_START_DOCSTRING = r"""
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
+
 @add_start_docstrings(
     HHEMV2_START_DOCSTRING,
 )
 class HHEMv2ForSequenceClassification(HHEMv2PreTrainedModel):
     config_class = HHEMv2Config
-    _tied_weights_keys = ['transformer.shared.weight', 'transformer.encoder.embed_tokens.weight']
+    _tied_weights_keys = ["transformer.shared.weight", "transformer.encoder.embed_tokens.weight"]
 
-    base_model_prefix = 't5'
+    base_model_prefix = "t5"
 
     def __init__(self, config=HHEMv2Config()):
         super().__init__(config)
@@ -895,7 +903,6 @@ class HHEMv2ForSequenceClassification(HHEMv2PreTrainedModel):
 
         self.prompt = config.prompt
         self.tokenzier = AutoTokenizer.from_pretrained(config.foundation)
-
 
     @replace_return_docstrings(output_type=TokenClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -908,7 +915,7 @@ class HHEMv2ForSequenceClassification(HHEMv2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        **kwargs
+        **kwargs,
     ) -> Union[Tuple[torch.Tensor], TokenClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -920,23 +927,27 @@ class HHEMv2ForSequenceClassification(HHEMv2PreTrainedModel):
 
         if (labels is not None) and (labels.shape != input_ids.shape):
             assert labels.shape[0] == input_ids.shape[0]
-            if self.config.problem_type == "multi_label_classification": # actually does not work for multi_label_classification because T5ForTokenClassification does not consider this problem type
+            if (
+                self.config.problem_type == "multi_label_classification"
+            ):  # actually does not work for multi_label_classification because T5ForTokenClassification does not consider this problem type
                 processed_labels = [label + [float(0)] * (input_ids.shape[1] - 2) for label in labels.tolist()]
-            else: # reshape the labels to make it work for T5ForTokenClassification
+            else:  # reshape the labels to make it work for T5ForTokenClassification
                 processed_labels = [[label] + [0] * (input_ids.shape[1] - 1) for label in labels.tolist()]
             labels = torch.tensor(processed_labels, dtype=torch.long).to(input_ids.device)
             # print(labels.shape)
             # print(labels)
 
         self.t5.eval()
-        outputs = self.t5(input_ids=input_ids,
+        outputs = self.t5(
+            input_ids=input_ids,
             attention_mask=attention_mask,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             labels=labels,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,)
+            return_dict=return_dict,
+        )
 
         if not return_dict:
             if labels is not None:
@@ -954,13 +965,10 @@ class HHEMv2ForSequenceClassification(HHEMv2PreTrainedModel):
 
         return outputs
 
-
-
     def predict(self, text_pairs):
         tokenizer = self.tokenzier
-        pair_dict = [{'text1': pair[0], 'text2': pair[1]} for pair in text_pairs]
-        inputs = tokenizer(
-            [self.prompt.format(**pair) for pair in pair_dict], return_tensors='pt', padding=True)
+        pair_dict = [{"text1": pair[0], "text2": pair[1]} for pair in text_pairs]
+        inputs = tokenizer([self.prompt.format(**pair) for pair in pair_dict], return_tensors="pt", padding=True)
         inputs = inputs.to(self.device)
         with torch.no_grad():
             outputs = self.t5(**inputs)
@@ -969,5 +977,5 @@ class HHEMv2ForSequenceClassification(HHEMv2PreTrainedModel):
         logits = logits[:, 0, :]
 
         transformed_probs = torch.softmax(logits, dim=-1)
-        raw_scores = transformed_probs[:, 1] # the probability of class 1
+        raw_scores = transformed_probs[:, 1]  # the probability of class 1
         return raw_scores

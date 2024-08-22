@@ -14,7 +14,6 @@
 # limitations under the License.
 """HHEMv2 model configuration"""
 
-
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -24,57 +23,57 @@ logger = logging.get_logger(__name__)
 
 class HHEMv2Config(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`HHEMv2Model`] or a [`TFHHEMv2Model`]. It is used to
-    instantiate a HHEMv2 model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the HHEMv2
-    [vectara/hallucination_evaluation_model](https://huggingface.co/vectara/hallucination_evaluation_model) architecture.
+        This is the configuration class to store the configuration of a [`HHEMv2Model`] or a [`TFHHEMv2Model`]. It is used to
+        instantiate a HHEMv2 model according to the specified arguments, defining the model architecture. Instantiating a
+        configuration with the defaults will yield a similar configuration to that of the HHEMv2
+        [vectara/hallucination_evaluation_model](https://huggingface.co/vectara/hallucination_evaluation_model) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+        Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+        documentation from [`PretrainedConfig`] for more information.
 
-    Arguments:
-        vocab_size (`int`, *optional*, defaults to 32128):
-            Vocabulary size of the HHEMv2 model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`HHEMv2Model`] or [`TFHHEMv2Model`].
-        d_model (`int`, *optional*, defaults to 768):
-            Size of the encoder layers and the pooler layer.
-        d_kv (`int`, *optional*, defaults to 64):
-            Size of the key, query, value projections per attention head. The `inner_dim` of the projection layer will
-            be defined as `num_heads * d_kv`.
-        d_ff (`int`, *optional*, defaults to 2048):
-            Size of the intermediate feed forward layer in each `HHEMv2Block`.
-        num_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the Transformer encoder.
-        num_decoder_layers (`int`, *optional*):
-            Number of hidden layers in the Transformer decoder. Will use the same value as `num_layers` if not set.
-        num_heads (`int`, *optional*, defaults to 12):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        relative_attention_num_buckets (`int`, *optional*, defaults to 32):
-            The number of buckets to use for each attention layer.
-        relative_attention_max_distance (`int`, *optional*, defaults to 128):
-            The maximum distance of the longer sequences for the bucket separation.
-        dropout_rate (`float`, *optional*, defaults to 0.1):
-            The ratio for all dropout layers.
-        layer_norm_epsilon (`<fill_type>`, *optional*, defaults to 1e-06): <fill_docstring>
-        initializer_factor (`float`, *optional*, defaults to 1.0):
-            A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
-            testing).
-        feed_forward_proj (`string`, *optional*, defaults to `"gated-gelu"`):
-            Type of feed forward layer to be used. Should be one of `"relu"` or `"gated-gelu"`. HHEMv2v1.1 uses the
-            `"gated-gelu"` feed forward projection. Original HHEMv2 uses `"relu"`.
-        is_encoder_decoder (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models).
-        pad_token_id (`<fill_type>`, *optional*, defaults to 0): <fill_docstring>
-        eos_token_id (`<fill_type>`, *optional*, defaults to 1): <fill_docstring>
-        classifier_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for classifier.
-        foundation (`<fill_type>`, *optional*, defaults to `"google/flan-t5-base"`): <fill_docstring>
-        prompt (`<fill_type>`, *optional*, defaults to `"<pad> Determine if the hypothesis is true given the premise?
+        Arguments:
+            vocab_size (`int`, *optional*, defaults to 32128):
+                Vocabulary size of the HHEMv2 model. Defines the number of different tokens that can be represented by the
+                `inputs_ids` passed when calling [`HHEMv2Model`] or [`TFHHEMv2Model`].
+            d_model (`int`, *optional*, defaults to 768):
+                Size of the encoder layers and the pooler layer.
+            d_kv (`int`, *optional*, defaults to 64):
+                Size of the key, query, value projections per attention head. The `inner_dim` of the projection layer will
+                be defined as `num_heads * d_kv`.
+            d_ff (`int`, *optional*, defaults to 2048):
+                Size of the intermediate feed forward layer in each `HHEMv2Block`.
+            num_layers (`int`, *optional*, defaults to 12):
+                Number of hidden layers in the Transformer encoder.
+            num_decoder_layers (`int`, *optional*):
+                Number of hidden layers in the Transformer decoder. Will use the same value as `num_layers` if not set.
+            num_heads (`int`, *optional*, defaults to 12):
+                Number of attention heads for each attention layer in the Transformer encoder.
+            relative_attention_num_buckets (`int`, *optional*, defaults to 32):
+                The number of buckets to use for each attention layer.
+            relative_attention_max_distance (`int`, *optional*, defaults to 128):
+                The maximum distance of the longer sequences for the bucket separation.
+            dropout_rate (`float`, *optional*, defaults to 0.1):
+                The ratio for all dropout layers.
+            layer_norm_epsilon (`<fill_type>`, *optional*, defaults to 1e-06): <fill_docstring>
+            initializer_factor (`float`, *optional*, defaults to 1.0):
+                A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
+                testing).
+            feed_forward_proj (`string`, *optional*, defaults to `"gated-gelu"`):
+                Type of feed forward layer to be used. Should be one of `"relu"` or `"gated-gelu"`. HHEMv2v1.1 uses the
+                `"gated-gelu"` feed forward projection. Original HHEMv2 uses `"relu"`.
+            is_encoder_decoder (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
+            use_cache (`bool`, *optional*, defaults to `True`):
+                Whether or not the model should return the last key/values attentions (not used by all models).
+            pad_token_id (`<fill_type>`, *optional*, defaults to 0): <fill_docstring>
+            eos_token_id (`<fill_type>`, *optional*, defaults to 1): <fill_docstring>
+            classifier_dropout (`float`, *optional*, defaults to 0.0):
+                The dropout ratio for classifier.
+            foundation (`<fill_type>`, *optional*, defaults to `"google/flan-t5-base"`): <fill_docstring>
+            prompt (`<fill_type>`, *optional*, defaults to `"<pad> Determine if the hypothesis is true given the premise?
 
-Premise: {text1}
+    Premise: {text1}
 
-Hypothesis: {text2}"`): <fill_docstring>
+    Hypothesis: {text2}"`): <fill_docstring>
     """
 
     model_type = "hhemv2"
