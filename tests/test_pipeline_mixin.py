@@ -33,7 +33,6 @@ from transformers.image_processing_utils import BaseImageProcessor
 from transformers.models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING_NAMES
 from transformers.models.auto.image_processing_auto import IMAGE_PROCESSOR_MAPPING_NAMES
 from transformers.models.auto.processing_auto import PROCESSOR_MAPPING_NAMES
-from transformers.models.auto.tokenization_auto import TOKENIZER_MAPPING_NAMES
 from transformers.testing_utils import (
     is_pipeline_test,
     require_decord,
@@ -165,6 +164,10 @@ class PipelineTesterMixin:
         if not isinstance(model_architectures, tuple):
             model_architectures = (model_architectures,)
 
+        # We are going to run tests for multiple model architectures, some of them might be skipped
+        # with this flag we are control if at least one model were tested or all were skipped
+        at_least_one_model_is_tested = False
+
         for model_architecture in model_architectures:
             model_arch_name = model_architecture.__name__
             model_type = model_architecture.config_class.model_type
@@ -175,23 +178,27 @@ class PipelineTesterMixin:
                     model_arch_name = model_arch_name[len(_prefix) :]
                     break
 
-            # tokenizers are mapped to tuple, e.g. ("XxxTokenizer", None)
-            tokenizer_names = TOKENIZER_MAPPING_NAMES.get(model_type, [None])
-            if len(tokenizer_names) > 1:
-                tokenizer_names = [name for name in tokenizer_names if name is not None]
+            if model_arch_name not in tiny_model_summary:
+                continue
 
-            # image processors are mapped to tuple, e.g. ("XxxImageProcessor", None)
-            image_processor_names = IMAGE_PROCESSOR_MAPPING_NAMES.get(model_type, [None])
-            if len(image_processor_names) > 1:
-                image_processor_names = [name for name in image_processor_names if name is not None]
+            tokenizer_names = tiny_model_summary[model_arch_name]["tokenizer_classes"]
 
-            # feature extractors are mapped to instance, e.g. "XxxFeatureExtractor"
-            feature_extractor_names = FEATURE_EXTRACTOR_MAPPING_NAMES.get(model_type, [None])
-            if not isinstance(feature_extractor_names, (list, tuple)):
-                feature_extractor_names = [feature_extractor_names]
+            # Sort image processors and feature extractors from tiny-models json file
+            image_processor_names = []
+            feature_extractor_names = []
 
+            processor_classes = tiny_model_summary[model_arch_name]["processor_classes"]
+            for cls_name in processor_classes:
+                if "ImageProcessor" in cls_name:
+                    image_processor_names.append(cls_name)
+                elif "FeatureExtractor" in cls_name:
+                    feature_extractor_names.append(cls_name)
+                else:
+                    raise ValueError(f"Unknown processor class: {cls_name}")
+
+            # Processor classes are not in tiny models JSON file, so extract them from the mapping
             # processors are mapped to instance, e.g. "XxxProcessor"
-            processor_names = PROCESSOR_MAPPING_NAMES.get(model_type, [None])
+            processor_names = PROCESSOR_MAPPING_NAMES.get(model_type, None)
             if not isinstance(processor_names, (list, tuple)):
                 processor_names = [processor_names]
 
@@ -217,6 +224,14 @@ class PipelineTesterMixin:
         if task in task_to_pipeline_and_spec_mapping:
             pipeline, hub_spec = task_to_pipeline_and_spec_mapping[task]
             compare_pipeline_args_to_hub_spec(pipeline, hub_spec)
+
+            at_least_one_model_is_tested = True
+
+        if not at_least_one_model_is_tested:
+            self.skipTest(
+                f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')}_{torch_dtype} is skipped: Could not find any "
+                f"model architecture in the tiny models JSON file for `{task}`."
+            )
 
     def run_model_pipeline_tests(
         self,
