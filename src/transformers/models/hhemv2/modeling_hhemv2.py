@@ -18,11 +18,10 @@ import copy
 import math
 import os
 import warnings
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Tuple, Union
 
 import torch
 from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...modeling_outputs import (
@@ -36,16 +35,14 @@ from ...utils import (
     DUMMY_INPUTS,
     DUMMY_MASK,
     add_start_docstrings,
-    add_start_docstrings_to_model_forward,
     is_torch_fx_proxy,
     logging,
     replace_return_docstrings,
 )
 from ...utils.model_parallel_utils import assert_device_map, get_device_map
-from .configuration_hhemv2 import HHEMv2Config
-from ..auto import AutoConfig, AutoModel
 from ..auto.tokenization_auto import AutoTokenizer
 from ..t5 import T5ForTokenClassification
+from .configuration_hhemv2 import HHEMv2Config
 
 
 logger = logging.get_logger(__name__)
@@ -1295,11 +1292,11 @@ class HHEMv2ForSequenceClassification(HHEMv2PreTrainedModel):
     def __init__(self, config=HHEMv2Config()):
         super().__init__(config)
         self.t5 = T5ForTokenClassification(config)
-        
+
         self.prompt = config.prompt
         self.tokenzier = AutoTokenizer.from_pretrained(config.foundation)
 
-    
+
     @replace_return_docstrings(output_type=TokenClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1330,7 +1327,7 @@ class HHEMv2ForSequenceClassification(HHEMv2PreTrainedModel):
             labels = torch.tensor(processed_labels, dtype=torch.long).to(input_ids.device)
             # print(labels.shape)
             # print(labels)
-            
+
         self.t5.eval()
         outputs = self.t5(input_ids=input_ids,
             attention_mask=attention_mask,
@@ -1340,7 +1337,7 @@ class HHEMv2ForSequenceClassification(HHEMv2PreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,)
-        
+
         if not return_dict:
             if labels is not None:
                 loss, logits, output = outputs
@@ -1357,15 +1354,15 @@ class HHEMv2ForSequenceClassification(HHEMv2PreTrainedModel):
 
         return outputs
 
-    
-    
+
+
     def predict(self, text_pairs):
         tokenizer = self.tokenzier
         pair_dict = [{'text1': pair[0], 'text2': pair[1]} for pair in text_pairs]
         inputs = tokenizer(
             [self.prompt.format(**pair) for pair in pair_dict], return_tensors='pt', padding=True)
         inputs = inputs.to(self.device)
-        with torch.no_grad():    
+        with torch.no_grad():
             outputs = self.t5(**inputs)
         logits = outputs.logits
 

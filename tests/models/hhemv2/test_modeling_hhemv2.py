@@ -14,16 +14,11 @@
 # limitations under the License.
 
 
-import copy
 import os
-import pickle
-import tempfile
 import unittest
 
 from transformers import HHEMv2Config, is_torch_available
-from transformers.models.auto.modeling_auto import MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES
 from transformers.testing_utils import (
-    require_accelerate,
     require_sentencepiece,
     require_tokenizers,
     require_torch,
@@ -32,23 +27,19 @@ from transformers.testing_utils import (
 )
 from transformers.utils import cached_property, is_torch_fx_available
 
-from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_fx_available():
-    from transformers.utils.fx import symbolic_trace
+    pass
 
 
 if is_torch_available():
     import torch
 
     from transformers import (
-        AutoTokenizer,
-        ByT5Tokenizer,
-        HHEMv2EncoderModel,
         HHEMv2ForSequenceClassification,
         T5Tokenizer,
     )
@@ -108,12 +99,12 @@ class HHEMv2ModelTester:
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size).clamp(2)
         input_ids[:, -1] = self.eos_token_id  # Eos Token
-        
+
         attention_mask = None
         if self.use_attention_mask:
             attention_mask = ids_tensor([self.batch_size, self.encoder_seq_length], vocab_size=2)
-        
-        
+
+
         config = self.get_config()
 
         return (
@@ -213,7 +204,7 @@ class HHEMv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     # The small HHEMv2 model needs higher percentages for CPU/MP tests
     model_split_percents = [0.5, 0.8, 0.9]
 
-    
+
 
     def setUp(self):
         self.model_tester = HHEMv2ModelTester(self)

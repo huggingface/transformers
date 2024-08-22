@@ -14,7 +14,6 @@
 # limitations under the License.
 """HHEMv2 model configuration"""
 
-from typing import Mapping
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
