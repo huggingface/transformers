@@ -94,7 +94,7 @@ More concretely, key-value cache acts as a memory bank for these generative mode
 In 🤗 Transformers, we support various Cache types to optimize the performance across different models and tasks. By default, all models generate with caching,
 with the [`~DynamicCache`] class being the default cache for most models. It allows us to dynamically grow cache size, by saving more and more keys and values as we generate. If for some reason you don't want to use caches, you can pass `use_cache=False` into the `generate()` method.
 
-Refer to the table below to see the difference between cache types and choose the one that suits best for your use-case.
+Refer to the table below to see the difference between cache types and choose the one that suits best for your use-case. Models for which initialization is recommended should be initialized before calling the model and passed to model as a kwarg. In all other cases you can simply define desired `cache_implementation` and we take care of the rest for you.
 
 | Cache Type          | Memory Efficient | Supports torch.compile() | Initialization Recommended | Latency  |  Long Context Generation |
 |---------------------|------------------|--------------------------|----------------------------|----------|--------------------------|
