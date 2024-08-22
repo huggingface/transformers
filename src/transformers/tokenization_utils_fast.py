@@ -880,7 +880,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
     def update_post_processor(self):
         """
-        Updates the underlying post processor with the current `bos_token` and `eos_token`.
+        Overwrites the underlying post processor with the current `bos_token` and `eos_token`.
         """
         if not isinstance(self._tokenizer.post_processor, processors.TemplateProcessing) and not isinstance(
             self._tokenizer.post_processor, processors.Sequence
