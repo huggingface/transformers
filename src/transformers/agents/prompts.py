@@ -63,7 +63,7 @@ Examples:
 ---
 Task: "Answer the question in the variable `question` about the image stored in the variable `image`. The question is in French."
 
-I will use the following tools: `translator` to translate the question into English and then `image_qa` to answer the question on the input image.
+Thought: I will use the following tools: `translator` to translate the question into English and then `image_qa` to answer the question on the input image.
 Code:
 ```py
 translated_question = translator(question=question, src_lang="French", tgt_lang="English")
@@ -75,7 +75,7 @@ final_answer(f"The answer is {answer}")
 ---
 Task: "Identify the oldest person in the `document` and create an image showcasing the result."
 
-I will use the following tools: `document_qa` to find the oldest person in the document, then `image_generator` to generate an image according to the answer.
+Thought: I will use the following tools: `document_qa` to find the oldest person in the document, then `image_generator` to generate an image according to the answer.
 Code:
 ```py
 answer = document_qa(document, question="What is the oldest person?")
@@ -87,7 +87,7 @@ final_answer(image)
 ---
 Task: "Generate an image using the text given in the variable `caption`."
 
-I will use the following tool: `image_generator` to generate an image.
+Thought: I will use the following tool: `image_generator` to generate an image.
 Code:
 ```py
 image = image_generator(prompt=caption)
@@ -97,7 +97,7 @@ final_answer(image)
 ---
 Task: "Summarize the text given in the variable `text` and read it out loud."
 
-I will use the following tools: `summarizer` to create a summary of the input text, then `text_reader` to read it out loud.
+Thought: I will use the following tools: `summarizer` to create a summary of the input text, then `text_reader` to read it out loud.
 Code:
 ```py
 summarized_text = summarizer(text)
@@ -109,7 +109,7 @@ final_answer(audio_summary)
 ---
 Task: "Answer the question in the variable `question` about the text in the variable `text`. Use the answer to generate an image."
 
-I will use the following tools: `text_qa` to create the answer, then `image_generator` to generate an image according to the answer.
+Thought: I will use the following tools: `text_qa` to create the answer, then `image_generator` to generate an image according to the answer.
 Code:
 ```py
 answer = text_qa(text=text, question=question)
@@ -121,7 +121,7 @@ final_answer(image)
 ---
 Task: "Caption the following `image`."
 
-I will use the following tool: `image_captioner` to generate a caption for the image.
+Thought: I will use the following tool: `image_captioner` to generate a caption for the image.
 Code:
 ```py
 caption = image_captioner(image)
@@ -292,7 +292,6 @@ print(answer)
 Observation: "The oldest person in the document is John Doe, a 55 year old lumberjack living in Newfoundland."
 
 Thought: I will now generate an image showcasing the oldest person.
-
 Code:
 ```py
 image = image_generator("A portrait of John Doe, a 55-year-old man living in Canada.")
@@ -303,7 +302,6 @@ final_answer(image)
 Task: "What is the result of the following operation: 5 + 3 + 1294.678?"
 
 Thought: I will use python code to compute the result of the operation and then return the final answer using the `final_answer` tool
-
 Code:
 ```py
 result = 5 + 3 + 1294.678
