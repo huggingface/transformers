@@ -336,6 +336,7 @@ class TextGenerationPipelineTests(unittest.TestCase):
         output = text_generator(prompt, stop_sequence=" fe")
         self.assertEqual(output, [{"generated_text": "Hello I believe in fe"}])
 
+    @require_torch
     def test_custom_code_with_string_tokenizer(self):
         # This test checks for an edge case - tokenizer loading used to fail when using a custom code model
         # with a separate tokenizer that was passed as a repo name rather than a tokenizer object.
