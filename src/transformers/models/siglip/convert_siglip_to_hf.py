@@ -78,7 +78,7 @@ def get_siglip_config(model_name):
     config.vision_config.image_size = image_size
     config.vision_config.patch_size = patch_size
     config.text_config.vocab_size = vocab_size
-
+    
     if "base" in model_name:
         pass
     elif "large" in model_name:
@@ -101,6 +101,9 @@ def get_siglip_config(model_name):
         config.vision_config.num_attention_heads = 16
     else:
         raise ValueError("Model not supported")
+    
+    if model_name == "siglip-so400m-patch14-224":
+        config.text_config.max_position_embeddings = 16
 
     return config
 
@@ -270,9 +273,9 @@ def convert_siglip_checkpoint(model_name, pytorch_dump_folder_path, verify_logit
 
     # get vocab file
     if "i18n" in model_name:
-        vocab_file = "/Users/nielsrogge/Documents/SigLIP/multilingual_vocab/sentencepiece.model"
+        vocab_file = "/Users/mervenoyan/Desktop/siglips/mc4/sentencepiece.model"
     else:
-        vocab_file = "/Users/nielsrogge/Documents/SigLIP/english_vocab/sentencepiece.model"
+        vocab_file = "/Users/mervenoyan/Desktop/siglips/c4_en/sentencepiece.model"
 
     # load original state dict
     data = load(checkpoint)
@@ -296,8 +299,12 @@ def convert_siglip_checkpoint(model_name, pytorch_dump_folder_path, verify_logit
     size = {"height": image_size, "width": image_size}
     image_processor = SiglipImageProcessor(size=size)
     tokenizer = SiglipTokenizer(vocab_file=vocab_file, model_input_names=["input_ids"])
-    processor = SiglipProcessor(image_processor=image_processor, tokenizer=tokenizer)
 
+    if model_name == "siglip-so400m-patch14-224":
+        tokenizer.model_max_length = 16
+        
+    processor = SiglipProcessor(image_processor=image_processor, tokenizer=tokenizer)
+    
     # verify on dummy images and texts
     url_1 = "https://cdn.openai.com/multimodal-neurons/assets/apple/apple-ipod.jpg"
     image_1 = Image.open(requests.get(url_1, stream=True).raw).convert("RGB")
@@ -322,7 +329,12 @@ def convert_siglip_checkpoint(model_name, pytorch_dump_folder_path, verify_logit
     filepath = hf_hub_download(repo_id="nielsr/test-image", filename=filename, repo_type="dataset")
     original_pixel_values = torch.load(filepath)
     filepath = hf_hub_download(repo_id="nielsr/test-image", filename="siglip_input_ids.pt", repo_type="dataset")
-    original_input_ids = torch.load(filepath)
+
+    if model_name=="siglip-so400m-patch14-224":
+        filepath = hf_hub_download(repo_id="merve/model-test-inputs", filename="input_ids.pt", repo_type="dataset")
+        original_input_ids = torch.load(filepath)
+    else:
+        original_input_ids = torch.load(filepath)
 
     if "i18n" not in model_name:
         assert inputs.input_ids.tolist() == original_input_ids.tolist()
@@ -375,11 +387,13 @@ def convert_siglip_checkpoint(model_name, pytorch_dump_folder_path, verify_logit
             expected_slice = torch.tensor(
                 [[-0.9064, 0.1073], [-0.0299, 0.5304]],
             )
-        elif model_name == "siglip-so400m-patch14-224-i18n":
+        elif model_name == "siglip-so400m-patch14-224":
             expected_slice = torch.tensor(
                 [[-1.0836973,  1.1742821], [-0.7195749,  1.4370537]],
             )
 
+        print("outputs.logits_per_image[:3, :3]:", outputs.logits_per_image[:3, :3])
+        print("expected_slice:", expected_slice)
         assert torch.allclose(outputs.logits_per_image[:3, :3], expected_slice, atol=1e-4)
         print("Looks ok!")
 
