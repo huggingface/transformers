@@ -557,6 +557,8 @@ class TrainingArguments:
                     Will use gradient checkpointing over each nested XLA FSDP wrapped layer. This setting can only be
                     used when the xla flag is set to true, and an auto wrapping policy is specified through
                     fsdp_min_num_params or fsdp_transformer_layer_cls_to_wrap.
+                - device_mesh (`DeviceMesh`, *optional*):
+                    The device mesh used for device management and sharding.
 
         deepspeed (`str` or `dict`, *optional*):
             Use [Deepspeed](https://github.com/microsoft/deepspeed). This is an experimental feature and its API may
@@ -1213,7 +1215,7 @@ class TrainingArguments:
             )
         },
     )
-    fsdp_config: Optional[Union[dict, str]] = field(
+    fsdp_config: Optional[Union[dict, Union[str, int, bool, dict, "DeviceMesh"]]] = field(
         default=None,
         metadata={
             "help": (
