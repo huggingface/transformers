@@ -169,6 +169,7 @@ from .utils import (
     is_torch_npu_available,
     is_torch_xla_available,
     is_torch_xpu_available,
+    is_torchao_available,
     logging,
     strtobool,
 )
@@ -1470,7 +1471,23 @@ class Trainer:
                     "gradient_clipping": float(optim_args.get("gradient_clipping", 1.0)),
                 }
             )
+        elif args.optim == OptimizerNames.ADAMW_TORCH_4BIT:
+            if not is_torchao_available() or version.parse(importlib.metadata.version("torchao")) < version.parse(
+                "0.4.0"
+            ):
+                raise ImportError(
+                    "You need to have `torchao>=0.4.0` in order to use torch 4-bit optimizers."
+                    "Install it with `pip install torchao` or follow the instructions here: https://github.com/pytorch/ao"
+                )
+            if version.parse(importlib.metadata.version("torch")) < version.parse("2.3"):
+                raise ImportError(
+                    "You need to have `torch>=2.3` in order to use torch 4-bit optimizers. "
+                    "Install it with `pip install --upgrade torch`"
+                )
+            from torchao.prototype.low_bit_optim import AdamW4bit
 
+            optimizer_cls = AdamW4bit
+            optimizer_kwargs.update(adam_kwargs)
         else:
             raise ValueError(f"Trainer cannot instantiate unsupported optimizer: {args.optim}")
         return optimizer_cls, optimizer_kwargs

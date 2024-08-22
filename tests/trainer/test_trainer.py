@@ -100,6 +100,7 @@ from transformers.utils import (
     is_apex_available,
     is_bitsandbytes_available,
     is_safetensors_available,
+    is_torchao_available,
     is_torchdistx_available,
 )
 from transformers.utils.hp_naming import TrialShortNamer
@@ -4245,6 +4246,16 @@ if is_torch_available():
                 TrainingArguments(optim=OptimizerNames.ADAMW_ANYPRECISION, output_dir="None"),
                 torchdistx.optimizers.AnyPrecisionAdamW,
                 dict(default_adam_kwargs, **default_anyprecision_kwargs),
+            )
+        )
+    if is_torchao_available():
+        import torchao
+
+        optim_test_params.append(
+            (
+                TrainingArguments(optim=OptimizerNames.ADAMW_TORCH_4BIT, output_dir="None"),
+                torchao.prototype.low_bit_optim.AdamW4bit,
+                default_adam_kwargs,
             )
         )
 
