@@ -1509,12 +1509,6 @@ class GenerationMixin:
         # b) convert to the new cache format (if the user passes a legacy cache and model supports it)
         user_defined_cache = model_kwargs.get(cache_name)
         if user_defined_cache is not None:
-            if is_torchdynamo_compiling():
-                raise ValueError(
-                    "Passing `past_key_values` is not supported when compiling `model.generate` with torch.compile -- "
-                    "you may get incorrect outputs. Please compile `model.forward` only or use the "
-                    "`cache_implementation` input argument."
-                )
             if generation_config.cache_implementation is not None:
                 raise ValueError(
                     f"Passing both `cache_implementation` (used to initialize certain caches) and `{cache_name}` (a "
@@ -2159,6 +2153,7 @@ class GenerationMixin:
         # Convert to legacy cache format if requested
         if (
             generation_config.return_legacy_cache is not False  # Should check for `True` after v4.47
+            and not is_torchdynamo_compiling()
             and hasattr(result, "past_key_values")
             and hasattr(result.past_key_values, "to_legacy_cache")
             and result.past_key_values.to_legacy_cache is not None

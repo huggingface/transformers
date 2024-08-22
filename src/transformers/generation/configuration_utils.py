@@ -716,7 +716,7 @@ class GenerationConfig(PushToHubMixin):
             )
             for arg_name in ("cache_implementation", "cache_config", "return_legacy_cache"):
                 if getattr(self, arg_name) is not None:
-                    warnings.warn(
+                    logger.warning_once(
                         no_cache_warning.format(cache_arg=arg_name, cache_arg_value=getattr(self, arg_name)),
                         UserWarning,
                     )
