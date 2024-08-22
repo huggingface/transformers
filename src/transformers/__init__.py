@@ -3336,7 +3336,6 @@ else:
     _import_structure["models.hhemv2"].extend(
         [
             "HHEMv2ForSequenceClassification",
-            "HHEMv2EncoderModel",
             "HHEMv2PreTrainedModel",
             "load_tf_weights_in_hhemv2",
         ]
@@ -7719,7 +7718,6 @@ if TYPE_CHECKING:
         )
         from .models.hhemv2 import (
             HHEMv2ForSequenceClassification,
-            HHEMv2EncoderModel,
             HHEMv2PreTrainedModel,
             load_tf_weights_in_hhemv2,
         )

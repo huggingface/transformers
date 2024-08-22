@@ -8591,13 +8591,6 @@ class HHEMv2ForSequenceClassification(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class HHEMv2EncoderModel(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class HHEMv2PreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
