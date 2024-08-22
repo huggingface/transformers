@@ -301,23 +301,23 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
             patches = patches.transpose(0, 3, 1, 2)
         if patches.shape[0] == 1:
             patches = np.tile(patches, (self.temporal_patch_size, 1, 1, 1))
-        c = patches.shape[1]
+        channel = patches.shape[1]
         grid_t = patches.shape[0] // self.temporal_patch_size
         grid_h, grid_w = resized_height // self.patch_size, resized_width // self.patch_size
-        flatten_patches = (
-            patches.reshape(
-                grid_t,
-                self.temporal_patch_size,
-                c,
-                grid_h // self.merge_size,
-                self.merge_size,
-                self.patch_size,
-                grid_w // self.merge_size,
-                self.merge_size,
-                self.patch_size,
-            )
-            .transpose(0, 3, 6, 4, 7, 2, 1, 5, 8)
-            .reshape(grid_t * grid_h * grid_w, c * self.temporal_patch_size * self.patch_size * self.patch_size)
+        patches = patches.reshape(
+            grid_t,
+            self.temporal_patch_size,
+            channel,
+            grid_h // self.merge_size,
+            self.merge_size,
+            self.patch_size,
+            grid_w // self.merge_size,
+            self.merge_size,
+            self.patch_size,
+        )
+        patches = patches.transpose(0, 3, 6, 4, 7, 2, 1, 5, 8)
+        flatten_patches = patches.reshape(
+            grid_t * grid_h * grid_w, channel * self.temporal_patch_size * self.patch_size * self.patch_size
         )
 
         return flatten_patches, (grid_t, grid_h, grid_w)
