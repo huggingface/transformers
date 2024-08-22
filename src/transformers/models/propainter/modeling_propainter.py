@@ -1266,7 +1266,7 @@ class ProPainterSparseWindowAttention(nn.Module):
         _att_t = att_t
         _att_s = att_s
         if output_attentions:
-            all_self_attentions = all_self_attentions + (_att_t,) + (_att_s,)
+            all_self_attentions = all_self_attentions + (_att_t.half(),) + (_att_s.half(),)
         # re-assemble all head outputs side by side
         output = output.view(batch_size, n_window_height, n_window_width, self.num_attention_heads, timesteps, window_height, window_width, channel_head)
         output = output.permute(0, 4, 1, 5, 2, 6, 3, 7).contiguous().view(batch_size, timesteps, new_height, new_width, num_channels)
@@ -1476,7 +1476,7 @@ class ProPainterInpaintGenerator(nn.Module):
         trans_feat, _all_self_attentions = self.transformers(trans_feat, fold_feat_size, mask_pool_l, t_dilation=t_dilation, output_attentions = output_attentions, output_hidden_states = output_hidden_states, return_dict = return_dict)
         _trans_feat = trans_feat
         if output_hidden_states:
-            all_hidden_states = all_hidden_states + (_trans_feat,)
+            all_hidden_states = all_hidden_states + (_trans_feat.half(),)
         if output_attentions:
                 all_self_attentions = all_self_attentions + (_all_self_attentions,)
         trans_feat = self.soft_comp(trans_feat, timestep, fold_feat_size)
@@ -1493,7 +1493,7 @@ class ProPainterInpaintGenerator(nn.Module):
 
         _output = output
         if output_hidden_states:
-            all_hidden_states = all_hidden_states + (_output,)
+            all_hidden_states = all_hidden_states + (_output.half(),)
 
         if not return_dict:
             return tuple(v for v in [output, all_hidden_states, all_self_attentions] if v is not None)
@@ -3005,7 +3005,7 @@ class ProPainterModel(ProPainterPreTrainedModel):
                     flows_f, flows_b = self.optical_flow_model(pixel_values[:,f-1:end_f], iters=self.config.raft_iter)
                 _flows_f, _flows_b = flows_f, flows_b
                 if output_hidden_states:
-                    all_hidden_states = all_hidden_states + (_flows_f,_flows_b,)
+                    all_hidden_states = all_hidden_states + (_flows_f.half(),_flows_b.half(),)
                 gt_flows_f_list.append(flows_f)
                 gt_flows_b_list.append(flows_b)
                 torch.cuda.empty_cache()
@@ -3016,7 +3016,7 @@ class ProPainterModel(ProPainterPreTrainedModel):
         else:
             gt_flows_bi = self.optical_flow_model(pixel_values, iters=self.config.raft_iter)
             all_hidden_states = gt_flows_bi
-            all_hidden_states = all_hidden_states
+            all_hidden_states = all_hidden_states.half()
             torch.cuda.empty_cache()
         return gt_flows_bi, all_hidden_states
     
@@ -3036,7 +3036,7 @@ class ProPainterModel(ProPainterPreTrainedModel):
                     flow_masks[:, s_f:e_f+1])
                 _pred_flows_bi_sub, _pred_edges_bi = pred_flows_bi_sub, pred_edges_bi
                 if output_hidden_states:
-                    all_hidden_states = all_hidden_states + tuple(tensor for tensor in _pred_flows_bi_sub) + tuple(tensor for tensor in _pred_edges_bi)
+                    all_hidden_states = all_hidden_states + tuple(tensor.half() for tensor in _pred_flows_bi_sub) + tuple(tensor.half() for tensor in _pred_edges_bi)
 
                 pred_flows_bi_loss.append(pred_flows_bi_sub)
                 pred_edges_bi_loss.append(pred_edges_bi)
@@ -3058,7 +3058,7 @@ class ProPainterModel(ProPainterPreTrainedModel):
         else:
             pred_flows_bi, pred_edges_bi = self.flow_completion_net.forward_bidirect_flow(gt_flows_bi, flow_masks)
             _pred_flows_bi, _pred_edges_bi = pred_flows_bi, pred_edges_bi
-            all_hidden_states = tuple(tensor for tensor in _pred_flows_bi) + tuple(tensor for tensor in _pred_edges_bi)
+            all_hidden_states = tuple(tensor.half() for tensor in _pred_flows_bi) + tuple(tensor.half() for tensor in _pred_edges_bi)
             pred_flows_bi_loss = pred_flows_bi
 
             pred_flows_bi = self.flow_completion_net.combine_flow(gt_flows_bi, pred_flows_bi, flow_masks)
@@ -3103,7 +3103,7 @@ class ProPainterModel(ProPainterPreTrainedModel):
             batch_size, timesteps, _, _, _ = masks_dilated.size()
             prop_imgs, updated_local_masks = self.inpaint_generator.img_propagation(masked_frames, pred_flows_bi, masks_dilated, 'nearest')
             all_hidden_states = prop_imgs
-            all_hidden_states = all_hidden_states
+            all_hidden_states = all_hidden_states.half()
             updated_frames = pixel_values * (1 - masks_dilated) + prop_imgs.view(batch_size, timesteps, 3, height, width) * masks_dilated
             updated_masks = updated_local_masks.view(batch_size, timesteps, 1, height, width)
             torch.cuda.empty_cache()
