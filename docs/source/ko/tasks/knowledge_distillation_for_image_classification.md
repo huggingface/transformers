@@ -91,7 +91,7 @@ class ImageDistilTrainer(Trainer):
         # 실제 레이블 손실 계산
         student_target_loss = student_output.loss
 
-        # Calculate final loss
+        # 최종 손실 계산
         loss = (1. - self.lambda_param) * student_target_loss + self.lambda_param * distillation_loss
         return (loss, student_output) if return_outputs else loss
 ```
