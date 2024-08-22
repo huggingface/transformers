@@ -121,13 +121,18 @@ class CircleCIJob:
         )
 
         steps.append({"run": {"name": "Create `test-results` directory", "command": "mkdir test-results"}})
+
+        # Examples special case: we need to download NLTK files in advance to avoid cuncurrency issues
+        if "examples" in self.name:
+            steps.append({"run": {"name": "Download NLTK files", "command": """python -c "import nltk; nltk.download('punkt', quiet=True)" """}})
+
         test_command = ""
         if self.command_timeout:
             test_command = f"timeout {self.command_timeout} "
-        # junit familiy xunit1 is necessary to support splitting on test name or class name with circleci split
-        test_command += f"python3 -m pytest -rsfE -p no:warnings -o junit_family=xunit1 --tb=short --junitxml=test-results/junit.xml -n {self.pytest_num_workers} " + " ".join(pytest_flags)
 
         if self.parallelism == 1:
+            # junit familiy xunit1 is necessary to support splitting on test name or class name with circleci split
+            test_command += f"python3 -m pytest -rsfE -p no:warnings -o junit_family=xunit1 --tb=short --junitxml=test-results/junit.xml -n {self.pytest_num_workers} " + " ".join(pytest_flags)
             if self.tests_to_run is None:
                 test_command += " << pipeline.parameters.tests_to_run >>"
             else:
@@ -185,9 +190,6 @@ class CircleCIJob:
             steps.append({"store_artifacts": {"path": "tests.txt"}})
             steps.append({"store_artifacts": {"path": "splitted_tests.txt"}})
 
-            test_command = ""
-            if self.command_timeout:
-                test_command = f"timeout {self.command_timeout} "
             test_command += f"python3 -m pytest -rsfE -p no:warnings --tb=short  -o junit_family=xunit1 --junitxml=test-results/junit.xml -n {self.pytest_num_workers} " + " ".join(pytest_flags)
             test_command += " $(cat splitted_tests.txt)"
         if self.marker is not None:
@@ -327,7 +329,7 @@ examples_tensorflow_job = CircleCIJob(
     cache_name="tensorflow_examples",
     docker_image=[{"image":"huggingface/transformers-examples-tf"}],
     install_steps=["uv venv && uv pip install . && uv pip install -r examples/tensorflow/_tests_requirements.txt"],
-    parallelism=8
+    parallelism=8,
 )
 
 
