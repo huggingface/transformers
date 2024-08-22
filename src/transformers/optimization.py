@@ -521,6 +521,11 @@ def get_scheduler(
 
         return LayerWiseDummyScheduler(optimizer_dict=optimizer_dict, lr=optimizer.defaults["lr"])
 
+    if optimizer.__class__.__name__ == "AdamW4bit" and name != SchedulerType.CONSTANT:
+        logger.warning(
+            "You are using torch 4-bit optimizer with a non constant LR. Note that is will be slower compared with a constant LR."
+            "To learn why, check here: https://github.com/pytorch/ao/tree/main/torchao/prototype/low_bit_optim"
+        )
     if name == SchedulerType.CONSTANT:
         return schedule_func(optimizer)
 
