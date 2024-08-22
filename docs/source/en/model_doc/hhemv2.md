@@ -47,9 +47,9 @@ model.predict(pairs) # note the predict() method. Do not do model(pairs).
 
 [[autodoc]] HHEMv2Config
 
-## HHEMv2Model
+## HHEMv2PreTrainedModel
 
-[[autodoc]] HHEMv2EncoderModel
+[[autodoc]] HHEMv2PreTrainedModel
 
 ## HHEMv2ForSequenceClassification
 

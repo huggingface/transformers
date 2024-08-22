@@ -4684,6 +4684,13 @@ class GroupViTVisionModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class HHEMv2ForSequenceClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class HieraBackbone(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -8582,24 +8589,6 @@ class T5PreTrainedModel(metaclass=DummyObject):
 
 def load_tf_weights_in_t5(*args, **kwargs):
     requires_backends(load_tf_weights_in_t5, ["torch"])
-
-
-class HHEMv2ForSequenceClassification(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class HHEMv2PreTrainedModel(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-def load_tf_weights_in_hhemv2(*args, **kwargs):
-    requires_backends(load_tf_weights_in_hhemv2, ["torch"])
 
 
 class TableTransformerForObjectDetection(metaclass=DummyObject):

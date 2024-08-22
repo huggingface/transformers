@@ -771,6 +771,24 @@ class HHEMv2ClassificationHead(nn.Module):
         return hidden_states
 
 
+HHEMV2_START_DOCSTRING = r"""
+
+    HHEM-2.1-open is a major upgrade to [HHEM-1.0-Open](https://huggingface.co/vectara/hallucination_evaluation_model/tree/hhem-1.0-open)
+    created by [Vectara](https://vectara.com) in November 2023. The HHEM model series are designed for detecting hallucinations in
+    LLMs. They are particularly useful in the context of building retrieval-augmented-generation (RAG) applications where a set of
+    facts is summarized by an LLM, and HHEM can be used to measure the extent to which this summary is factually consistent with
+    the facts.
+
+    Parameters:
+        config ([`HHEMv2Config`]): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+
+@add_start_docstrings(
+    HHEMV2_START_DOCSTRING,
+)
 class HHEMv2PreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -871,21 +889,6 @@ class HHEMv2PreTrainedModel(PreTrainedModel):
         shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
 
         return shifted_input_ids
-
-
-HHEMV2_START_DOCSTRING = r"""
-
-    HHEM-2.1-open is a major upgrade to [HHEM-1.0-Open](https://huggingface.co/vectara/hallucination_evaluation_model/tree/hhem-1.0-open)
-    created by [Vectara](https://vectara.com) in November 2023. The HHEM model series are designed for detecting hallucinations in
-    LLMs. They are particularly useful in the context of building retrieval-augmented-generation (RAG) applications where a set of
-    facts is summarized by an LLM, and HHEM can be used to measure the extent to which this summary is factually consistent with
-    the facts.
-
-    Parameters:
-        config ([`HHEMv2Config`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
 
 
 @add_start_docstrings(

@@ -104,7 +104,6 @@ class HHEMv2ModelTester:
         if self.use_attention_mask:
             attention_mask = ids_tensor([self.batch_size, self.encoder_seq_length], vocab_size=2)
 
-
         config = self.get_config()
 
         return (
@@ -156,7 +155,9 @@ class HHEMv2ModelTester:
         attention_mask,
     ):
         # labels = torch.tensor([1] * self.batch_size, dtype=torch.long, device=torch_device)
-        labels = torch.tensor([[1] + [0]*(input_ids.shape[1]-1)]* self.batch_size, dtype=torch.long, device=torch_device)
+        labels = torch.tensor(
+            [[1] + [0] * (input_ids.shape[1] - 1)] * self.batch_size, dtype=torch.long, device=torch_device
+        )
         model = HHEMv2ForSequenceClassification(config=config).to(torch_device).eval()
         outputs = model(
             input_ids=input_ids,
@@ -183,11 +184,7 @@ class HHEMv2ModelTester:
 
 @require_torch
 class HHEMv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (
-        (HHEMv2ForSequenceClassification,)
-        if is_torch_available()
-        else ()
-    )
+    all_model_classes = (HHEMv2ForSequenceClassification,) if is_torch_available() else ()
     all_generative_model_classes = ()
     all_parallelizable_model_classes = ()
     pipeline_model_mapping = (
@@ -200,11 +197,9 @@ class HHEMv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     test_pruning = False
     test_mismatched_shapes = False
-    test_model_parallel = True#False
+    test_model_parallel = True  # False
     # The small HHEMv2 model needs higher percentages for CPU/MP tests
     model_split_percents = [0.5, 0.8, 0.9]
-
-
 
     def setUp(self):
         self.model_tester = HHEMv2ModelTester(self)
@@ -227,7 +222,12 @@ class HHEMv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 class HHEMv2ModelIntegrationTests(unittest.TestCase):
     @cached_property
     def local_model_path(self):
-        return os.path.join(os.path.dirname((os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))), 'hallucination_evaluation_model')
+        return os.path.join(
+            os.path.dirname(
+                (os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
+            ),
+            "hallucination_evaluation_model",
+        )
 
     @cached_property
     def model(self):
@@ -242,29 +242,34 @@ class HHEMv2ModelIntegrationTests(unittest.TestCase):
         config = self.config
         return T5Tokenizer.from_pretrained(config.foundation)
 
-
     @slow
     def test_small_prediction(self):
         model = self.model
         pairs = [("The capital of France is Berlin.", "The capital of France is Paris.")]
         score = model.predict(pairs).item()
-        self.assertTrue(round(score,4) == 0.0111)
+        self.assertTrue(round(score, 4) == 0.0111)
 
     @slow
     def test_prediction(self):
         model = self.model
-        pairs = [ # Test data, List[Tuple[str, str]]
-            ("The capital of France is Berlin.", "The capital of France is Paris."), # factual but hallucinated
-            ('I am in California', 'I am in United States.'), # Consistent
-            ('I am in United States', 'I am in California.'), # Hallucinated
+        pairs = [  # Test data, List[Tuple[str, str]]
+            ("The capital of France is Berlin.", "The capital of France is Paris."),  # factual but hallucinated
+            ("I am in California", "I am in United States."),  # Consistent
+            ("I am in United States", "I am in California."),  # Hallucinated
             ("A person on a horse jumps over a broken down airplane.", "A person is outdoors, on a horse."),
-            ("A boy is jumping on skateboard in the middle of a red bridge.", "The boy skates down the sidewalk on a red bridge"),
-            ("A man with blond-hair, and a brown shirt drinking out of a public water fountain.", "A blond man wearing a brown shirt is reading a book."),
-            ("Mark Wahlberg was a fan of Manny.", "Manny was a fan of Mark Wahlberg.")
+            (
+                "A boy is jumping on skateboard in the middle of a red bridge.",
+                "The boy skates down the sidewalk on a red bridge",
+            ),
+            (
+                "A man with blond-hair, and a brown shirt drinking out of a public water fountain.",
+                "A blond man wearing a brown shirt is reading a book.",
+            ),
+            ("Mark Wahlberg was a fan of Manny.", "Manny was a fan of Mark Wahlberg."),
         ]
         preds = model.predict(pairs).tolist()
         expected = [0.0111, 0.6474, 0.1290, 0.8969, 0.1846, 0.0050, 0.0543]
         self.assertListEqual(
             expected,
-            [round(pred,4) for pred in preds],
+            [round(pred, 4) for pred in preds],
         )

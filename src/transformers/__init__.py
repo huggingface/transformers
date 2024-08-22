@@ -3333,13 +3333,7 @@ else:
             "load_tf_weights_in_t5",
         ]
     )
-    _import_structure["models.hhemv2"].extend(
-        [
-            "HHEMv2ForSequenceClassification",
-            "HHEMv2PreTrainedModel",
-            "load_tf_weights_in_hhemv2",
-        ]
-    )
+    _import_structure["models.hhemv2"].extend(["HHEMv2ForSequenceClassification"])
     _import_structure["models.table_transformer"].extend(
         [
             "TableTransformerForObjectDetection",
@@ -6939,8 +6933,6 @@ if TYPE_CHECKING:
         )
         from .models.hhemv2 import (
             HHEMv2ForSequenceClassification,
-            HHEMv2PreTrainedModel,
-            load_tf_weights_in_hhemv2,
         )
         from .models.hiera import (
             HieraBackbone,
