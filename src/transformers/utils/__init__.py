@@ -15,6 +15,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from functools import lru_cache
+
 from huggingface_hub import get_full_repo_name  # for backward compatibility
 from huggingface_hub.constants import HF_HUB_DISABLE_TELEMETRY as DISABLE_TELEMETRY  # for backward compatibility
 from packaging import version
@@ -274,3 +276,30 @@ def check_min_version(min_version):
             + "Check out https://github.com/huggingface/transformers/tree/main/examples#important-note for the examples corresponding to other "
             "versions of HuggingFace Transformers."
         )
+
+@lru_cache()
+def get_available_devices():
+    """
+    Returns a set of devices available for the current PyTorch installation.
+    """
+    devices = {"cpu"}  # `cpu` is always supported as a device in PyTorch
+
+    if is_torch_cuda_available():
+        devices.add("cuda")
+
+    if is_torch_mps_available():
+        devices.add("mps")
+
+    if is_torch_xpu_available():
+        devices.add("xpu")
+
+    if is_torch_npu_available():
+        devices.add("npu")
+
+    if is_torch_mlu_available():
+        devices.add("mlu")
+
+    if is_torch_musa_available():
+        devices.add("musa")
+
+    return devices

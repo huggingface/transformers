@@ -93,6 +93,7 @@ _import_structure = {
         "run_hp_search_ray",
         "run_hp_search_sigopt",
         "run_hp_search_wandb",
+        "validate_bnb_backend_availability",
     ],
     "peft": ["PeftAdapterMixin"],
     "quanto": ["replace_with_quanto_layers"],
@@ -175,6 +176,7 @@ if TYPE_CHECKING:
         run_hp_search_ray,
         run_hp_search_sigopt,
         run_hp_search_wandb,
+        validate_bnb_backend_availability,
     )
     from .peft import PeftAdapterMixin
     from .quanto import replace_with_quanto_layers

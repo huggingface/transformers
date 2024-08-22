@@ -38,7 +38,9 @@ from .. import __version__ as version
 from ..utils import (
     PushToHubMixin,
     flatten_dict,
+    get_available_devices,
     is_datasets_available,
+    is_ipex_available,
     is_pandas_available,
     is_tf_available,
     is_torch_available,
@@ -202,6 +204,67 @@ def is_flyte_deck_standard_available():
 
 def is_dvclive_available():
     return importlib.util.find_spec("dvclive") is not None
+
+
+def _validate_bnb_multi_backend_availability(raise_exception):
+    import bitsandbytes as bnb
+
+    bnb_supported_devices = getattr(bnb, "supported_torch_devices", set())
+    available_devices = get_available_devices()
+
+    if available_devices == {"cpu"} and not is_ipex_available():
+        from importlib.util import find_spec
+
+        if find_spec("intel_extension_for_pytorch"):
+            logger.warning(
+                "You have Intel IPEX installed but if you're intending to use it for CPU, it might not have the right version. Be sure to double check that your PyTorch and IPEX installs are compatible."
+            )
+
+        available_devices.discard("cpu")  # Only Intel CPU is supported by BNB at the moment
+
+    if not available_devices.intersection(bnb_supported_devices):
+        if raise_exception:
+            bnb_supported_devices_with_info = set(  # noqa: C401
+                '"cpu" (needs an Intel CPU and intel_extension_for_pytorch installed and compatible with the PyTorch version)'
+                if device == "cpu"
+                else device
+                for device in bnb_supported_devices
+            )
+            err_msg = f"None of the available devices `available_devices = {available_devices or None}` are supported by the bitsandbytes version you have installed: `bnb_supported_devices = {bnb_supported_devices_with_info}`. Please check the docs to see if the backend you intend to use is available and how to install it: https://huggingface.co/docs/bitsandbytes/main/en/installation#multi-backend"
+
+            logger.error(err_msg)
+            raise RuntimeError(err_msg)
+
+        logger.warning("No supported devices found for bitsandbytes multi-backend.")
+        return False
+
+    logger.debug("Multi-backend validation successful.")
+    return True
+
+
+def _validate_bnb_cuda_backend_availability(raise_exception):
+    if not torch.cuda.is_available():
+        log_msg = "CUDA is required but not available for bitsandbytes. Please consider installing the multi-platform enabled version of bitsandbytes, which is currently a work in progress. Please check currently supported platforms and installation instructions at https://huggingface.co/docs/bitsandbytes/main/en/installation#multi-backend"
+        if raise_exception:
+            logger.error(log_msg)
+            raise RuntimeError(log_msg)
+
+        logger.warning(log_msg)
+        return False
+
+    logger.debug("CUDA backend validation successful.")
+    return True
+
+
+def validate_bnb_backend_availability(raise_exception=False):
+    """
+    Validates if the available devices are supported by bitsandbytes, optionally raising an exception if not.
+    """
+    import bitsandbytes as bnb
+
+    if "multi_backend" in getattr(bnb, "features", set()):
+        return _validate_bnb_multi_backend_availability(raise_exception)
+    return _validate_bnb_cuda_backend_availability(raise_exception)
 
 
 def hp_params(trial):

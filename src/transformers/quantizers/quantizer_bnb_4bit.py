@@ -65,7 +65,7 @@ class Bnb4BitHfQuantizer(HfQuantizer):
             self.modules_to_not_convert = self.quantization_config.llm_int8_skip_modules
 
     def validate_environment(self, *args, **kwargs):
-        if not (is_accelerate_available() and is_bitsandbytes_available()):
+        if not is_accelerate_available():
             raise ImportError(
                 f"Using `bitsandbytes` 4-bit quantization requires Accelerate: `pip install 'accelerate>={ACCELERATE_MIN_VERSION}'`"
             )
@@ -75,15 +75,11 @@ class Bnb4BitHfQuantizer(HfQuantizer):
             )
         import bitsandbytes as bnb
 
-        bnb_is_multibackend_enabled = "multi_backend" in getattr(bnb, "features", set())
+        bnb_multibackend_is_enabled = "multi_backend" in getattr(bnb, "features", set())
 
-        if not torch.cuda.is_available():
-            import bitsandbytes as bnb
+        from ..integrations.integration_utils import validate_bnb_backend_availability
 
-            if not bnb_is_multibackend_enabled:
-                raise RuntimeError(
-                    "Current bitsandbytes (`main`) only supports CUDA, please switch to the `multi-backend-refactor` preview release for WIP support of other backends."
-                )
+        validate_bnb_backend_availability(raise_exception=True)
 
         if kwargs.get("from_tf", False) or kwargs.get("from_flax", False):
             raise ValueError(
@@ -100,7 +96,7 @@ class Bnb4BitHfQuantizer(HfQuantizer):
             device_map_without_lm_head = {
                 key: device_map[key] for key in device_map.keys() if key not in self.modules_to_not_convert
             }
-            if set(device_map.values()) == {"cpu"} and bnb_is_multibackend_enabled:
+            if set(device_map.values()) == {"cpu"} and bnb_multibackend_is_enabled:
                 pass
             elif "cpu" in device_map_without_lm_head.values() or "disk" in device_map_without_lm_head.values():
                 raise ValueError(

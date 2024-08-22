@@ -6,7 +6,11 @@ from inspect import signature
 
 from packaging import version
 
-from ..utils import is_accelerate_available, is_bitsandbytes_available, logging
+from ..utils import (
+    is_accelerate_available,
+    is_bitsandbytes_available,
+    logging,
+)
 
 
 if is_bitsandbytes_available():

@@ -221,6 +221,17 @@ _run_agent_tests = parse_flag_from_env("RUN_AGENT_TESTS", default=False)
 _run_third_party_device_tests = parse_flag_from_env("RUN_THIRD_PARTY_DEVICE_TESTS", default=False)
 
 
+def get_device_count():
+    import torch
+
+    if is_torch_xpu_available():
+        num_devices = torch.xpu.device_count()
+    else:
+        num_devices = torch.cuda.device_count()
+
+    return num_devices
+
+
 def is_pt_tf_cross_test(test_case):
     """
     Decorator marking a test as a test that control interactions between PyTorch and TensorFlow.
@@ -748,9 +759,7 @@ def require_torch_multi_gpu(test_case):
     if not is_torch_available():
         return unittest.skip(reason="test requires PyTorch")(test_case)
 
-    import torch
-
-    device_count = torch.cuda.device_count() if not is_torch_xpu_available() else torch.xpu.device_count()
+    device_count = get_device_count()
 
     return unittest.skipUnless(device_count > 1, "test requires multiple GPUs")(test_case)
 

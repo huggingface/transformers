@@ -840,11 +840,11 @@ def is_torch_xpu_available(check_device=False):
     return hasattr(torch, "xpu") and torch.xpu.is_available()
 
 
+@lru_cache()
 def is_bitsandbytes_available():
-    if not is_torch_available():
-        return False
+    from transformers.integrations.integration_utils import validate_bnb_backend_availability
 
-    return _bitsandbytes_available
+    return is_torch_available() and validate_bnb_backend_availability(raise_exception=False)
 
 
 def is_flash_attn_2_available():
