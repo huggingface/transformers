@@ -917,8 +917,8 @@ class Trainer:
         if self.args.use_legacy_prediction_loop:
             if is_torch_xla_available():
                 return SequentialDistributedSampler(
-                    eval_dataset, 
-                    num_replicas=xm.xrt_world_size(), 
+                    eval_dataset,
+                    num_replicas=xm.xrt_world_size(),
                     rank=xm.get_ordinal(),
                 )
             elif is_sagemaker_mp_enabled():
