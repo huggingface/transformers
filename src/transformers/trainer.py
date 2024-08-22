@@ -4751,6 +4751,7 @@ class Trainer:
 
         args = {
             "deepspeed_plugin": self.args.deepspeed_plugin,
+            "fsdp_plugin": self.args.fsdp_plugin,
             "gradient_accumulation_plugin": gradient_accumulation_plugin,
         }
         if is_accelerate_available("0.28.0"):

@@ -1906,6 +1906,7 @@ class TrainingArguments:
                 warnings.warn("`--xla_fsdp_grad_ckpt` is useful only when `--xla` is set to true.")
 
         # accelerate integration for FSDP
+        self.fsdp_plugin = None
         if len(self.fsdp) > 0 and is_accelerate_available("0.28.0"):
             os.environ["ACCELERATE_USE_FSDP"] = "true"
             from accelerate.utils.constants import (
@@ -1947,6 +1948,13 @@ class TrainingArguments:
             os.environ[f"{prefix}CPU_RAM_EFFICIENT_LOADING"] = cpu_ram_efficient_loading
 
             os.environ[f"{prefix}USE_ORIG_PARAMS"] = str(self.fsdp_config.get("use_orig_params", "true")).lower()
+
+            fsdp_plugin_kwargs = {}
+            if self.fsdp_config.get("device_mesh", None) and is_accelerate_available("0.34.0"):
+                fsdp_plugin_kwargs["device_mesh"] = self.fsdp_config["device_mesh"]
+
+            from accelerate.utils import FullyShardedDataParallelPlugin
+            self.fsdp_plugin = FullyShardedDataParallelPlugin(**fsdp_plugin_kwargs)
 
         if self.tpu_metrics_debug:
             warnings.warn(
