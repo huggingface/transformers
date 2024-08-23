@@ -50,6 +50,9 @@ class MSClapTextConfig(PretrainedConfig):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
+        vocab_size (`int`, *optional*, defaults to 50257):
+            Vocabulary size of the MSClap Text model. Defines the number of different tokens that can be represented by the
+            `inputs_ids` passed when calling [`ClapTextModel`].
 
     Examples:
 
@@ -77,6 +80,7 @@ class MSClapTextConfig(PretrainedConfig):
         projection_hidden_act="gelu",
         num_hidden_layers=None,
         num_attention_heads=None,
+        vocab_size=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -94,6 +98,7 @@ class MSClapTextConfig(PretrainedConfig):
         self.projection_hidden_act = projection_hidden_act
         self.num_hidden_layers = num_hidden_layers if num_hidden_layers else self.text_model_config.n_layer
         self.num_attention_heads = num_attention_heads if num_attention_heads else self.text_model_config.n_head
+        self.vocab_size = vocab_size if vocab_size else self.text_model_config.vocab_size
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
