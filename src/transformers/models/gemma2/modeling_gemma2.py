@@ -427,6 +427,7 @@ class Gemma2FlashAttention2(Gemma2Attention):
             dropout=dropout_rate,
             softmax_scale=self.scaling,
             is_causal=self.is_causal,
+            sliding_window=self.sliding_window,
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
             softcap=self.config.attn_logit_softcapping if is_flash_attn_greater_or_equal("2.6.0") else None,
         )
@@ -567,7 +568,8 @@ class Gemma2DecoderLayer(nn.Module):
         if self.is_sliding and attention_mask is not None:  # efficient SDPA and no padding
             # Flash-attn is a 2D tensor
             if self.config._attn_implementation == "flash_attention_2":
-                attention_mask = attention_mask[:, -self.sliding_window :]
+                if past_key_value is not None:  # when decoding
+                    attention_mask = attention_mask[:, -self.sliding_window :]
             else:
                 min_dtype = torch.finfo(hidden_states.dtype).min
                 sliding_window_mask = torch.tril(
@@ -653,6 +655,20 @@ class Gemma2PreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+
+    @classmethod
+    def _check_and_enable_sdpa(cls, config, hard_check_only: bool = False):
+        """
+        Overloads `PreTrainedModel._check_and_enable_sdpa` so as to DISABLE torch SDPA by default on Gemma2 models.
+        SDPA reduces the model performance on Gemma2 because of the logits softcapping.
+        """
+        config = super()._check_and_enable_sdpa(config, hard_check_only=hard_check_only)
+
+        # if using the default path -> swap sdpa by eager
+        if not hard_check_only and config._attn_implementation == "sdpa":
+            config._attn_implementation = "eager"
+
+        return config
 
 
 _CONFIG_FOR_DOC = "Gemma2Config"
@@ -816,7 +832,7 @@ class Gemma2Model(Gemma2PreTrainedModel):
             batch_size, seq_len, _ = inputs_embeds.shape
             past_key_values = HybridCache(
                 self.config,
-                max_batch_size=batch_size,
+                batch_size=batch_size,
                 max_cache_len=seq_len,
                 device=self.device,
                 dtype=inputs_embeds.dtype,
@@ -1093,7 +1109,11 @@ class Gemma2ForCausalLM(Gemma2PreTrainedModel):
             # The clone here is for the same reason as for `position_ids`.
             model_inputs = {"input_ids": input_ids.clone(memory_format=torch.contiguous_format), "inputs_embeds": None}
 
-        if isinstance(past_key_values, HybridCache) and attention_mask.ndim == 2:
+        if (
+            isinstance(past_key_values, HybridCache)
+            and attention_mask.ndim == 2
+            and not self.config._attn_implementation == "flash_attention_2"
+        ):
             if model_inputs["inputs_embeds"] is not None:
                 batch_size, sequence_length, _ = model_inputs["inputs_embeds"].shape
                 device = model_inputs["inputs_embeds"].device

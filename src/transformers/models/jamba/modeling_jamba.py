@@ -210,6 +210,7 @@ class HybridMambaAttentionDynamicCache(DynamicCache):
     """
 
     def __init__(self, config, batch_size, dtype=torch.float16, device=None):
+        super().__init__()
         self.dtype = dtype
         self.layers_block_type = config.layers_block_type
         self.has_previous_state = False  # only used by mamba
@@ -629,7 +630,7 @@ class JambaMambaMixer(nn.Module):
 
         # S4D real initialization. These are not discretized!
         # The core is to load them, compute the discrete states, then write the updated state. Keeps the memory bounded
-        A = torch.arange(1, self.ssm_state_size + 1, dtype=torch.float32)[None, :]
+        A = torch.arange(1, self.ssm_state_size + 1)[None, :]
         A = A.expand(self.intermediate_size, -1).contiguous()
 
         self.A_log = nn.Parameter(torch.log(A))

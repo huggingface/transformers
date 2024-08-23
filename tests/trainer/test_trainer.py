@@ -62,6 +62,7 @@ from transformers.testing_utils import (
     require_bitsandbytes,
     require_deepspeed,
     require_galore_torch,
+    require_grokadamw,
     require_intel_extension_for_pytorch,
     require_lomo,
     require_optuna,
@@ -98,6 +99,7 @@ from transformers.utils import (
     is_apex_available,
     is_bitsandbytes_available,
     is_safetensors_available,
+    is_torchao_available,
     is_torchdistx_available,
 )
 from transformers.utils.hp_naming import TrialShortNamer
@@ -1360,6 +1362,28 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 learning_rate=1e-9,
                 logging_steps=5,
                 optim="adalomo",
+            )
+            trainer = Trainer(tiny_llama, args, train_dataset=train_dataset)
+
+            # Check this works
+            _ = trainer.train()
+
+    @require_grokadamw
+    @require_torch_gpu
+    def test_grokadamw():
+        config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
+        tiny_llama = LlamaForCausalLM(config)
+        x = torch.randint(0, 100, (128,))
+        train_dataset = RepeatDataset(x)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Trainer without inf/nan filter
+            args = TrainingArguments(
+                tmpdir,
+                learning_rate=2e-5,
+                logging_steps=5,
+                optim="grokadamw",
+                max_steps=20,
             )
             trainer = Trainer(tiny_llama, args, train_dataset=train_dataset)
 
@@ -4185,6 +4209,16 @@ if is_torch_available():
                 TrainingArguments(optim=OptimizerNames.ADAMW_ANYPRECISION, output_dir="None"),
                 torchdistx.optimizers.AnyPrecisionAdamW,
                 dict(default_adam_kwargs, **default_anyprecision_kwargs),
+            )
+        )
+    if is_torchao_available():
+        import torchao
+
+        optim_test_params.append(
+            (
+                TrainingArguments(optim=OptimizerNames.ADAMW_TORCH_4BIT, output_dir="None"),
+                torchao.prototype.low_bit_optim.AdamW4bit,
+                default_adam_kwargs,
             )
         )
 
