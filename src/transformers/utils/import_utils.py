@@ -97,6 +97,7 @@ _apex_available = _is_package_available("apex")
 _aqlm_available = _is_package_available("aqlm")
 _av_available = importlib.util.find_spec("av") is not None
 _bitsandbytes_available = _is_package_available("bitsandbytes")
+_compressed_tensors_available = _is_package_available("compressed_tensors")
 _eetq_available = _is_package_available("eetq")
 _fbgemm_gpu_available = _is_package_available("fbgemm_gpu")
 _galore_torch_available = _is_package_available("galore_torch")
@@ -936,6 +937,9 @@ def is_auto_awq_available():
 
 def is_quanto_available():
     return _quanto_available
+
+def is_compressed_tensors_available():
+    return _compressed_tensors_available
 
 
 def is_auto_gptq_available():

@@ -30,6 +30,7 @@ from ..cache_utils import (
     DynamicCache,
     EncoderDecoderCache,
     HQQQuantizedCache,
+    CompressedTensorsQuantizedCache,
     HybridCache,
     MambaCache,
     OffloadedCache,
@@ -52,6 +53,7 @@ from ..tokenization_utils import ExtensionsTrie
 from ..utils import (
     ModelOutput,
     is_accelerate_available,
+    is_compressed_tensors_available,
     is_hqq_available,
     is_quanto_available,
     is_torchdynamo_compiling,
@@ -124,7 +126,7 @@ NEED_SETUP_CACHE_CLASSES_MAPPING = {
     "hybrid": HybridCache,
     "mamba": MambaCache,
 }
-QUANT_BACKEND_CLASSES_MAPPING = {"quanto": QuantoQuantizedCache, "HQQ": HQQQuantizedCache}
+QUANT_BACKEND_CLASSES_MAPPING = {"quanto": QuantoQuantizedCache, "HQQ": HQQQuantizedCache, "compressed-tensors": CompressedTensorsQuantizedCache}
 
 
 @dataclass
@@ -1583,6 +1585,11 @@ class GenerationMixin:
                         "Please install it via  with `pip install quanto`"
                     )
                 elif cache_config.backend == "HQQ" and not is_hqq_available():
+                    raise ImportError(
+                        "You need to install `HQQ` in order to use KV cache quantization with HQQ backend. "
+                        "Please install it via  with `pip install hqq`"
+                    )
+                elif cache_config.backend == "HQQ" and not is_compressed_tensors_available():
                     raise ImportError(
                         "You need to install `HQQ` in order to use KV cache quantization with HQQ backend. "
                         "Please install it via  with `pip install hqq`"

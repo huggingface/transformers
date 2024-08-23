@@ -9,7 +9,7 @@ import torch
 from packaging import version
 
 from .configuration_utils import PretrainedConfig
-from .utils import is_hqq_available, is_quanto_available, is_torchdynamo_compiling, logging
+from .utils import is_compressed_tensors_available, is_hqq_available, is_quanto_available, is_torchdynamo_compiling, logging
 
 
 if is_quanto_available():
@@ -19,6 +19,9 @@ if is_quanto_available():
 
 if is_hqq_available():
     from hqq.core.quantize import Quantizer as HQQQuantizer
+    
+if is_compressed_tensors_available():
+    from compressed_tensors import Quantizer as CompressedTensorQuantizer
 
 logger = logging.get_logger(__name__)
 
@@ -784,6 +787,19 @@ class HQQQuantizedCache(QuantizedCache):
         quant_tensor, meta = qtensor
         tensor = self.quantizer.dequantize(quant_tensor, meta)
         return tensor
+
+
+class CompressedTensorsQuantizedCache(QuantizedCache):
+
+    def __init__(self, cache_config: CacheConfig) -> None:
+        super().__init__(cache_config)
+        ...
+
+    def _quantize(self, tensor, axis):
+        ...
+
+    def _dequantize(self, qtensor):
+       ...
 
 
 class SinkCache(Cache):
