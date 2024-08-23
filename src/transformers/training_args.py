@@ -1952,7 +1952,7 @@ class TrainingArguments:
             os.environ[f"{prefix}USE_ORIG_PARAMS"] = str(self.fsdp_config.get("use_orig_params", "true")).lower()
 
             fsdp_plugin_kwargs = {}
-            if self.fsdp_config.get("device_mesh", None) and is_accelerate_available("0.34.0"):
+            if self.fsdp_config.get("device_mesh", None):
                 fsdp_plugin_kwargs["device_mesh"] = self.fsdp_config["device_mesh"]
 
             from accelerate.utils import FullyShardedDataParallelPlugin
