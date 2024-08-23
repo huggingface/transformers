@@ -145,7 +145,6 @@ class CircleCIJob:
             {"run": {"name": "Failed tests: show reasons",   "when": "always", "command": f"python3 .circleci/parse_test_outputs.py --file tests_output.txt --fail"}},
             {"run": {"name": "Errors",                       "when": "always", "command": f"python3 .circleci/parse_test_outputs.py --file tests_output.txt --errors"}},
             {"store_test_results": {"path": "test-results"}},
-            {"store_artifacts": {"path": "/root/project"}},
             {"store_artifacts": {"path": "test-results/junit.xml"}},
             {"store_artifacts": {"path": "reports"}},
             {"store_artifacts": {"path": "tests.txt"}},
