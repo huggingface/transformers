@@ -974,8 +974,8 @@ def create_module_to_test_map(
             if (
                 not t.startswith("tests/models/")
                 or Path(t).parts[2] in IMPORTANT_MODELS
-            # at this point, `t` is of the form `tests/models/my_model`, and we check if `models/my_model`
-            # (i.e. `parts[1:3]`) is in `module`.
+                # at this point, `t` is of the form `tests/models/my_model`, and we check if `models/my_model`
+                # (i.e. `parts[1:3]`) is in `module`.
                 or "/".join(Path(t).parts[1:3]) in module
             ):
                 filtered_tests += [t]
@@ -1136,7 +1136,7 @@ JOB_TO_TEST_FILE = {
     "tf": r"tests/models/.*/test_modeling_tf_.*",
     "torch": r"tests/models/.*/test_modeling_[^flax_|^tf_].*",
     "tokenization": r"tests/models/.*/test_tokenization.*",
-    "processors": r"tests/models/.*/test_[^modeling|^tokenization].*", # takes feature extractors, image processors, processors
+    "processors": r"tests/models/.*/test_[^modeling|^tokenization].*",  # takes feature extractors, image processors, processors
     "examples_torch": r"examples/pytorch/.*test_.*",
     "examples_tensorflow": r"examples/tensorflow/.*test_.*",
     "examples_flax": r"examples/flax/.*test.*",
