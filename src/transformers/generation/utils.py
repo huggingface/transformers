@@ -1889,7 +1889,7 @@ class GenerationMixin:
         # dynamically overrides this value as it can need more than the last token logits
         if self._supports_num_logits_to_keep() and "num_logits_to_keep" not in model_kwargs:
             model_kwargs["num_logits_to_keep"] = 1
-            
+
         self._validate_generated_length(generation_config, input_ids_length, has_default_max_length)
 
         # 7. Prepare the cache.
