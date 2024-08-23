@@ -258,7 +258,7 @@ class GroundingDinoModelOutput(ModelOutput):
             weighted average in the text-vision attention, vision-text attention, text-enhancer (self-attention) and
             multi-scale deformable attention heads. attention softmax, used to compute the weighted average in the
             bi-attention heads.
-        enc_topk_proposals (`torch.FloatTensor` of shape `(batch_size, num_queries)`, *optional*, returned when `config.two_stage=True`):
+        encoder_topk_proposals (`torch.FloatTensor` of shape `(batch_size, num_queries)`, *optional*, returned when `config.two_stage=True`):
             Top `config.num_queries` scoring bounding boxes indices picked as region proposals in the first stage.
         enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.two_stage=True`):
             Predicted bounding boxes scores where the top `config.num_queries` scoring bounding boxes are picked as
@@ -283,7 +283,7 @@ class GroundingDinoModelOutput(ModelOutput):
     encoder_vision_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_text_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
-    enc_topk_proposals: Optional[torch.FloatTensor] = None
+    encoder_topk_proposals: Optional[torch.FloatTensor] = None
     enc_outputs_class: Optional[torch.FloatTensor] = None
     enc_outputs_coord_logits: Optional[torch.FloatTensor] = None
     encoder_logits: Optional[torch.FloatTensor] = None
@@ -346,7 +346,7 @@ class GroundingDinoObjectDetectionOutput(ModelOutput):
             Stacked intermediate reference points (reference points of each layer of the decoder).
         init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
             Initial reference points sent through the Transformer decoder.
-        enc_topk_proposals (`torch.FloatTensor` of shape `(batch_size, num_queries)`, *optional*, returned when `config.two_stage=True`):
+        encoder_topk_proposals (`torch.FloatTensor` of shape `(batch_size, num_queries)`, *optional*, returned when `config.two_stage=True`):
             Top `config.num_queries` scoring bounding boxes indices picked as region proposals in the first stage.
         enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.two_stage=True`):
             Predicted bounding boxes scores where the top `config.num_queries` scoring bounding boxes are picked as
@@ -376,7 +376,7 @@ class GroundingDinoObjectDetectionOutput(ModelOutput):
     encoder_vision_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_text_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
-    enc_topk_proposals: Optional[torch.FloatTensor] = None
+    encoder_topk_proposals: Optional[torch.FloatTensor] = None
     enc_outputs_class: Optional[torch.FloatTensor] = None
     enc_outputs_coord_logits: Optional[torch.FloatTensor] = None
     encoder_logits: Optional[torch.FloatTensor] = None
@@ -2493,7 +2493,7 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
             encoder_vision_hidden_states=encoder_outputs.vision_hidden_states,
             encoder_text_hidden_states=encoder_outputs.text_hidden_states,
             encoder_attentions=encoder_outputs.attentions,
-            enc_topk_proposals=topk_proposals,
+            encoder_topk_proposals=topk_proposals,
             enc_outputs_class=enc_outputs_class,
             enc_outputs_coord_logits=enc_outputs_coord_logits,
             encoder_logits=encoder_logits,
@@ -2591,8 +2591,8 @@ def generalized_box_iou(boxes1, boxes2):
     return iou - (area - union) / area
 
 
-# Similar to `DeformableDetr` but we pass `num_queries` (because inputs are only the valid logits)
-# and we also pass `reduction` for testing purposes.
+# Similar to the one used in `DeformableDetr` but we pass `num_queries`, as `logits` are flattened
+# due to masked selection, and support different `reduction` modes.
 def sigmoid_focal_loss(
     inputs: torch.Tensor,
     targets: torch.Tensor,
@@ -2760,15 +2760,19 @@ class GroundingDinoLoss(nn.Module):
         """
         Create one_hot based on the matching indices
         """
-        class_labels = [target["class_labels"] for target in targets]
         logits = outputs["logits"]
-        label_maps = outputs["label_maps"]
+        # Add offsets to class_labels to select the correct label map
+        class_labels = torch.cat(
+            [
+                target["class_labels"][J] + len(outputs["label_maps"][i]) if i > 0 else target["class_labels"][J]
+                for i, (target, (_, J)) in enumerate(zip(targets, indices))
+            ]
+        )
+        label_maps = torch.cat(outputs["label_maps"], dim=0)
 
+        idx = self._get_source_permutation_idx(indices)
         target_classes_onehot = torch.zeros_like(logits, device=logits.device, dtype=torch.long)
-
-        for i, (source, target) in enumerate(indices):
-            labels = class_labels[i][target]
-            target_classes_onehot[i, source] = label_maps[i][labels].to(torch.long)
+        target_classes_onehot[idx] = label_maps[class_labels].to(torch.long)
 
         return target_classes_onehot
 
@@ -2924,34 +2928,58 @@ class GroundingDinoLoss(nn.Module):
         return losses
 
 
-def build_label_maps(logits, input_ids):
+def build_label_maps(logits: torch.FloatTensor, input_ids: torch.LongTensor) -> Tuple[torch.FloatTensor]:
     """
-    Computes a mapping between the tokens associated with the prompt labels in the logit space with shape `(batch_size, num_labels, hidden_size)`
-    where `num_labels` is defined by the number of classes in the input prompt.
+    Computes a mapping between tokens and their corresponding labels, where `num_labels` is determined by the number of classes in the input prompt.
+    The function identifies segments of tokens between specific delimiter tokens and generates label maps for those segments.
+    Args:
+        logits (`torch.Tensor` of shape `(batch_size, seq_length, hidden_size)`):
+            The output logits from the model, where `hidden_size` corresponds to the dimension of the model's output features.
 
-    For instance, given the prompt "fish. shark." we get input_ids = [  101,  3869,  1012, 11420,  1012,   102].
-    This function will return a mapping for each of the prompt tokens (i.e. tokens associated with "fish" and "shark")
-    indicating their position in the logit space.
-
+        input_ids (`torch.Tensor` of shape `(batch_size, seq_length)`):
+            The input token IDs corresponding to the input prompt. For example, given the prompt "fish. shark.",
+            `input_ids` might look like `[101, 3869, 1012, 11420, 1012, 102]` where each number corresponds to a token including special tokens.
+    Returns:
+        tuple: A tuple containing label maps for each instance in the batch.
+        - label_maps (tuple of `torch.Tensor`):
+            A tuple of tensors, where each tensor in the tuple corresponds to an instance in the batch. Each tensor
+            has shape `(num_labels, hidden_size)` and contains binary values (0 or 1), where `1` indicates the tokens
+            that are associated with a specific label (class) between delimiter tokens, and `0` elsewhere.
+    Example:
+        Given an input prompt "fish. shark." and corresponding `input_ids` as `[101, 3869, 1012, 11420, 1012, 102]`:
+        - The function identifies the tokens for "fish" (IDs `[3869]`) and "shark" (IDs `[11420]`).
+        - The function then constructs label maps for these tokens, where each label map indicates which tokens
+          correspond to which label between the delimiter tokens (e.g., between the period `.`).
+        - The output is a tuple of label maps, one for each instance in the batch.
+    Note:
+        - `SPECIAL_TOKENS` should be a predefined list of tokens that are considered special (e.g., `[CLS]`, `[SEP]`, etc.).
     """
-    hidden_size = logits.shape[-1]
+    max_seq_len = logits.shape[-1]
     # Add [PAD] token to the list of special tokens
     delimiter_tokens = torch.tensor(SPECIAL_TOKENS + [0], device=input_ids.device)
 
     delimiter_token_masks = torch.isin(input_ids, delimiter_tokens)
-    label_maps = ()
-    for delimiter_token_mask in delimiter_token_masks:
-        label_map_within_batch = []
-        delimiter_indices = torch.where(delimiter_token_mask)[0]
-        for i in range(len(delimiter_indices) - 1):
-            start = delimiter_indices[i]
-            end = delimiter_indices[i + 1]
-            if end - start > 1:
-                label_map = torch.zeros(hidden_size, device=input_ids.device)
-                label_map[start + 1 : end] = 1
-                label_map_within_batch.append(label_map)
+    label_groups = torch.cumsum(delimiter_token_masks, dim=1) * (~delimiter_token_masks).to(torch.int32)
 
-        label_maps += (torch.stack(label_map_within_batch),)
+    label_maps = ()
+
+    # Iterate over batch dimension as we can have different number of labels
+    for label_group in label_groups:
+        # `label_group` is a tensor of shape `(seq_len,)` with zeros for non-label tokens and integers for label tokens
+        # label tokens with same integer value are part of the same label group
+
+        # Get unique labels and exclude 0 (i.e. non-label tokens)
+        unique_labels = torch.unique(label_group)[1:, None]
+        num_labels = unique_labels.shape[0]
+
+        # Create one-hot encoding for each label group
+        label_map = label_group.unsqueeze(0).repeat(num_labels, 1)
+        label_map = torch.where(label_map == unique_labels, 1, 0)
+
+        # Pad label_map to match `max_seq_len`
+        label_map = F.pad(label_map, (0, max_seq_len - label_map.shape[1]), value=0)
+
+        label_maps += (label_map,)
 
     return label_maps
 
@@ -3211,7 +3239,7 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
             intermediate_hidden_states=outputs.intermediate_hidden_states,
             intermediate_reference_points=outputs.intermediate_reference_points,
             init_reference_points=outputs.init_reference_points,
-            enc_topk_proposals=outputs.enc_topk_proposals,
+            encoder_topk_proposals=outputs.encoder_topk_proposals,
             enc_outputs_class=outputs.enc_outputs_class,
             enc_outputs_coord_logits=outputs.enc_outputs_coord_logits,
             encoder_logits=outputs.encoder_logits,
