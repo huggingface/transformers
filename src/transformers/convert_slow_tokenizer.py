@@ -1099,6 +1099,8 @@ class UdopConverter(SpmConverter):
 
 
 class SiglipConverter(SpmConverter):
+    handle_byte_fallback = True
+
     def normalizer(self, proto):
         precompiled_charsmap = proto.normalizer_spec.precompiled_charsmap
 
@@ -1106,7 +1108,8 @@ class SiglipConverter(SpmConverter):
 
         if self.original_tokenizer.do_lower_case:
             list_normalizers.append(normalizers.Lowercase())
-            list_normalizers.append(normalizers.Replace(Regex(r"[" + re.escape(string.punctuation) + "]"), ""))
+            punctuation_to_remove = string.punctuation.replace('>', '').replace('<', '').replace('/', '')
+            list_normalizers.append(normalizers.Replace(Regex(r"[" + re.escape(punctuation_to_remove) + "]"), ""))
             list_normalizers.extend(
                 [
                     normalizers.Replace(Regex(r"\s+"), " "),
