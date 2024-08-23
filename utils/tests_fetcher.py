@@ -1134,9 +1134,9 @@ JOB_TO_TEST_FILE = {
     "torch_and_tf": r"tests/models/.*/test_modeling_(?=tf_|[^flax]).*",
     "torch_and_flax": r"tests/models/.*/test_modeling_(?=flax_|[^tf]).*",
     "tf": r"tests/models/.*/test_modeling_tf_.*",
-    "torch": r"tests/models/.*/test_modeling_[^flax_|^tf_)].*",
+    "torch": r"tests/models/.*/test_modeling_[^flax_|^tf_].*",
     "tokenization": r"tests/models/.*/test_tokenization.*",
-    "processors": r"tests/models/.*/test_[^modeling|^tokenization]", # takes feature extractors, image processors, processors
+    "processors": r"tests/models/.*/test_[^modeling|^tokenization].*", # takes feature extractors, image processors, processors
     "examples_torch": r"examples/pytorch/.*test_.*",
     "examples_tensorflow": r"examples/tensorflow/.*test_.*",
     "examples_flax": r"examples/flax/.*test.*",
@@ -1144,8 +1144,8 @@ JOB_TO_TEST_FILE = {
     "custom_tokenizers": r"tests/models/.*/test_tokenization_(?=bert_japanese|openai|clip).*",
     "repo_utils": r"tests/repo_utils/test.*",
     "pipeline_tf": r"tests/models/.*/test_modeling_tf_.*",
-    "pipeline_torch": r"tests/models/.*/test_modeling_[^flax_|^tf_)].*",
-    "hub": r"tests/models/.*/test_modeling_[^flax_|^tf_)].*",
+    "pipeline_torch": r"tests/models/.*/test_modeling_[^flax_|^tf_].*",
+    "hub": r"tests/models/.*/test_modeling_[^flax_|^tf_].*",
     "onnx": r"tests/models/.*/test_modeling_(?=tf_|[^flax]).*",
 }
 
