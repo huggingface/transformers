@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch DeBERTa model."""
+""" PyTorch DeBERTa model."""
 
 from collections.abc import Sequence
 from typing import Optional, Tuple, Union
@@ -51,6 +51,16 @@ _QA_EXPECTED_OUTPUT = "' a nice puppet'"
 _QA_EXPECTED_LOSS = 0.14
 _QA_TARGET_START_INDEX = 12
 _QA_TARGET_END_INDEX = 14
+
+
+DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "microsoft/deberta-base",
+    "microsoft/deberta-large",
+    "microsoft/deberta-xlarge",
+    "microsoft/deberta-base-mnli",
+    "microsoft/deberta-large-mnli",
+    "microsoft/deberta-xlarge-mnli",
+]
 
 
 class ContextPooler(nn.Module):
@@ -104,20 +114,20 @@ class XSoftmax(torch.autograd.Function):
     ```"""
 
     @staticmethod
-    def forward(ctx, input, mask, dim):
-        ctx.dim = dim
+    def forward(self, input, mask, dim):
+        self.dim = dim
         rmask = ~(mask.to(torch.bool))
 
         output = input.masked_fill(rmask, torch.tensor(torch.finfo(input.dtype).min))
-        output = torch.softmax(output, ctx.dim)
+        output = torch.softmax(output, self.dim)
         output.masked_fill_(rmask, 0)
-        ctx.save_for_backward(output)
+        self.save_for_backward(output)
         return output
 
     @staticmethod
-    def backward(ctx, grad_output):
-        (output,) = ctx.saved_tensors
-        inputGrad = softmax_backward_data(ctx, grad_output, output, ctx.dim, output)
+    def backward(self, grad_output):
+        (output,) = self.saved_tensors
+        inputGrad = softmax_backward_data(self, grad_output, output, self.dim, output)
         return inputGrad, None, None
 
     @staticmethod
@@ -138,7 +148,7 @@ class XSoftmax(torch.autograd.Function):
         return masked_fill(g, output, r_mask, g.op("Constant", value_t=torch.tensor(0, dtype=torch.bool)))
 
 
-class DropoutContext:
+class DropoutContext(object):
     def __init__(self):
         self.dropout = 0
         self.mask = None
@@ -602,10 +612,10 @@ class DisentangledSelfAttention(nn.Module):
                 sequence length in which element [i,j] = *1* means the *i* th token in the input can attend to the *j*
                 th token.
 
-            output_attentions (`bool`, *optional*):
+            output_attentions (`bool`, optional):
                 Whether return the attention matrix.
 
-            query_states (`torch.FloatTensor`, *optional*):
+            query_states (`torch.FloatTensor`, optional):
                 The *Q* state in *Attention(Q,K,V)*.
 
             relative_pos (`torch.LongTensor`):
@@ -1018,7 +1028,6 @@ class DebertaForMaskedLM(DebertaPreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.cls.predictions.decoder = new_embeddings
-        self.cls.predictions.bias = new_embeddings.bias
 
     @add_start_docstrings_to_model_forward(DEBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -1113,9 +1122,6 @@ class DebertaLMPredictionHead(nn.Module):
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
 
         # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
-        self.decoder.bias = self.bias
-
-    def _tie_weights(self):
         self.decoder.bias = self.bias
 
     def forward(self, hidden_states):

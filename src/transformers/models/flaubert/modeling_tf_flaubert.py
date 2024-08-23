@@ -13,8 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-TF 2.0 Flaubert model.
+ TF 2.0 Flaubert model.
 """
+
 
 from __future__ import annotations
 
@@ -45,7 +46,6 @@ from ...modeling_tf_utils import (
     TFSharedEmbeddings,
     TFTokenClassificationLoss,
     get_initializer,
-    keras,
     keras_serializable,
     unpack_inputs,
 )
@@ -66,6 +66,9 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "flaubert/flaubert_base_cased"
 _CONFIG_FOR_DOC = "FlaubertConfig"
 
+TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    # See all Flaubert models at https://huggingface.co/models?filter=flaubert
+]
 
 FLAUBERT_START_DOCSTRING = r"""
 
@@ -73,7 +76,7 @@ FLAUBERT_START_DOCSTRING = r"""
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
-    This model is also a [keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
+    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
     as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
     behavior.
 
@@ -297,7 +300,7 @@ class TFFlaubertModel(TFFlaubertPreTrainedModel):
 
 
 # Copied from transformers.models.xlm.modeling_tf_xlm.TFXLMMultiHeadAttention with XLM->Flaubert
-class TFFlaubertMultiHeadAttention(keras.layers.Layer):
+class TFFlaubertMultiHeadAttention(tf.keras.layers.Layer):
     NEW_ID = itertools.count()
 
     def __init__(self, n_heads, dim, config, **kwargs):
@@ -308,11 +311,11 @@ class TFFlaubertMultiHeadAttention(keras.layers.Layer):
         self.output_attentions = config.output_attentions
         assert self.dim % self.n_heads == 0
 
-        self.q_lin = keras.layers.Dense(dim, kernel_initializer=get_initializer(config.init_std), name="q_lin")
-        self.k_lin = keras.layers.Dense(dim, kernel_initializer=get_initializer(config.init_std), name="k_lin")
-        self.v_lin = keras.layers.Dense(dim, kernel_initializer=get_initializer(config.init_std), name="v_lin")
-        self.out_lin = keras.layers.Dense(dim, kernel_initializer=get_initializer(config.init_std), name="out_lin")
-        self.dropout = keras.layers.Dropout(config.attention_dropout)
+        self.q_lin = tf.keras.layers.Dense(dim, kernel_initializer=get_initializer(config.init_std), name="q_lin")
+        self.k_lin = tf.keras.layers.Dense(dim, kernel_initializer=get_initializer(config.init_std), name="k_lin")
+        self.v_lin = tf.keras.layers.Dense(dim, kernel_initializer=get_initializer(config.init_std), name="v_lin")
+        self.out_lin = tf.keras.layers.Dense(dim, kernel_initializer=get_initializer(config.init_std), name="out_lin")
+        self.dropout = tf.keras.layers.Dropout(config.attention_dropout)
         self.pruned_heads = set()
         self.dim = dim
 
@@ -408,14 +411,14 @@ class TFFlaubertMultiHeadAttention(keras.layers.Layer):
 
 
 # Copied from transformers.models.xlm.modeling_tf_xlm.TFXLMTransformerFFN
-class TFFlaubertTransformerFFN(keras.layers.Layer):
+class TFFlaubertTransformerFFN(tf.keras.layers.Layer):
     def __init__(self, in_dim, dim_hidden, out_dim, config, **kwargs):
         super().__init__(**kwargs)
 
-        self.lin1 = keras.layers.Dense(dim_hidden, kernel_initializer=get_initializer(config.init_std), name="lin1")
-        self.lin2 = keras.layers.Dense(out_dim, kernel_initializer=get_initializer(config.init_std), name="lin2")
+        self.lin1 = tf.keras.layers.Dense(dim_hidden, kernel_initializer=get_initializer(config.init_std), name="lin1")
+        self.lin2 = tf.keras.layers.Dense(out_dim, kernel_initializer=get_initializer(config.init_std), name="lin2")
         self.act = get_tf_activation("gelu") if config.gelu_activation else get_tf_activation("relu")
-        self.dropout = keras.layers.Dropout(config.dropout)
+        self.dropout = tf.keras.layers.Dropout(config.dropout)
         self.in_dim = in_dim
         self.dim_hidden = dim_hidden
 
@@ -440,7 +443,7 @@ class TFFlaubertTransformerFFN(keras.layers.Layer):
 
 
 @keras_serializable
-class TFFlaubertMainLayer(keras.layers.Layer):
+class TFFlaubertMainLayer(tf.keras.layers.Layer):
     config_class = FlaubertConfig
 
     def __init__(self, config, **kwargs):
@@ -463,11 +466,11 @@ class TFFlaubertMainLayer(keras.layers.Layer):
         self.return_dict = config.use_return_dict
         self.max_position_embeddings = config.max_position_embeddings
         self.embed_init_std = config.embed_init_std
-        self.dropout = keras.layers.Dropout(config.dropout)
+        self.dropout = tf.keras.layers.Dropout(config.dropout)
         self.embeddings = TFSharedEmbeddings(
             self.n_words, self.dim, initializer_range=config.embed_init_std, name="embeddings"
         )
-        self.layer_norm_emb = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm_emb")
+        self.layer_norm_emb = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm_emb")
         self.attentions = []
         self.layer_norm1 = []
         self.ffns = []
@@ -478,7 +481,7 @@ class TFFlaubertMainLayer(keras.layers.Layer):
                 TFFlaubertMultiHeadAttention(self.n_heads, self.dim, config=config, name=f"attentions_._{i}")
             )
             self.layer_norm1.append(
-                keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name=f"layer_norm1_._{i}")
+                tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name=f"layer_norm1_._{i}")
             )
             # if self.is_decoder:
             #     self.layer_norm15.append(nn.LayerNorm(self.dim, eps=config.layer_norm_eps))
@@ -487,7 +490,7 @@ class TFFlaubertMainLayer(keras.layers.Layer):
                 TFFlaubertTransformerFFN(self.dim, self.hidden_dim, self.dim, config=config, name=f"ffns_._{i}")
             )
             self.layer_norm2.append(
-                keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name=f"layer_norm2_._{i}")
+                tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name=f"layer_norm2_._{i}")
             )
 
     def build(self, input_shape=None):
@@ -736,7 +739,7 @@ class TFFlaubertMainLayer(keras.layers.Layer):
 
 
 # Copied from transformers.models.xlm.modeling_tf_xlm.TFXLMPredLayer
-class TFFlaubertPredLayer(keras.layers.Layer):
+class TFFlaubertPredLayer(tf.keras.layers.Layer):
     """
     Prediction layer (cross_entropy or adaptive_softmax).
     """
@@ -1011,7 +1014,7 @@ class TFFlaubertForQuestionAnsweringSimple(TFFlaubertPreTrainedModel, TFQuestion
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.transformer = TFFlaubertMainLayer(config, name="transformer")
-        self.qa_outputs = keras.layers.Dense(
+        self.qa_outputs = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.init_std), name="qa_outputs"
         )
         self.config = config
@@ -1117,8 +1120,8 @@ class TFFlaubertForTokenClassification(TFFlaubertPreTrainedModel, TFTokenClassif
         self.num_labels = config.num_labels
 
         self.transformer = TFFlaubertMainLayer(config, name="transformer")
-        self.dropout = keras.layers.Dropout(config.dropout)
-        self.classifier = keras.layers.Dense(
+        self.dropout = tf.keras.layers.Dropout(config.dropout)
+        self.classifier = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.init_std), name="classifier"
         )
         self.config = config
@@ -1210,7 +1213,7 @@ class TFFlaubertForMultipleChoice(TFFlaubertPreTrainedModel, TFMultipleChoiceLos
 
         self.transformer = TFFlaubertMainLayer(config, name="transformer")
         self.sequence_summary = TFSequenceSummary(config, initializer_range=config.init_std, name="sequence_summary")
-        self.logits_proj = keras.layers.Dense(
+        self.logits_proj = tf.keras.layers.Dense(
             1, kernel_initializer=get_initializer(config.initializer_range), name="logits_proj"
         )
         self.config = config

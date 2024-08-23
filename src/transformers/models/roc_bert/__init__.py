@@ -17,7 +17,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tokenizers_
 
 
 _import_structure = {
-    "configuration_roc_bert": ["RoCBertConfig"],
+    "configuration_roc_bert": ["ROC_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RoCBertConfig"],
     "tokenization_roc_bert": ["RoCBertTokenizer"],
 }
 
@@ -36,6 +36,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_roc_bert"] = [
+        "ROC_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "RoCBertForCausalLM",
         "RoCBertForMaskedLM",
         "RoCBertForMultipleChoice",
@@ -50,7 +51,7 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_roc_bert import RoCBertConfig
+    from .configuration_roc_bert import ROC_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RoCBertConfig
     from .tokenization_roc_bert import RoCBertTokenizer
 
     try:
@@ -68,6 +69,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_roc_bert import (
+            ROC_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             RoCBertForCausalLM,
             RoCBertForMaskedLM,
             RoCBertForMultipleChoice,

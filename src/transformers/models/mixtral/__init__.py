@@ -21,7 +21,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_mixtral": ["MixtralConfig"],
+    "configuration_mixtral": ["MIXTRAL_PRETRAINED_CONFIG_ARCHIVE_MAP", "MixtralConfig"],
 }
 
 
@@ -36,12 +36,11 @@ else:
         "MixtralModel",
         "MixtralPreTrainedModel",
         "MixtralForSequenceClassification",
-        "MixtralForTokenClassification",
     ]
 
 
 if TYPE_CHECKING:
-    from .configuration_mixtral import MixtralConfig
+    from .configuration_mixtral import MIXTRAL_PRETRAINED_CONFIG_ARCHIVE_MAP, MixtralConfig
 
     try:
         if not is_torch_available():
@@ -52,7 +51,6 @@ if TYPE_CHECKING:
         from .modeling_mixtral import (
             MixtralForCausalLM,
             MixtralForSequenceClassification,
-            MixtralForTokenClassification,
             MixtralModel,
             MixtralPreTrainedModel,
         )

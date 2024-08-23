@@ -16,8 +16,6 @@
 
 import unittest
 
-import numpy as np
-
 from transformers.testing_utils import require_torch, require_torchvision, require_vision
 from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
@@ -77,8 +75,6 @@ class IdeficsImageProcessingTester(unittest.TestCase):
             image = image_inputs[0]
             if isinstance(image, Image.Image):
                 w, h = image.size
-            elif isinstance(image, np.ndarray):
-                h, w = image.shape[0], image.shape[1]
             else:
                 h, w = image.shape[1], image.shape[2]
             scale = size / min(w, h)
@@ -131,7 +127,6 @@ class IdeficsImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = IdeficsImageProcessor if is_vision_available() else None
 
     def setUp(self):
-        super().setUp()
         self.image_processor_tester = IdeficsImageProcessingTester(self)
 
     @property
@@ -157,7 +152,7 @@ class IdeficsImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         # they both do the same
 
         image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
-        image_processor = self.image_processing_class(**self.image_processor_dict, return_tensors="pt")
+        image_processor = self.image_processing_class(**self.image_processor_dict)
 
         print(image_inputs)
 
@@ -186,23 +181,23 @@ class IdeficsImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             ]
         )
 
-        pixel_values_transform_implied = image_processor(image_inputs, transform=None, return_tensors="pt")
-        pixel_values_transform_supplied = image_processor(image_inputs, transform=transform, return_tensors="pt")
+        pixel_values_transform_implied = image_processor(image_inputs, transform=None)
+        pixel_values_transform_supplied = image_processor(image_inputs, transform=transform)
 
         torch.testing.assert_close(pixel_values_transform_implied, pixel_values_transform_supplied, rtol=0.0, atol=0.0)
 
-    @unittest.skip(reason="not supported")
+    @unittest.skip("not supported")
     def test_call_numpy(self):
         pass
 
-    @unittest.skip(reason="not supported")
+    @unittest.skip("not supported")
     def test_call_numpy_4_channels(self):
         pass
 
-    @unittest.skip(reason="not supported")
+    @unittest.skip("not supported")
     def test_call_pil(self):
         pass
 
-    @unittest.skip(reason="not supported")
+    @unittest.skip("not supported")
     def test_call_pytorch(self):
         pass

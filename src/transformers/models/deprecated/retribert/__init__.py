@@ -18,7 +18,7 @@ from ....utils import OptionalDependencyNotAvailable, _LazyModule, is_tokenizers
 
 
 _import_structure = {
-    "configuration_retribert": ["RetriBertConfig"],
+    "configuration_retribert": ["RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RetriBertConfig"],
     "tokenization_retribert": ["RetriBertTokenizer"],
 }
 
@@ -37,13 +37,14 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_retribert"] = [
+        "RETRIBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "RetriBertModel",
         "RetriBertPreTrainedModel",
     ]
 
 
 if TYPE_CHECKING:
-    from .configuration_retribert import RetriBertConfig
+    from .configuration_retribert import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RetriBertConfig
     from .tokenization_retribert import RetriBertTokenizer
 
     try:
@@ -61,6 +62,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_retribert import (
+            RETRIBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             RetriBertModel,
             RetriBertPreTrainedModel,
         )

@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tests for the VITS tokenizer."""
-
 import json
 import os
 import shutil
@@ -28,7 +27,6 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 
 class VitsTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
-    from_pretrained_id = "facebook/mms-tts-eng"
     tokenizer_class = VitsTokenizer
     test_rust_tokenizer = False
 
@@ -62,15 +60,15 @@ class VitsTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         ids = tokenizer.encode(txt, add_special_tokens=False)
         return txt, ids
 
-    @unittest.skip(reason="Adding multicharacter tokens does not work with the VITS tokenizer")
+    @unittest.skip("Adding multicharacter tokens does not work with the VITS tokenizer")
     def test_add_tokens_tokenizer(self):
         pass
 
-    @unittest.skip(reason="Adding multicharacter tokens does not work with the VITS tokenizer")
+    @unittest.skip("Adding multicharacter tokens does not work with the VITS tokenizer")
     def test_encode_decode_with_spaces(self):
         pass
 
-    @unittest.skip(reason="The VITS tokenizer does not support `is_split_into_words`")
+    @unittest.skip("The VITS tokenizer does not support `is_split_into_words`")
     def test_pretokenized_inputs(self):
         pass
 
@@ -88,7 +86,7 @@ class VitsTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
                 # Isolate this from the other tests because we save additional tokens/etc
                 tmpdirname = tempfile.mkdtemp()
 
-                sample_text = " He is very happy, UNwant\u00e9d,running"
+                sample_text = " He is very happy, UNwant\u00E9d,running"
                 before_tokens = tokenizer.encode(sample_text, add_special_tokens=False)
                 before_vocab = tokenizer.get_vocab()
                 tokenizer.save_pretrained(tmpdirname)
@@ -101,7 +99,7 @@ class VitsTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
 
                 shutil.rmtree(tmpdirname)
 
-    @unittest.skip(reason="Adding multicharacter tokens does not work the VITS tokenizer")
+    @unittest.skip("Adding multicharacter tokens does not work the VITS tokenizer")
     def test_special_tokens_initialization_with_non_empty_additional_special_tokens(self):
         pass
 

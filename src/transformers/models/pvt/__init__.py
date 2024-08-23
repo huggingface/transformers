@@ -25,7 +25,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_pvt": ["PvtConfig", "PvtOnnxConfig"],
+    "configuration_pvt": ["PVT_PRETRAINED_CONFIG_ARCHIVE_MAP", "PvtConfig", "PvtOnnxConfig"],
 }
 
 try:
@@ -43,6 +43,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_pvt"] = [
+        "PVT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "PvtForImageClassification",
         "PvtModel",
         "PvtPreTrainedModel",
@@ -50,7 +51,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_pvt import PvtConfig, PvtOnnxConfig
+    from .configuration_pvt import PVT_PRETRAINED_CONFIG_ARCHIVE_MAP, PvtConfig, PvtOnnxConfig
 
     try:
         if not is_vision_available():
@@ -67,6 +68,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_pvt import (
+            PVT_PRETRAINED_MODEL_ARCHIVE_LIST,
             PvtForImageClassification,
             PvtModel,
             PvtPreTrainedModel,

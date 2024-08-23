@@ -22,7 +22,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tokenizers_
 
 
 _import_structure = {
-    "configuration_cpmant": ["CpmAntConfig"],
+    "configuration_cpmant": ["CPMANT_PRETRAINED_CONFIG_ARCHIVE_MAP", "CpmAntConfig"],
     "tokenization_cpmant": ["CpmAntTokenizer"],
 }
 
@@ -33,6 +33,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_cpmant"] = [
+        "CPMANT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "CpmAntForCausalLM",
         "CpmAntModel",
         "CpmAntPreTrainedModel",
@@ -40,7 +41,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_cpmant import CpmAntConfig
+    from .configuration_cpmant import CPMANT_PRETRAINED_CONFIG_ARCHIVE_MAP, CpmAntConfig
     from .tokenization_cpmant import CpmAntTokenizer
 
     try:
@@ -50,6 +51,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_cpmant import (
+            CPMANT_PRETRAINED_MODEL_ARCHIVE_LIST,
             CpmAntForCausalLM,
             CpmAntModel,
             CpmAntPreTrainedModel,

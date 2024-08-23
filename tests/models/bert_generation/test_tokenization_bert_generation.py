@@ -29,7 +29,6 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 
 @require_sentencepiece
 class BertGenerationTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-    from_pretrained_id = "google/bert_for_seq_generation_L-24_bbc_encoder"
     tokenizer_class = BertGenerationTokenizer
     test_rust_tokenizer = False
     test_sentencepiece = True

@@ -26,8 +26,6 @@ from transformers.models.bert.tokenization_bert import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_vision
 from transformers.utils import IMAGE_PROCESSOR_NAME, is_vision_available
 
-from ...test_processing_common import ProcessorTesterMixin
-
 
 if is_vision_available():
     from PIL import Image
@@ -36,9 +34,7 @@ if is_vision_available():
 
 
 @require_vision
-class AlignProcessorTest(ProcessorTesterMixin, unittest.TestCase):
-    processor_class = AlignProcessor
-
+class AlignProcessorTest(unittest.TestCase):
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
 
@@ -66,6 +62,8 @@ class AlignProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_processor_map = {
             "do_resize": True,
             "size": 20,
+            "do_center_crop": True,
+            "crop_size": 18,
             "do_normalize": True,
             "image_mean": [0.48145466, 0.4578275, 0.40821073],
             "image_std": [0.26862954, 0.26130258, 0.27577711],
@@ -161,6 +159,7 @@ class AlignProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         encoded_processor = processor(text=input_str)
 
         encoded_tok = tokenizer(input_str, padding="max_length", max_length=64)
+
         for key in encoded_tok.keys():
             self.assertListEqual(encoded_tok[key], encoded_processor[key])
 

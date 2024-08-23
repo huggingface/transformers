@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch PEGASUS-X model."""
+""" Testing suite for the PyTorch PEGASUS-X model. """
+
 
 import copy
 import math
@@ -206,6 +207,7 @@ class PegasusXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
     all_generative_model_classes = (PegasusXForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
+            "conversational": PegasusXForConditionalGeneration,
             "feature-extraction": PegasusXModel,
             "summarization": PegasusXForConditionalGeneration,
             "text2text-generation": PegasusXForConditionalGeneration,
@@ -872,6 +874,6 @@ class PegasusXStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_attention_mask_past(*config_and_inputs)
 
-    @unittest.skip(reason="Decoder cannot keep gradients")
     def test_retain_grad_hidden_states_attentions(self):
+        # decoder cannot keep gradients
         return

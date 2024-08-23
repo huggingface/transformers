@@ -18,7 +18,7 @@ import numpy as np
 import requests
 
 from ..utils import add_end_docstrings, is_torch_available, is_torchaudio_available, logging
-from .base import Pipeline, build_pipeline_init_args
+from .base import PIPELINE_INIT_ARGS, Pipeline
 
 
 if is_torch_available():
@@ -63,7 +63,7 @@ def ffmpeg_read(bpayload: bytes, sampling_rate: int) -> np.array:
     return audio
 
 
-@add_end_docstrings(build_pipeline_init_args(has_feature_extractor=True))
+@add_end_docstrings(PIPELINE_INIT_ARGS)
 class AudioClassificationPipeline(Pipeline):
     """
     Audio classification pipeline using any `AutoModelForAudioClassification`. This pipeline predicts the class of a
@@ -190,7 +190,7 @@ class AudioClassificationPipeline(Pipeline):
                 ).numpy()
 
         if not isinstance(inputs, np.ndarray):
-            raise TypeError("We expect a numpy ndarray as input")
+            raise ValueError("We expect a numpy ndarray as input")
         if len(inputs.shape) != 1:
             raise ValueError("We expect a single channel audio input for AudioClassificationPipeline")
 

@@ -14,7 +14,6 @@
 """
 Hub utilities: utilities related to download and cache models
 """
-
 import json
 import os
 import re
@@ -34,8 +33,6 @@ import requests
 from huggingface_hub import (
     _CACHED_NO_EXIST,
     CommitOperationAdd,
-    ModelCard,
-    ModelCardData,
     constants,
     create_branch,
     create_commit,
@@ -49,14 +46,11 @@ from huggingface_hub.file_download import REGEX_COMMIT_HASH, http_get
 from huggingface_hub.utils import (
     EntryNotFoundError,
     GatedRepoError,
-    HfHubHTTPError,
     HFValidationError,
     LocalEntryNotFoundError,
-    OfflineModeIsEnabled,
     RepositoryNotFoundError,
     RevisionNotFoundError,
     build_hf_headers,
-    get_session,
     hf_raise_for_status,
     send_telemetry,
 )
@@ -78,7 +72,7 @@ from .logging import tqdm
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
-_is_offline_mode = huggingface_hub.constants.HF_HUB_OFFLINE
+_is_offline_mode = True if os.environ.get("TRANSFORMERS_OFFLINE", "0").upper() in ENV_VARS_TRUE_VALUES else False
 
 
 def is_offline_mode():
@@ -148,16 +142,6 @@ if os.environ.get("HUGGINGFACE_CO_RESOLVE_ENDPOINT", None) is not None:
 HUGGINGFACE_CO_RESOLVE_ENDPOINT = os.environ.get("HF_ENDPOINT", HUGGINGFACE_CO_RESOLVE_ENDPOINT)
 HUGGINGFACE_CO_PREFIX = HUGGINGFACE_CO_RESOLVE_ENDPOINT + "/{model_id}/resolve/{revision}/{filename}"
 HUGGINGFACE_CO_EXAMPLES_TELEMETRY = HUGGINGFACE_CO_RESOLVE_ENDPOINT + "/api/telemetry/examples"
-
-
-def _get_cache_file_to_return(
-    path_or_repo_id: str, full_filename: str, cache_dir: Union[str, Path, None] = None, revision: Optional[str] = None
-):
-    # We try to see if we have a cached version (not up to date):
-    resolved_file = try_to_load_from_cache(path_or_repo_id, full_filename, cache_dir=cache_dir, revision=revision)
-    if resolved_file is not None and resolved_file != _CACHED_NO_EXIST:
-        return resolved_file
-    return None
 
 
 def is_remote_url(url_or_filename):
@@ -272,7 +256,7 @@ def cached_file(
     filename: str,
     cache_dir: Optional[Union[str, os.PathLike]] = None,
     force_download: bool = False,
-    resume_download: Optional[bool] = None,
+    resume_download: bool = False,
     proxies: Optional[Dict[str, str]] = None,
     token: Optional[Union[bool, str]] = None,
     revision: Optional[str] = None,
@@ -280,7 +264,6 @@ def cached_file(
     subfolder: str = "",
     repo_type: Optional[str] = None,
     user_agent: Optional[Union[str, Dict[str, str]]] = None,
-    _raise_exceptions_for_gated_repo: bool = True,
     _raise_exceptions_for_missing_entries: bool = True,
     _raise_exceptions_for_connection_errors: bool = True,
     _commit_hash: Optional[str] = None,
@@ -303,9 +286,8 @@ def cached_file(
         force_download (`bool`, *optional*, defaults to `False`):
             Whether or not to force to (re-)download the configuration files and override the cached versions if they
             exist.
-        resume_download:
-            Deprecated and ignored. All downloads are now resumed by default when possible.
-            Will be removed in v5 of Transformers.
+        resume_download (`bool`, *optional*, defaults to `False`):
+            Whether or not to delete incompletely received file. Attempts to resume the download if such a file exists.
         proxies (`Dict[str, str]`, *optional*):
             A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
             'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
@@ -337,7 +319,7 @@ def cached_file(
 
     ```python
     # Download a model weight from the Hub and cache it.
-    model_weights_file = cached_file("google-bert/bert-base-uncased", "pytorch_model.bin")
+    model_weights_file = cached_file("bert-base-uncased", "pytorch_model.bin")
     ```
     """
     use_auth_token = deprecated_kwargs.pop("use_auth_token", None)
@@ -351,8 +333,6 @@ def cached_file(
         token = use_auth_token
 
     # Private arguments
-    #     _raise_exceptions_for_gated_repo: if False, do not raise an exception for gated repo error but return
-    #         None.
     #     _raise_exceptions_for_missing_entries: if False, do not raise an exception for missing entries but return
     #         None.
     #     _raise_exceptions_for_connection_errors: if False, do not raise an exception for connection errors but return
@@ -373,7 +353,7 @@ def cached_file(
             if _raise_exceptions_for_missing_entries:
                 raise EnvironmentError(
                     f"{path_or_repo_id} does not appear to have a file named {full_filename}. Checkout "
-                    f"'https://huggingface.co/{path_or_repo_id}/tree/{revision}' for available files."
+                    f"'https://huggingface.co/{path_or_repo_id}/{revision}' for available files."
                 )
             else:
                 return None
@@ -415,12 +395,10 @@ def cached_file(
             local_files_only=local_files_only,
         )
     except GatedRepoError as e:
-        resolved_file = _get_cache_file_to_return(path_or_repo_id, full_filename, cache_dir, revision)
-        if resolved_file is not None or not _raise_exceptions_for_gated_repo:
-            return resolved_file
         raise EnvironmentError(
-            "You are trying to access a gated repo.\nMake sure to have access to it at "
-            f"https://huggingface.co/{path_or_repo_id}.\n{str(e)}"
+            "You are trying to access a gated repo.\nMake sure to request access at "
+            f"https://huggingface.co/{path_or_repo_id} and pass a token having permission to this repo either "
+            "by logging in with `huggingface-cli login` or by passing `token=<your_token>`."
         ) from e
     except RepositoryNotFoundError as e:
         raise EnvironmentError(
@@ -436,13 +414,12 @@ def cached_file(
             f"'https://huggingface.co/{path_or_repo_id}' for available revisions."
         ) from e
     except LocalEntryNotFoundError as e:
-        resolved_file = _get_cache_file_to_return(path_or_repo_id, full_filename, cache_dir, revision)
-        if (
-            resolved_file is not None
-            or not _raise_exceptions_for_missing_entries
-            or not _raise_exceptions_for_connection_errors
-        ):
+        # We try to see if we have a cached version (not up to date):
+        resolved_file = try_to_load_from_cache(path_or_repo_id, full_filename, cache_dir=cache_dir, revision=revision)
+        if resolved_file is not None and resolved_file != _CACHED_NO_EXIST:
             return resolved_file
+        if not _raise_exceptions_for_missing_entries or not _raise_exceptions_for_connection_errors:
+            return None
         raise EnvironmentError(
             f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load this file, couldn't find it in the"
             f" cached files and it looks like {path_or_repo_id} is not the path to a directory containing a file named"
@@ -456,12 +433,16 @@ def cached_file(
             revision = "main"
         raise EnvironmentError(
             f"{path_or_repo_id} does not appear to have a file named {full_filename}. Checkout "
-            f"'https://huggingface.co/{path_or_repo_id}/tree/{revision}' for available files."
+            f"'https://huggingface.co/{path_or_repo_id}/{revision}' for available files."
         ) from e
     except HTTPError as err:
-        resolved_file = _get_cache_file_to_return(path_or_repo_id, full_filename, cache_dir, revision)
-        if resolved_file is not None or not _raise_exceptions_for_connection_errors:
+        # First we try to see if we have a cached version (not up to date):
+        resolved_file = try_to_load_from_cache(path_or_repo_id, full_filename, cache_dir=cache_dir, revision=revision)
+        if resolved_file is not None and resolved_file != _CACHED_NO_EXIST:
             return resolved_file
+        if not _raise_exceptions_for_connection_errors:
+            return None
+
         raise EnvironmentError(f"There was a specific connection error when trying to load {path_or_repo_id}:\n{err}")
     except HFValidationError as e:
         raise EnvironmentError(
@@ -479,7 +460,7 @@ def get_file_from_repo(
     filename: str,
     cache_dir: Optional[Union[str, os.PathLike]] = None,
     force_download: bool = False,
-    resume_download: Optional[bool] = None,
+    resume_download: bool = False,
     proxies: Optional[Dict[str, str]] = None,
     token: Optional[Union[bool, str]] = None,
     revision: Optional[str] = None,
@@ -504,9 +485,8 @@ def get_file_from_repo(
         force_download (`bool`, *optional*, defaults to `False`):
             Whether or not to force to (re-)download the configuration files and override the cached versions if they
             exist.
-        resume_download:
-            Deprecated and ignored. All downloads are now resumed by default when possible.
-            Will be removed in v5 of Transformers.
+        resume_download (`bool`, *optional*, defaults to `False`):
+            Whether or not to delete incompletely received file. Attempts to resume the download if such a file exists.
         proxies (`Dict[str, str]`, *optional*):
             A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
             'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
@@ -537,9 +517,9 @@ def get_file_from_repo(
 
     ```python
     # Download a tokenizer configuration from huggingface.co and cache.
-    tokenizer_config = get_file_from_repo("google-bert/bert-base-uncased", "tokenizer_config.json")
+    tokenizer_config = get_file_from_repo("bert-base-uncased", "tokenizer_config.json")
     # This model does not have a tokenizer config so the result will be None.
-    tokenizer_config = get_file_from_repo("FacebookAI/xlm-roberta-base", "tokenizer_config.json")
+    tokenizer_config = get_file_from_repo("xlm-roberta-base", "tokenizer_config.json")
     ```
     """
     use_auth_token = deprecated_kwargs.pop("use_auth_token", None)
@@ -563,7 +543,6 @@ def get_file_from_repo(
         revision=revision,
         local_files_only=local_files_only,
         subfolder=subfolder,
-        _raise_exceptions_for_gated_repo=False,
         _raise_exceptions_for_missing_entries=False,
         _raise_exceptions_for_connection_errors=False,
     )
@@ -602,16 +581,10 @@ def has_file(
     revision: Optional[str] = None,
     proxies: Optional[Dict[str, str]] = None,
     token: Optional[Union[bool, str]] = None,
-    *,
-    local_files_only: bool = False,
-    cache_dir: Union[str, Path, None] = None,
-    repo_type: Optional[str] = None,
     **deprecated_kwargs,
 ):
     """
     Checks if a repo contains a given file without downloading it. Works for remote repos and local folders.
-
-    If offline mode is enabled, checks if the file exists in the cache.
 
     <Tip warning={false}>
 
@@ -630,41 +603,15 @@ def has_file(
             raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
         token = use_auth_token
 
-    # If path to local directory, check if the file exists
     if os.path.isdir(path_or_repo):
         return os.path.isfile(os.path.join(path_or_repo, filename))
 
-    # Else it's a repo => let's check if the file exists in local cache or on the Hub
+    url = hf_hub_url(path_or_repo, filename=filename, revision=revision)
+    headers = build_hf_headers(token=token, user_agent=http_user_agent())
 
-    # Check if file exists in cache
-    # This information might be outdated so it's best to also make a HEAD call (if allowed).
-    cached_path = try_to_load_from_cache(
-        repo_id=path_or_repo,
-        filename=filename,
-        revision=revision,
-        repo_type=repo_type,
-        cache_dir=cache_dir,
-    )
-    has_file_in_cache = isinstance(cached_path, str)
-
-    # If local_files_only, don't try the HEAD call
-    if local_files_only:
-        return has_file_in_cache
-
-    # Check if the file exists
+    r = requests.head(url, headers=headers, allow_redirects=False, proxies=proxies, timeout=10)
     try:
-        response = get_session().head(
-            hf_hub_url(path_or_repo, filename=filename, revision=revision, repo_type=repo_type),
-            headers=build_hf_headers(token=token, user_agent=http_user_agent()),
-            allow_redirects=False,
-            proxies=proxies,
-            timeout=10,
-        )
-    except OfflineModeIsEnabled:
-        return has_file_in_cache
-
-    try:
-        hf_raise_for_status(response)
+        hf_raise_for_status(r)
         return True
     except GatedRepoError as e:
         logger.error(e)
@@ -675,20 +622,16 @@ def has_file(
         ) from e
     except RepositoryNotFoundError as e:
         logger.error(e)
-        raise EnvironmentError(
-            f"{path_or_repo} is not a local folder or a valid repository name on 'https://hf.co'."
-        ) from e
+        raise EnvironmentError(f"{path_or_repo} is not a local folder or a valid repository name on 'https://hf.co'.")
     except RevisionNotFoundError as e:
         logger.error(e)
         raise EnvironmentError(
             f"{revision} is not a valid git identifier (branch name, tag name or commit id) that exists for this "
             f"model name. Check the model page at 'https://huggingface.co/{path_or_repo}' for available revisions."
-        ) from e
-    except EntryNotFoundError:
-        return False  # File does not exist
+        )
     except requests.HTTPError:
-        # Any authentication/authorization error will be caught here => default to cache
-        return has_file_in_cache
+        # We return false for EntryNotFoundError (logical) as well as any connection error.
+        return False
 
 
 class PushToHubMixin:
@@ -794,16 +737,7 @@ class PushToHubMixin:
                 )
 
         if revision is not None:
-            try:
-                create_branch(repo_id=repo_id, branch=revision, token=token, exist_ok=True)
-            except HfHubHTTPError as e:
-                if e.response.status_code == 403 and create_pr:
-                    # If we are creating a PR on a repo we don't have access to, we can't create the branch.
-                    # so let's assume the branch already exists. If it's not the case, an error will be raised when
-                    # calling `create_commit` below.
-                    pass
-                else:
-                    raise
+            create_branch(repo_id=repo_id, branch=revision, token=token, exist_ok=True)
 
         logger.info(f"Uploading the following files to {repo_id}: {','.join(modified_files)}")
         return create_commit(
@@ -828,7 +762,6 @@ class PushToHubMixin:
         safe_serialization: bool = True,
         revision: str = None,
         commit_description: str = None,
-        tags: Optional[List[str]] = None,
         **deprecated_kwargs,
     ) -> str:
         """
@@ -862,15 +795,13 @@ class PushToHubMixin:
                 Branch to push the uploaded files to.
             commit_description (`str`, *optional*):
                 The description of the commit that will be created
-            tags (`List[str]`, *optional*):
-                List of tags to push on the Hub.
 
         Examples:
 
         ```python
         from transformers import {object_class}
 
-        {object} = {object_class}.from_pretrained("google-bert/bert-base-cased")
+        {object} = {object_class}.from_pretrained("bert-base-cased")
 
         # Push the {object} to your namespace with the name "my-finetuned-bert".
         {object}.push_to_hub("my-finetuned-bert")
@@ -880,7 +811,6 @@ class PushToHubMixin:
         ```
         """
         use_auth_token = deprecated_kwargs.pop("use_auth_token", None)
-        ignore_metadata_errors = deprecated_kwargs.pop("ignore_metadata_errors", False)
         if use_auth_token is not None:
             warnings.warn(
                 "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
@@ -925,11 +855,6 @@ class PushToHubMixin:
             repo_id, private=private, token=token, repo_url=repo_url, organization=organization
         )
 
-        # Create a new empty model card and eventually tag it
-        model_card = create_and_tag_model_card(
-            repo_id, tags, token=token, ignore_metadata_errors=ignore_metadata_errors
-        )
-
         if use_temp_dir is None:
             use_temp_dir = not os.path.isdir(working_dir)
 
@@ -938,9 +863,6 @@ class PushToHubMixin:
 
             # Save all files.
             self.save_pretrained(work_dir, max_shard_size=max_shard_size, safe_serialization=safe_serialization)
-
-            # Update model card if needed:
-            model_card.save(os.path.join(work_dir, "README.md"))
 
             return self._upload_modified_files(
                 work_dir,
@@ -1028,7 +950,7 @@ def get_checkpoint_shard_files(
     cache_dir=None,
     force_download=False,
     proxies=None,
-    resume_download=None,
+    resume_download=False,
     local_files_only=False,
     token=None,
     user_agent=None,
@@ -1157,43 +1079,6 @@ def extract_info_from_url(url):
     repo, revision, filename = search.groups()
     cache_repo = "--".join(["models"] + repo.split("/"))
     return {"repo": cache_repo, "revision": revision, "filename": filename}
-
-
-def create_and_tag_model_card(
-    repo_id: str,
-    tags: Optional[List[str]] = None,
-    token: Optional[str] = None,
-    ignore_metadata_errors: bool = False,
-):
-    """
-    Creates or loads an existing model card and tags it.
-
-    Args:
-        repo_id (`str`):
-            The repo_id where to look for the model card.
-        tags (`List[str]`, *optional*):
-            The list of tags to add in the model card
-        token (`str`, *optional*):
-            Authentication token, obtained with `huggingface_hub.HfApi.login` method. Will default to the stored token.
-        ignore_metadata_errors (`str`):
-            If True, errors while parsing the metadata section will be ignored. Some information might be lost during
-            the process. Use it at your own risk.
-    """
-    try:
-        # Check if the model card is present on the remote repo
-        model_card = ModelCard.load(repo_id, token=token, ignore_metadata_errors=ignore_metadata_errors)
-    except EntryNotFoundError:
-        # Otherwise create a simple model card from template
-        model_description = "This is the model card of a 🤗 transformers model that has been pushed on the Hub. This model card has been automatically generated."
-        card_data = ModelCardData(tags=[] if tags is None else tags, library_name="transformers")
-        model_card = ModelCard.from_template(card_data, model_description=model_description)
-
-    if tags is not None:
-        for model_tag in tags:
-            if model_tag not in model_card.data.tags:
-                model_card.data.tags.append(model_tag)
-
-    return model_card
 
 
 def clean_files_for(file):

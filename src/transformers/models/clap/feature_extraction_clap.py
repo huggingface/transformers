@@ -14,6 +14,7 @@
 # limitations under the License.
 """Feature extractor class for CLAP."""
 
+
 import copy
 from typing import Any, Dict, List, Optional, Union
 

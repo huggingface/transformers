@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch ViT MSN (masked siamese network) model."""
+""" PyTorch ViT MSN (masked siamese network) model."""
+
 
 import collections.abc
 import math
@@ -36,6 +37,10 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "ViTMSNConfig"
 _CHECKPOINT_FOR_DOC = "facebook/vit-msn-small"
+VIT_MSN_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "facebook/vit-msn-small",
+    # See all ViTMSN models at https://huggingface.co/models?filter=vit_msn
+]
 
 
 class ViTMSNEmbeddings(nn.Module):
@@ -221,38 +226,6 @@ class ViTMSNSelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTSdpaSelfAttention with ViT->ViTMSN
-class ViTMSNSdpaSelfAttention(ViTMSNSelfAttention):
-    def __init__(self, config: ViTMSNConfig) -> None:
-        super().__init__(config)
-        self.attention_probs_dropout_prob = config.attention_probs_dropout_prob
-
-    def forward(
-        self, hidden_states, head_mask: Optional[torch.Tensor] = None, output_attentions: bool = False
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
-        mixed_query_layer = self.query(hidden_states)
-
-        key_layer = self.transpose_for_scores(self.key(hidden_states))
-        value_layer = self.transpose_for_scores(self.value(hidden_states))
-        query_layer = self.transpose_for_scores(mixed_query_layer)
-
-        context_layer = torch.nn.functional.scaled_dot_product_attention(
-            query_layer,
-            key_layer,
-            value_layer,
-            head_mask,
-            self.attention_probs_dropout_prob if self.training else 0.0,
-            is_causal=False,
-            scale=None,
-        )
-
-        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
-        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-        context_layer = context_layer.view(new_context_layer_shape)
-
-        return context_layer, None
-
-
 # Copied from transformers.models.vit.modeling_vit.ViTSelfOutput with ViT->ViTMSN
 class ViTMSNSelfOutput(nn.Module):
     """
@@ -312,13 +285,6 @@ class ViTMSNAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTSdpaAttention with ViT->ViTMSN
-class ViTMSNSdpaAttention(ViTMSNAttention):
-    def __init__(self, config: ViTMSNConfig) -> None:
-        super().__init__(config)
-        self.attention = ViTMSNSdpaSelfAttention(config)
-
-
 # Copied from transformers.models.vit.modeling_vit.ViTIntermediate with ViT->ViTMSN
 class ViTMSNIntermediate(nn.Module):
     def __init__(self, config: ViTMSNConfig) -> None:
@@ -352,10 +318,7 @@ class ViTMSNOutput(nn.Module):
         return hidden_states
 
 
-VITMSN_ATTENTION_CLASSES = {"eager": ViTMSNAttention, "sdpa": ViTMSNSdpaAttention}
-
-
-# Copied from transformers.models.vit.modeling_vit.ViTLayer with ViT->ViTMSN, VIT->VITMSN
+# Copied from transformers.models.vit.modeling_vit.ViTLayer with ViT->ViTMSN
 class ViTMSNLayer(nn.Module):
     """This corresponds to the Block class in the timm implementation."""
 
@@ -363,7 +326,7 @@ class ViTMSNLayer(nn.Module):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = VITMSN_ATTENTION_CLASSES[config._attn_implementation](config)
+        self.attention = ViTMSNAttention(config)
         self.intermediate = ViTMSNIntermediate(config)
         self.output = ViTMSNOutput(config)
         self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -460,8 +423,6 @@ class ViTMSNPreTrainedModel(PreTrainedModel):
     base_model_prefix = "vit"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["ViTMSNAttention", "ViTMSNSdpaAttention"]
-    _supports_sdpa = True
 
     # todo: Resort to https://github.com/facebookresearch/msn/blob/main/src/deit.py#L200-#L211
     # when creating pre-training scripts.
@@ -677,7 +638,7 @@ class ViTMSNForImageClassification(ViTMSNPreTrainedModel):
         >>> # model predicts one of the 1000 ImageNet classes
         >>> predicted_label = logits.argmax(-1).item()
         >>> print(model.config.id2label[predicted_label])
-        tusker
+        Kerry blue terrier
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

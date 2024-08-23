@@ -18,7 +18,10 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 
 _import_structure = {
-    "configuration_patchtsmixer": ["PatchTSMixerConfig"],
+    "configuration_patchtsmixer": [
+        "PATCHTSMIXER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "PatchTSMixerConfig",
+    ],
 }
 
 try:
@@ -28,6 +31,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_patchtsmixer"] = [
+        "PATCHTSMIXER_PRETRAINED_MODEL_ARCHIVE_LIST",
         "PatchTSMixerPreTrainedModel",
         "PatchTSMixerModel",
         "PatchTSMixerForPretraining",
@@ -39,6 +43,7 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_patchtsmixer import (
+        PATCHTSMIXER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         PatchTSMixerConfig,
     )
 
@@ -49,6 +54,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_patchtsmixer import (
+            PATCHTSMIXER_PRETRAINED_MODEL_ARCHIVE_LIST,
             PatchTSMixerForPrediction,
             PatchTSMixerForPretraining,
             PatchTSMixerForRegression,

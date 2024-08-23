@@ -101,10 +101,6 @@ See [`T5TokenizerFast`] for all details.
 
 [[autodoc]] MT5ForSequenceClassification
 
-## MT5ForTokenClassification
-
-[[autodoc]] MT5ForTokenClassification
-
 ## MT5ForQuestionAnswering
 
 [[autodoc]] MT5ForQuestionAnswering

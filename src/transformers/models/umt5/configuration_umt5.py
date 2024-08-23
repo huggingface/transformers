@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""UMT5 model configuration"""
-
+""" UMT5 model configuration"""
 from typing import Mapping
 
 from ...configuration_utils import PretrainedConfig
@@ -22,6 +21,11 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
+
+UMT5_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+    "google/umt5-small": "https://huggingface.co/google/umt5-small/resolve/main/config.json",
+    # See all umt5 models at https://huggingface.co/models?filter=umt5
+}
 
 
 class UMT5Config(PretrainedConfig):
@@ -72,7 +76,6 @@ class UMT5Config(PretrainedConfig):
 
     model_type = "umt5"
     keys_to_ignore_at_inference = ["past_key_values"]
-    attribute_map = {"hidden_size": "d_model", "num_attention_heads": "num_heads", "num_hidden_layers": "num_layers"}
 
     def __init__(
         self,
@@ -99,6 +102,15 @@ class UMT5Config(PretrainedConfig):
         classifier_dropout=0.0,
         **kwargs,
     ):
+        super().__init__(
+            is_encoder_decoder=is_encoder_decoder,
+            tokenizer_class=tokenizer_class,
+            tie_word_embeddings=tie_word_embeddings,
+            pad_token_id=pad_token_id,
+            eos_token_id=eos_token_id,
+            decoder_start_token_id=decoder_start_token_id,
+            **kwargs,
+        )
         self.vocab_size = vocab_size
         self.d_model = d_model
         self.d_kv = d_kv
@@ -131,15 +143,17 @@ class UMT5Config(PretrainedConfig):
         if feed_forward_proj == "gated-gelu":
             self.dense_act_fn = "gelu_new"
 
-        super().__init__(
-            is_encoder_decoder=is_encoder_decoder,
-            tokenizer_class=tokenizer_class,
-            tie_word_embeddings=tie_word_embeddings,
-            pad_token_id=pad_token_id,
-            eos_token_id=eos_token_id,
-            decoder_start_token_id=decoder_start_token_id,
-            **kwargs,
-        )
+    @property
+    def hidden_size(self):
+        return self.d_model
+
+    @property
+    def num_attention_heads(self):
+        return self.num_heads
+
+    @property
+    def num_hidden_layers(self):
+        return self.num_layers
 
 
 class UMT5OnnxConfig(OnnxSeq2SeqConfigWithPast):

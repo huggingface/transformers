@@ -17,7 +17,10 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 
 _import_structure = {
-    "configuration_decision_transformer": ["DecisionTransformerConfig"],
+    "configuration_decision_transformer": [
+        "DECISION_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "DecisionTransformerConfig",
+    ],
 }
 
 try:
@@ -27,6 +30,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_decision_transformer"] = [
+        "DECISION_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
         "DecisionTransformerGPT2Model",
         "DecisionTransformerGPT2PreTrainedModel",
         "DecisionTransformerModel",
@@ -36,6 +40,7 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_decision_transformer import (
+        DECISION_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         DecisionTransformerConfig,
     )
 
@@ -46,6 +51,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_decision_transformer import (
+            DECISION_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             DecisionTransformerGPT2Model,
             DecisionTransformerGPT2PreTrainedModel,
             DecisionTransformerModel,

@@ -96,7 +96,7 @@ if stale_egg_info.exists():
 # 2. once modified, run: `make deps_table_update` to update src/transformers/dependency_versions_table.py
 _deps = [
     "Pillow>=10.0.1,<=15.0",
-    "accelerate>=0.26.0",
+    "accelerate>=0.21.0",
     "av==9.2.0",  # Latest version of PyAV (10.0.0) has issues with audio stream.
     "beautifulsoup4",
     "codecarbon==1.2.0",
@@ -117,27 +117,25 @@ _deps = [
     "fugashi>=1.0",
     "GitPython<3.1.19",
     "hf-doc-builder>=0.3.0",
-    "huggingface-hub>=0.23.2,<1.0",
+    "huggingface-hub>=0.19.3,<1.0",
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
     "isort>=5.5.4",
     "jax>=0.4.1,<=0.4.13",
     "jaxlib>=0.4.1,<=0.4.13",
     "jieba",
-    "jinja2>=3.1.0",
     "kenlm",
     # Keras pin - this is to make sure Keras 3 doesn't destroy us. Remove or change when we have proper support.
-    "keras>2.9,<2.16",
-    "keras-nlp>=0.3.1,<0.14.0",  # keras-nlp 0.14 doesn't support keras 2, see pin on keras.
+    "keras<2.16",
+    "keras-nlp>=0.3.1",
     "librosa",
     "nltk",
-    "natten>=0.14.6,<0.15.0",
+    "natten>=0.14.6",
     "numpy>=1.17",
     "onnxconverter-common",
     "onnxruntime-tools>=1.4.2",
     "onnxruntime>=1.4.0",
     "opencv-python",
-    "optimum-benchmark>=0.2.0",
     "optuna",
     "optax>=0.0.8,<=0.1.4",
     "packaging>=20.0",
@@ -146,8 +144,8 @@ _deps = [
     "protobuf",
     "psutil",
     "pyyaml>=5.1",
-    "pydantic",
-    "pytest>=7.2.0,<8.0.0",
+    "pydantic<2",
+    "pytest>=7.2.0",
     "pytest-timeout",
     "pytest-xdist",
     "python>=3.8.0",
@@ -157,13 +155,12 @@ _deps = [
     "rhoknp>=1.1.0,<1.3.1",
     "rjieba",
     "rouge-score!=0.0.7,!=0.0.8,!=0.1,!=0.1.1",
-    "ruff==0.5.1",
+    "ruff==0.1.5",
     "sacrebleu>=1.4.12,<2.0.0",
     "sacremoses",
-    "safetensors>=0.4.1",
+    "safetensors>=0.3.1",
     "sagemaker>=2.31.0",
     "scikit-learn",
-    "scipy<1.13.0",  # SciPy >= 1.13.0 is not supported with the current jax pin (`jax>=0.4.1,<=0.4.13`)
     "sentencepiece>=0.1.91,!=0.1.92",
     "sigopt",
     "starlette",
@@ -171,15 +168,14 @@ _deps = [
     "sudachidict_core>=20220729",
     "tensorboard",
     # TensorFlow pin. When changing this value, update examples/tensorflow/_tests_requirements.txt accordingly
-    "tensorflow-cpu>2.9,<2.16",
-    "tensorflow>2.9,<2.16",
+    "tensorflow-cpu>=2.6,<2.16",
+    "tensorflow>=2.6,<2.16",
     "tensorflow-text<2.16",
-    "tensorflow-probability<0.24",
     "tf2onnx",
     "timeout-decorator",
-    "timm<=0.9.16",
-    "tokenizers>=0.19,<0.20",
-    "torch",
+    "timm",
+    "tokenizers>=0.14,<0.19",
+    "torch>=1.10,!=1.12.0",
     "torchaudio",
     "torchvision",
     "pyctcdecode>=0.4.0",
@@ -188,7 +184,6 @@ _deps = [
     "unidic_lite>=1.0.7",
     "urllib3<2.0.0",
     "uvicorn",
-    "pytest-rich",
 ]
 
 
@@ -262,15 +257,7 @@ extras["ja"] = deps_list("fugashi", "ipadic", "unidic_lite", "unidic", "sudachip
 extras["sklearn"] = deps_list("scikit-learn")
 
 extras["tf"] = deps_list("tensorflow", "onnxconverter-common", "tf2onnx", "tensorflow-text", "keras-nlp")
-extras["tf-cpu"] = deps_list(
-    "keras",
-    "tensorflow-cpu",
-    "onnxconverter-common",
-    "tf2onnx",
-    "tensorflow-text",
-    "keras-nlp",
-    "tensorflow-probability",
-)
+extras["tf-cpu"] = deps_list("tensorflow-cpu", "onnxconverter-common", "tf2onnx", "tensorflow-text", "keras-nlp")
 
 extras["torch"] = deps_list("torch", "accelerate")
 extras["accelerate"] = deps_list("accelerate")
@@ -280,7 +267,7 @@ if os.name == "nt":  # windows
     extras["flax"] = []  # jax is not supported on windows
 else:
     extras["retrieval"] = deps_list("faiss-cpu", "datasets")
-    extras["flax"] = deps_list("jax", "jaxlib", "flax", "optax", "scipy")
+    extras["flax"] = deps_list("jax", "jaxlib", "flax", "optax")
 
 extras["tokenizers"] = deps_list("tokenizers")
 extras["ftfy"] = deps_list("ftfy")
@@ -314,7 +301,6 @@ extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["testing"] = (
     deps_list(
         "pytest",
-        "pytest-rich",
         "pytest-xdist",
         "timeout-decorator",
         "parameterized",
@@ -328,20 +314,21 @@ extras["testing"] = (
         "rouge-score",
         "nltk",
         "GitPython",
+        "hf-doc-builder",
+        "protobuf",  # Can be removed once we can unpin protobuf
         "sacremoses",
         "rjieba",
         "beautifulsoup4",
         "tensorboard",
         "pydantic",
-        "sentencepiece",
     )
     + extras["retrieval"]
     + extras["modelcreation"]
 )
 
 extras["deepspeed-testing"] = extras["deepspeed"] + extras["testing"] + extras["optuna"] + extras["sentencepiece"]
-extras["ruff"] = deps_list("ruff")
-extras["quality"] = deps_list("datasets", "isort", "ruff", "GitPython", "urllib3")
+
+extras["quality"] = deps_list("datasets", "isort", "ruff", "GitPython", "hf-doc-builder", "urllib3")
 
 extras["all"] = (
     extras["tf"]
@@ -359,6 +346,11 @@ extras["all"] = (
     + extras["video"]
 )
 
+# Might need to add doc-builder and some specific deps in the future
+extras["docs_specific"] = ["hf-doc-builder"]
+
+# "docs" needs "all" to resolve all the references
+extras["docs"] = extras["all"] + extras["docs_specific"]
 
 extras["dev-torch"] = (
     extras["testing"]
@@ -373,6 +365,7 @@ extras["dev-torch"] = (
     + extras["codecarbon"]
     + extras["quality"]
     + extras["ja"]
+    + extras["docs_specific"]
     + extras["sklearn"]
     + extras["modelcreation"]
     + extras["onnxruntime"]
@@ -384,13 +377,20 @@ extras["dev-tensorflow"] = (
     + extras["tokenizers"]
     + extras["vision"]
     + extras["quality"]
+    + extras["docs_specific"]
     + extras["sklearn"]
     + extras["modelcreation"]
     + extras["onnx"]
     + extras["tf-speech"]
 )
 extras["dev"] = (
-    extras["all"] + extras["testing"] + extras["quality"] + extras["ja"] + extras["sklearn"] + extras["modelcreation"]
+    extras["all"]
+    + extras["testing"]
+    + extras["quality"]
+    + extras["ja"]
+    + extras["docs_specific"]
+    + extras["sklearn"]
+    + extras["modelcreation"]
 )
 
 extras["torchhub"] = deps_list(
@@ -412,8 +412,6 @@ extras["agents"] = deps_list(
     "diffusers", "accelerate", "datasets", "torch", "sentencepiece", "opencv-python", "Pillow"
 )
 
-extras["benchmark"] = deps_list("optimum-benchmark")
-
 # when modifying the following list, make sure to update src/transformers/dependency_versions_check.py
 install_requires = [
     deps["filelock"],  # filesystem locks, e.g., to prevent parallel downloads
@@ -430,7 +428,7 @@ install_requires = [
 
 setup(
     name="transformers",
-    version="4.45.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    version="4.37.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
     author="The Hugging Face team (past and future) with the help of all our contributors (https://github.com/huggingface/transformers/graphs/contributors)",
     author_email="transformers@huggingface.co",
     description="State-of-the-art Machine Learning for JAX, PyTorch and TensorFlow",
@@ -463,18 +461,3 @@ setup(
     ],
     cmdclass={"deps_table_update": DepsTableUpdateCommand},
 )
-
-extras["tests_torch"] = deps_list()
-extras["tests_tf"] = deps_list()
-extras["tests_flax"] = deps_list()
-extras["tests_torch_and_tf"] = deps_list()
-extras["tests_torch_and_flax"] = deps_list()
-extras["tests_hub"] = deps_list()
-extras["tests_pipelines_torch"] = deps_list()
-extras["tests_pipelines_tf"] = deps_list()
-extras["tests_onnx"] = deps_list()
-extras["tests_examples_torch"] = deps_list()
-extras["tests_examples_tf"] = deps_list()
-extras["tests_custom_tokenizers"] = deps_list()
-extras["tests_exotic_models"] = deps_list()
-extras["consistency"] = deps_list()

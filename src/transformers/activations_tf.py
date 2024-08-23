@@ -15,20 +15,7 @@
 import math
 
 import tensorflow as tf
-from packaging.version import parse
-
-
-try:
-    import tf_keras as keras
-except (ModuleNotFoundError, ImportError):
-    import keras
-
-    if parse(keras.__version__).major > 2:
-        raise ValueError(
-            "Your currently installed version of Keras is Keras 3, but this is not yet supported in "
-            "Transformers. Please install the backwards-compatible tf-keras package with "
-            "`pip install tf-keras`."
-        )
+from packaging import version
 
 
 def _gelu(x):
@@ -112,12 +99,12 @@ def glu(x, axis=-1):
     return a * tf.math.sigmoid(b)
 
 
-if parse(tf.version.VERSION) >= parse("2.4"):
+if version.parse(tf.version.VERSION) >= version.parse("2.4"):
 
     def approximate_gelu_wrap(x):
-        return keras.activations.gelu(x, approximate=True)
+        return tf.keras.activations.gelu(x, approximate=True)
 
-    gelu = keras.activations.gelu
+    gelu = tf.keras.activations.gelu
     gelu_new = approximate_gelu_wrap
 else:
     gelu = _gelu
@@ -132,11 +119,11 @@ ACT2FN = {
     "glu": glu,
     "mish": mish,
     "quick_gelu": quick_gelu,
-    "relu": keras.activations.relu,
-    "sigmoid": keras.activations.sigmoid,
-    "silu": keras.activations.swish,
-    "swish": keras.activations.swish,
-    "tanh": keras.activations.tanh,
+    "relu": tf.keras.activations.relu,
+    "sigmoid": tf.keras.activations.sigmoid,
+    "silu": tf.keras.activations.swish,
+    "swish": tf.keras.activations.swish,
+    "tanh": tf.keras.activations.tanh,
 }
 
 

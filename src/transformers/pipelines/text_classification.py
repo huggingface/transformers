@@ -5,7 +5,7 @@ from typing import Dict
 import numpy as np
 
 from ..utils import ExplicitEnum, add_end_docstrings, is_tf_available, is_torch_available
-from .base import GenericTensor, Pipeline, build_pipeline_init_args
+from .base import PIPELINE_INIT_ARGS, GenericTensor, Pipeline
 
 
 if is_tf_available():
@@ -32,7 +32,7 @@ class ClassificationFunction(ExplicitEnum):
 
 
 @add_end_docstrings(
-    build_pipeline_init_args(has_tokenizer=True),
+    PIPELINE_INIT_ARGS,
     r"""
         return_all_scores (`bool`, *optional*, defaults to `False`):
             Whether to return all prediction scores or just the one of the predicted class.
@@ -43,7 +43,8 @@ class ClassificationFunction(ExplicitEnum):
               has several labels, will apply the softmax function on the output.
             - `"sigmoid"`: Applies the sigmoid function on the output.
             - `"softmax"`: Applies the softmax function on the output.
-            - `"none"`: Does not apply any function on the output.""",
+            - `"none"`: Does not apply any function on the output.
+    """,
 )
 class TextClassificationPipeline(Pipeline):
     """
@@ -55,7 +56,7 @@ class TextClassificationPipeline(Pipeline):
     ```python
     >>> from transformers import pipeline
 
-    >>> classifier = pipeline(model="distilbert/distilbert-base-uncased-finetuned-sst-2-english")
+    >>> classifier = pipeline(model="distilbert-base-uncased-finetuned-sst-2-english")
     >>> classifier("This movie is disgustingly good !")
     [{'label': 'POSITIVE', 'score': 1.0}]
 
@@ -118,12 +119,12 @@ class TextClassificationPipeline(Pipeline):
             postprocess_params["function_to_apply"] = function_to_apply
         return preprocess_params, {}, postprocess_params
 
-    def __call__(self, inputs, **kwargs):
+    def __call__(self, *args, **kwargs):
         """
         Classify the text(s) given as inputs.
 
         Args:
-            inputs (`str` or `List[str]` or `Dict[str]`, or `List[Dict[str]]`):
+            args (`str` or `List[str]` or `Dict[str]`, or `List[Dict[str]]`):
                 One or several texts to classify. In order to use text pairs for your classification, you can send a
                 dictionary containing `{"text", "text_pair"}` keys, or a list of those.
             top_k (`int`, *optional*, defaults to `1`):
@@ -152,11 +153,10 @@ class TextClassificationPipeline(Pipeline):
 
             If `top_k` is used, one such dictionary is returned per label.
         """
-        inputs = (inputs,)
-        result = super().__call__(*inputs, **kwargs)
+        result = super().__call__(*args, **kwargs)
         # TODO try and retrieve it in a nicer way from _sanitize_parameters.
         _legacy = "top_k" not in kwargs
-        if isinstance(inputs[0], str) and _legacy:
+        if isinstance(args[0], str) and _legacy:
             # This pipeline is odd, and return a list when single item is run
             return [result]
         else:
@@ -202,12 +202,7 @@ class TextClassificationPipeline(Pipeline):
                 function_to_apply = ClassificationFunction.NONE
 
         outputs = model_outputs["logits"][0]
-
-        if self.framework == "pt":
-            # To enable using fp16 and bf16
-            outputs = outputs.float().numpy()
-        else:
-            outputs = outputs.numpy()
+        outputs = outputs.numpy()
 
         if function_to_apply == ClassificationFunction.SIGMOID:
             scores = sigmoid(outputs)

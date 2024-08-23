@@ -14,6 +14,7 @@
 # limitations under the License.
 """Convert OpenAI GPT checkpoint."""
 
+
 import argparse
 import json
 

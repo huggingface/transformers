@@ -22,7 +22,7 @@ from ...utils import (
 )
 
 
-_import_structure = {"configuration_vit_mae": ["ViTMAEConfig"]}
+_import_structure = {"configuration_vit_mae": ["VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTMAEConfig"]}
 
 try:
     if not is_torch_available():
@@ -31,6 +31,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_vit_mae"] = [
+        "VIT_MAE_PRETRAINED_MODEL_ARCHIVE_LIST",
         "ViTMAEForPreTraining",
         "ViTMAELayer",
         "ViTMAEModel",
@@ -50,7 +51,7 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_vit_mae import ViTMAEConfig
+    from .configuration_vit_mae import VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTMAEConfig
 
     try:
         if not is_torch_available():
@@ -59,6 +60,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_vit_mae import (
+            VIT_MAE_PRETRAINED_MODEL_ARCHIVE_LIST,
             ViTMAEForPreTraining,
             ViTMAELayer,
             ViTMAEModel,

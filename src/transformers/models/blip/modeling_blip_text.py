@@ -523,9 +523,6 @@ class BlipTextLMPredictionHead(nn.Module):
         # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
         self.decoder.bias = self.bias
 
-    def _tie_weights(self):
-        self.decoder.bias = self.bias
-
     def forward(self, hidden_states):
         hidden_states = self.transform(hidden_states)
         hidden_states = self.decoder(hidden_states)
@@ -552,7 +549,6 @@ class BlipTextPreTrainedModel(PreTrainedModel):
 
     config_class = BlipTextConfig
     base_model_prefix = "bert"
-    _no_split_modules = []
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -814,14 +810,12 @@ class BlipTextLMHeadModel(BlipTextPreTrainedModel):
 
         self.bert = BlipTextModel(config, add_pooling_layer=False)
         self.cls = BlipTextOnlyMLMHead(config)
-        self.label_smoothing = config.label_smoothing
 
     def get_output_embeddings(self):
         return self.cls.predictions.decoder
 
     def set_output_embeddings(self, new_embeddings):
         self.cls.predictions.decoder = new_embeddings
-        self.cls.predictions.bias = new_embeddings.bias
 
     def forward(
         self,
@@ -895,7 +889,7 @@ class BlipTextLMHeadModel(BlipTextPreTrainedModel):
             # we are doing next-token prediction; shift prediction scores and input ids by one
             shifted_prediction_scores = prediction_scores[:, :-1, :].contiguous()
             labels = labels[:, 1:].contiguous().to(shifted_prediction_scores.device)
-            loss_fct = CrossEntropyLoss(reduction=reduction, label_smoothing=self.label_smoothing)
+            loss_fct = CrossEntropyLoss(reduction=reduction, label_smoothing=0.1)
             lm_loss = loss_fct(shifted_prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
             if reduction == "none":
                 lm_loss = lm_loss.view(prediction_scores.size(0), -1).sum(1)

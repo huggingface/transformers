@@ -30,7 +30,6 @@ Auto-sort the doctest list if it is not properly sorted (used in `make fix-copie
 python utils/check_doctest_list.py --fix_and_overwrite
 ```
 """
-
 import argparse
 import os
 

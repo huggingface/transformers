@@ -21,7 +21,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_persimmon": ["PersimmonConfig"],
+    "configuration_persimmon": ["PERSIMMON_PRETRAINED_CONFIG_ARCHIVE_MAP", "PersimmonConfig"],
 }
 
 
@@ -36,12 +36,11 @@ else:
         "PersimmonModel",
         "PersimmonPreTrainedModel",
         "PersimmonForSequenceClassification",
-        "PersimmonForTokenClassification",
     ]
 
 
 if TYPE_CHECKING:
-    from .configuration_persimmon import PersimmonConfig
+    from .configuration_persimmon import PERSIMMON_PRETRAINED_CONFIG_ARCHIVE_MAP, PersimmonConfig
 
     try:
         if not is_torch_available():
@@ -52,7 +51,6 @@ if TYPE_CHECKING:
         from .modeling_persimmon import (
             PersimmonForCausalLM,
             PersimmonForSequenceClassification,
-            PersimmonForTokenClassification,
             PersimmonModel,
             PersimmonPreTrainedModel,
         )

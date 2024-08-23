@@ -34,7 +34,7 @@ from accelerate import Accelerator
 from accelerate.logging import get_logger
 from accelerate.utils import set_seed
 from datasets import load_dataset
-from huggingface_hub import HfApi
+from huggingface_hub import Repository, create_repo
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 from utils_qa import postprocess_qa_predictions_with_beam_search
@@ -56,7 +56,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.45.0.dev0")
+check_min_version("4.37.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/question-answering/requirements.txt")
 
@@ -101,15 +101,6 @@ def parse_args():
         help="The configuration name of the dataset to use (via the datasets library).",
     )
     parser.add_argument(
-        "--trust_remote_code",
-        action="store_true",
-        help=(
-            "Whether to trust the execution of code from datasets/models defined on the Hub."
-            " This option should only be set to `True` for repositories you trust and in which you have read the"
-            " code, as it will execute code present on the Hub on your local machine."
-        ),
-    )
-    parser.add_argument(
         "--train_file", type=str, default=None, help="A csv or a json file containing the training data."
     )
     parser.add_argument(
@@ -128,7 +119,7 @@ def parse_args():
         default=384,
         help=(
             "The maximum total input sequence length after tokenization. Sequences longer than this will be truncated,"
-            " sequences shorter will be padded if `--pad_to_max_length` is passed."
+            " sequences shorter will be padded if `--pad_to_max_lengh` is passed."
         ),
     )
     parser.add_argument(
@@ -342,8 +333,9 @@ def main():
             if repo_name is None:
                 repo_name = Path(args.output_dir).absolute().name
             # Create repo and retrieve repo_id
-            api = HfApi()
-            repo_id = api.create_repo(repo_name, exist_ok=True, token=args.hub_token).repo_id
+            repo_id = create_repo(repo_name, exist_ok=True, token=args.hub_token).repo_id
+            # Clone repo locally
+            repo = Repository(args.output_dir, clone_from=repo_id, token=args.hub_token)
 
             with open(os.path.join(args.output_dir, ".gitignore"), "w+") as gitignore:
                 if "step_*" not in gitignore:
@@ -365,20 +357,16 @@ def main():
     # download the dataset.
     if args.dataset_name is not None:
         # Downloading and loading a dataset from the hub.
-        raw_datasets = load_dataset(
-            args.dataset_name, args.dataset_config_name, trust_remote_code=args.trust_remote_code
-        )
+        raw_datasets = load_dataset(args.dataset_name, args.dataset_config_name)
     else:
         data_files = {}
         if args.train_file is not None:
             data_files["train"] = args.train_file
-            extension = args.train_file.split(".")[-1]
         if args.validation_file is not None:
             data_files["validation"] = args.validation_file
-            extension = args.validation_file.split(".")[-1]
         if args.test_file is not None:
             data_files["test"] = args.test_file
-            extension = args.test_file.split(".")[-1]
+        extension = args.train_file.split(".")[-1]
         raw_datasets = load_dataset(extension, data_files=data_files, field="data")
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
     # https://huggingface.co/docs/datasets/loading_datasets.
@@ -395,7 +383,7 @@ def main():
     )
 
     # Preprocessing the datasets.
-    # Preprocessing is slightly different for training and evaluation.
+    # Preprocessing is slighlty different for training and evaluation.
     column_names = raw_datasets["train"].column_names
 
     question_column_name = "question" if "question" in column_names else column_names[0]
@@ -455,12 +443,7 @@ def main():
         for i, offsets in enumerate(offset_mapping):
             # We will label impossible answers with the index of the CLS token.
             input_ids = tokenized_examples["input_ids"][i]
-            if tokenizer.cls_token_id in input_ids:
-                cls_index = input_ids.index(tokenizer.cls_token_id)
-            elif tokenizer.bos_token_id in input_ids:
-                cls_index = input_ids.index(tokenizer.bos_token_id)
-            else:
-                cls_index = 0
+            cls_index = input_ids.index(tokenizer.cls_token_id)
             tokenized_examples["cls_index"].append(cls_index)
 
             # Grab the sequence corresponding to that example (to know what is the context and what is the question).
@@ -523,7 +506,7 @@ def main():
         raise ValueError("--do_train requires a train dataset")
     train_dataset = raw_datasets["train"]
     if args.max_train_samples is not None:
-        # We will select sample from whole data if argument is specified
+        # We will select sample from whole data if agument is specified
         train_dataset = train_dataset.select(range(args.max_train_samples))
     # Create train feature from dataset
     with accelerator.main_process_first():
@@ -579,12 +562,7 @@ def main():
 
         for i, input_ids in enumerate(tokenized_examples["input_ids"]):
             # Find the CLS token in the input ids.
-            if tokenizer.cls_token_id in input_ids:
-                cls_index = input_ids.index(tokenizer.cls_token_id)
-            elif tokenizer.bos_token_id in input_ids:
-                cls_index = input_ids.index(tokenizer.bos_token_id)
-            else:
-                cls_index = 0
+            cls_index = input_ids.index(tokenizer.cls_token_id)
             tokenized_examples["cls_index"].append(cls_index)
 
             # Grab the sequence corresponding to that example (to know what is the context and what is the question).
@@ -772,10 +750,8 @@ def main():
     lr_scheduler = get_scheduler(
         name=args.lr_scheduler_type,
         optimizer=optimizer,
-        num_warmup_steps=args.num_warmup_steps * accelerator.num_processes,
-        num_training_steps=args.max_train_steps
-        if overrode_max_train_steps
-        else args.max_train_steps * accelerator.num_processes,
+        num_warmup_steps=args.num_warmup_steps * args.gradient_accumulation_steps,
+        num_training_steps=args.max_train_steps * args.gradient_accumulation_steps,
     )
 
     # Prepare everything with our `accelerator`.
@@ -893,15 +869,11 @@ def main():
             )
             if accelerator.is_main_process:
                 tokenizer.save_pretrained(args.output_dir)
-                api.upload_folder(
-                    commit_message=f"Training in progress epoch {epoch}",
-                    folder_path=args.output_dir,
-                    repo_id=repo_id,
-                    repo_type="model",
-                    token=args.hub_token,
+                repo.push_to_hub(
+                    commit_message=f"Training in progress epoch {epoch}", blocking=False, auto_lfs_prune=True
                 )
 
-    # initialize all lists to collect the batches
+    # intialize all lists to collect the batches
     all_start_top_log_probs = []
     all_start_top_index = []
     all_end_top_log_probs = []
@@ -960,7 +932,7 @@ def main():
     logger.info(f"Evaluation metrics: {eval_metric}")
 
     if args.do_predict:
-        # initialize all lists to collect the batches
+        # intialize all lists to collect the batches
 
         all_start_top_log_probs = []
         all_start_top_index = []
@@ -1044,13 +1016,7 @@ def main():
         if accelerator.is_main_process:
             tokenizer.save_pretrained(args.output_dir)
             if args.push_to_hub:
-                api.upload_folder(
-                    commit_message="End of training",
-                    folder_path=args.output_dir,
-                    repo_id=repo_id,
-                    repo_type="model",
-                    token=args.hub_token,
-                )
+                repo.push_to_hub(commit_message="End of training", auto_lfs_prune=True)
 
             logger.info(json.dumps(eval_metric, indent=4))
             save_prefixed_metrics(eval_metric, args.output_dir)

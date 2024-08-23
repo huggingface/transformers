@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch Wav2Vec2 model."""
+""" Testing suite for the PyTorch Wav2Vec2 model. """
 
 import gc
 import math
@@ -25,7 +25,6 @@ import unittest
 
 import numpy as np
 from datasets import load_dataset
-from pytest import mark
 
 from transformers import Wav2Vec2Config, is_torch_available
 from transformers.testing_utils import (
@@ -34,11 +33,9 @@ from transformers.testing_utils import (
     is_pt_flax_cross_test,
     is_pyctcdecode_available,
     is_torchaudio_available,
-    require_flash_attn,
     require_pyctcdecode,
     require_soundfile,
     require_torch,
-    require_torch_gpu,
     require_torchaudio,
     run_test_in_subprocess,
     slow,
@@ -101,9 +98,7 @@ def _test_wav2vec2_with_lm_invalid_pool(in_queue, out_queue, timeout):
     try:
         _ = in_queue.get(timeout=timeout)
 
-        ds = load_dataset(
-            "mozilla-foundation/common_voice_11_0", "es", split="test", streaming=True, trust_remote_code=True
-        )
+        ds = load_dataset("mozilla-foundation/common_voice_11_0", "es", split="test", streaming=True)
         sample = next(iter(ds))
 
         resampled_audio = torchaudio.functional.resample(
@@ -553,29 +548,32 @@ class Wav2Vec2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_labels_out_of_vocab(*config_and_inputs)
 
-    @unittest.skip(reason="Model has no inputs_embeds")
+    # Wav2Vec2 has no inputs_embeds
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="Model has input_values instead of input_ids")
+    # `input_ids` is renamed to `input_values`
     def test_forward_signature(self):
         pass
 
-    @unittest.skip(reason="Model has no tokens embeds")
+    # Wav2Vec2 cannot resize token embeddings
+    # since it has no tokens embeddings
     def test_resize_tokens_embeddings(self):
         pass
 
-    @unittest.skip(reason="Model has no inputs_embeds")
-    def test_model_get_set_embeddings(self):
+    # Wav2Vec2 has no inputs_embeds
+    # and thus the `get_input_embeddings` fn
+    # is not implemented
+    def test_model_common_attributes(self):
         pass
 
     @is_pt_flax_cross_test
-    @unittest.skip(reason="Non-rubst architecture does not exist in Flax")
+    # non-robust architecture does not exist in Flax
     def test_equivalence_flax_to_pt(self):
         pass
 
     @is_pt_flax_cross_test
-    @unittest.skip(reason="Non-rubst architecture does not exist in Flax")
+    # non-robust architecture does not exist in Flax
     def test_equivalence_pt_to_flax(self):
         pass
 
@@ -726,10 +724,10 @@ class Wav2Vec2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     # Wav2Vec2 cannot be torchscripted because of group norm.
     def _create_and_check_torch_fx_tracing(self, config, inputs_dict, output_loss=False):
         # TODO: fix it
-        self.skipTest(reason="torch 2.1 breaks torch fx tests for wav2vec2/hubert.")
+        self.skipTest("torch 2.1 breaks torch fx tests for wav2vec2/hubert.")
 
         if not is_torch_fx_available() or not self.fx_compatible:
-            self.skipTest(reason="torch fx not available or not compatible with this model")
+            return
 
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
         configs_no_init.return_dict = False
@@ -904,20 +902,23 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_labels_out_of_vocab(*config_and_inputs)
 
-    @unittest.skip(reason="Model has no input_embeds")
+    # Wav2Vec2 has no inputs_embeds
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="Model has input_values instead of input_ids")
+    # `input_ids` is renamed to `input_values`
     def test_forward_signature(self):
         pass
 
-    @unittest.skip(reason="Model has no token embeddings")
+    # Wav2Vec2 cannot resize token embeddings
+    # since it has no tokens embeddings
     def test_resize_tokens_embeddings(self):
         pass
 
-    @unittest.skip(reason="Model has no input_embeds")
-    def test_model_get_set_embeddings(self):
+    # Wav2Vec2 has no inputs_embeds
+    # and thus the `get_input_embeddings` fn
+    # is not implemented
+    def test_model_common_attributes(self):
         pass
 
     def test_retain_grad_hidden_states_attentions(self):
@@ -1473,7 +1474,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         return [x["array"] for x in speech_samples]
 
     def _load_superb(self, task, num_samples):
-        ds = load_dataset("anton-l/superb_dummy", task, split="test", trust_remote_code=True)
+        ds = load_dataset("anton-l/superb_dummy", task, split="test")
 
         return ds[:num_samples]
 
@@ -1839,9 +1840,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
     @require_pyctcdecode
     @require_torchaudio
     def test_wav2vec2_with_lm(self):
-        ds = load_dataset(
-            "mozilla-foundation/common_voice_11_0", "es", split="test", streaming=True, trust_remote_code=True
-        )
+        ds = load_dataset("mozilla-foundation/common_voice_11_0", "es", split="test", streaming=True)
         sample = next(iter(ds))
 
         resampled_audio = torchaudio.functional.resample(
@@ -1865,9 +1864,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
     @require_pyctcdecode
     @require_torchaudio
     def test_wav2vec2_with_lm_pool(self):
-        ds = load_dataset(
-            "mozilla-foundation/common_voice_11_0", "es", split="test", streaming=True, trust_remote_code=True
-        )
+        ds = load_dataset("mozilla-foundation/common_voice_11_0", "es", split="test", streaming=True)
         sample = next(iter(ds))
 
         resampled_audio = torchaudio.functional.resample(
@@ -1931,6 +1928,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         )
         self.assertEqual(labels[0, :, 0].sum(), 555)
         self.assertEqual(labels[0, :, 1].sum(), 299)
+        # TODO: update the tolerance after the CI moves to torch 1.10
         self.assertTrue(torch.allclose(outputs.logits[:, :4], expected_logits, atol=1e-2))
 
     def test_inference_speaker_verification(self):
@@ -1955,6 +1953,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         # id10002 vs id10004
         self.assertAlmostEqual(cosine_sim(embeddings[2], embeddings[3]).numpy(), 0.7594, 3)
 
+        # TODO: update the tolerance after the CI moves to torch 1.10
         self.assertAlmostEqual(outputs.loss.item(), 17.7963, 2)
 
     @require_torchaudio
@@ -1965,9 +1964,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         LANG_MAP = {"it": "ita", "es": "spa", "fr": "fra", "en": "eng"}
 
         def run_model(lang):
-            ds = load_dataset(
-                "mozilla-foundation/common_voice_11_0", lang, split="test", streaming=True, trust_remote_code=True
-            )
+            ds = load_dataset("mozilla-foundation/common_voice_11_0", lang, split="test", streaming=True)
             sample = next(iter(ds))
 
             wav2vec2_lang = LANG_MAP[lang]
@@ -2000,52 +1997,3 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
 
         for lang in LANG_MAP.keys():
             assert run_model(lang) == TRANSCRIPTIONS[lang]
-
-    @require_flash_attn
-    @require_torch_gpu
-    @mark.flash_attn_test
-    def test_inference_ctc_fa2(self):
-        model_fa = Wav2Vec2ForCTC.from_pretrained(
-            "facebook/wav2vec2-base-960h", attn_implementation="flash_attention_2", torch_dtype=torch.bfloat16
-        )
-        model_fa.to(torch_device)
-        processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base-960h", do_lower_case=True)
-        input_speech = self._load_datasamples(1)
-
-        input_values = processor(input_speech, return_tensors="pt").input_values.to(torch_device)
-
-        with torch.no_grad():
-            logits = model_fa(input_values.to(torch.bfloat16)).logits
-
-        predicted_ids = torch.argmax(logits, dim=-1)
-        predicted_trans = processor.batch_decode(predicted_ids)
-
-        EXPECTED_TRANSCRIPTIONS = ["a man said to the universe sir i exist"]
-        self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)
-
-    @require_flash_attn
-    @require_torch_gpu
-    @mark.flash_attn_test
-    def test_inference_ctc_fa2_batched(self):
-        model_fa = Wav2Vec2ForCTC.from_pretrained(
-            "facebook/wav2vec2-base-960h", attn_implementation="flash_attention_2", torch_dtype=torch.bfloat16
-        )
-        model_fa.to(torch_device)
-        processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base-960h", do_lower_case=True)
-
-        input_speech = self._load_datasamples(2)
-
-        inputs = processor(input_speech, return_tensors="pt", padding=True, return_attention_mask=True)
-        inputs = inputs.to(torch_device)
-
-        with torch.no_grad():
-            logits = model_fa(inputs.input_values.to(torch.bfloat16), attention_mask=inputs.attention_mask).logits
-
-        predicted_ids = torch.argmax(logits, dim=-1)
-        predicted_trans = processor.batch_decode(predicted_ids)
-
-        EXPECTED_TRANSCRIPTIONS = [
-            "a man said to the universe sir i exist",
-            "sweat covered brion's body trickling into the tight lowing cloth that was the only garment he wore",
-        ]
-        self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)

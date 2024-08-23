@@ -92,9 +92,8 @@ class IdeficsImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         transform: Callable = None,
-        return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH,
         **kwargs,
-    ) -> TensorType:
+    ) -> TensorType.PYTORCH:
         """
         Preprocess a batch of images.
 
@@ -163,6 +162,7 @@ class IdeficsImageProcessor(BaseImageProcessor):
         images = [self.rescale(image=image, scale=1 / 255) for image in images]
         images = [self.normalize(x, mean=image_mean, std=image_std) for x in images]
         images = [to_channel_dimension_format(x, ChannelDimension.FIRST) for x in images]
-        images = BatchFeature(data={"pixel_values": images}, tensor_type=return_tensors)["pixel_values"]
+        # TODO: this converts to torch tensors - switch to convert_to_tensors once it becomes available
+        images = BatchFeature(data={"pixel_values": images}, tensor_type=TensorType.PYTORCH)["pixel_values"]
 
         return images

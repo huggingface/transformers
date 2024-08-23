@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch CLIPSeg model."""
+""" Testing suite for the PyTorch CLIPSeg model. """
+
 
 import inspect
 import os
@@ -23,7 +24,8 @@ import numpy as np
 import requests
 
 import transformers
-from transformers import CLIPSegConfig, CLIPSegProcessor, CLIPSegTextConfig, CLIPSegVisionConfig
+from transformers import MODEL_MAPPING, CLIPSegConfig, CLIPSegProcessor, CLIPSegTextConfig, CLIPSegVisionConfig
+from transformers.models.auto import get_values
 from transformers.testing_utils import (
     is_flax_available,
     is_pt_flax_cross_test,
@@ -50,7 +52,7 @@ if is_torch_available():
     from torch import nn
 
     from transformers import CLIPSegForImageSegmentation, CLIPSegModel, CLIPSegTextModel, CLIPSegVisionModel
-    from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES
+    from transformers.models.clipseg.modeling_clipseg import CLIPSEG_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -169,7 +171,7 @@ class CLIPSegVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    def test_model_get_set_embeddings(self):
+    def test_model_common_attributes(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -194,11 +196,9 @@ class CLIPSegVisionModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip
     def test_training(self):
         pass
 
-    @unittest.skip
     def test_training_gradient_checkpointing(self):
         pass
 
@@ -224,9 +224,9 @@ class CLIPSegVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "CIDAS/clipseg-rd64-refined"
-        model = CLIPSegVisionModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
+        for model_name in CLIPSEG_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = CLIPSegVisionModel.from_pretrained(model_name)
+            self.assertIsNotNone(model)
 
 
 class CLIPSegTextModelTester:
@@ -333,11 +333,9 @@ class CLIPSegTextModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip
     def test_training(self):
         pass
 
-    @unittest.skip
     def test_training_gradient_checkpointing(self):
         pass
 
@@ -367,9 +365,9 @@ class CLIPSegTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "CIDAS/clipseg-rd64-refined"
-        model = CLIPSegTextModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
+        for model_name in CLIPSEG_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = CLIPSegTextModel.from_pretrained(model_name)
+            self.assertIsNotNone(model)
 
 
 class CLIPSegModelTester:
@@ -390,7 +388,6 @@ class CLIPSegModelTester:
         self.parent = parent
         self.text_model_tester = CLIPSegTextModelTester(parent, **text_kwargs)
         self.vision_model_tester = CLIPSegVisionModelTester(parent, **vision_kwargs)
-        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
         self.is_training = is_training
         self.extract_layers = extract_layers
 
@@ -494,7 +491,7 @@ class CLIPSegModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         pass
 
     @unittest.skip(reason="CLIPSegModel does not have input/output embeddings")
-    def test_model_get_set_embeddings(self):
+    def test_model_common_attributes(self):
         pass
 
     @unittest.skip(
@@ -544,7 +541,7 @@ class CLIPSegModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:
-            self.skipTest(reason="test_torchscript is set to False")
+            return
 
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
         configs_no_init.torchscript = True
@@ -645,7 +642,7 @@ class CLIPSegModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
                 fx_model_class_name = "Flax" + model_class.__name__
 
                 if not hasattr(transformers, fx_model_class_name):
-                    self.skipTest(reason="No Flax model exists for this class")
+                    return
 
                 fx_model_class = getattr(transformers, fx_model_class_name)
 
@@ -701,7 +698,8 @@ class CLIPSegModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
                 fx_model_class_name = "Flax" + model_class.__name__
 
                 if not hasattr(transformers, fx_model_class_name):
-                    self.skipTest(reason="No Flax model exists for this class")
+                    # no flax model exists for this class
+                    return
 
                 fx_model_class = getattr(transformers, fx_model_class_name)
 
@@ -747,13 +745,13 @@ class CLIPSegModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     def test_training(self):
         if not self.model_tester.is_training:
-            self.skipTest(reason="Training test is skipped as the model was not trained")
+            return
 
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             config.return_dict = True
 
-            if model_class.__name__ in MODEL_MAPPING_NAMES.values():
+            if model_class in get_values(MODEL_MAPPING):
                 continue
 
             print("Model class:", model_class)
@@ -769,9 +767,9 @@ class CLIPSegModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "CIDAS/clipseg-rd64-refined"
-        model = CLIPSegModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
+        for model_name in CLIPSEG_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = CLIPSegModel.from_pretrained(model_name)
+            self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

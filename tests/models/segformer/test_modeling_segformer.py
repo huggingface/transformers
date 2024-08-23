@@ -12,11 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch SegFormer model."""
+""" Testing suite for the PyTorch SegFormer model. """
+
 
 import unittest
 
 from transformers import SegformerConfig, is_torch_available, is_vision_available
+from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
@@ -28,11 +30,12 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        MODEL_MAPPING,
         SegformerForImageClassification,
         SegformerForSemanticSegmentation,
         SegformerModel,
     )
-    from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES
+    from transformers.models.segformer.modeling_segformer import SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -168,7 +171,7 @@ class SegformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     )
     pipeline_model_mapping = (
         {
-            "image-feature-extraction": SegformerModel,
+            "feature-extraction": SegformerModel,
             "image-classification": SegformerForImageClassification,
             "image-segmentation": SegformerForSemanticSegmentation,
         }
@@ -200,12 +203,12 @@ class SegformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_image_segmentation(*config_and_inputs)
 
-    @unittest.skip(reason="SegFormer does not use inputs_embeds")
+    @unittest.skip("SegFormer does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="SegFormer does not have get_input_embeddings method and get_output_embeddings methods")
-    def test_model_get_set_embeddings(self):
+    @unittest.skip("SegFormer does not have get_input_embeddings method and get_output_embeddings methods")
+    def test_model_common_attributes(self):
         pass
 
     def test_attention_outputs(self):
@@ -315,13 +318,13 @@ class SegformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 
     def test_training(self):
         if not self.model_tester.is_training:
-            self.skipTest(reason="model_tester.is_training is set to False")
+            return
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
 
         for model_class in self.all_model_classes:
-            if model_class.__name__ in MODEL_MAPPING_NAMES.values():
+            if model_class in get_values(MODEL_MAPPING):
                 continue
 
             model = model_class(config)
@@ -333,9 +336,9 @@ class SegformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "nvidia/segformer-b0-finetuned-ade-512-512"
-        model = SegformerModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
+        for model_name in SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = SegformerModel.from_pretrained(model_name)
+            self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

@@ -13,8 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""X-MOD configuration"""
-
+""" X-MOD configuration"""
 from collections import OrderedDict
 from typing import Mapping
 
@@ -24,6 +23,18 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
+
+XMOD_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+    "facebook/xmod-base": "https://huggingface.co/facebook/xmod-base/resolve/main/config.json",
+    "facebook/xmod-large-prenorm": "https://huggingface.co/facebook/xmod-large-prenorm/resolve/main/config.json",
+    "facebook/xmod-base-13-125k": "https://huggingface.co/facebook/xmod-base-13-125k/resolve/main/config.json",
+    "facebook/xmod-base-30-125k": "https://huggingface.co/facebook/xmod-base-30-125k/resolve/main/config.json",
+    "facebook/xmod-base-30-195k": "https://huggingface.co/facebook/xmod-base-30-195k/resolve/main/config.json",
+    "facebook/xmod-base-60-125k": "https://huggingface.co/facebook/xmod-base-60-125k/resolve/main/config.json",
+    "facebook/xmod-base-60-265k": "https://huggingface.co/facebook/xmod-base-60-265k/resolve/main/config.json",
+    "facebook/xmod-base-75-125k": "https://huggingface.co/facebook/xmod-base-75-125k/resolve/main/config.json",
+    "facebook/xmod-base-75-269k": "https://huggingface.co/facebook/xmod-base-75-269k/resolve/main/config.json",
+}
 
 
 class XmodConfig(PretrainedConfig):

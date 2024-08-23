@@ -14,6 +14,7 @@
 # limitations under the License.
 """Convert ViT and non-distilled DeiT checkpoints from the timm library."""
 
+
 import argparse
 from pathlib import Path
 

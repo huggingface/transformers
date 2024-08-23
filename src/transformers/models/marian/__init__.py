@@ -25,7 +25,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_marian": ["MarianConfig", "MarianOnnxConfig"],
+    "configuration_marian": ["MARIAN_PRETRAINED_CONFIG_ARCHIVE_MAP", "MarianConfig", "MarianOnnxConfig"],
 }
 
 try:
@@ -43,6 +43,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_marian"] = [
+        "MARIAN_PRETRAINED_MODEL_ARCHIVE_LIST",
         "MarianForCausalLM",
         "MarianModel",
         "MarianMTModel",
@@ -66,7 +67,7 @@ else:
     _import_structure["modeling_flax_marian"] = ["FlaxMarianModel", "FlaxMarianMTModel", "FlaxMarianPreTrainedModel"]
 
 if TYPE_CHECKING:
-    from .configuration_marian import MarianConfig, MarianOnnxConfig
+    from .configuration_marian import MARIAN_PRETRAINED_CONFIG_ARCHIVE_MAP, MarianConfig, MarianOnnxConfig
 
     try:
         if not is_sentencepiece_available():
@@ -83,6 +84,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_marian import (
+            MARIAN_PRETRAINED_MODEL_ARCHIVE_LIST,
             MarianForCausalLM,
             MarianModel,
             MarianMTModel,

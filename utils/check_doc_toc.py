@@ -31,6 +31,7 @@ python utils/check_doc_toc.py --fix_and_overwrite
 ```
 """
 
+
 import argparse
 from collections import defaultdict
 from typing import List

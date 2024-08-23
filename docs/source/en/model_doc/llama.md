@@ -116,16 +116,6 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 [[autodoc]] LlamaForSequenceClassification
     - forward
 
-## LlamaForQuestionAnswering
-
-[[autodoc]] LlamaForQuestionAnswering
-    - forward
-
-## LlamaForTokenClassification
-
-[[autodoc]] LlamaForTokenClassification
-    - forward
-
 ## FlaxLlamaModel
 
 [[autodoc]] FlaxLlamaModel

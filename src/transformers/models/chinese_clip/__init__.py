@@ -18,6 +18,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 _import_structure = {
     "configuration_chinese_clip": [
+        "CHINESE_CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "ChineseCLIPConfig",
         "ChineseCLIPOnnxConfig",
         "ChineseCLIPTextConfig",
@@ -42,6 +43,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_chinese_clip"] = [
+        "CHINESE_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
         "ChineseCLIPModel",
         "ChineseCLIPPreTrainedModel",
         "ChineseCLIPTextModel",
@@ -50,6 +52,7 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_chinese_clip import (
+        CHINESE_CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
         ChineseCLIPConfig,
         ChineseCLIPOnnxConfig,
         ChineseCLIPTextConfig,
@@ -72,6 +75,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_chinese_clip import (
+            CHINESE_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
             ChineseCLIPModel,
             ChineseCLIPPreTrainedModel,
             ChineseCLIPTextModel,

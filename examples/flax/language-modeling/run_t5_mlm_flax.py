@@ -19,13 +19,13 @@ Pretraining the library models for T5-like span-masked language modeling on a te
 Here is the full list of checkpoints on the hub that can be pretrained by this script:
 https://huggingface.co/models?filter=t5
 """
-
 import json
 import logging
 import math
 import os
 import sys
 import time
+import warnings
 from dataclasses import asdict, dataclass, field
 
 # You can also adapt this script on your own masked language modeling task. Pointers for this are left as comments.
@@ -44,7 +44,7 @@ from flax import jax_utils, traverse_util
 from flax.jax_utils import pad_shard_unpad
 from flax.training import train_state
 from flax.training.common_utils import get_metrics, onehot, shard
-from huggingface_hub import HfApi
+from huggingface_hub import Repository, create_repo
 from tqdm import tqdm
 
 from transformers import (
@@ -178,6 +178,12 @@ class ModelArguments:
             )
         },
     )
+    use_auth_token: bool = field(
+        default=None,
+        metadata={
+            "help": "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token` instead."
+        },
+    )
 
 
 @dataclass
@@ -191,16 +197,6 @@ class DataTrainingArguments:
     )
     dataset_config_name: Optional[str] = field(
         default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
-    )
-    trust_remote_code: bool = field(
-        default=False,
-        metadata={
-            "help": (
-                "Whether to trust the execution of code from datasets/models defined on the Hub."
-                " This option should only be set to `True` for repositories you trust and in which you have read the"
-                " code, as it will execute code present on the Hub on your local machine."
-            )
-        },
     )
     train_file: Optional[str] = field(default=None, metadata={"help": "The input training data file (a text file)."})
     validation_file: Optional[str] = field(
@@ -515,6 +511,15 @@ def main():
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
+    if model_args.use_auth_token is not None:
+        warnings.warn(
+            "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token` instead.",
+            FutureWarning,
+        )
+        if model_args.token is not None:
+            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
+        model_args.token = model_args.use_auth_token
+
     # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
     # information sent is the one passed as arguments along with your Python/PyTorch versions.
     send_example_telemetry("run_t5_mlm", model_args, data_args, framework="flax")
@@ -553,8 +558,9 @@ def main():
         if repo_name is None:
             repo_name = Path(training_args.output_dir).absolute().name
         # Create repo and retrieve repo_id
-        api = HfApi()
-        repo_id = api.create_repo(repo_name, exist_ok=True, token=training_args.hub_token).repo_id
+        repo_id = create_repo(repo_name, exist_ok=True, token=training_args.hub_token).repo_id
+        # Clone repo locally
+        repo = Repository(training_args.output_dir, clone_from=repo_id, token=training_args.hub_token)
 
     # Get the datasets: you can either provide your own CSV/JSON/TXT training and evaluation files (see below)
     # or just provide the name of one of the public datasets available on the hub at https://huggingface.co/datasets/
@@ -570,7 +576,6 @@ def main():
             cache_dir=model_args.cache_dir,
             token=model_args.token,
             num_proc=data_args.preprocessing_num_workers,
-            trust_remote_code=data_args.trust_remote_code,
         )
 
         if "validation" not in datasets.keys():
@@ -581,7 +586,6 @@ def main():
                 cache_dir=model_args.cache_dir,
                 token=model_args.token,
                 num_proc=data_args.preprocessing_num_workers,
-                trust_remote_code=data_args.trust_remote_code,
             )
             datasets["train"] = load_dataset(
                 data_args.dataset_name,
@@ -590,16 +594,14 @@ def main():
                 cache_dir=model_args.cache_dir,
                 token=model_args.token,
                 num_proc=data_args.preprocessing_num_workers,
-                trust_remote_code=data_args.trust_remote_code,
             )
     else:
         data_files = {}
         if data_args.train_file is not None:
             data_files["train"] = data_args.train_file
-            extension = data_args.train_file.split(".")[-1]
         if data_args.validation_file is not None:
             data_files["validation"] = data_args.validation_file
-            extension = data_args.validation_file.split(".")[-1]
+        extension = data_args.train_file.split(".")[-1]
         if extension == "txt":
             extension = "text"
         datasets = load_dataset(
@@ -974,13 +976,8 @@ def main():
                     model.save_pretrained(training_args.output_dir, params=params)
                     tokenizer.save_pretrained(training_args.output_dir)
                     if training_args.push_to_hub:
-                        api.upload_folder(
-                            commit_message=f"Saving weights and logs of step {cur_step}",
-                            folder_path=training_args.output_dir,
-                            repo_id=repo_id,
-                            repo_type="model",
-                            token=training_args.hub_token,
-                        )
+                        repo.push_to_hub(commit_message=f"Saving weights and logs of step {cur_step}", blocking=False)
+
     # Eval after training
     if training_args.do_eval:
         num_eval_samples = len(tokenized_datasets["validation"])

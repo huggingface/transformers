@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING
 from ....utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_vision_available
 
 
-_import_structure = {"configuration_van": ["VanConfig"]}
+_import_structure = {"configuration_van": ["VAN_PRETRAINED_CONFIG_ARCHIVE_MAP", "VanConfig"]}
 
 
 try:
@@ -26,13 +26,14 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_van"] = [
+        "VAN_PRETRAINED_MODEL_ARCHIVE_LIST",
         "VanForImageClassification",
         "VanModel",
         "VanPreTrainedModel",
     ]
 
 if TYPE_CHECKING:
-    from .configuration_van import VanConfig
+    from .configuration_van import VAN_PRETRAINED_CONFIG_ARCHIVE_MAP, VanConfig
 
     try:
         if not is_torch_available():
@@ -41,6 +42,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_van import (
+            VAN_PRETRAINED_MODEL_ARCHIVE_LIST,
             VanForImageClassification,
             VanModel,
             VanPreTrainedModel,

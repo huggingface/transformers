@@ -26,6 +26,7 @@ from ...utils import (
 
 _import_structure = {
     "configuration_distilbert": [
+        "DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "DistilBertConfig",
         "DistilBertOnnxConfig",
     ],
@@ -47,6 +48,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_distilbert"] = [
+        "DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "DistilBertForMaskedLM",
         "DistilBertForMultipleChoice",
         "DistilBertForQuestionAnswering",
@@ -63,6 +65,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_tf_distilbert"] = [
+        "TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFDistilBertForMaskedLM",
         "TFDistilBertForMultipleChoice",
         "TFDistilBertForQuestionAnswering",
@@ -92,6 +95,7 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_distilbert import (
+        DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         DistilBertConfig,
         DistilBertOnnxConfig,
     )
@@ -112,6 +116,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_distilbert import (
+            DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             DistilBertForMaskedLM,
             DistilBertForMultipleChoice,
             DistilBertForQuestionAnswering,
@@ -128,6 +133,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_tf_distilbert import (
+            TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFDistilBertForMaskedLM,
             TFDistilBertForMultipleChoice,
             TFDistilBertForQuestionAnswering,

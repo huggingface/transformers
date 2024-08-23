@@ -53,7 +53,6 @@ class NougatImageProcessingTester(unittest.TestCase):
         image_mean=[0.5, 0.5, 0.5],
         image_std=[0.5, 0.5, 0.5],
     ):
-        super().__init__()
         size = size if size is not None else {"height": 20, "width": 20}
         self.parent = parent
         self.batch_size = batch_size
@@ -112,7 +111,6 @@ class NougatImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = NougatImageProcessor if is_vision_available() else None
 
     def setUp(self):
-        super().setUp()
         self.image_processor_tester = NougatImageProcessingTester(self)
 
     @property

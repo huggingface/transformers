@@ -14,6 +14,7 @@
 # limitations under the License.
 """Tokenization class for VITS."""
 
+
 import json
 import os
 import re
@@ -30,6 +31,17 @@ if is_phonemizer_available():
 logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.json"}
+
+PRETRAINED_VOCAB_FILES_MAP = {
+    "vocab_file": {
+        "facebook/mms-tts-eng": "https://huggingface.co/facebook/mms-tts-eng/resolve/main/vocab.json",
+    }
+}
+
+PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
+    # This model does not have a maximum input length.
+    "facebook/mms-tts-eng": 4096,
+}
 
 
 def has_non_roman_characters(input_string):
@@ -65,6 +77,8 @@ class VitsTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
+    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
+    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(

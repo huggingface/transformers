@@ -21,7 +21,7 @@ from ...utils import (
 )
 
 
-_import_structure = {"configuration_vitmatte": ["VitMatteConfig"]}
+_import_structure = {"configuration_vitmatte": ["VITMATTE_PRETRAINED_CONFIG_ARCHIVE_MAP", "VitMatteConfig"]}
 
 try:
     if not is_vision_available():
@@ -38,12 +38,13 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_vitmatte"] = [
+        "VITMATTE_PRETRAINED_MODEL_ARCHIVE_LIST",
         "VitMattePreTrainedModel",
         "VitMatteForImageMatting",
     ]
 
 if TYPE_CHECKING:
-    from .configuration_vitmatte import VitMatteConfig
+    from .configuration_vitmatte import VITMATTE_PRETRAINED_CONFIG_ARCHIVE_MAP, VitMatteConfig
 
     try:
         if not is_vision_available():
@@ -60,6 +61,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_vitmatte import (
+            VITMATTE_PRETRAINED_MODEL_ARCHIVE_LIST,
             VitMatteForImageMatting,
             VitMattePreTrainedModel,
         )

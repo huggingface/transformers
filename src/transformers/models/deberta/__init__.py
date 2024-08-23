@@ -24,7 +24,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_deberta": ["DebertaConfig", "DebertaOnnxConfig"],
+    "configuration_deberta": ["DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "DebertaConfig", "DebertaOnnxConfig"],
     "tokenization_deberta": ["DebertaTokenizer"],
 }
 
@@ -43,6 +43,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_deberta"] = [
+        "DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST",
         "DebertaForMaskedLM",
         "DebertaForQuestionAnswering",
         "DebertaForSequenceClassification",
@@ -58,6 +59,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_tf_deberta"] = [
+        "TF_DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFDebertaForMaskedLM",
         "TFDebertaForQuestionAnswering",
         "TFDebertaForSequenceClassification",
@@ -68,7 +70,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_deberta import DebertaConfig, DebertaOnnxConfig
+    from .configuration_deberta import DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaConfig, DebertaOnnxConfig
     from .tokenization_deberta import DebertaTokenizer
 
     try:
@@ -86,6 +88,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_deberta import (
+            DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
             DebertaForMaskedLM,
             DebertaForQuestionAnswering,
             DebertaForSequenceClassification,
@@ -101,6 +104,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_tf_deberta import (
+            TF_DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFDebertaForMaskedLM,
             TFDebertaForQuestionAnswering,
             TFDebertaForSequenceClassification,

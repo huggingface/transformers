@@ -184,6 +184,7 @@ class TFMarianModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     all_generative_model_classes = (TFMarianMTModel,) if is_tf_available() else ()
     pipeline_model_mapping = (
         {
+            "conversational": TFMarianMTModel,
             "feature-extraction": TFMarianModel,
             "summarization": TFMarianMTModel,
             "text2text-generation": TFMarianMTModel,
@@ -206,6 +207,10 @@ class TFMarianModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     def test_decoder_model_past_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
         self.model_tester.check_decoder_model_past_large_inputs(*config_and_inputs)
+
+    @unittest.skip("Skipping for now, to fix @ArthurZ or @ydshieh")
+    def test_pipeline_conversational(self):
+        pass
 
 
 @require_tf

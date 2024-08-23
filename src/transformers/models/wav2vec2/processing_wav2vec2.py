@@ -15,7 +15,6 @@
 """
 Speech processor class for Wav2Vec2
 """
-
 import warnings
 from contextlib import contextmanager
 

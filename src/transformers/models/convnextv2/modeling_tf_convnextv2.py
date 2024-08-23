@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""TF 2.0 ConvNextV2 model."""
+""" TF 2.0 ConvNextV2 model."""
+
 
 from __future__ import annotations
 
@@ -33,7 +34,6 @@ from ...modeling_tf_utils import (
     TFPreTrainedModel,
     TFSequenceClassificationLoss,
     get_initializer,
-    keras,
     keras_serializable,
     unpack_inputs,
 )
@@ -60,9 +60,14 @@ _EXPECTED_OUTPUT_SHAPE = [1, 768, 7, 7]
 _IMAGE_CLASS_CHECKPOINT = "facebook/convnextv2-tiny-1k-224"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
+CONVNEXTV2_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "facebook/convnextv2-tiny-1k-224",
+    # See all ConvNextV2 models at https://huggingface.co/models?filter=convnextv2
+]
+
 
 # Copied from transformers.models.convnext.modeling_tf_convnext.TFConvNextDropPath with ConvNext->ConvNextV2
-class TFConvNextV2DropPath(keras.layers.Layer):
+class TFConvNextV2DropPath(tf.keras.layers.Layer):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
     References:
         (1) github.com:rwightman/pytorch-image-models
@@ -82,7 +87,7 @@ class TFConvNextV2DropPath(keras.layers.Layer):
         return x
 
 
-class TFConvNextV2GRN(keras.layers.Layer):
+class TFConvNextV2GRN(tf.keras.layers.Layer):
     """GRN (Global Response Normalization) layer"""
 
     def __init__(self, config: ConvNextV2Config, dim: int, **kwargs):
@@ -94,12 +99,12 @@ class TFConvNextV2GRN(keras.layers.Layer):
         self.weight = self.add_weight(
             name="weight",
             shape=(1, 1, 1, self.dim),
-            initializer=keras.initializers.Zeros(),
+            initializer=tf.keras.initializers.Zeros(),
         )
         self.bias = self.add_weight(
             name="bias",
             shape=(1, 1, 1, self.dim),
-            initializer=keras.initializers.Zeros(),
+            initializer=tf.keras.initializers.Zeros(),
         )
         return super().build(input_shape)
 
@@ -111,22 +116,22 @@ class TFConvNextV2GRN(keras.layers.Layer):
 
 
 # Copied from transformers.models.convnext.modeling_tf_convnext.TFConvNextEmbeddings with ConvNext->ConvNextV2
-class TFConvNextV2Embeddings(keras.layers.Layer):
+class TFConvNextV2Embeddings(tf.keras.layers.Layer):
     """This class is comparable to (and inspired by) the SwinEmbeddings class
     found in src/transformers/models/swin/modeling_swin.py.
     """
 
     def __init__(self, config: ConvNextV2Config, **kwargs):
         super().__init__(**kwargs)
-        self.patch_embeddings = keras.layers.Conv2D(
+        self.patch_embeddings = tf.keras.layers.Conv2D(
             filters=config.hidden_sizes[0],
             kernel_size=config.patch_size,
             strides=config.patch_size,
             name="patch_embeddings",
             kernel_initializer=get_initializer(config.initializer_range),
-            bias_initializer=keras.initializers.Zeros(),
+            bias_initializer=tf.keras.initializers.Zeros(),
         )
-        self.layernorm = keras.layers.LayerNormalization(epsilon=1e-6, name="layernorm")
+        self.layernorm = tf.keras.layers.LayerNormalization(epsilon=1e-6, name="layernorm")
         self.num_channels = config.num_channels
         self.config = config
 
@@ -140,7 +145,7 @@ class TFConvNextV2Embeddings(keras.layers.Layer):
             message="Make sure that the channel dimension of the pixel values match with the one set in the configuration.",
         )
 
-        # When running on CPU, `keras.layers.Conv2D` doesn't support `NCHW` format.
+        # When running on CPU, `tf.keras.layers.Conv2D` doesn't support `NCHW` format.
         # So change the input format from `NCHW` to `NHWC`.
         # shape = (batch_size, in_height, in_width, in_channels)
         pixel_values = tf.transpose(pixel_values, perm=(0, 2, 3, 1))
@@ -161,7 +166,7 @@ class TFConvNextV2Embeddings(keras.layers.Layer):
                 self.layernorm.build([None, None, None, self.config.hidden_sizes[0]])
 
 
-class TFConvNextV2Layer(keras.layers.Layer):
+class TFConvNextV2Layer(tf.keras.layers.Layer):
     """This corresponds to the `Block` class in the original implementation.
 
     There are two equivalent implementations: [DwConv, LayerNorm (channels_first), Conv, GELU,1x1 Conv]; all in (N, C,
@@ -175,7 +180,7 @@ class TFConvNextV2Layer(keras.layers.Layer):
             Model configuration class.
         dim (`int`):
             Number of input channels.
-        drop_path (`float`, *optional*, defaults to 0.0):
+        drop_path (`float`, defaults to 0.0):
             Stochastic depth rate.
     """
 
@@ -183,31 +188,31 @@ class TFConvNextV2Layer(keras.layers.Layer):
         super().__init__(**kwargs)
         self.dim = dim
         self.config = config
-        self.dwconv = keras.layers.Conv2D(
+        self.dwconv = tf.keras.layers.Conv2D(
             filters=dim,
             kernel_size=7,
             padding="same",
             groups=dim,
             kernel_initializer=get_initializer(config.initializer_range),
-            bias_initializer=keras.initializers.Zeros(),
+            bias_initializer=tf.keras.initializers.Zeros(),
             name="dwconv",
         )  # depthwise conv
-        self.layernorm = keras.layers.LayerNormalization(
+        self.layernorm = tf.keras.layers.LayerNormalization(
             epsilon=1e-6,
             name="layernorm",
         )
-        self.pwconv1 = keras.layers.Dense(
+        self.pwconv1 = tf.keras.layers.Dense(
             units=4 * dim,
             kernel_initializer=get_initializer(config.initializer_range),
-            bias_initializer=keras.initializers.Zeros(),
+            bias_initializer=tf.keras.initializers.Zeros(),
             name="pwconv1",
         )  # pointwise/1x1 convs, implemented with linear layers
         self.act = get_tf_activation(config.hidden_act)
         self.grn = TFConvNextV2GRN(config, 4 * dim, dtype=tf.float32, name="grn")
-        self.pwconv2 = keras.layers.Dense(
+        self.pwconv2 = tf.keras.layers.Dense(
             units=dim,
             kernel_initializer=get_initializer(config.initializer_range),
-            bias_initializer=keras.initializers.Zeros(),
+            bias_initializer=tf.keras.initializers.Zeros(),
             name="pwconv2",
         )
         # Using `layers.Activation` instead of `tf.identity` to better control `training`
@@ -215,7 +220,7 @@ class TFConvNextV2Layer(keras.layers.Layer):
         self.drop_path = (
             TFConvNextV2DropPath(drop_path, name="drop_path")
             if drop_path > 0.0
-            else keras.layers.Activation("linear", name="drop_path")
+            else tf.keras.layers.Activation("linear", name="drop_path")
         )
 
     def call(self, hidden_states, training=False):
@@ -255,7 +260,7 @@ class TFConvNextV2Layer(keras.layers.Layer):
 
 
 # Copied from transformers.models.convnext.modeling_tf_convnext.TFConvNextStage with ConvNext->ConvNextV2
-class TFConvNextV2Stage(keras.layers.Layer):
+class TFConvNextV2Stage(tf.keras.layers.Layer):
     """ConvNextV2 stage, consisting of an optional downsampling layer + multiple residual blocks.
 
     Args:
@@ -285,7 +290,7 @@ class TFConvNextV2Stage(keras.layers.Layer):
         super().__init__(**kwargs)
         if in_channels != out_channels or stride > 1:
             self.downsampling_layer = [
-                keras.layers.LayerNormalization(
+                tf.keras.layers.LayerNormalization(
                     epsilon=1e-6,
                     name="downsampling_layer.0",
                 ),
@@ -294,12 +299,12 @@ class TFConvNextV2Stage(keras.layers.Layer):
                 # layer. All the outputs throughout the model will be in NHWC
                 # from this point on until the output where we again change to
                 # NCHW.
-                keras.layers.Conv2D(
+                tf.keras.layers.Conv2D(
                     filters=out_channels,
                     kernel_size=kernel_size,
                     strides=stride,
                     kernel_initializer=get_initializer(config.initializer_range),
-                    bias_initializer=keras.initializers.Zeros(),
+                    bias_initializer=tf.keras.initializers.Zeros(),
                     name="downsampling_layer.1",
                 ),
             ]
@@ -342,7 +347,7 @@ class TFConvNextV2Stage(keras.layers.Layer):
                 self.downsampling_layer[1].build([None, None, None, self.in_channels])
 
 
-class TFConvNextV2Encoder(keras.layers.Layer):
+class TFConvNextV2Encoder(tf.keras.layers.Layer):
     def __init__(self, config: ConvNextV2Config, **kwargs):
         super().__init__(**kwargs)
         self.stages = []
@@ -393,7 +398,7 @@ class TFConvNextV2Encoder(keras.layers.Layer):
 
 
 @keras_serializable
-class TFConvNextV2MainLayer(keras.layers.Layer):
+class TFConvNextV2MainLayer(tf.keras.layers.Layer):
     config_class = ConvNextV2Config
 
     def __init__(self, config: ConvNextV2Config, **kwargs):
@@ -402,10 +407,10 @@ class TFConvNextV2MainLayer(keras.layers.Layer):
         self.config = config
         self.embeddings = TFConvNextV2Embeddings(config, name="embeddings")
         self.encoder = TFConvNextV2Encoder(config, name="encoder")
-        self.layernorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm")
+        self.layernorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm")
         # We are setting the `data_format` like so because from here on we will revert to the
         # NCHW output format
-        self.pooler = keras.layers.GlobalAvgPool2D(data_format="channels_last")
+        self.pooler = tf.keras.layers.GlobalAvgPool2D(data_format="channels_last")
 
     @unpack_inputs
     def call(
@@ -484,7 +489,7 @@ CONVNEXTV2_START_DOCSTRING = r"""
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
-    This model is also a [keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
+    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
     as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
     behavior.
 
@@ -609,10 +614,10 @@ class TFConvNextV2ForImageClassification(TFConvNextV2PreTrainedModel, TFSequence
         self.convnextv2 = TFConvNextV2MainLayer(config, name="convnextv2")
 
         # Classifier head
-        self.classifier = keras.layers.Dense(
+        self.classifier = tf.keras.layers.Dense(
             units=config.num_labels,
             kernel_initializer=get_initializer(config.initializer_range),
-            bias_initializer=keras.initializers.Zeros(),
+            bias_initializer=tf.keras.initializers.Zeros(),
             name="classifier",
         )
 

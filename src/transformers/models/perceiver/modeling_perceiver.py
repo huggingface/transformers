@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch Perceiver model."""
+""" PyTorch Perceiver model."""
 
 import abc
 import math
@@ -50,6 +50,11 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "deepmind/language-perceiver"
 _CONFIG_FOR_DOC = "PerceiverConfig"
+
+PERCEIVER_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "deepmind/language-perceiver",
+    # See all Perceiver models at https://huggingface.co/models?filter=perceiver
+]
 
 
 @dataclass
@@ -699,24 +704,13 @@ PERCEIVER_INPUTS_DOCSTRING = r"""
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-        interpolate_pos_encoding (`bool`, *optional*, defaults to `False`):
-            Whether to interpolate the pre-trained position encodings.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 
 @add_start_docstrings(
-    """The Perceiver: a scalable, fully attentional architecture.
-
-    <Tip>
-
-        Note that it's possible to fine-tune Perceiver on higher resolution images than the ones it has been trained on, by
-        setting `interpolate_pos_encoding` to `True` in the forward of the model. This will interpolate the pre-trained
-        position embeddings to the higher resolution.
-
-    </Tip>
-    """,
+    """The Perceiver: a scalable, fully attentional architecture.""",
     PERCEIVER_MODEL_START_DOCSTRING,
 )
 class PerceiverModel(PerceiverPreTrainedModel):
@@ -765,7 +759,6 @@ class PerceiverModel(PerceiverPreTrainedModel):
         head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, PerceiverModelOutput]:
         r"""
@@ -869,9 +862,7 @@ class PerceiverModel(PerceiverPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if self.input_preprocessor is not None:
-            inputs, modality_sizes, inputs_without_pos = self.input_preprocessor(
-                inputs, interpolate_pos_encoding=interpolate_pos_encoding
-            )
+            inputs, modality_sizes, inputs_without_pos = self.input_preprocessor(inputs)
         else:
             modality_sizes = None
             inputs_without_pos = None
@@ -1261,7 +1252,6 @@ class PerceiverForImageClassificationLearned(PerceiverPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         labels: Optional[torch.Tensor] = None,
-        interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
         pixel_values: Optional[torch.Tensor] = None,
     ) -> Union[Tuple, PerceiverClassifierOutput]:
@@ -1310,7 +1300,6 @@ class PerceiverForImageClassificationLearned(PerceiverPreTrainedModel):
             head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            interpolate_pos_encoding=interpolate_pos_encoding,
             return_dict=return_dict,
         )
         logits = outputs.logits if return_dict else outputs[0]
@@ -1740,10 +1729,6 @@ class PerceiverForOpticalFlow(PerceiverPreTrainedModel):
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        loss = None
-        if labels is not None:
-            raise NotImplementedError("Optical flow training is not yet supported")
-
         outputs = self.perceiver(
             inputs=inputs,
             attention_mask=attention_mask,
@@ -1753,6 +1738,10 @@ class PerceiverForOpticalFlow(PerceiverPreTrainedModel):
             return_dict=return_dict,
         )
         logits = outputs.logits if return_dict else outputs[0]
+
+        loss = None
+        if labels is not None:
+            raise NotImplementedError("Optical flow training is not yet supported")
 
         if not return_dict:
             output = (logits,) + outputs[2:]
@@ -1974,10 +1963,6 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        loss = None
-        if labels is not None:
-            raise NotImplementedError("Multimodal autoencoding training is not yet supported")
-
         outputs = self.perceiver(
             inputs=inputs,
             attention_mask=attention_mask,
@@ -1988,6 +1973,10 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
             return_dict=return_dict,
         )
         logits = outputs.logits if return_dict else outputs[0]
+
+        loss = None
+        if labels is not None:
+            raise NotImplementedError("Multimodal autoencoding training is not yet supported")
 
         if not return_dict:
             output = (logits,) + outputs[2:]
@@ -2765,30 +2754,8 @@ class PerceiverTrainablePositionEncoding(PerceiverAbstractPositionEncoding):
     def output_size(self, *args, **kwargs) -> int:
         return self._num_channels
 
-    def interpolate_pos_encoding(self, position_embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
-        num_positions = position_embeddings.shape[0]
-        new_height = new_width = math.sqrt(num_positions)
-        position_embeddings = position_embeddings.reshape(
-            1, int(new_height), int(new_width), self._num_channels
-        ).permute(0, 3, 1, 2)
-        position_embeddings = nn.functional.interpolate(
-            position_embeddings,
-            scale_factor=(height / new_height, width / new_width),
-            mode="bicubic",
-            align_corners=False,
-        )
-        position_embeddings = position_embeddings.reshape(1, self._num_channels, -1).permute(0, 2, 1).squeeze(0)
-        return position_embeddings
-
-    def forward(
-        self, batch_size: int, interpolate_pos_encoding: bool = False, input_size: torch.Size = None
-    ) -> torch.Tensor:
+    def forward(self, batch_size: int) -> torch.Tensor:
         position_embeddings = self.position_embeddings
-
-        if interpolate_pos_encoding:
-            height, width = input_size
-            height, width = height + 0.1, width + 0.1
-            position_embeddings = self.interpolate_pos_encoding(position_embeddings, height, width)
 
         if batch_size is not None:
             position_embeddings = position_embeddings.expand(batch_size, -1, -1)
@@ -2897,13 +2864,7 @@ class PerceiverTextPreprocessor(AbstractPreprocessor):
     def num_channels(self) -> int:
         return self.config.d_model
 
-    def forward(
-        self,
-        inputs: torch.LongTensor,
-        pos: Optional[torch.Tensor] = None,
-        network_input_is_1d: bool = True,
-        interpolate_pos_encoding: bool = False,
-    ):
+    def forward(self, inputs: torch.LongTensor, pos: Optional[torch.Tensor] = None, network_input_is_1d: bool = True):
         embeddings_without_pos = self.embeddings(inputs)
 
         seq_length = inputs.shape[1]
@@ -3183,9 +3144,7 @@ class PerceiverImagePreprocessor(AbstractPreprocessor):
 
         return inp_dim + pos_dim
 
-    def _build_network_inputs(
-        self, inputs: torch.Tensor, network_input_is_1d: bool = True, interpolate_pos_encoding: bool = False
-    ):
+    def _build_network_inputs(self, inputs: torch.Tensor, network_input_is_1d: bool = True):
         """
         Construct the final input, including position encoding.
 
@@ -3193,7 +3152,6 @@ class PerceiverImagePreprocessor(AbstractPreprocessor):
 
         """
         batch_size = inputs.shape[0]
-        input_size = inputs.shape[1:3]
         index_dims = inputs.shape[1:-1]
         indices = np.prod(index_dims)
 
@@ -3203,7 +3161,7 @@ class PerceiverImagePreprocessor(AbstractPreprocessor):
 
         # Construct the position encoding.
         if self.position_encoding_type == "trainable":
-            pos_enc = self.position_embeddings(batch_size, interpolate_pos_encoding, input_size)
+            pos_enc = self.position_embeddings(batch_size)
         elif self.position_encoding_type == "fourier":
             pos_enc = self.position_embeddings(index_dims, batch_size, device=inputs.device, dtype=inputs.dtype)
 
@@ -3221,13 +3179,7 @@ class PerceiverImagePreprocessor(AbstractPreprocessor):
             inputs_with_pos = inputs + pos_enc
         return inputs_with_pos, inputs
 
-    def forward(
-        self,
-        inputs: torch.Tensor,
-        pos: Optional[torch.Tensor] = None,
-        network_input_is_1d: bool = True,
-        interpolate_pos_encoding: bool = False,
-    ):
+    def forward(self, inputs: torch.Tensor, pos: Optional[torch.Tensor] = None, network_input_is_1d: bool = True):
         if self.prep_type == "conv":
             # Convnet image featurization.
             # Downsamples spatially by a factor of 4
@@ -3271,7 +3223,7 @@ class PerceiverImagePreprocessor(AbstractPreprocessor):
             else:
                 raise ValueError("Unsupported data format for conv1x1.")
 
-        inputs, inputs_without_pos = self._build_network_inputs(inputs, network_input_is_1d, interpolate_pos_encoding)
+        inputs, inputs_without_pos = self._build_network_inputs(inputs, network_input_is_1d)
         modality_sizes = None  # Size for each modality, only needed for multimodal
 
         return inputs, modality_sizes, inputs_without_pos
@@ -3391,13 +3343,7 @@ class PerceiverAudioPreprocessor(AbstractPreprocessor):
 
         return inputs_with_pos, inputs
 
-    def forward(
-        self,
-        inputs: torch.Tensor,
-        pos: Optional[torch.Tensor] = None,
-        network_input_is_1d: bool = True,
-        interpolate_pos_encoding: bool = False,
-    ):
+    def forward(self, inputs: torch.Tensor, pos: Optional[torch.Tensor] = None, network_input_is_1d: bool = True):
         inputs = torch.reshape(inputs, [inputs.shape[0], -1, self.samples_per_patch])
 
         inputs, inputs_without_pos = self._build_network_inputs(inputs)
@@ -3450,11 +3396,7 @@ class PerceiverMultimodalPreprocessor(AbstractPreprocessor):
         return common_channel_size
 
     def forward(
-        self,
-        inputs: Mapping[str, torch.Tensor],
-        pos: Optional[torch.Tensor] = None,
-        network_input_is_1d: bool = True,
-        interpolate_pos_encoding: bool = False,
+        self, inputs: Mapping[str, torch.Tensor], pos: Optional[torch.Tensor] = None, network_input_is_1d: bool = True
     ) -> PreprocessorOutputType:
         padded = {}
         modality_sizes = {}

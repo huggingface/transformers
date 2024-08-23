@@ -32,6 +32,7 @@ if is_tf_available():
     import tensorflow as tf
 
     from transformers.models.xlnet.modeling_tf_xlnet import (
+        TF_XLNET_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFXLNetForMultipleChoice,
         TFXLNetForQuestionAnsweringSimple,
         TFXLNetForSequenceClassification,
@@ -414,9 +415,9 @@ class TFXLNetModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "xlnet/xlnet-base-cased"
-        model = TFXLNetModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
+        for model_name in TF_XLNET_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = TFXLNetModel.from_pretrained(model_name)
+            self.assertIsNotNone(model)
 
     @unittest.skip("Some of the XLNet models misbehave with flexible input shapes.")
     def test_compile_tf_model(self):
@@ -490,7 +491,7 @@ class TFXLNetModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 class TFXLNetModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_lm_generate_xlnet_base_cased(self):
-        model = TFXLNetLMHeadModel.from_pretrained("xlnet/xlnet-base-cased")
+        model = TFXLNetLMHeadModel.from_pretrained("xlnet-base-cased")
         # fmt: off
         input_ids = tf.convert_to_tensor(
             [

@@ -17,7 +17,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 
 _import_structure = {
-    "configuration_fuyu": ["FuyuConfig"],
+    "configuration_fuyu": ["FUYU_PRETRAINED_CONFIG_ARCHIVE_MAP", "FuyuConfig"],
 }
 
 
@@ -44,7 +44,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_fuyu import FuyuConfig
+    from .configuration_fuyu import FUYU_PRETRAINED_CONFIG_ARCHIVE_MAP, FuyuConfig
 
     try:
         if not is_vision_available():

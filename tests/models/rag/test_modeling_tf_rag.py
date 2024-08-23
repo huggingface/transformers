@@ -590,7 +590,6 @@ class TFRagModelIntegrationTests(unittest.TestCase):
             use_dummy_dataset=True,
             retrieval_vector_size=768,
             retrieval_batch_size=8,
-            dataset_revision="b24a417",
         )
 
     @slow
@@ -795,9 +794,7 @@ class TFRagModelIntegrationTests(unittest.TestCase):
     @slow
     def test_rag_token_greedy_search(self):
         tokenizer = RagTokenizer.from_pretrained("facebook/rag-token-nq")
-        retriever = RagRetriever.from_pretrained(
-            "facebook/rag-token-nq", index_name="exact", use_dummy_dataset=True, dataset_revision="b24a417"
-        )
+        retriever = RagRetriever.from_pretrained("facebook/rag-token-nq", index_name="exact", use_dummy_dataset=True)
         rag_token = TFRagTokenForGeneration.from_pretrained("facebook/rag-token-nq", retriever=retriever)
 
         # check first two questions
@@ -831,9 +828,7 @@ class TFRagModelIntegrationTests(unittest.TestCase):
     def test_rag_token_generate_batch(self):
         # NOTE: gold labels comes from num_beam=4, so this is effectively beam-search test
         tokenizer = RagTokenizer.from_pretrained("facebook/rag-token-nq")
-        retriever = RagRetriever.from_pretrained(
-            "facebook/rag-token-nq", index_name="exact", use_dummy_dataset=True, dataset_revision="b24a417"
-        )
+        retriever = RagRetriever.from_pretrained("facebook/rag-token-nq", index_name="exact", use_dummy_dataset=True)
         rag_token = TFRagTokenForGeneration.from_pretrained("facebook/rag-token-nq", retriever=retriever)
 
         input_dict = tokenizer(
@@ -876,10 +871,7 @@ class TFRagModelIntegrationTests(unittest.TestCase):
     def test_rag_sequence_generate_batch(self):
         tokenizer = RagTokenizer.from_pretrained("facebook/rag-sequence-nq")
         retriever = RagRetriever.from_pretrained(
-            "facebook/rag-sequence-nq",
-            index_name="exact",
-            use_dummy_dataset=True,
-            dataset_revision="b24a417",
+            "facebook/rag-sequence-nq", index_name="exact", use_dummy_dataset=True
         )
         rag_sequence = TFRagSequenceForGeneration.from_pretrained("facebook/rag-sequence-nq", retriever=retriever)
 
@@ -916,7 +908,7 @@ class TFRagModelIntegrationTests(unittest.TestCase):
     def test_rag_sequence_generate_batch_from_context_input_ids(self):
         tokenizer = RagTokenizer.from_pretrained("facebook/rag-sequence-nq")
         retriever = RagRetriever.from_pretrained(
-            "facebook/rag-sequence-nq", index_name="exact", use_dummy_dataset=True, dataset_revision="b24a417"
+            "facebook/rag-sequence-nq", index_name="exact", use_dummy_dataset=True
         )
         rag_sequence = TFRagSequenceForGeneration.from_pretrained("facebook/rag-sequence-nq", retriever=retriever)
         input_dict = tokenizer(
@@ -984,7 +976,6 @@ class TFRagModelSaveLoadTests(unittest.TestCase):
             use_dummy_dataset=True,
             retrieval_vector_size=768,
             retrieval_batch_size=8,
-            dataset_revision="b24a417",
         )
 
     @slow

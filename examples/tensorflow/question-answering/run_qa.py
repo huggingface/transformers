@@ -22,6 +22,7 @@ import json
 import logging
 import os
 import sys
+import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -29,7 +30,6 @@ from typing import Optional
 import evaluate
 import tensorflow as tf
 from datasets import load_dataset
-from packaging.version import parse
 from utils_qa import postprocess_qa_predictions
 
 import transformers
@@ -48,21 +48,8 @@ from transformers import (
 from transformers.utils import CONFIG_NAME, TF2_WEIGHTS_NAME, check_min_version, send_example_telemetry
 
 
-try:
-    import tf_keras as keras
-except (ModuleNotFoundError, ImportError):
-    import keras
-
-    if parse(keras.__version__).major > 2:
-        raise ValueError(
-            "Your currently installed version of Keras is Keras 3, but this is not yet supported in "
-            "Transformers. Please install the backwards-compatible tf-keras package with "
-            "`pip install tf-keras`."
-        )
-
-
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.45.0.dev0")
+check_min_version("4.37.0.dev0")
 
 logger = logging.getLogger(__name__)
 
@@ -100,13 +87,19 @@ class ModelArguments:
             )
         },
     )
+    use_auth_token: bool = field(
+        default=None,
+        metadata={
+            "help": "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token` instead."
+        },
+    )
     trust_remote_code: bool = field(
         default=False,
         metadata={
             "help": (
-                "Whether to trust the execution of code from datasets/models defined on the Hub."
-                " This option should only be set to `True` for repositories you trust and in which you have read the"
-                " code, as it will execute code present on the Hub on your local machine."
+                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option"
+                "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
+                "execute code present on the Hub on your local machine."
             )
         },
     )
@@ -240,7 +233,7 @@ class DataTrainingArguments:
 
 
 # region Helper classes
-class SavePretrainedCallback(keras.callbacks.Callback):
+class SavePretrainedCallback(tf.keras.callbacks.Callback):
     # Hugging Face models have a save_pretrained() method that saves both the weights and the necessary
     # metadata to allow them to be loaded as a pretrained model in future. This is a simple Keras callback
     # that saves the model with this method after each epoch.
@@ -268,6 +261,15 @@ def main():
         model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
+
+    if model_args.use_auth_token is not None:
+        warnings.warn(
+            "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token` instead.",
+            FutureWarning,
+        )
+        if model_args.token is not None:
+            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
+        model_args.token = model_args.use_auth_token
 
     # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
     # information sent is the one passed as arguments along with your Python/PyTorch versions.
@@ -329,7 +331,6 @@ def main():
             data_args.dataset_config_name,
             cache_dir=model_args.cache_dir,
             token=model_args.token,
-            trust_remote_code=model_args.trust_remote_code,
         )
     else:
         data_files = {}
@@ -497,7 +498,7 @@ def main():
             raise ValueError("--do_train requires a train dataset")
         train_dataset = datasets["train"]
         if data_args.max_train_samples is not None:
-            # We will select sample from whole data if argument is specified
+            # We will select sample from whole data if agument is specified
             max_train_samples = min(len(train_dataset), data_args.max_train_samples)
             train_dataset = train_dataset.select(range(max_train_samples))
         # Create train feature from dataset
@@ -630,9 +631,7 @@ def main():
         references = [{"id": ex["id"], "answers": ex[answer_column_name]} for ex in examples]
         return EvalPrediction(predictions=formatted_predictions, label_ids=references)
 
-    metric = evaluate.load(
-        "squad_v2" if data_args.version_2_with_negative else "squad", cache_dir=model_args.cache_dir
-    )
+    metric = evaluate.load("squad_v2" if data_args.version_2_with_negative else "squad")
 
     def compute_metrics(p: EvalPrediction):
         return metric.compute(predictions=p.predictions, references=p.label_ids)
@@ -691,8 +690,7 @@ def main():
             model.compile(optimizer=optimizer, jit_compile=training_args.xla, metrics=["accuracy"])
 
         else:
-            # Optimizer doesn't matter as it won't be used anyway
-            model.compile(optimizer="sgd", jit_compile=training_args.xla, metrics=["accuracy"])
+            model.compile(optimizer=None, jit_compile=training_args.xla, metrics=["accuracy"])
             training_dataset = None
 
         if training_args.do_eval:

@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch SpeechT5 model."""
+""" Testing suite for the PyTorch SpeechT5 model. """
 
 import copy
 import inspect
@@ -22,7 +22,6 @@ import unittest
 from transformers import SpeechT5Config, SpeechT5HifiGanConfig
 from transformers.testing_utils import (
     is_torch_available,
-    require_deterministic_for_xpu,
     require_sentencepiece,
     require_tokenizers,
     require_torch,
@@ -212,31 +211,31 @@ class SpeechT5ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             )
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
-    @unittest.skip(reason="Model has no input_embeds")
+    # this model has no inputs_embeds
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="Model has no input_embeds")
-    def test_model_get_set_embeddings(self):
+    # this model has no input embeddings
+    def test_model_common_attributes(self):
         pass
 
-    @unittest.skip(reason="Decoder cannot keep gradients")
     def test_retain_grad_hidden_states_attentions(self):
+        # decoder cannot keep gradients
         pass
 
     @slow
-    @unittest.skip(reason="Model does not have decoder_input_ids")
     def test_torchscript_output_attentions(self):
+        # disabled because this model doesn't have decoder_input_ids
         pass
 
     @slow
-    @unittest.skip(reason="Model does not have decoder_input_ids")
     def test_torchscript_output_hidden_state(self):
+        # disabled because this model doesn't have decoder_input_ids
         pass
 
     @slow
-    @unittest.skip(reason="Model does not have decoder_input_ids")
     def test_torchscript_simple(self):
+        # disabled because this model doesn't have decoder_input_ids
         pass
 
 
@@ -598,20 +597,19 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase):
                         )
 
     # this model has no inputs_embeds
-    @unittest.skip(reason="Model has no input_embeds")
     def test_inputs_embeds(self):
         pass
 
     def test_resize_embeddings_untied(self):
         original_config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         if not self.test_resize_embeddings:
-            self.skipTest(reason="test_resize_embeddings is set to False")
+            return
 
         original_config.tie_word_embeddings = False
 
         # if model cannot untied embeddings -> leave test
         if original_config.tie_word_embeddings:
-            self.skipTest(reason="Model cannot untie embeddings")
+            return
 
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
@@ -651,7 +649,7 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase):
     def test_resize_tokens_embeddings(self):
         original_config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         if not self.test_resize_embeddings:
-            self.skipTest(reason="test_resize_embeddings is set to False")
+            return
 
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
@@ -693,16 +691,14 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase):
 
             self.assertTrue(models_equal)
 
-    @unittest.skip(reason="Decoder cannot keep gradients")
     def test_retain_grad_hidden_states_attentions(self):
         # decoder cannot keep gradients
         pass
 
-    @unittest.skip(reason="Training is not supported yet")
+    # training is not supported yet
     def test_training(self):
         pass
 
-    @unittest.skip(reason="Training is not supported yet")
     def test_training_gradient_checkpointing(self):
         pass
 
@@ -912,33 +908,12 @@ class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_forward(*config_and_inputs)
 
-    def test_model_forward_with_labels(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
-        model = SpeechT5ForTextToSpeech(config=config).to(torch_device).eval()
-
-        input_ids = inputs_dict["input_ids"]
-        attention_mask = inputs_dict["attention_mask"]
-        decoder_attention_mask = inputs_dict["decoder_attention_mask"]
-        labels = inputs_dict["decoder_input_values"]
-
-        result = model(
-            input_ids, attention_mask=attention_mask, labels=labels, decoder_attention_mask=decoder_attention_mask
-        )
-        self.assertEqual(
-            result.spectrogram.shape,
-            (self.model_tester.batch_size, self.model_tester.decoder_seq_length, self.model_tester.num_mel_bins),
-        )
-
-    @unittest.skip(reason="Dropout is always present in SpeechT5SpeechDecoderPrenet")
+    # skipped because there is always dropout in SpeechT5SpeechDecoderPrenet
     def test_decoder_model_past_with_large_inputs(self):
         pass
 
-    @unittest.skip(reason="Dropout is always present in SpeechT5SpeechDecoderPrenet")
+    # skipped because there is always dropout in SpeechT5SpeechDecoderPrenet
     def test_determinism(self):
-        pass
-
-    @unittest.skip(reason="skipped because there is always dropout in SpeechT5SpeechDecoderPrenet")
-    def test_batching_equivalence(self):
         pass
 
     def test_forward_signature(self):
@@ -986,43 +961,41 @@ class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
 
-    @unittest.skip(reason="Model has no inputs_embeds")
+    # this model has no inputs_embeds
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="Dropout is always present in SpeechT5SpeechDecoderPrenet")
+    # skipped because there is always dropout in SpeechT5SpeechDecoderPrenet
     def test_model_outputs_equivalence(self):
         pass
 
-    @unittest.skip(reason="Dropout is always present in SpeechT5SpeechDecoderPrenet")
+    # skipped because there is always dropout in SpeechT5SpeechDecoderPrenet
     def test_save_load(self):
         pass
 
-    @unittest.skip(reason="Decoder cannot keep gradients")
     def test_retain_grad_hidden_states_attentions(self):
+        # decoder cannot keep gradients
         pass
 
     @slow
-    @unittest.skip(reason="Model doesn't have decoder_input_ids")
     def test_torchscript_output_attentions(self):
+        # disabled because this model doesn't have decoder_input_ids
         pass
 
     @slow
-    @unittest.skip(reason="Model doesn't have decoder_input_ids")
     def test_torchscript_output_hidden_state(self):
+        # disabled because this model doesn't have decoder_input_ids
         pass
 
     @slow
-    @unittest.skip(reason="Model doesn't have decoder_input_ids")
     def test_torchscript_simple(self):
         # disabled because this model doesn't have decoder_input_ids
         pass
 
-    @unittest.skip(reason="training is not supported yet")
+    # training is not supported yet
     def test_training(self):
         pass
 
-    @unittest.skip(reason="training is not supported yet")
     def test_training_gradient_checkpointing(self):
         pass
 
@@ -1056,7 +1029,7 @@ class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
 class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
     @cached_property
     def default_model(self):
-        return SpeechT5ForTextToSpeech.from_pretrained("microsoft/speecht5_tts").to(torch_device)
+        return SpeechT5ForTextToSpeech.from_pretrained("microsoft/speecht5_tts")
 
     @cached_property
     def default_processor(self):
@@ -1064,149 +1037,37 @@ class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
 
     @cached_property
     def default_vocoder(self):
-        return SpeechT5HifiGan.from_pretrained("microsoft/speecht5_hifigan").to(torch_device)
+        return SpeechT5HifiGan.from_pretrained("microsoft/speecht5_hifigan")
 
     def test_generation(self):
         model = self.default_model
+        model.to(torch_device)
         processor = self.default_processor
 
-        input_text = "Mister Quilter is the apostle of the middle classes, and we are glad to welcome his gospel."
+        set_seed(555)  # make deterministic
+
+        speaker_embeddings = torch.zeros((1, 512)).to(torch_device)
+
+        input_text = "mister quilter is the apostle of the middle classes and we are glad to welcome his gospel"
         input_ids = processor(text=input_text, return_tensors="pt").input_ids.to(torch_device)
-        speaker_embeddings = torch.zeros((1, 512), device=torch_device)
 
-        # Generate speech and validate output dimensions
-        set_seed(555)  # Ensure deterministic behavior
         generated_speech = model.generate_speech(input_ids, speaker_embeddings=speaker_embeddings)
-        num_mel_bins = model.config.num_mel_bins
-        self.assertEqual(
-            generated_speech.shape[1], num_mel_bins, "Generated speech output has an unexpected number of mel bins."
-        )
+        self.assertEqual(generated_speech.shape, (230, model.config.num_mel_bins))
 
-        # Validate generation with additional kwargs using model.generate;
-        # same method than generate_speech
-        set_seed(555)  # Reset seed for consistent results
+        set_seed(555)  # make deterministic
+
+        # test model.generate, same method than generate_speech but with additional kwargs to absorb kwargs such as attention_mask
         generated_speech_with_generate = model.generate(
             input_ids, attention_mask=None, speaker_embeddings=speaker_embeddings
         )
-        self.assertEqual(
-            generated_speech_with_generate.shape,
-            generated_speech.shape,
-            "Shape mismatch between generate_speech and generate methods.",
-        )
-
-    @require_deterministic_for_xpu
-    def test_one_to_many_generation(self):
-        model = self.default_model
-        processor = self.default_processor
-        vocoder = self.default_vocoder
-
-        input_text = [
-            "mister quilter is the apostle of the middle classes and we are glad to welcome his gospel",
-            "nor is mister quilter's manner less interesting than his matter",
-            "he tells us that at this festive season of the year with christmas and rosebeaf looming before us",
-        ]
-        inputs = processor(text=input_text, padding="max_length", max_length=128, return_tensors="pt").to(torch_device)
-        speaker_embeddings = torch.zeros((1, 512), device=torch_device)
-
-        # Generate spectrograms
-        set_seed(555)  # Ensure deterministic behavior
-        spectrograms, spectrogram_lengths = model.generate_speech(
-            input_ids=inputs["input_ids"],
-            speaker_embeddings=speaker_embeddings,
-            attention_mask=inputs["attention_mask"],
-            return_output_lengths=True,
-        )
-
-        # Validate generated spectrogram dimensions
-        expected_batch_size = len(input_text)
-        num_mel_bins = model.config.num_mel_bins
-        actual_batch_size, _, actual_num_mel_bins = spectrograms.shape
-        self.assertEqual(actual_batch_size, expected_batch_size, "Batch size of generated spectrograms is incorrect.")
-        self.assertEqual(
-            actual_num_mel_bins, num_mel_bins, "Number of mel bins in batch generated spectrograms is incorrect."
-        )
-
-        # Generate waveforms using the vocoder
-        waveforms = vocoder(spectrograms)
-        waveform_lengths = [int(waveforms.size(1) / max(spectrogram_lengths)) * i for i in spectrogram_lengths]
-
-        # Validate generation with integrated vocoder
-        set_seed(555)  # Reset seed for consistent results
-        waveforms_with_vocoder, waveform_lengths_with_vocoder = model.generate_speech(
-            input_ids=inputs["input_ids"],
-            speaker_embeddings=speaker_embeddings,
-            attention_mask=inputs["attention_mask"],
-            vocoder=vocoder,
-            return_output_lengths=True,
-        )
-
-        # Check consistency between waveforms generated with and without standalone vocoder
-        self.assertTrue(
-            torch.allclose(waveforms, waveforms_with_vocoder, atol=1e-8),
-            "Mismatch in waveforms generated with and without the standalone vocoder.",
-        )
-        self.assertEqual(
-            waveform_lengths,
-            waveform_lengths_with_vocoder,
-            "Waveform lengths differ between standalone and integrated vocoder generation.",
-        )
-
-        # Test generation consistency without returning lengths
-        set_seed(555)  # Reset seed for consistent results
-        waveforms_with_vocoder_no_lengths = model.generate_speech(
-            input_ids=inputs["input_ids"],
-            speaker_embeddings=speaker_embeddings,
-            attention_mask=inputs["attention_mask"],
-            vocoder=vocoder,
-            return_output_lengths=False,
-        )
-
-        # Validate waveform consistency without length information
-        self.assertTrue(
-            torch.allclose(waveforms_with_vocoder_no_lengths, waveforms_with_vocoder, atol=1e-8),
-            "Waveforms differ when generated with and without length information.",
-        )
-
-        # Validate batch vs. single instance generation consistency
-        for i, text in enumerate(input_text):
-            inputs = processor(text=text, padding="max_length", max_length=128, return_tensors="pt").to(torch_device)
-            set_seed(555)  # Reset seed for consistent results
-            spectrogram = model.generate_speech(
-                input_ids=inputs["input_ids"],
-                speaker_embeddings=speaker_embeddings,
-            )
-
-            # Check spectrogram shape consistency
-            self.assertEqual(
-                spectrogram.shape,
-                spectrograms[i][: spectrogram_lengths[i]].shape,
-                "Mismatch in spectrogram shape between batch and single instance generation.",
-            )
-
-            # Generate and validate waveform for single instance
-            waveform = vocoder(spectrogram)
-            self.assertEqual(
-                waveform.shape,
-                waveforms[i][: waveform_lengths[i]].shape,
-                "Mismatch in waveform shape between batch and single instance generation.",
-            )
-
-            # Check waveform consistency with integrated vocoder
-            set_seed(555)  # Reset seed for consistent results
-            waveform_with_integrated_vocoder = model.generate_speech(
-                input_ids=inputs["input_ids"],
-                speaker_embeddings=speaker_embeddings,
-                vocoder=vocoder,
-            )
-            self.assertTrue(
-                torch.allclose(waveform, waveform_with_integrated_vocoder, atol=1e-8),
-                "Mismatch in waveform between standalone and integrated vocoder for single instance generation.",
-            )
+        self.assertEqual(generated_speech_with_generate.shape, (230, model.config.num_mel_bins))
 
     def test_batch_generation(self):
         model = self.default_model
+        model.to(torch_device)
         processor = self.default_processor
         vocoder = self.default_vocoder
+        set_seed(555)  # make deterministic
 
         input_text = [
             "mister quilter is the apostle of the middle classes and we are glad to welcome his gospel",
@@ -1214,39 +1075,20 @@ class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
             "he tells us that at this festive season of the year with christmas and rosebeaf looming before us",
         ]
         inputs = processor(text=input_text, padding="max_length", max_length=128, return_tensors="pt").to(torch_device)
-        set_seed(555)  # Ensure deterministic behavior
-        speaker_embeddings = torch.randn((len(input_text), 512), device=torch_device)
 
-        # Generate spectrograms
-        set_seed(555)  # Reset seed for consistent results
+        speaker_embeddings = torch.zeros((1, 512), device=torch_device)
         spectrograms, spectrogram_lengths = model.generate_speech(
             input_ids=inputs["input_ids"],
             speaker_embeddings=speaker_embeddings,
             attention_mask=inputs["attention_mask"],
             return_output_lengths=True,
         )
-
-        # Validate generated spectrogram dimensions
-        expected_batch_size = len(input_text)
-        num_mel_bins = model.config.num_mel_bins
-        actual_batch_size, _, actual_num_mel_bins = spectrograms.shape
-        self.assertEqual(
-            actual_batch_size,
-            expected_batch_size,
-            "Batch size of generated spectrograms is incorrect.",
-        )
-        self.assertEqual(
-            actual_num_mel_bins,
-            num_mel_bins,
-            "Number of mel bins in batch generated spectrograms is incorrect.",
-        )
-
-        # Generate waveforms using the vocoder
+        self.assertEqual(spectrograms.shape, (3, 262, model.config.num_mel_bins))
         waveforms = vocoder(spectrograms)
         waveform_lengths = [int(waveforms.size(1) / max(spectrogram_lengths)) * i for i in spectrogram_lengths]
 
-        # Validate generation with integrated vocoder
-        set_seed(555)  # Reset seed for consistent results
+        # Check waveform results are the same with or without using vocder
+        set_seed(555)
         waveforms_with_vocoder, waveform_lengths_with_vocoder = model.generate_speech(
             input_ids=inputs["input_ids"],
             speaker_embeddings=speaker_embeddings,
@@ -1254,20 +1096,11 @@ class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
             vocoder=vocoder,
             return_output_lengths=True,
         )
+        self.assertTrue(torch.allclose(waveforms, waveforms_with_vocoder, atol=1e-8))
+        self.assertEqual(waveform_lengths, waveform_lengths_with_vocoder)
 
-        # Check consistency between waveforms generated with and without standalone vocoder
-        self.assertTrue(
-            torch.allclose(waveforms, waveforms_with_vocoder, atol=1e-8),
-            "Mismatch in waveforms generated with and without the standalone vocoder.",
-        )
-        self.assertEqual(
-            waveform_lengths,
-            waveform_lengths_with_vocoder,
-            "Waveform lengths differ between standalone and integrated vocoder generation.",
-        )
-
-        # Test generation consistency without returning lengths
-        set_seed(555)  # Reset seed for consistent results
+        # Check waveform results are the same with return_concrete_lengths=True/False
+        set_seed(555)
         waveforms_with_vocoder_no_lengths = model.generate_speech(
             input_ids=inputs["input_ids"],
             speaker_embeddings=speaker_embeddings,
@@ -1275,49 +1108,28 @@ class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
             vocoder=vocoder,
             return_output_lengths=False,
         )
+        self.assertTrue(torch.allclose(waveforms_with_vocoder_no_lengths, waveforms_with_vocoder, atol=1e-8))
 
-        # Validate waveform consistency without length information
-        self.assertTrue(
-            torch.allclose(waveforms_with_vocoder_no_lengths, waveforms_with_vocoder, atol=1e-8),
-            "Waveforms differ when generated with and without length information.",
-        )
-
-        # Validate batch vs. single instance generation consistency
+        # Check results when batching are consistent with results without batching
         for i, text in enumerate(input_text):
+            set_seed(555)  # make deterministic
             inputs = processor(text=text, padding="max_length", max_length=128, return_tensors="pt").to(torch_device)
-            current_speaker_embedding = speaker_embeddings[i].unsqueeze(0)
-            set_seed(555)  # Reset seed for consistent results
             spectrogram = model.generate_speech(
                 input_ids=inputs["input_ids"],
-                speaker_embeddings=current_speaker_embedding,
+                speaker_embeddings=speaker_embeddings,
             )
-
-            # Check spectrogram shape consistency
-            self.assertEqual(
-                spectrogram.shape,
-                spectrograms[i][: spectrogram_lengths[i]].shape,
-                "Mismatch in spectrogram shape between batch and single instance generation.",
-            )
-
-            # Generate and validate waveform for single instance
+            self.assertEqual(spectrogram.shape, spectrograms[i][: spectrogram_lengths[i]].shape)
+            self.assertTrue(torch.allclose(spectrogram, spectrograms[i][: spectrogram_lengths[i]], atol=5e-3))
             waveform = vocoder(spectrogram)
-            self.assertEqual(
-                waveform.shape,
-                waveforms[i][: waveform_lengths[i]].shape,
-                "Mismatch in waveform shape between batch and single instance generation.",
-            )
-
-            # Check waveform consistency with integrated vocoder
-            set_seed(555)  # Reset seed for consistent results
-            waveform_with_integrated_vocoder = model.generate_speech(
+            self.assertEqual(waveform.shape, waveforms[i][: waveform_lengths[i]].shape)
+            # Check whether waveforms are the same with/without passing vocoder
+            set_seed(555)
+            waveform_with_vocoder = model.generate_speech(
                 input_ids=inputs["input_ids"],
-                speaker_embeddings=current_speaker_embedding,
+                speaker_embeddings=speaker_embeddings,
                 vocoder=vocoder,
             )
-            self.assertTrue(
-                torch.allclose(waveform, waveform_with_integrated_vocoder, atol=1e-8),
-                "Mismatch in waveform between standalone and integrated vocoder for single instance generation.",
-            )
+            self.assertTrue(torch.allclose(waveform, waveform_with_vocoder, atol=1e-8))
 
 
 @require_torch
@@ -1458,33 +1270,12 @@ class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_forward(*config_and_inputs)
 
-    def test_model_forward_with_labels(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
-        model = SpeechT5ForSpeechToSpeech(config=config).to(torch_device).eval()
-
-        input_values = inputs_dict["input_values"]
-        attention_mask = inputs_dict["attention_mask"]
-        decoder_attention_mask = inputs_dict["decoder_attention_mask"]
-        labels = inputs_dict["decoder_input_values"]
-
-        result = model(
-            input_values, attention_mask=attention_mask, labels=labels, decoder_attention_mask=decoder_attention_mask
-        )
-        self.assertEqual(
-            result.spectrogram.shape,
-            (self.model_tester.batch_size, self.model_tester.decoder_seq_length, self.model_tester.num_mel_bins),
-        )
-
-    @unittest.skip(reason="There is always dropout in SpeechT5SpeechDecoderPrenet")
+    # skipped because there is always dropout in SpeechT5SpeechDecoderPrenet
     def test_decoder_model_past_with_large_inputs(self):
         pass
 
-    @unittest.skip(reason="There is always dropout in SpeechT5SpeechDecoderPrenet")
+    # skipped because there is always dropout in SpeechT5SpeechDecoderPrenet
     def test_determinism(self):
-        pass
-
-    @unittest.skip(reason="skipped because there is always dropout in SpeechT5SpeechDecoderPrenet")
-    def test_batching_equivalence(self):
         pass
 
     def test_attention_outputs(self):
@@ -1688,46 +1479,45 @@ class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
 
-    @unittest.skip(reason="Model has no input_embeds")
+    # this model has no inputs_embeds
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="Model has no input_embeds")
-    def test_model_get_set_embeddings(self):
+    # this model has no input embeddings
+    def test_model_common_attributes(self):
         pass
 
-    @unittest.skip(reason="Dropout is always present in SpeechT5SpeechDecoderPrenet")
+    # skipped because there is always dropout in SpeechT5SpeechDecoderPrenet
     def test_model_outputs_equivalence(self):
         pass
 
-    @unittest.skip(reason="Decoder cannot keep gradients")
     def test_retain_grad_hidden_states_attentions(self):
+        # decoder cannot keep gradients
         pass
 
-    @unittest.skip(reason="Dropout is always present in SpeechT5SpeechDecoderPrenet")
+    # skipped because there is always dropout in SpeechT5SpeechDecoderPrenet
     def test_save_load(self):
         pass
 
     @slow
-    @unittest.skip(reason="Model doesn't have decoder_input_ids")
     def test_torchscript_output_attentions(self):
+        # disabled because this model doesn't have decoder_input_ids
         pass
 
     @slow
-    @unittest.skip(reason="Model doesn't have decoder_input_ids")
     def test_torchscript_output_hidden_state(self):
+        # disabled because this model doesn't have decoder_input_ids
         pass
 
     @slow
-    @unittest.skip(reason="Model doesn't have decoder_input_ids")
     def test_torchscript_simple(self):
+        # disabled because this model doesn't have decoder_input_ids
         pass
 
-    @unittest.skip(reason="Training is not supported yet")
+    # training is not supported yet
     def test_training(self):
         pass
 
-    @unittest.skip(reason="Training is not supported yet")
     def test_training_gradient_checkpointing(self):
         pass
 
@@ -1875,35 +1665,35 @@ class SpeechT5HifiGanTest(ModelTesterMixin, unittest.TestCase):
             ]
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
-    @unittest.skip(reason="Model does not output hidden states")
+    # this model does not output hidden states
     def test_hidden_states_output(self):
         pass
 
-    @unittest.skip
+    # skip
     def test_initialization(self):
         pass
 
-    @unittest.skip(reason="Model has no input_embeds")
+    # this model has no inputs_embeds
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="Model has no input_embeds")
-    def test_model_get_set_embeddings(self):
+    # this model has no input embeddings
+    def test_model_common_attributes(self):
         pass
 
-    @unittest.skip(reason="Model does not support all arguments tested")
+    # skip as this model doesn't support all arguments tested
     def test_model_outputs_equivalence(self):
         pass
 
-    @unittest.skip(reason="Model does not output hidden states")
+    # this model does not output hidden states
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
-    @unittest.skip(reason="Fails on automapping of SpeechT5HifiGanConfig")
+    # skip because it fails on automapping of SpeechT5HifiGanConfig
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @unittest.skip(reason="Fails on automapping of SpeechT5HifiGanConfig")
+    # skip because it fails on automapping of SpeechT5HifiGanConfig
     def test_save_load_fast_init_to_base(self):
         pass
 

@@ -19,12 +19,11 @@ from ...utils import (
     is_flax_available,
     is_tf_available,
     is_torch_available,
-    is_torchvision_available,
     is_vision_available,
 )
 
 
-_import_structure = {"configuration_vit": ["ViTConfig", "ViTOnnxConfig"]}
+_import_structure = {"configuration_vit": ["VIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTConfig", "ViTOnnxConfig"]}
 
 try:
     if not is_vision_available():
@@ -35,15 +34,6 @@ else:
     _import_structure["feature_extraction_vit"] = ["ViTFeatureExtractor"]
     _import_structure["image_processing_vit"] = ["ViTImageProcessor"]
 
-
-try:
-    if not is_torchvision_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["image_processing_vit_fast"] = ["ViTImageProcessorFast"]
-
 try:
     if not is_torch_available():
         raise OptionalDependencyNotAvailable()
@@ -51,6 +41,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_vit"] = [
+        "VIT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "ViTForImageClassification",
         "ViTForMaskedImageModeling",
         "ViTModel",
@@ -82,7 +73,7 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_vit import ViTConfig, ViTOnnxConfig
+    from .configuration_vit import VIT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTConfig, ViTOnnxConfig
 
     try:
         if not is_vision_available():
@@ -94,20 +85,13 @@ if TYPE_CHECKING:
         from .image_processing_vit import ViTImageProcessor
 
     try:
-        if not is_torchvision_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .image_processing_vit_fast import ViTImageProcessorFast
-
-    try:
         if not is_torch_available():
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
         pass
     else:
         from .modeling_vit import (
+            VIT_PRETRAINED_MODEL_ARCHIVE_LIST,
             ViTForImageClassification,
             ViTForMaskedImageModeling,
             ViTModel,

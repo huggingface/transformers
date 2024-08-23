@@ -25,7 +25,6 @@ python utils/check_support_list.py
 
 It has no auto-fix mode.
 """
-
 import os
 from glob import glob
 
@@ -85,7 +84,7 @@ def check_sdpa_support_list():
                 archs_supporting_sdpa.append(model_name)
 
     for arch in archs_supporting_sdpa:
-        if arch not in doctext and arch not in doctext.replace("-", "_"):
+        if arch not in doctext:
             raise ValueError(
                 f"{arch} should be in listed in the SDPA documentation but is not. Please update the documentation."
             )

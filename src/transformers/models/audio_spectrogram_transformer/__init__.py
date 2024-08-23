@@ -17,7 +17,10 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 
 _import_structure = {
-    "configuration_audio_spectrogram_transformer": ["ASTConfig"],
+    "configuration_audio_spectrogram_transformer": [
+        "AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "ASTConfig",
+    ],
     "feature_extraction_audio_spectrogram_transformer": ["ASTFeatureExtractor"],
 }
 
@@ -28,6 +31,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_audio_spectrogram_transformer"] = [
+        "AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
         "ASTForAudioClassification",
         "ASTModel",
         "ASTPreTrainedModel",
@@ -36,6 +40,7 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_audio_spectrogram_transformer import (
+        AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         ASTConfig,
     )
     from .feature_extraction_audio_spectrogram_transformer import ASTFeatureExtractor
@@ -47,6 +52,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_audio_spectrogram_transformer import (
+            AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             ASTForAudioClassification,
             ASTModel,
             ASTPreTrainedModel,

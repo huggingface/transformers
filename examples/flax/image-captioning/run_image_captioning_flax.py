@@ -22,6 +22,7 @@ import logging
 import os
 import sys
 import time
+import warnings
 from dataclasses import asdict, dataclass, field
 from enum import Enum
 from functools import partial
@@ -41,7 +42,7 @@ from flax import jax_utils, traverse_util
 from flax.jax_utils import unreplicate
 from flax.training import train_state
 from flax.training.common_utils import get_metrics, onehot, shard, shard_prng_key
-from huggingface_hub import HfApi
+from huggingface_hub import Repository, create_repo
 from PIL import Image
 from tqdm import tqdm
 
@@ -191,13 +192,19 @@ class ModelArguments:
             )
         },
     )
+    use_auth_token: bool = field(
+        default=None,
+        metadata={
+            "help": "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token` instead."
+        },
+    )
     trust_remote_code: bool = field(
         default=False,
         metadata={
             "help": (
-                "Whether to trust the execution of code from datasets/models defined on the Hub."
-                " This option should only be set to `True` for repositories you trust and in which you have read the"
-                " code, as it will execute code present on the Hub on your local machine."
+                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option"
+                "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
+                "execute code present on the Hub on your local machine."
             )
         },
     )
@@ -399,6 +406,15 @@ def main():
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
+    if model_args.use_auth_token is not None:
+        warnings.warn(
+            "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token` instead.",
+            FutureWarning,
+        )
+        if model_args.token is not None:
+            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
+        model_args.token = model_args.use_auth_token
+
     # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
     # information sent is the one passed as arguments along with your Python/PyTorch versions.
     send_example_telemetry("run_image_captioning", model_args, data_args, framework="flax")
@@ -439,8 +455,9 @@ def main():
         if repo_name is None:
             repo_name = Path(training_args.output_dir).absolute().name
         # Create repo and retrieve repo_id
-        api = HfApi()
-        repo_id = api.create_repo(repo_name, exist_ok=True, token=training_args.hub_token).repo_id
+        repo_id = create_repo(repo_name, exist_ok=True, token=training_args.hub_token).repo_id
+        # Clone repo locally
+        repo = Repository(training_args.output_dir, clone_from=repo_id, token=training_args.hub_token)
 
     # Get the datasets: you can either provide your own CSV/JSON training and evaluation files (see below)
     # or just provide the name of one of the public datasets available on the hub at https://huggingface.co/datasets/
@@ -458,7 +475,6 @@ def main():
             keep_in_memory=False,
             data_dir=data_args.data_dir,
             token=model_args.token,
-            trust_remote_code=model_args.trust_remote_code,
         )
     else:
         data_files = {}
@@ -837,7 +853,7 @@ def main():
                 yield batch
 
     # Metric
-    metric = evaluate.load("rouge", cache_dir=model_args.cache_dir)
+    metric = evaluate.load("rouge")
 
     def postprocess_text(preds, labels):
         preds = [pred.strip() for pred in preds]
@@ -1045,13 +1061,7 @@ def main():
             model.save_pretrained(os.path.join(training_args.output_dir, ckpt_dir), params=params)
             tokenizer.save_pretrained(os.path.join(training_args.output_dir, ckpt_dir))
             if training_args.push_to_hub:
-                api.upload_folder(
-                    commit_message=commit_msg,
-                    folder_path=training_args.output_dir,
-                    repo_id=repo_id,
-                    repo_type="model",
-                    token=training_args.hub_token,
-                )
+                repo.push_to_hub(commit_message=commit_msg, blocking=False)
 
     def evaluation_loop(
         rng: jax.random.PRNGKey,

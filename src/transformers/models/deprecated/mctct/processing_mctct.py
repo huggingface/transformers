@@ -15,7 +15,6 @@
 """
 Speech processor class for M-CTC-T
 """
-
 import warnings
 from contextlib import contextmanager
 

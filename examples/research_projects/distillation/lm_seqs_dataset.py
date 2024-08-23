@@ -12,10 +12,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Dataset to distilled models
-adapted in part from Facebook, Inc XLM model (https://github.com/facebookresearch/XLM)
+""" Dataset to distilled models
+    adapted in part from Facebook, Inc XLM model (https://github.com/facebookresearch/XLM)
 """
-
 import numpy as np
 import torch
 from torch.utils.data import Dataset

@@ -14,6 +14,7 @@
 # limitations under the License.
 """Convert BERT checkpoint."""
 
+
 import argparse
 
 import torch

@@ -17,7 +17,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tokenizers_
 
 
 _import_structure = {
-    "configuration_codegen": ["CodeGenConfig", "CodeGenOnnxConfig"],
+    "configuration_codegen": ["CODEGEN_PRETRAINED_CONFIG_ARCHIVE_MAP", "CodeGenConfig", "CodeGenOnnxConfig"],
     "tokenization_codegen": ["CodeGenTokenizer"],
 }
 
@@ -36,13 +36,14 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_codegen"] = [
+        "CODEGEN_PRETRAINED_MODEL_ARCHIVE_LIST",
         "CodeGenForCausalLM",
         "CodeGenModel",
         "CodeGenPreTrainedModel",
     ]
 
 if TYPE_CHECKING:
-    from .configuration_codegen import CodeGenConfig, CodeGenOnnxConfig
+    from .configuration_codegen import CODEGEN_PRETRAINED_CONFIG_ARCHIVE_MAP, CodeGenConfig, CodeGenOnnxConfig
     from .tokenization_codegen import CodeGenTokenizer
 
     try:
@@ -60,6 +61,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_codegen import (
+            CODEGEN_PRETRAINED_MODEL_ARCHIVE_LIST,
             CodeGenForCausalLM,
             CodeGenModel,
             CodeGenPreTrainedModel,

@@ -34,6 +34,7 @@ if is_torch_available():
         LiltForTokenClassification,
         LiltModel,
     )
+    from transformers.models.lilt.modeling_lilt import LILT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class LiltModelTester:
@@ -294,9 +295,9 @@ class LiltModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "SCUT-DLVCLab/lilt-roberta-en-base"
-        model = LiltModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
+        for model_name in LILT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = LiltModel.from_pretrained(model_name)
+            self.assertIsNotNone(model)
 
 
 @require_torch

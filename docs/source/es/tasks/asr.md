@@ -260,7 +260,7 @@ En este punto, solo quedan tres pasos:
 ...     gradient_checkpointing=True,
 ...     fp16=True,
 ...     group_by_length=True,
-...     eval_strategy="steps",
+...     evaluation_strategy="steps",
 ...     per_device_eval_batch_size=8,
 ...     save_steps=1000,
 ...     eval_steps=1000,

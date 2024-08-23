@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""TF 2.0 DeBERTa model."""
+""" TF 2.0 DeBERTa model."""
+
 
 from __future__ import annotations
 
@@ -38,7 +39,6 @@ from ...modeling_tf_utils import (
     TFSequenceClassificationLoss,
     TFTokenClassificationLoss,
     get_initializer,
-    keras,
     unpack_inputs,
 )
 from ...tf_utils import check_embeddings_within_bounds, shape_list, stable_softmax
@@ -52,11 +52,16 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "DebertaConfig"
 _CHECKPOINT_FOR_DOC = "kamalkraj/deberta-base"
 
+TF_DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "kamalkraj/deberta-base",
+    # See all DeBERTa models at https://huggingface.co/models?filter=DeBERTa
+]
 
-class TFDebertaContextPooler(keras.layers.Layer):
+
+class TFDebertaContextPooler(tf.keras.layers.Layer):
     def __init__(self, config: DebertaConfig, **kwargs):
         super().__init__(**kwargs)
-        self.dense = keras.layers.Dense(config.pooler_hidden_size, name="dense")
+        self.dense = tf.keras.layers.Dense(config.pooler_hidden_size, name="dense")
         self.dropout = TFDebertaStableDropout(config.pooler_dropout, name="dropout")
         self.config = config
 
@@ -85,7 +90,7 @@ class TFDebertaContextPooler(keras.layers.Layer):
                 self.dropout.build(None)
 
 
-class TFDebertaXSoftmax(keras.layers.Layer):
+class TFDebertaXSoftmax(tf.keras.layers.Layer):
     """
     Masked Softmax which is optimized for saving memory
 
@@ -101,13 +106,13 @@ class TFDebertaXSoftmax(keras.layers.Layer):
 
     def call(self, inputs: tf.Tensor, mask: tf.Tensor):
         rmask = tf.logical_not(tf.cast(mask, tf.bool))
-        output = tf.where(rmask, tf.cast(float("-inf"), dtype=self.compute_dtype), inputs)
-        output = stable_softmax(tf.cast(output, dtype=tf.float32), self.axis)
+        output = tf.where(rmask, float("-inf"), inputs)
+        output = stable_softmax(output, self.axis)
         output = tf.where(rmask, 0.0, output)
         return output
 
 
-class TFDebertaStableDropout(keras.layers.Layer):
+class TFDebertaStableDropout(tf.keras.layers.Layer):
     """
     Optimized dropout module for stabilizing the training
 
@@ -129,13 +134,13 @@ class TFDebertaStableDropout(keras.layers.Layer):
             - tf.compat.v1.distributions.Bernoulli(probs=1.0 - self.drop_prob).sample(sample_shape=shape_list(inputs)),
             tf.bool,
         )
-        scale = tf.convert_to_tensor(1.0 / (1 - self.drop_prob), dtype=self.compute_dtype)
+        scale = tf.convert_to_tensor(1.0 / (1 - self.drop_prob), dtype=tf.float32)
         if self.drop_prob > 0:
-            inputs = tf.where(mask, tf.cast(0.0, dtype=self.compute_dtype), inputs) * scale
+            inputs = tf.where(mask, 0.0, inputs) * scale
 
         def grad(upstream):
             if self.drop_prob > 0:
-                return tf.where(mask, tf.cast(0.0, dtype=self.compute_dtype), upstream) * scale
+                return tf.where(mask, 0.0, upstream) * scale
             else:
                 return upstream
 
@@ -147,7 +152,7 @@ class TFDebertaStableDropout(keras.layers.Layer):
         return inputs
 
 
-class TFDebertaLayerNorm(keras.layers.Layer):
+class TFDebertaLayerNorm(tf.keras.layers.Layer):
     """LayerNorm module in the TF style (epsilon inside the square root)."""
 
     def __init__(self, size, eps=1e-12, **kwargs):
@@ -167,11 +172,11 @@ class TFDebertaLayerNorm(keras.layers.Layer):
         return self.gamma * (x - mean) / std + self.beta
 
 
-class TFDebertaSelfOutput(keras.layers.Layer):
+class TFDebertaSelfOutput(tf.keras.layers.Layer):
     def __init__(self, config: DebertaConfig, **kwargs):
         super().__init__(**kwargs)
-        self.dense = keras.layers.Dense(config.hidden_size, name="dense")
-        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.dense = tf.keras.layers.Dense(config.hidden_size, name="dense")
+        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = TFDebertaStableDropout(config.hidden_dropout_prob, name="dropout")
         self.config = config
 
@@ -196,7 +201,7 @@ class TFDebertaSelfOutput(keras.layers.Layer):
                 self.dropout.build(None)
 
 
-class TFDebertaAttention(keras.layers.Layer):
+class TFDebertaAttention(tf.keras.layers.Layer):
     def __init__(self, config: DebertaConfig, **kwargs):
         super().__init__(**kwargs)
         self.self = TFDebertaDisentangledSelfAttention(config, name="self")
@@ -244,11 +249,11 @@ class TFDebertaAttention(keras.layers.Layer):
                 self.dense_output.build(None)
 
 
-class TFDebertaIntermediate(keras.layers.Layer):
+class TFDebertaIntermediate(tf.keras.layers.Layer):
     def __init__(self, config: DebertaConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = keras.layers.Dense(
+        self.dense = tf.keras.layers.Dense(
             units=config.intermediate_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
 
@@ -273,14 +278,14 @@ class TFDebertaIntermediate(keras.layers.Layer):
                 self.dense.build([None, None, self.config.hidden_size])
 
 
-class TFDebertaOutput(keras.layers.Layer):
+class TFDebertaOutput(tf.keras.layers.Layer):
     def __init__(self, config: DebertaConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = keras.layers.Dense(
+        self.dense = tf.keras.layers.Dense(
             units=config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
-        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = TFDebertaStableDropout(config.hidden_dropout_prob, name="dropout")
         self.config = config
 
@@ -306,7 +311,7 @@ class TFDebertaOutput(keras.layers.Layer):
                 self.dropout.build(None)
 
 
-class TFDebertaLayer(keras.layers.Layer):
+class TFDebertaLayer(tf.keras.layers.Layer):
     def __init__(self, config: DebertaConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -357,7 +362,7 @@ class TFDebertaLayer(keras.layers.Layer):
                 self.bert_output.build(None)
 
 
-class TFDebertaEncoder(keras.layers.Layer):
+class TFDebertaEncoder(tf.keras.layers.Layer):
     def __init__(self, config: DebertaConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -538,7 +543,7 @@ def torch_gather(x, indices, gather_axis):
     return gathered
 
 
-class TFDebertaDisentangledSelfAttention(keras.layers.Layer):
+class TFDebertaDisentangledSelfAttention(tf.keras.layers.Layer):
     """
     Disentangled self-attention module
 
@@ -559,7 +564,7 @@ class TFDebertaDisentangledSelfAttention(keras.layers.Layer):
         self.num_attention_heads = config.num_attention_heads
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
-        self.in_proj = keras.layers.Dense(
+        self.in_proj = tf.keras.layers.Dense(
             self.all_head_size * 3,
             kernel_initializer=get_initializer(config.initializer_range),
             name="in_proj",
@@ -571,13 +576,13 @@ class TFDebertaDisentangledSelfAttention(keras.layers.Layer):
         self.talking_head = getattr(config, "talking_head", False)
 
         if self.talking_head:
-            self.head_logits_proj = keras.layers.Dense(
+            self.head_logits_proj = tf.keras.layers.Dense(
                 self.num_attention_heads,
                 kernel_initializer=get_initializer(config.initializer_range),
                 name="head_logits_proj",
                 use_bias=False,
             )
-            self.head_weights_proj = keras.layers.Dense(
+            self.head_weights_proj = tf.keras.layers.Dense(
                 self.num_attention_heads,
                 kernel_initializer=get_initializer(config.initializer_range),
                 name="head_weights_proj",
@@ -592,14 +597,14 @@ class TFDebertaDisentangledSelfAttention(keras.layers.Layer):
                 self.max_relative_positions = config.max_position_embeddings
             self.pos_dropout = TFDebertaStableDropout(config.hidden_dropout_prob, name="pos_dropout")
             if "c2p" in self.pos_att_type:
-                self.pos_proj = keras.layers.Dense(
+                self.pos_proj = tf.keras.layers.Dense(
                     self.all_head_size,
                     kernel_initializer=get_initializer(config.initializer_range),
                     name="pos_proj",
                     use_bias=False,
                 )
             if "p2c" in self.pos_att_type:
-                self.pos_q_proj = keras.layers.Dense(
+                self.pos_q_proj = tf.keras.layers.Dense(
                     self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="pos_q_proj"
                 )
 
@@ -611,10 +616,10 @@ class TFDebertaDisentangledSelfAttention(keras.layers.Layer):
             return
         self.built = True
         self.q_bias = self.add_weight(
-            name="q_bias", shape=(self.all_head_size), initializer=keras.initializers.Zeros()
+            name="q_bias", shape=(self.all_head_size), initializer=tf.keras.initializers.Zeros()
         )
         self.v_bias = self.add_weight(
-            name="v_bias", shape=(self.all_head_size), initializer=keras.initializers.Zeros()
+            name="v_bias", shape=(self.all_head_size), initializer=tf.keras.initializers.Zeros()
         )
         if getattr(self, "in_proj", None) is not None:
             with tf.name_scope(self.in_proj.name):
@@ -669,10 +674,10 @@ class TFDebertaDisentangledSelfAttention(keras.layers.Layer):
                 sequence length in which element [i,j] = *1* means the *i* th token in the input can attend to the *j*
                 th token.
 
-            return_att (`bool`, *optional*):
+            return_att (`bool`, optional):
                 Whether return the attention matrix.
 
-            query_states (`tf.Tensor`, *optional*):
+            query_states (`tf.Tensor`, optional):
                 The *Q* state in *Attention(Q,K,V)*.
 
             relative_pos (`tf.Tensor`):
@@ -701,9 +706,9 @@ class TFDebertaDisentangledSelfAttention(keras.layers.Layer):
             ws = tf.split(
                 tf.transpose(self.in_proj.weight[0]), num_or_size_splits=self.num_attention_heads * 3, axis=0
             )
-            qkvw = tf.TensorArray(dtype=self.dtype, size=3)
+            qkvw = tf.TensorArray(dtype=tf.float32, size=3)
             for k in tf.range(3):
-                qkvw_inside = tf.TensorArray(dtype=self.dtype, size=self.num_attention_heads)
+                qkvw_inside = tf.TensorArray(dtype=tf.float32, size=self.num_attention_heads)
                 for i in tf.range(self.num_attention_heads):
                     qkvw_inside = qkvw_inside.write(i, ws[i * 3 + k])
                 qkvw = qkvw.write(k, qkvw_inside.concat())
@@ -795,9 +800,7 @@ class TFDebertaDisentangledSelfAttention(keras.layers.Layer):
         if "p2c" in self.pos_att_type:
             pos_query_layer = self.pos_q_proj(rel_embeddings)
             pos_query_layer = self.transpose_for_scores(pos_query_layer)
-            pos_query_layer /= tf.math.sqrt(
-                tf.cast(shape_list(pos_query_layer)[-1] * scale_factor, dtype=self.compute_dtype)
-            )
+            pos_query_layer /= tf.math.sqrt(tf.cast(shape_list(pos_query_layer)[-1] * scale_factor, dtype=tf.float32))
             if shape_list(query_layer)[-2] != shape_list(key_layer)[-2]:
                 r_pos = build_relative_position(shape_list(key_layer)[-2], shape_list(key_layer)[-2])
             else:
@@ -815,7 +818,7 @@ class TFDebertaDisentangledSelfAttention(keras.layers.Layer):
         return score
 
 
-class TFDebertaEmbeddings(keras.layers.Layer):
+class TFDebertaEmbeddings(tf.keras.layers.Layer):
     """Construct the embeddings from word, position and token_type embeddings."""
 
     def __init__(self, config, **kwargs):
@@ -828,13 +831,13 @@ class TFDebertaEmbeddings(keras.layers.Layer):
         self.position_biased_input = getattr(config, "position_biased_input", True)
         self.initializer_range = config.initializer_range
         if self.embedding_size != config.hidden_size:
-            self.embed_proj = keras.layers.Dense(
+            self.embed_proj = tf.keras.layers.Dense(
                 config.hidden_size,
                 kernel_initializer=get_initializer(config.initializer_range),
                 name="embed_proj",
                 use_bias=False,
             )
-        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = TFDebertaStableDropout(config.hidden_dropout_prob, name="dropout")
 
     def build(self, input_shape=None):
@@ -925,7 +928,7 @@ class TFDebertaEmbeddings(keras.layers.Layer):
             if len(shape_list(mask)) != len(shape_list(final_embeddings)):
                 if len(shape_list(mask)) == 4:
                     mask = tf.squeeze(tf.squeeze(mask, axis=1), axis=1)
-                mask = tf.cast(tf.expand_dims(mask, axis=2), dtype=self.compute_dtype)
+                mask = tf.cast(tf.expand_dims(mask, axis=2), tf.float32)
 
             final_embeddings = final_embeddings * mask
 
@@ -934,13 +937,13 @@ class TFDebertaEmbeddings(keras.layers.Layer):
         return final_embeddings
 
 
-class TFDebertaPredictionHeadTransform(keras.layers.Layer):
+class TFDebertaPredictionHeadTransform(tf.keras.layers.Layer):
     def __init__(self, config: DebertaConfig, **kwargs):
         super().__init__(**kwargs)
 
         self.embedding_size = getattr(config, "embedding_size", config.hidden_size)
 
-        self.dense = keras.layers.Dense(
+        self.dense = tf.keras.layers.Dense(
             units=self.embedding_size,
             kernel_initializer=get_initializer(config.initializer_range),
             name="dense",
@@ -950,7 +953,7 @@ class TFDebertaPredictionHeadTransform(keras.layers.Layer):
             self.transform_act_fn = get_tf_activation(config.hidden_act)
         else:
             self.transform_act_fn = config.hidden_act
-        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.config = config
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
@@ -972,8 +975,8 @@ class TFDebertaPredictionHeadTransform(keras.layers.Layer):
                 self.LayerNorm.build([None, None, self.embedding_size])
 
 
-class TFDebertaLMPredictionHead(keras.layers.Layer):
-    def __init__(self, config: DebertaConfig, input_embeddings: keras.layers.Layer, **kwargs):
+class TFDebertaLMPredictionHead(tf.keras.layers.Layer):
+    def __init__(self, config: DebertaConfig, input_embeddings: tf.keras.layers.Layer, **kwargs):
         super().__init__(**kwargs)
 
         self.config = config
@@ -995,7 +998,7 @@ class TFDebertaLMPredictionHead(keras.layers.Layer):
             with tf.name_scope(self.transform.name):
                 self.transform.build(None)
 
-    def get_output_embeddings(self) -> keras.layers.Layer:
+    def get_output_embeddings(self) -> tf.keras.layers.Layer:
         return self.input_embeddings
 
     def set_output_embeddings(self, value: tf.Variable):
@@ -1020,8 +1023,8 @@ class TFDebertaLMPredictionHead(keras.layers.Layer):
         return hidden_states
 
 
-class TFDebertaOnlyMLMHead(keras.layers.Layer):
-    def __init__(self, config: DebertaConfig, input_embeddings: keras.layers.Layer, **kwargs):
+class TFDebertaOnlyMLMHead(tf.keras.layers.Layer):
+    def __init__(self, config: DebertaConfig, input_embeddings: tf.keras.layers.Layer, **kwargs):
         super().__init__(**kwargs)
         self.predictions = TFDebertaLMPredictionHead(config, input_embeddings, name="predictions")
 
@@ -1040,7 +1043,7 @@ class TFDebertaOnlyMLMHead(keras.layers.Layer):
 
 
 # @keras_serializable
-class TFDebertaMainLayer(keras.layers.Layer):
+class TFDebertaMainLayer(tf.keras.layers.Layer):
     config_class = DebertaConfig
 
     def __init__(self, config: DebertaConfig, **kwargs):
@@ -1051,7 +1054,7 @@ class TFDebertaMainLayer(keras.layers.Layer):
         self.embeddings = TFDebertaEmbeddings(config, name="embeddings")
         self.encoder = TFDebertaEncoder(config, name="encoder")
 
-    def get_input_embeddings(self) -> keras.layers.Layer:
+    def get_input_embeddings(self) -> tf.keras.layers.Layer:
         return self.embeddings
 
     def set_input_embeddings(self, value: tf.Variable):
@@ -1150,7 +1153,7 @@ DEBERTA_START_DOCSTRING = r"""
     on top of BERT/RoBERTa with two improvements, i.e. disentangled attention and enhanced mask decoder. With those two
     improvements, it out perform BERT/RoBERTa on a majority of tasks with 80GB pretraining data.
 
-    This model is also a [keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
+    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
     as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
     behavior.
 
@@ -1296,7 +1299,7 @@ class TFDebertaForMaskedLM(TFDebertaPreTrainedModel, TFMaskedLanguageModelingLos
         self.deberta = TFDebertaMainLayer(config, name="deberta")
         self.mlm = TFDebertaOnlyMLMHead(config, input_embeddings=self.deberta.embeddings, name="cls")
 
-    def get_lm_head(self) -> keras.layers.Layer:
+    def get_lm_head(self) -> tf.keras.layers.Layer:
         return self.mlm.predictions
 
     @unpack_inputs
@@ -1382,7 +1385,7 @@ class TFDebertaForSequenceClassification(TFDebertaPreTrainedModel, TFSequenceCla
         drop_out = getattr(config, "cls_dropout", None)
         drop_out = self.config.hidden_dropout_prob if drop_out is None else drop_out
         self.dropout = TFDebertaStableDropout(drop_out, name="cls_dropout")
-        self.classifier = keras.layers.Dense(
+        self.classifier = tf.keras.layers.Dense(
             units=config.num_labels,
             kernel_initializer=get_initializer(config.initializer_range),
             name="classifier",
@@ -1476,8 +1479,8 @@ class TFDebertaForTokenClassification(TFDebertaPreTrainedModel, TFTokenClassific
         self.num_labels = config.num_labels
 
         self.deberta = TFDebertaMainLayer(config, name="deberta")
-        self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
-        self.classifier = keras.layers.Dense(
+        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.classifier = tf.keras.layers.Dense(
             units=config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
         self.config = config
@@ -1559,7 +1562,7 @@ class TFDebertaForQuestionAnswering(TFDebertaPreTrainedModel, TFQuestionAnswerin
         self.num_labels = config.num_labels
 
         self.deberta = TFDebertaMainLayer(config, name="deberta")
-        self.qa_outputs = keras.layers.Dense(
+        self.qa_outputs = tf.keras.layers.Dense(
             units=config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
         )
         self.config = config

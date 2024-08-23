@@ -13,8 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""RoBERTa-PreLayerNorm configuration"""
-
+""" RoBERTa-PreLayerNorm configuration"""
 from collections import OrderedDict
 from typing import Mapping
 
@@ -25,8 +24,14 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
+ROBERTA_PRELAYERNORM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+    "andreasmadsen/efficient_mlm_m0.40": (
+        "https://huggingface.co/andreasmadsen/efficient_mlm_m0.40/resolve/main/config.json"
+    ),
+}
 
-# Copied from transformers.models.roberta.configuration_roberta.RobertaConfig with FacebookAI/roberta-base->andreasmadsen/efficient_mlm_m0.40,RoBERTa->RoBERTa-PreLayerNorm,Roberta->RobertaPreLayerNorm,roberta->roberta-prelayernorm
+
+# Copied from transformers.models.roberta.configuration_roberta.RobertaConfig with roberta-base->andreasmadsen/efficient_mlm_m0.40,RoBERTa->RoBERTa-PreLayerNorm,Roberta->RobertaPreLayerNorm,roberta->roberta-prelayernorm
 class RobertaPreLayerNormConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`RobertaPreLayerNormModel`] or a [`TFRobertaPreLayerNormModel`]. It is

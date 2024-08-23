@@ -14,6 +14,7 @@
 # limitations under the License.
 """Convert UniSpeechSat checkpoint."""
 
+
 import argparse
 
 import fairseq

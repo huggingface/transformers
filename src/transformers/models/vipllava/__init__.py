@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING
 from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
 
 
-_import_structure = {"configuration_vipllava": ["VipLlavaConfig"]}
+_import_structure = {"configuration_vipllava": ["VIPLLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP", "VipLlavaConfig"]}
 
 
 try:
@@ -26,13 +26,14 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_vipllava"] = [
+        "VIPLLAVA_PRETRAINED_MODEL_ARCHIVE_LIST",
         "VipLlavaForConditionalGeneration",
         "VipLlavaPreTrainedModel",
     ]
 
 
 if TYPE_CHECKING:
-    from .configuration_vipllava import VipLlavaConfig
+    from .configuration_vipllava import VIPLLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP, VipLlavaConfig
 
     try:
         if not is_torch_available():
@@ -41,6 +42,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_vipllava import (
+            VIPLLAVA_PRETRAINED_MODEL_ARCHIVE_LIST,
             VipLlavaForConditionalGeneration,
             VipLlavaPreTrainedModel,
         )

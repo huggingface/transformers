@@ -33,7 +33,6 @@ class DPRContextEncoderTokenizationTest(BertTokenizationTest):
     tokenizer_class = DPRContextEncoderTokenizer
     rust_tokenizer_class = DPRContextEncoderTokenizerFast
     test_rust_tokenizer = True
-    from_pretrained_id = "facebook/dpr-ctx_encoder-single-nq-base"
 
 
 @require_tokenizers
@@ -41,7 +40,6 @@ class DPRQuestionEncoderTokenizationTest(BertTokenizationTest):
     tokenizer_class = DPRQuestionEncoderTokenizer
     rust_tokenizer_class = DPRQuestionEncoderTokenizerFast
     test_rust_tokenizer = True
-    from_pretrained_id = "facebook/dpr-ctx_encoder-single-nq-base"
 
 
 @require_tokenizers
@@ -49,11 +47,10 @@ class DPRReaderTokenizationTest(BertTokenizationTest):
     tokenizer_class = DPRReaderTokenizer
     rust_tokenizer_class = DPRReaderTokenizerFast
     test_rust_tokenizer = True
-    from_pretrained_id = "facebook/dpr-ctx_encoder-single-nq-base"
 
     @slow
     def test_decode_best_spans(self):
-        tokenizer = self.tokenizer_class.from_pretrained("google-bert/bert-base-uncased")
+        tokenizer = self.tokenizer_class.from_pretrained("bert-base-uncased")
 
         text_1 = tokenizer.encode("question sequence", add_special_tokens=False)
         text_2 = tokenizer.encode("title sequence", add_special_tokens=False)
@@ -76,7 +73,7 @@ class DPRReaderTokenizationTest(BertTokenizationTest):
 
     @slow
     def test_call(self):
-        tokenizer = self.tokenizer_class.from_pretrained("google-bert/bert-base-uncased")
+        tokenizer = self.tokenizer_class.from_pretrained("bert-base-uncased")
 
         text_1 = tokenizer.encode("question sequence", add_special_tokens=False)
         text_2 = tokenizer.encode("title sequence", add_special_tokens=False)

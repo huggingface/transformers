@@ -22,8 +22,11 @@ import numpy as np
 
 from transformers import T5Tokenizer, T5TokenizerFast
 from transformers.testing_utils import require_sentencepiece, require_torch
-from transformers.utils.import_utils import is_speech_available
+from transformers.utils.import_utils import is_speech_available, is_torch_available
 
+
+if is_torch_available():
+    pass
 
 if is_speech_available():
     from transformers import EncodecFeatureExtractor, MusicgenProcessor

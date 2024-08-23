@@ -50,7 +50,6 @@ InstructBLIP uses the same architecture as [BLIP-2](blip2) with a tiny but impor
 
 [[autodoc]] InstructBlipProcessor
 
-
 ## InstructBlipVisionModel
 
 [[autodoc]] InstructBlipVisionModel

@@ -7,9 +7,11 @@
         "hysteresis": 2,
         "min_loss_scale": 1
     },
+
     "bf16": {
         "enabled": "auto"
     },
+
     "optimizer": {
         "type": "AdamW",
         "params": {
@@ -19,6 +21,7 @@
             "weight_decay": "auto"
         }
     },
+
     "scheduler": {
         "type": "WarmupLR",
         "params": {
@@ -27,14 +30,15 @@
             "warmup_num_steps": "auto"
         }
     },
+
     "zero_optimization": {
         "stage": 3,
         "offload_optimizer": {
-            "device": "none",
+            "device": "cpu",
             "pin_memory": true
         },
         "offload_param": {
-            "device": "none",
+            "device": "cpu",
             "pin_memory": true
         },
         "overlap_comm": true,
@@ -47,6 +51,7 @@
         "stage3_max_reuse_distance": 1e9,
         "stage3_gather_16bit_weights_on_model_save": true
     },
+
     "gradient_accumulation_steps": "auto",
     "gradient_clipping": "auto",
     "steps_per_print": 2000,

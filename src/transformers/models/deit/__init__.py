@@ -22,7 +22,7 @@ from ...utils import (
 )
 
 
-_import_structure = {"configuration_deit": ["DeiTConfig", "DeiTOnnxConfig"]}
+_import_structure = {"configuration_deit": ["DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DeiTConfig", "DeiTOnnxConfig"]}
 
 try:
     if not is_vision_available():
@@ -40,6 +40,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_deit"] = [
+        "DEIT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "DeiTForImageClassification",
         "DeiTForImageClassificationWithTeacher",
         "DeiTForMaskedImageModeling",
@@ -54,6 +55,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_tf_deit"] = [
+        "TF_DEIT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFDeiTForImageClassification",
         "TFDeiTForImageClassificationWithTeacher",
         "TFDeiTForMaskedImageModeling",
@@ -63,7 +65,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_deit import DeiTConfig, DeiTOnnxConfig
+    from .configuration_deit import DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP, DeiTConfig, DeiTOnnxConfig
 
     try:
         if not is_vision_available():
@@ -81,6 +83,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_deit import (
+            DEIT_PRETRAINED_MODEL_ARCHIVE_LIST,
             DeiTForImageClassification,
             DeiTForImageClassificationWithTeacher,
             DeiTForMaskedImageModeling,
@@ -95,6 +98,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_tf_deit import (
+            TF_DEIT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFDeiTForImageClassification,
             TFDeiTForImageClassificationWithTeacher,
             TFDeiTForMaskedImageModeling,

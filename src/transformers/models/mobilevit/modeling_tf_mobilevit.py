@@ -14,7 +14,7 @@
 # limitations under the License.
 #
 # Original license: https://github.com/apple/ml-cvnets/blob/main/LICENSE
-"""TensorFlow 2.0 MobileViT model."""
+""" TensorFlow 2.0 MobileViT model."""
 
 from __future__ import annotations
 
@@ -35,13 +35,7 @@ from ...modeling_tf_outputs import (
     TFImageClassifierOutputWithNoAttention,
     TFSemanticSegmenterOutputWithNoAttention,
 )
-from ...modeling_tf_utils import (
-    TFPreTrainedModel,
-    TFSequenceClassificationLoss,
-    keras,
-    keras_serializable,
-    unpack_inputs,
-)
+from ...modeling_tf_utils import TFPreTrainedModel, TFSequenceClassificationLoss, keras_serializable, unpack_inputs
 from ...tf_utils import shape_list, stable_softmax
 from ...utils import logging
 from .configuration_mobilevit import MobileViTConfig
@@ -61,6 +55,17 @@ _IMAGE_CLASS_CHECKPOINT = "apple/mobilevit-small"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
+TF_MOBILEVIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "apple/mobilevit-small",
+    "apple/mobilevit-x-small",
+    "apple/mobilevit-xx-small",
+    "apple/deeplabv3-mobilevit-small",
+    "apple/deeplabv3-mobilevit-x-small",
+    "apple/deeplabv3-mobilevit-xx-small",
+    # See all MobileViT models at https://huggingface.co/models?filter=mobilevit
+]
+
+
 def make_divisible(value: int, divisor: int = 8, min_value: Optional[int] = None) -> int:
     """
     Ensure that all layers have a channel count that is divisible by `divisor`. This function is taken from the
@@ -76,7 +81,7 @@ def make_divisible(value: int, divisor: int = 8, min_value: Optional[int] = None
     return int(new_value)
 
 
-class TFMobileViTConvLayer(keras.layers.Layer):
+class TFMobileViTConvLayer(tf.keras.layers.Layer):
     def __init__(
         self,
         config: MobileViTConfig,
@@ -98,12 +103,12 @@ class TFMobileViTConvLayer(keras.layers.Layer):
         )
 
         padding = int((kernel_size - 1) / 2) * dilation
-        self.padding = keras.layers.ZeroPadding2D(padding)
+        self.padding = tf.keras.layers.ZeroPadding2D(padding)
 
         if out_channels % groups != 0:
             raise ValueError(f"Output channels ({out_channels}) are not divisible by {groups} groups.")
 
-        self.convolution = keras.layers.Conv2D(
+        self.convolution = tf.keras.layers.Conv2D(
             filters=out_channels,
             kernel_size=kernel_size,
             strides=stride,
@@ -115,7 +120,7 @@ class TFMobileViTConvLayer(keras.layers.Layer):
         )
 
         if use_normalization:
-            self.normalization = keras.layers.BatchNormalization(epsilon=1e-5, momentum=0.1, name="normalization")
+            self.normalization = tf.keras.layers.BatchNormalization(epsilon=1e-5, momentum=0.1, name="normalization")
         else:
             self.normalization = None
 
@@ -153,7 +158,7 @@ class TFMobileViTConvLayer(keras.layers.Layer):
                     self.normalization.build([None, None, None, self.out_channels])
 
 
-class TFMobileViTInvertedResidual(keras.layers.Layer):
+class TFMobileViTInvertedResidual(tf.keras.layers.Layer):
     """
     Inverted residual block (MobileNetv2): https://arxiv.org/abs/1801.04381
     """
@@ -217,7 +222,7 @@ class TFMobileViTInvertedResidual(keras.layers.Layer):
                 self.reduce_1x1.build(None)
 
 
-class TFMobileViTMobileNetLayer(keras.layers.Layer):
+class TFMobileViTMobileNetLayer(tf.keras.layers.Layer):
     def __init__(
         self,
         config: MobileViTConfig,
@@ -256,7 +261,7 @@ class TFMobileViTMobileNetLayer(keras.layers.Layer):
                     layer_module.build(None)
 
 
-class TFMobileViTSelfAttention(keras.layers.Layer):
+class TFMobileViTSelfAttention(tf.keras.layers.Layer):
     def __init__(self, config: MobileViTConfig, hidden_size: int, **kwargs) -> None:
         super().__init__(**kwargs)
 
@@ -272,11 +277,11 @@ class TFMobileViTSelfAttention(keras.layers.Layer):
         scale = tf.cast(self.attention_head_size, dtype=tf.float32)
         self.scale = tf.math.sqrt(scale)
 
-        self.query = keras.layers.Dense(self.all_head_size, use_bias=config.qkv_bias, name="query")
-        self.key = keras.layers.Dense(self.all_head_size, use_bias=config.qkv_bias, name="key")
-        self.value = keras.layers.Dense(self.all_head_size, use_bias=config.qkv_bias, name="value")
+        self.query = tf.keras.layers.Dense(self.all_head_size, use_bias=config.qkv_bias, name="query")
+        self.key = tf.keras.layers.Dense(self.all_head_size, use_bias=config.qkv_bias, name="key")
+        self.value = tf.keras.layers.Dense(self.all_head_size, use_bias=config.qkv_bias, name="value")
 
-        self.dropout = keras.layers.Dropout(config.attention_probs_dropout_prob)
+        self.dropout = tf.keras.layers.Dropout(config.attention_probs_dropout_prob)
         self.hidden_size = hidden_size
 
     def transpose_for_scores(self, x: tf.Tensor) -> tf.Tensor:
@@ -323,11 +328,11 @@ class TFMobileViTSelfAttention(keras.layers.Layer):
                 self.value.build([None, None, self.hidden_size])
 
 
-class TFMobileViTSelfOutput(keras.layers.Layer):
+class TFMobileViTSelfOutput(tf.keras.layers.Layer):
     def __init__(self, config: MobileViTConfig, hidden_size: int, **kwargs) -> None:
         super().__init__(**kwargs)
-        self.dense = keras.layers.Dense(hidden_size, name="dense")
-        self.dropout = keras.layers.Dropout(config.hidden_dropout_prob)
+        self.dense = tf.keras.layers.Dense(hidden_size, name="dense")
+        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
         self.hidden_size = hidden_size
 
     def call(self, hidden_states: tf.Tensor, training: bool = False) -> tf.Tensor:
@@ -344,7 +349,7 @@ class TFMobileViTSelfOutput(keras.layers.Layer):
                 self.dense.build([None, None, self.hidden_size])
 
 
-class TFMobileViTAttention(keras.layers.Layer):
+class TFMobileViTAttention(tf.keras.layers.Layer):
     def __init__(self, config: MobileViTConfig, hidden_size: int, **kwargs) -> None:
         super().__init__(**kwargs)
         self.attention = TFMobileViTSelfAttention(config, hidden_size, name="attention")
@@ -370,10 +375,10 @@ class TFMobileViTAttention(keras.layers.Layer):
                 self.dense_output.build(None)
 
 
-class TFMobileViTIntermediate(keras.layers.Layer):
+class TFMobileViTIntermediate(tf.keras.layers.Layer):
     def __init__(self, config: MobileViTConfig, hidden_size: int, intermediate_size: int, **kwargs) -> None:
         super().__init__(**kwargs)
-        self.dense = keras.layers.Dense(intermediate_size, name="dense")
+        self.dense = tf.keras.layers.Dense(intermediate_size, name="dense")
         if isinstance(config.hidden_act, str):
             self.intermediate_act_fn = get_tf_activation(config.hidden_act)
         else:
@@ -394,11 +399,11 @@ class TFMobileViTIntermediate(keras.layers.Layer):
                 self.dense.build([None, None, self.hidden_size])
 
 
-class TFMobileViTOutput(keras.layers.Layer):
+class TFMobileViTOutput(tf.keras.layers.Layer):
     def __init__(self, config: MobileViTConfig, hidden_size: int, intermediate_size: int, **kwargs) -> None:
         super().__init__(**kwargs)
-        self.dense = keras.layers.Dense(hidden_size, name="dense")
-        self.dropout = keras.layers.Dropout(config.hidden_dropout_prob)
+        self.dense = tf.keras.layers.Dense(hidden_size, name="dense")
+        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
         self.intermediate_size = intermediate_size
 
     def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
@@ -416,14 +421,18 @@ class TFMobileViTOutput(keras.layers.Layer):
                 self.dense.build([None, None, self.intermediate_size])
 
 
-class TFMobileViTTransformerLayer(keras.layers.Layer):
+class TFMobileViTTransformerLayer(tf.keras.layers.Layer):
     def __init__(self, config: MobileViTConfig, hidden_size: int, intermediate_size: int, **kwargs) -> None:
         super().__init__(**kwargs)
         self.attention = TFMobileViTAttention(config, hidden_size, name="attention")
         self.intermediate = TFMobileViTIntermediate(config, hidden_size, intermediate_size, name="intermediate")
         self.mobilevit_output = TFMobileViTOutput(config, hidden_size, intermediate_size, name="output")
-        self.layernorm_before = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm_before")
-        self.layernorm_after = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm_after")
+        self.layernorm_before = tf.keras.layers.LayerNormalization(
+            epsilon=config.layer_norm_eps, name="layernorm_before"
+        )
+        self.layernorm_after = tf.keras.layers.LayerNormalization(
+            epsilon=config.layer_norm_eps, name="layernorm_after"
+        )
         self.hidden_size = hidden_size
 
     def call(self, hidden_states: tf.Tensor, training: bool = False) -> tf.Tensor:
@@ -456,7 +465,7 @@ class TFMobileViTTransformerLayer(keras.layers.Layer):
                 self.layernorm_after.build([None, None, self.hidden_size])
 
 
-class TFMobileViTTransformer(keras.layers.Layer):
+class TFMobileViTTransformer(tf.keras.layers.Layer):
     def __init__(self, config: MobileViTConfig, hidden_size: int, num_stages: int, **kwargs) -> None:
         super().__init__(**kwargs)
 
@@ -485,7 +494,7 @@ class TFMobileViTTransformer(keras.layers.Layer):
                     layer_module.build(None)
 
 
-class TFMobileViTLayer(keras.layers.Layer):
+class TFMobileViTLayer(tf.keras.layers.Layer):
     """
     MobileViT block: https://arxiv.org/abs/2110.02178
     """
@@ -540,7 +549,7 @@ class TFMobileViTLayer(keras.layers.Layer):
             config, hidden_size=hidden_size, num_stages=num_stages, name="transformer"
         )
 
-        self.layernorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm")
+        self.layernorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm")
 
         self.conv_projection = TFMobileViTConvLayer(
             config, in_channels=hidden_size, out_channels=in_channels, kernel_size=1, name="conv_projection"
@@ -679,7 +688,7 @@ class TFMobileViTLayer(keras.layers.Layer):
                 self.downsampling_layer.build(None)
 
 
-class TFMobileViTEncoder(keras.layers.Layer):
+class TFMobileViTEncoder(tf.keras.layers.Layer):
     def __init__(self, config: MobileViTConfig, **kwargs) -> None:
         super().__init__(**kwargs)
         self.config = config
@@ -789,7 +798,7 @@ class TFMobileViTEncoder(keras.layers.Layer):
 
 
 @keras_serializable
-class TFMobileViTMainLayer(keras.layers.Layer):
+class TFMobileViTMainLayer(tf.keras.layers.Layer):
     config_class = MobileViTConfig
 
     def __init__(self, config: MobileViTConfig, expand_output: bool = True, **kwargs):
@@ -817,7 +826,7 @@ class TFMobileViTMainLayer(keras.layers.Layer):
                 name="conv_1x1_exp",
             )
 
-        self.pooler = keras.layers.GlobalAveragePooling2D(data_format="channels_first", name="pooler")
+        self.pooler = tf.keras.layers.GlobalAveragePooling2D(data_format="channels_first", name="pooler")
 
     def _prune_heads(self, heads_to_prune):
         """
@@ -839,7 +848,7 @@ class TFMobileViTMainLayer(keras.layers.Layer):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # When running on CPU, `keras.layers.Conv2D` doesn't support `NCHW` format.
+        # When running on CPU, `tf.keras.layers.Conv2D` doesn't support `NCHW` format.
         # So change the input format from `NCHW` to `NHWC`.
         # shape = (batch_size, in_height, in_width, in_channels=num_channels)
         pixel_values = tf.transpose(pixel_values, perm=(0, 2, 3, 1))
@@ -922,7 +931,7 @@ MOBILEVIT_START_DOCSTRING = r"""
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
-    This model is also a [keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
+    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
     as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
     behavior.
 
@@ -1029,9 +1038,9 @@ class TFMobileViTForImageClassification(TFMobileViTPreTrainedModel, TFSequenceCl
         self.mobilevit = TFMobileViTMainLayer(config, name="mobilevit")
 
         # Classifier head
-        self.dropout = keras.layers.Dropout(config.classifier_dropout_prob)
+        self.dropout = tf.keras.layers.Dropout(config.classifier_dropout_prob)
         self.classifier = (
-            keras.layers.Dense(config.num_labels, name="classifier") if config.num_labels > 0 else tf.identity
+            tf.keras.layers.Dense(config.num_labels, name="classifier") if config.num_labels > 0 else tf.identity
         )
         self.config = config
 
@@ -1087,11 +1096,11 @@ class TFMobileViTForImageClassification(TFMobileViTPreTrainedModel, TFSequenceCl
                     self.classifier.build([None, None, self.config.neck_hidden_sizes[-1]])
 
 
-class TFMobileViTASPPPooling(keras.layers.Layer):
+class TFMobileViTASPPPooling(tf.keras.layers.Layer):
     def __init__(self, config: MobileViTConfig, in_channels: int, out_channels: int, **kwargs) -> None:
         super().__init__(**kwargs)
 
-        self.global_pool = keras.layers.GlobalAveragePooling2D(keepdims=True, name="global_pool")
+        self.global_pool = tf.keras.layers.GlobalAveragePooling2D(keepdims=True, name="global_pool")
 
         self.conv_1x1 = TFMobileViTConvLayer(
             config,
@@ -1123,7 +1132,7 @@ class TFMobileViTASPPPooling(keras.layers.Layer):
                 self.conv_1x1.build(None)
 
 
-class TFMobileViTASPP(keras.layers.Layer):
+class TFMobileViTASPP(tf.keras.layers.Layer):
     """
     ASPP module defined in DeepLab papers: https://arxiv.org/abs/1606.00915, https://arxiv.org/abs/1706.05587
     """
@@ -1178,7 +1187,7 @@ class TFMobileViTASPP(keras.layers.Layer):
             name="project",
         )
 
-        self.dropout = keras.layers.Dropout(config.aspp_dropout_prob)
+        self.dropout = tf.keras.layers.Dropout(config.aspp_dropout_prob)
 
     def call(self, features: tf.Tensor, training: bool = False) -> tf.Tensor:
         # since the hidden states were transposed to have `(batch_size, channels, height, width)`
@@ -1206,7 +1215,7 @@ class TFMobileViTASPP(keras.layers.Layer):
                     conv.build(None)
 
 
-class TFMobileViTDeepLabV3(keras.layers.Layer):
+class TFMobileViTDeepLabV3(tf.keras.layers.Layer):
     """
     DeepLabv3 architecture: https://arxiv.org/abs/1706.05587
     """
@@ -1215,7 +1224,7 @@ class TFMobileViTDeepLabV3(keras.layers.Layer):
         super().__init__(**kwargs)
         self.aspp = TFMobileViTASPP(config, name="aspp")
 
-        self.dropout = keras.layers.Dropout(config.classifier_dropout_prob)
+        self.dropout = tf.keras.layers.Dropout(config.classifier_dropout_prob)
 
         self.classifier = TFMobileViTConvLayer(
             config,
@@ -1267,7 +1276,7 @@ class TFMobileViTForSemanticSegmentation(TFMobileViTPreTrainedModel):
 
         upsampled_logits = tf.image.resize(logits, size=label_interp_shape, method="bilinear")
         # compute weighted loss
-        loss_fct = keras.losses.SparseCategoricalCrossentropy(from_logits=True, reduction="none")
+        loss_fct = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True, reduction="none")
 
         def masked_loss(real, pred):
             unmasked_loss = loss_fct(real, pred)
@@ -1323,9 +1332,6 @@ class TFMobileViTForSemanticSegmentation(TFMobileViTPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if labels is not None and not self.config.num_labels > 1:
-            raise ValueError("The number of labels should be greater than one")
-
         outputs = self.mobilevit(
             pixel_values,
             output_hidden_states=True,  # we need the intermediate hidden states
@@ -1339,7 +1345,10 @@ class TFMobileViTForSemanticSegmentation(TFMobileViTPreTrainedModel):
 
         loss = None
         if labels is not None:
-            loss = self.hf_compute_loss(logits=logits, labels=labels)
+            if not self.config.num_labels > 1:
+                raise ValueError("The number of labels should be greater than one")
+            else:
+                loss = self.hf_compute_loss(logits=logits, labels=labels)
 
         # make logits of shape (batch_size, num_labels, height, width) to
         # keep them consistent across APIs

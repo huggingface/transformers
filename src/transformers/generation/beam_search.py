@@ -218,8 +218,8 @@ class BeamSearchScorer(BeamScorer):
         next_scores: torch.FloatTensor,
         next_tokens: torch.LongTensor,
         next_indices: torch.LongTensor,
-        pad_token_id: Optional[Union[int, torch.Tensor]] = None,
-        eos_token_id: Optional[Union[int, List[int], torch.Tensor]] = None,
+        pad_token_id: Optional[int] = None,
+        eos_token_id: Optional[Union[int, List[int]]] = None,
         beam_indices: Optional[torch.LongTensor] = None,
         group_index: Optional[int] = 0,
         decoder_prompt_len: Optional[int] = 0,
@@ -245,10 +245,8 @@ class BeamSearchScorer(BeamScorer):
         next_beam_tokens = torch.zeros((batch_size, self.group_size), dtype=next_tokens.dtype, device=device)
         next_beam_indices = torch.zeros((batch_size, self.group_size), dtype=next_indices.dtype, device=device)
 
-        if eos_token_id is not None and not isinstance(eos_token_id, torch.Tensor):
-            if isinstance(eos_token_id, int):
-                eos_token_id = [eos_token_id]
-            eos_token_id = torch.tensor(eos_token_id)
+        if isinstance(eos_token_id, int):
+            eos_token_id = [eos_token_id]
 
         for batch_idx in range(batch_size):
             batch_group_idx = batch_idx * self.num_beam_groups + group_index
@@ -324,17 +322,15 @@ class BeamSearchScorer(BeamScorer):
         final_beam_tokens: torch.LongTensor,
         final_beam_indices: torch.LongTensor,
         max_length: int,
-        pad_token_id: Optional[Union[int, torch.Tensor]] = None,
-        eos_token_id: Optional[Union[int, List[int], torch.Tensor]] = None,
+        pad_token_id: Optional[int] = None,
+        eos_token_id: Optional[Union[int, List[int]]] = None,
         beam_indices: Optional[torch.LongTensor] = None,
         decoder_prompt_len: Optional[int] = 0,
     ) -> Tuple[torch.LongTensor]:
         batch_size = len(self._beam_hyps) // self.num_beam_groups
 
-        if eos_token_id is not None and not isinstance(eos_token_id, torch.Tensor):
-            if isinstance(eos_token_id, int):
-                eos_token_id = [eos_token_id]
-            eos_token_id = torch.tensor(eos_token_id)
+        if isinstance(eos_token_id, int):
+            eos_token_id = [eos_token_id]
 
         # finalize all open beam hypotheses and add to generated hypotheses
         for batch_group_idx, beam_hyp in enumerate(self._beam_hyps):
@@ -517,8 +513,8 @@ class ConstrainedBeamSearchScorer(BeamScorer):
         next_tokens: torch.LongTensor,
         next_indices: torch.LongTensor,
         scores_for_all_vocab: torch.FloatTensor,
-        pad_token_id: Optional[Union[int, torch.Tensor]] = None,
-        eos_token_id: Optional[Union[int, List[int], torch.Tensor]] = None,
+        pad_token_id: Optional[int] = None,
+        eos_token_id: Optional[Union[int, List[int]]] = None,
         beam_indices: Optional[torch.LongTensor] = None,
         decoder_prompt_len: Optional[int] = 0,
     ) -> Tuple[torch.Tensor]:
@@ -582,10 +578,8 @@ class ConstrainedBeamSearchScorer(BeamScorer):
         next_beam_tokens = torch.zeros((batch_size, self.group_size), dtype=next_tokens.dtype, device=device)
         next_beam_indices = torch.zeros((batch_size, self.group_size), dtype=next_indices.dtype, device=device)
 
-        if eos_token_id is not None and not isinstance(eos_token_id, torch.Tensor):
-            if isinstance(eos_token_id, int):
-                eos_token_id = [eos_token_id]
-            eos_token_id = torch.tensor(eos_token_id)
+        if isinstance(eos_token_id, int):
+            eos_token_id = [eos_token_id]
 
         for batch_idx, beam_hyp in enumerate(self._beam_hyps):
             if self._done[batch_idx]:
@@ -817,17 +811,15 @@ class ConstrainedBeamSearchScorer(BeamScorer):
         final_beam_tokens: torch.LongTensor,
         final_beam_indices: torch.LongTensor,
         max_length: int,
-        pad_token_id: Optional[Union[int, torch.Tensor]] = None,
-        eos_token_id: Optional[Union[int, List[int], torch.Tensor]] = None,
+        pad_token_id: Optional[int] = None,
+        eos_token_id: Optional[Union[int, List[int]]] = None,
         beam_indices: Optional[torch.LongTensor] = None,
         decoder_prompt_len: Optional[int] = 0,
     ) -> Tuple[torch.LongTensor]:
         batch_size = len(self._beam_hyps)
 
-        if eos_token_id is not None and not isinstance(eos_token_id, torch.Tensor):
-            if isinstance(eos_token_id, int):
-                eos_token_id = [eos_token_id]
-            eos_token_id = torch.tensor(eos_token_id)
+        if isinstance(eos_token_id, int):
+            eos_token_id = [eos_token_id]
 
         # finalize all open beam hypotheses and add to generated hypotheses
         for batch_idx, beam_hyp in enumerate(self._beam_hyps):

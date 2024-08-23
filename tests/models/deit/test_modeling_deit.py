@@ -12,12 +12,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch DeiT model."""
+""" Testing suite for the PyTorch DeiT model. """
+
 
 import unittest
 import warnings
 
 from transformers import DeiTConfig
+from transformers.models.auto import get_values
 from transformers.testing_utils import (
     require_accelerate,
     require_torch,
@@ -39,16 +41,15 @@ if is_torch_available():
     from torch import nn
 
     from transformers import (
+        MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
+        MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+        MODEL_MAPPING,
         DeiTForImageClassification,
         DeiTForImageClassificationWithTeacher,
         DeiTForMaskedImageModeling,
         DeiTModel,
     )
-    from transformers.models.auto.modeling_auto import (
-        MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES,
-        MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES,
-        MODEL_MAPPING_NAMES,
-    )
+    from transformers.models.deit.modeling_deit import DEIT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -79,8 +80,6 @@ class DeiTModelTester:
         num_labels=3,
         scope=None,
         encoder_stride=2,
-        mask_ratio=0.5,
-        attn_implementation="eager",
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -100,14 +99,10 @@ class DeiTModelTester:
         self.initializer_range = initializer_range
         self.scope = scope
         self.encoder_stride = encoder_stride
-        self.attn_implementation = attn_implementation
 
         # in DeiT, the seq length equals the number of patches + 2 (we add 2 for the [CLS] and distilation tokens)
         num_patches = (image_size // patch_size) ** 2
         self.seq_length = num_patches + 2
-        self.mask_ratio = mask_ratio
-        self.num_masks = int(mask_ratio * self.seq_length)
-        self.mask_length = num_patches
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -135,7 +130,6 @@ class DeiTModelTester:
             is_decoder=False,
             initializer_range=self.initializer_range,
             encoder_stride=self.encoder_stride,
-            attn_implementation=self.attn_implementation,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
@@ -212,7 +206,7 @@ class DeiTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     )
     pipeline_model_mapping = (
         {
-            "image-feature-extraction": DeiTModel,
+            "feature-extraction": DeiTModel,
             "image-classification": (DeiTForImageClassification, DeiTForImageClassificationWithTeacher),
         }
         if is_torch_available()
@@ -227,13 +221,6 @@ class DeiTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.model_tester = DeiTModelTester(self)
         self.config_tester = ConfigTester(self, config_class=DeiTConfig, has_text_modality=False, hidden_size=37)
 
-    @unittest.skip(
-        "Since `torch==2.3+cu121`, although this test passes, many subsequent tests have `CUDA error: misaligned address`."
-        "If `nvidia-xxx-cu118` are also installed, no failure (even with `torch==2.3+cu121`)."
-    )
-    def test_multi_gpu_data_parallel_forward(self):
-        super().test_multi_gpu_data_parallel_forward()
-
     def test_config(self):
         self.config_tester.run_common_tests()
 
@@ -241,7 +228,7 @@ class DeiTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    def test_model_get_set_embeddings(self):
+    def test_model_common_attributes(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -274,7 +261,7 @@ class DeiTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def test_training(self):
         if not self.model_tester.is_training:
-            self.skipTest(reason="model_tester.is_training is set to False")
+            return
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
@@ -282,7 +269,7 @@ class DeiTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         for model_class in self.all_model_classes:
             # DeiTForImageClassificationWithTeacher supports inference-only
             if (
-                model_class.__name__ in MODEL_MAPPING_NAMES.values()
+                model_class in get_values(MODEL_MAPPING)
                 or model_class.__name__ == "DeiTForImageClassificationWithTeacher"
             ):
                 continue
@@ -296,13 +283,13 @@ class DeiTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         if not self.model_tester.is_training:
-            self.skipTest(reason="model_tester.is_training is set to False")
+            return
 
         config.use_cache = False
         config.return_dict = True
 
         for model_class in self.all_model_classes:
-            if model_class.__name__ in MODEL_MAPPING_NAMES.values() or not model_class.supports_gradient_checkpointing:
+            if model_class in get_values(MODEL_MAPPING) or not model_class.supports_gradient_checkpointing:
                 continue
             # DeiTForImageClassificationWithTeacher supports inference-only
             if model_class.__name__ == "DeiTForImageClassificationWithTeacher":
@@ -338,10 +325,10 @@ class DeiTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
         for model_class in self.all_model_classes:
             if (
-                model_class.__name__
+                model_class
                 not in [
-                    *MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES.values(),
-                    *MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES.values(),
+                    *get_values(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING),
+                    *get_values(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING),
                 ]
                 or model_class.__name__ == "DeiTForImageClassificationWithTeacher"
             ):
@@ -379,9 +366,9 @@ class DeiTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "facebook/deit-base-distilled-patch16-224"
-        model = DeiTModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
+        for model_name in DEIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = DeiTModel.from_pretrained(model_name)
+            self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats
@@ -422,28 +409,6 @@ class DeiTModelIntegrationTest(unittest.TestCase):
         expected_slice = torch.tensor([-1.0266, 0.1912, -1.2861]).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
-
-    @slow
-    def test_inference_interpolate_pos_encoding(self):
-        model = DeiTForImageClassificationWithTeacher.from_pretrained("facebook/deit-base-distilled-patch16-224").to(
-            torch_device
-        )
-
-        image_processor = self.default_image_processor
-
-        # image size is {"height": 480, "width": 640}
-        image = prepare_img()
-        image_processor.size = {"height": 480, "width": 640}
-        # center crop set to False so image is not center cropped to 224x224
-        inputs = image_processor(images=image, return_tensors="pt", do_center_crop=False).to(torch_device)
-
-        # forward pass
-        with torch.no_grad():
-            outputs = model(**inputs, interpolate_pos_encoding=True)
-
-        # verify the logits
-        expected_shape = torch.Size((1, 1000))
-        self.assertEqual(outputs.logits.shape, expected_shape)
 
     @slow
     @require_accelerate

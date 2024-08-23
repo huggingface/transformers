@@ -23,7 +23,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_mobilevit": ["MobileViTConfig", "MobileViTOnnxConfig"],
+    "configuration_mobilevit": ["MOBILEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileViTConfig", "MobileViTOnnxConfig"],
 }
 
 try:
@@ -42,6 +42,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_mobilevit"] = [
+        "MOBILEVIT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "MobileViTForImageClassification",
         "MobileViTForSemanticSegmentation",
         "MobileViTModel",
@@ -55,6 +56,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_tf_mobilevit"] = [
+        "TF_MOBILEVIT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFMobileViTForImageClassification",
         "TFMobileViTForSemanticSegmentation",
         "TFMobileViTModel",
@@ -62,7 +64,7 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_mobilevit import MobileViTConfig, MobileViTOnnxConfig
+    from .configuration_mobilevit import MOBILEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileViTConfig, MobileViTOnnxConfig
 
     try:
         if not is_vision_available():
@@ -80,6 +82,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_mobilevit import (
+            MOBILEVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
             MobileViTForImageClassification,
             MobileViTForSemanticSegmentation,
             MobileViTModel,
@@ -93,6 +96,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_tf_mobilevit import (
+            TF_MOBILEVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFMobileViTForImageClassification,
             TFMobileViTForSemanticSegmentation,
             TFMobileViTModel,

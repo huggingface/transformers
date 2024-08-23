@@ -17,7 +17,7 @@ Fixes # (issue)
 
 ## Before submitting
 - [ ] This PR fixes a typo or improves the docs (you can dismiss the other checks if that's the case).
-- [ ] Did you read the [contributor guideline](https://github.com/huggingface/transformers/blob/main/CONTRIBUTING.md#create-a-pull-request),
+- [ ] Did you read the [contributor guideline](https://github.com/huggingface/transformers/blob/main/CONTRIBUTING.md#start-contributing-pull-requests),
       Pull Request section?
 - [ ] Was this discussed/approved via a Github issue or the [forum](https://discuss.huggingface.co/)? Please add a link
       to it if that's the case.
@@ -39,7 +39,7 @@ members/contributors who may be interested in your PR.
 
 Models:
 
-- text models: @ArthurZucker
+- text models: @ArthurZucker and @younesbelkada
 - vision models: @amyeroberts
 - speech models: @sanchit-gandhi
 - graph models: @clefourrier
@@ -47,20 +47,20 @@ Models:
 Library:
 
 - flax: @sanchit-gandhi
-- generate: @zucchini-nlp (visual-language models) or @gante (all others)
+- generate: @gante
 - pipelines: @Narsil
 - tensorflow: @gante and @Rocketknight1
 - tokenizers: @ArthurZucker
-- trainer: @muellerzr and @SunMarc
+- trainer: @muellerzr and @pacman100
 
 Integrations:
 
-- deepspeed: HF Trainer/Accelerate: @muellerzr
+- deepspeed: HF Trainer/Accelerate: @pacman100
 - ray/raytune: @richardliaw, @amogkam
 - Big Model Inference: @SunMarc
-- quantization (bitsandbytes, autogpt): @SunMarc
+- quantization (bitsandbytes, autogpt): @SunMarc and @younesbelkada
 
-Documentation: @stevhliu
+Documentation: @stevhliu and @MKhalusova
 
 HF projects:
 

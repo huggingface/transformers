@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""TF 2.0 RemBERT model."""
+""" TF 2.0 RemBERT model."""
+
 
 from __future__ import annotations
 
@@ -43,7 +44,6 @@ from ...modeling_tf_utils import (
     TFSequenceClassificationLoss,
     TFTokenClassificationLoss,
     get_initializer,
-    keras,
     keras_serializable,
     unpack_inputs,
 )
@@ -61,8 +61,13 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "RemBertConfig"
 
+TF_REMBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "google/rembert",
+    # See all RemBERT models at https://huggingface.co/models?filter=rembert
+]
 
-class TFRemBertEmbeddings(keras.layers.Layer):
+
+class TFRemBertEmbeddings(tf.keras.layers.Layer):
     """Construct the embeddings from word, position and token_type embeddings."""
 
     def __init__(self, config: RemBertConfig, **kwargs):
@@ -72,8 +77,8 @@ class TFRemBertEmbeddings(keras.layers.Layer):
         self.input_embedding_size = config.input_embedding_size
         self.max_position_embeddings = config.max_position_embeddings
         self.initializer_range = config.initializer_range
-        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
-        self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
     def build(self, input_shape=None):
         with tf.name_scope("word_embeddings"):
@@ -145,7 +150,7 @@ class TFRemBertEmbeddings(keras.layers.Layer):
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfAttention with Bert->RemBert
-class TFRemBertSelfAttention(keras.layers.Layer):
+class TFRemBertSelfAttention(tf.keras.layers.Layer):
     def __init__(self, config: RemBertConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -160,16 +165,16 @@ class TFRemBertSelfAttention(keras.layers.Layer):
         self.all_head_size = self.num_attention_heads * self.attention_head_size
         self.sqrt_att_head_size = math.sqrt(self.attention_head_size)
 
-        self.query = keras.layers.Dense(
+        self.query = tf.keras.layers.Dense(
             units=self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="query"
         )
-        self.key = keras.layers.Dense(
+        self.key = tf.keras.layers.Dense(
             units=self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="key"
         )
-        self.value = keras.layers.Dense(
+        self.value = tf.keras.layers.Dense(
             units=self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="value"
         )
-        self.dropout = keras.layers.Dropout(rate=config.attention_probs_dropout_prob)
+        self.dropout = tf.keras.layers.Dropout(rate=config.attention_probs_dropout_prob)
 
         self.is_decoder = config.is_decoder
         self.config = config
@@ -278,15 +283,15 @@ class TFRemBertSelfAttention(keras.layers.Layer):
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfOutput with Bert->RemBert
-class TFRemBertSelfOutput(keras.layers.Layer):
+class TFRemBertSelfOutput(tf.keras.layers.Layer):
     def __init__(self, config: RemBertConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = keras.layers.Dense(
+        self.dense = tf.keras.layers.Dense(
             units=config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
-        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
-        self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
         self.config = config
 
     def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
@@ -309,7 +314,7 @@ class TFRemBertSelfOutput(keras.layers.Layer):
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertAttention with Bert->RemBert
-class TFRemBertAttention(keras.layers.Layer):
+class TFRemBertAttention(tf.keras.layers.Layer):
     def __init__(self, config: RemBertConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -361,11 +366,11 @@ class TFRemBertAttention(keras.layers.Layer):
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertIntermediate with Bert->RemBert
-class TFRemBertIntermediate(keras.layers.Layer):
+class TFRemBertIntermediate(tf.keras.layers.Layer):
     def __init__(self, config: RemBertConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = keras.layers.Dense(
+        self.dense = tf.keras.layers.Dense(
             units=config.intermediate_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
 
@@ -391,15 +396,15 @@ class TFRemBertIntermediate(keras.layers.Layer):
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertOutput with Bert->RemBert
-class TFRemBertOutput(keras.layers.Layer):
+class TFRemBertOutput(tf.keras.layers.Layer):
     def __init__(self, config: RemBertConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = keras.layers.Dense(
+        self.dense = tf.keras.layers.Dense(
             units=config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
-        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
-        self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
         self.config = config
 
     def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
@@ -422,7 +427,7 @@ class TFRemBertOutput(keras.layers.Layer):
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertLayer with Bert->RemBert
-class TFRemBertLayer(keras.layers.Layer):
+class TFRemBertLayer(tf.keras.layers.Layer):
     def __init__(self, config: RemBertConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -525,12 +530,12 @@ class TFRemBertLayer(keras.layers.Layer):
                 self.crossattention.build(None)
 
 
-class TFRemBertEncoder(keras.layers.Layer):
+class TFRemBertEncoder(tf.keras.layers.Layer):
     def __init__(self, config: RemBertConfig, **kwargs):
         super().__init__(**kwargs)
         self.config = config
 
-        self.embedding_hidden_mapping_in = keras.layers.Dense(
+        self.embedding_hidden_mapping_in = tf.keras.layers.Dense(
             units=config.hidden_size,
             kernel_initializer=get_initializer(config.initializer_range),
             name="embedding_hidden_mapping_in",
@@ -614,11 +619,11 @@ class TFRemBertEncoder(keras.layers.Layer):
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertPooler with Bert->RemBert
-class TFRemBertPooler(keras.layers.Layer):
+class TFRemBertPooler(tf.keras.layers.Layer):
     def __init__(self, config: RemBertConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = keras.layers.Dense(
+        self.dense = tf.keras.layers.Dense(
             units=config.hidden_size,
             kernel_initializer=get_initializer(config.initializer_range),
             activation="tanh",
@@ -643,21 +648,21 @@ class TFRemBertPooler(keras.layers.Layer):
                 self.dense.build([None, None, self.config.hidden_size])
 
 
-class TFRemBertLMPredictionHead(keras.layers.Layer):
-    def __init__(self, config: RemBertConfig, input_embeddings: keras.layers.Layer, **kwargs):
+class TFRemBertLMPredictionHead(tf.keras.layers.Layer):
+    def __init__(self, config: RemBertConfig, input_embeddings: tf.keras.layers.Layer, **kwargs):
         super().__init__(**kwargs)
 
         self.config = config
         self.initializer_range = config.initializer_range
         self.output_embedding_size = config.output_embedding_size
-        self.dense = keras.layers.Dense(
+        self.dense = tf.keras.layers.Dense(
             config.output_embedding_size, kernel_initializer=get_initializer(self.initializer_range), name="dense"
         )
         if isinstance(config.hidden_act, str):
             self.activation = get_tf_activation(config.hidden_act)
         else:
             self.activation = config.hidden_act
-        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
 
     def build(self, input_shape=None):
         self.decoder = self.add_weight(
@@ -679,7 +684,7 @@ class TFRemBertLMPredictionHead(keras.layers.Layer):
             with tf.name_scope(self.LayerNorm.name):
                 self.LayerNorm.build([None, self.config.output_embedding_size])
 
-    def get_output_embeddings(self) -> keras.layers.Layer:
+    def get_output_embeddings(self) -> tf.keras.layers.Layer:
         return self
 
     def set_output_embeddings(self, value):
@@ -706,8 +711,8 @@ class TFRemBertLMPredictionHead(keras.layers.Layer):
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertMLMHead with Bert->RemBert
-class TFRemBertMLMHead(keras.layers.Layer):
-    def __init__(self, config: RemBertConfig, input_embeddings: keras.layers.Layer, **kwargs):
+class TFRemBertMLMHead(tf.keras.layers.Layer):
+    def __init__(self, config: RemBertConfig, input_embeddings: tf.keras.layers.Layer, **kwargs):
         super().__init__(**kwargs)
 
         self.predictions = TFRemBertLMPredictionHead(config, input_embeddings, name="predictions")
@@ -727,7 +732,7 @@ class TFRemBertMLMHead(keras.layers.Layer):
 
 
 @keras_serializable
-class TFRemBertMainLayer(keras.layers.Layer):
+class TFRemBertMainLayer(tf.keras.layers.Layer):
     config_class = RemBertConfig
 
     def __init__(self, config: RemBertConfig, add_pooling_layer: bool = True, **kwargs):
@@ -740,7 +745,7 @@ class TFRemBertMainLayer(keras.layers.Layer):
         self.encoder = TFRemBertEncoder(config, name="encoder")
         self.pooler = TFRemBertPooler(config, name="pooler") if add_pooling_layer else None
 
-    def get_input_embeddings(self) -> keras.layers.Layer:
+    def get_input_embeddings(self) -> tf.keras.layers.Layer:
         return self.embeddings
 
     def set_input_embeddings(self, value: tf.Variable):
@@ -944,7 +949,7 @@ REMBERT_START_DOCSTRING = r"""
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
-    This model is also a [keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
+    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
     as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
     behavior.
 
@@ -1132,7 +1137,7 @@ class TFRemBertForMaskedLM(TFRemBertPreTrainedModel, TFMaskedLanguageModelingLos
         self.rembert = TFRemBertMainLayer(config, name="rembert", add_pooling_layer=False)
         self.mlm = TFRemBertMLMHead(config, input_embeddings=self.rembert.embeddings, name="mlm___cls")
 
-    def get_lm_head(self) -> keras.layers.Layer:
+    def get_lm_head(self) -> tf.keras.layers.Layer:
         return self.mlm.predictions
 
     @unpack_inputs
@@ -1214,7 +1219,7 @@ class TFRemBertForCausalLM(TFRemBertPreTrainedModel, TFCausalLanguageModelingLos
         self.rembert = TFRemBertMainLayer(config, name="rembert", add_pooling_layer=False)
         self.mlm = TFRemBertMLMHead(config, input_embeddings=self.rembert.embeddings, name="mlm___cls")
 
-    def get_lm_head(self) -> keras.layers.Layer:
+    def get_lm_head(self) -> tf.keras.layers.Layer:
         return self.mlm.predictions
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertLMHeadModel.prepare_inputs_for_generation
@@ -1341,8 +1346,8 @@ class TFRemBertForSequenceClassification(TFRemBertPreTrainedModel, TFSequenceCla
         self.num_labels = config.num_labels
 
         self.rembert = TFRemBertMainLayer(config, name="rembert")
-        self.dropout = keras.layers.Dropout(rate=config.classifier_dropout_prob)
-        self.classifier = keras.layers.Dense(
+        self.dropout = tf.keras.layers.Dropout(rate=config.classifier_dropout_prob)
+        self.classifier = tf.keras.layers.Dense(
             units=config.num_labels,
             kernel_initializer=get_initializer(config.initializer_range),
             name="classifier",
@@ -1428,8 +1433,8 @@ class TFRemBertForMultipleChoice(TFRemBertPreTrainedModel, TFMultipleChoiceLoss)
         super().__init__(config, *inputs, **kwargs)
 
         self.rembert = TFRemBertMainLayer(config, name="rembert")
-        self.dropout = keras.layers.Dropout(rate=config.classifier_dropout_prob)
-        self.classifier = keras.layers.Dense(
+        self.dropout = tf.keras.layers.Dropout(rate=config.classifier_dropout_prob)
+        self.classifier = tf.keras.layers.Dense(
             units=1, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
         self.config = config
@@ -1538,8 +1543,8 @@ class TFRemBertForTokenClassification(TFRemBertPreTrainedModel, TFTokenClassific
         self.num_labels = config.num_labels
 
         self.rembert = TFRemBertMainLayer(config, name="rembert", add_pooling_layer=False)
-        self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
-        self.classifier = keras.layers.Dense(
+        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.classifier = tf.keras.layers.Dense(
             units=config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
         self.config = config
@@ -1623,7 +1628,7 @@ class TFRemBertForQuestionAnswering(TFRemBertPreTrainedModel, TFQuestionAnswerin
         self.num_labels = config.num_labels
 
         self.rembert = TFRemBertMainLayer(config, add_pooling_layer=False, name="rembert")
-        self.qa_outputs = keras.layers.Dense(
+        self.qa_outputs = tf.keras.layers.Dense(
             units=config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
         )
         self.config = config

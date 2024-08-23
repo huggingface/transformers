@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Converting Meta SeamlessM4T checkpoints from seamless_communication to HF."""
+""" Converting Meta SeamlessM4T checkpoints from seamless_communication to HF."""
+
 
 import argparse
 import os

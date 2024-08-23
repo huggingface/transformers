@@ -14,6 +14,7 @@
 # limitations under the License.
 """Convert SegFormer checkpoints."""
 
+
 import argparse
 import json
 from collections import OrderedDict

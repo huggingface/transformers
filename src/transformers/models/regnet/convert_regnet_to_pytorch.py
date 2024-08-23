@@ -14,6 +14,7 @@
 # limitations under the License.
 """Convert RegNet checkpoints from timm and vissl."""
 
+
 import argparse
 import json
 from dataclasses import dataclass, field
@@ -25,7 +26,7 @@ import timm
 import torch
 import torch.nn as nn
 from classy_vision.models.regnet import RegNet, RegNetParams, RegNetY32gf, RegNetY64gf, RegNetY128gf
-from huggingface_hub import hf_hub_download
+from huggingface_hub import cached_download, hf_hub_url
 from torch import Tensor
 from vissl.models.model_helpers import get_trunk_forward_outputs
 
@@ -225,7 +226,7 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
 
     repo_id = "huggingface/label-files"
     num_labels = num_labels
-    id2label = json.loads(Path(hf_hub_download(repo_id, filename, repo_type="dataset")).read_text())
+    id2label = json.load(open(cached_download(hf_hub_url(repo_id, filename, repo_type="dataset")), "r"))
     id2label = {int(k): v for k, v in id2label.items()}
 
     id2label = id2label

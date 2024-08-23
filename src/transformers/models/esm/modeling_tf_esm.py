@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch ESM model."""
+""" PyTorch ESM model."""
+
 
 from __future__ import annotations
 
@@ -21,6 +22,8 @@ from typing import Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
+from tensorflow.keras.activations import gelu
+from tensorflow.keras.layers import Dense, Dropout, Embedding, Layer, LayerNormalization
 
 from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
 from ...modeling_tf_outputs import (
@@ -37,7 +40,6 @@ from ...modeling_tf_utils import (
     TFSequenceClassificationLoss,
     TFTokenClassificationLoss,
     get_initializer,
-    keras,
     shape_list,
     unpack_inputs,
 )
@@ -50,6 +52,13 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "facebook/esm2_t6_8M_UR50D"
 _CONFIG_FOR_DOC = "EsmConfig"
+
+TF_ESM_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "facebook/esm2_t6_8M_UR50D",
+    "facebook/esm2_t12_35M_UR50D",
+    # This is not a complete list of all ESM models!
+    # See all ESM models at https://huggingface.co/models?filter=esm
+]
 
 
 def rotate_half(x):
@@ -81,7 +90,7 @@ def average_product_correct(x):
     return normalized
 
 
-class TFRotaryEmbedding(keras.layers.Layer):
+class TFRotaryEmbedding(Layer):
     """
     Rotary position embeddings based on those in
     [RoFormer](https://huggingface.co/docs/transformers/model_doc/roformer). Query and keys are transformed by rotation
@@ -125,7 +134,7 @@ class TFRotaryEmbedding(keras.layers.Layer):
         )
 
 
-class TFEsmContactPredictionHead(keras.layers.Layer):
+class TFEsmContactPredictionHead(Layer):
     """Performs symmetrization, apc, and computes a logistic regression on the output features"""
 
     def __init__(
@@ -138,7 +147,7 @@ class TFEsmContactPredictionHead(keras.layers.Layer):
         super().__init__(name=name)
         self.eos_idx = eos_idx
         self.in_features = in_features
-        self.regression = keras.layers.Dense(1, use_bias=bias, activation="sigmoid", name="regression")
+        self.regression = Dense(1, use_bias=bias, activation="sigmoid", name="regression")
 
     def build(self, input_shape=None):
         if self.built:
@@ -165,20 +174,20 @@ class TFEsmContactPredictionHead(keras.layers.Layer):
         return tf.squeeze(self.regression(attentions), 3)
 
 
-class TFEsmEmbeddings(keras.layers.Layer):
+class TFEsmEmbeddings(Layer):
     """
     Same as BertEmbeddings with a tiny tweak for positional embeddings indexing.
     """
 
     def __init__(self, config, name=None):
         super().__init__(name=name)
-        self.word_embeddings = keras.layers.Embedding(
+        self.word_embeddings = Embedding(
             config.vocab_size,
             config.hidden_size,
             embeddings_initializer=get_initializer(config.initializer_range),
             name="word_embeddings",
         )
-        self.position_embeddings = keras.layers.Embedding(
+        self.position_embeddings = Embedding(
             config.max_position_embeddings,
             config.hidden_size,
             embeddings_initializer=get_initializer(config.initializer_range),
@@ -186,7 +195,7 @@ class TFEsmEmbeddings(keras.layers.Layer):
         )
 
         if config.emb_layer_norm_before:
-            self.layer_norm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
+            self.layer_norm = LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
         else:
             self.layer_norm = None
         # Matt: I think this line was copied incorrectly from BERT, disabling for now
@@ -277,7 +286,7 @@ class TFEsmEmbeddings(keras.layers.Layer):
                 self.layer_norm.build([None, None, self.config.hidden_size])
 
 
-class TFEsmSelfAttention(keras.layers.Layer):
+class TFEsmSelfAttention(Layer):
     def __init__(self, config, position_embedding_type=None, name=None):
         super().__init__(name=name)
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
@@ -290,24 +299,22 @@ class TFEsmSelfAttention(keras.layers.Layer):
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
-        self.query = keras.layers.Dense(
+        self.query = Dense(
             self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="query"
         )
-        self.key = keras.layers.Dense(
-            self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="key"
-        )
-        self.value = keras.layers.Dense(
+        self.key = Dense(self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="key")
+        self.value = Dense(
             self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="value"
         )
 
-        self.dropout = keras.layers.Dropout(config.attention_probs_dropout_prob)
+        self.dropout = Dropout(config.attention_probs_dropout_prob)
         self.position_embedding_type = position_embedding_type or getattr(
             config, "position_embedding_type", "absolute"
         )
         self.rotary_embeddings = None
         if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
             self.max_position_embeddings = config.max_position_embeddings
-            self.distance_embedding = keras.layers.Embedding(
+            self.distance_embedding = Embedding(
                 2 * config.max_position_embeddings - 1,
                 self.attention_head_size,
                 embeddings_initializer=get_initializer(config.initializer_range),
@@ -444,13 +451,13 @@ class TFEsmSelfAttention(keras.layers.Layer):
                 self.rotary_embeddings.build(None)
 
 
-class TFEsmSelfOutput(keras.layers.Layer):
+class TFEsmSelfOutput(Layer):
     def __init__(self, config, name=None):
         super().__init__(name=name)
-        self.dense = keras.layers.Dense(
+        self.dense = Dense(
             config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
-        self.dropout = keras.layers.Dropout(config.hidden_dropout_prob)
+        self.dropout = Dropout(config.hidden_dropout_prob)
         self.config = config
 
     def call(self, hidden_states, input_tensor, training=False):
@@ -468,13 +475,13 @@ class TFEsmSelfOutput(keras.layers.Layer):
                 self.dense.build([None, None, self.config.hidden_size])
 
 
-class TFEsmAttention(keras.layers.Layer):
+class TFEsmAttention(Layer):
     def __init__(self, config, name=None):
         super().__init__(name=name)
         self.self = TFEsmSelfAttention(config, name="self")
         self.output_layer = TFEsmSelfOutput(config, name="output")
         self.pruned_heads = set()
-        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.LayerNorm = LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.config = config
 
     def prune_heads(self, heads):
@@ -521,11 +528,11 @@ class TFEsmAttention(keras.layers.Layer):
                 self.LayerNorm.build([None, None, self.config.hidden_size])
 
 
-class TFEsmIntermediate(keras.layers.Layer):
+class TFEsmIntermediate(tf.keras.layers.Layer):
     def __init__(self, config: EsmConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = keras.layers.Dense(
+        self.dense = tf.keras.layers.Dense(
             units=config.intermediate_size,
             kernel_initializer=get_initializer(config.initializer_range),
             name="dense",
@@ -546,13 +553,13 @@ class TFEsmIntermediate(keras.layers.Layer):
                 self.dense.build([None, None, self.config.hidden_size])
 
 
-class TFEsmOutput(keras.layers.Layer):
+class TFEsmOutput(Layer):
     def __init__(self, config, name=None):
         super().__init__(name=name)
-        self.dense = keras.layers.Dense(
+        self.dense = Dense(
             config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
-        self.dropout = keras.layers.Dropout(config.hidden_dropout_prob)
+        self.dropout = Dropout(config.hidden_dropout_prob)
         self.config = config
 
     def call(self, hidden_states, input_tensor, training=False):
@@ -570,7 +577,7 @@ class TFEsmOutput(keras.layers.Layer):
                 self.dense.build([None, None, self.config.intermediate_size])
 
 
-class TFEsmLayer(keras.layers.Layer):
+class TFEsmLayer(Layer):
     def __init__(self, config, name=None):
         super().__init__(name=name)
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -584,7 +591,7 @@ class TFEsmLayer(keras.layers.Layer):
             self.crossattention = TFEsmAttention(config)
         self.intermediate = TFEsmIntermediate(config, name="intermediate")
         self.output_layer = TFEsmOutput(config, name="output")
-        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.LayerNorm = LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.config = config
 
     def call(
@@ -675,14 +682,12 @@ class TFEsmLayer(keras.layers.Layer):
                 self.LayerNorm.build([None, None, self.config.hidden_size])
 
 
-class TFEsmEncoder(keras.layers.Layer):
+class TFEsmEncoder(Layer):
     def __init__(self, config, name=None):
         super().__init__(name=name)
         self.config = config
         self.layer = [TFEsmLayer(config, name=f"layer_._{i}") for i in range(config.num_hidden_layers)]
-        self.emb_layer_norm_after = keras.layers.LayerNormalization(
-            epsilon=config.layer_norm_eps, name="emb_layer_norm_after"
-        )
+        self.emb_layer_norm_after = LayerNormalization(epsilon=config.layer_norm_eps, name="emb_layer_norm_after")
 
     def call(
         self,
@@ -769,11 +774,11 @@ class TFEsmEncoder(keras.layers.Layer):
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertPooler with Bert->Esm
-class TFEsmPooler(keras.layers.Layer):
+class TFEsmPooler(tf.keras.layers.Layer):
     def __init__(self, config: EsmConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = keras.layers.Dense(
+        self.dense = tf.keras.layers.Dense(
             units=config.hidden_size,
             kernel_initializer=get_initializer(config.initializer_range),
             activation="tanh",
@@ -869,7 +874,7 @@ ESM_INPUTS_DOCSTRING = r"""
     "The bare ESM Model transformer outputting raw hidden-states without any specific head on top.",
     ESM_START_DOCSTRING,
 )
-class TFEsmMainLayer(keras.layers.Layer):
+class TFEsmMainLayer(Layer):
     """
 
     The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
@@ -1232,7 +1237,7 @@ class TFEsmForMaskedLM(TFEsmPreTrainedModel, TFMaskedLanguageModelingLoss):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
             config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
             loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
-        kwargs (`Dict[str, any]`, *optional*, defaults to `{}`):
+        kwargs (`Dict[str, any]`, optional, defaults to *{}*):
             Used to hide legacy arguments that have been deprecated.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1283,20 +1288,20 @@ class TFEsmForMaskedLM(TFEsmPreTrainedModel, TFMaskedLanguageModelingLoss):
                 self.lm_head.build(None)
 
 
-class TFEsmLMHead(keras.layers.Layer):
+class TFEsmLMHead(Layer):
     """ESM Head for masked language modeling."""
 
     def __init__(self, config, name=None):
         super().__init__(name=name)
-        self.dense = keras.layers.Dense(
+        self.dense = Dense(
             config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
 
-        self.layer_norm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
+        self.layer_norm = LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
         if config.tie_word_embeddings:
             self.decoder = None
         else:
-            self.decoder = keras.layers.Dense(
+            self.decoder = Dense(
                 config.vocab_size,
                 kernel_initializer=get_initializer(config.initializer_range),
                 name="decoder",
@@ -1326,7 +1331,7 @@ class TFEsmLMHead(keras.layers.Layer):
 
     def call(self, features):
         x = self.dense(features)
-        x = tf.nn.gelu(x)
+        x = gelu(x)
         x = self.layer_norm(x)
 
         # project back to size of vocabulary with bias
@@ -1438,8 +1443,8 @@ class TFEsmForTokenClassification(TFEsmPreTrainedModel, TFTokenClassificationLos
         self.num_labels = config.num_labels
 
         self.esm = TFEsmMainLayer(config, add_pooling_layer=False, name="esm")
-        self.dropout = keras.layers.Dropout(config.hidden_dropout_prob)
-        self.classifier = keras.layers.Dense(config.num_labels, name="classifier")
+        self.dropout = Dropout(config.hidden_dropout_prob)
+        self.classifier = Dense(config.num_labels, name="classifier")
         self.config = config
 
     @unpack_inputs
@@ -1510,19 +1515,19 @@ class TFEsmForTokenClassification(TFEsmPreTrainedModel, TFTokenClassificationLos
                 self.classifier.build([None, None, self.config.hidden_size])
 
 
-class TFEsmClassificationHead(keras.layers.Layer):
+class TFEsmClassificationHead(Layer):
     """Head for sentence-level classification tasks."""
 
     def __init__(self, config, name=None):
         super().__init__(name=name)
-        self.dense = keras.layers.Dense(
+        self.dense = Dense(
             config.hidden_size,
             kernel_initializer=get_initializer(config.initializer_range),
             activation="tanh",
             name="dense",
         )
-        self.dropout = keras.layers.Dropout(config.hidden_dropout_prob)
-        self.out_proj = keras.layers.Dense(
+        self.dropout = Dropout(config.hidden_dropout_prob)
+        self.out_proj = Dense(
             config.num_labels,
             kernel_initializer=get_initializer(config.initializer_range),
             activation="linear",

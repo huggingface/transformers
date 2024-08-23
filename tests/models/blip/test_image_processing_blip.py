@@ -43,7 +43,6 @@ class BlipImageProcessingTester(unittest.TestCase):
         image_std=[0.26862954, 0.26130258, 0.27577711],
         do_convert_rgb=True,
     ):
-        super().__init__()
         size = size if size is not None else {"height": 20, "width": 20}
         self.parent = parent
         self.batch_size = batch_size
@@ -91,7 +90,6 @@ class BlipImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = BlipImageProcessor if is_vision_available() else None
 
     def setUp(self):
-        super().setUp()
         self.image_processor_tester = BlipImageProcessingTester(self)
 
     @property
@@ -114,7 +112,6 @@ class BlipImageProcessingTestFourChannels(ImageProcessingTestMixin, unittest.Tes
     image_processing_class = BlipImageProcessor if is_vision_available() else None
 
     def setUp(self):
-        super().setUp()
         self.image_processor_tester = BlipImageProcessingTester(self, num_channels=4)
         self.expected_encoded_image_num_channels = 3
 
@@ -131,18 +128,18 @@ class BlipImageProcessingTestFourChannels(ImageProcessingTestMixin, unittest.Tes
         self.assertTrue(hasattr(image_processor, "image_std"))
         self.assertTrue(hasattr(image_processor, "do_convert_rgb"))
 
-    @unittest.skip(reason="BlipImageProcessor does not support 4 channels yet")  # FIXME Amy
+    @unittest.skip("BlipImageProcessor does not support 4 channels yet")  # FIXME Amy
     def test_call_numpy(self):
         return super().test_call_numpy()
 
-    @unittest.skip(reason="BlipImageProcessor does not support 4 channels yet")  # FIXME Amy
+    @unittest.skip("BlipImageProcessor does not support 4 channels yet")  # FIXME Amy
     def test_call_pytorch(self):
         return super().test_call_torch()
 
-    @unittest.skip(reason="BLIP doesn't treat 4 channel PIL and numpy consistently yet")  # FIXME Amy
+    @unittest.skip("BLIP doesn't treat 4 channel PIL and numpy consistently yet")  # FIXME Amy
     def test_call_pil(self):
         pass
 
-    @unittest.skip(reason="BLIP doesn't treat 4 channel PIL and numpy consistently yet")  # FIXME Amy
+    @unittest.skip("BLIP doesn't treat 4 channel PIL and numpy consistently yet")  # FIXME Amy
     def test_call_numpy_4_channels(self):
         pass
