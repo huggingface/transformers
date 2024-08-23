@@ -24,13 +24,13 @@ import quant_trainer
 import torch
 from torch.utils.data import DataLoader
 
-from transformers import Trainer, is_torch_xla_available
+from transformers import Trainer, is_torch_tpu_available
 from transformers.trainer_utils import PredictionOutput
 
 
 logger = logging.getLogger(__name__)
 
-if is_torch_xla_available():
+if is_torch_tpu_available(check_device=False):
     import torch_xla.core.xla_model as xm
     import torch_xla.debug.metrics as met
 

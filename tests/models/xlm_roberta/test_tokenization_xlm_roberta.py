@@ -31,7 +31,6 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 @require_sentencepiece
 @require_tokenizers
 class XLMRobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-    from_pretrained_id = "FacebookAI/xlm-roberta-base"
     tokenizer_class = XLMRobertaTokenizer
     rust_tokenizer_class = XLMRobertaTokenizerFast
     test_rust_tokenizer = True
@@ -143,7 +142,7 @@ class XLMRobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_save_pretrained(self):
         if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
-            self.skipTest(reason="test_slow_tokenizer is set to False")
+            return
 
         self.tokenizers_list[0] = (self.rust_tokenizer_class, "hf-internal-testing/tiny-xlm-roberta", {})
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
@@ -213,7 +212,7 @@ class XLMRobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @cached_property
     def big_tokenizer(self):
-        return XLMRobertaTokenizer.from_pretrained("FacebookAI/xlm-roberta-base")
+        return XLMRobertaTokenizer.from_pretrained("xlm-roberta-base")
 
     def test_picklable_without_disk(self):
         with tempfile.NamedTemporaryFile() as f:
@@ -224,7 +223,7 @@ class XLMRobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_rust_and_python_full_tokenizers(self):
         if not self.test_rust_tokenizer:
-            self.skipTest(reason="test_rust_tokenizer is set to False")
+            return
 
         tokenizer = self.get_tokenizer()
         rust_tokenizer = self.get_rust_tokenizer()
@@ -339,6 +338,6 @@ class XLMRobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.tokenizer_integration_test_util(
             expected_encoding=expected_encoding,
-            model_name="FacebookAI/xlm-roberta-base",
+            model_name="xlm-roberta-base",
             revision="d9d8a8ea5eb94b1c6654ae9249df7793cd2933d3",
         )

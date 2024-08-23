@@ -18,7 +18,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 
 _import_structure = {
-    "configuration_lilt": ["LiltConfig"],
+    "configuration_lilt": ["LILT_PRETRAINED_CONFIG_ARCHIVE_MAP", "LiltConfig"],
 }
 
 try:
@@ -28,6 +28,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_lilt"] = [
+        "LILT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "LiltForQuestionAnswering",
         "LiltForSequenceClassification",
         "LiltForTokenClassification",
@@ -36,7 +37,7 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_lilt import LiltConfig
+    from .configuration_lilt import LILT_PRETRAINED_CONFIG_ARCHIVE_MAP, LiltConfig
 
     try:
         if not is_torch_available():
@@ -45,6 +46,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_lilt import (
+            LILT_PRETRAINED_MODEL_ARCHIVE_LIST,
             LiltForQuestionAnswering,
             LiltForSequenceClassification,
             LiltForTokenClassification,

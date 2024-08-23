@@ -15,7 +15,6 @@
 """
 Preprocessing script before training the distilled model.
 """
-
 import argparse
 import logging
 import pickle

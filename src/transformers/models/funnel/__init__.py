@@ -24,7 +24,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_funnel": ["FunnelConfig"],
+    "configuration_funnel": ["FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP", "FunnelConfig"],
     "convert_funnel_original_tf_checkpoint_to_pytorch": [],
     "tokenization_funnel": ["FunnelTokenizer"],
 }
@@ -44,6 +44,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_funnel"] = [
+        "FUNNEL_PRETRAINED_MODEL_ARCHIVE_LIST",
         "FunnelBaseModel",
         "FunnelForMaskedLM",
         "FunnelForMultipleChoice",
@@ -63,6 +64,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_tf_funnel"] = [
+        "TF_FUNNEL_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFFunnelBaseModel",
         "TFFunnelForMaskedLM",
         "TFFunnelForMultipleChoice",
@@ -76,7 +78,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_funnel import FunnelConfig
+    from .configuration_funnel import FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP, FunnelConfig
     from .tokenization_funnel import FunnelTokenizer
 
     try:
@@ -94,6 +96,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_funnel import (
+            FUNNEL_PRETRAINED_MODEL_ARCHIVE_LIST,
             FunnelBaseModel,
             FunnelForMaskedLM,
             FunnelForMultipleChoice,
@@ -113,6 +116,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_tf_funnel import (
+            TF_FUNNEL_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFFunnelBaseModel,
             TFFunnelForMaskedLM,
             TFFunnelForMultipleChoice,

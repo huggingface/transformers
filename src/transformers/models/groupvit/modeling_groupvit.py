@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch GroupViT model."""
+""" PyTorch GroupViT model."""
+
 
 import collections.abc
 import math
@@ -41,6 +42,11 @@ from .configuration_groupvit import GroupViTConfig, GroupViTTextConfig, GroupViT
 logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "nvidia/groupvit-gcc-yfcc"
+
+GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "nvidia/groupvit-gcc-yfcc",
+    # See all GroupViT models at https://huggingface.co/models?filter=groupvit
+]
 
 
 # contrastive loss function, adapted from
@@ -688,7 +694,7 @@ class GroupViTAttention(nn.Module):
         return attn_output, attn_weights_reshaped
 
 
-# Copied from transformers.models.altclip.modeling_altclip.AltCLIPEncoderLayer with AltCLIP->GroupViT
+# Copied from transformers.models.clip.modeling_clip.CLIPEncoderLayer with CLIP->GroupViT
 class GroupViTEncoderLayer(nn.Module):
     def __init__(self, config: GroupViTConfig):
         super().__init__()
@@ -1034,6 +1040,7 @@ class GroupViTTextEncoder(nn.Module):
         )
 
 
+# Copied from transformers.models.clip.modeling_clip.CLIPTextTransformer with CLIPText->GroupViTText, CLIPEncoder->GroupViTTextEncoder, CLIP_TEXT->GROUPVIT_TEXT
 class GroupViTTextTransformer(nn.Module):
     def __init__(self, config: GroupViTTextConfig):
         super().__init__()
@@ -1080,7 +1087,6 @@ class GroupViTTextTransformer(nn.Module):
         causal_attention_mask = _create_4d_causal_attention_mask(
             input_shape, hidden_states.dtype, device=hidden_states.device
         )
-
         # expand attention_mask
         if attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
@@ -1114,7 +1120,6 @@ class GroupViTTextTransformer(nn.Module):
             pooled_output = last_hidden_state[
                 torch.arange(last_hidden_state.shape[0], device=last_hidden_state.device),
                 # We need to get the first position of `eos_token_id` value (`pad_token_ids` might equal to `eos_token_id`)
-                # Note: we assume each sequence (along batch dim.) contains an  `eos_token_id` (e.g. prepared by the tokenizer)
                 (input_ids.to(dtype=torch.int, device=last_hidden_state.device) == self.eos_token_id)
                 .int()
                 .argmax(dim=-1),
@@ -1302,13 +1307,13 @@ class GroupViTModel(GroupViTPreTrainedModel):
         super().__init__(config)
 
         if not isinstance(config.text_config, GroupViTTextConfig):
-            raise TypeError(
+            raise ValueError(
                 "config.text_config is expected to be of type GroupViTTextConfig but is of type"
                 f" {type(config.text_config)}."
             )
 
         if not isinstance(config.vision_config, GroupViTVisionConfig):
-            raise TypeError(
+            raise ValueError(
                 "config.vision_config is expected to be of type GroupViTVisionConfig but is of type"
                 f" {type(config.vision_config)}."
             )

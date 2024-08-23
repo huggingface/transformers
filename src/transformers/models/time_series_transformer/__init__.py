@@ -17,7 +17,10 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 
 _import_structure = {
-    "configuration_time_series_transformer": ["TimeSeriesTransformerConfig"],
+    "configuration_time_series_transformer": [
+        "TIME_SERIES_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "TimeSeriesTransformerConfig",
+    ],
 }
 
 try:
@@ -27,6 +30,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_time_series_transformer"] = [
+        "TIME_SERIES_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TimeSeriesTransformerForPrediction",
         "TimeSeriesTransformerModel",
         "TimeSeriesTransformerPreTrainedModel",
@@ -35,6 +39,7 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_time_series_transformer import (
+        TIME_SERIES_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         TimeSeriesTransformerConfig,
     )
 
@@ -45,6 +50,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_time_series_transformer import (
+            TIME_SERIES_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             TimeSeriesTransformerForPrediction,
             TimeSeriesTransformerModel,
             TimeSeriesTransformerPreTrainedModel,

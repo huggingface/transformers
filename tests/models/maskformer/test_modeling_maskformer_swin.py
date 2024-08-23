@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch MaskFormer Swin model."""
+""" Testing suite for the PyTorch MaskFormer Swin model. """
 
 import collections
 import unittest
@@ -184,13 +184,7 @@ class MaskFormerSwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
 
     def setUp(self):
         self.model_tester = MaskFormerSwinModelTester(self)
-        self.config_tester = ConfigTester(
-            self,
-            config_class=MaskFormerSwinConfig,
-            has_text_modality=False,
-            embed_dim=37,
-            common_properties=["image_size", "patch_size", "num_channels"],
-        )
+        self.config_tester = ConfigTester(self, config_class=MaskFormerSwinConfig, embed_dim=37)
 
     @require_torch_multi_gpu
     @unittest.skip(
@@ -203,7 +197,16 @@ class MaskFormerSwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
         pass
 
     def test_config(self):
-        self.config_tester.run_common_tests()
+        self.create_and_test_config_common_properties()
+        self.config_tester.create_and_test_config_to_json_string()
+        self.config_tester.create_and_test_config_to_json_file()
+        self.config_tester.create_and_test_config_from_and_save_pretrained()
+        self.config_tester.create_and_test_config_with_num_labels()
+        self.config_tester.check_config_can_be_init_without_params()
+        self.config_tester.check_config_arguments_init()
+
+    def create_and_test_config_common_properties(self):
+        return
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -213,15 +216,15 @@ class MaskFormerSwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_backbone(*config_and_inputs)
 
-    @unittest.skip(reason="Swin does not use inputs_embeds")
+    @unittest.skip("Swin does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="Swin does not support feedforward chunking")
+    @unittest.skip("Swin does not support feedforward chunking")
     def test_feed_forward_chunking(self):
         pass
 
-    def test_model_get_set_embeddings(self):
+    def test_model_common_attributes(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:

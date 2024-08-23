@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch UniSpeechSat model."""
+""" Testing suite for the PyTorch UniSpeechSat model. """
 
 import math
 import unittest
@@ -403,20 +403,23 @@ class UniSpeechSatModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_labels_out_of_vocab(*config_and_inputs)
 
-    @unittest.skip(reason="Model has no input_embeds")
+    # UniSpeechSat has no inputs_embeds
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="Model has input_values instead of input_ids")
+    # `input_ids` is renamed to `input_values`
     def test_forward_signature(self):
         pass
 
-    @unittest.skip(reason="Model has no tokens embeddings")
+    # UniSpeechSat cannot resize token embeddings
+    # since it has no tokens embeddings
     def test_resize_tokens_embeddings(self):
         pass
 
-    @unittest.skip(reason="Model has no input_embeds")
-    def test_model_get_set_embeddings(self):
+    # UniSpeechSat has no inputs_embeds
+    # and thus the `get_input_embeddings` fn
+    # is not implemented
+    def test_model_common_attributes(self):
         pass
 
     def test_retain_grad_hidden_states_attentions(self):
@@ -612,20 +615,23 @@ class UniSpeechSatRobustModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_labels_out_of_vocab(*config_and_inputs)
 
-    @unittest.skip(reason="Model has no input_embeds")
+    # UniSpeechSat has no inputs_embeds
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="Model has input_values instead of input_ids")
+    # `input_ids` is renamed to `input_values`
     def test_forward_signature(self):
         pass
 
-    @unittest.skip(reason="Model has no tokens embeddings")
+    # UniSpeechSat cannot resize token embeddings
+    # since it has no tokens embeddings
     def test_resize_tokens_embeddings(self):
         pass
 
-    @unittest.skip(reason="Model has no input_embeds")
-    def test_model_get_set_embeddings(self):
+    # UniSpeechSat has no inputs_embeds
+    # and thus the `get_input_embeddings` fn
+    # is not implemented
+    def test_model_common_attributes(self):
         pass
 
     def test_retain_grad_hidden_states_attentions(self):
@@ -815,7 +821,7 @@ class UniSpeechSatModelIntegrationTest(unittest.TestCase):
         return [x["array"] for x in speech_samples]
 
     def _load_superb(self, task, num_samples):
-        ds = load_dataset("anton-l/superb_dummy", task, split="test", trust_remote_code=True)
+        ds = load_dataset("anton-l/superb_dummy", task, split="test")
 
         return ds[:num_samples]
 
@@ -900,6 +906,7 @@ class UniSpeechSatModelIntegrationTest(unittest.TestCase):
         )
         self.assertEqual(labels[0, :, 0].sum(), 270)
         self.assertEqual(labels[0, :, 1].sum(), 647)
+        # TODO: update the tolerance after the CI moves to torch 1.10
         self.assertTrue(torch.allclose(outputs.logits[:, :4], expected_logits, atol=1e-2))
 
     def test_inference_speaker_verification(self):
@@ -924,4 +931,5 @@ class UniSpeechSatModelIntegrationTest(unittest.TestCase):
         # id10002 vs id10004
         self.assertAlmostEqual(cosine_sim(embeddings[2], embeddings[3]).item(), 0.5616, 3)
 
+        # TODO: update the tolerance after the CI moves to torch 1.10
         self.assertAlmostEqual(outputs.loss.item(), 18.5925, 2)

@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 
-"""Pre-Training a 🤗 Wav2Vec2 model on unlabeled audio data"""
+""" Pre-Training a 🤗 Wav2Vec2 model on unlabeled audio data """
 
 import argparse
 import math
@@ -27,7 +27,7 @@ import torch
 from accelerate import Accelerator
 from accelerate.logging import get_logger
 from datasets import DatasetDict, concatenate_datasets, load_dataset
-from huggingface_hub import HfApi
+from huggingface_hub import Repository, create_repo
 from torch.utils.data.dataloader import DataLoader
 from tqdm.auto import tqdm
 
@@ -70,15 +70,6 @@ def parse_args():
         type=str,
         required=True,
         help="The names of the training data set splits to use (via the datasets library).",
-    )
-    parser.add_argument(
-        "--trust_remote_code",
-        action="store_true",
-        help=(
-            "Whether to trust the execution of code from datasets/models defined on the Hub."
-            " This option should only be set to `True` for repositories you trust and in which you have read the"
-            " code, as it will execute code present on the Hub on your local machine."
-        ),
     )
     parser.add_argument(
         "--preprocessing_num_workers",
@@ -432,14 +423,9 @@ def main():
             if repo_name is None:
                 repo_name = Path(args.output_dir).absolute().name
             # Create repo and retrieve repo_id
-            api = HfApi()
-            repo_id = api.create_repo(repo_name, exist_ok=True, token=args.hub_token).repo_id
-
-            with open(os.path.join(args.output_dir, ".gitignore"), "w+") as gitignore:
-                if "step_*" not in gitignore:
-                    gitignore.write("step_*\n")
-                if "epoch_*" not in gitignore:
-                    gitignore.write("epoch_*\n")
+            repo_id = create_repo(repo_name, exist_ok=True, token=args.hub_token).repo_id
+            # Clone repo locally
+            repo = Repository(args.output_dir, clone_from=repo_id, token=args.hub_token)
         elif args.output_dir is not None:
             os.makedirs(args.output_dir, exist_ok=True)
     accelerator.wait_for_everyone()
@@ -455,7 +441,6 @@ def main():
             dataset_config_name,
             split=train_split_name,
             cache_dir=args.cache_dir,
-            trust_remote_code=args.trust_remote_code,
         )
         datasets_splits.append(dataset_split)
 
@@ -734,12 +719,10 @@ def main():
                     )
 
                 if (args.push_to_hub and epoch < args.num_train_epochs - 1) and accelerator.is_main_process:
-                    api.upload_folder(
-                        commit_message=f"Training in progress epoch {epoch}",
-                        folder_path=args.output_dir,
-                        repo_id=repo_id,
-                        repo_type="model",
-                        token=args.hub_token,
+                    repo.push_to_hub(
+                        commit_message=f"Training in progress step {completed_steps}",
+                        blocking=False,
+                        auto_lfs_prune=True,
                     )
 
             # if completed steps > `args.max_train_steps` stop
@@ -789,13 +772,7 @@ def main():
             )
             if accelerator.is_main_process:
                 if args.push_to_hub:
-                    api.upload_folder(
-                        commit_message="End of training",
-                        folder_path=args.output_dir,
-                        repo_id=repo_id,
-                        repo_type="model",
-                        token=args.hub_token,
-                    )
+                    repo.push_to_hub(commit_message="End of training", auto_lfs_prune=True)
 
 
 if __name__ == "__main__":

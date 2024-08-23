@@ -1,0 +1,11 @@
+{
+  "modelname": "FlaxNewENCDEC",
+  "uppercase_modelname": "FLAX_NEW_ENC_DEC",
+  "lowercase_modelname": "flax_new_enc_dec_template",
+  "camelcase_modelname": "FlaxNewEncDec",
+  "authors": "The HuggingFace Team",
+  "checkpoint_identifier": "new-flax-enc-dec-base",
+  "tokenizer_type": "Based on BART",
+  "generate_tensorflow_pytorch_and_flax": "Flax",
+  "is_encoder_decoder_model": "True"
+}

@@ -1,7 +1,7 @@
 # docstyle-ignore
 INSTALL_CONTENT = """
 # Installation de Transformers
-! pip install transformers datasets evaluate accelerate
+! pip install transformers datasets
 # Pour installer à partir du code source au lieu de la dernière version, commentez la commande ci-dessus et décommentez la suivante.
 # ! pip install git+https://github.com/huggingface/transformers.git
 """

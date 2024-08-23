@@ -26,6 +26,22 @@ logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "prophetnet.tokenizer"}
 
+PRETRAINED_VOCAB_FILES_MAP = {
+    "vocab_file": {
+        "microsoft/prophetnet-large-uncased": (
+            "https://huggingface.co/microsoft/prophetnet-large-uncased/resolve/main/prophetnet.tokenizer"
+        ),
+    }
+}
+
+PRETRAINED_INIT_CONFIGURATION = {
+    "microsoft/prophetnet-large-uncased": {"do_lower_case": True},
+}
+
+PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
+    "microsoft/prophetnet-large-uncased": 512,
+}
+
 
 # Copied from transformers.models.bert.tokenization_bert.whitespace_tokenize
 def whitespace_tokenize(text):
@@ -38,7 +54,7 @@ def whitespace_tokenize(text):
 
 
 # Copied from transformers.models.bert.tokenization_bert.BasicTokenizer
-class BasicTokenizer:
+class BasicTokenizer(object):
     """
     Constructs a BasicTokenizer that will run basic tokenization (punctuation splitting, lower casing, etc.).
 
@@ -200,7 +216,7 @@ class BasicTokenizer:
 
 
 # Copied from transformers.models.bert.tokenization_bert.WordpieceTokenizer
-class WordpieceTokenizer:
+class WordpieceTokenizer(object):
     """Runs WordPiece tokenization."""
 
     def __init__(self, vocab, unk_token, max_input_chars_per_word=100):
@@ -311,6 +327,9 @@ class ProphetNetTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
+    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
+    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
+    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
     # first name has to correspond to main model input name
     # to make sure `tokenizer.pad(...)` works correctly

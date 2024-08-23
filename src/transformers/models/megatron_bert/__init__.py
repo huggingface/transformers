@@ -17,7 +17,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 
 _import_structure = {
-    "configuration_megatron_bert": ["MegatronBertConfig"],
+    "configuration_megatron_bert": ["MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MegatronBertConfig"],
 }
 
 try:
@@ -27,6 +27,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_megatron_bert"] = [
+        "MEGATRON_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "MegatronBertForCausalLM",
         "MegatronBertForMaskedLM",
         "MegatronBertForMultipleChoice",
@@ -40,7 +41,7 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_megatron_bert import MegatronBertConfig
+    from .configuration_megatron_bert import MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MegatronBertConfig
 
     try:
         if not is_torch_available():
@@ -49,6 +50,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_megatron_bert import (
+            MEGATRON_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             MegatronBertForCausalLM,
             MegatronBertForMaskedLM,
             MegatronBertForMultipleChoice,

@@ -25,8 +25,6 @@ logger = logging.get_logger(__name__)
 if is_tf_available():
     import tensorflow as tf
 
-    from .modeling_tf_utils import keras
-
 
 @dataclass
 class TFTrainingArguments(TrainingArguments):
@@ -49,7 +47,7 @@ class TFTrainingArguments(TrainingArguments):
             by your training/evaluation scripts instead. See the [example
             scripts](https://github.com/huggingface/transformers/tree/main/examples) for more details.
         do_eval (`bool`, *optional*):
-            Whether to run evaluation on the validation set or not. Will be set to `True` if `eval_strategy` is
+            Whether to run evaluation on the validation set or not. Will be set to `True` if `evaluation_strategy` is
             different from `"no"`. This argument is not directly used by [`Trainer`], it's intended to be used by your
             training/evaluation scripts instead. See the [example
             scripts](https://github.com/huggingface/transformers/tree/main/examples) for more details.
@@ -57,7 +55,7 @@ class TFTrainingArguments(TrainingArguments):
             Whether to run predictions on the test set or not. This argument is not directly used by [`Trainer`], it's
             intended to be used by your training/evaluation scripts instead. See the [example
             scripts](https://github.com/huggingface/transformers/tree/main/examples) for more details.
-        eval_strategy (`str` or [`~trainer_utils.IntervalStrategy`], *optional*, defaults to `"no"`):
+        evaluation_strategy (`str` or [`~trainer_utils.IntervalStrategy`], *optional*, defaults to `"no"`):
             The evaluation strategy to adopt during training. Possible values are:
 
                 - `"no"`: No evaluation is done during training.
@@ -160,7 +158,7 @@ class TFTrainingArguments(TrainingArguments):
             Google Cloud Project name for the Cloud TPU-enabled project. If not specified, we will attempt to
             automatically detect from metadata.
         run_name (`str`, *optional*):
-            A descriptor for the run. Notably used for wandb, mlflow and comet logging.
+            A descriptor for the run. Notably used for wandb logging.
         xla (`bool`, *optional*):
             Whether to activate the XLA compilation or not.
     """
@@ -197,7 +195,7 @@ class TFTrainingArguments(TrainingArguments):
 
         # Set to float16 at first
         if self.fp16:
-            keras.mixed_precision.set_global_policy("mixed_float16")
+            tf.keras.mixed_precision.set_global_policy("mixed_float16")
 
         if self.no_cuda:
             strategy = tf.distribute.OneDeviceStrategy(device="/cpu:0")
@@ -218,7 +216,7 @@ class TFTrainingArguments(TrainingArguments):
             if tpu:
                 # Set to bfloat16 in case of TPU
                 if self.fp16:
-                    keras.mixed_precision.set_global_policy("mixed_bfloat16")
+                    tf.keras.mixed_precision.set_global_policy("mixed_bfloat16")
 
                 tf.config.experimental_connect_to_cluster(tpu)
                 tf.tpu.experimental.initialize_tpu_system(tpu)

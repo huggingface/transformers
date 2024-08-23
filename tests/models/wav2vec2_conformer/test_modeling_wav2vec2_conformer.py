@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch Wav2Vec2-Conformer model."""
-
+""" Testing suite for the PyTorch Wav2Vec2-Conformer model. """
 import math
 import tempfile
 import unittest
@@ -512,29 +511,32 @@ class Wav2Vec2ConformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_labels_out_of_vocab(*config_and_inputs)
 
-    @unittest.skip(reason="Wav2Vec2Conformer has not inputs_embeds")
+    # Wav2Vec2Conformer has no inputs_embeds
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="Wav2Vec2Conformer has input_values instead of input_ids")
+    # `input_ids` is renamed to `input_values`
     def test_forward_signature(self):
         pass
 
-    @unittest.skip(reason="Wav2Vec2Conformer has not token embeddings")
+    # Wav2Vec2Conformer cannot resize token embeddings
+    # since it has no tokens embeddings
     def test_resize_tokens_embeddings(self):
         pass
 
-    @unittest.skip(reason="Wav2Vec2Conformer has not inputs_embeds")
-    def test_model_get_set_embeddings(self):
+    # Wav2Vec2Conformer has no inputs_embeds
+    # and thus the `get_input_embeddings` fn
+    # is not implemented
+    def test_model_common_attributes(self):
         pass
 
     @is_pt_flax_cross_test
-    @unittest.skip(reason="Non-robust architecture does not exist in Flax")
+    # non-robust architecture does not exist in Flax
     def test_equivalence_flax_to_pt(self):
         pass
 
     @is_pt_flax_cross_test
-    @unittest.skip(reason="Non-robust architecture does not exist in Flax")
+    # non-robust architecture does not exist in Flax
     def test_equivalence_pt_to_flax(self):
         pass
 

@@ -23,7 +23,7 @@ from ...utils import (
 )
 
 
-_import_structure = {"configuration_opt": ["OPTConfig"]}
+_import_structure = {"configuration_opt": ["OPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "OPTConfig"]}
 
 try:
     if not is_torch_available():
@@ -32,6 +32,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_opt"] = [
+        "OPT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "OPTForCausalLM",
         "OPTModel",
         "OPTPreTrainedModel",
@@ -61,7 +62,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_opt import OPTConfig
+    from .configuration_opt import OPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OPTConfig
 
     try:
         if not is_torch_available():
@@ -70,6 +71,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_opt import (
+            OPT_PRETRAINED_MODEL_ARCHIVE_LIST,
             OPTForCausalLM,
             OPTForQuestionAnswering,
             OPTForSequenceClassification,

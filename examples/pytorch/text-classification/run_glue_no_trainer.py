@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Finetuning a 🤗 Transformers model for sequence classification on GLUE."""
-
+""" Finetuning a 🤗 Transformers model for sequence classification on GLUE."""
 import argparse
 import json
 import logging
@@ -29,7 +28,7 @@ from accelerate import Accelerator
 from accelerate.logging import get_logger
 from accelerate.utils import set_seed
 from datasets import load_dataset
-from huggingface_hub import HfApi
+from huggingface_hub import Repository, create_repo
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
@@ -49,7 +48,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.45.0.dev0")
+check_min_version("4.37.0.dev0")
 
 logger = get_logger(__name__)
 
@@ -162,7 +161,7 @@ def parse_args():
         type=bool,
         default=False,
         help=(
-            "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option "
+            "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option"
             "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
             "execute code present on the Hub on your local machine."
         ),
@@ -256,8 +255,9 @@ def main():
             if repo_name is None:
                 repo_name = Path(args.output_dir).absolute().name
             # Create repo and retrieve repo_id
-            api = HfApi()
-            repo_id = api.create_repo(repo_name, exist_ok=True, token=args.hub_token).repo_id
+            repo_id = create_repo(repo_name, exist_ok=True, token=args.hub_token).repo_id
+            # Clone repo locally
+            repo = Repository(args.output_dir, clone_from=repo_id, token=args.hub_token)
 
             with open(os.path.join(args.output_dir, ".gitignore"), "w+") as gitignore:
                 if "step_*" not in gitignore:
@@ -282,7 +282,7 @@ def main():
     # download the dataset.
     if args.task_name is not None:
         # Downloading and loading a dataset from the hub.
-        raw_datasets = load_dataset("nyu-mll/glue", args.task_name)
+        raw_datasets = load_dataset("glue", args.task_name)
     else:
         # Loading the dataset from local csv or json file.
         data_files = {}
@@ -328,9 +328,6 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained(
         args.model_name_or_path, use_fast=not args.use_slow_tokenizer, trust_remote_code=args.trust_remote_code
     )
-    if tokenizer.pad_token is None:
-        tokenizer.pad_token = tokenizer.eos_token
-    config.pad_token_id = tokenizer.pad_token_id
     model = AutoModelForSequenceClassification.from_pretrained(
         args.model_name_or_path,
         from_tf=bool(".ckpt" in args.model_name_or_path),
@@ -370,7 +367,7 @@ def main():
             label_to_id = {i: label_name_to_id[label_list[i]] for i in range(num_labels)}
         else:
             logger.warning(
-                "Your model seems to have been trained with labels, but they don't match the dataset: "
+                "Your model seems to have been trained with labels, but they don't match the dataset: ",
                 f"model labels: {sorted(label_name_to_id.keys())}, dataset labels: {sorted(label_list)}."
                 "\nIgnoring the model labels as a result.",
             )
@@ -614,12 +611,8 @@ def main():
             )
             if accelerator.is_main_process:
                 tokenizer.save_pretrained(args.output_dir)
-                api.upload_folder(
-                    commit_message=f"Training in progress epoch {epoch}",
-                    folder_path=args.output_dir,
-                    repo_id=repo_id,
-                    repo_type="model",
-                    token=args.hub_token,
+                repo.push_to_hub(
+                    commit_message=f"Training in progress epoch {epoch}", blocking=False, auto_lfs_prune=True
                 )
 
         if args.checkpointing_steps == "epoch":
@@ -640,13 +633,7 @@ def main():
         if accelerator.is_main_process:
             tokenizer.save_pretrained(args.output_dir)
             if args.push_to_hub:
-                api.upload_folder(
-                    commit_message="End of training",
-                    folder_path=args.output_dir,
-                    repo_id=repo_id,
-                    repo_type="model",
-                    token=args.hub_token,
-                )
+                repo.push_to_hub(commit_message="End of training", auto_lfs_prune=True)
 
     if args.task_name == "mnli":
         # Final evaluation on mismatched validation set

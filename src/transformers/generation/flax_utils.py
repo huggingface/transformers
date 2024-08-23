@@ -40,7 +40,6 @@ from .flax_logits_process import (
     FlaxForceTokensLogitsProcessor,
     FlaxLogitsProcessorList,
     FlaxMinLengthLogitsProcessor,
-    FlaxNoRepeatNGramLogitsProcessor,
     FlaxSuppressTokensAtBeginLogitsProcessor,
     FlaxSuppressTokensLogitsProcessor,
     FlaxTemperatureLogitsWarper,
@@ -335,6 +334,7 @@ class FlaxGenerationMixin:
 
         generation_config = copy.deepcopy(generation_config)
         model_kwargs = generation_config.update(**kwargs)  # All unused kwargs must be model kwargs
+        generation_config.validate()
         self._validate_model_kwargs(model_kwargs.copy())
 
         logits_processor = logits_processor if logits_processor is not None else FlaxLogitsProcessorList()
@@ -544,8 +544,6 @@ class FlaxGenerationMixin:
                 [input_ids_seq_length + i[0] - 1, i[1]] for i in generation_config.forced_decoder_ids
             ]
             processors.append(FlaxForceTokensLogitsProcessor(forced_decoder_ids))
-        if generation_config.no_repeat_ngram_size is not None and generation_config.no_repeat_ngram_size > 0:
-            processors.append(FlaxNoRepeatNGramLogitsProcessor(generation_config.no_repeat_ngram_size))
         processors = self._merge_criteria_processor_list(processors, logits_processor)
 
         return processors
@@ -747,8 +745,8 @@ class FlaxGenerationMixin:
 
             next_token = jax.random.categorical(prng_key, logits, axis=-1)
 
-            next_token = next_token * ~state.is_sent_finished + pad_token_id * state.is_sent_finished
             next_is_sent_finished = state.is_sent_finished | (next_token == eos_token_id)
+            next_token = next_token * ~next_is_sent_finished + pad_token_id * next_is_sent_finished
             next_token = next_token[:, None]
 
             next_sequences = lax.dynamic_update_slice(state.sequences, next_token, (0, state.cur_len))
@@ -946,7 +944,7 @@ class FlaxGenerationMixin:
             # add new logprobs to existing running logprobs scores.
             log_probs = jax.nn.log_softmax(logits)
             log_probs = logits_processor(
-                flatten_beam_dim(state.running_sequences), flatten_beam_dim(log_probs), state.cur_len
+                flatten_beam_dim(running_sequences), flatten_beam_dim(log_probs), state.cur_len
             )
             log_probs = unflatten_beam_dim(log_probs, batch_size, num_beams)
             log_probs = log_probs + jnp.expand_dims(state.running_scores, axis=2)

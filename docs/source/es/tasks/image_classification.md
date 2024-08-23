@@ -143,7 +143,7 @@ Al llegar a este punto, solo quedan tres pasos:
 >>> training_args = TrainingArguments(
 ...     output_dir="./results",
 ...     per_device_train_batch_size=16,
-...     eval_strategy="steps",
+...     evaluation_strategy="steps",
 ...     num_train_epochs=4,
 ...     fp16=True,
 ...     save_steps=100,

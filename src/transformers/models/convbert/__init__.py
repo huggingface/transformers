@@ -23,7 +23,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_convbert": ["ConvBertConfig", "ConvBertOnnxConfig"],
+    "configuration_convbert": ["CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvBertConfig", "ConvBertOnnxConfig"],
     "tokenization_convbert": ["ConvBertTokenizer"],
 }
 
@@ -42,6 +42,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_convbert"] = [
+        "CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "ConvBertForMaskedLM",
         "ConvBertForMultipleChoice",
         "ConvBertForQuestionAnswering",
@@ -61,6 +62,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_tf_convbert"] = [
+        "TF_CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFConvBertForMaskedLM",
         "TFConvBertForMultipleChoice",
         "TFConvBertForQuestionAnswering",
@@ -73,7 +75,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_convbert import ConvBertConfig, ConvBertOnnxConfig
+    from .configuration_convbert import CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvBertConfig, ConvBertOnnxConfig
     from .tokenization_convbert import ConvBertTokenizer
 
     try:
@@ -91,6 +93,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_convbert import (
+            CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             ConvBertForMaskedLM,
             ConvBertForMultipleChoice,
             ConvBertForQuestionAnswering,
@@ -109,6 +112,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_tf_convbert import (
+            TF_CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFConvBertForMaskedLM,
             TFConvBertForMultipleChoice,
             TFConvBertForQuestionAnswering,

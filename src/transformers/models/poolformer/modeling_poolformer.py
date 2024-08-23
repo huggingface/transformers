@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch PoolFormer model."""
+""" PyTorch PoolFormer model."""
+
 
 import collections.abc
 from typing import Optional, Tuple, Union
@@ -41,6 +42,11 @@ _EXPECTED_OUTPUT_SHAPE = [1, 512, 7, 7]
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "sail/poolformer_s12"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
+
+POOLFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "sail/poolformer_s12",
+    # See all PoolFormer models at https://huggingface.co/models?filter=poolformer
+]
 
 
 # Copied from transformers.models.beit.modeling_beit.drop_path
@@ -264,7 +270,6 @@ class PoolFormerPreTrainedModel(PreTrainedModel):
     config_class = PoolFormerConfig
     base_model_prefix = "poolformer"
     main_input_name = "pixel_values"
-    _no_split_modules = ["PoolFormerLayer"]
 
     def _init_weights(self, module):
         """Initialize the weights"""

@@ -30,6 +30,9 @@ if is_tf_available():
     import tensorflow as tf
 
     from transformers import (
+        TF_DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TF_DPR_QUESTION_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TF_DPR_READER_PRETRAINED_MODEL_ARCHIVE_LIST,
         BertConfig,
         DPRConfig,
         TFDPRContextEncoder,
@@ -210,21 +213,21 @@ class TFDPRModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "facebook/dpr-ctx_encoder-single-nq-base"
-        model = TFDPRContextEncoder.from_pretrained(model_name)
-        self.assertIsNotNone(model)
+        for model_name in TF_DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = TFDPRContextEncoder.from_pretrained(model_name)
+            self.assertIsNotNone(model)
 
-        model_name = "facebook/dpr-ctx_encoder-single-nq-base"
-        model = TFDPRContextEncoder.from_pretrained(model_name)
-        self.assertIsNotNone(model)
+        for model_name in TF_DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = TFDPRContextEncoder.from_pretrained(model_name)
+            self.assertIsNotNone(model)
 
-        model_name = "facebook/dpr-ctx_encoder-single-nq-base"
-        model = TFDPRQuestionEncoder.from_pretrained(model_name)
-        self.assertIsNotNone(model)
+        for model_name in TF_DPR_QUESTION_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = TFDPRQuestionEncoder.from_pretrained(model_name)
+            self.assertIsNotNone(model)
 
-        model_name = "facebook/dpr-ctx_encoder-single-nq-base"
-        model = TFDPRReader.from_pretrained(model_name)
-        self.assertIsNotNone(model)
+        for model_name in TF_DPR_READER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = TFDPRReader.from_pretrained(model_name)
+            self.assertIsNotNone(model)
 
 
 @require_tf

@@ -18,6 +18,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 _import_structure = {
     "configuration_instructblip": [
+        "INSTRUCTBLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "InstructBlipConfig",
         "InstructBlipQFormerConfig",
         "InstructBlipVisionConfig",
@@ -32,6 +33,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_instructblip"] = [
+        "INSTRUCTBLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
         "InstructBlipQFormerModel",
         "InstructBlipPreTrainedModel",
         "InstructBlipForConditionalGeneration",
@@ -40,6 +42,7 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_instructblip import (
+        INSTRUCTBLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
         InstructBlipConfig,
         InstructBlipQFormerConfig,
         InstructBlipVisionConfig,
@@ -53,6 +56,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_instructblip import (
+            INSTRUCTBLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
             InstructBlipForConditionalGeneration,
             InstructBlipPreTrainedModel,
             InstructBlipQFormerModel,

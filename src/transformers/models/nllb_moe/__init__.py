@@ -17,7 +17,12 @@ from typing import TYPE_CHECKING
 from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
 
 
-_import_structure = {"configuration_nllb_moe": ["NllbMoeConfig"]}
+_import_structure = {
+    "configuration_nllb_moe": [
+        "NLLB_MOE_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "NllbMoeConfig",
+    ]
+}
 
 try:
     if not is_torch_available():
@@ -26,6 +31,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_nllb_moe"] = [
+        "NLLB_MOE_PRETRAINED_MODEL_ARCHIVE_LIST",
         "NllbMoeForConditionalGeneration",
         "NllbMoeModel",
         "NllbMoePreTrainedModel",
@@ -36,6 +42,7 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_nllb_moe import (
+        NLLB_MOE_PRETRAINED_CONFIG_ARCHIVE_MAP,
         NllbMoeConfig,
     )
 
@@ -46,6 +53,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_nllb_moe import (
+            NLLB_MOE_PRETRAINED_MODEL_ARCHIVE_LIST,
             NllbMoeForConditionalGeneration,
             NllbMoeModel,
             NllbMoePreTrainedModel,

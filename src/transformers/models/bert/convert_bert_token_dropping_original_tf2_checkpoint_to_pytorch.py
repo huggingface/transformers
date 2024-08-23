@@ -18,7 +18,6 @@ model. The official implementation of "Token Dropping" can be found in the Tenso
 
 https://github.com/tensorflow/models/tree/master/official/projects/token_dropping
 """
-
 import argparse
 
 import tensorflow as tf

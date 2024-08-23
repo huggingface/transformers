@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch CLIPSeg model."""
+""" PyTorch CLIPSeg model."""
 
 import copy
 import math
@@ -41,6 +41,11 @@ logger = logging.get_logger(__name__)
 
 
 _CHECKPOINT_FOR_DOC = "CIDAS/clipseg-rd64-refined"
+
+CLIPSEG_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "CIDAS/clipseg-rd64-refined",
+    # See all CLIPSeg models at https://huggingface.co/models?filter=clipseg
+]
 
 
 # contrastive loss function, adapted from
@@ -266,7 +271,7 @@ class CLIPSegAttention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         causal_attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
         bsz, tgt_len, embed_dim = hidden_states.size()
@@ -355,7 +360,7 @@ class CLIPSegMLP(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.altclip.modeling_altclip.AltCLIPEncoderLayer with AltCLIP->CLIPSeg
+# Copied from transformers.models.clip.modeling_clip.CLIPEncoderLayer with CLIP->CLIPSeg
 class CLIPSegEncoderLayer(nn.Module):
     def __init__(self, config: CLIPSegConfig):
         super().__init__()
@@ -554,7 +559,7 @@ CLIPSEG_INPUTS_DOCSTRING = r"""
 """
 
 
-# Copied from transformers.models.altclip.modeling_altclip.AltCLIPEncoder with AltCLIP->CLIPSeg
+# Copied from transformers.models.clip.modeling_clip.CLIPEncoder with CLIP->CLIPSeg
 class CLIPSegEncoder(nn.Module):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
@@ -653,6 +658,7 @@ class CLIPSegEncoder(nn.Module):
 
 
 class CLIPSegTextTransformer(nn.Module):
+    # Copied from transformers.models.clip.modeling_clip.CLIPTextTransformer.__init__ with CLIP->CLIPSeg
     def __init__(self, config: CLIPSegTextConfig):
         super().__init__()
         self.config = config
@@ -666,7 +672,7 @@ class CLIPSegTextTransformer(nn.Module):
 
     @add_start_docstrings_to_model_forward(CLIPSEG_TEXT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=CLIPSegTextConfig)
-    # Adapted from transformers.models.clip.modeling_clip.CLIPTextTransformer.forward with clip->clipseg, CLIP->CLIPSeg
+    # Copied from transformers.models.clip.modeling_clip.CLIPTextTransformer.forward with clip->clipseg, CLIP->CLIPSeg
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -732,7 +738,6 @@ class CLIPSegTextTransformer(nn.Module):
             pooled_output = last_hidden_state[
                 torch.arange(last_hidden_state.shape[0], device=last_hidden_state.device),
                 # We need to get the first position of `eos_token_id` value (`pad_token_ids` might equal to `eos_token_id`)
-                # Note: we assume each sequence (along batch dim.) contains an  `eos_token_id` (e.g. prepared by the tokenizer)
                 (input_ids.to(dtype=torch.int, device=last_hidden_state.device) == self.eos_token_id)
                 .int()
                 .argmax(dim=-1),
@@ -805,7 +810,7 @@ class CLIPSegTextModel(CLIPSegPreTrainedModel):
 
 
 class CLIPSegVisionTransformer(nn.Module):
-    # Copied from transformers.models.altclip.modeling_altclip.AltCLIPVisionTransformer.__init__ with AltCLIP->CLIPSeg
+    # Copied from transformers.models.clip.modeling_clip.CLIPVisionTransformer.__init__ with CLIP->CLIPSeg
     def __init__(self, config: CLIPSegVisionConfig):
         super().__init__()
         self.config = config
@@ -924,13 +929,13 @@ class CLIPSegModel(CLIPSegPreTrainedModel):
         super().__init__(config)
 
         if not isinstance(config.text_config, CLIPSegTextConfig):
-            raise TypeError(
+            raise ValueError(
                 "config.text_config is expected to be of type CLIPSegTextConfig but is of type"
                 f" {type(config.text_config)}."
             )
 
         if not isinstance(config.vision_config, CLIPSegVisionConfig):
-            raise TypeError(
+            raise ValueError(
                 "config.vision_config is expected to be of type CLIPSegVisionConfig but is of type"
                 f" {type(config.vision_config)}."
             )
@@ -1148,7 +1153,7 @@ class CLIPSegDecoderLayer(nn.Module):
     self-attention/MLP, rather than before.
     """
 
-    # Copied from transformers.models.altclip.modeling_altclip.AltCLIPEncoderLayer.__init__ with AltCLIP->CLIPSeg
+    # Copied from transformers.models.clip.modeling_clip.CLIPEncoderLayer.__init__ with CLIP->CLIPSeg
     def __init__(self, config: CLIPSegConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
@@ -1287,7 +1292,7 @@ class CLIPSegDecoder(CLIPSegPreTrainedModel):
         batch_size = conditional_embeddings.shape[0]
         output = output.view(batch_size, output.shape[1], size, size)
 
-        logits = self.transposed_convolution(output).squeeze(1)
+        logits = self.transposed_convolution(output).squeeze()
 
         if not return_dict:
             return tuple(v for v in [logits, all_hidden_states, all_attentions] if v is not None)

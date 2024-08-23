@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch YOSO model."""
+""" Testing suite for the PyTorch YOSO model. """
+
 
 import unittest
 
@@ -35,6 +36,7 @@ if is_torch_available():
         YosoForTokenClassification,
         YosoModel,
     )
+    from transformers.models.yoso.modeling_yoso import YOSO_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class YosoModelTester:
@@ -349,11 +351,10 @@ class YosoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "uw-madison/yoso-4096"
-        model = YosoModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
+        for model_name in YOSO_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = YosoModel.from_pretrained(model_name)
+            self.assertIsNotNone(model)
 
-    @unittest.skip(reason="This model does not output attentions")
     def test_attention_outputs(self):
         return
 

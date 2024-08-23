@@ -18,6 +18,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 _import_structure = {
     "configuration_clipseg": [
+        "CLIPSEG_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "CLIPSegConfig",
         "CLIPSegTextConfig",
         "CLIPSegVisionConfig",
@@ -32,6 +33,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_clipseg"] = [
+        "CLIPSEG_PRETRAINED_MODEL_ARCHIVE_LIST",
         "CLIPSegModel",
         "CLIPSegPreTrainedModel",
         "CLIPSegTextModel",
@@ -41,6 +43,7 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_clipseg import (
+        CLIPSEG_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CLIPSegConfig,
         CLIPSegTextConfig,
         CLIPSegVisionConfig,
@@ -54,6 +57,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_clipseg import (
+            CLIPSEG_PRETRAINED_MODEL_ARCHIVE_LIST,
             CLIPSegForImageSegmentation,
             CLIPSegModel,
             CLIPSegPreTrainedModel,

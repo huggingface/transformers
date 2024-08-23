@@ -22,7 +22,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 
 _import_structure = {
-    "configuration_vivit": ["VivitConfig"],
+    "configuration_vivit": ["VIVIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "VivitConfig"],
 }
 try:
     if not is_vision_available():
@@ -40,6 +40,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_vivit"] = [
+        "VIVIT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "VivitModel",
         "VivitPreTrainedModel",
         "VivitForVideoClassification",
@@ -47,7 +48,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_vivit import VivitConfig
+    from .configuration_vivit import VIVIT_PRETRAINED_CONFIG_ARCHIVE_MAP, VivitConfig
 
     try:
         if not is_vision_available():
@@ -64,6 +65,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_vivit import (
+            VIVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
             VivitForVideoClassification,
             VivitModel,
             VivitPreTrainedModel,

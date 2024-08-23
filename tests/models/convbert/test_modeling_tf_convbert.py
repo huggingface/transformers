@@ -37,7 +37,6 @@ if is_tf_available():
         TFConvBertForTokenClassification,
         TFConvBertModel,
     )
-    from transformers.modeling_tf_utils import keras
 
 
 class TFConvBertModelTester:
@@ -307,7 +306,7 @@ class TFConvBertModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Test
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname, saved_model=True)
                 saved_model_dir = os.path.join(tmpdirname, "saved_model", "1")
-                model = keras.models.load_model(saved_model_dir)
+                model = tf.keras.models.load_model(saved_model_dir)
                 outputs = model(class_inputs_dict)
 
                 if self.is_encoder_decoder:

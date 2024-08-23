@@ -15,7 +15,6 @@
 """
 Text/audio processor class for MusicGen
 """
-
 from typing import List, Optional
 
 import numpy as np

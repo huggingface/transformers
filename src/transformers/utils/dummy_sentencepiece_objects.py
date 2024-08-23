@@ -72,21 +72,7 @@ class ErnieMTokenizer(metaclass=DummyObject):
         requires_backends(self, ["sentencepiece"])
 
 
-class XLMProphetNetTokenizer(metaclass=DummyObject):
-    _backends = ["sentencepiece"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["sentencepiece"])
-
-
 class FNetTokenizer(metaclass=DummyObject):
-    _backends = ["sentencepiece"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["sentencepiece"])
-
-
-class GemmaTokenizer(metaclass=DummyObject):
     _backends = ["sentencepiece"]
 
     def __init__(self, *args, **kwargs):
@@ -198,13 +184,6 @@ class SeamlessM4TTokenizer(metaclass=DummyObject):
         requires_backends(self, ["sentencepiece"])
 
 
-class SiglipTokenizer(metaclass=DummyObject):
-    _backends = ["sentencepiece"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["sentencepiece"])
-
-
 class Speech2TextTokenizer(metaclass=DummyObject):
     _backends = ["sentencepiece"]
 
@@ -226,14 +205,14 @@ class T5Tokenizer(metaclass=DummyObject):
         requires_backends(self, ["sentencepiece"])
 
 
-class UdopTokenizer(metaclass=DummyObject):
+class XGLMTokenizer(metaclass=DummyObject):
     _backends = ["sentencepiece"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["sentencepiece"])
 
 
-class XGLMTokenizer(metaclass=DummyObject):
+class XLMProphetNetTokenizer(metaclass=DummyObject):
     _backends = ["sentencepiece"]
 
     def __init__(self, *args, **kwargs):

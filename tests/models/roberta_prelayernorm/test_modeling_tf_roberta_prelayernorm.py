@@ -31,6 +31,7 @@ if is_tf_available():
     import tensorflow as tf
 
     from transformers.models.roberta_prelayernorm.modeling_tf_roberta_prelayernorm import (
+        TF_ROBERTA_PRELAYERNORM_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFRobertaPreLayerNormForCausalLM,
         TFRobertaPreLayerNormForMaskedLM,
         TFRobertaPreLayerNormForMultipleChoice,
@@ -550,7 +551,7 @@ class TFRobertaPreLayerNormModelTester:
 
 
 @require_tf
-# Copied from tests.models.roberta.test_modeling_tf_roberta.TFRobertaModelTest with ROBERTA->ROBERTA_PRELAYERNORM,Roberta->RobertaPreLayerNorm,FacebookAI/roberta-base->andreasmadsen/efficient_mlm_m0.15
+# Copied from tests.models.roberta.test_modeling_tf_roberta.TFRobertaModelTest with ROBERTA->ROBERTA_PRELAYERNORM,Roberta->RobertaPreLayerNorm
 class TFRobertaPreLayerNormModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
@@ -656,9 +657,9 @@ class TFRobertaPreLayerNormModelTest(TFModelTesterMixin, PipelineTesterMixin, un
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "andreasmadsen/efficient_mlm_m0.15"
-        model = TFRobertaPreLayerNormModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
+        for model_name in TF_ROBERTA_PRELAYERNORM_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = TFRobertaPreLayerNormModel.from_pretrained(model_name)
+            self.assertIsNotNone(model)
 
 
 @require_tf

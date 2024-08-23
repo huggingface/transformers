@@ -16,6 +16,7 @@
 Speech processor class for Whisper
 """
 
+
 from ...processing_utils import ProcessorMixin
 
 

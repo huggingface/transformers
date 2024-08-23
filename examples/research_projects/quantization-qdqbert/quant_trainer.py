@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Helper functions for training models with pytorch-quantization"""
-
 import logging
 import re
 

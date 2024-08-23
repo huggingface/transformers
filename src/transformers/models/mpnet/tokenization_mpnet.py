@@ -28,6 +28,20 @@ logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 
+PRETRAINED_VOCAB_FILES_MAP = {
+    "vocab_file": {
+        "microsoft/mpnet-base": "https://huggingface.co/microsoft/mpnet-base/resolve/main/vocab.txt",
+    }
+}
+
+PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
+    "microsoft/mpnet-base": 512,
+}
+
+PRETRAINED_INIT_CONFIGURATION = {
+    "microsoft/mpnet-base": {"do_lower_case": True},
+}
+
 
 def load_vocab(vocab_file):
     """Loads a vocabulary file into a dictionary."""
@@ -111,6 +125,9 @@ class MPNetTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
+    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
+    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
+    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
@@ -310,7 +327,7 @@ class MPNetTokenizer(PreTrainedTokenizer):
 
 
 # Copied from transformers.models.bert.tokenization_bert.BasicTokenizer
-class BasicTokenizer:
+class BasicTokenizer(object):
     """
     Constructs a BasicTokenizer that will run basic tokenization (punctuation splitting, lower casing, etc.).
 
@@ -472,7 +489,7 @@ class BasicTokenizer:
 
 
 # Copied from transformers.models.bert.tokenization_bert.WordpieceTokenizer
-class WordpieceTokenizer:
+class WordpieceTokenizer(object):
     """Runs WordPiece tokenization."""
 
     def __init__(self, vocab, unk_token, max_input_chars_per_word=100):

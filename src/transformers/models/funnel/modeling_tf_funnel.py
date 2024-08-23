@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""TF 2.0 Funnel model."""
+""" TF 2.0 Funnel model."""
+
 
 from __future__ import annotations
 
@@ -41,7 +42,6 @@ from ...modeling_tf_utils import (
     TFSequenceClassificationLoss,
     TFTokenClassificationLoss,
     get_initializer,
-    keras,
     keras_serializable,
     unpack_inputs,
 )
@@ -61,11 +61,23 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "FunnelConfig"
 
+TF_FUNNEL_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "funnel-transformer/small",  # B4-4-4H768
+    "funnel-transformer/small-base",  # B4-4-4H768, no decoder
+    "funnel-transformer/medium",  # B6-3x2-3x2H768
+    "funnel-transformer/medium-base",  # B6-3x2-3x2H768, no decoder
+    "funnel-transformer/intermediate",  # B6-6-6H768
+    "funnel-transformer/intermediate-base",  # B6-6-6H768, no decoder
+    "funnel-transformer/large",  # B8-8-8H1024
+    "funnel-transformer/large-base",  # B8-8-8H1024, no decoder
+    "funnel-transformer/xlarge-base",  # B10-10-10H1024
+    "funnel-transformer/xlarge",  # B10-10-10H1024, no decoder
+]
 
 INF = 1e6
 
 
-class TFFunnelEmbeddings(keras.layers.Layer):
+class TFFunnelEmbeddings(tf.keras.layers.Layer):
     """Construct the embeddings from word, position and token_type embeddings."""
 
     def __init__(self, config, **kwargs):
@@ -75,8 +87,8 @@ class TFFunnelEmbeddings(keras.layers.Layer):
         self.hidden_size = config.hidden_size
         self.initializer_std = 1.0 if config.initializer_std is None else config.initializer_std
 
-        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
-        self.dropout = keras.layers.Dropout(rate=config.hidden_dropout)
+        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
+        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout)
 
     def build(self, input_shape=None):
         with tf.name_scope("word_embeddings"):
@@ -129,8 +141,8 @@ class TFFunnelAttentionStructure:
         self.pool_q_only = config.pool_q_only
         self.pooling_type = config.pooling_type
 
-        self.sin_dropout = keras.layers.Dropout(config.hidden_dropout)
-        self.cos_dropout = keras.layers.Dropout(config.hidden_dropout)
+        self.sin_dropout = tf.keras.layers.Dropout(config.hidden_dropout)
+        self.cos_dropout = tf.keras.layers.Dropout(config.hidden_dropout)
         # Track where we are at in terms of pooling from the original input, e.g., by how much the sequence length was
         # divided.
         self.pooling_mult = None
@@ -375,7 +387,7 @@ def _relative_shift_gather(positional_attn, context_len, shift):
     return positional_attn
 
 
-class TFFunnelRelMultiheadAttention(keras.layers.Layer):
+class TFFunnelRelMultiheadAttention(tf.keras.layers.Layer):
     def __init__(self, config, block_index, **kwargs):
         super().__init__(**kwargs)
         self.attention_type = config.attention_type
@@ -385,19 +397,19 @@ class TFFunnelRelMultiheadAttention(keras.layers.Layer):
         self.initializer_range = config.initializer_range
         self.block_index = block_index
 
-        self.hidden_dropout = keras.layers.Dropout(config.hidden_dropout)
-        self.attention_dropout = keras.layers.Dropout(config.attention_dropout)
+        self.hidden_dropout = tf.keras.layers.Dropout(config.hidden_dropout)
+        self.attention_dropout = tf.keras.layers.Dropout(config.attention_dropout)
 
         initializer = get_initializer(config.initializer_range)
 
-        self.q_head = keras.layers.Dense(
+        self.q_head = tf.keras.layers.Dense(
             n_head * d_head, use_bias=False, kernel_initializer=initializer, name="q_head"
         )
-        self.k_head = keras.layers.Dense(n_head * d_head, kernel_initializer=initializer, name="k_head")
-        self.v_head = keras.layers.Dense(n_head * d_head, kernel_initializer=initializer, name="v_head")
+        self.k_head = tf.keras.layers.Dense(n_head * d_head, kernel_initializer=initializer, name="k_head")
+        self.v_head = tf.keras.layers.Dense(n_head * d_head, kernel_initializer=initializer, name="v_head")
 
-        self.post_proj = keras.layers.Dense(d_model, kernel_initializer=initializer, name="post_proj")
-        self.layer_norm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
+        self.post_proj = tf.keras.layers.Dense(d_model, kernel_initializer=initializer, name="post_proj")
+        self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
         self.scale = 1.0 / (d_head**0.5)
 
     def build(self, input_shape=None):
@@ -558,16 +570,16 @@ class TFFunnelRelMultiheadAttention(keras.layers.Layer):
         return (output, attn_prob) if output_attentions else (output,)
 
 
-class TFFunnelPositionwiseFFN(keras.layers.Layer):
+class TFFunnelPositionwiseFFN(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         initializer = get_initializer(config.initializer_range)
-        self.linear_1 = keras.layers.Dense(config.d_inner, kernel_initializer=initializer, name="linear_1")
+        self.linear_1 = tf.keras.layers.Dense(config.d_inner, kernel_initializer=initializer, name="linear_1")
         self.activation_function = get_tf_activation(config.hidden_act)
-        self.activation_dropout = keras.layers.Dropout(config.activation_dropout)
-        self.linear_2 = keras.layers.Dense(config.d_model, kernel_initializer=initializer, name="linear_2")
-        self.dropout = keras.layers.Dropout(config.hidden_dropout)
-        self.layer_norm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
+        self.activation_dropout = tf.keras.layers.Dropout(config.activation_dropout)
+        self.linear_2 = tf.keras.layers.Dense(config.d_model, kernel_initializer=initializer, name="linear_2")
+        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout)
+        self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
         self.config = config
 
     def call(self, hidden, training=False):
@@ -593,7 +605,7 @@ class TFFunnelPositionwiseFFN(keras.layers.Layer):
                 self.layer_norm.build([None, None, self.config.d_model])
 
 
-class TFFunnelLayer(keras.layers.Layer):
+class TFFunnelLayer(tf.keras.layers.Layer):
     def __init__(self, config, block_index, **kwargs):
         super().__init__(**kwargs)
         self.attention = TFFunnelRelMultiheadAttention(config, block_index, name="attention")
@@ -618,7 +630,7 @@ class TFFunnelLayer(keras.layers.Layer):
                 self.ffn.build(None)
 
 
-class TFFunnelEncoder(keras.layers.Layer):
+class TFFunnelEncoder(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.separate_cls = config.separate_cls
@@ -717,7 +729,7 @@ def upsample(x, stride, target_len, separate_cls=True, truncate_seq=False):
     return output
 
 
-class TFFunnelDecoder(keras.layers.Layer):
+class TFFunnelDecoder(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.separate_cls = config.separate_cls
@@ -782,7 +794,7 @@ class TFFunnelDecoder(keras.layers.Layer):
 
 
 @keras_serializable
-class TFFunnelBaseLayer(keras.layers.Layer):
+class TFFunnelBaseLayer(tf.keras.layers.Layer):
     """Base model without decoder"""
 
     config_class = FunnelConfig
@@ -863,7 +875,7 @@ class TFFunnelBaseLayer(keras.layers.Layer):
 
 
 @keras_serializable
-class TFFunnelMainLayer(keras.layers.Layer):
+class TFFunnelMainLayer(tf.keras.layers.Layer):
     """Base model with decoder"""
 
     config_class = FunnelConfig
@@ -976,15 +988,15 @@ class TFFunnelMainLayer(keras.layers.Layer):
                 self.decoder.build(None)
 
 
-class TFFunnelDiscriminatorPredictions(keras.layers.Layer):
+class TFFunnelDiscriminatorPredictions(tf.keras.layers.Layer):
     """Prediction module for the discriminator, made up of two dense layers."""
 
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         initializer = get_initializer(config.initializer_range)
-        self.dense = keras.layers.Dense(config.d_model, kernel_initializer=initializer, name="dense")
+        self.dense = tf.keras.layers.Dense(config.d_model, kernel_initializer=initializer, name="dense")
         self.activation_function = get_tf_activation(config.hidden_act)
-        self.dense_prediction = keras.layers.Dense(1, kernel_initializer=initializer, name="dense_prediction")
+        self.dense_prediction = tf.keras.layers.Dense(1, kernel_initializer=initializer, name="dense_prediction")
         self.config = config
 
     def call(self, discriminator_hidden_states):
@@ -1005,7 +1017,7 @@ class TFFunnelDiscriminatorPredictions(keras.layers.Layer):
                 self.dense_prediction.build([None, None, self.config.d_model])
 
 
-class TFFunnelMaskedLMHead(keras.layers.Layer):
+class TFFunnelMaskedLMHead(tf.keras.layers.Layer):
     def __init__(self, config, input_embeddings, **kwargs):
         super().__init__(**kwargs)
         self.config = config
@@ -1041,18 +1053,20 @@ class TFFunnelMaskedLMHead(keras.layers.Layer):
         return hidden_states
 
 
-class TFFunnelClassificationHead(keras.layers.Layer):
+class TFFunnelClassificationHead(tf.keras.layers.Layer):
     def __init__(self, config, n_labels, **kwargs):
         super().__init__(**kwargs)
         initializer = get_initializer(config.initializer_range)
-        self.linear_hidden = keras.layers.Dense(config.d_model, kernel_initializer=initializer, name="linear_hidden")
-        self.dropout = keras.layers.Dropout(config.hidden_dropout)
-        self.linear_out = keras.layers.Dense(n_labels, kernel_initializer=initializer, name="linear_out")
+        self.linear_hidden = tf.keras.layers.Dense(
+            config.d_model, kernel_initializer=initializer, name="linear_hidden"
+        )
+        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout)
+        self.linear_out = tf.keras.layers.Dense(n_labels, kernel_initializer=initializer, name="linear_out")
         self.config = config
 
     def call(self, hidden, training=False):
         hidden = self.linear_hidden(hidden)
-        hidden = keras.activations.tanh(hidden)
+        hidden = tf.keras.activations.tanh(hidden)
         hidden = self.dropout(hidden, training=training)
         return self.linear_out(hidden)
 
@@ -1118,7 +1132,7 @@ FUNNEL_START_DOCSTRING = r"""
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
-    This model is also a [keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
+    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
     as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
     behavior.
 
@@ -1686,8 +1700,8 @@ class TFFunnelForTokenClassification(TFFunnelPreTrainedModel, TFTokenClassificat
         self.num_labels = config.num_labels
 
         self.funnel = TFFunnelMainLayer(config, name="funnel")
-        self.dropout = keras.layers.Dropout(config.hidden_dropout)
-        self.classifier = keras.layers.Dense(
+        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout)
+        self.classifier = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
         self.config = config
@@ -1775,7 +1789,7 @@ class TFFunnelForQuestionAnswering(TFFunnelPreTrainedModel, TFQuestionAnsweringL
         self.num_labels = config.num_labels
 
         self.funnel = TFFunnelMainLayer(config, name="funnel")
-        self.qa_outputs = keras.layers.Dense(
+        self.qa_outputs = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
         )
         self.config = config

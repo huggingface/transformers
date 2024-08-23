@@ -12,17 +12,21 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND=, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""TVP model configuration"""
+""" TVP model configuration"""
 
 import copy
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
-from ...utils.backbone_utils import verify_backbone_config_arguments
 from ..auto import CONFIG_MAPPING
 
 
 logger = logging.get_logger(__name__)
+
+
+TVP_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+    "Intel/tvp-base": "https://huggingface.co/Intel/tvp-base/resolve/main/config.json",
+}
 
 
 class TvpConfig(PretrainedConfig):
@@ -39,18 +43,6 @@ class TvpConfig(PretrainedConfig):
     Args:
         backbone_config (`PretrainedConfig` or `dict`, *optional*):
             The configuration of the backbone model.
-        backbone (`str`, *optional*):
-            Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
-            will load the corresponding pretrained weights from the timm or transformers library. If `use_pretrained_backbone`
-            is `False`, this loads the backbone's config and uses that to initialize the backbone with random weights.
-        use_pretrained_backbone (`bool`, *optional*, defaults to `False`):
-            Whether to use pretrained weights for the backbone.
-        use_timm_backbone (`bool`, *optional*, defaults to `False`):
-            Whether to load `backbone` from the timm library. If `False`, the backbone is loaded from the transformers
-            library.
-        backbone_kwargs (`dict`, *optional*):
-            Keyword arguments to be passed to AutoBackbone when loading from a checkpoint
-            e.g. `{'out_indices': (0, 1, 2, 3)}`. Cannot be specified if `backbone_config` is set.
         distance_loss_weight (`float`, *optional*, defaults to 1.0):
             The weight of distance loss.
         duration_loss_weight (`float`, *optional*, defaults to 0.1):
@@ -89,7 +81,7 @@ class TvpConfig(PretrainedConfig):
             The dropout probability of hidden layers.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
+            `"relu"`, `"selu"` and `"gelu_new"` ``"quick_gelu"` are supported.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -103,10 +95,6 @@ class TvpConfig(PretrainedConfig):
     def __init__(
         self,
         backbone_config=None,
-        backbone=None,
-        use_pretrained_backbone=False,
-        use_timm_backbone=False,
-        backbone_kwargs=None,
         distance_loss_weight=1.0,
         duration_loss_weight=0.1,
         visual_prompter_type="framepad",
@@ -130,7 +118,8 @@ class TvpConfig(PretrainedConfig):
         **kwargs,
     ):
         super().__init__(**kwargs)
-        if backbone_config is None and backbone is None:
+
+        if backbone_config is None:
             logger.info("`backbone_config` is `None`. Initializing the config with the default `ResNet` backbone.")
             backbone_config = CONFIG_MAPPING["resnet"](out_features=["stage4"])
         elif isinstance(backbone_config, dict):
@@ -138,19 +127,7 @@ class TvpConfig(PretrainedConfig):
             config_class = CONFIG_MAPPING[backbone_model_type]
             backbone_config = config_class.from_dict(backbone_config)
 
-        verify_backbone_config_arguments(
-            use_timm_backbone=use_timm_backbone,
-            use_pretrained_backbone=use_pretrained_backbone,
-            backbone=backbone,
-            backbone_config=backbone_config,
-            backbone_kwargs=backbone_kwargs,
-        )
-
         self.backbone_config = backbone_config
-        self.backbone = backbone
-        self.use_pretrained_backbone = use_pretrained_backbone
-        self.use_timm_backbone = use_timm_backbone
-        self.backbone_kwargs = backbone_kwargs
         self.distance_loss_weight = distance_loss_weight
         self.duration_loss_weight = duration_loss_weight
         self.visual_prompter_type = visual_prompter_type

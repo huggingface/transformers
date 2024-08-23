@@ -16,7 +16,6 @@
 Preprocessing script before training DistilBERT.
 Specific to BERT -> DistilBERT.
 """
-
 import argparse
 
 import torch

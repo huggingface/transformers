@@ -28,9 +28,8 @@ from ...image_utils import (
     make_list_of_images,
     to_numpy_array,
     valid_images,
-    validate_preprocess_arguments,
 )
-from ...utils import TensorType, filter_out_non_signature_kwargs, logging
+from ...utils import TensorType, logging
 
 
 logger = logging.get_logger(__name__)
@@ -107,7 +106,6 @@ class Swin2SRImageProcessor(BaseImageProcessor):
             input_data_format=input_data_format,
         )
 
-    @filter_out_non_signature_kwargs()
     def preprocess(
         self,
         images: ImageInput,
@@ -118,6 +116,7 @@ class Swin2SRImageProcessor(BaseImageProcessor):
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        **kwargs,
     ):
         """
         Preprocess an image or batch of images.
@@ -166,12 +165,9 @@ class Swin2SRImageProcessor(BaseImageProcessor):
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
-        validate_preprocess_arguments(
-            do_rescale=do_rescale,
-            rescale_factor=rescale_factor,
-            do_pad=do_pad,
-            size_divisibility=pad_size,  # Here the pad function simply requires pad_size.
-        )
+
+        if do_rescale and rescale_factor is None:
+            raise ValueError("Rescale factor must be specified if do_rescale is True.")
 
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]

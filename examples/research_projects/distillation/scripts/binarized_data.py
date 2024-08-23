@@ -15,7 +15,6 @@
 """
 Preprocessing script before distillation.
 """
-
 import argparse
 import logging
 import pickle

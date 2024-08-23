@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the TensorFlow DeiT model."""
+""" Testing suite for the TensorFlow DeiT model. """
+
 
 from __future__ import annotations
 
@@ -39,7 +40,7 @@ if is_tf_available():
         TFDeiTForMaskedImageModeling,
         TFDeiTModel,
     )
-    from transformers.modeling_tf_utils import keras
+    from transformers.models.deit.modeling_tf_deit import TF_DEIT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -70,7 +71,6 @@ class TFDeiTModelTester:
         num_labels=3,
         scope=None,
         encoder_stride=2,
-        attn_implementation="eager",
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -90,7 +90,6 @@ class TFDeiTModelTester:
         self.initializer_range = initializer_range
         self.scope = scope
         self.encoder_stride = encoder_stride
-        self.attn_implementation = attn_implementation
 
         # in DeiT, the seq length equals the number of patches + 2 (we add 2 for the [CLS] and distilation tokens)
         num_patches = (image_size // patch_size) ** 2
@@ -122,7 +121,6 @@ class TFDeiTModelTester:
             is_decoder=False,
             initializer_range=self.initializer_range,
             encoder_stride=self.encoder_stride,
-            attn_implementation=self.attn_implementation,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
@@ -213,9 +211,9 @@ class TFDeiTModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            self.assertIsInstance(model.get_input_embeddings(), (keras.layers.Layer))
+            self.assertIsInstance(model.get_input_embeddings(), (tf.keras.layers.Layer))
             x = model.get_output_embeddings()
-            self.assertTrue(x is None or isinstance(x, keras.layers.Dense))
+            self.assertTrue(x is None or isinstance(x, tf.keras.layers.Dense))
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -253,9 +251,9 @@ class TFDeiTModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "facebook/deit-base-distilled-patch16-224"
-        model = TFDeiTModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
+        for model_name in TF_DEIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = TFDeiTModel.from_pretrained(model_name)
+            self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats
@@ -293,20 +291,3 @@ class DeiTModelIntegrationTest(unittest.TestCase):
         expected_slice = tf.constant([-1.0266, 0.1912, -1.2861])
 
         self.assertTrue(np.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
-
-    @slow
-    def test_inference_interpolate_pos_encoding(self):
-        model = TFDeiTForImageClassificationWithTeacher.from_pretrained("facebook/deit-base-distilled-patch16-224")
-
-        image_processor = self.default_image_processor
-        # image size is {"height": 480, "width": 640}
-        image = prepare_img()
-        image_processor.size = {"height": 480, "width": 640}
-        # center crop set to False so image is not center cropped to 224x224
-        inputs = image_processor(images=image, return_tensors="tf", do_center_crop=False)
-        # forward pass
-        outputs = model(**inputs, interpolate_pos_encoding=True)
-
-        # verify the logits
-        expected_shape = tf.TensorShape((1, 1000))
-        self.assertEqual(outputs.logits.shape, expected_shape)

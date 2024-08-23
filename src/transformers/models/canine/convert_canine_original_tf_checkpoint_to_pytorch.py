@@ -14,6 +14,7 @@
 # limitations under the License.
 """Convert CANINE checkpoint."""
 
+
 import argparse
 
 from transformers import CanineConfig, CanineModel, CanineTokenizer, load_tf_weights_in_canine

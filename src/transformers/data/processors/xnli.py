@@ -13,7 +13,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""XNLI utils (dataset loading and evaluation)"""
+""" XNLI utils (dataset loading and evaluation)"""
+
 
 import os
 
@@ -47,11 +48,11 @@ class XnliProcessor(DataProcessor):
             text_b = line[1]
             label = "contradiction" if line[2] == "contradictory" else line[2]
             if not isinstance(text_a, str):
-                raise TypeError(f"Training input {text_a} is not a string")
+                raise ValueError(f"Training input {text_a} is not a string")
             if not isinstance(text_b, str):
-                raise TypeError(f"Training input {text_b} is not a string")
+                raise ValueError(f"Training input {text_b} is not a string")
             if not isinstance(label, str):
-                raise TypeError(f"Training label {label} is not a string")
+                raise ValueError(f"Training label {label} is not a string")
             examples.append(InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
         return examples
 
@@ -70,11 +71,11 @@ class XnliProcessor(DataProcessor):
             text_b = line[7]
             label = line[1]
             if not isinstance(text_a, str):
-                raise TypeError(f"Training input {text_a} is not a string")
+                raise ValueError(f"Training input {text_a} is not a string")
             if not isinstance(text_b, str):
-                raise TypeError(f"Training input {text_b} is not a string")
+                raise ValueError(f"Training input {text_b} is not a string")
             if not isinstance(label, str):
-                raise TypeError(f"Training label {label} is not a string")
+                raise ValueError(f"Training label {label} is not a string")
             examples.append(InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
         return examples
 

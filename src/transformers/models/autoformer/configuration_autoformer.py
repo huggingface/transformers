@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Autoformer model configuration"""
+""" Autoformer model configuration"""
 
 from typing import List, Optional
 
@@ -21,6 +21,10 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
+
+AUTOFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+    "huggingface/autoformer-tourism-monthly": "https://huggingface.co/huggingface/autoformer-tourism-monthly/resolve/main/config.json",
+}
 
 
 class AutoformerConfig(PretrainedConfig):
@@ -105,10 +109,10 @@ class AutoformerConfig(PretrainedConfig):
         label_length (`int`, *optional*, defaults to 10):
             Start token length of the Autoformer decoder, which is used for direct multi-step prediction (i.e.
             non-autoregressive generation).
-        moving_average (`int`, *optional*, defaults to 25):
+        moving_average (`int`, defaults to 25):
             The window size of the moving average. In practice, it's the kernel size in AvgPool1d of the Decomposition
             Layer.
-        autocorrelation_factor (`int`, *optional*, defaults to 3):
+        autocorrelation_factor (`int`, defaults to 3):
             "Attention" (i.e. AutoCorrelation mechanism) factor which is used to find top k autocorrelations delays.
             It's recommended in the paper to set it to a number between 1 and 5.
 

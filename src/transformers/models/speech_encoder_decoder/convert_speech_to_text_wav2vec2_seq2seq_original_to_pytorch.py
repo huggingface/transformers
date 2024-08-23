@@ -14,6 +14,7 @@
 # limitations under the License.
 """Convert Wav2Vec2 checkpoint."""
 
+
 import argparse
 import json
 import os

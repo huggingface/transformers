@@ -108,19 +108,23 @@ def dict_map(
 
 
 @overload
-def tree_map(fn: Callable[[T], Any], tree: T, leaf_type: Type[T]) -> Any: ...
+def tree_map(fn: Callable[[T], Any], tree: T, leaf_type: Type[T]) -> Any:
+    ...
 
 
 @overload
-def tree_map(fn: Callable[[T], Any], tree: dict, leaf_type: Type[T]) -> dict: ...
+def tree_map(fn: Callable[[T], Any], tree: dict, leaf_type: Type[T]) -> dict:
+    ...
 
 
 @overload
-def tree_map(fn: Callable[[T], Any], tree: list, leaf_type: Type[T]) -> list: ...
+def tree_map(fn: Callable[[T], Any], tree: list, leaf_type: Type[T]) -> list:
+    ...
 
 
 @overload
-def tree_map(fn: Callable[[T], Any], tree: tuple, leaf_type: Type[T]) -> tuple: ...
+def tree_map(fn: Callable[[T], Any], tree: tuple, leaf_type: Type[T]) -> tuple:
+    ...
 
 
 def tree_map(fn, tree, leaf_type):
@@ -134,7 +138,7 @@ def tree_map(fn, tree, leaf_type):
         return fn(tree)
     else:
         print(type(tree))
-        raise TypeError("Not supported")
+        raise ValueError("Not supported")
 
 
 tensor_tree_map = partial(tree_map, leaf_type=torch.Tensor)

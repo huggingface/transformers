@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch CLAP model."""
+""" Testing suite for the PyTorch CLAP model. """
+
 
 import inspect
 import os
@@ -48,6 +49,7 @@ if is_torch_available():
         ClapTextModel,
         ClapTextModelWithProjection,
     )
+    from transformers.models.clap.modeling_clap import CLAP_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class ClapAudioModelTester:
@@ -177,7 +179,7 @@ class ClapAudioModelTest(ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    def test_model_get_set_embeddings(self):
+    def test_model_common_attributes(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -273,16 +275,16 @@ class ClapAudioModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "laion/clap-htsat-fused"
-        model = ClapAudioModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
+        for model_name in CLAP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = ClapAudioModel.from_pretrained(model_name)
+            self.assertIsNotNone(model)
 
     @slow
     def test_model_with_projection_from_pretrained(self):
-        model_name = "laion/clap-htsat-fused"
-        model = ClapAudioModelWithProjection.from_pretrained(model_name)
-        self.assertIsNotNone(model)
-        self.assertTrue(hasattr(model, "audio_projection"))
+        for model_name in CLAP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = ClapAudioModelWithProjection.from_pretrained(model_name)
+            self.assertIsNotNone(model)
+            self.assertTrue(hasattr(model, "audio_projection"))
 
 
 class ClapTextModelTester:
@@ -442,16 +444,16 @@ class ClapTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "laion/clap-htsat-fused"
-        model = ClapTextModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
+        for model_name in CLAP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = ClapTextModel.from_pretrained(model_name)
+            self.assertIsNotNone(model)
 
     @slow
     def test_model_with_projection_from_pretrained(self):
-        model_name = "laion/clap-htsat-fused"
-        model = ClapTextModelWithProjection.from_pretrained(model_name)
-        self.assertIsNotNone(model)
-        self.assertTrue(hasattr(model, "text_projection"))
+        for model_name in CLAP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = ClapTextModelWithProjection.from_pretrained(model_name)
+            self.assertIsNotNone(model)
+            self.assertTrue(hasattr(model, "text_projection"))
 
 
 class ClapModelTester:
@@ -464,7 +466,6 @@ class ClapModelTester:
         self.parent = parent
         self.text_model_tester = ClapTextModelTester(parent, **text_kwargs)
         self.audio_model_tester = ClapAudioModelTester(parent, **audio_kwargs)
-        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
@@ -533,7 +534,7 @@ class ClapModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(reason="ClapModel does not have input/output embeddings")
-    def test_model_get_set_embeddings(self):
+    def test_model_common_attributes(self):
         pass
 
     # override as the `logit_scale` parameter initilization is different for CLAP
@@ -562,7 +563,7 @@ class ClapModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:
-            self.skipTest(reason="test_torchscript is set to False")
+            return
 
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
         configs_no_init.torchscript = True
@@ -648,9 +649,9 @@ class ClapModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "laion/clap-htsat-fused"
-        model = ClapModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
+        for model_name in CLAP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = ClapModel.from_pretrained(model_name)
+            self.assertIsNotNone(model)
 
 
 @slow

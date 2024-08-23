@@ -45,7 +45,7 @@ from transformers.utils.versions import require_version
 logger = logging.getLogger(__name__)
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.45.0.dev0")
+check_min_version("4.37.0.dev0")
 
 require_version("datasets>=1.14.0", "To fix: pip install -r examples/pytorch/audio-classification/requirements.txt")
 
@@ -161,13 +161,19 @@ class ModelArguments:
             )
         },
     )
+    use_auth_token: bool = field(
+        default=None,
+        metadata={
+            "help": "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token` instead."
+        },
+    )
     trust_remote_code: bool = field(
         default=False,
         metadata={
             "help": (
-                "Whether to trust the execution of code from datasets/models defined on the Hub."
-                " This option should only be set to `True` for repositories you trust and in which you have read the"
-                " code, as it will execute code present on the Hub on your local machine."
+                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option"
+                "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
+                "execute code present on the Hub on your local machine."
             )
         },
     )
@@ -207,6 +213,15 @@ def main():
         model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
+
+    if model_args.use_auth_token is not None:
+        warnings.warn(
+            "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token` instead.",
+            FutureWarning,
+        )
+        if model_args.token is not None:
+            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
+        model_args.token = model_args.use_auth_token
 
     # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
     # information sent is the one passed as arguments along with your Python/PyTorch versions.
@@ -261,14 +276,12 @@ def main():
         data_args.dataset_config_name,
         split=data_args.train_split_name,
         token=model_args.token,
-        trust_remote_code=model_args.trust_remote_code,
     )
     raw_datasets["eval"] = load_dataset(
         data_args.dataset_name,
         data_args.dataset_config_name,
         split=data_args.eval_split_name,
         token=model_args.token,
-        trust_remote_code=model_args.trust_remote_code,
     )
 
     if data_args.audio_column_name not in raw_datasets["train"].column_names:
@@ -336,7 +349,7 @@ def main():
         id2label[str(i)] = label
 
     # Load the accuracy metric from the datasets package
-    metric = evaluate.load("accuracy", cache_dir=model_args.cache_dir)
+    metric = evaluate.load("accuracy")
 
     # Define our compute_metrics function. It takes an `EvalPrediction` object (a namedtuple with
     # `predictions` and `label_ids` fields) and has to return a dictionary string to float.

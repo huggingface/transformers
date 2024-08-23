@@ -14,6 +14,7 @@
 # limitations under the License.
 """Convert SwiftFormer checkpoints from the original implementation."""
 
+
 import argparse
 import json
 from pathlib import Path

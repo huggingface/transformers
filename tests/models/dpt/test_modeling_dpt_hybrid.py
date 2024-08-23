@@ -12,13 +12,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch DPT model."""
+""" Testing suite for the PyTorch DPT model. """
+
 
 import unittest
 
 from transformers import DPTConfig
 from transformers.file_utils import is_torch_available, is_vision_available
-from transformers.testing_utils import is_flaky, require_torch, require_vision, slow, torch_device
+from transformers.models.auto import get_values
+from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
@@ -29,8 +31,8 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import DPTForDepthEstimation, DPTForSemanticSegmentation, DPTModel
-    from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES
+    from transformers import MODEL_MAPPING, DPTForDepthEstimation, DPTForSemanticSegmentation, DPTModel
+    from transformers.models.dpt.modeling_dpt import DPT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -128,7 +130,6 @@ class DPTModelTester:
             initializer_range=self.initializer_range,
             is_hybrid=self.is_hybrid,
             backbone_config=backbone_config,
-            backbone=None,
             backbone_featmap_shape=self.backbone_featmap_shape,
             neck_hidden_sizes=self.neck_hidden_sizes,
         )
@@ -198,7 +199,7 @@ class DPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    def test_model_get_set_embeddings(self):
+    def test_model_common_attributes(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -227,7 +228,7 @@ class DPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             config.return_dict = True
 
-            if model_class.__name__ in MODEL_MAPPING_NAMES.values():
+            if model_class in get_values(MODEL_MAPPING):
                 continue
 
             model = model_class(config)
@@ -246,7 +247,7 @@ class DPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             config.use_cache = False
             config.return_dict = True
 
-            if model_class.__name__ in MODEL_MAPPING_NAMES.values() or not model_class.supports_gradient_checkpointing:
+            if model_class in get_values(MODEL_MAPPING) or not model_class.supports_gradient_checkpointing:
                 continue
             model = model_class(config)
             model.to(torch_device)
@@ -293,9 +294,9 @@ class DPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "Intel/dpt-hybrid-midas"
-        model = DPTModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
+        for model_name in DPT_PRETRAINED_MODEL_ARCHIVE_LIST[1:]:
+            model = DPTModel.from_pretrained(model_name)
+            self.assertIsNotNone(model)
 
     def test_raise_readout_type(self):
         # We do this test only for DPTForDepthEstimation since it is the only model that uses readout_type
@@ -303,10 +304,6 @@ class DPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config.readout_type = "add"
         with self.assertRaises(ValueError):
             _ = DPTForDepthEstimation(config)
-
-    @is_flaky(description="is_flaky https://github.com/huggingface/transformers/issues/29516")
-    def test_batching_equivalence(self):
-        super().test_batching_equivalence()
 
 
 # We will verify our results on an image of cute cats

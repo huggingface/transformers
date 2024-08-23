@@ -30,7 +30,6 @@ python utils/check_repo.py
 
 It has no auto-fix mode.
 """
-
 import inspect
 import os
 import re
@@ -62,14 +61,12 @@ PATH_TO_DOC = "docs/source/en"
 PRIVATE_MODELS = [
     "AltRobertaModel",
     "DPRSpanPredictor",
-    "UdopStack",
     "LongT5Stack",
     "RealmBertModel",
     "T5Stack",
     "MT5Stack",
     "UMT5Stack",
     "Pop2PianoStack",
-    "Qwen2AudioEncoder",
     "SwitchTransformersStack",
     "TFDPRSpanPredictor",
     "MaskFormerSwinModel",
@@ -88,15 +85,11 @@ PRIVATE_MODELS = [
 # Being in this list is an exception and should **not** be the rule.
 IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     # models to ignore for not tested
-    "RecurrentGemmaModel",  # Building part of bigger (tested) model.
     "FuyuForCausalLM",  # Not tested fort now
     "InstructBlipQFormerModel",  # Building part of bigger (tested) model.
-    "InstructBlipVideoQFormerModel",  # Building part of bigger (tested) model.
     "UMT5EncoderModel",  # Building part of bigger (tested) model.
     "Blip2QFormerModel",  # Building part of bigger (tested) model.
     "ErnieMForInformationExtraction",
-    "FastSpeech2ConformerHifiGan",  # Already tested by SpeechT5HifiGan (# Copied from)
-    "FastSpeech2ConformerWithHifiGan",  # Built with two smaller (tested) models.
     "GraphormerDecoderHead",  # Building part of bigger (tested) model.
     "JukeboxVQVAE",  # Building part of bigger (tested) model.
     "JukeboxPrior",  # Building part of bigger (tested) model.
@@ -128,7 +121,6 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "SeamlessM4TTextToUnitModel",  # Building part of bigger (tested) model.
     "SeamlessM4TCodeHifiGan",  # Building part of bigger (tested) model.
     "SeamlessM4TTextToUnitForConditionalGeneration",  # Building part of bigger (tested) model.
-    "ChameleonVQVAE",  # VQVAE here is used only for encoding (discretizing) and is tested as part of bigger model
 ]
 
 # Update this list with test files that don't have a tester with a `all_model_classes` variable and which don't
@@ -167,8 +159,6 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "Blip2QFormerModel",
     "Blip2VisionModel",
     "ErnieMForInformationExtraction",
-    "FastSpeech2ConformerHifiGan",
-    "FastSpeech2ConformerWithHifiGan",
     "GitVisionModel",
     "GraphormerModel",
     "GraphormerForGraphClassification",
@@ -220,6 +210,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "ChineseCLIPVisionModel",
     "CLIPTextModel",
     "CLIPTextModelWithProjection",
+    "CLIPVisionModel",
     "CLIPVisionModelWithProjection",
     "ClvpForCausalLM",
     "ClvpModel",
@@ -248,8 +239,6 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "GPTSw3DoubleHeadsModel",
     "InstructBlipVisionModel",
     "InstructBlipQFormerModel",
-    "InstructBlipVideoVisionModel",
-    "InstructBlipVideoQFormerModel",
     "LayoutLMForQuestionAnswering",
     "LukeForMaskedLM",
     "LukeForEntityClassification",
@@ -301,7 +290,6 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "BarkCoarseModel",
     "BarkFineModel",
     "BarkSemanticModel",
-    "MusicgenMelodyModel",
     "MusicgenModel",
     "MusicgenForConditionalGeneration",
     "SpeechT5ForSpeechToSpeech",
@@ -313,15 +301,10 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "SeamlessM4TCodeHifiGan",
     "SeamlessM4TForSpeechToSpeech",  # no auto class for speech-to-speech
     "TvpForVideoGrounding",
-    "UdopForConditionalGeneration",
     "SeamlessM4Tv2NARTextToUnitModel",
     "SeamlessM4Tv2NARTextToUnitForConditionalGeneration",
     "SeamlessM4Tv2CodeHifiGan",
     "SeamlessM4Tv2ForSpeechToSpeech",  # no auto class for speech-to-speech
-    "SegGptForImageSegmentation",
-    "SiglipVisionModel",
-    "SiglipTextModel",
-    "ChameleonVQVAE",  # no autoclass for VQ-VAE models
 ]
 
 # DO NOT edit this list!
@@ -370,12 +353,12 @@ def check_missing_backends():
         missing = ", ".join(missing_backends)
         if os.getenv("TRANSFORMERS_IS_CI", "").upper() in ENV_VARS_TRUE_VALUES:
             raise Exception(
-                "Full repo consistency checks require all backends to be installed (with `pip install -e '.[dev]'` in the "
+                "Full repo consistency checks require all backends to be installed (with `pip install -e .[dev]` in the "
                 f"Transformers repo, the following are missing: {missing}."
             )
         else:
             warnings.warn(
-                "Full repo consistency checks require all backends to be installed (with `pip install -e '.[dev]'` in the "
+                "Full repo consistency checks require all backends to be installed (with `pip install -e .[dev]` in the "
                 f"Transformers repo, the following are missing: {missing}. While it's probably fine as long as you "
                 "didn't make any change in one of those backends modeling files, you should probably execute the "
                 "command above to be on the safe side."
@@ -744,8 +727,6 @@ def check_all_auto_object_names_being_defined():
                         # module, if it's a private model defined in this file.
                         if name.endswith("MODEL_MAPPING_NAMES") and is_a_private_model(class_name):
                             continue
-                        if name.endswith("MODEL_FOR_IMAGE_MAPPING_NAMES") and is_a_private_model(class_name):
-                            continue
                         failures.append(
                             f"`{class_name}` appears in the mapping `{name}` but it is not defined in the library."
                         )
@@ -932,7 +913,6 @@ DEPRECATED_OBJECTS = [
     "LineByLineTextDataset",
     "LineByLineWithRefDataset",
     "LineByLineWithSOPTextDataset",
-    "LogitsWarper",
     "NerPipeline",
     "PretrainedBartModel",
     "PretrainedFSMTModel",
@@ -959,6 +939,7 @@ DEPRECATED_OBJECTS = [
     "xnli_output_modes",
     "xnli_processors",
     "xnli_tasks_num_labels",
+    "TFTrainer",
     "TFTrainingArguments",
 ]
 
@@ -1001,12 +982,10 @@ SHOULD_HAVE_THEIR_OWN_PAGE = [
     "DinatBackbone",
     "Dinov2Backbone",
     "FocalNetBackbone",
-    "HieraBackbone",
     "MaskFormerSwinBackbone",
     "MaskFormerSwinConfig",
     "MaskFormerSwinModel",
     "NatBackbone",
-    "PvtV2Backbone",
     "ResNetBackbone",
     "SwinBackbone",
     "Swinv2Backbone",

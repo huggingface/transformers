@@ -17,7 +17,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tf_availabl
 
 
 _import_structure = {
-    "configuration_esm": ["EsmConfig"],
+    "configuration_esm": ["ESM_PRETRAINED_CONFIG_ARCHIVE_MAP", "EsmConfig"],
     "tokenization_esm": ["EsmTokenizer"],
 }
 
@@ -28,6 +28,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_esm"] = [
+        "ESM_PRETRAINED_MODEL_ARCHIVE_LIST",
         "EsmForMaskedLM",
         "EsmForSequenceClassification",
         "EsmForTokenClassification",
@@ -43,6 +44,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_tf_esm"] = [
+        "TF_ESM_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFEsmForMaskedLM",
         "TFEsmForSequenceClassification",
         "TFEsmForTokenClassification",
@@ -51,7 +53,7 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_esm import EsmConfig
+    from .configuration_esm import ESM_PRETRAINED_CONFIG_ARCHIVE_MAP, EsmConfig
     from .tokenization_esm import EsmTokenizer
 
     try:
@@ -61,6 +63,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_esm import (
+            ESM_PRETRAINED_MODEL_ARCHIVE_LIST,
             EsmForMaskedLM,
             EsmForSequenceClassification,
             EsmForTokenClassification,
@@ -76,6 +79,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_tf_esm import (
+            TF_ESM_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFEsmForMaskedLM,
             TFEsmForSequenceClassification,
             TFEsmForTokenClassification,

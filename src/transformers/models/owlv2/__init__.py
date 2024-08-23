@@ -23,6 +23,7 @@ from ...utils import (
 
 _import_structure = {
     "configuration_owlv2": [
+        "OWLV2_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "Owlv2Config",
         "Owlv2TextConfig",
         "Owlv2VisionConfig",
@@ -46,6 +47,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_owlv2"] = [
+        "OWLV2_PRETRAINED_MODEL_ARCHIVE_LIST",
         "Owlv2Model",
         "Owlv2PreTrainedModel",
         "Owlv2TextModel",
@@ -55,6 +57,7 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_owlv2 import (
+        OWLV2_PRETRAINED_CONFIG_ARCHIVE_MAP,
         Owlv2Config,
         Owlv2TextConfig,
         Owlv2VisionConfig,
@@ -76,6 +79,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_owlv2 import (
+            OWLV2_PRETRAINED_MODEL_ARCHIVE_LIST,
             Owlv2ForObjectDetection,
             Owlv2Model,
             Owlv2PreTrainedModel,

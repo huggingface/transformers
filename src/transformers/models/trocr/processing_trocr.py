@@ -15,7 +15,6 @@
 """
 Processor class for TrOCR.
 """
-
 import warnings
 from contextlib import contextmanager
 

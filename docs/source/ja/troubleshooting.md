@@ -69,6 +69,7 @@ TensorFlowの[model.save](https://www.tensorflow.org/tutorials/keras/save_and_lo
 
 ```py
 >>> from transformers import TFPreTrainedModel
+>>> from tensorflow import keras
 
 >>> model.save_weights("some_folder/tf_model.h5")
 >>> model = TFPreTrainedModel.from_pretrained("some_folder")
@@ -132,7 +133,7 @@ GPUからより良いトレースバックを取得する別のオプション�
 >>> from transformers import AutoModelForSequenceClassification
 >>> import torch
 
->>> model = AutoModelForSequenceClassification.from_pretrained("google-bert/bert-base-uncased")
+>>> model = AutoModelForSequenceClassification.from_pretrained("bert-base-uncased")
 >>> model.config.pad_token_id
 0
 ```
@@ -188,8 +189,8 @@ tensor([[ 0.0082, -0.2307],
 ```py
 >>> from transformers import AutoProcessor, AutoModelForQuestionAnswering
 
->>> processor = AutoProcessor.from_pretrained("openai-community/gpt2-medium")
->>> model = AutoModelForQuestionAnswering.from_pretrained("openai-community/gpt2-medium")
+>>> processor = AutoProcessor.from_pretrained("gpt2-medium")
+>>> model = AutoModelForQuestionAnswering.from_pretrained("gpt2-medium")
 ValueError: Unrecognized configuration class <class 'transformers.models.gpt2.configuration_gpt2.GPT2Config'> for this kind of AutoModel: AutoModelForQuestionAnswering.
 Model type should be one of AlbertConfig, BartConfig, BertConfig, BigBirdConfig, BigBirdPegasusConfig, BloomConfig, ...
 ```

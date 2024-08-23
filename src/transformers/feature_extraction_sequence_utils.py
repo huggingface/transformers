@@ -13,9 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Sequence feature extraction class for common feature extractors to preprocess sequences.
+ Sequence feature extraction class for common feature extractors to preprocess sequences.
 """
-
 from typing import Dict, List, Optional, Union
 
 import numpy as np

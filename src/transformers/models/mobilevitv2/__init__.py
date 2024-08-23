@@ -23,6 +23,7 @@ from ...utils import (
 
 _import_structure = {
     "configuration_mobilevitv2": [
+        "MOBILEVITV2_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "MobileViTV2Config",
         "MobileViTV2OnnxConfig",
     ],
@@ -36,6 +37,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_mobilevitv2"] = [
+        "MOBILEVITV2_PRETRAINED_MODEL_ARCHIVE_LIST",
         "MobileViTV2ForImageClassification",
         "MobileViTV2ForSemanticSegmentation",
         "MobileViTV2Model",
@@ -44,6 +46,7 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_mobilevitv2 import (
+        MOBILEVITV2_PRETRAINED_CONFIG_ARCHIVE_MAP,
         MobileViTV2Config,
         MobileViTV2OnnxConfig,
     )
@@ -55,6 +58,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_mobilevitv2 import (
+            MOBILEVITV2_PRETRAINED_MODEL_ARCHIVE_LIST,
             MobileViTV2ForImageClassification,
             MobileViTV2ForSemanticSegmentation,
             MobileViTV2Model,

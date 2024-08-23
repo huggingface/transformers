@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch MobileViTV2 model."""
+""" Testing suite for the PyTorch MobileViTV2 model. """
+
 
 import unittest
 
@@ -30,6 +31,7 @@ if is_torch_available():
 
     from transformers import MobileViTV2ForImageClassification, MobileViTV2ForSemanticSegmentation, MobileViTV2Model
     from transformers.models.mobilevitv2.modeling_mobilevitv2 import (
+        MOBILEVITV2_PRETRAINED_MODEL_ARCHIVE_LIST,
         make_divisible,
     )
 
@@ -188,7 +190,7 @@ class MobileViTV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
     pipeline_model_mapping = (
         {
-            "image-feature-extraction": MobileViTV2Model,
+            "feature-extraction": MobileViTV2Model,
             "image-classification": MobileViTV2ForImageClassification,
             "image-segmentation": MobileViTV2ForSemanticSegmentation,
         }
@@ -213,7 +215,7 @@ class MobileViTV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
         pass
 
     @unittest.skip(reason="MobileViTV2 does not support input and output embeddings")
-    def test_model_get_set_embeddings(self):
+    def test_model_common_attributes(self):
         pass
 
     @unittest.skip(reason="MobileViTV2 does not output attentions")
@@ -277,9 +279,9 @@ class MobileViTV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "apple/mobilevitv2-1.0-imagenet1k-256"
-        model = MobileViTV2Model.from_pretrained(model_name)
-        self.assertIsNotNone(model)
+        for model_name in MOBILEVITV2_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = MobileViTV2Model.from_pretrained(model_name)
+            self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

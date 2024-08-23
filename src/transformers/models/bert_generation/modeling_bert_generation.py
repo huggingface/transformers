@@ -192,18 +192,11 @@ class BertGenerationSelfAttention(nn.Module):
         return outputs
 
 
-BERT_GENERATION_SELF_ATTENTION_CLASSES = {
-    "eager": BertGenerationSelfAttention,
-}
-
-
-# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->BertGeneration,BERT->BERT_GENERATION
+# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->BertGeneration
 class BertGenerationAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
-        self.self = BERT_GENERATION_SELF_ATTENTION_CLASSES[config._attn_implementation](
-            config, position_embedding_type=position_embedding_type
-        )
+        self.self = BertGenerationSelfAttention(config, position_embedding_type=position_embedding_type)
         self.output = BertGenerationSelfOutput(config)
         self.pruned_heads = set()
 
@@ -851,12 +844,8 @@ class BertGenerationOnlyLMHead(nn.Module):
         return logits
 
     def _tie_weights(self):
-        # For accelerate compatibility and to not break backward compatibility
-        if self.decoder.bias.device.type == "meta":
-            self.decoder.bias = self.bias
-        else:
-            # To tie those two weights if they get disconnected (on TPU or when the bias is resized)
-            self.bias = self.decoder.bias
+        # To tie those two weights if they get disconnected (on TPU or when the bias is resized)
+        self.bias = self.decoder.bias
 
 
 @add_start_docstrings(
@@ -883,7 +872,6 @@ class BertGenerationDecoder(BertGenerationPreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.lm_head.decoder = new_embeddings
-        self.lm_head.bias = new_embeddings.bias
 
     @add_start_docstrings_to_model_forward(BERT_GENERATION_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)

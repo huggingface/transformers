@@ -12,12 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch MobileNetV2 model."""
+""" Testing suite for the PyTorch MobileNetV2 model. """
+
 
 import unittest
 
 from transformers import MobileNetV2Config
-from transformers.testing_utils import is_flaky, require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -29,6 +30,7 @@ if is_torch_available():
     import torch
 
     from transformers import MobileNetV2ForImageClassification, MobileNetV2ForSemanticSegmentation, MobileNetV2Model
+    from transformers.models.mobilenet_v2.modeling_mobilenet_v2 import MOBILENET_V2_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -193,7 +195,7 @@ class MobileNetV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     )
     pipeline_model_mapping = (
         {
-            "image-feature-extraction": MobileNetV2Model,
+            "feature-extraction": MobileNetV2Model,
             "image-classification": MobileNetV2ForImageClassification,
             "image-segmentation": MobileNetV2ForSemanticSegmentation,
         }
@@ -218,7 +220,7 @@ class MobileNetV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
         pass
 
     @unittest.skip(reason="MobileNetV2 does not support input and output embeddings")
-    def test_model_get_set_embeddings(self):
+    def test_model_common_attributes(self):
         pass
 
     @unittest.skip(reason="MobileNetV2 does not output attentions")
@@ -265,13 +267,9 @@ class MobileNetV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "google/mobilenet_v2_1.4_224"
-        model = MobileNetV2Model.from_pretrained(model_name)
-        self.assertIsNotNone(model)
-
-    @is_flaky(description="is_flaky https://github.com/huggingface/transformers/issues/29516")
-    def test_batching_equivalence(self):
-        super().test_batching_equivalence()
+        for model_name in MOBILENET_V2_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = MobileNetV2Model.from_pretrained(model_name)
+            self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

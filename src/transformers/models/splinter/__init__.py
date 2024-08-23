@@ -17,7 +17,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tokenizers_
 
 
 _import_structure = {
-    "configuration_splinter": ["SplinterConfig"],
+    "configuration_splinter": ["SPLINTER_PRETRAINED_CONFIG_ARCHIVE_MAP", "SplinterConfig"],
     "tokenization_splinter": ["SplinterTokenizer"],
 }
 
@@ -36,6 +36,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_splinter"] = [
+        "SPLINTER_PRETRAINED_MODEL_ARCHIVE_LIST",
         "SplinterForQuestionAnswering",
         "SplinterForPreTraining",
         "SplinterLayer",
@@ -45,7 +46,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_splinter import SplinterConfig
+    from .configuration_splinter import SPLINTER_PRETRAINED_CONFIG_ARCHIVE_MAP, SplinterConfig
     from .tokenization_splinter import SplinterTokenizer
 
     try:
@@ -63,6 +64,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_splinter import (
+            SPLINTER_PRETRAINED_MODEL_ARCHIVE_LIST,
             SplinterForPreTraining,
             SplinterForQuestionAnswering,
             SplinterLayer,

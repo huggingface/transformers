@@ -13,7 +13,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""TF 2.0 BERT model."""
+""" TF 2.0 BERT model."""
+
 
 from __future__ import annotations
 
@@ -48,7 +49,6 @@ from ...modeling_tf_utils import (
     TFSequenceClassificationLoss,
     TFTokenClassificationLoss,
     get_initializer,
-    keras,
     keras_serializable,
     unpack_inputs,
 )
@@ -66,7 +66,7 @@ from .configuration_bert import BertConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "google-bert/bert-base-uncased"
+_CHECKPOINT_FOR_DOC = "bert-base-uncased"
 _CONFIG_FOR_DOC = "BertConfig"
 
 # TokenClassification docstring
@@ -88,6 +88,30 @@ _CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION = "ydshieh/bert-base-uncased-yelp-polari
 _SEQ_CLASS_EXPECTED_OUTPUT = "'LABEL_1'"
 _SEQ_CLASS_EXPECTED_LOSS = 0.01
 
+TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "bert-base-uncased",
+    "bert-large-uncased",
+    "bert-base-cased",
+    "bert-large-cased",
+    "bert-base-multilingual-uncased",
+    "bert-base-multilingual-cased",
+    "bert-base-chinese",
+    "bert-base-german-cased",
+    "bert-large-uncased-whole-word-masking",
+    "bert-large-cased-whole-word-masking",
+    "bert-large-uncased-whole-word-masking-finetuned-squad",
+    "bert-large-cased-whole-word-masking-finetuned-squad",
+    "bert-base-cased-finetuned-mrpc",
+    "cl-tohoku/bert-base-japanese",
+    "cl-tohoku/bert-base-japanese-whole-word-masking",
+    "cl-tohoku/bert-base-japanese-char",
+    "cl-tohoku/bert-base-japanese-char-whole-word-masking",
+    "TurkuNLP/bert-base-finnish-cased-v1",
+    "TurkuNLP/bert-base-finnish-uncased-v1",
+    "wietsedv/bert-base-dutch-cased",
+    # See all BERT models at https://huggingface.co/models?filter=bert
+]
+
 
 class TFBertPreTrainingLoss:
     """
@@ -97,7 +121,9 @@ class TFBertPreTrainingLoss:
     """
 
     def hf_compute_loss(self, labels: tf.Tensor, logits: tf.Tensor) -> tf.Tensor:
-        loss_fn = keras.losses.SparseCategoricalCrossentropy(from_logits=True, reduction=keras.losses.Reduction.NONE)
+        loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
+            from_logits=True, reduction=tf.keras.losses.Reduction.NONE
+        )
 
         # Clip negative labels to zero here to avoid NaNs and errors - those positions will get masked later anyway
         unmasked_lm_losses = loss_fn(y_true=tf.nn.relu(labels["labels"]), y_pred=logits[0])
@@ -117,7 +143,7 @@ class TFBertPreTrainingLoss:
         return tf.reshape(reduced_masked_lm_loss + reduced_masked_ns_loss, (1,))
 
 
-class TFBertEmbeddings(keras.layers.Layer):
+class TFBertEmbeddings(tf.keras.layers.Layer):
     """Construct the embeddings from word, position and token_type embeddings."""
 
     def __init__(self, config: BertConfig, **kwargs):
@@ -127,8 +153,8 @@ class TFBertEmbeddings(keras.layers.Layer):
         self.hidden_size = config.hidden_size
         self.max_position_embeddings = config.max_position_embeddings
         self.initializer_range = config.initializer_range
-        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
-        self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
     def build(self, input_shape=None):
         with tf.name_scope("word_embeddings"):
@@ -200,7 +226,7 @@ class TFBertEmbeddings(keras.layers.Layer):
         return final_embeddings
 
 
-class TFBertSelfAttention(keras.layers.Layer):
+class TFBertSelfAttention(tf.keras.layers.Layer):
     def __init__(self, config: BertConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -215,16 +241,16 @@ class TFBertSelfAttention(keras.layers.Layer):
         self.all_head_size = self.num_attention_heads * self.attention_head_size
         self.sqrt_att_head_size = math.sqrt(self.attention_head_size)
 
-        self.query = keras.layers.Dense(
+        self.query = tf.keras.layers.Dense(
             units=self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="query"
         )
-        self.key = keras.layers.Dense(
+        self.key = tf.keras.layers.Dense(
             units=self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="key"
         )
-        self.value = keras.layers.Dense(
+        self.value = tf.keras.layers.Dense(
             units=self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="value"
         )
-        self.dropout = keras.layers.Dropout(rate=config.attention_probs_dropout_prob)
+        self.dropout = tf.keras.layers.Dropout(rate=config.attention_probs_dropout_prob)
 
         self.is_decoder = config.is_decoder
         self.config = config
@@ -332,15 +358,15 @@ class TFBertSelfAttention(keras.layers.Layer):
                 self.value.build([None, None, self.config.hidden_size])
 
 
-class TFBertSelfOutput(keras.layers.Layer):
+class TFBertSelfOutput(tf.keras.layers.Layer):
     def __init__(self, config: BertConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = keras.layers.Dense(
+        self.dense = tf.keras.layers.Dense(
             units=config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
-        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
-        self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
         self.config = config
 
     def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
@@ -362,7 +388,7 @@ class TFBertSelfOutput(keras.layers.Layer):
                 self.LayerNorm.build([None, None, self.config.hidden_size])
 
 
-class TFBertAttention(keras.layers.Layer):
+class TFBertAttention(tf.keras.layers.Layer):
     def __init__(self, config: BertConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -413,11 +439,11 @@ class TFBertAttention(keras.layers.Layer):
                 self.dense_output.build(None)
 
 
-class TFBertIntermediate(keras.layers.Layer):
+class TFBertIntermediate(tf.keras.layers.Layer):
     def __init__(self, config: BertConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = keras.layers.Dense(
+        self.dense = tf.keras.layers.Dense(
             units=config.intermediate_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
 
@@ -442,15 +468,15 @@ class TFBertIntermediate(keras.layers.Layer):
                 self.dense.build([None, None, self.config.hidden_size])
 
 
-class TFBertOutput(keras.layers.Layer):
+class TFBertOutput(tf.keras.layers.Layer):
     def __init__(self, config: BertConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = keras.layers.Dense(
+        self.dense = tf.keras.layers.Dense(
             units=config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
-        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
-        self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
         self.config = config
 
     def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
@@ -472,7 +498,7 @@ class TFBertOutput(keras.layers.Layer):
                 self.LayerNorm.build([None, None, self.config.hidden_size])
 
 
-class TFBertLayer(keras.layers.Layer):
+class TFBertLayer(tf.keras.layers.Layer):
     def __init__(self, config: BertConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -575,7 +601,7 @@ class TFBertLayer(keras.layers.Layer):
                 self.crossattention.build(None)
 
 
-class TFBertEncoder(keras.layers.Layer):
+class TFBertEncoder(tf.keras.layers.Layer):
     def __init__(self, config: BertConfig, **kwargs):
         super().__init__(**kwargs)
         self.config = config
@@ -653,11 +679,11 @@ class TFBertEncoder(keras.layers.Layer):
                     layer.build(None)
 
 
-class TFBertPooler(keras.layers.Layer):
+class TFBertPooler(tf.keras.layers.Layer):
     def __init__(self, config: BertConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = keras.layers.Dense(
+        self.dense = tf.keras.layers.Dense(
             units=config.hidden_size,
             kernel_initializer=get_initializer(config.initializer_range),
             activation="tanh",
@@ -682,11 +708,11 @@ class TFBertPooler(keras.layers.Layer):
                 self.dense.build([None, None, self.config.hidden_size])
 
 
-class TFBertPredictionHeadTransform(keras.layers.Layer):
+class TFBertPredictionHeadTransform(tf.keras.layers.Layer):
     def __init__(self, config: BertConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = keras.layers.Dense(
+        self.dense = tf.keras.layers.Dense(
             units=config.hidden_size,
             kernel_initializer=get_initializer(config.initializer_range),
             name="dense",
@@ -697,7 +723,7 @@ class TFBertPredictionHeadTransform(keras.layers.Layer):
         else:
             self.transform_act_fn = config.hidden_act
 
-        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.config = config
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
@@ -719,8 +745,8 @@ class TFBertPredictionHeadTransform(keras.layers.Layer):
                 self.LayerNorm.build([None, None, self.config.hidden_size])
 
 
-class TFBertLMPredictionHead(keras.layers.Layer):
-    def __init__(self, config: BertConfig, input_embeddings: keras.layers.Layer, **kwargs):
+class TFBertLMPredictionHead(tf.keras.layers.Layer):
+    def __init__(self, config: BertConfig, input_embeddings: tf.keras.layers.Layer, **kwargs):
         super().__init__(**kwargs)
 
         self.config = config
@@ -742,7 +768,7 @@ class TFBertLMPredictionHead(keras.layers.Layer):
             with tf.name_scope(self.transform.name):
                 self.transform.build(None)
 
-    def get_output_embeddings(self) -> keras.layers.Layer:
+    def get_output_embeddings(self) -> tf.keras.layers.Layer:
         return self.input_embeddings
 
     def set_output_embeddings(self, value: tf.Variable):
@@ -767,8 +793,8 @@ class TFBertLMPredictionHead(keras.layers.Layer):
         return hidden_states
 
 
-class TFBertMLMHead(keras.layers.Layer):
-    def __init__(self, config: BertConfig, input_embeddings: keras.layers.Layer, **kwargs):
+class TFBertMLMHead(tf.keras.layers.Layer):
+    def __init__(self, config: BertConfig, input_embeddings: tf.keras.layers.Layer, **kwargs):
         super().__init__(**kwargs)
 
         self.predictions = TFBertLMPredictionHead(config, input_embeddings, name="predictions")
@@ -787,11 +813,11 @@ class TFBertMLMHead(keras.layers.Layer):
                 self.predictions.build(None)
 
 
-class TFBertNSPHead(keras.layers.Layer):
+class TFBertNSPHead(tf.keras.layers.Layer):
     def __init__(self, config: BertConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.seq_relationship = keras.layers.Dense(
+        self.seq_relationship = tf.keras.layers.Dense(
             units=2,
             kernel_initializer=get_initializer(config.initializer_range),
             name="seq_relationship",
@@ -813,7 +839,7 @@ class TFBertNSPHead(keras.layers.Layer):
 
 
 @keras_serializable
-class TFBertMainLayer(keras.layers.Layer):
+class TFBertMainLayer(tf.keras.layers.Layer):
     config_class = BertConfig
 
     def __init__(self, config: BertConfig, add_pooling_layer: bool = True, **kwargs):
@@ -826,7 +852,7 @@ class TFBertMainLayer(keras.layers.Layer):
         self.encoder = TFBertEncoder(config, name="encoder")
         self.pooler = TFBertPooler(config, name="pooler") if add_pooling_layer else None
 
-    def get_input_embeddings(self) -> keras.layers.Layer:
+    def get_input_embeddings(self) -> tf.keras.layers.Layer:
         return self.embeddings
 
     def set_input_embeddings(self, value: tf.Variable):
@@ -1060,7 +1086,7 @@ BERT_START_DOCSTRING = r"""
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
-    This model is also a [keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
+    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
     as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
     behavior.
 
@@ -1157,10 +1183,10 @@ BERT_INPUTS_DOCSTRING = r"""
     BERT_START_DOCSTRING,
 )
 class TFBertModel(TFBertPreTrainedModel):
-    def __init__(self, config: BertConfig, add_pooling_layer: bool = True, *inputs, **kwargs):
+    def __init__(self, config: BertConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
-        self.bert = TFBertMainLayer(config, add_pooling_layer, name="bert")
+        self.bert = TFBertMainLayer(config, name="bert")
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -1255,7 +1281,7 @@ class TFBertForPreTraining(TFBertPreTrainedModel, TFBertPreTrainingLoss):
         self.nsp = TFBertNSPHead(config, name="nsp___cls")
         self.mlm = TFBertMLMHead(config, input_embeddings=self.bert.embeddings, name="mlm___cls")
 
-    def get_lm_head(self) -> keras.layers.Layer:
+    def get_lm_head(self) -> tf.keras.layers.Layer:
         return self.mlm.predictions
 
     def get_prefix_bias_name(self) -> str:
@@ -1291,7 +1317,7 @@ class TFBertForPreTraining(TFBertPreTrainedModel, TFBertPreTrainingLoss):
 
             - 0 indicates sequence B is a continuation of sequence A,
             - 1 indicates sequence B is a random sequence.
-        kwargs (`Dict[str, any]`, *optional*, defaults to `{}`):
+        kwargs (`Dict[str, any]`, optional, defaults to *{}*):
             Used to hide legacy arguments that have been deprecated.
 
         Return:
@@ -1302,8 +1328,8 @@ class TFBertForPreTraining(TFBertPreTrainedModel, TFBertPreTrainingLoss):
         >>> import tensorflow as tf
         >>> from transformers import AutoTokenizer, TFBertForPreTraining
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
-        >>> model = TFBertForPreTraining.from_pretrained("google-bert/bert-base-uncased")
+        >>> tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+        >>> model = TFBertForPreTraining.from_pretrained("bert-base-uncased")
         >>> input_ids = tokenizer("Hello, my dog is cute", add_special_tokens=True, return_tensors="tf")
         >>> # Batch size 1
 
@@ -1381,7 +1407,7 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
         self.bert = TFBertMainLayer(config, add_pooling_layer=False, name="bert")
         self.mlm = TFBertMLMHead(config, input_embeddings=self.bert.embeddings, name="mlm___cls")
 
-    def get_lm_head(self) -> keras.layers.Layer:
+    def get_lm_head(self) -> tf.keras.layers.Layer:
         return self.mlm.predictions
 
     def get_prefix_bias_name(self) -> str:
@@ -1474,7 +1500,7 @@ class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
         self.bert = TFBertMainLayer(config, add_pooling_layer=False, name="bert")
         self.mlm = TFBertMLMHead(config, input_embeddings=self.bert.embeddings, name="mlm___cls")
 
-    def get_lm_head(self) -> keras.layers.Layer:
+    def get_lm_head(self) -> tf.keras.layers.Layer:
         return self.mlm.predictions
 
     def get_prefix_bias_name(self) -> str:
@@ -1632,8 +1658,8 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel, TFNextSentencePredi
         >>> import tensorflow as tf
         >>> from transformers import AutoTokenizer, TFBertForNextSentencePrediction
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
-        >>> model = TFBertForNextSentencePrediction.from_pretrained("google-bert/bert-base-uncased")
+        >>> tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+        >>> model = TFBertForNextSentencePrediction.from_pretrained("bert-base-uncased")
 
         >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
         >>> next_sentence = "The sky is blue due to the shorter wavelength of blue light."
@@ -1706,8 +1732,8 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel, TFSequenceClassific
         classifier_dropout = (
             config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
         )
-        self.dropout = keras.layers.Dropout(rate=classifier_dropout)
-        self.classifier = keras.layers.Dense(
+        self.dropout = tf.keras.layers.Dropout(rate=classifier_dropout)
+        self.classifier = tf.keras.layers.Dense(
             units=config.num_labels,
             kernel_initializer=get_initializer(config.initializer_range),
             name="classifier",
@@ -1799,8 +1825,8 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel, TFMultipleChoiceLoss):
         super().__init__(config, *inputs, **kwargs)
 
         self.bert = TFBertMainLayer(config, name="bert")
-        self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
-        self.classifier = keras.layers.Dense(
+        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.classifier = tf.keras.layers.Dense(
             units=1, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
         self.config = config
@@ -1921,8 +1947,8 @@ class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationL
         classifier_dropout = (
             config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
         )
-        self.dropout = keras.layers.Dropout(rate=classifier_dropout)
-        self.classifier = keras.layers.Dense(
+        self.dropout = tf.keras.layers.Dropout(rate=classifier_dropout)
+        self.classifier = tf.keras.layers.Dense(
             units=config.num_labels,
             kernel_initializer=get_initializer(config.initializer_range),
             name="classifier",
@@ -2019,7 +2045,7 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss)
         self.num_labels = config.num_labels
 
         self.bert = TFBertMainLayer(config, add_pooling_layer=False, name="bert")
-        self.qa_outputs = keras.layers.Dense(
+        self.qa_outputs = tf.keras.layers.Dense(
             units=config.num_labels,
             kernel_initializer=get_initializer(config.initializer_range),
             name="qa_outputs",

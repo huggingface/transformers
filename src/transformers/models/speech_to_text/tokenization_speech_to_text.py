@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization classes for Speech2Text."""
-
 import json
 import os
 from pathlib import Path
@@ -35,6 +34,18 @@ VOCAB_FILES_NAMES = {
     "spm_file": "sentencepiece.bpe.model",
 }
 
+PRETRAINED_VOCAB_FILES_MAP = {
+    "vocab_file": {
+        "facebook/s2t-small-librispeech-asr": (
+            "https://huggingface.co/facebook/s2t-small-librispeech-asr/resolve/main/vocab.json"
+        ),
+    },
+    "spm_file": {
+        "facebook/s2t-small-librispeech-asr": (
+            "https://huggingface.co/facebook/s2t-small-librispeech-asr/resolve/main/sentencepiece.bpe.model"
+        )
+    },
+}
 
 MAX_MODEL_INPUT_SIZES = {
     "facebook/s2t-small-librispeech-asr": 1024,
@@ -93,6 +104,8 @@ class Speech2TextTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
+    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
+    max_model_input_sizes = MAX_MODEL_INPUT_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
     prefix_tokens: List[int] = []

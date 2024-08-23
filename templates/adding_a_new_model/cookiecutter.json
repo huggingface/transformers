@@ -1,0 +1,19 @@
+{
+  "modelname": "BrandNewBERT",
+  "uppercase_modelname": "BRAND_NEW_BERT",
+  "lowercase_modelname": "brand_new_bert",
+  "camelcase_modelname": "BrandNewBert",
+  "authors": "The HuggingFace Team",
+  "checkpoint_identifier": "brand-new-bert-base-cased",
+  "tokenizer_type": ["Based on BERT", "Based on BART", "Standalone"],
+  "generate_tensorflow_pytorch_and_flax": [
+    "PyTorch, TensorFlow and Flax",
+    "PyTorch & TensorFlow",
+    "PyTorch & Flax",
+    "TensorFlow & Flax",
+    "PyTorch",
+    "TensorFlow",
+    "Flax"
+  ],
+  "is_encoder_decoder_model": ["True", "False"]
+}

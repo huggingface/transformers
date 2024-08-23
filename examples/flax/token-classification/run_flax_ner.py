@@ -13,8 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Fine-tuning a 🤗 Flax Transformers model on token classification tasks (NER, POS, CHUNKS)"""
-
+""" Fine-tuning a 🤗 Flax Transformers model on token classification tasks (NER, POS, CHUNKS)"""
 import json
 import logging
 import math
@@ -40,7 +39,7 @@ from flax import struct, traverse_util
 from flax.jax_utils import pad_shard_unpad, replicate, unreplicate
 from flax.training import train_state
 from flax.training.common_utils import get_metrics, onehot, shard
-from huggingface_hub import HfApi
+from huggingface_hub import Repository, create_repo
 from tqdm import tqdm
 
 import transformers
@@ -57,7 +56,7 @@ from transformers.utils.versions import require_version
 
 logger = logging.getLogger(__name__)
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.45.0.dev0")
+check_min_version("4.37.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/token-classification/requirements.txt")
 
@@ -170,9 +169,9 @@ class ModelArguments:
         default=False,
         metadata={
             "help": (
-                "Whether to trust the execution of code from datasets/models defined on the Hub."
-                " This option should only be set to `True` for repositories you trust and in which you have read the"
-                " code, as it will execute code present on the Hub on your local machine."
+                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option"
+                "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
+                "execute code present on the Hub on your local machine."
             )
         },
     )
@@ -430,8 +429,9 @@ def main():
         if repo_name is None:
             repo_name = Path(training_args.output_dir).absolute().name
         # Create repo and retrieve repo_id
-        api = HfApi()
-        repo_id = api.create_repo(repo_name, exist_ok=True, token=training_args.hub_token).repo_id
+        repo_id = create_repo(repo_name, exist_ok=True, token=training_args.hub_token).repo_id
+        # Clone repo locally
+        repo = Repository(training_args.output_dir, clone_from=repo_id, token=training_args.hub_token)
 
     # Get the datasets: you can either provide your own CSV/JSON/TXT training and evaluation files (see below)
     # or just provide the name of one of the public datasets for token classification task available on the hub at https://huggingface.co/datasets/
@@ -449,7 +449,6 @@ def main():
             data_args.dataset_config_name,
             cache_dir=model_args.cache_dir,
             token=model_args.token,
-            trust_remote_code=model_args.trust_remote_code,
         )
     else:
         # Loading the dataset from local csv or json file.
@@ -677,7 +676,7 @@ def main():
 
     p_eval_step = jax.pmap(eval_step, axis_name="batch")
 
-    metric = evaluate.load("seqeval", cache_dir=model_args.cache_dir)
+    metric = evaluate.load("seqeval")
 
     def get_labels(y_pred, y_true):
         # Transform predictions and references tensos to numpy arrays
@@ -799,13 +798,7 @@ def main():
                     model.save_pretrained(training_args.output_dir, params=params)
                     tokenizer.save_pretrained(training_args.output_dir)
                     if training_args.push_to_hub:
-                        api.upload_folder(
-                            commit_message=f"Saving weights and logs of step {cur_step}",
-                            folder_path=training_args.output_dir,
-                            repo_id=repo_id,
-                            repo_type="model",
-                            token=training_args.hub_token,
-                        )
+                        repo.push_to_hub(commit_message=f"Saving weights and logs of step {cur_step}", blocking=False)
         epochs.desc = f"Epoch ... {epoch + 1}/{num_epochs}"
 
     # Eval after training

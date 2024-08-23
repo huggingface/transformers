@@ -91,7 +91,8 @@ class OneFormerProcessor(ProcessorMixin):
             images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`,
             `List[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. Both channels-first and channels-last formats are supported.
+                tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
+                number of channels, H and W are image height and width.
             segmentation_maps (`ImageInput`, *optional*):
                 The corresponding semantic segmentation maps with the pixel-wise annotations.
 

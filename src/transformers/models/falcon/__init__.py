@@ -22,7 +22,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_falcon": ["FalconConfig"],
+    "configuration_falcon": ["FALCON_PRETRAINED_CONFIG_ARCHIVE_MAP", "FalconConfig"],
 }
 
 try:
@@ -32,6 +32,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_falcon"] = [
+        "FALCON_PRETRAINED_MODEL_ARCHIVE_LIST",
         "FalconForCausalLM",
         "FalconModel",
         "FalconPreTrainedModel",
@@ -42,7 +43,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_falcon import FalconConfig
+    from .configuration_falcon import FALCON_PRETRAINED_CONFIG_ARCHIVE_MAP, FalconConfig
 
     try:
         if not is_torch_available():
@@ -51,6 +52,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_falcon import (
+            FALCON_PRETRAINED_MODEL_ARCHIVE_LIST,
             FalconForCausalLM,
             FalconForQuestionAnswering,
             FalconForSequenceClassification,

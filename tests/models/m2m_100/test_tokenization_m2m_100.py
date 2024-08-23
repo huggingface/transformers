@@ -48,7 +48,6 @@ FR_CODE = 128028
 
 @require_sentencepiece
 class M2M100TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-    from_pretrained_id = "facebook/m2m100_418M"
     tokenizer_class = M2M100Tokenizer
     test_rust_tokenizer = False
     test_seq2seq = False
@@ -93,6 +92,10 @@ class M2M100TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(vocab_keys[-1], "<s>")
         # The length of the vocab keys can be different
         # self.assertEqual(len(vocab_keys), tokenizer.vocab_size)
+
+    @unittest.skip("Skip this test while all models are still to be uploaded.")
+    def test_pretrained_model_lists(self):
+        pass
 
     def test_full_tokenizer(self):
         tokenizer = self.get_tokenizer()
