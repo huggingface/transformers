@@ -19,9 +19,9 @@ import inspect
 import tempfile
 import unittest
 import warnings
-import pytest 
 
 import numpy as np
+import pytest
 from parameterized import parameterized
 
 from transformers import is_torch_available, pipeline, set_seed
@@ -87,6 +87,7 @@ if is_torch_available():
         WatermarkingConfig,
     )
     from transformers.generation.utils import _speculative_sampling
+
 
 @pytest.mark.generate
 class GenerationTesterMixin:
@@ -430,7 +431,7 @@ class GenerationTesterMixin:
                 self.assertTrue(output_generate.shape[-1] == self.max_new_tokens + 1)
             else:
                 self.assertTrue(output_generate.shape[-1] == self.max_new_tokens + input_ids.shape[-1])
-    
+
     @pytest.mark.generate
     def test_greedy_generate_dict_outputs(self):
         for model_class in self.all_generative_model_classes:
@@ -461,7 +462,7 @@ class GenerationTesterMixin:
                 self.assertIsInstance(output_generate, GreedySearchDecoderOnlyOutput)
 
             self._check_outputs(output_generate, input_ids, model.config)
-    
+
     @pytest.mark.generate
     def test_greedy_generate_dict_outputs_use_cache(self):
         for model_class in self.all_generative_model_classes:
@@ -730,6 +731,7 @@ class GenerationTesterMixin:
             self._check_outputs(
                 output_generate, input_ids, model.config, num_return_sequences=beam_kwargs["num_beams"]
             )
+
     @pytest.mark.generate
     def test_generate_without_input_ids(self):
         config, _, _ = self._get_input_ids_and_config()
