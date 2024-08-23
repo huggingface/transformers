@@ -554,7 +554,6 @@ class _BaseAutoModelClass:
             _ = hub_kwargs.pop("code_revision", None)
             if os.path.isdir(pretrained_model_name_or_path):
                 model_class.register_for_auto_class(cls.__name__)
-                cls.register(config.__class__, model_class, exist_ok=True)
             else:
                 cls.register(config.__class__, model_class, exist_ok=True)
             return model_class.from_pretrained(
@@ -804,4 +803,5 @@ class _LazyAutoMapping(OrderedDict):
             model_type = self._reverse_config_mapping[key.__name__]
             if model_type in self._model_mapping.keys() and not exist_ok:
                 raise ValueError(f"'{key}' is already used by a Transformers model.")
+
         self._extra_content[key] = value
