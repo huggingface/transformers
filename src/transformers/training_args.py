@@ -703,6 +703,9 @@ class TrainingArguments:
         include_inputs_for_metrics (`bool`, *optional*, defaults to `False`):
             Whether or not the inputs will be passed to the `compute_metrics` function. This is intended for metrics
             that need inputs, predictions and references for scoring calculation in Metric class.
+        include_loss_for_metrics (`bool`, *optional*, defaults to `False`):
+            Whether or not the loss values will be passed to the `compute_metrics` function. This is intended for calculating
+            loss dependent metrics.
         eval_do_concat_batches (`bool`, *optional*, defaults to `True`):
             Whether to recursively concat inputs/losses/labels/predictions across batches. If `False`,
             will instead store them as lists, with each batch kept separate.
@@ -1351,7 +1354,15 @@ class TrainingArguments:
         },
     )
     include_inputs_for_metrics: bool = field(
-        default=False, metadata={"help": "Whether or not the inputs will be passed to the `compute_metrics` function."}
+        default=False, 
+        metadata={
+            "help": "Whether or not the inputs will be passed to the `compute_metrics` function."
+        },
+    )
+    include_loss_for_metrics: bool = field(
+        default=False,
+        metadata={"help": "Whether or not the loss will be passed to the `compute_metrics` function."
+        },
     )
     eval_do_concat_batches: bool = field(
         default=True,

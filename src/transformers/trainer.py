@@ -3953,6 +3953,7 @@ class Trainer:
         all_inputs = EvalLoopContainer(self.args.eval_do_concat_batches, padding_index=-100)
 
         metrics = None
+        eval_set_kwargs =  {}
 
         # Will be useful when we have an iterable dataset so don't know its length.
         observed_num_examples = 0
@@ -3974,7 +3975,7 @@ class Trainer:
 
             if is_torch_xla_available():
                 xm.mark_step()
-
+            
             # Update containers
             if losses is not None:
                 losses = self.gather_function((losses.repeat(batch_size)))
@@ -4004,9 +4005,12 @@ class Trainer:
             if self.args.batch_eval_metrics:
                 if self.compute_metrics is not None and logits is not None and labels is not None:
                     is_last_step = self.accelerator.gradient_state.end_of_dataloader
-                    if args.include_inputs_for_metrics:
+                    if args.include_inputs_for_metrics or args.include_loss_for_metrics:
+                        batch_kwargs = {}
+                        batch_kwargs["losses"] = losses if args.include_loss_for_metrics else None
+                        batch_kwargs["inputs"] = inputs if args.include_inputs_for_metrics else None
                         metrics = self.compute_metrics(
-                            EvalPrediction(predictions=logits, label_ids=labels, inputs=inputs),
+                            EvalPrediction(predictions=logits, label_ids=labels, **batch_kwargs),
                             compute_result=is_last_step,
                         )
                     else:
@@ -4062,9 +4066,11 @@ class Trainer:
             and all_labels is not None
             and not self.args.batch_eval_metrics
         ):
-            if args.include_inputs_for_metrics:
+            if args.include_inputs_for_metrics or args.include_loss_for_metrics:
+                eval_set_kwargs['losses'] = all_losses if args.include_loss_for_metrics else None
+                eval_set_kwargs['inputs'] = all_inputs if args.include_inputs_for_metrics else None
                 metrics = self.compute_metrics(
-                    EvalPrediction(predictions=all_preds, label_ids=all_labels, inputs=all_inputs)
+                    EvalPrediction(predictions=all_preds, label_ids=all_labels, **eval_set_kwargs)
                 )
             else:
                 metrics = self.compute_metrics(EvalPrediction(predictions=all_preds, label_ids=all_labels))
@@ -4536,6 +4542,7 @@ class Trainer:
         labels_host: Union[torch.Tensor, List[torch.Tensor]] = None
         inputs_host: Union[torch.Tensor, List[torch.Tensor]] = None
         metrics: Optional[dict] = None
+        eval_set_kwargs: dict = {}
 
         world_size = max(1, args.world_size)
 
@@ -4580,9 +4587,12 @@ class Trainer:
             if self.args.batch_eval_metrics:
                 if self.compute_metrics is not None and preds_host is not None and labels_host is not None:
                     is_last_step = self.accelerator.gradient_state.end_of_dataloader
-                    if args.include_inputs_for_metrics:
+                    if args.include_inputs_for_metrics or args.include_loss_for_metrics:
+                        batch_kwargs = {}
+                        batch_kwargs["losses"] = losses_host if  args.include_loss_for_metrics else None
+                        batch_kwargs["inputs"] = inputs_host if  args.include_inputs_for_metrics else None                        
                         metrics = self.compute_metrics(
-                            EvalPrediction(predictions=preds_host, label_ids=labels_host, inputs=inputs_host),
+                            EvalPrediction(predictions=preds_host, label_ids=labels_host, **batch_kwargs),
                             compute_result=is_last_step,
                         )
                     else:
@@ -4628,9 +4638,11 @@ class Trainer:
             and label_ids is not None
             and not self.args.batch_eval_metrics
         ):
-            if args.include_inputs_for_metrics:
+            if args.include_inputs_for_metrics or args.include_loss_for_metrics:
+                eval_set_kwargs['losses'] = eval_loss if args.include_loss_for_metrics else None
+                eval_set_kwargs['inputs'] = inputs_ids if args.include_inputs_for_metrics else None
                 metrics = self.compute_metrics(
-                    EvalPrediction(predictions=preds, label_ids=label_ids, inputs=inputs_ids)
+                    EvalPrediction(predictions=preds, label_ids=label_ids, **eval_set_kwargs)
                 )
             else:
                 metrics = self.compute_metrics(EvalPrediction(predictions=preds, label_ids=label_ids))

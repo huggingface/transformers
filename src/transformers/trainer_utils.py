@@ -156,36 +156,33 @@ class EvalPrediction:
     Parameters:
         predictions (`np.ndarray`): Predictions of the model.
         label_ids (`np.ndarray`): Targets to be matched.
-        inputs (`np.ndarray`, *optional*):
+        kwargs (`Dict[str, Any]`, *optional*): Additional keyword arguments passed to EvalPrediction to include inputs and/or losses.
     """
 
     def __init__(
         self,
         predictions: Union[np.ndarray, Tuple[np.ndarray]],
         label_ids: Union[np.ndarray, Tuple[np.ndarray]],
-        inputs: Optional[Union[np.ndarray, Tuple[np.ndarray]]] = None,
+        kwargs: Optional[Dict[str, Any]] = None,
     ):
         self.predictions = predictions
         self.label_ids = label_ids
-        self.inputs = inputs
+        if kwargs is not None:
+            self.inputs =  kwargs.pop("inputs", None)
+            self.losses =  kwargs.pop("losses", None)
+        self.items = (self.predictions, self.label_ids)
+        if self.inputs is not None:
+            self.items += (self.inputs,)
+        if self.losses is not None:
+            self.items += (self.losses,)
 
     def __iter__(self):
-        if self.inputs is not None:
-            return iter((self.predictions, self.label_ids, self.inputs))
-        else:
-            return iter((self.predictions, self.label_ids))
+        return iter(self.items)
 
     def __getitem__(self, idx):
-        if idx < 0 or idx > 2:
+        if idx < 0 or idx >= len(self.items):
             raise IndexError("tuple index out of range")
-        if idx == 2 and self.inputs is None:
-            raise IndexError("tuple index out of range")
-        if idx == 0:
-            return self.predictions
-        elif idx == 1:
-            return self.label_ids
-        elif idx == 2:
-            return self.inputs
+        return self.items[idx]
 
 
 class EvalLoopOutput(NamedTuple):
