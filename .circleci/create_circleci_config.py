@@ -144,18 +144,12 @@ class CircleCIJob:
             {"run": {"name": "Expand to show skipped tests", "when": "always", "command": f"python3 .circleci/parse_test_outputs.py --file tests_output.txt --skip"}},
             {"run": {"name": "Failed tests: show reasons",   "when": "always", "command": f"python3 .circleci/parse_test_outputs.py --file tests_output.txt --fail"}},
             {"run": {"name": "Errors",                       "when": "always", "command": f"python3 .circleci/parse_test_outputs.py --file tests_output.txt --errors"}},
-                {"store_test_results": {"path": "test-results"}},
-            {
-                "run": {
-                    "name": "Move files to artifacts folder",
-                    "command": "mkdir -p artifacts && mv test-results/junit.xml reports tests.txt splitted_tests.txt installed.txt artifacts/"
-                }
-                },
-                {
-                "store_artifacts": {
-                    "path": "artifacts"
-                }
-                }
+            {"store_test_results": {"path": "test-results"}},
+            {"store_artifacts": {"path": "test-results/junit.xml"}},
+            {"store_artifacts": {"path": "reports"}},
+            {"store_artifacts": {"path": "tests.txt"}},
+            {"store_artifacts": {"path": "splitted_tests.txt"}},
+            {"store_artifacts": {"path": "installed.txt"}},
         ]
         if self.parallelism is not None:
             job["parallelism"] = self.parallelism
