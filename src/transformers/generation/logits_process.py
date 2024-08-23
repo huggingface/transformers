@@ -2486,10 +2486,10 @@ class SynthIDTextWatermarkState:
         """Initializes the state.
 
         Args:
-            batch_size: Batch size.
-            ngram_len: Ngram length.
-            context_history_size: Size of the tensor to keep track of seen contexts.
-            device: Device to use.
+            batch_size (`int`): Batch size.
+            ngram_len (`int`): Ngram length.
+            context_history_size (`int`): Size of the tensor to keep track of seen contexts.
+            device (`int`): Device to use.
         """
         self.context = torch.zeros(
             (batch_size, ngram_len - 1),
@@ -2521,15 +2521,14 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
         """Initializes the logits processor.
 
         Args:
-            ngram_len: Ngram length.
-            keys: A sequence of watermarking keys, one for each depth.
-            sampling_table_size: Size of the sampling table.
-            sampling_table_seed: Random seed to generate the sampling table.
-            context_history_size: Size of the tensor to keep track of seen contexts.
-            device: Device to use.
-            skip_first_ngram_calls: Whether to skip first ngram calls.
-            debug_mode: Logits are modified to uniform one got before watermarking
-            modification is applied. This is to test the implementation.
+            ngram_len (`int`): Ngram length.
+            keys (`List[int]`): A sequence of watermarking keys, one for each depth.
+            sampling_table_size (`int`): Size of the sampling table.
+            sampling_table_seed (`int`): Random seed to generate the sampling table.
+            context_history_size (`int`): Size of the tensor to keep track of seen contexts.
+            device (`torch.device`): Device to use.
+            skip_first_ngram_calls hashing_key (`bool`, optional, *optional*, defaults to False): Whether to skip first ngram calls.
+            debug_mode (`bool`, optional, *optional*, defaults to False): Logits are modified to uniform one got before watermarking modification is applied. This is to test the implementation.
         """
         self.ngram_len = ngram_len
         self.keys = torch.tensor(keys, device=device)
@@ -2566,8 +2565,8 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
 
         We assume that the scores are in the log space.
         Args:
-            scores: Scores (batch_size, vocab_size).
-            g_values: G valus (batch_size, vocab_size, depth).
+            scores (`torch.FloatTensor`): Scores (batch_size, vocab_size).
+            g_values (`torch.FloatTensor`): G valus (batch_size, vocab_size, depth).
 
         Returns:
             Updated scores (batch_size, vocab_size).
@@ -2584,7 +2583,7 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
 
         log_probs = torch.log(probs)
         log_probs = torch.where(
-            torch.isfinite(log_probs), log_probs, torch.tensor(-1e12, device=device)
+            torch.isfinite(log_probs), log_probs, torch.finfo(log_probs.dtype).min
         )
         return log_probs
     
@@ -2600,8 +2599,8 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
         from top_k scores to dense scores.
 
         Args:
-            input_ids: Input token ids (batch_size, inputs_len).
-            scores: Scores (batch_size, vocab_size).
+            input_ids (`torch.LongTensor`): Input token ids (batch_size, inputs_len).
+            scores (`torch.FloatTensor`): Scores (batch_size, vocab_size).
 
         Returns:
             Tuple of
@@ -2657,8 +2656,7 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
         updated_scores = self.update_scores(scores, g_values)
         # updated scores shape [batch_size, top_k]
 
-        # 5. Check if the current watermarking context was previously used, if
-        # yes skip watermarking.
+        # 5. Check if the current watermarking context was previously used, if yes skip watermarking.
         hash_result_with_just_context = hash_result_with_just_context[:, None]
         is_repeated_context = (
             self.state.context_history == hash_result_with_just_context
@@ -2696,10 +2694,10 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
         match/broadcastable.
 
         Args:
-            current_hash: (shape,)
-            data: (shape, tensor_len)
-            multiplier: (int) multiplier of linear congruential generator
-            increment: (int) increment of linear congruential generator
+            current_hash (`torch.LongTensor`): (shape,)
+            data (`torch.LongTensor`): (shape, tensor_len)
+            multiplier (`int`, optional, *optional*, defaults to 6364136223846793005): (int) multiplier of linear congruential generator
+            increment (`int`, optional, *optional*, defaults to 1): (int) increment of linear congruential generator
 
         Returns:
             upadted hash (shape,)
@@ -2717,7 +2715,7 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
         """Computes random keys for each ngram and depth.
 
         Args:
-            ngrams: Ngrams (batch_size, num_ngrams, ngram_len).
+            ngrams (`torch.LongTensor`): Ngrams (batch_size, num_ngrams, ngram_len).
 
         Returns:
             ngram keys (batch_size, num_ngrams, depth).
@@ -2760,8 +2758,8 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
         """Computes random keys for each ngram and depth.
 
         Args:
-            n_minus_1_grams: Ngrams (batch_size, ngram_len - 1).
-            indices: indices of the continuations (batch_size, num_indices)
+            n_minus_1_grams (`torch.LongTensor`): Ngrams (batch_size, ngram_len - 1).
+            indices (`torch.LongTensor`): indices of the continuations (batch_size, num_indices)
 
         Returns:
             Ngram keys (batch_size, num_indices, depth).
@@ -2804,7 +2802,7 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
         map from ngram keys (int64) to g values.
 
         Args:
-            ngram_keys: Random keys (batch_size, num_ngrams, depth).
+            ngram_keys (`torch.LongTensor`): Random keys (batch_size, num_ngrams, depth).
 
         Returns:
             G values (batch_size, num_ngrams, depth).
@@ -2829,7 +2827,7 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
         """Computes g values for each ngram from the given sequence of tokens.
 
         Args:
-            input_ids: Input token ids (batch_size, input_len).
+            input_ids (`torch.LongTensor`): Input token ids (batch_size, input_len).
 
         Returns:
             G values (batch_size, input_len - (ngram_len - 1), depth).
@@ -2848,7 +2846,7 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
         0 and 1 stand for repeated and not repeated context n-1 grams respectively.
 
         Args:
-            input_ids: Input token ids (batch_size, input_len).
+            input_ids (`torch.LongTensor`): Input token ids (batch_size, input_len).
 
         Returns:
             Repetitions mask (batch_size, input_len - (ngram_len - 1)).
@@ -2898,8 +2896,8 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
         1 stands for ngrams that don't contain EOS tokens and vice versa.
 
         Args:
-            input_ids: Input token ids (batch_size, input_len).
-            eos_token_id: EOS token ID.
+            input_ids (`torch.LongTensor`): Input token ids (batch_size, input_len).
+            eos_token_id (`int`): EOS token ID.
 
         Returns:
             EOS token mask (batch_size, input_len).
@@ -2925,8 +2923,8 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
         This is the theoretical expected value for single-layer watermarking.
 
         Args:
-            vocab_size: The size of the vocabulary.
-            coinflip_prob: Probability of 1 in boolean prf.
+            vocab_size (`int`): The size of the vocabulary.
+            coinflip_prob arg_name (`float`, *optional*, defaults to 0.5): Probability of 1 in boolean prf.
 
         Returns:
             The expected mean g-value for watermarked text.
