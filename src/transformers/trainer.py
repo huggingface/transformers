@@ -155,6 +155,7 @@ from .utils import (
     is_grokadamw_available,
     is_in_notebook,
     is_ipex_available,
+    is_liger_kernel_available,
     is_lomo_available,
     is_peft_available,
     is_safetensors_available,
@@ -462,6 +463,24 @@ class Trainer:
                 logger.info(
                     "You have loaded a model on multiple GPUs. `is_model_parallel` attribute will be force-set"
                     " to `True` to avoid any unexpected behavior such as device placement mismatching."
+                )
+
+        if self.args.use_liger_kernel:
+            if is_liger_kernel_available():
+                from liger_kernel.transformers.trainer_integration import _apply_liger_kernel
+
+                model_type = getattr(model, "config", None) and getattr(model.config, "model_type", None)
+                if model_type:
+                    # Monkey patch the model with liger kernels. Use the default kernel configurations.
+                    _apply_liger_kernel(model_type=model_type)
+                else:
+                    logger.warning(
+                        "The model does not have a valid `model_type` specified. No liger kernels will be applied."
+                    )
+            else:
+                raise ImportError(
+                    "You have set `use_liger_kernel` to `True` but liger-kernel >= 0.1.0 is not available. "
+                    "Please install it with `pip install liger-kernel`"
                 )
 
         _is_quantized_and_base_model = getattr(model, "is_quantized", False) and not getattr(
