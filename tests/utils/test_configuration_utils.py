@@ -315,21 +315,19 @@ class ConfigTestUtils(unittest.TestCase):
         old_configuration = old_transformers.models.auto.AutoConfig.from_pretrained(repo)
         self.assertEqual(old_configuration.hidden_size, 768)
 
-    def test_saving_config_with_custom_generation_kwargs_raises_warning(self):
+    def test_saving_config_with_custom_generation_kwargs_raises_exception(self):
         config = BertConfig(min_length=3)  # `min_length = 3` is a non-default generation kwarg
         with tempfile.TemporaryDirectory() as tmp_dir:
-            with self.assertLogs("transformers.configuration_utils", level="WARNING") as logs:
+            with self.assertRaises(ValueError):
                 config.save_pretrained(tmp_dir)
-            self.assertEqual(len(logs.output), 1)
-            self.assertIn("min_length", logs.output[0])
 
-    def test_has_non_default_generation_parameters(self):
+    def test_get_non_default_generation_parameters(self):
         config = BertConfig()
-        self.assertFalse(config._has_non_default_generation_parameters())
+        self.assertFalse(len(config._get_non_default_generation_parameters()) > 0)
         config = BertConfig(min_length=3)
-        self.assertTrue(config._has_non_default_generation_parameters())
+        self.assertTrue(len(config._get_non_default_generation_parameters()) > 0)
         config = BertConfig(min_length=0)  # `min_length = 0` is a default generation kwarg
-        self.assertFalse(config._has_non_default_generation_parameters())
+        self.assertFalse(len(config._get_non_default_generation_parameters()) > 0)
 
     def test_loading_config_do_not_raise_future_warnings(self):
         """Regression test for https://github.com/huggingface/transformers/issues/31002."""

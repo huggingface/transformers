@@ -139,9 +139,6 @@ generation_output[:2]
 [[autodoc]] ForcedEOSTokenLogitsProcessor
     - __call__
 
-[[autodoc]] ForceTokensLogitsProcessor
-    - __call__
-
 [[autodoc]] HammingDiversityLogitsProcessor
     - __call__
 
