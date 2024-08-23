@@ -429,6 +429,7 @@ class _BaseAutoModelClass:
             model_class = get_class_from_dynamic_module(class_ref, repo_id, **kwargs)
             if os.path.isdir(config._name_or_path):
                 model_class.register_for_auto_class(cls.__name__)
+                cls.register(config.__class__, model_class, exist_ok=True)
             else:
                 cls.register(config.__class__, model_class, exist_ok=True)
             _ = kwargs.pop("code_revision", None)
@@ -554,6 +555,7 @@ class _BaseAutoModelClass:
             _ = hub_kwargs.pop("code_revision", None)
             if os.path.isdir(pretrained_model_name_or_path):
                 model_class.register_for_auto_class(cls.__name__)
+                cls.register(config.__class__, model_class, exist_ok=True)
             else:
                 cls.register(config.__class__, model_class, exist_ok=True)
             return model_class.from_pretrained(
