@@ -1355,14 +1355,11 @@ class TrainingArguments:
     )
     include_inputs_for_metrics: bool = field(
         default=False,
-        metadata={
-            "help": "Whether or not the inputs will be passed to the `compute_metrics` function."
-        },
+        metadata={"help": "Whether or not the inputs will be passed to the `compute_metrics` function."},
     )
     include_loss_for_metrics: bool = field(
         default=False,
-        metadata={"help": "Whether or not the loss will be passed to the `compute_metrics` function."
-        },
+        metadata={"help": "Whether or not the loss will be passed to the `compute_metrics` function."},
     )
     eval_do_concat_batches: bool = field(
         default=True,

@@ -170,8 +170,8 @@ class EvalPrediction:
         self.inputs = None
         self.losses = None
         if kwargs is not None:
-            self.inputs =  kwargs.pop("inputs", None)
-            self.losses =  kwargs.pop("losses", None)
+            self.inputs = kwargs.pop("inputs", None)
+            self.losses = kwargs.pop("losses", None)
         self.items = (self.predictions, self.label_ids)
         if self.inputs is not None:
             self.items += (self.inputs,)

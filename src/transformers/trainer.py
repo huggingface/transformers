@@ -3953,7 +3953,7 @@ class Trainer:
         all_inputs = EvalLoopContainer(self.args.eval_do_concat_batches, padding_index=-100)
 
         metrics = None
-        eval_set_kwargs =  {}
+        eval_set_kwargs = {}
 
         # Will be useful when we have an iterable dataset so don't know its length.
         observed_num_examples = 0
@@ -4067,8 +4067,8 @@ class Trainer:
             and not self.args.batch_eval_metrics
         ):
             if args.include_inputs_for_metrics or args.include_loss_for_metrics:
-                eval_set_kwargs['losses'] = all_losses if args.include_loss_for_metrics else None
-                eval_set_kwargs['inputs'] = all_inputs if args.include_inputs_for_metrics else None
+                eval_set_kwargs["losses"] = all_losses if args.include_loss_for_metrics else None
+                eval_set_kwargs["inputs"] = all_inputs if args.include_inputs_for_metrics else None
                 metrics = self.compute_metrics(
                     EvalPrediction(predictions=all_preds, label_ids=all_labels, **eval_set_kwargs)
                 )
@@ -4589,8 +4589,8 @@ class Trainer:
                     is_last_step = self.accelerator.gradient_state.end_of_dataloader
                     if args.include_inputs_for_metrics or args.include_loss_for_metrics:
                         batch_kwargs = {}
-                        batch_kwargs["losses"] = losses_host if  args.include_loss_for_metrics else None
-                        batch_kwargs["inputs"] = inputs_host if  args.include_inputs_for_metrics else None
+                        batch_kwargs["losses"] = losses_host if args.include_loss_for_metrics else None
+                        batch_kwargs["inputs"] = inputs_host if args.include_inputs_for_metrics else None
                         metrics = self.compute_metrics(
                             EvalPrediction(predictions=preds_host, label_ids=labels_host, **batch_kwargs),
                             compute_result=is_last_step,
@@ -4639,8 +4639,8 @@ class Trainer:
             and not self.args.batch_eval_metrics
         ):
             if args.include_inputs_for_metrics or args.include_loss_for_metrics:
-                eval_set_kwargs['losses'] = eval_loss if args.include_loss_for_metrics else None
-                eval_set_kwargs['inputs'] = inputs_ids if args.include_inputs_for_metrics else None
+                eval_set_kwargs["losses"] = eval_loss if args.include_loss_for_metrics else None
+                eval_set_kwargs["inputs"] = inputs_ids if args.include_inputs_for_metrics else None
                 metrics = self.compute_metrics(
                     EvalPrediction(predictions=preds, label_ids=label_ids, **eval_set_kwargs)
                 )
