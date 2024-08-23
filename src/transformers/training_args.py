@@ -154,6 +154,7 @@ class OptimizerNames(ExplicitEnum):
     ADAMW_APEX_FUSED = "adamw_apex_fused"
     ADAFACTOR = "adafactor"
     ADAMW_ANYPRECISION = "adamw_anyprecision"
+    ADAMW_TORCH_4BIT = "adamw_torch_4bit"
     SGD = "sgd"
     ADAGRAD = "adagrad"
     ADAMW_BNB = "adamw_bnb_8bit"
@@ -415,7 +416,7 @@ class TrainingArguments:
         tf32 (`bool`, *optional*):
             Whether to enable the TF32 mode, available in Ampere and newer GPU architectures. The default value depends
             on PyTorch's version default of `torch.backends.cuda.matmul.allow_tf32`. For more details please refer to
-            the [TF32](https://huggingface.co/docs/transformers/performance#tf32) documentation. This is an
+            the [TF32](https://huggingface.co/docs/transformers/perf_train_gpu_one#tf32) documentation. This is an
             experimental API and it may change.
         local_rank (`int`, *optional*, defaults to -1):
             Rank of the process during distributed training.
