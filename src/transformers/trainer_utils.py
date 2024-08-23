@@ -167,6 +167,8 @@ class EvalPrediction:
     ):
         self.predictions = predictions
         self.label_ids = label_ids
+        self.inputs = None
+        self.losses = None
         if kwargs is not None:
             self.inputs =  kwargs.pop("inputs", None)
             self.losses =  kwargs.pop("losses", None)
