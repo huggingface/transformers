@@ -15,6 +15,7 @@ import shutil
 import tempfile
 import unittest
 
+from transformers import AutoProcessor, AutoTokenizer, LlamaTokenizerFast, LlavaProcessor
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_vision_available
 
@@ -22,7 +23,7 @@ from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
-    from transformers import AutoProcessor, AutoTokenizer, CLIPImageProcessor, LlamaTokenizerFast, LlavaProcessor
+    from transformers import CLIPImageProcessor
 
 
 @require_vision
@@ -34,7 +35,7 @@ class LlavaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_processor = CLIPImageProcessor(do_center_crop=False)
         tokenizer = LlamaTokenizerFast.from_pretrained("huggyllama/llama-7b")
 
-        processor = LlavaProcessor(image_processor, tokenizer)
+        processor = LlavaProcessor(image_processor=image_processor, tokenizer=tokenizer)
 
         processor.save_pretrained(self.tmpdirname)
 
