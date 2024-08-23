@@ -135,7 +135,7 @@ class CircleCIJob:
             {"run": {"name": "Create `test-results` directory", "command": "mkdir test-results"}},
             {"run": {"name": "Show files being tested tests", "command": f'echo {" ".join(self.tests_to_run)} | tr " " "\\n" >> {self.name}_test_list.txt'}},
             {"run": {"name": "Split tests across parallel nodes",
-                     "command": f"TESTS=$(circleci tests split {self.name}_test_list.txt) && echo $TESTS > splitted_tests.txt" if self.parallelism else f"cp {self.name}_test_list.txt  splitted_tests.txt"}
+                     "command": f"TESTS=$(circleci tests split {self.name}_test_list.txt) && echo $TESTS > splitted_tests.txt && echo $TESTS" if self.parallelism else f"cp {self.name}_test_list.txt  splitted_tests.txt"}
             },
             {"run": {
                 "name": "Run tests",
@@ -145,12 +145,7 @@ class CircleCIJob:
             {"run": {"name": "Failed tests: show reasons",   "when": "always", "command": f"python3 .circleci/parse_test_outputs.py --file tests_output.txt --fail"}},
             {"run": {"name": "Errors",                       "when": "always", "command": f"python3 .circleci/parse_test_outputs.py --file tests_output.txt --errors"}},
             {"store_test_results": {"path": "test-results"}},
-            {"store_artifacts": {"path": "tests_output.txt"}},
-            {"store_artifacts": {"path": "test-results/junit.xml"}},
-            {"store_artifacts": {"path": "reports"}},
-            {"store_artifacts": {"path": "tests.txt"}},
-            {"store_artifacts": {"path": "splitted_tests.txt"}},
-            {"store_artifacts": {"path": "installed.txt"}},
+            {"store_artifacts": {"path": "/root/project"}},
         ]
         if self.parallelism is not None:
             job["parallelism"] = self.parallelism
