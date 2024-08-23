@@ -183,16 +183,22 @@ torch_job = CircleCIJob(
     "torch",
     docker_image=[{"image": "huggingface/transformers-torch-light"}],
     parallelism=6,
-    pytest_num_workers=16
+    pytest_num_workers=8
 )
 
 tokenization_job = CircleCIJob(
     "tokenization",
     docker_image=[{"image": "huggingface/transformers-torch-light"}],
-    parallelism=16,
-    pytest_num_workers=6
+    parallelism=8,
+    pytest_num_workers=16
 )
 
+tokenization_job = CircleCIJob(
+    "processors",
+    docker_image=[{"image": "huggingface/transformers-torch-light"}],
+    parallelism=8,
+    pytest_num_workers=6
+)
 
 tf_job = CircleCIJob(
     "tf",
@@ -239,7 +245,8 @@ examples_torch_job = CircleCIJob(
     "examples_torch",
     additional_env={"OMP_NUM_THREADS": 8},
     docker_image=[{"image":"huggingface/transformers-examples-torch"}],
-    install_steps=["uv venv && uv pip install . && uv pip install torchmetrics[detection]"],
+    # TODO @ArthurZucker remove this once docker is easier to build
+    install_steps=["uv venv && uv pip install . && uv pip install -r examples/pytorch/_tests_requirements.txt"],
     pytest_num_workers=1,
 )
 
@@ -247,7 +254,8 @@ examples_torch_job = CircleCIJob(
 examples_tensorflow_job = CircleCIJob(
     "examples_tensorflow",
     docker_image=[{"image":"huggingface/transformers-examples-tf"}],
-    parallelism=4
+    parallelism=4,
+    pytest_num_workers=4,
 )
 
 

@@ -974,6 +974,8 @@ def create_module_to_test_map(
             if (
                 not t.startswith("tests/models/")
                 or Path(t).parts[2] in IMPORTANT_MODELS
+            # at this point, `t` is of the form `tests/models/my_model`, and we check if `models/my_model`
+            # (i.e. `parts[1:3]`) is in `module`.
                 or "/".join(Path(t).parts[1:3]) in module
             ):
                 filtered_tests += [t]
@@ -1035,11 +1037,12 @@ def infer_tests_to_run(
         any(x in modified_files for x in ["setup.py", ".circleci/create_circleci_config.py"])
         or not filter_models
         and len(model_impacted) >= NUM_MODELS_TO_TRIGGER_FULL_CI
+        or commit_flags["test_all"]
     ):
         test_files_to_run = glob.glob("tests/**/test_**.py", recursive=True) + glob.glob(
             "examples/**/*.py", recursive=True
         )
-        if len(model_impacted) >= NUM_MODELS_TO_TRIGGER_FULL_CI:
+        if len(model_impacted) >= NUM_MODELS_TO_TRIGGER_FULL_CI and filter_models:
             print(
                 f"More than {NUM_MODELS_TO_TRIGGER_FULL_CI - 1} models are impacted and `filter_models=False`. CI is configured to test everything."
             )
@@ -1133,6 +1136,7 @@ JOB_TO_TEST_FILE = {
     "tf": r"tests/models/.*/test_modeling_tf_.*",
     "torch": r"tests/models/.*/test_modeling_[^flax_|^tf_)].*",
     "tokenization": r"tests/models/.*/test_tokenization.*",
+    "processors": r"tests/models/.*/test_[^modeling|^tokenization])", # takes feature extractors, image processors, processors
     "examples_torch": r"examples/pytorch/.*test_.*",
     "examples_tensorflow": r"examples/tensorflow/.*test_.*",
     "examples_flax": r"examples/flax/.*test.*",
