@@ -239,6 +239,7 @@ examples_torch_job = CircleCIJob(
     "examples_torch",
     additional_env={"OMP_NUM_THREADS": 8},
     docker_image=[{"image":"huggingface/transformers-examples-torch"}],
+    install_steps=["uv pip install torchmetrics"],
     pytest_num_workers=1,
 )
 
