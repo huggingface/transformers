@@ -1354,7 +1354,7 @@ class TrainingArguments:
         },
     )
     include_inputs_for_metrics: bool = field(
-        default=False, 
+        default=False,
         metadata={
             "help": "Whether or not the inputs will be passed to the `compute_metrics` function."
         },

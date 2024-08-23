@@ -3975,7 +3975,7 @@ class Trainer:
 
             if is_torch_xla_available():
                 xm.mark_step()
-            
+
             # Update containers
             if losses is not None:
                 losses = self.gather_function((losses.repeat(batch_size)))
@@ -4590,7 +4590,7 @@ class Trainer:
                     if args.include_inputs_for_metrics or args.include_loss_for_metrics:
                         batch_kwargs = {}
                         batch_kwargs["losses"] = losses_host if  args.include_loss_for_metrics else None
-                        batch_kwargs["inputs"] = inputs_host if  args.include_inputs_for_metrics else None                        
+                        batch_kwargs["inputs"] = inputs_host if  args.include_inputs_for_metrics else None
                         metrics = self.compute_metrics(
                             EvalPrediction(predictions=preds_host, label_ids=labels_host, **batch_kwargs),
                             compute_result=is_last_step,
