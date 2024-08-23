@@ -35,8 +35,7 @@ from ..utils import (
     is_torch_available,
     logging,
 )
-from .logits_process import WatermarkLogitsProcessor
-from .synthid_watermarked_logits_process import SynthIDTextWatermarkLogitsProcessor
+from .logits_process import WatermarkLogitsProcessor, SynthIDTextWatermarkLogitsProcessor
 
 
 if TYPE_CHECKING:

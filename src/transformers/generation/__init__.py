@@ -79,9 +79,7 @@ else:
         "UnbatchedClassifierFreeGuidanceLogitsProcessor",
         "WhisperTimeStampLogitsProcessor",
         "WatermarkLogitsProcessor",
-    ]
-    _import_structure["synthid_watermarked_logits_process"] = [
-        "SynthIDTextWatermarkLogitsProcessor",
+        "SynthIDTextWatermarkLogitsProcessor"
     ]
     _import_structure["stopping_criteria"] = [
         "MaxNewTokensCriteria",
@@ -228,8 +226,8 @@ if TYPE_CHECKING:
             UnbatchedClassifierFreeGuidanceLogitsProcessor,
             WatermarkLogitsProcessor,
             WhisperTimeStampLogitsProcessor,
+            SynthIDTextWatermarkLogitsProcessor,
         )
-        from .synthid_watermarked_logits_process import SynthIDTextWatermarkLogitsProcessor
         from .stopping_criteria import (
             EosTokenCriteria,
             MaxLengthCriteria,

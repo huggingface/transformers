@@ -2377,7 +2377,8 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
 
         self.assertListEqual(detection_out_watermarked.prediction.tolist(), [True])
         self.assertListEqual(detection_out.prediction.tolist(), [False])
-
+    
+    """Check the mean bias inserted by the watermarking algorithm."""
     @slow
     def test_synthid_text_watermark_generation_mean_expected_bias(self):
         model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
