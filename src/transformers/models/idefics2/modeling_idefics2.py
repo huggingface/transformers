@@ -435,7 +435,7 @@ class Idefics2MultiheadAttentionPoolingHead(nn.Module):
 
 
 class Idefics2EncoderLayer(nn.Module):
-    def __init__(self, config: Idefics2Config):
+    def __init__(self, config: Idefics2VisionConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
         self.self_attn = IDEFICS_VISION_ATTENTION_CLASSES[config._attn_implementation](config)
@@ -490,10 +490,10 @@ class Idefics2Encoder(nn.Module):
     [`Idefics2EncoderLayer`].
 
     Args:
-        config: Idefics2Config
+        config: Idefics2VisionConfig
     """
 
-    def __init__(self, config: Idefics2Config):
+    def __init__(self, config: Idefics2VisionConfig):
         super().__init__()
         self.config = config
         self.layers = nn.ModuleList([Idefics2EncoderLayer(config) for _ in range(config.num_hidden_layers)])
