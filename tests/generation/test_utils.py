@@ -19,6 +19,7 @@ import inspect
 import tempfile
 import unittest
 import warnings
+import pytest 
 
 import numpy as np
 from parameterized import parameterized
@@ -87,7 +88,7 @@ if is_torch_available():
     )
     from transformers.generation.utils import _speculative_sampling
 
-
+@pytest.mark.generate
 class GenerationTesterMixin:
     model_tester = None
     all_generative_model_classes = ()

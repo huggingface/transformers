@@ -186,6 +186,14 @@ torch_job = CircleCIJob(
     pytest_num_workers=8
 )
 
+generate_job = CircleCIJob(
+    "generate",
+    docker_image=[{"image": "huggingface/transformers-torch-light"}],
+    marker="generate",
+    parallelism=6,
+    pytest_num_workers=8
+)
+
 tokenization_job = CircleCIJob(
     "tokenization",
     docker_image=[{"image": "huggingface/transformers-torch-light"}],
@@ -193,7 +201,7 @@ tokenization_job = CircleCIJob(
     pytest_num_workers=16
 )
 
-tokenization_job = CircleCIJob(
+processor_job = CircleCIJob(
     "processors",
     docker_image=[{"image": "huggingface/transformers-torch-light"}],
     parallelism=8,
@@ -326,7 +334,7 @@ doc_test_job = CircleCIJob(
     pytest_num_workers=1,
 )
 
-REGULAR_TESTS = [torch_and_tf_job, torch_and_flax_job, torch_job, tf_job, flax_job, hub_job, onnx_job, tokenization_job] # fmt: skip
+REGULAR_TESTS = [torch_and_tf_job, torch_and_flax_job, torch_job, tf_job, flax_job, hub_job, onnx_job, tokenization_job, processor_job, generate_job] # fmt: skip
 EXAMPLES_TESTS = [examples_torch_job, examples_tensorflow_job]
 PIPELINE_TESTS = [pipelines_torch_job, pipelines_tf_job]
 REPO_UTIL_TESTS = [repo_utils_job]

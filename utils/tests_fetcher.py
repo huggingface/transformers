@@ -1135,6 +1135,7 @@ JOB_TO_TEST_FILE = {
     "torch_and_flax": r"tests/models/.*/test_modeling_(?=flax_|[^tf]).*",
     "tf": r"tests/models/.*/test_modeling_tf_.*",
     "torch": r"tests/models/.*/test_modeling_[^flax_|^tf_].*",
+    "generate":r"tests/models/.*/test_modeling_[^flax_|^tf_].*", 
     "tokenization": r"tests/models/.*/test_tokenization.*",
     "processors": r"tests/models/.*/test_[^modeling|^tokenization].*",  # takes feature extractors, image processors, processors
     "examples_torch": r"examples/pytorch/.*test_.*",
