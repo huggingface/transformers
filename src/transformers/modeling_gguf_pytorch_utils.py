@@ -26,6 +26,7 @@ from .integrations import (
     _gguf_parse_value,
 )
 from .utils import is_torch_available
+from .utils.import_utils import is_gguf_available
 from .utils.logging import get_logger
 
 
@@ -70,14 +71,14 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
             Whether to read the tensors from the file and return them. Not doing so is faster
             and only loads the metadata in memory.
     """
-    try:
+    if is_gguf_available() and is_torch_available():
         from gguf import GGUFReader, dequantize
-    except (ImportError, ModuleNotFoundError):
+    else:
         logger.error(
-            "Loading a GGUF checkpoint in PyTorch, requires both PyTorch and GGUF to be installed. Please see "
+            "Loading a GGUF checkpoint in PyTorch, requires both PyTorch and GGUF>=0.10.0 to be installed. Please see "
             "https://pytorch.org/ and https://github.com/ggerganov/llama.cpp/tree/master/gguf-py for installation instructions."
         )
-        raise
+        raise ImportError("Please install torch and gguf>=0.10.0 to load a GGUF checkpoint in PyTorch.")
 
     reader = GGUFReader(gguf_checkpoint_path)
     fields = reader.fields
@@ -128,18 +129,6 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
 
         if gguf_key in reader_keys:
             logger.info(f"Some keys were not parsed and added into account {gguf_key} | {value}")
-
-    # retrieve config vocab_size from tokenizer
-    # Pleas refer to https://github.com/huggingface/transformers/issues/32526 for more details
-    if "vocab_size" not in parsed_parameters["config"]:
-        tokenizer_parameters = parsed_parameters["tokenizer"]
-        if "tokens" in tokenizer_parameters:
-            parsed_parameters["config"]["vocab_size"] = len(tokenizer_parameters["tokens"])
-        else:
-            logger.warning(
-                "Can't find a way to retrieve missing config vocab_size from tokenizer parameters. "
-                "This will use default value from model config class and cause unexpected behavior."
-            )
 
     if return_tensors:
         tensor_key_mapping = GGUF_TO_TRANSFORMERS_MAPPING["tensors"][architecture]
