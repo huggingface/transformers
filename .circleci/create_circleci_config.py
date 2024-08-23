@@ -306,7 +306,8 @@ exotic_models_job = CircleCIJob(
 repo_utils_job = CircleCIJob(
     "repo_utils",
     docker_image=[{"image":"huggingface/transformers-consistency"}],
-    pytest_num_workers=1,
+    pytest_num_workers=12,
+    parallelism=4,
     resource_class="large",
 )
 
