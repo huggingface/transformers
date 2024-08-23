@@ -182,6 +182,7 @@ torch_and_flax_job = CircleCIJob(
 torch_job = CircleCIJob(
     "torch",
     docker_image=[{"image": "huggingface/transformers-torch-light"}],
+    marker="not generate",
     parallelism=6,
     pytest_num_workers=8
 )
