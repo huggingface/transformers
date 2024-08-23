@@ -146,16 +146,16 @@ class CircleCIJob:
             {"run": {"name": "Errors",                       "when": "always", "command": f"python3 .circleci/parse_test_outputs.py --file tests_output.txt --errors"}},
                 {"store_test_results": {"path": "test-results"}},
             {
-                "store_artifacts": {
-                    "paths": [
-                    "test-results/junit.xml",
-                    "reports",
-                    "tests.txt",
-                    "splitted_tests.txt",
-                    "installed.txt"
-                    ]
+                "run": {
+                    "name": "Move files to artifacts folder",
+                    "command": "mkdir -p artifacts && mv test-results/junit.xml reports tests.txt splitted_tests.txt installed.txt artifacts/"
                 }
-            }
+                },
+                {
+                "store_artifacts": {
+                    "path": "artifacts"
+                }
+                }
         ]
         if self.parallelism is not None:
             job["parallelism"] = self.parallelism
