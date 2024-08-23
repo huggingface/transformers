@@ -32,7 +32,7 @@ COMMON_ENV_VARIABLES = {
     "RUN_PT_FLAX_CROSS_TESTS": False,
 }
 # Disable the use of {"s": None} as the output is way too long, causing the navigation on CircleCI impractical
-COMMON_PYTEST_OPTIONS = {"max-worker-restart": 0, "dist": "loadfile", "v": None}
+COMMON_PYTEST_OPTIONS = {"max-worker-restart": 0, "dist": "loadfile", "v": None, "rsf":None, "p":"no:warning"}
 DEFAULT_DOCKER_IMAGE = [{"image": "cimg/python:3.8.12"}]
 
 
@@ -114,7 +114,7 @@ class CircleCIJob:
                 # Examples special case: we need to download NLTK files in advance to avoid cuncurrency issues
         timeout_cmd = f"timeout {self.command_timeout} " if self.command_timeout else ""
         marker_cmd = f"-m {self.marker}" if self.marker is not None else ""
-        additional_flags = f" -rsfE -p no:warnings -o junit_family=xunit1 --junitxml=test-results/junit.xml"
+        additional_flags = f"-o junit_family=xunit1 --junitxml=test-results/junit.xml"
         steps = [
             "checkout",
             {"attach_workspace": {"at": "test_preparation"}},
@@ -139,7 +139,7 @@ class CircleCIJob:
             },
             {"run": {
                 "name": "Run tests",
-                "command": f"({timeout_cmd} python3 -m pytest -n {self.pytest_num_workers} {' '.join(pytest_flags)} {marker_cmd} $(cat splitted_tests.txt) | tee tests_output.txt)"}
+                "command": f"({timeout_cmd} python3 -m pytest -n {self.pytest_num_workers} {additional_flags} {' '.join(pytest_flags)} {marker_cmd} $(cat splitted_tests.txt) | tee tests_output.txt)"}
             },
             {"run": {"name": "Expand to show skipped tests", "when": "always", "command": f"python3 .circleci/parse_test_outputs.py --file tests_output.txt --skip"}},
             {"run": {"name": "Failed tests: show reasons",   "when": "always", "command": f"python3 .circleci/parse_test_outputs.py --file tests_output.txt --fail"}},
