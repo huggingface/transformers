@@ -747,7 +747,7 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
             if not self.training:
                 logger.warning_once(
                     "We detected that you are passing `past_key_values` as a tuple and this is deprecated and will be removed in v4.45. "
-                    "Please use an appropriate `Cache` class (https://huggingface.co/docs/transformers/v4.41.3/en/internal/generation_utils#transformers.Cache)"
+                    "Please use an appropriate `Cache` class (https://huggingface.co/docs/transformers/internal/generation_utils#transformers.Cache)"
                 )
 
         seq_length = inputs_embeds.shape[1]

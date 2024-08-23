@@ -1576,6 +1576,11 @@ class GenerationTesterMixin:
             # 3. ignore `token_type_ids` for simplicity
             # 4. ignore `forced_eos_token_id`, which requires further manipulation of the continuation inputs and is
             #    active by default on some models
+            # 5. ignore `encoder_no_repeat_ngram_size`, which is set by default in some encoder-decoder models. When
+            #    we use their decoder as a stand-alone model, `encoder_no_repeat_ngram_size` actually prevents
+            #    repetition exclusively from the prompt. This test relies on comparing one call vs 2 calls
+            #    with cache, what is considered a prompt is different in the two cases.
+
             if "token_type_ids" in inputs:
                 del inputs["token_type_ids"]
 
@@ -1583,6 +1588,7 @@ class GenerationTesterMixin:
             model.eval()
             model.generation_config.pad_token_id = model.generation_config.eos_token_id = -1
             model.generation_config.forced_eos_token_id = None
+            model.generation_config.encoder_no_repeat_ngram_size = 0
             model.generation_config.use_cache = True
 
             # If "past_key_values" is not returned, skip the test (e.g. RWKV uses a different cache name and format)
@@ -2846,7 +2852,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
     def test_default_max_length_warning(self):
         model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
-        model.config.pad_token_id = tokenizer.eos_token_id
+        model.generation_config.pad_token_id = tokenizer.eos_token_id
 
         text = "Hello world"
         tokenized_inputs = tokenizer([text], return_tensors="pt")
@@ -2873,8 +2879,8 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
         assistant = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
-        model.config.pad_token_id = tokenizer.eos_token_id
-        assistant.config.pad_token_id = tokenizer.eos_token_id
+        model.generation_config.pad_token_id = tokenizer.eos_token_id
+        assistant.generation_config.pad_token_id = tokenizer.eos_token_id
 
         text = "Hello world"
         tokenized_inputs = tokenizer([text], return_tensors="pt")
@@ -2895,8 +2901,8 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
         assistant = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
-        model.config.pad_token_id = tokenizer.eos_token_id
-        assistant.config.pad_token_id = tokenizer.eos_token_id
+        model.generation_config.pad_token_id = tokenizer.eos_token_id
+        assistant.generation_config.pad_token_id = tokenizer.eos_token_id
 
         text = "Hello world"
         tokenized_inputs = tokenizer([text], return_tensors="pt")
@@ -2922,7 +2928,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         # PT-only test: TF doesn't support assisted decoding yet.
         model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
-        model.config.pad_token_id = tokenizer.eos_token_id
+        model.generation_config.pad_token_id = tokenizer.eos_token_id
 
         text = "Hello world"
         tokenized_inputs = tokenizer([text], return_tensors="pt")

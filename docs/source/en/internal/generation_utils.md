@@ -140,9 +140,6 @@ generation.
 [[autodoc]] ForcedEOSTokenLogitsProcessor
     - __call__
 
-[[autodoc]] ForceTokensLogitsProcessor
-    - __call__
-
 [[autodoc]] HammingDiversityLogitsProcessor
     - __call__
 
