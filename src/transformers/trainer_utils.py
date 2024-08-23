@@ -156,22 +156,21 @@ class EvalPrediction:
     Parameters:
         predictions (`np.ndarray`): Predictions of the model.
         label_ids (`np.ndarray`): Targets to be matched.
-        kwargs (`Dict[str, Any]`, *optional*): Additional keyword arguments passed to EvalPrediction to include inputs and/or losses.
+        inputs (`np.ndarray`, *optional*): Input data passed to the model.
+        losses (`np.ndarray`, *optional*): Loss values computed during evaluation.
     """
 
     def __init__(
         self,
         predictions: Union[np.ndarray, Tuple[np.ndarray]],
         label_ids: Union[np.ndarray, Tuple[np.ndarray]],
-        kwargs: Optional[Dict[str, Any]] = None,
+        inputs: Optional[Union[np.ndarray, Tuple[np.ndarray]]] = None,
+        losses: Optional[Union[np.ndarray, Tuple[np.ndarray]]] = None,
     ):
         self.predictions = predictions
         self.label_ids = label_ids
-        self.inputs = None
-        self.losses = None
-        if kwargs is not None:
-            self.inputs = kwargs.pop("inputs", None)
-            self.losses = kwargs.pop("losses", None)
+        self.inputs = inputs
+        self.losses = losses
         self.items = (self.predictions, self.label_ids)
         if self.inputs is not None:
             self.items += (self.inputs,)
