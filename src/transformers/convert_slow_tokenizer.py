@@ -1108,7 +1108,7 @@ class SiglipConverter(SpmConverter):
 
         if self.original_tokenizer.do_lower_case:
             list_normalizers.append(normalizers.Lowercase())
-            punctuation_to_remove = string.punctuation.replace('>', '').replace('<', '').replace('/', '')
+            punctuation_to_remove = string.punctuation.replace(">", "").replace("<", "").replace("/", "")
             list_normalizers.append(normalizers.Replace(Regex(r"[" + re.escape(punctuation_to_remove) + "]"), ""))
             list_normalizers.extend(
                 [

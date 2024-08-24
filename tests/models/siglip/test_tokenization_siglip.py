@@ -20,7 +20,7 @@ import unittest
 
 from transformers import SPIECE_UNDERLINE, AddedToken, BatchEncoding, SiglipTokenizer, SiglipTokenizerFast
 from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers, slow
-from transformers.utils import cached_property, is_torch_available
+from transformers.utils import cached_property, is_tf_available, is_torch_available
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
@@ -29,6 +29,10 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 
 if is_torch_available():
     FRAMEWORK = "pt"
+elif is_tf_available():
+    FRAMEWORK = "tf"
+else:
+    FRAMEWORK = "jax"
 
 
 @require_sentencepiece

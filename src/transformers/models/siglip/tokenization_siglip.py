@@ -267,7 +267,7 @@ class SiglipTokenizer(PreTrainedTokenizer):
         self.sp_model.Load(self.vocab_file)
 
     def remove_punctuation(self, text: str) -> str:
-        punctuation_to_remove = string.punctuation.replace('>', '').replace('<', '').replace('/', '')
+        punctuation_to_remove = string.punctuation.replace(">", "").replace("<", "").replace("/", "")
         return text.translate(str.maketrans("", "", punctuation_to_remove))
 
     # source: https://github.com/google-research/big_vision/blob/3b8e5ab6ad4f96e32b32826f9e1b8fd277914f9c/big_vision/evaluators/proj/image_text/prompt_engineering.py#L94
