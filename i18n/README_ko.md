@@ -59,10 +59,10 @@ limitations under the License.
 
 제공되는 모델을 통해 다음 과제를 수행할 수 있습니다.
 - 📝 텍스트: 100개 이상의 언어들로, 텍스트 분류, 정보 추출, 질문 답변, 요약, 번역 및 문장 생성
-- 🖼️ 이미지: 이미지 분류(Image Classification), 객체 탐지(object detection) 및 분할(segmentation)
-- 🗣️ 오디오: 음성 인식(speech recognition) 및 오디오 분류(audio classification)
+- 🖼️ 이미지: 이미지 분류(Image Classification), 객체 탐지(Object Detection) 및 분할(Segmentation)
+- 🗣️ 오디오: 음성 인식(Speech Recognition) 및 오디오 분류(Audio Classification)
 
-Transformer의 모델은 표를 통한 질의응답(table QA), 광학 문자 인식(optical character recognition), 스캔 된 문서에서 정보 추출, 비디오 분류 및 시각적 질의응답과 같은 **여러 분야가 결합된** 과제 또한 수행할 수 있습니다.
+Transformer의 모델은 표를 통한 질의응답(Table QA), 광학 문자 인식(Optical Character Recognition), 스캔 한 문서에서 정보 추출, 비디오 분류 및 시각적 질의응답과 같은 **여러 분야가 결합된** 과제 또한 수행할 수 있습니다.
 
 🤗 Transformers는 이러한 사전학습 모델을 빠르게 다운로드해 특정 텍스트에 사용하고, 원하는 데이터로 fine-tuning해 커뮤니티나 우리의 [모델 허브](https://huggingface.co/models)에 공유할 수 있도록 API를 제공합니다. 또한, 모델 구조를 정의하는 각 파이썬 모듈은 완전히 독립적이여서 연구 실험을 위해 손쉽게 수정할 수 있습니다.
 
@@ -118,7 +118,7 @@ Transformers에 달린 100,000개의 별을 축하하기 위해, 우리는 커�
 
 만일 소유한 혹은 사용하고 계신 프로젝트가 이 리스트에 꼭 등재되어야 한다고 믿으신다면, PR을 열고 추가하여 주세요!
 
-## Hugging Face 팀의 커스텀 지원을 원한다면
+## Hugging Face 팀과 직접 대화하고 싶으신가요?
 
 <a target="_blank" href="https://huggingface.co/support">
     <img alt="HuggingFace Expert Acceleration Program" src="https://cdn-media.huggingface.co/marketing/transformers/new-support-improved.png" style="max-width: 600px; border: 1px solid #eee; border-radius: 4px; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);">
@@ -139,7 +139,7 @@ Transformers에 달린 100,000개의 별을 축하하기 위해, 우리는 커�
 
 코드의 두 번째 줄은 pipeline이 사용하는 사전학습 모델을 다운로드하고 캐시로 저장합니다. 세 번째 줄에선 그 모델이 주어진 텍스트를 평가합니다. 여기서 모델은 99.97%의 확률로 텍스트가 긍정적이라고 평가했습니다.
 
-자연어 처리(NLP) 뿐만 아니라 컴퓨터 비전, 발화(speech) 과제들을 사전 학습된 `pipeline`으로 바로 수행할 수 있습니다. 예를 들어, 사진에서 손쉽게 객체들을 탐지할 수 있습니다.:
+자연어 처리(NLP) 뿐만 아니라 컴퓨터 비전, 발화(Speech) 과제들을 사전 학습된 `pipeline`으로 바로 수행할 수 있습니다. 예를 들어, 사진에서 손쉽게 객체들을 탐지할 수 있습니다.:
 
 ``` python
 >>> import requests
