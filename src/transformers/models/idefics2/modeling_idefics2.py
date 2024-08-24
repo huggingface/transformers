@@ -492,8 +492,7 @@ class Idefics2Encoder(nn.Module):
     Args:
         config: Idefics2Config
     """
-    # Ignore copy
-    def __init__(self, config: Idefics2VisionConfig):
+    def __init__(self, config: Idefics2Config):
         super().__init__()
         self.config = config
         self.layers = nn.ModuleList([Idefics2EncoderLayer(config) for _ in range(config.num_hidden_layers)])
