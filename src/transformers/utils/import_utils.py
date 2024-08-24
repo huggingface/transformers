@@ -87,7 +87,7 @@ FORCE_TF_AVAILABLE = os.environ.get("FORCE_TF_AVAILABLE", "AUTO").upper()
 # This is the version of torch required to run torch.fx features and torch.onnx with dictionary inputs.
 TORCH_FX_REQUIRED_VERSION = version.parse("1.10")
 
-ACCELERATE_MIN_VERSION = "0.21.0"
+ACCELERATE_MIN_VERSION = "0.26.0"
 FSDP_MIN_VERSION = "1.12.0"
 XLA_FSDPV2_MIN_VERSION = "2.2.0"
 
@@ -172,10 +172,12 @@ _tf2onnx_available = _is_package_available("tf2onnx")
 _timm_available = _is_package_available("timm")
 _tokenizers_available = _is_package_available("tokenizers")
 _torchaudio_available = _is_package_available("torchaudio")
+_torchao_available = _is_package_available("torchao")
 _torchdistx_available = _is_package_available("torchdistx")
 _torchvision_available = _is_package_available("torchvision")
 _mlx_available = _is_package_available("mlx")
 _hqq_available = _is_package_available("hqq")
+_liger_kernel_available = _is_package_available("liger_kernel")
 
 
 _torch_version = "N/A"
@@ -1092,6 +1094,10 @@ def is_torchaudio_available():
     return _torchaudio_available
 
 
+def is_torchao_available():
+    return _torchao_available
+
+
 def is_speech_available():
     # For now this depends on torchaudio but the exact dependency might evolve in the future.
     return _torchaudio_available
@@ -1157,6 +1163,13 @@ def is_jinja_available():
 
 def is_mlx_available():
     return _mlx_available
+
+
+def is_liger_kernel_available():
+    if not _liger_kernel_available:
+        return False
+
+    return version.parse(importlib.metadata.version("liger_kernel")) >= version.parse("0.1.0")
 
 
 # docstyle-ignore
