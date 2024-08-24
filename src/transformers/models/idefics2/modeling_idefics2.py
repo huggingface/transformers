@@ -490,7 +490,7 @@ class Idefics2Encoder(nn.Module):
     [`Idefics2EncoderLayer`].
 
     Args:
-        config: Idefics2VisionConfig
+        config: Idefics2Config
     """
 
     def __init__(self, config: Idefics2VisionConfig):
