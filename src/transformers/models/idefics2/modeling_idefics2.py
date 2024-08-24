@@ -492,7 +492,7 @@ class Idefics2Encoder(nn.Module):
     Args:
         config: Idefics2Config
     """
-
+    # Ignore copy
     def __init__(self, config: Idefics2VisionConfig):
         super().__init__()
         self.config = config
