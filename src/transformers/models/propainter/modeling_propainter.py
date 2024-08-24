@@ -3068,7 +3068,7 @@ class ProPainterModel(ProPainterPreTrainedModel):
         return pred_flows_bi, pred_flows_bi_loss, pred_edges_bi, all_hidden_states
 
     def image_propagation(self,pixel_values,masks_dilated, pred_flows_bi,output_hidden_states: bool = False):
-        width, height = self.size
+        height, width = self.size
         masked_frames = pixel_values * (1 - masks_dilated)
         subvideo_length_img_prop = min(100, self.config.subvideo_length) # ensure a minimum of 100 frames for image propagation
         if self.video_length > subvideo_length_img_prop:
@@ -3113,7 +3113,7 @@ class ProPainterModel(ProPainterPreTrainedModel):
     def feature_propagation(self,updated_frames,updated_masks,masks_dilated,pred_flows_bi,original_frames, output_attentions: bool = False,output_hidden_states: bool = False,return_dict: bool = True):
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
-        width, height = self.size
+        height, width = self.size
         comp_frames = [None] * self.video_length
 
         neighbor_stride = self.config.neighbor_length // 2
