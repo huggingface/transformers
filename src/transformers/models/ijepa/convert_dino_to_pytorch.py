@@ -239,11 +239,11 @@ def convert_ijepa_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
 
     if push_to_hub:
         model_name_to_hf_name = {
-                "ijepa_vith14_1k": "ijepa_huge_patch14_1k",
-                "ijepa_vith14_22k": "ijepa_huge_patch14_22k",
-                "ijepa_vith16_1k": "ijepa_huge_patch16_1k",
-                "ijepa_vitg16_22k": "ijepa_giant_patch16_22k",
-                }
+            "ijepa_vith14_1k": "ijepa_huge_patch14_1k",
+            "ijepa_vith14_22k": "ijepa_huge_patch14_22k",
+            "ijepa_vith16_1k": "ijepa_huge_patch16_1k",
+            "ijepa_vitg16_22k": "ijepa_giant_patch16_22k",
+        }
         name = model_name_to_hf_name[model_name]
         model.push_to_hub(f"jmtzt/{name}", use_temp_dir=True)
 
