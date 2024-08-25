@@ -47,7 +47,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import IJepaImageProcessor
+    from transformers import ViTImageProcessor
 
 
 class IJepaModelTester:
@@ -94,9 +94,9 @@ class IJepaModelTester:
         self.encoder_stride = encoder_stride
         self.attn_implementation = attn_implementation
 
-        # in IJEPA, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
+        # in IJEPA, the seq length equals the number of patches (we don't add 1 for the [CLS] token)
         num_patches = (image_size // patch_size) ** 2
-        self.seq_length = num_patches + 1
+        self.seq_length = num_patches
         self.mask_ratio = mask_ratio
         self.num_masks = int(mask_ratio * self.seq_length)
         self.mask_length = num_patches
@@ -197,6 +197,11 @@ class IJepaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
+    pipeline_model_mapping = (
+        {"image-feature-extraction": IJepaModel, "image-classification": IJepaForImageClassification}
+        if is_torch_available()
+        else {}
+    )
     fx_compatible = False
 
     test_pruning = False
@@ -239,17 +244,13 @@ class IJepaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_for_masked_image_modeling(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_masked_image_modeling(*config_and_inputs)
-
     def test_for_image_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "google/ijepa-base-patch16-224"
+        model_name = "jmtzt/ijepa_huge_patch14_1k"
         model = IJepaModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
@@ -265,11 +266,11 @@ def prepare_img():
 class IJepaModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return IJepaImageProcessor.from_pretrained("google/ijepa-base-patch16-224") if is_vision_available() else None
+        return ViTImageProcessor.from_pretrained("google/vit-base-patch16-224") if is_vision_available() else None
 
     @slow
-    def test_inference_image_classification_head(self):
-        model = IJepaForImageClassification.from_pretrained("google/ijepa-base-patch16-224").to(torch_device)
+    def test_inference_no_head(self):
+        model = IJepaModel.from_pretrained("jmtzt/ijepa_huge_patch14_1k").to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()
@@ -279,41 +280,12 @@ class IJepaModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = model(**inputs)
 
-        # verify the logits
-        expected_shape = torch.Size((1, 1000))
-        self.assertEqual(outputs.logits.shape, expected_shape)
-
-        expected_slice = torch.tensor([-0.2744, 0.8215, -0.0836]).to(torch_device)
-
-        self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
-
-    @slow
-    def test_inference_interpolate_pos_encoding(self):
-        # IJEPA models have an `interpolate_pos_encoding` argument in their forward method,
-        # allowing to interpolate the pre-trained position embeddings in order to use
-        # the model on higher resolutions. The DINO model by Facebook AI leverages this
-        # to visualize self-attention on higher resolution images.
-        model = IJepaModel.from_pretrained("facebook/dino-ijepas8").to(torch_device)
-
-        image_processor = IJepaImageProcessor.from_pretrained("facebook/dino-ijepas8", size=480)
-        image = prepare_img()
-        inputs = image_processor(images=image, return_tensors="pt")
-        pixel_values = inputs.pixel_values.to(torch_device)
-
-        # forward pass
-        with torch.no_grad():
-            outputs = model(pixel_values, interpolate_pos_encoding=True)
-
-        # verify the logits
-        expected_shape = torch.Size((1, 3601, 384))
+        # verify the last hidden state
+        expected_shape = torch.Size((1, 256, 1280))
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
-        expected_slice = torch.tensor(
-            [
-                [4.2340, 4.3906, -6.6692],
-                [4.5463, 1.8928, -6.7257],
-                [4.4429, 0.8496, -5.8585],
-            ]
+        expected_slice = torch.Tensor(
+            [[-0.0621, -0.0054, -2.7513], [-0.1952, 0.0909, -3.9536], [0.0942, -0.0331, -1.2833]]
         ).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
@@ -327,7 +299,7 @@ class IJepaModelIntegrationTest(unittest.TestCase):
         A small test to make sure that inference work in half precision without any problem.
         """
         model = IJepaModel.from_pretrained(
-            "facebook/dino-ijepas8",
+            "jmtzt/ijepa_huge_patch14_1k",
             torch_dtype=torch.float16,
             device_map="auto",
         )
