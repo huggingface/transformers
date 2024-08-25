@@ -400,6 +400,12 @@ Pipelines available for natural language processing tasks include the following.
     - __call__
     - all
 
+### NerPipeline
+
+[[autodoc]] NerPipeline
+
+See [`TokenClassificationPipeline`] for all details.
+
 ### QuestionAnsweringPipeline
 
 [[autodoc]] QuestionAnsweringPipeline

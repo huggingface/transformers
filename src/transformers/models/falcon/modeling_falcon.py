@@ -620,8 +620,6 @@ class FalconFlashAttention2(FalconAttention):
             # Handle the case where the model is quantized
             if hasattr(self.config, "_pre_quantization_dtype"):
                 target_dtype = self.config._pre_quantization_dtype
-            elif torch.is_autocast_enabled():
-                target_dtype = torch.get_autocast_gpu_dtype()
             else:
                 target_dtype = self.query_key_value.weight.dtype
 
@@ -1432,10 +1430,7 @@ class FalconForSequenceClassification(FalconPreTrainedModel):
             sequence_lengths = -1
         else:
             if input_ids is not None:
-                # if no pad token found, use modulo instead of reverse indexing for ONNX compatibility
-                sequence_lengths = torch.eq(input_ids, self.config.pad_token_id).int().argmax(-1) - 1
-                sequence_lengths = sequence_lengths % input_ids.shape[-1]
-                sequence_lengths = sequence_lengths.to(logits.device)
+                sequence_lengths = (torch.ne(input_ids, self.config.pad_token_id).sum(dim=-1) - 1).to(logits.device)
             else:
                 sequence_lengths = -1
                 logger.warning(
