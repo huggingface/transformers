@@ -102,9 +102,7 @@ GGUF_TENSOR_MAPPING = {
         "ffn_gate": "mlp.gate_up_proj",
         "ffn_norm": "post_attention_layernorm",
         "attn_norm": "input_layernorm",
-        "attn_q": "self_attn.qkv_proj",
-        "attn_v": "self_attn.qkv_proj",
-        "attn_k": "self_attn.qkv_proj",
+        "attn_qkv": "self_attn.qkv_proj",
         "attn_output": "self_attn.o_proj",
         "output.weight": "lm_head.weight",
         "output_norm": "model.norm",
@@ -425,16 +423,14 @@ class GGUFPhi3Converter(LlamaConverter):
     def converted(self) -> Tokenizer:
         vocab = {word: i for i, word in enumerate(self.original_tokenizer.tokens)}
         merges = self.original_tokenizer.merges
-
-        tokenizer = Tokenizer(BPE(vocab, merges))
-
-        tokenizer.normalizer = normalizers.Sequence([normalizers.NFC(), normalizers.Lowercase()])
-        tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=True)
-        tokenizer.decoder = decoders.ByteLevel()
-
+        tokenizer = Tokenizer(BPE(vocab, merges, unk_token='<unk>', fuse_unk=True, byte_fallback=True))
+        tokenizer.decoder = decoders.Sequence([decoders.ByteFallback(),
+                                               decoders.Fuse(),
+                                               decoders.Replace("▁", " "),])
+        # add the special tokens from phi3 tokenizer config
         tokenizer.add_special_tokens(
             [
-                AddedToken("</s>", rstrip=True, lstrip=False, single_word=False, normalized=False, special=True),
+                AddedToken("</s>", rstrip=True, lstrip=False,  normalized=False, special=True),
                 AddedToken("<|endoftext|>", normalized=False, special=True),
                 AddedToken("<|assistant|>", rstrip=True, normalized=False, special=True),
                 AddedToken("<|placeholder1|>", rstrip=True, normalized=False, special=True),
@@ -448,6 +444,11 @@ class GGUFPhi3Converter(LlamaConverter):
                 AddedToken("<|user|>", rstrip=True, normalized=False, special=True)
             ]
         )
+
+        self.additional_kwargs["unk_token"] = "<unk>"
+        self.additional_kwargs["eos_token"] = "<|endoftext|>"
+        self.additional_kwargs["bos_token"] = "<s>"
+        self.additional_kwargs["pad_token"] = "<|endoftext|>"
 
         return tokenizer
 
