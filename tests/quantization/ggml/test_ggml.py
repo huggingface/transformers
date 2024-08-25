@@ -43,7 +43,6 @@ class GgufIntegrationTests(unittest.TestCase):
     tinyllama_model_id = "PenutChen/TinyLlama-1.1B-Chat-v1.0-GGUF"
     phi3_model_id = "microsoft/Phi-3-mini-4k-instruct-gguf"
 
-
     # standard quants
     q4_0_gguf_model_id = "tinyllama-1.1b-chat-v1.0.Q4_0.gguf"
     q5_0_gguf_model_id = "tinyllama-1.1b-chat-v1.0.Q5_0.gguf"

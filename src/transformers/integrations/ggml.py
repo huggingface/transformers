@@ -106,7 +106,7 @@ GGUF_TENSOR_MAPPING = {
         "attn_output": "self_attn.o_proj",
         "output.weight": "lm_head.weight",
         "output_norm": "model.norm",
-    }
+    },
 }
 
 
@@ -179,8 +179,8 @@ GGUF_CONFIG_MAPPING = {
         "attention.head_count": "num_attention_heads",
         "attention.head_count_kv": "num_key_value_heads",
         "attention.layer_norm_rms_epsilon": "rms_norm_eps",
-        "vocab_size": "vocab_size"
-    }
+        "vocab_size": "vocab_size",
+    },
 }
 
 GGUF_TOKENIZER_MAPPING = {
@@ -423,14 +423,18 @@ class GGUFPhi3Converter(LlamaConverter):
     def converted(self) -> Tokenizer:
         vocab = {word: i for i, word in enumerate(self.original_tokenizer.tokens)}
         merges = self.original_tokenizer.merges
-        tokenizer = Tokenizer(BPE(vocab, merges, unk_token='<unk>', fuse_unk=True, byte_fallback=True))
-        tokenizer.decoder = decoders.Sequence([decoders.ByteFallback(),
-                                               decoders.Fuse(),
-                                               decoders.Replace("▁", " "),])
+        tokenizer = Tokenizer(BPE(vocab, merges, unk_token="<unk>", fuse_unk=True, byte_fallback=True))
+        tokenizer.decoder = decoders.Sequence(
+            [
+                decoders.ByteFallback(),
+                decoders.Fuse(),
+                decoders.Replace("▁", " "),
+            ]
+        )
         # add the special tokens from phi3 tokenizer config
         tokenizer.add_special_tokens(
             [
-                AddedToken("</s>", rstrip=True, lstrip=False,  normalized=False, special=True),
+                AddedToken("</s>", rstrip=True, lstrip=False, normalized=False, special=True),
                 AddedToken("<|endoftext|>", normalized=False, special=True),
                 AddedToken("<|assistant|>", rstrip=True, normalized=False, special=True),
                 AddedToken("<|placeholder1|>", rstrip=True, normalized=False, special=True),
@@ -441,7 +445,7 @@ class GGUFPhi3Converter(LlamaConverter):
                 AddedToken("<|end|>", rstrip=True, normalized=False, special=True),
                 AddedToken("<|placeholder5|>", rstrip=True, normalized=False, special=True),
                 AddedToken("<|placeholder6|>", rstrip=True, normalized=False, special=True),
-                AddedToken("<|user|>", rstrip=True, normalized=False, special=True)
+                AddedToken("<|user|>", rstrip=True, normalized=False, special=True),
             ]
         )
 
@@ -451,6 +455,7 @@ class GGUFPhi3Converter(LlamaConverter):
         self.additional_kwargs["pad_token"] = "<|endoftext|>"
 
         return tokenizer
+
 
 GGUF_TO_FAST_CONVERTERS = {
     "llama": GGUFLlamaConverter,
