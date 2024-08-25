@@ -607,7 +607,8 @@ class IJepaModel(IJepaPreTrainedModel):
             pixel_values = pixel_values.to(expected_dtype)
 
         embedding_output = self.embeddings(
-            pixel_values, bool_masked_pos=bool_masked_pos,
+            pixel_values,
+            bool_masked_pos=bool_masked_pos,
         )
 
         encoder_outputs = self.encoder(

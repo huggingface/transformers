@@ -22,13 +22,12 @@ from pathlib import Path
 
 import requests
 import torch
-from huggingface_hub import hf_hub_download
 from PIL import Image
 
 from transformers import (
     IJepaConfig,
-    ViTImageProcessor,
     IJepaModel,
+    ViTImageProcessor,
 )
 from transformers.utils import logging
 
@@ -118,10 +117,7 @@ def create_rename_keys(config):
     )
 
     # if just the base model, we should remove "ijepa" from all keys that start with "ijepa"
-    rename_keys = [
-        (pair[0], pair[1][6:]) if pair[1].startswith("ijepa") else pair
-        for pair in rename_keys
-    ]
+    rename_keys = [(pair[0], pair[1][6:]) if pair[1].startswith("ijepa") else pair for pair in rename_keys]
 
     return rename_keys
 
@@ -133,24 +129,16 @@ def read_in_q_k_v(state_dict, config):
         in_proj_weight = state_dict.pop(f"blocks.{i}.attn.qkv.weight")
         in_proj_bias = state_dict.pop(f"blocks.{i}.attn.qkv.bias")
         # next, add query, keys and values (in that order) to the state dict
-        state_dict[f"encoder.layer.{i}.attention.attention.query.weight"] = (
-            in_proj_weight[: config.hidden_size, :]
-        )
-        state_dict[f"encoder.layer.{i}.attention.attention.query.bias"] = (
-            in_proj_bias[: config.hidden_size]
-        )
-        state_dict[f"encoder.layer.{i}.attention.attention.key.weight"] = (
-            in_proj_weight[config.hidden_size : config.hidden_size * 2, :]
-        )
-        state_dict[f"encoder.layer.{i}.attention.attention.key.bias"] = (
-            in_proj_bias[config.hidden_size : config.hidden_size * 2]
-        )
-        state_dict[f"encoder.layer.{i}.attention.attention.value.weight"] = (
-            in_proj_weight[-config.hidden_size :, :]
-        )
-        state_dict[f"encoder.layer.{i}.attention.attention.value.bias"] = (
-            in_proj_bias[-config.hidden_size :]
-        )
+        state_dict[f"encoder.layer.{i}.attention.attention.query.weight"] = in_proj_weight[: config.hidden_size, :]
+        state_dict[f"encoder.layer.{i}.attention.attention.query.bias"] = in_proj_bias[: config.hidden_size]
+        state_dict[f"encoder.layer.{i}.attention.attention.key.weight"] = in_proj_weight[
+            config.hidden_size : config.hidden_size * 2, :
+        ]
+        state_dict[f"encoder.layer.{i}.attention.attention.key.bias"] = in_proj_bias[
+            config.hidden_size : config.hidden_size * 2
+        ]
+        state_dict[f"encoder.layer.{i}.attention.attention.value.weight"] = in_proj_weight[-config.hidden_size :, :]
+        state_dict[f"encoder.layer.{i}.attention.attention.value.bias"] = in_proj_bias[-config.hidden_size :]
 
 
 def remove_classification_head_(state_dict):
@@ -232,9 +220,9 @@ def convert_ijepa_checkpoint(model_name, pytorch_dump_folder_path):
     pixel_values = encoding["pixel_values"]
     outputs = model(pixel_values)
 
-    expected_slice = torch.Tensor([[-0.0621, -0.0054, -2.7513],
-                                   [-0.1952, 0.0909, -3.9536],
-                                   [0.0942, -0.0331, -1.2833]])
+    expected_slice = torch.Tensor(
+        [[-0.0621, -0.0054, -2.7513], [-0.1952, 0.0909, -3.9536], [0.0942, -0.0331, -1.2833]]
+    )
 
     assert torch.allclose(
         expected_slice,
