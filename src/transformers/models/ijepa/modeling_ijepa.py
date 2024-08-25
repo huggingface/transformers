@@ -510,13 +510,21 @@ IJEPA_START_DOCSTRING = r"""
         config ([`IJepaConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+
+        add_pooling_layer (bool, *optional*, defaults to `True`): Whether to include a pooling layer in the model. If set to `True`, the model will include a pooling layer that can be used to extract a pooled output representation of the hidden states. If set to `False`, the pooling layer will be omitted.
+
+        use_mask_token (bool, *optional*, defaults to `False`): Whether to use a mask token in the embeddings layer. If set to `True`, a special token will be used to mask certain inputs during training. If set to `False`, no mask token will be used, and the embeddings layer will function without masking capability.
+
 """
 
 IJEPA_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`IJepaImageProcessor.__call__`]
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`ViTImageProcessor.__call__`]
             for details.
+
+        bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`, *optional*):
+            Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
 
         head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
@@ -581,10 +589,6 @@ class IJepaModel(IJepaPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
-        r"""
-        bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`, *optional*):
-            Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
-        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -650,13 +654,25 @@ class IJepaPooler(nn.Module):
         return pooled_output
 
 
+IJEPA_FOR_IMAGE_CLASSIFICATION_START_DOCSTRING = r"""
+    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
+    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
+    behavior.
+
+    Parameters:
+        config ([`IJepaConfig`]): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+
 @add_start_docstrings(
     """
     I-JEPA Model transformer with an image classification head on top (a linear layer on top of the final hidden state of
     the average pooling of the output) e.g. for ImageNet.
 
     """,
-    IJEPA_START_DOCSTRING,
+    IJEPA_FOR_IMAGE_CLASSIFICATION_START_DOCSTRING,
 )
 class IJepaForImageClassification(IJepaPreTrainedModel):
     def __init__(self, config: IJepaConfig) -> None:

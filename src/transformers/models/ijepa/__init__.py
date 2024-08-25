@@ -17,19 +17,10 @@ from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
     is_torch_available,
-    is_torchvision_available,
 )
 
 
 _import_structure = {"configuration_ijepa": ["IJepaConfig", "IJepaOnnxConfig"]}
-
-try:
-    if not is_torchvision_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["image_processing_ijepa_fast"] = ["IJepaImageProcessorFast"]
 
 try:
     if not is_torch_available():
@@ -47,22 +38,16 @@ if TYPE_CHECKING:
     from .configuration_ijepa import IJepaConfig, IJepaOnnxConfig
 
     try:
-        if not is_torchvision_available():
+        if not is_torch_available():
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
         pass
     else:
-        try:
-            if not is_torch_available():
-                raise OptionalDependencyNotAvailable()
-        except OptionalDependencyNotAvailable:
-            pass
-        else:
-            from .modeling_ijepa import (
-                IJepaForImageClassification,
-                IJepaModel,
-                IJepaPreTrainedModel,
-            )
+        from .modeling_ijepa import (
+            IJepaForImageClassification,
+            IJepaModel,
+            IJepaPreTrainedModel,
+        )
 
 else:
     import sys

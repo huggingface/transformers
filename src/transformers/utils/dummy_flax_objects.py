@@ -842,27 +842,6 @@ class FlaxGPTJPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["flax"])
 
 
-class FlaxIJepaForImageClassification(metaclass=DummyObject):
-    _backends = ["flax"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["flax"])
-
-
-class FlaxIJepaModel(metaclass=DummyObject):
-    _backends = ["flax"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["flax"])
-
-
-class FlaxIJepaPreTrainedModel(metaclass=DummyObject):
-    _backends = ["flax"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["flax"])
-
-
 class FlaxLlamaForCausalLM(metaclass=DummyObject):
     _backends = ["flax"]
 

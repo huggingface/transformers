@@ -214,7 +214,7 @@ def convert_ijepa_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     model = IJepaModel(config, add_pooling_layer=False).eval()
     model.load_state_dict(state_dict)
 
-    # Check outputs on an image, prepared by IJepaImageProcessor
+    # Check outputs on an image, prepared by ViTImageProcessor
     image_processor = ViTImageProcessor()
     encoding = image_processor(images=prepare_img(), return_tensors="pt")
     pixel_values = encoding["pixel_values"]

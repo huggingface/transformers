@@ -89,6 +89,7 @@ else:
             ("hiera", ("BitImageProcessor",)),
             ("idefics", ("IdeficsImageProcessor",)),
             ("idefics2", ("Idefics2ImageProcessor",)),
+            ("ijepa", ("ViTImageProcessor", "ViTImageProcessorFast")),
             ("imagegpt", ("ImageGPTImageProcessor",)),
             ("instructblip", ("BlipImageProcessor",)),
             ("instructblipvideo", ("InstructBlipVideoImageProcessor",)),
