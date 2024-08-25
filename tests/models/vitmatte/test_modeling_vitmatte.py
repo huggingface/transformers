@@ -61,7 +61,7 @@ class VitMatteModelTester:
         type_sequence_label_size=10,
         initializer_range=0.02,
         scope=None,
-        out_features=["stage1"],
+        out_indices=[1],
         fusion_hidden_sizes=[128, 64, 32, 16],
     ):
         self.parent = parent
@@ -78,7 +78,7 @@ class VitMatteModelTester:
         self.type_sequence_label_size = type_sequence_label_size
         self.initializer_range = initializer_range
         self.scope = scope
-        self.out_features = out_features
+        self.out_indices = out_indices
         self.fusion_hidden_sizes = fusion_hidden_sizes
 
         self.seq_length = (self.image_size // self.patch_size) ** 2
@@ -104,7 +104,7 @@ class VitMatteModelTester:
             hidden_size=self.hidden_size,
             is_training=self.is_training,
             hidden_act=self.hidden_act,
-            out_features=self.out_features,
+            out_indices=self.out_indices,
         )
 
     def get_config(self):

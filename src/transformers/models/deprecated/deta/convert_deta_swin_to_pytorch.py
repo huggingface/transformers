@@ -39,7 +39,7 @@ def get_deta_config(model_name):
         depths=(2, 2, 18, 2),
         num_heads=(6, 12, 24, 48),
         window_size=12,
-        out_features=["stage2", "stage3", "stage4"],
+        out_indices=[2, 3, 4],
     )
 
     config = DetaConfig(
