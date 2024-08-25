@@ -182,7 +182,7 @@ def get_ijepa_config(model_name):
 
 
 @torch.no_grad()
-def convert_ijepa_checkpoint(model_name, pytorch_dump_folder_path):
+def convert_ijepa_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     """
     Copy/paste/tweak model's weights to our IJEPA structure.
     """
@@ -237,6 +237,16 @@ def convert_ijepa_checkpoint(model_name, pytorch_dump_folder_path):
         print(f"Saving image processor to {pytorch_dump_folder_path}")
         image_processor.save_pretrained(pytorch_dump_folder_path)
 
+    if push_to_hub:
+        model_name_to_hf_name = {
+                "ijepa_vith14_1k": "ijepa_huge_patch14_1k",
+                "ijepa_vith14_22k": "ijepa_huge_patch14_22k",
+                "ijepa_vith16_1k": "ijepa_huge_patch16_1k",
+                "ijepa_vitg16_22k": "ijepa_giant_patch16_22k",
+                }
+        name = model_name_to_hf_name[model_name]
+        model.push_to_hub(f"jmtzt/{name}", use_temp_dir=True)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -259,7 +269,12 @@ if __name__ == "__main__":
         type=str,
         help="Path to the output PyTorch model directory.",
     )
+    parser.add_argument(
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the model to the Hub.",
+    )
 
     parser.set_defaults()
     args = parser.parse_args()
-    convert_ijepa_checkpoint(args.model_name, args.pytorch_dump_folder_path)
+    convert_ijepa_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub)
