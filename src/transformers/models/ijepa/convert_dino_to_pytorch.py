@@ -12,10 +12,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert IJEPA checkpoints trained with the DINO method."""
+"""Convert IJEPA checkpoints from the original repository.
+
+URL: https://github.com/facebookresearch/ijepa
+"""
 
 import argparse
-import json
 from pathlib import Path
 
 import requests
@@ -25,8 +27,7 @@ from PIL import Image
 
 from transformers import (
     IJepaConfig,
-    IJepaForImageClassification,
-    IJepaImageProcessor,
+    ViTImageProcessor,
     IJepaModel,
 )
 from transformers.utils import logging
@@ -37,8 +38,14 @@ logger = logging.get_logger(__name__)
 
 
 # here we list all keys to be renamed (original name on the left, our name on the right)
-def create_rename_keys(config, base_model=False):
+def create_rename_keys(config):
     rename_keys = []
+
+    # projection layer + position embeddings
+    rename_keys.append(("pos_embed", "ijepa.embeddings.position_embeddings"))
+    rename_keys.append(("patch_embed.proj.weight", "ijepa.embeddings.patch_embeddings.projection.weight"))
+    rename_keys.append(("patch_embed.proj.bias", "ijepa.embeddings.patch_embeddings.projection.bias"))
+
     for i in range(config.num_hidden_layers):
         # encoder layers: output projection, 2 feedforward neural networks and 2 layernorms
         rename_keys.append(
@@ -102,72 +109,48 @@ def create_rename_keys(config, base_model=False):
             )
         )
 
-    # projection layer + position embeddings
+    # layernorm + pooler
     rename_keys.extend(
         [
-            ("cls_token", "ijepa.embeddings.cls_token"),
-            (
-                "patch_embed.proj.weight",
-                "ijepa.embeddings.patch_embeddings.projection.weight",
-            ),
-            (
-                "patch_embed.proj.bias",
-                "ijepa.embeddings.patch_embeddings.projection.bias",
-            ),
-            ("pos_embed", "ijepa.embeddings.position_embeddings"),
+            ("norm.weight", "layernorm.weight"),
+            ("norm.bias", "layernorm.bias"),
         ]
     )
 
-    if base_model:
-        # layernorm + pooler
-        rename_keys.extend(
-            [
-                ("norm.weight", "layernorm.weight"),
-                ("norm.bias", "layernorm.bias"),
-            ]
-        )
-
-        # if just the base model, we should remove "ijepa" from all keys that start with "ijepa"
-        rename_keys = [(pair[0], pair[1][4:]) if pair[1].startswith("ijepa") else pair for pair in rename_keys]
-    else:
-        # layernorm + classification head
-        rename_keys.extend(
-            [
-                ("norm.weight", "ijepa.layernorm.weight"),
-                ("norm.bias", "ijepa.layernorm.bias"),
-                ("head.weight", "classifier.weight"),
-                ("head.bias", "classifier.bias"),
-            ]
-        )
+    # if just the base model, we should remove "ijepa" from all keys that start with "ijepa"
+    rename_keys = [
+        (pair[0], pair[1][6:]) if pair[1].startswith("ijepa") else pair
+        for pair in rename_keys
+    ]
 
     return rename_keys
 
 
 # we split up the matrix of each encoder layer into queries, keys and values
-def read_in_q_k_v(state_dict, config, base_model=False):
+def read_in_q_k_v(state_dict, config):
     for i in range(config.num_hidden_layers):
-        if base_model:
-            prefix = ""
-        else:
-            prefix = "ijepa."
         # read in weights + bias of input projection layer (in timm, this is a single matrix + bias)
         in_proj_weight = state_dict.pop(f"blocks.{i}.attn.qkv.weight")
         in_proj_bias = state_dict.pop(f"blocks.{i}.attn.qkv.bias")
         # next, add query, keys and values (in that order) to the state dict
-        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.query.weight"] = in_proj_weight[
-            : config.hidden_size, :
-        ]
-        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.query.bias"] = in_proj_bias[: config.hidden_size]
-        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.key.weight"] = in_proj_weight[
-            config.hidden_size : config.hidden_size * 2, :
-        ]
-        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.key.bias"] = in_proj_bias[
-            config.hidden_size : config.hidden_size * 2
-        ]
-        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.value.weight"] = in_proj_weight[
-            -config.hidden_size :, :
-        ]
-        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.value.bias"] = in_proj_bias[-config.hidden_size :]
+        state_dict[f"encoder.layer.{i}.attention.attention.query.weight"] = (
+            in_proj_weight[: config.hidden_size, :]
+        )
+        state_dict[f"encoder.layer.{i}.attention.attention.query.bias"] = (
+            in_proj_bias[: config.hidden_size]
+        )
+        state_dict[f"encoder.layer.{i}.attention.attention.key.weight"] = (
+            in_proj_weight[config.hidden_size : config.hidden_size * 2, :]
+        )
+        state_dict[f"encoder.layer.{i}.attention.attention.key.bias"] = (
+            in_proj_bias[config.hidden_size : config.hidden_size * 2]
+        )
+        state_dict[f"encoder.layer.{i}.attention.attention.value.weight"] = (
+            in_proj_weight[-config.hidden_size :, :]
+        )
+        state_dict[f"encoder.layer.{i}.attention.attention.value.bias"] = (
+            in_proj_bias[-config.hidden_size :]
+        )
 
 
 def remove_classification_head_(state_dict):
@@ -188,76 +171,83 @@ def prepare_img():
     return im
 
 
+def get_ijepa_config(model_name):
+    patch_size = int(model_name.split("_")[1][4:])
+    config = IJepaConfig(patch_size=patch_size)
+    if "vith" in model_name:
+        config.hidden_size = 1280
+        config.num_hidden_layers = 32
+        config.num_attention_heads = 16
+        config.layer_norm_eps = 1e-6
+        config.mlp_ratio = 4
+        config.intermediate_size = 5120
+    elif "vitg" in model_name:
+        config.hidden_size = 1408
+        config.num_hidden_layers = 40
+        config.num_attention_heads = 16
+        config.layer_norm_eps = 1e-6
+        config.mlp_ratio = 48 / 11
+        config.intermediate_size = 6144
+    else:
+        raise ValueError("Model not supported, only supports huge and giant models.")
+    return config
+
+
 @torch.no_grad()
-def convert_ijepa_checkpoint(model_name, pytorch_dump_folder_path, base_model=True):
+def convert_ijepa_checkpoint(model_name, pytorch_dump_folder_path):
     """
     Copy/paste/tweak model's weights to our IJEPA structure.
     """
 
     # define default IJEPA configuration
-    config = IJepaConfig()
-    # patch_size
-    if model_name[-1] == "8":
-        config.patch_size = 8
-    # set labels if required
-    if not base_model:
-        config.num_labels = 1000
-        repo_id = "huggingface/label-files"
-        filename = "imagenet-1k-id2label.json"
-        id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
-        id2label = {int(k): v for k, v in id2label.items()}
-        config.id2label = id2label
-        config.label2id = {v: k for k, v in id2label.items()}
-    # size of the architecture
-    if model_name in ["dino_ijepas8", "dino_ijepas16"]:
-        config.hidden_size = 384
-        config.intermediate_size = 1536
-        config.num_hidden_layers = 12
-        config.num_attention_heads = 6
+    config = get_ijepa_config(model_name)
 
-    # load original model from torch hub
-    original_model = torch.hub.load("facebookresearch/dino:main", model_name)
-    original_model.eval()
+    checkpoint_mapping = {
+        "ijepa_vith14_1k": "https://dl.fbaipublicfiles.com/ijepa/IN1K-vit.h.14-300e.pth.tar",
+        "ijepa_vith14_22k": "https://dl.fbaipublicfiles.com/ijepa/IN22K-vit.h.14-900e.pth.tar",
+        "ijepa_vith16_1k": "https://dl.fbaipublicfiles.com/ijepa/IN1K-vit.h.16-448px-300e.pth.tar",
+        "ijepa_vitg16_22k": "https://dl.fbaipublicfiles.com/ijepa/IN22K-vit.g.16-600e.pth.tar",
+    }
 
-    # load state_dict of original model, remove and rename some keys
-    state_dict = original_model.state_dict()
-    if base_model:
-        remove_classification_head_(state_dict)
-    rename_keys = create_rename_keys(config, base_model=base_model)
+    # Load original checkpoint
+    checkpoint_url = checkpoint_mapping[model_name]
+    original_state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")["encoder"]
+    original_state_dict = {k.replace("module.", ""): v for k, v in original_state_dict.items()}
+
+    # Rename keys
+    state_dict = original_state_dict.copy()
+    remove_classification_head_(state_dict)
+    rename_keys = create_rename_keys(config)
     for src, dest in rename_keys:
         rename_key(state_dict, src, dest)
-    read_in_q_k_v(state_dict, config, base_model)
+    read_in_q_k_v(state_dict, config)
 
     # load HuggingFace model
-    if base_model:
-        model = IJepaModel(config, add_pooling_layer=False).eval()
-    else:
-        model = IJepaForImageClassification(config).eval()
+    model = IJepaModel(config, add_pooling_layer=False).eval()
     model.load_state_dict(state_dict)
 
     # Check outputs on an image, prepared by IJepaImageProcessor
-    image_processor = IJepaImageProcessor()
+    image_processor = ViTImageProcessor()
     encoding = image_processor(images=prepare_img(), return_tensors="pt")
     pixel_values = encoding["pixel_values"]
     outputs = model(pixel_values)
 
-    if base_model:
-        final_hidden_state_cls_token = original_model(pixel_values)
-        assert torch.allclose(
-            final_hidden_state_cls_token,
-            outputs.last_hidden_state[:, 0, :],
-            atol=1e-1,
-        )
-    else:
-        logits = original_model(pixel_values)
-        assert logits.shape == outputs.logits.shape
-        assert torch.allclose(logits, outputs.logits, atol=1e-3)
+    expected_slice = torch.Tensor([[-0.0621, -0.0054, -2.7513],
+                                   [-0.1952, 0.0909, -3.9536],
+                                   [0.0942, -0.0331, -1.2833]])
 
-    Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
-    print(f"Saving model {model_name} to {pytorch_dump_folder_path}")
-    model.save_pretrained(pytorch_dump_folder_path)
-    print(f"Saving image processor to {pytorch_dump_folder_path}")
-    image_processor.save_pretrained(pytorch_dump_folder_path)
+    assert torch.allclose(
+        expected_slice,
+        outputs.last_hidden_state[0, :3, :3],
+        atol=1e-4,
+    )
+
+    if pytorch_dump_folder_path is not None:
+        Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
+        print(f"Saving model {model_name} to {pytorch_dump_folder_path}")
+        model.save_pretrained(pytorch_dump_folder_path)
+        print(f"Saving image processor to {pytorch_dump_folder_path}")
+        image_processor.save_pretrained(pytorch_dump_folder_path)
 
 
 if __name__ == "__main__":
@@ -265,9 +255,15 @@ if __name__ == "__main__":
     # Required parameters
     parser.add_argument(
         "--model_name",
-        default="dino_ijepab16",
+        default="ijepa_vith14_1k",
         type=str,
-        help="Name of the model trained with DINO you'd like to convert.",
+        choices=[
+            "ijepa_vith14_1k",
+            "ijepa_vith14_22k",
+            "ijepa_vith16_1k",
+            "ijepa_vitg16_22k",
+        ],
+        help="Name of the model you'd like to convert.",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path",
@@ -275,12 +271,7 @@ if __name__ == "__main__":
         type=str,
         help="Path to the output PyTorch model directory.",
     )
-    parser.add_argument(
-        "--base_model",
-        action="store_true",
-        help="Whether to only convert the base model (no projection head weights).",
-    )
 
-    parser.set_defaults(base_model=True)
+    parser.set_defaults()
     args = parser.parse_args()
-    convert_ijepa_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.base_model)
+    convert_ijepa_checkpoint(args.model_name, args.pytorch_dump_folder_path)

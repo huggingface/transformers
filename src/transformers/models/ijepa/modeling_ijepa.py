@@ -68,7 +68,7 @@ class IJepaEmbeddings(nn.Module):
         self.mask_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size)) if use_mask_token else None
         self.patch_embeddings = IJepaPatchEmbeddings(config)
         num_patches = self.patch_embeddings.num_patches
-        self.position_embeddings = nn.Parameter(torch.randn(1, num_patches + 1, config.hidden_size))
+        self.position_embeddings = nn.Parameter(torch.randn(1, num_patches, config.hidden_size))
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.config = config
 
@@ -117,10 +117,9 @@ class IJepaEmbeddings(nn.Module):
         self,
         pixel_values: torch.Tensor,
         bool_masked_pos: Optional[torch.BoolTensor] = None,
-        interpolate_pos_encoding: bool = False,
     ) -> torch.Tensor:
         batch_size, _, height, width = pixel_values.shape
-        embeddings = self.patch_embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
+        embeddings = self.patch_embeddings(pixel_values)
 
         if bool_masked_pos is not None:
             seq_length = embeddings.shape[1]
@@ -130,17 +129,13 @@ class IJepaEmbeddings(nn.Module):
             embeddings = embeddings * (1.0 - mask) + mask_tokens * mask
 
         # add positional encoding to each token
-        if interpolate_pos_encoding:
-            embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
-        else:
-            embeddings = embeddings + self.position_embeddings
+        embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
 
         embeddings = self.dropout(embeddings)
 
         return embeddings
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTPatchEmbeddings with ViT->IJepa
 class IJepaPatchEmbeddings(nn.Module):
     """
     This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
@@ -163,19 +158,18 @@ class IJepaPatchEmbeddings(nn.Module):
 
         self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
 
-    def forward(self, pixel_values: torch.Tensor, interpolate_pos_encoding: bool = False) -> torch.Tensor:
+    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         batch_size, num_channels, height, width = pixel_values.shape
         if num_channels != self.num_channels:
             raise ValueError(
                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
                 f" Expected {self.num_channels} but got {num_channels}."
             )
-        if not interpolate_pos_encoding:
-            if height != self.image_size[0] or width != self.image_size[1]:
-                raise ValueError(
-                    f"Input image size ({height}*{width}) doesn't match model"
-                    f" ({self.image_size[0]}*{self.image_size[1]})."
-                )
+        if height != self.image_size[0] or width != self.image_size[1]:
+            raise ValueError(
+                f"Input image size ({height}*{width}) doesn't match model"
+                f" ({self.image_size[0]}*{self.image_size[1]})."
+            )
         embeddings = self.projection(pixel_values).flatten(2).transpose(1, 2)
         return embeddings
 
@@ -378,7 +372,7 @@ IJEPA_ATTENTION_CLASSES = {
 }
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTLayer with VIT->IJEPA,ViT->IJepa
+# Copied from transformers.models.vit.modeling_vit.ViTLayer with VIT->IJepa,ViT->IJepa
 class IJepaLayer(nn.Module):
     """This corresponds to the Block class in the timm implementation."""
 
@@ -473,7 +467,6 @@ class IJepaEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTPreTrainedModel with ViT->IJepa,vit->ijepa
 class IJepaPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -507,12 +500,6 @@ class IJepaPreTrainedModel(PreTrainedModel):
                 std=self.config.initializer_range,
             ).to(module.position_embeddings.dtype)
 
-            module.cls_token.data = nn.init.trunc_normal_(
-                module.cls_token.data.to(torch.float32),
-                mean=0.0,
-                std=self.config.initializer_range,
-            ).to(module.cls_token.dtype)
-
 
 IJEPA_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
@@ -543,8 +530,6 @@ IJEPA_INPUTS_DOCSTRING = r"""
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-        interpolate_pos_encoding (`bool`, *optional*):
-            Whether to interpolate the pre-trained position encodings.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
@@ -554,7 +539,6 @@ IJEPA_INPUTS_DOCSTRING = r"""
     "The bare I-JEPA Model transformer outputting raw hidden-states without any specific head on top.",
     IJEPA_START_DOCSTRING,
 )
-# Copied from transformers.models.vit.modeling_vit.ViTModel with VIT->IJEPA,ViT->IJepa
 class IJepaModel(IJepaPreTrainedModel):
     def __init__(self, config: IJepaConfig, add_pooling_layer: bool = True, use_mask_token: bool = False):
         super().__init__(config)
@@ -595,7 +579,6 @@ class IJepaModel(IJepaPreTrainedModel):
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        interpolate_pos_encoding: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         r"""
@@ -624,7 +607,7 @@ class IJepaModel(IJepaPreTrainedModel):
             pixel_values = pixel_values.to(expected_dtype)
 
         embedding_output = self.embeddings(
-            pixel_values, bool_masked_pos=bool_masked_pos, interpolate_pos_encoding=interpolate_pos_encoding
+            pixel_values, bool_masked_pos=bool_masked_pos,
         )
 
         encoder_outputs = self.encoder(
@@ -671,17 +654,9 @@ class IJepaPooler(nn.Module):
     I-JEPA Model transformer with an image classification head on top (a linear layer on top of the final hidden state of
     the average pooling of the output) e.g. for ImageNet.
 
-    <Tip>
-
-        Note that it's possible to fine-tune I-JEPA on higher resolution images than the ones it has been trained on, by
-        setting `interpolate_pos_encoding` to `True` in the forward of the model. This will interpolate the pre-trained
-        position embeddings to the higher resolution.
-
-    </Tip>
     """,
     IJEPA_START_DOCSTRING,
 )
-# Copied from transformers.models.vit.modeling_vit.ViTForImageClassification with VIT->IJEPA,ViT->IJepa,vit->ijepa
 class IJepaForImageClassification(IJepaPreTrainedModel):
     def __init__(self, config: IJepaConfig) -> None:
         super().__init__(config)
@@ -709,7 +684,6 @@ class IJepaForImageClassification(IJepaPreTrainedModel):
         labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        interpolate_pos_encoding: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, ImageClassifierOutput]:
         r"""
@@ -725,7 +699,6 @@ class IJepaForImageClassification(IJepaPreTrainedModel):
             head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            interpolate_pos_encoding=interpolate_pos_encoding,
             return_dict=return_dict,
         )
 
