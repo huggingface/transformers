@@ -366,7 +366,7 @@ class IJepaOutput(nn.Module):
         return hidden_states
 
 
-IJEPA_ATTENTION_CLASSES = {
+IJepa_ATTENTION_CLASSES = {
     "eager": IJepaAttention,
     "sdpa": IJepaSdpaAttention,
 }
@@ -380,7 +380,7 @@ class IJepaLayer(nn.Module):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = IJEPA_ATTENTION_CLASSES[config._attn_implementation](config)
+        self.attention = IJepa_ATTENTION_CLASSES[config._attn_implementation](config)
         self.intermediate = IJepaIntermediate(config)
         self.output = IJepaOutput(config)
         self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
