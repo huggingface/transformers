@@ -136,7 +136,7 @@ class OriginalMask2FormerConfigToOursConverter:
 
         if model.SWIN.EMBED_DIM == 96:
             backbone_config = SwinConfig.from_pretrained(
-                "microsoft/swin-tiny-patch4-window7-224", out_features=["stage1", "stage2", "stage3", "stage4"]
+                "microsoft/swin-tiny-patch4-window7-224", out_indices=[1, 2, 3, 4]
             )
         elif model.SWIN.EMBED_DIM == 128:
             backbone_config = SwinConfig(
@@ -144,12 +144,12 @@ class OriginalMask2FormerConfigToOursConverter:
                 window_size=12,
                 depths=(2, 2, 18, 2),
                 num_heads=(4, 8, 16, 32),
-                out_features=["stage1", "stage2", "stage3", "stage4"],
+                out_indices=[1, 2, 3, 4],
             )
 
         elif model.SWIN.EMBED_DIM == 192:
             backbone_config = SwinConfig.from_pretrained(
-                "microsoft/swin-large-patch4-window12-384", out_features=["stage1", "stage2", "stage3", "stage4"]
+                "microsoft/swin-large-patch4-window12-384", out_indices=[1, 2, 3, 4]
             )
         else:
             raise ValueError(f"embed dim {model.SWIN.EMBED_DIM} not supported for Swin!")

@@ -65,7 +65,7 @@ def get_dpt_config(model_name):
         window_size=window_size,
         pretrained_window_sizes=pretrained_window_sizes,
         num_heads=num_heads,
-        out_features=["stage1", "stage2", "stage3", "stage4"],
+        out_indices=[1, 2, 3, 4],
     )
 
     if model_name == "dpt-swinv2-tiny-256":

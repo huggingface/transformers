@@ -307,9 +307,7 @@ def convert_table_transformer_checkpoint(checkpoint_url, pytorch_dump_folder_pat
     logger.info("Converting model...")
 
     # create HuggingFace model and load state dict
-    backbone_config = ResNetConfig.from_pretrained(
-        "microsoft/resnet-18", out_features=["stage1", "stage2", "stage3", "stage4"]
-    )
+    backbone_config = ResNetConfig.from_pretrained("microsoft/resnet-18", out_indices=[1, 2, 3, 4])
 
     config = TableTransformerConfig(
         backbone_config=backbone_config,

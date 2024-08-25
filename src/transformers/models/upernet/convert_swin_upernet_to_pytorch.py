@@ -65,7 +65,7 @@ def get_upernet_config(model_name):
         depths=depths,
         num_heads=num_heads,
         window_size=window_size,
-        out_features=["stage1", "stage2", "stage3", "stage4"],
+        out_indices=[1, 2, 3, 4],
     )
     config = UperNetConfig(
         backbone_config=backbone_config,

@@ -38,13 +38,9 @@ def get_maskformer_config(model_name: str):
         # TODO add support for ResNet-C backbone, which uses a "deeplab" stem
         raise NotImplementedError("To do")
     elif "resnet101" in model_name:
-        backbone_config = ResNetConfig.from_pretrained(
-            "microsoft/resnet-101", out_features=["stage1", "stage2", "stage3", "stage4"]
-        )
+        backbone_config = ResNetConfig.from_pretrained("microsoft/resnet-101", out_indices=[1, 2, 3, 4])
     else:
-        backbone_config = ResNetConfig.from_pretrained(
-            "microsoft/resnet-50", out_features=["stage1", "stage2", "stage3", "stage4"]
-        )
+        backbone_config = ResNetConfig.from_pretrained("microsoft/resnet-50", out_indices=[1, 2, 3, 4])
     config = MaskFormerConfig(backbone_config=backbone_config)
 
     repo_id = "huggingface/label-files"

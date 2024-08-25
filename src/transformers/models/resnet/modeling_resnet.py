@@ -478,7 +478,7 @@ class ResNetBackbone(ResNetPreTrainedModel, BackboneMixin):
 
         >>> processor = AutoImageProcessor.from_pretrained("microsoft/resnet-50")
         >>> model = AutoBackbone.from_pretrained(
-        ...     "microsoft/resnet-50", out_features=["stage1", "stage2", "stage3", "stage4"]
+        ...     "microsoft/resnet-50", out_indices=[1, 2, 3, 4]
         ... )
 
         >>> inputs = processor(image, return_tensors="pt")

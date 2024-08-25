@@ -179,7 +179,7 @@ class Mask2FormerConfig(PretrainedConfig):
                 window_size=7,
                 drop_path_rate=0.3,
                 use_absolute_embeddings=False,
-                out_features=["stage1", "stage2", "stage3", "stage4"],
+                out_indices=[1, 2, 3, 4],
             )
         elif isinstance(backbone_config, dict):
             backbone_model_type = backbone_config.pop("model_type")
