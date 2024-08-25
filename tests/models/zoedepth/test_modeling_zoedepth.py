@@ -52,7 +52,7 @@ class ZoeDepthModelTester:
         num_hidden_layers=2,
         num_attention_heads=2,
         intermediate_size=8,
-        out_features=["stage1", "stage2"],
+        out_indices=[1, 2],
         apply_layernorm=False,
         reshape_hidden_states=False,
         neck_hidden_sizes=[2, 2],
@@ -69,7 +69,7 @@ class ZoeDepthModelTester:
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.intermediate_size = intermediate_size
-        self.out_features = out_features
+        self.out_indices = out_indices
         self.apply_layernorm = apply_layernorm
         self.reshape_hidden_states = reshape_hidden_states
         self.use_labels = use_labels
@@ -113,7 +113,7 @@ class ZoeDepthModelTester:
             num_attention_heads=self.num_attention_heads,
             intermediate_size=self.intermediate_size,
             is_training=self.is_training,
-            out_features=self.out_features,
+            out_indices=self.out_indices,
             reshape_hidden_states=self.reshape_hidden_states,
         )
 

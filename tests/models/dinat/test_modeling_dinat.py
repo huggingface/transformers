@@ -65,7 +65,6 @@ class DinatModelTester:
         scope=None,
         use_labels=True,
         num_labels=10,
-        out_features=["stage1", "stage2"],
         out_indices=[1, 2],
     ):
         self.parent = parent
@@ -91,7 +90,6 @@ class DinatModelTester:
         self.scope = scope
         self.use_labels = use_labels
         self.num_labels = num_labels
-        self.out_features = out_features
         self.out_indices = out_indices
 
     def prepare_config_and_inputs(self):
@@ -125,7 +123,6 @@ class DinatModelTester:
             patch_norm=self.patch_norm,
             layer_norm_eps=self.layer_norm_eps,
             initializer_range=self.initializer_range,
-            out_features=self.out_features,
             out_indices=self.out_indices,
         )
 
@@ -166,14 +163,14 @@ class DinatModelTester:
         result = model(pixel_values)
 
         # verify hidden states
-        self.parent.assertEqual(len(result.feature_maps), len(config.out_features))
+        self.parent.assertEqual(len(result.feature_maps), len(config.out_indices))
         self.parent.assertListEqual(list(result.feature_maps[0].shape), [self.batch_size, model.channels[0], 16, 16])
 
         # verify channels
-        self.parent.assertEqual(len(model.channels), len(config.out_features))
+        self.parent.assertEqual(len(model.channels), len(config.out_indices))
 
-        # verify backbone works with out_features=None
-        config.out_features = None
+        # verify backbone works with out_indices=None
+        config.out_indices = None
         model = DinatBackbone(config=config)
         model.to(torch_device)
         model.eval()

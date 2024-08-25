@@ -55,7 +55,6 @@ class ConvNextV2ModelTester:
         hidden_act="gelu",
         num_labels=10,
         initializer_range=0.02,
-        out_features=["stage2", "stage3", "stage4"],
         out_indices=[2, 3, 4],
         scope=None,
     ):
@@ -72,7 +71,6 @@ class ConvNextV2ModelTester:
         self.hidden_act = hidden_act
         self.num_labels = num_labels
         self.initializer_range = initializer_range
-        self.out_features = out_features
         self.out_indices = out_indices
         self.scope = scope
 
@@ -96,7 +94,6 @@ class ConvNextV2ModelTester:
             hidden_act=self.hidden_act,
             is_decoder=False,
             initializer_range=self.initializer_range,
-            out_features=self.out_features,
             out_indices=self.out_indices,
             num_labels=self.num_labels,
         )
@@ -126,15 +123,15 @@ class ConvNextV2ModelTester:
         result = model(pixel_values)
 
         # verify hidden states
-        self.parent.assertEqual(len(result.feature_maps), len(config.out_features))
+        self.parent.assertEqual(len(result.feature_maps), len(config.out_indices))
         self.parent.assertListEqual(list(result.feature_maps[0].shape), [self.batch_size, self.hidden_sizes[1], 4, 4])
 
         # verify channels
-        self.parent.assertEqual(len(model.channels), len(config.out_features))
+        self.parent.assertEqual(len(model.channels), len(config.out_indices))
         self.parent.assertListEqual(model.channels, config.hidden_sizes[1:])
 
-        # verify backbone works with out_features=None
-        config.out_features = None
+        # verify backbone works with out_indices=None
+        config.out_indices = None
         model = ConvNextV2Backbone(config=config)
         model.to(torch_device)
         model.eval()
