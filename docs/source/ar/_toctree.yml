@@ -855,14 +855,14 @@
       - local: model_doc/autoformer
         title: Autoformer
       - local: model_doc/informer
-        title: المبلغ
+        title: Informer
       - local: model_doc/patchtsmixer
         title: PatchTSMixer
       - local: model_doc/patchtst
         title: PatchTST
       - local: model_doc/time_series_transformer
-        title: محول السلسلة الزمنية
-      title: نماذج السلسلة الزمنية
+        title: محول السلاسل الزمنية
+      title: نماذج السلاسل الزمنية
     - isExpanded: false
       sections:
       - local: model_doc/graphormer
