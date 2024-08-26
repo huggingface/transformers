@@ -1622,17 +1622,20 @@ class DataCollatorWithFlattening(DefaultDataCollator):
     - no padding will be added, returns `input_ids`, `labels` and `position_ids`
     """
 
-    def __init__(self, *args, return_position_ids=True, **kwargs):
+    def __init__(self, *args, return_position_ids=True, separator_id=-100, **kwargs):
         super().__init__(*args, **kwargs)
         self.return_position_ids = return_position_ids
+        self.separator_id = separator_id
         warnings.warn(
             "Using `DataCollatorWithFlattening` will flatten the entire mini batch into single long sequence."
             "Make sure your attention computation is able to handle it!"
         )
 
-    def __call__(self, features, return_tensors=None):
+    def __call__(self, features, return_tensors=None, separator_id=None):
         if return_tensors is None:
             return_tensors = self.return_tensors
+        if separator_id is None:
+            separator_id = self.separator_id
         is_labels_provided = "labels" in features[0]
         ret = {"input_ids": [], "labels": []}
         if self.return_position_ids:
@@ -1640,9 +1643,9 @@ class DataCollatorWithFlattening(DefaultDataCollator):
         for idx in range(0, len(features)):
             ret["input_ids"] += features[idx]["input_ids"]
             if is_labels_provided:
-                ret["labels"] += [-100] + features[idx]["labels"][1:]
+                ret["labels"] += [separator_id] + features[idx]["labels"][1:]
             else:
-                ret["labels"] += [-100] + features[idx]["input_ids"][1:]
+                ret["labels"] += [separator_id] + features[idx]["input_ids"][1:]
             if self.return_position_ids:
                 ret["position_ids"] += list(range(len(features[idx]["input_ids"])))
         return default_data_collator([ret], return_tensors)
