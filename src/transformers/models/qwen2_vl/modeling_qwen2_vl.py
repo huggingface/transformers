@@ -209,27 +209,13 @@ def apply_rotary_pos_emb_vision(tensor: torch.Tensor, freqs: torch.Tensor) -> to
 class VisionRotaryEmbedding(nn.Module):
     def __init__(self, dim: int, theta: float = 10000.0) -> None:
         super().__init__()
-        self.dim = dim
-        self.theta = theta
         inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self._seq_len_cached = 0
-        self._freqs_cached = None
-
-    def update_freqs_cache(self, seqlen: int) -> None:
-        if seqlen > self._seq_len_cached:
-            seqlen *= 2
-            self._seq_len_cached = seqlen
-            self.inv_freq = 1.0 / (
-                self.theta ** (torch.arange(0, self.dim, 2, dtype=torch.float, device=self.inv_freq.device) / self.dim)
-            )
-            seq = torch.arange(seqlen, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
-            freqs = torch.outer(seq, self.inv_freq)
-            self._freqs_cached = freqs
 
     def forward(self, seqlen: int) -> torch.Tensor:
-        self.update_freqs_cache(seqlen)
-        return self._freqs_cached[:seqlen]
+        seq = torch.arange(seqlen, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
+        freqs = torch.outer(seq, self.inv_freq)
+        return freqs
 
 
 class PatchEmbed(nn.Module):
