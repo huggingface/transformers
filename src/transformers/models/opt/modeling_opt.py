@@ -59,6 +59,13 @@ _CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION = "ArthurZ/opt-350m-dummy-sc"
 _SEQ_CLASS_EXPECTED_LOSS = 1.71
 _SEQ_CLASS_EXPECTED_OUTPUT = "'LABEL_0'"
 
+def _attention_to_position_ids(attention_mask: torch.Tensor) -> torch.Tensor:
+    """
+    Converts an attention mask to position ids.
+    """
+
+    return (torch.cumsum(attention_mask, dim=1) * attention_mask).long() - 1
+
 
 class OPTLearnedPositionalEmbedding(nn.Embedding):
     """
@@ -71,17 +78,10 @@ class OPTLearnedPositionalEmbedding(nn.Embedding):
         self.offset = 2
         super().__init__(num_embeddings + self.offset, embedding_dim)
 
-    def forward(self, attention_mask: torch.LongTensor, past_key_values_length: int = 0):
+    def forward(self, position_ids: torch.LongTensor):
         """`input_ids_shape` is expected to be [bsz x seqlen]."""
-        attention_mask = attention_mask.long()
 
-        # create positions depending on attention_mask
-        positions = (torch.cumsum(attention_mask, dim=1).type_as(attention_mask) * attention_mask).long() - 1
-
-        # cut positions if `past_key_values_length` is > 0
-        positions = positions[:, past_key_values_length:]
-
-        return super().forward(positions + self.offset)
+        return super().forward(position_ids + self.offset)
 
 
 class OPTAttention(nn.Module):
@@ -123,6 +123,7 @@ class OPTAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         key_value_states: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None, # isn't needed in normal attention, but needed in flash attention so to keep the signature same
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
@@ -260,6 +261,7 @@ class OptFlashAttention2(OPTAttention):
         self,
         hidden_states: torch.Tensor,
         key_value_states: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
@@ -345,6 +347,7 @@ class OptFlashAttention2(OPTAttention):
             value_states,
             attention_mask,
             query_length,
+            position_ids=position_ids,
             dropout=attn_dropout,
             is_causal=self.is_causal,
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
@@ -387,6 +390,7 @@ class OPTDecoderLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: Optional[bool] = False,
@@ -418,6 +422,7 @@ class OPTDecoderLayer(nn.Module):
         hidden_states, self_attn_weights, present_key_value = self.self_attn(
             hidden_states=hidden_states,
             past_key_value=past_key_value,
+            position_ids=position_ids,
             attention_mask=attention_mask,
             layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
@@ -619,6 +624,7 @@ class OPTDecoder(OPTPreTrainedModel):
         self,
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
@@ -723,7 +729,12 @@ class OPTDecoder(OPTPreTrainedModel):
                 attention_mask, input_shape, inputs_embeds, past_key_values_length
             )
 
-        pos_embeds = self.embed_positions(attention_mask, past_key_values_length)
+        if position_ids is None:
+           position_ids = _attention_to_position_ids(attention_mask)
+           # cut positions if `past_key_values_length` is > 0
+           position_ids = position_ids[:, past_key_values_length:]
+
+        pos_embeds = self.embed_positions(position_ids)
 
         if self.project_in is not None:
             inputs_embeds = self.project_in(inputs_embeds)
@@ -768,6 +779,7 @@ class OPTDecoder(OPTPreTrainedModel):
                     decoder_layer.__call__,
                     hidden_states,
                     causal_attention_mask,
+                    position_ids,
                     head_mask[idx] if head_mask is not None else None,
                     None,
                     output_attentions,
@@ -777,6 +789,7 @@ class OPTDecoder(OPTPreTrainedModel):
                 layer_outputs = decoder_layer(
                     hidden_states,
                     attention_mask=causal_attention_mask,
+                    position_ids=position_ids,
                     layer_head_mask=(head_mask[idx] if head_mask is not None else None),
                     past_key_value=past_key_value,
                     output_attentions=output_attentions,
@@ -843,6 +856,7 @@ class OPTModel(OPTPreTrainedModel):
         self,
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
@@ -862,6 +876,7 @@ class OPTModel(OPTPreTrainedModel):
         decoder_outputs = self.decoder(
             input_ids=input_ids,
             attention_mask=attention_mask,
+            position_ids=position_ids,
             head_mask=head_mask,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
@@ -918,6 +933,7 @@ class OPTForCausalLM(OPTPreTrainedModel):
         self,
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
@@ -1011,6 +1027,7 @@ class OPTForCausalLM(OPTPreTrainedModel):
         outputs = self.model.decoder(
             input_ids=input_ids,
             attention_mask=attention_mask,
+            position_ids=position_ids,
             head_mask=head_mask,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
@@ -1046,7 +1063,7 @@ class OPTForCausalLM(OPTPreTrainedModel):
         )
 
     def prepare_inputs_for_generation(
-        self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
+        self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None,position_ids=None, **kwargs
     ):
         if past_key_values is not None:
             past_length = past_key_values[0][0].shape[2]
@@ -1060,6 +1077,15 @@ class OPTForCausalLM(OPTPreTrainedModel):
 
             input_ids = input_ids[:, remove_prefix_length:]
 
+        if attention_mask is not None and position_ids is None:
+            position_ids = _attention_to_position_ids(attention_mask)
+            if past_key_values:
+                position_ids = position_ids[:, -input_ids.shape[1]:]
+
+                # This `clone` call is needed to avoid recapturing cuda graphs with `torch.compile`'s  `mode="reduce-overhead`, as otherwise the input `position_ids` would have various stride during the decoding. Here, simply using `.contiguous()` is not sufficient as in the batch size = 1 case, `position_ids` is already contiguous but with varying stride which retriggers a capture.
+                position_ids = position_ids.clone(memory_format=torch.contiguous_format)
+
+
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:
             model_inputs = {"inputs_embeds": inputs_embeds}
@@ -1071,6 +1097,7 @@ class OPTForCausalLM(OPTPreTrainedModel):
                 "past_key_values": past_key_values,
                 "use_cache": kwargs.get("use_cache"),
                 "attention_mask": attention_mask,
+                "position_ids": position_ids,
             }
         )
         return model_inputs
@@ -1122,6 +1149,7 @@ class OPTForSequenceClassification(OPTPreTrainedModel):
         self,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
@@ -1143,6 +1171,7 @@ class OPTForSequenceClassification(OPTPreTrainedModel):
             input_ids,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
+            position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
@@ -1238,6 +1267,7 @@ class OPTForQuestionAnswering(OPTPreTrainedModel):
         self,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
@@ -1297,6 +1327,7 @@ class OPTForQuestionAnswering(OPTPreTrainedModel):
             input_ids,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
+            position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
