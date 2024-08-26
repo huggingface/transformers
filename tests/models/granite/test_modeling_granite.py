@@ -315,7 +315,7 @@ class GraniteModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     model_split_percents = [0.5, 0.7, 0.8]
 
     # used in `test_torch_compile`
-    _torch_compile_test_ckpt = "mayank-mishra/granite-3b-mup"
+    _torch_compile_test_ckpt = "ibm/PowerLM-3b"
 
     def setUp(self):
         self.model_tester = GraniteModelTester(self)
@@ -500,12 +500,12 @@ class GraniteModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         Overwritting the common test as the test is flaky on tiny models
         """
         model = GraniteForCausalLM.from_pretrained(
-            "mayank-mishra/granite-3b-mup",
+            "ibm/PowerLM-3b",
             load_in_4bit=True,
             device_map={"": 0},
         )
 
-        tokenizer = AutoTokenizer.from_pretrained("mayank-mishra/granite-3b-mup")
+        tokenizer = AutoTokenizer.from_pretrained("ibm/PowerLM-3b")
 
         texts = ["hi", "Hello this is a very long sentence"]
 
@@ -518,7 +518,7 @@ class GraniteModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         output_native = tokenizer.batch_decode(output_native)
 
         model = GraniteForCausalLM.from_pretrained(
-            "mayank-mishra/granite-3b-mup",
+            "ibm/PowerLM-3b",
             load_in_4bit=True,
             device_map={"": 0},
             attn_implementation="flash_attention_2",
@@ -583,7 +583,7 @@ class GraniteIntegrationTest(unittest.TestCase):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
 
         model = GraniteForCausalLM.from_pretrained(
-            "mayank-mishra/granite-3b-mup", device_map="auto", torch_dtype=torch.bfloat16, attn_implementation="eager"
+            "ibm/PowerLM-3b", device_map="auto", torch_dtype=torch.bfloat16, attn_implementation="eager"
         )
 
         with torch.no_grad():
@@ -613,9 +613,7 @@ class GraniteIntegrationTest(unittest.TestCase):
     def test_model_3b_logits(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
 
-        model = GraniteForCausalLM.from_pretrained(
-            "mayank-mishra/granite-3b-mup", device_map="auto", torch_dtype=torch.float16
-        )
+        model = GraniteForCausalLM.from_pretrained("ibm/PowerLM-3b", device_map="auto", torch_dtype=torch.float16)
 
         with torch.no_grad():
             out = model(torch.tensor([input_ids]).to(torch_device))
@@ -667,9 +665,9 @@ class GraniteIntegrationTest(unittest.TestCase):
             "Simply put, the theory of relativity states that ",
             "My favorite all time favorite condiment is ketchup.",
         ]
-        tokenizer = AutoTokenizer.from_pretrained("mayank-mishra/granite-3b-mup", padding_side="right")
+        tokenizer = AutoTokenizer.from_pretrained("ibm/PowerLM-3b", padding_side="right")
         model = GraniteForCausalLM.from_pretrained(
-            "mayank-mishra/granite-3b-mup", device_map="sequential", torch_dtype=torch.float16
+            "ibm/PowerLM-3b", device_map="sequential", torch_dtype=torch.float16
         )
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 
