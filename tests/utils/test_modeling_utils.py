@@ -40,7 +40,6 @@ from transformers import (
     is_torch_available,
     logging,
 )
-from transformers.pytorch_utils import isin_mps_friendly
 from transformers.testing_utils import (
     TOKEN,
     USER,
@@ -106,6 +105,7 @@ if is_torch_available():
         dtype_byte_size,
         shard_checkpoint,
     )
+    from transformers.pytorch_utils import isin_mps_friendly
 
     # Fake pretrained models for tests
     class BaseModel(PreTrainedModel):
