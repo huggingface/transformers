@@ -514,6 +514,8 @@
         title: Qwen2Audio
       - local: model_doc/qwen2_moe
         title: Qwen2MoE
+      - local: model_doc/qwen2_vl
+        title: Qwen2VL
       - local: model_doc/rag
         title: RAG
       - local: model_doc/realm

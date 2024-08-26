@@ -194,6 +194,7 @@ from . import (
     qwen2,
     qwen2_audio,
     qwen2_moe,
+    qwen2_vl,
     rag,
     recurrent_gemma,
     reformer,
