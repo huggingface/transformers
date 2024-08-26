@@ -230,7 +230,7 @@ class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_added_tokens_do_lower_case(self):
         pass
 
-    @unittest.skip(reason="Sigliptokenizers trips the punctuation for chat tokens")
+    @unittest.skip(reason="Sigliptokenizer strips the punctuation for chat tokens")
     def test_chat_template_return_assistant_tokens_mask(self):
         pass
 
