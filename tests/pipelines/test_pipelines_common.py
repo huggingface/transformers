@@ -879,7 +879,7 @@ class CustomPipelineTest(unittest.TestCase):
         speech_recognizer = pipeline(
             "automatic-speech-recognition",
             model="Rocketknight1/fake-custom-wav2vec2",
-            tokenizer="Rocketknight1/fake-custom-wav2vec2",
+            feature_extractor="Rocketknight1/fake-custom-wav2vec2",
             trust_remote_code=True,
         )
 
