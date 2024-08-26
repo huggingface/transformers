@@ -681,7 +681,7 @@ class Trainer:
         self.hp_search_backend = None
         if _is_peft_model(self.model) and self.args.label_names is None:
             logger.warning(
-                "No label_names provided for model class `PeftModel`."
+                f"No label_names provided for model class `{self.model.__class__.__name__}`."
                 " Since `PeftModel` hides base models input arguments, if label_names is not given, label_names can't be set automatically within `Trainer`."
                 " Note that empty label_names list will be used instead."
             )
