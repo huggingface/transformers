@@ -10,15 +10,15 @@
   - local: pipeline_tutorial
     title: تشغيل الاستنتاج باستخدام خطوط الأنابيب
   - local: autoclass_tutorial
-    title: كتابة التعليمات البرمجية المحمولة باستخدام AutoClass
+    title: كتابة تعليمات برمجية متكيفه باستخدام AutoClass
   - local: preprocessing
     title: معالجة البيانات مسبقًا
   - local: training
     title: ضبط نموذج مسبق التدريب
   - local: run_scripts
-    title: التدريب باستخدام برنامج نصي
+    title: التدريب باستخدام نص برمجي
   - local: accelerate
-    title: إعداد التدريب الموزع باستخدام 🤗 Accelerate
+    title: إعداد تدريب موزع باستخدام 🤗 Accelerate
   - local: peft
     title: تحميل النماذج المخصصة وتدريبها باستخدام 🤗 PEFT
   - local: model_sharing
@@ -80,14 +80,14 @@
     - local: tasks/mask_generation
       title: توليد القناع
     - local: tasks/knowledge_distillation_for_image_classification
-      title: تقطير المعرفة للرؤية الحاسوبية
+      title: التقليل المعرفي للرؤية الحاسوبية
     title: رؤية حاسوبية
   - isExpanded: false
     sections:
     - local: tasks/image_captioning
-      title: تعليق الصور
+      title: وصف الصور Image captioning
     - local: tasks/document_question_answering
-      title: الإجابة على الأسئلة الوثائقية
+      title: الإجابة على أسئلة المستندات
     - local: tasks/visual_question_answering
       title: الإجابة على الأسئلة المرئية
     - local: tasks/text-to-speech
@@ -97,15 +97,17 @@
     sections:
     - local: generation_strategies
       title: تخصيص استراتيجية التوليد
+    - local: kv_cache
+      title: أفضل الممارسات للتوليد باستخدام ذاكرة التخزين المؤقت
     title: التوليد
   - isExpanded: false
     sections:
     - local: tasks/idefics
       title: مهام الصور مع IDEFICS
     - local: tasks/prompting
-      title: دليل إرشادي للنماذج اللغوية الكبيرة
+      title: دليل إرشادي لمحفزات النماذج اللغوية الكبيرة
     title: الإرشاد
-title: أدلة المهام
+  title: أدلة المهام
 - sections:
   - local: fast_tokenizers
     title: استخدم برامج التجزئة السريعة من 🤗 Tokenizers
@@ -116,7 +118,7 @@ title: أدلة المهام
   - local: custom_models
     title: مشاركة نموذج مخصص
   - local: chat_templating
-    title: قوالب للنماذج الدردشة
+    title: قوالب لنماذج الدردشة
   - local: trainer
     title: المدرب
   - local: sagemaker
@@ -136,7 +138,7 @@ title: أدلة المهام
   - local: troubleshooting
     title: استكشاف الأخطاء وإصلاحها
   - local: gguf
-    title: قابلية التشغيل البيني مع ملفات GGUF
+    title: التوافق مع ملفات GGUF
   title: أدلة المطورين
 - sections:
   - local: quantization/overview
@@ -167,7 +169,7 @@ title: أدلة المهام
     title: تحسين الاستدلال LLM
   - sections:
     - local: perf_train_gpu_one
-      title: الأساليب والأدوات للتدريب الفعال على وحدة معالجة الرسومات (GPU) واحدة
+      title: استخدام عدة وحدات معالجة رسوميات (GPUs) بشكل متوازٍ
     - local: perf_train_gpu_many
       title: وحدات معالجة الرسومات (GPU) متعددة والتوازي
     - local: fsdp
@@ -185,18 +187,18 @@ title: أدلة المهام
     - local: perf_hardware
       title: الأجهزة المخصصة للتدريب
     - local: hpo_train
-      title: البحث عن أفضل المعلمات باستخدام واجهة برمجة تطبيقات المدرب
+      title: البحث عن المعاملات المثلى باستخدام واجهة برمجة تطبيقات المدرب
   title: تقنيات التدريب الفعال
   - sections:
     - local: perf_infer_cpu
-      title: استدلال وحدة المعالجة المركزية (CPU)
+      title: استدلال على وحدة المعالجة المركزية (CPU)
     - local: perf_infer_gpu_one
-      title: استدلال وحدة معالجة الرسومات (GPU)
+      title: استدلال على وحدة معالجة الرسومات (GPU)
     title: تحسين الاستدلال
 - local: big_models
     title: إنشاء نموذج كبير
 - local: debugging
-    title: التصحيح
+    title: تصحيح الأخطاء البرمجية
 - local: tf_xla
     title: تكامل XLA لنماذج TensorFlow
 - local: perf_torch_compile
@@ -218,7 +220,7 @@ title: أدلة المهام
   - local: philosophy
     title: الفلسفة
   - local: glossary
-    title: مسرد المصطلحات
+    title: (قاموس المصطلحات (قائمة الكلمات
   - local: task_summary
     title: ما الذي يمكن أن تفعله 🤗 المحولات
   - local: tasks_explained
@@ -226,32 +228,32 @@ title: أدلة المهام
   - local: model_summary
     title: عائلة نماذج المحول
   - local: tokenizer_summary
-    title: ملخص برامج التجزئة
+    title: ملخص برنامج مقسم النصوص (tokenizers)
   - local: attention
-    title: آليات الاهتمام
+    title: الانتباه Attention
   - local: pad_truncation
     title: الحشو والتقليم
   - local: bertology
     title: BERTology
   - local: perplexity
-    title: غموض النماذج ذات الطول الثابت
+    title: حيرة النماذج ذات الطول الثابت
   - local: pipeline_webserver
-    title: خطوط الأنابيب لاستدلال الخادم
+    title: خطوط الأنابيب للاستدلال على خادم الويب
   - local: model_memory_anatomy
     title: تشريح تدريب النموذج
   - local: llm_tutorial_optimization
-    title:الاستفادة القصوى من LLMs
-  title: أدلة مفاهيمية
+    title: الاستفادة القصوى من LLMs
+  title: أطر مفاهيمية
 - sections:
   - sections:
     - local: main_classes/agent
       title: الوكلاء والأدوات
     - local: model_doc/auto
-      title: الفئات التلقائية
+      title: فئات يتم إنشاؤها ديناميكيًا
     - local: main_classes/backbones
       title: العمود الفقري
     - local: main_classes/callback
-      title: الاستدعاءات
+      title: عمليات الاسترجاع
     - local: main_classes/configuration
       title: التكوين
     - local: main_classes/data_collator
@@ -275,9 +277,9 @@ title: أدلة المهام
     - local: main_classes/processors
       title: المعالجات
     - local: main_classes/quantization
-      title: الضغط الكمي
+      title: التكميم
     - local: main_classes/tokenizer
-      title: برنامج التجزئة
+      title: برنامج مقسم النصوص
     - local: main_classes/trainer
       title: المدرب
     - local: main_classes/deepspeed
@@ -848,7 +850,7 @@ sections:
       title: محول القرار
     - local: model_doc/trajectory_transformer
       title: محول المسار
-    title: نماذج التعلم التعزيزي
+    title: نماذج التعلم التعزيزية
   - isExpanded: false
     sections:
     - local: model_doc/autoformer
@@ -872,20 +874,20 @@ sections:
   - local: internal/modeling_utils
     title: الطبقات المخصصة والمرافق
   - local: internal/pipelines_utils
-    title: المرافق لخطوط الأنابيب
+    title: مرافق خطوط الأنابيب
   - local: internal/tokenization_utils
-    title: المرافق لبرامج التجزئة
+    title: مرافق مقسم النصوص 
   - local: internal/trainer_utils
-    title: المرافق للمدرب
+    title: مرافق المدرب
   - local: internal/generation_utils
-    title: المرافق للتوليد
+    title: مرافق التوليد
   - local: internal/image_processing_utils
-    title: المرافق لمعالجات الصور
+    title: مرافق معالجة الصور
   - local: internal/audio_utils
-    title: المرافق لمعالجة الصوت
+    title: مرافق معالجة الصوت
   - local: internal/file_utils
-    title: المرافق العامة
+    title: مرافق عامة
   - local: internal/time_series_utils
-    title: المرافق لسلسلة الوقت
+    title: مرافق السلاسل الزمنية
   title: مساعدون داخليون
   title: API
