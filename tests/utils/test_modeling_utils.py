@@ -2543,8 +2543,7 @@ class TestAttentionImplementation(unittest.TestCase):
             _ = AutoModel.from_pretrained(
                 "hf-internal-testing/tiny-random-GPTBigCodeModel", attn_implementation="flash_attention_2"
             )
-
-        self.assertTrue("the package flash_attn seems not to be installed" in str(cm.exception))
+        self.assertTrue("the package flash_attn seems to be not installed" in str(cm.exception))
 
     def test_not_available_flash_with_config(self):
         if is_flash_attn_2_available():
@@ -2559,7 +2558,7 @@ class TestAttentionImplementation(unittest.TestCase):
                 attn_implementation="flash_attention_2",
             )
 
-        self.assertTrue("the package flash_attn seems not to be installed" in str(cm.exception))
+        self.assertTrue("the package flash_attn seems to be not installed" in str(cm.exception))
 
     def test_not_available_sdpa(self):
         if is_torch_sdpa_available():
