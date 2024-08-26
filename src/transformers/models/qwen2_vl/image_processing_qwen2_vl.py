@@ -435,9 +435,9 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
 
         if videos is not None:
             pixel_values, vision_grid_thws = [], []
-            for video in videos:
+            for images in videos:
                 patches, video_grid_thw = self._preprocess(
-                    video,
+                    images,
                     do_resize=do_resize,
                     resample=resample,
                     do_rescale=do_rescale,
