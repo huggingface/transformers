@@ -138,7 +138,7 @@ _deps = [
     "onnxruntime-tools>=1.4.2",
     "onnxruntime>=1.4.0",
     "opencv-python",
-    "optimum-benchmark>=0.2.0",
+    "optimum-benchmark>=0.3.0",
     "optuna",
     "optax>=0.0.8,<=0.1.4",
     "packaging>=20.0",

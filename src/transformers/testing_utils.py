@@ -84,6 +84,7 @@ from .utils import (
     is_keras_nlp_available,
     is_levenshtein_available,
     is_librosa_available,
+    is_liger_kernel_available,
     is_lomo_available,
     is_natten_available,
     is_nltk_available,
@@ -1161,6 +1162,13 @@ def require_librosa(test_case):
     Decorator marking a test that requires librosa
     """
     return unittest.skipUnless(is_librosa_available(), "test requires librosa")(test_case)
+
+
+def require_liger_kernel(test_case):
+    """
+    Decorator marking a test that requires liger_kernel
+    """
+    return unittest.skipUnless(is_liger_kernel_available(), "test requires liger_kernel")(test_case)
 
 
 def require_essentia(test_case):
