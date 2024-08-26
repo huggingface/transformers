@@ -102,6 +102,7 @@ class SapiensConfig(PretrainedConfig):
         num_channels=3,
         qkv_bias=True,
         encoder_stride=16,
+        use_cls_token=False,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -120,6 +121,7 @@ class SapiensConfig(PretrainedConfig):
         self.num_channels = num_channels
         self.qkv_bias = qkv_bias
         self.encoder_stride = encoder_stride
+        self.use_cls_token = use_cls_token
 
 
 class SapiensOnnxConfig(OnnxConfig):
