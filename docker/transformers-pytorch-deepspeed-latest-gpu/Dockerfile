@@ -49,5 +49,5 @@ RUN DS_BUILD_CPU_ADAM=1 DS_BUILD_FUSED_ADAM=1 python3 -m pip install deepspeed -
 RUN cd transformers && python3 setup.py develop
 
 # The base image ships with `pydantic==1.8.2` which is not working - i.e. the next command fails
-RUN python3 -m pip install -U --no-cache-dir "pydantic<2"
+RUN python3 -m pip install -U --no-cache-dir "pydantic>=2.0.0"
 RUN python3 -c "from deepspeed.launcher.runner import main"
