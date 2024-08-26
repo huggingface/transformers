@@ -400,7 +400,6 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         sp_tokens = tokenizer.sp_model.encode("</s>>", out_type=str)
         self.assertEqual(sp_tokens, ["<", "/", "s", ">", ">"])
         tokens = tokenizer.tokenize("</s>>")
-        self.assertNotEqual(sp_tokens, tokens)
         self.assertEqual(tokens, ["</s>", ">"])
 
         tokens = tokenizer.tokenize("")
