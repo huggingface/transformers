@@ -1109,7 +1109,6 @@ class GraniteForCausalLM(GranitePreTrainedModel):
             attentions=outputs.attentions,
         )
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.prepare_inputs_for_generation with Llama->Granite
     def prepare_inputs_for_generation(
         self,
         input_ids,
