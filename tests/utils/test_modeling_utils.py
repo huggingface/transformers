@@ -40,6 +40,7 @@ from transformers import (
     is_torch_available,
     logging,
 )
+from transformers.pytorch_utils import isin_mps_friendly
 from transformers.testing_utils import (
     TOKEN,
     USER,
@@ -1680,6 +1681,22 @@ class ModelUtilsTest(TestCasePlus):
         self.assertIn(warning_msg_beta, cl2.out)
         self.assertIn("beta_param", missing_keys)
         self.assertIn("bias_param", unexpected_keys)
+
+    def test_isin_mps_friendly(self):
+        """tests that our custom `isin_mps_friendly` matches `torch.isin`"""
+        random_ids = torch.randint(0, 100, (100,))
+        # We can match against an interger
+        random_test_integer = torch.randint(0, 100, (1,)).item()
+        self.assertTrue(
+            torch.equal(
+                torch.isin(random_ids, random_test_integer), isin_mps_friendly(random_ids, random_test_integer)
+            )
+        )
+        # We can match against an tensor of integers
+        random_test_tensor = torch.randint(0, 100, (10,))
+        self.assertTrue(
+            torch.equal(torch.isin(random_ids, random_test_tensor), isin_mps_friendly(random_ids, random_test_tensor))
+        )
 
 
 @slow
