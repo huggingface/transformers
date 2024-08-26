@@ -116,6 +116,7 @@ else:
             ("poolformer", ("PoolFormerImageProcessor",)),
             ("pvt", ("PvtImageProcessor",)),
             ("pvt_v2", ("PvtImageProcessor",)),
+            ("qwen2_vl", ("Qwen2VLImageProcessor",)),
             ("regnet", ("ConvNextImageProcessor",)),
             ("resnet", ("ConvNextImageProcessor",)),
             ("rt_detr", "RTDetrImageProcessor"),

@@ -70,6 +70,7 @@ PRIVATE_MODELS = [
     "UMT5Stack",
     "Pop2PianoStack",
     "Qwen2AudioEncoder",
+    "Qwen2VisionTransformerPretrainedModel",
     "SwitchTransformersStack",
     "TFDPRSpanPredictor",
     "MaskFormerSwinModel",
@@ -86,50 +87,54 @@ PRIVATE_MODELS = [
 
 # Update this list for models that are not tested with a comment explaining the reason it should not be.
 # Being in this list is an exception and should **not** be the rule.
-IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
-    # models to ignore for not tested
-    "RecurrentGemmaModel",  # Building part of bigger (tested) model.
-    "FuyuForCausalLM",  # Not tested fort now
-    "InstructBlipQFormerModel",  # Building part of bigger (tested) model.
-    "InstructBlipVideoQFormerModel",  # Building part of bigger (tested) model.
-    "UMT5EncoderModel",  # Building part of bigger (tested) model.
-    "Blip2QFormerModel",  # Building part of bigger (tested) model.
-    "ErnieMForInformationExtraction",
-    "FastSpeech2ConformerHifiGan",  # Already tested by SpeechT5HifiGan (# Copied from)
-    "FastSpeech2ConformerWithHifiGan",  # Built with two smaller (tested) models.
-    "GraphormerDecoderHead",  # Building part of bigger (tested) model.
-    "JukeboxVQVAE",  # Building part of bigger (tested) model.
-    "JukeboxPrior",  # Building part of bigger (tested) model.
-    "DecisionTransformerGPT2Model",  # Building part of bigger (tested) model.
-    "SegformerDecodeHead",  # Building part of bigger (tested) model.
-    "MgpstrModel",  # Building part of bigger (tested) model.
-    "BertLMHeadModel",  # Needs to be setup as decoder.
-    "MegatronBertLMHeadModel",  # Building part of bigger (tested) model.
-    "RealmBertModel",  # Building part of bigger (tested) model.
-    "RealmReader",  # Not regular model.
-    "RealmScorer",  # Not regular model.
-    "RealmForOpenQA",  # Not regular model.
-    "ReformerForMaskedLM",  # Needs to be setup as decoder.
-    "TFElectraMainLayer",  # Building part of bigger (tested) model (should it be a TFPreTrainedModel ?)
-    "TFRobertaForMultipleChoice",  # TODO: fix
-    "TFRobertaPreLayerNormForMultipleChoice",  # TODO: fix
-    "SeparableConv1D",  # Building part of bigger (tested) model.
-    "FlaxBartForCausalLM",  # Building part of bigger (tested) model.
-    "FlaxBertForCausalLM",  # Building part of bigger (tested) model. Tested implicitly through FlaxRobertaForCausalLM.
-    "OPTDecoderWrapper",
-    "TFSegformerDecodeHead",  # Not a regular model.
-    "AltRobertaModel",  # Building part of bigger (tested) model.
-    "BlipTextLMHeadModel",  # No need to test it as it is tested by BlipTextVision models
-    "TFBlipTextLMHeadModel",  # No need to test it as it is tested by BlipTextVision models
-    "BridgeTowerTextModel",  # No need to test it as it is tested by BridgeTowerModel model.
-    "BridgeTowerVisionModel",  # No need to test it as it is tested by BridgeTowerModel model.
-    "BarkCausalModel",  # Building part of bigger (tested) model.
-    "BarkModel",  # Does not have a forward signature - generation tested with integration tests.
-    "SeamlessM4TTextToUnitModel",  # Building part of bigger (tested) model.
-    "SeamlessM4TCodeHifiGan",  # Building part of bigger (tested) model.
-    "SeamlessM4TTextToUnitForConditionalGeneration",  # Building part of bigger (tested) model.
-    "ChameleonVQVAE",  # VQVAE here is used only for encoding (discretizing) and is tested as part of bigger model
-]
+IGNORE_NON_TESTED = (
+    PRIVATE_MODELS.copy()
+    + [
+        # models to ignore for not tested
+        "RecurrentGemmaModel",  # Building part of bigger (tested) model.
+        "FuyuForCausalLM",  # Not tested fort now
+        "InstructBlipQFormerModel",  # Building part of bigger (tested) model.
+        "InstructBlipVideoQFormerModel",  # Building part of bigger (tested) model.
+        "UMT5EncoderModel",  # Building part of bigger (tested) model.
+        "Blip2QFormerModel",  # Building part of bigger (tested) model.
+        "ErnieMForInformationExtraction",
+        "FastSpeech2ConformerHifiGan",  # Already tested by SpeechT5HifiGan (# Copied from)
+        "FastSpeech2ConformerWithHifiGan",  # Built with two smaller (tested) models.
+        "GraphormerDecoderHead",  # Building part of bigger (tested) model.
+        "JukeboxVQVAE",  # Building part of bigger (tested) model.
+        "JukeboxPrior",  # Building part of bigger (tested) model.
+        "DecisionTransformerGPT2Model",  # Building part of bigger (tested) model.
+        "SegformerDecodeHead",  # Building part of bigger (tested) model.
+        "MgpstrModel",  # Building part of bigger (tested) model.
+        "BertLMHeadModel",  # Needs to be setup as decoder.
+        "MegatronBertLMHeadModel",  # Building part of bigger (tested) model.
+        "RealmBertModel",  # Building part of bigger (tested) model.
+        "RealmReader",  # Not regular model.
+        "RealmScorer",  # Not regular model.
+        "RealmForOpenQA",  # Not regular model.
+        "ReformerForMaskedLM",  # Needs to be setup as decoder.
+        "TFElectraMainLayer",  # Building part of bigger (tested) model (should it be a TFPreTrainedModel ?)
+        "TFRobertaForMultipleChoice",  # TODO: fix
+        "TFRobertaPreLayerNormForMultipleChoice",  # TODO: fix
+        "SeparableConv1D",  # Building part of bigger (tested) model.
+        "FlaxBartForCausalLM",  # Building part of bigger (tested) model.
+        "FlaxBertForCausalLM",  # Building part of bigger (tested) model. Tested implicitly through FlaxRobertaForCausalLM.
+        "OPTDecoderWrapper",
+        "TFSegformerDecodeHead",  # Not a regular model.
+        "AltRobertaModel",  # Building part of bigger (tested) model.
+        "BlipTextLMHeadModel",  # No need to test it as it is tested by BlipTextVision models
+        "TFBlipTextLMHeadModel",  # No need to test it as it is tested by BlipTextVision models
+        "BridgeTowerTextModel",  # No need to test it as it is tested by BridgeTowerModel model.
+        "BridgeTowerVisionModel",  # No need to test it as it is tested by BridgeTowerModel model.
+        "BarkCausalModel",  # Building part of bigger (tested) model.
+        "BarkModel",  # Does not have a forward signature - generation tested with integration tests.
+        "SeamlessM4TTextToUnitModel",  # Building part of bigger (tested) model.
+        "SeamlessM4TCodeHifiGan",  # Building part of bigger (tested) model.
+        "SeamlessM4TTextToUnitForConditionalGeneration",  # Building part of bigger (tested) model.
+        "ChameleonVQVAE",  # VQVAE here is used only for encoding (discretizing) and is tested as part of bigger model
+        "Qwen2VLModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2VLForConditionalGeneration.
+    ]
+)
 
 # Update this list with test files that don't have a tester with a `all_model_classes` variable and which don't
 # trigger the common tests.
