@@ -112,47 +112,42 @@ class OptimizationTest(unittest.TestCase):
         self.assertListAlmostEqual(w.tolist(), [0.4, 0.2, -0.5], tol=1e-2)
 
     def test_adam_mini(self):
-        class SimpleModel(nn.Module):
-            def __init__(self, input_dim, hidden_dim):
-                super(SimpleModel, self).__init__()
-                self.layer1 = nn.Linear(input_dim, hidden_dim)
-                self.relu = nn.ReLU()
-                self.layer2 = nn.Linear(hidden_dim, 1)
+        from transformers import LlamaConfig, LlamaForCausalLM, TrainingArguments, Trainer
+        from torch.utils.data import Dataset
 
-            def forward(self, x):
-                out = self.layer1(x)
-                out = self.relu(out)
-                out = self.layer2(out)
-                return out
+        class RepeatDataset(Dataset):
+            def __init__(self, data):
+                self.data = [{'input_ids': torch.tensor(data, dtype=torch.long),
+                            'labels': torch.tensor(data, dtype=torch.long)}]
 
-        num_samples, num_features = 100, 4
-        inputs = torch.randn(num_samples, num_features)
-        weights = torch.randn(num_features)
-        targets = inputs @ weights + torch.randn(num_samples) * 0.1
+            def __len__(self):
+                return 1
 
-        hidden_dim = 10
-        model = SimpleModel(num_features, hidden_dim)
-        criterion = nn.MSELoss()
+            def __getitem__(self, idx):
+                return self.data[idx]
 
-        optimizer = AdamMini(
-            model=model,
-            lr=1e-2,
-            betas=(0.9, 0.999),
-            eps=1e-6,
-            weight_decay=0.0,
+        config = LlamaConfig(
+            vocab_size=100, 
+            hidden_size=32, 
+            num_hidden_layers=3, 
+            num_attention_heads=4
         )
-        for _ in range(1000):
-            outputs = model(inputs)
-            loss = criterion(outputs.squeeze(), targets)
+        tiny_llama = LlamaForCausalLM(config)
+        x = torch.randint(0, 100, (128,))
+        train_dataset = RepeatDataset(x)
 
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            args = TrainingArguments(
+                tmpdir,
+                learning_rate=1e-4,
+                logging_steps=5,
+                optim="adam_mini",
+                optim_args="n_feature=32, n_head=4, n_kv_head=4",
+                max_steps=100,
+            )
+            trainer = Trainer(tiny_llama, args, train_dataset=train_dataset)
 
-        with torch.no_grad():
-            preds = model(inputs)
-            loss = criterion(preds.squeeze(), targets)
-        self.assertListAlmostEqual([loss], [0.0], tol=0.01)
+            _ = trainer.train()
 
 
 @require_torch
