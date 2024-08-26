@@ -2876,10 +2876,18 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             raise ValueError("`.to` is not supported for HQQ-quantized models.")
         # Checks if the model has been loaded in 8-bit
         if getattr(self, "quantization_method", None) == QuantizationMethod.BITS_AND_BYTES:
-            raise ValueError(
-                "`.to` is not supported for `4-bit` or `8-bit` bitsandbytes models. Please use the model as it is, since the"
-                " model has already been set to the correct devices and casted to the correct `dtype`."
-            )
+            if self.is_loaded_in_4bit:
+                if version.parse(importlib.metadata.version("bitsandbytes")) < version.parse("0.43.0"):
+                    raise ValueError(
+                        "`.to` is not supported for `4-bit`. Please use the model as it is, since the"
+                        " model has already been set to the correct devices and casted to the correct `dtype`. "
+                        "However, if you still want to move the model, you need to install bitsandbytes >= 0.43.0 "
+                    )
+            else:
+                raise ValueError(
+                    "`.to` is not supported for `8-bit` bitsandbytes models. Please use the model as it is, since the"
+                    " model has already been set to the correct devices and casted to the correct `dtype`."
+                )
         elif getattr(self, "quantization_method", None) == QuantizationMethod.GPTQ:
             # For GPTQ models, we prevent users from casting the model to another dytpe to restrict unwanted behaviours.
             # the correct API should be to load the model with the desired dtype directly through `from_pretrained`.
