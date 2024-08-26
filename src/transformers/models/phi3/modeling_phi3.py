@@ -1314,8 +1314,14 @@ class Phi3ForCausalLM(Phi3PreTrainedModel):
     ):
         # When the first time input length reached long and short factor switching point, enforce re-compute cache
         # It will cause downside of slower at this single token position, however, better than current failure.
-        if past_key_values and self.config.rope_scaling and input_ids.shape[1] >= self.config.original_max_position_embeddings + 1:
-            past_length = past_key_values.seen_tokens if isinstance(past_key_values, Cache) else past_key_values[0][0].shape[2]
+        if (
+            past_key_values
+            and self.config.rope_scaling
+            and input_ids.shape[1] >= self.config.original_max_position_embeddings + 1
+        ):
+            past_length = (
+                past_key_values.seen_tokens if isinstance(past_key_values, Cache) else past_key_values[0][0].shape[2]
+            )
             if past_length <= self.config.original_max_position_embeddings:
                 past_key_values = None
 
