@@ -724,7 +724,8 @@ class DABDETRModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                         bias_tensor = torch.full_like(param.data, bias_value)
                         self.assertTrue(
                             torch.allclose(param.data, bias_tensor, atol=1e-4),
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",)
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                        )
                     elif "activation_fn" in name and config.activation_function == "prelu":
                         self.assertTrue(
                             param.data.mean() == 0.25,

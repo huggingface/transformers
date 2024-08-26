@@ -55,8 +55,6 @@ class DABDETRConfig(PretrainedConfig):
         backbone_kwargs (`dict`, *optional*):
             Keyword arguments to be passed to AutoBackbone when loading from a checkpoint
             e.g. `{'out_indices': (0, 1, 2, 3)}`. Cannot be specified if `backbone_config` is set.
-        num_channels (`int`, *optional*, defaults to 3):
-            The number of input channels.
         num_queries (`int`, *optional*, defaults to 300):
             Number of object queries, i.e. detection slots. This is the maximal number of objects
             [`DABDETRModel`] can detect in a single image. For COCO, we recommend 100 queries.
@@ -99,9 +97,6 @@ class DABDETRConfig(PretrainedConfig):
             Whether auxiliary decoding losses (loss at each decoder layer) are to be used.
         position_embedding_type (`str`, *optional*, defaults to `"sine"`):
             Type of position embeddings to be used on top of the image features. One of `"sine"` or `"learned"`.
-        dilation (`bool`, *optional*, defaults to `False`):
-            Whether to replace stride with dilation in the last convolutional block (DC5). Only supported when
-            `use_timm_backbone` = `True`.
         class_cost (`float`, *optional*, defaults to 2):
             Relative weight of the classification error in the Hungarian matching cost.
         bbox_cost (`float`, *optional*, defaults to 5):
@@ -180,10 +175,10 @@ class DABDETRConfig(PretrainedConfig):
         self,
         use_timm_backbone=True,
         backbone_config=None,
-        backbone='resnet50',
+        backbone="resnet50",
         use_pretrained_backbone=True,
         backbone_kwargs=None,
-        num_channels=3,
+        # num_channels=3,
         num_queries=300,
         encoder_layers=6,
         encoder_ffn_dim=2048,
@@ -203,7 +198,7 @@ class DABDETRConfig(PretrainedConfig):
         init_xavier_std=1.0,
         auxiliary_loss=False,
         position_embedding_type="sine",
-        dilation=False,
+        # dilation=False,
         class_cost=2,
         bbox_cost=5,
         giou_cost=2,
@@ -230,18 +225,17 @@ class DABDETRConfig(PretrainedConfig):
         **kwargs,
     ):
         if query_dim != 4:
-            raise ValueError(
-                "The query dimensions has to be 4."
-            )
+            raise ValueError("The query dimensions has to be 4.")
 
         # We default to values which were previously hard-coded in the model. This enables configurability of the config
         # while keeping the default behavior the same.
         if use_timm_backbone and backbone_kwargs is None:
             backbone_kwargs = {}
+            dilation = False
             if dilation:
                 backbone_kwargs["output_stride"] = 16
             backbone_kwargs["out_indices"] = [1, 2, 3, 4]
-            backbone_kwargs["in_chans"] = num_channels
+            backbone_kwargs["in_chans"] = 3  # num_channels
         # Backwards compatibility
         elif not use_timm_backbone and backbone in (None, "resnet50"):
             if backbone_config is None:
@@ -265,7 +259,6 @@ class DABDETRConfig(PretrainedConfig):
 
         self.use_timm_backbone = use_timm_backbone
         self.backbone_config = backbone_config
-        self.num_channels = num_channels
         self.num_queries = num_queries
         self.d_model = d_model
         self.encoder_ffn_dim = encoder_ffn_dim
@@ -288,7 +281,6 @@ class DABDETRConfig(PretrainedConfig):
         self.backbone = backbone
         self.use_pretrained_backbone = use_pretrained_backbone
         self.backbone_kwargs = backbone_kwargs
-        self.dilation = dilation
         # Hungarian matcher
         self.class_cost = class_cost
         self.bbox_cost = bbox_cost

@@ -281,8 +281,6 @@ class DABDETRConvEncoder(nn.Module):
         super().__init__()
 
         self.config = config
-        dilation = config.dilation
-        num_channels = config.num_channels
         backbone = load_backbone(config)
 
         # replace batch norm by frozen batch norm
@@ -605,10 +603,16 @@ class DABDETRAttention(nn.Module):
         self.output_projection = nn.Linear(self.output_dim, self.output_dim, bias=bias)
 
     def _query_key_shape(self, tensor: torch.Tensor, seq_len: int, batch_size: int):
-        return tensor.view(batch_size, seq_len, self.attention_heads, self.attention_head_dim).transpose(1, 2).contiguous()
+        return (
+            tensor.view(batch_size, seq_len, self.attention_heads, self.attention_head_dim)
+            .transpose(1, 2)
+            .contiguous()
+        )
 
     def _value_shape(self, tensor: torch.Tensor, seq_len: int, batch_size: int):
-        return tensor.view(batch_size, seq_len, self.attention_heads, self.values_head_dim).transpose(1, 2).contiguous()
+        return (
+            tensor.view(batch_size, seq_len, self.attention_heads, self.values_head_dim).transpose(1, 2).contiguous()
+        )
 
     def forward(
         self,
@@ -721,11 +725,11 @@ class DABDETREncoderLayer(nn.Module):
         """
         residual = hidden_states
         hidden_states, attn_weights = self.self_attn(
-                    hidden_states=hidden_states,
-                    attention_mask=attention_mask,
-                    object_queries=object_queries,
-                    output_attentions=output_attentions,
-                )
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            object_queries=object_queries,
+            output_attentions=output_attentions,
+        )
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
@@ -884,14 +888,18 @@ class DABDETRDecoderLayer(nn.Module):
             query = query_content
             key = key_content
 
-        query = query.view(batch_size, num_queries, self.decoder_attention_heads, n_model // self.decoder_attention_heads)
+        query = query.view(
+            batch_size, num_queries, self.decoder_attention_heads, n_model // self.decoder_attention_heads
+        )
         query_sine_embed = self.cross_attn_query_pos_sine_proj(query_sine_embed)
         query_sine_embed = query_sine_embed.view(
             batch_size, num_queries, self.decoder_attention_heads, n_model // self.decoder_attention_heads
         )
         query = torch.cat([query, query_sine_embed], dim=3).view(batch_size, num_queries, n_model * 2)
         key = key.view(batch_size, height_width, self.decoder_attention_heads, n_model // self.decoder_attention_heads)
-        key_pos = key_pos.view(batch_size, height_width, self.decoder_attention_heads, n_model // self.decoder_attention_heads)
+        key_pos = key_pos.view(
+            batch_size, height_width, self.decoder_attention_heads, n_model // self.decoder_attention_heads
+        )
         key = torch.cat([key, key_pos], dim=3).view(batch_size, height_width, n_model * 2)
 
         # Cross-Attention Block
@@ -1549,8 +1557,15 @@ class DABDETRModel(DABDETRPreTrainedModel):
         if self.num_patterns == 0:
             queries = torch.zeros(batch_size, num_queries, self.d_model, device=device)
         else:
-            queries = (self.patterns.weight[:, None, None, :].repeat(1, self.num_queries, batch_size, 1).flatten(0, 1).permute(1, 0, 2))  # bs, n_q*n_pat, d_model
-            reference_position_embeddings = reference_position_embeddings.repeat(1, self.num_patterns, 1)  # bs, n_q*n_pat,  d_model
+            queries = (
+                self.patterns.weight[:, None, None, :]
+                .repeat(1, self.num_queries, batch_size, 1)
+                .flatten(0, 1)
+                .permute(1, 0, 2)
+            )  # bs, n_q*n_pat, d_model
+            reference_position_embeddings = reference_position_embeddings.repeat(
+                1, self.num_patterns, 1
+            )  # bs, n_q*n_pat,  d_model
 
         # decoder outputs consists of (dec_features, dec_hidden, dec_attn)
         decoder_outputs = self.decoder(
@@ -1572,13 +1587,28 @@ class DABDETRModel(DABDETRPreTrainedModel):
 
             # it has to follow the order of DABDETRModelOutput that is based on ModelOutput
             if output_hidden_states and output_attentions:
-                output += (decoder_outputs[1], decoder_outputs[2], decoder_outputs[3], encoder_outputs[0], encoder_outputs[1], encoder_outputs[2],)
+                output += (
+                    decoder_outputs[1],
+                    decoder_outputs[2],
+                    decoder_outputs[3],
+                    encoder_outputs[0],
+                    encoder_outputs[1],
+                    encoder_outputs[2],
+                )
             elif output_hidden_states:
                 # decoder_hidden_states, encoder_last_hidden_state, encoder_hidden_states
-                output += (decoder_outputs[1], encoder_outputs[0], encoder_outputs[1],)
+                output += (
+                    decoder_outputs[1],
+                    encoder_outputs[0],
+                    encoder_outputs[1],
+                )
             elif output_attentions:
                 # decoder_self_attention, decoder_cross_attention, encoder_attentions
-                output += (decoder_outputs[1], decoder_outputs[2], encoder_outputs[1],)
+                output += (
+                    decoder_outputs[1],
+                    decoder_outputs[2],
+                    encoder_outputs[1],
+                )
 
             output += (intermediate_hidden_states, reference_points)
 
