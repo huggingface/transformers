@@ -515,14 +515,14 @@ def convert_feature_extractor(feature_extractor, tiny_config):
         if largest_image_size > 64:
             # hardcoded exceptions
             models_with_large_image_size = ("deformable_detr", "flava", "grounding_dino", "mgp_str", "swiftformer")
-            if any(model_name in feature_extractor.__class__.__name__ for model_name in models_with_large_image_size):
+            if any(model_name in tiny_config.model_type for model_name in models_with_large_image_size):
                 pass
             else:
                 raise ValueError(
-                    f"Image size of {feature_extractor.__class__.__name__} is too large "
-                    f"({feature_extractor.size}). Please reduce it to 64 or less on each dimension. The following "
-                    "steps are usually the easiest solution: 1) confirm that you're setting `image_size` in your "
-                    "ModelTester class; 2) ensure that it gets passed to the tester config init, `get_config()`."
+                    f"Image size of {tiny_config.model_type} is too large ({feature_extractor.size}). "
+                    "Please reduce it to 64 or less on each dimension. The following steps are usually the "
+                    "easiest solution: 1) confirm that you're setting `image_size` in your ModelTester class; "
+                    "2) ensure that it gets passed to the tester config init, `get_config()`."
                 )
 
     return feature_extractor
