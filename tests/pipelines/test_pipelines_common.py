@@ -22,7 +22,7 @@ from pathlib import Path
 
 import datasets
 import numpy as np
-from huggingface_hub import HfFolder, delete_repo
+from huggingface_hub import HfFolder, delete_repo, Repository
 from requests.exceptions import HTTPError
 
 from transformers import (
@@ -36,7 +36,7 @@ from transformers import (
     TFAutoModelForSequenceClassification,
     pipeline,
 )
-from transformers.pipelines import PIPELINE_REGISTRY, get_task
+from transformers.pipelines import PIPELINE_REGISTRY, get_task, TextGenerationPipeline
 from transformers.pipelines.base import Pipeline, _pad
 from transformers.testing_utils import (
     TOKEN,
@@ -225,6 +225,14 @@ class CommonPipelineTest(unittest.TestCase):
         # If underlying model doesn't have dtype property, simply return None
         pipe.model = None
         self.assertIsNone(pipe.torch_dtype)
+
+    @require_torch
+    def test_auto_model_pipeline_registration_from_local_dir(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            _ = Repository(local_dir=tmp_dir, clone_from="Rocketknight1/fake-custom-model-test")
+            pipe = pipeline("text-generation", tmp_dir, trust_remote_code=True)
+
+            self.assertIsInstance(pipe, TextGenerationPipeline)  # Assert successful load
 
 
 @is_pipeline_test
