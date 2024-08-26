@@ -22,7 +22,7 @@ from pathlib import Path
 
 import datasets
 import numpy as np
-from huggingface_hub import HfFolder, delete_repo, Repository
+from huggingface_hub import HfFolder, Repository, delete_repo
 from requests.exceptions import HTTPError
 
 from transformers import (
@@ -36,7 +36,7 @@ from transformers import (
     TFAutoModelForSequenceClassification,
     pipeline,
 )
-from transformers.pipelines import PIPELINE_REGISTRY, get_task, TextGenerationPipeline
+from transformers.pipelines import PIPELINE_REGISTRY, TextGenerationPipeline, get_task
 from transformers.pipelines.base import Pipeline, _pad
 from transformers.testing_utils import (
     TOKEN,
