@@ -263,41 +263,32 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
 
         height, width = get_image_size(images[0], channel_dim=input_data_format)
         resized_height, resized_width = height, width
-        if do_resize:
-            resized_height, resized_width = smart_resize(
-                height,
-                width,
-                factor=self.patch_size * self.merge_size,
-                min_pixels=self.min_pixels,
-                max_pixels=self.max_pixels,
-            )
-            images = [
-                resize(
-                    image=image,
-                    size=(resized_height, resized_width),
-                    resample=resample,
-                    input_data_format=input_data_format,
+        processed_images = []
+        for image in images:
+            if do_resize:
+                resized_height, resized_width = smart_resize(
+                    height,
+                    width,
+                    factor=self.patch_size * self.merge_size,
+                    min_pixels=self.min_pixels,
+                    max_pixels=self.max_pixels,
                 )
-                for image in images
-            ]
+                image = resize(
+                    image, size=(resized_height, resized_width), resample=resample, input_data_format=input_data_format
+                )
 
-        if do_rescale:
-            images = [
-                self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
-                for image in images
-            ]
+            if do_rescale:
+                image = self.rescale(image, scale=rescale_factor, input_data_format=input_data_format)
 
-        if do_normalize:
-            images = [
-                self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
-                for image in images
-            ]
+            if do_normalize:
+                image = self.normalize(
+                    image=image, mean=image_mean, std=image_std, input_data_format=input_data_format
+                )
 
-        images = [
-            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
-        ]
+            image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
+            processed_images.append(image)
 
-        patches = np.array(images)
+        patches = np.array(processed_images)
         if data_format == ChannelDimension.LAST:
             patches = patches.transpose(0, 3, 1, 2)
         if patches.shape[0] == 1:
