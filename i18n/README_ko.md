@@ -176,7 +176,7 @@ Transformers에 달린 100,000개의 별을 축하하기 위해, 우리는 커�
     <a><img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/coco_sample_post_processed.png" width="400"></a>
 </h3>
 
-[이 튜토리얼](https://huggingface.co/docs/transformers/task_summary)에서 `pipeline` API가 지원하는 다양한 과제를 확인할 수 있습니다.
+[이 튜토리얼](https://huggingface.co/docs/transformers/ko/task_summary)에서 `pipeline` API가 지원하는 다양한 과제를 확인할 수 있습니다.
 
 코드 3줄로 원하는 과제에 맞게 사전학습 모델을 다운로드 받고 사용할 수 있습니다. 다음은 PyTorch 버전입니다:
 ```python
@@ -201,7 +201,7 @@ Transformers에 달린 100,000개의 별을 축하하기 위해, 우리는 커�
 
 토크나이저는 사전학습 모델의 모든 전처리를 책임집니다. 그리고 (위의 예시처럼) 1개의 스트링이나 리스트도 처리할 수 있습니다. 토크나이저는 딕셔너리를 반환하는데, 이는 다운스트림 코드에 사용하거나 언패킹 연산자 ** 를 이용해 모델에 바로 전달할 수도 있습니다.
 
-모델 자체는 일반적으로 사용되는 [Pytorch `nn.Module`](https://pytorch.org/docs/stable/nn.html#torch.nn.Module)나 [TensorFlow `tf.keras.Model`](https://www.tensorflow.org/api_docs/python/tf/keras/Model)입니다. [이 튜토리얼](https://huggingface.co/transformers/training.html)은 이러한 모델을 표준적인 PyTorch나 TensorFlow 학습 과정에서 사용하는 방법, 또는 새로운 데이터로 fine-tune하기 위해 `Trainer` API를 사용하는 방법을 설명해 줍니다.
+모델 자체는 일반적으로 사용되는 [Pytorch `nn.Module`](https://pytorch.org/docs/stable/nn.html#torch.nn.Module)나 [TensorFlow `tf.keras.Model`](https://www.tensorflow.org/api_docs/python/tf/keras/Model)입니다. [이 튜토리얼](https://huggingface.co/docs/transformers/ko/training)은 이러한 모델을 표준적인 PyTorch나 TensorFlow 학습 과정에서 사용하는 방법, 또는 새로운 데이터로 fine-tune하기 위해 `Trainer` API를 사용하는 방법을 설명해 줍니다.
 
 ## 왜 transformers를 사용해야 할까요?
 
@@ -214,7 +214,7 @@ Transformers에 달린 100,000개의 별을 축하하기 위해, 우리는 커�
 1. 더 적은 계산 비용, 더 적은 탄소 발자국:
     - 연구자들은 모델을 계속 다시 학습시키는 대신 학습된 모델을 공유할 수 있습니다.
     - 실무자들은 학습에 필요한 시간과 비용을 절약할 수 있습니다.
-    - 수십개의 모델 구조를 포함하여 다양한 분야 400,000개 이상의 사전 학습된 모델들
+    - 모든 분야를 통틀어서 400,000개 이상의 사전 학습된 모델이 있는 수십 개의 아키텍처.
 
 1. 모델의 각 생애주기에 적합한 프레임워크:
     - 코드 3줄로 최첨단 모델을 학습하세요.
@@ -229,7 +229,7 @@ Transformers에 달린 100,000개의 별을 축하하기 위해, 우리는 커�
 ## 왜 transformers를 사용하지 말아야 할까요?
 
 - 이 라이브러리는 신경망 블록을 만들기 위한 모듈이 아닙니다. 연구자들이 여러 파일을 살펴보지 않고 바로 각 모델을 사용할 수 있도록, 모델 파일 코드의 추상화 수준을 적정하게 유지했습니다.
-- 학습 API는 모든 모델에 적용할 수 있도록 만들어지진 않았지만, 라이브러리가 제공하는 모델들에 적용할 수 있도록 최적화되었습니다. 일반적인 머신 러닝을 위해선, 다른 라이브러리를 사용하세요.
+- 학습 API는 모든 모델에 적용할 수 있도록 만들어지진 않았지만, 라이브러리가 제공하는 모델들에 적용할 수 있도록 최적화되었습니다. 일반적인 머신 러닝을 위해선, 다른 라이브러리를 사용하세요(예를 들면, [Accelerate](https://huggingface.co/docs/accelerate/index)).
 - 가능한 많은 사용 예시를 보여드리고 싶어서, [예시 폴더](https://github.com/huggingface/transformers/tree/main/examples)의 스크립트를 준비했습니다. 이 스크립트들을 수정 없이 특정한 문제에 바로 적용하지 못할 수 있습니다. 필요에 맞게 일부 코드를 수정해야 할 수 있습니다.
 
 ## 설치
@@ -251,7 +251,7 @@ Transformers에 달린 100,000개의 별을 축하하기 위해, 우리는 커�
 pip install transformers
 ```
 
-예시들을 체험해보고 싶거나, 최최최첨단 코드를 원하거나, 새로운 버전이 나올 때까지 기다릴 수 없다면 [라이브러리를 소스에서 바로 설치](https://huggingface.co/docs/transformers/installation#installing-from-source)하셔야 합니다.
+예시들을 체험해보고 싶거나, 최최최첨단 코드를 원하거나, 새로운 버전이 나올 때까지 기다릴 수 없다면 [라이브러리를 소스에서 바로 설치](https://huggingface.co/docs/transformers/ko/installation)하셔야 합니다.
 
 ### conda로 설치하기
 
@@ -268,15 +268,15 @@ Flax, PyTorch, TensorFlow 설치 페이지에서 이들을 conda로 설치하는
 
 ## 모델 구조
 
-**🤗 Transformers가 제공하는 [모든 모델 체크포인트](https://huggingface.co/models)** 는 huggingface.co [모델 허브](https://huggingface.co)에 완벽히 연동되어 있습니다. [개인](https://huggingface.co/users)과 [기관](https://huggingface.co/organizations)이 모델 허브에 직접 업로드할 수 있습니다.
+**🤗 Transformers가 제공하는 [모든 모델 체크포인트](https://huggingface.co/models)** 는 huggingface.co [모델 허브](https://huggingface.co/models)에 완벽히 연동되어 있습니다. [개인](https://huggingface.co/users)과 [기관](https://huggingface.co/organizations)이 모델 허브에 직접 업로드할 수 있습니다.
 
 현재 사용 가능한 모델 체크포인트의 개수: ![](https://img.shields.io/endpoint?url=https://huggingface.co/api/shields/models&color=brightgreen)
 
 🤗 Transformers는 다음 모델들을 제공합니다: 각 모델의 요약은 [여기](https://huggingface.co/docs/transformers/model_summary)서 확인하세요.
 
-각 모델이 Flax, PyTorch, TensorFlow으로 구현되었는지 또는 🤗 Tokenizers 라이브러리가 지원하는 토크나이저를 사용하는지 확인하려면, [이 표](https://huggingface.co/docs/transformers/index#supported-frameworks)를 확인하세요.
+각 모델이 Flax, PyTorch, TensorFlow으로 구현되었는지 또는 🤗 Tokenizers 라이브러리가 지원하는 토크나이저를 사용하는지 확인하려면, [이 표](https://huggingface.co/docs/transformers/ko/index#supported-framework)를 확인하세요.
 
-이 구현은 여러 데이터로 검증되었고 (예시 스크립트를 참고하세요) 오리지널 구현의 성능과 같아야 합니다. [도큐먼트](https://huggingface.co/docs/transformers/examples)의 Examples 섹션에서 성능에 대한 자세한 설명을 확인할 수 있습니다.
+이 구현은 여러 데이터로 검증되었고 (예시 스크립트를 참고하세요) 오리지널 구현의 성능과 같아야 합니다. [도큐먼트](https://github.com/huggingface/transformers/tree/main/examples)의 Examples 섹션에서 성능에 대한 자세한 설명을 확인할 수 있습니다.
 
 ## 더 알아보기
 
