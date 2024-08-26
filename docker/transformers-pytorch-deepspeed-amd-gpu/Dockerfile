@@ -22,7 +22,7 @@ RUN apt update && \
     apt clean && \
     rm -rf /var/lib/apt/lists/*
 
-RUN python3 -m pip install --no-cache-dir --upgrade pip ninja "pydantic<2"
+RUN python3 -m pip install --no-cache-dir --upgrade pip ninja "pydantic>=2.0.0"
 RUN python3 -m pip uninstall -y apex torch torchvision torchaudio
 RUN python3 -m pip install torch==$PYTORCH torchvision==$TORCH_VISION torchaudio==$TORCH_AUDIO --index-url https://download.pytorch.org/whl/rocm$ROCM --no-cache-dir
 
