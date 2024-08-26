@@ -46,7 +46,7 @@
     - local: tasks/translation
       title: الترجمة
     - local: tasks/summarization
-      title: تلخيص
+      title: التلخيص
     - local: tasks/multiple_choice
       title: الاختيار المتعدد
     title: معالجة اللغات الطبيعية
@@ -56,7 +56,7 @@
       title: تصنيف الصوت
     - local: tasks/asr
       title: التعرف التلقائي على الكلام
-    title: صوتي
+    title: الصوت
   - isExpanded: false
     sections:
     - local: tasks/image_classification
@@ -81,7 +81,7 @@
       title: توليد القناع
     - local: tasks/knowledge_distillation_for_image_classification
       title: التقليل المعرفي للرؤية الحاسوبية
-    title: رؤية حاسوبية
+    title: الرؤية الحاسوبية
   - isExpanded: false
     sections:
     - local: tasks/image_captioning
@@ -92,7 +92,7 @@
       title: الإجابة على الأسئلة المرئية
     - local: tasks/text-to-speech
       title: تحويل النص إلى كلام
-    title: متعدد الوسائط
+    title: المتعددة الوسائط
   - isExpanded: false
     sections:
     - local: generation_strategies
@@ -158,10 +158,10 @@
   - local: quantization/hqq
     title: HQQ
   - local: quantization/optimum
-    title: الأمثل
+    title: Optimum
   - local: quantization/contribute
-    title: المساهمة بطريقة جديدة لضغط الكميات
-  title: أساليب الضغط الكمي
+    title: المساهمة بطريقة جديدة للتكميم
+  title: أساليب التكميم
 - sections:
   - local: performance
     title: نظرة عامة
@@ -181,7 +181,7 @@
     - local: perf_train_cpu_many
       title: التدريب الموزع لوحدة المعالجة المركزية (CPU)
     - local: perf_train_tpu_tf
-      title: التدريب على وحدة معالجة الدقة (TPU) باستخدام TensorFlow
+      title: التدريب على (TPU) باستخدام TensorFlow
     - local: perf_train_special
       title: تدريب PyTorch على Apple silicon
     - local: perf_hardware
@@ -191,9 +191,9 @@
   title: تقنيات التدريب الفعال
   - sections:
     - local: perf_infer_cpu
-      title: استدلال على وحدة المعالجة المركزية (CPU)
+      title: الإستدلال على وحدة المعالجة المركزية (CPU)
     - local: perf_infer_gpu_one
-      title: استدلال على وحدة معالجة الرسومات (GPU)
+      title: الإستدلال على وحدة معالجة الرسومات (GPU)
     title: تحسين الاستدلال
 - local: big_models
     title: إنشاء نموذج كبير
