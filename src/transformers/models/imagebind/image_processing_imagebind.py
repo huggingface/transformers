@@ -365,6 +365,7 @@ class ImageBindImageProcessor(BaseImageProcessor):
         self.fps = fps
         self._valid_processor_keys = [
             "images",
+            "videos",
             "do_resize",
             "size",
             "resample",
@@ -379,6 +380,7 @@ class ImageBindImageProcessor(BaseImageProcessor):
             "do_chunk",
             "chunk_duration",
             "num_chunks",
+            "num_frames_per_chunk",
             "fps",
             "return_tensors",
             "data_format",
