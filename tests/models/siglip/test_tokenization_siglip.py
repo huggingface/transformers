@@ -385,7 +385,6 @@ class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             input_ids = tokenizer(text, padding="max_length").input_ids
             self.assertListEqual(input_ids, expected)
 
-    # Copied from tests.models.t5.test_tokenization_t5.T5TokenizationTest.test_some_edge_cases with T5->Siglip
     def test_some_edge_cases(self):
         tokenizer = SiglipTokenizer.from_pretrained("google/siglip-base-patch16-224", legacy=False)
 
