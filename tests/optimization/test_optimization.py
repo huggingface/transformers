@@ -28,7 +28,6 @@ if is_torch_available():
 
     from transformers import (
         Adafactor,
-        AdamMini,
         AdamW,
         get_constant_schedule,
         get_constant_schedule_with_warmup,
@@ -112,13 +111,15 @@ class OptimizationTest(unittest.TestCase):
         self.assertListAlmostEqual(w.tolist(), [0.4, 0.2, -0.5], tol=1e-2)
 
     def test_adam_mini(self):
-        from transformers import LlamaConfig, LlamaForCausalLM, TrainingArguments, Trainer
         from torch.utils.data import Dataset
+
+        from transformers import LlamaConfig, LlamaForCausalLM, Trainer, TrainingArguments
 
         class RepeatDataset(Dataset):
             def __init__(self, data):
-                self.data = [{'input_ids': torch.tensor(data, dtype=torch.long),
-                            'labels': torch.tensor(data, dtype=torch.long)}]
+                self.data = [
+                    {"input_ids": torch.tensor(data, dtype=torch.long), "labels": torch.tensor(data, dtype=torch.long)}
+                ]
 
             def __len__(self):
                 return 1
@@ -126,12 +127,7 @@ class OptimizationTest(unittest.TestCase):
             def __getitem__(self, idx):
                 return self.data[idx]
 
-        config = LlamaConfig(
-            vocab_size=100, 
-            hidden_size=32, 
-            num_hidden_layers=3, 
-            num_attention_heads=4
-        )
+        config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
         tiny_llama = LlamaForCausalLM(config)
         x = torch.randint(0, 100, (128,))
         train_dataset = RepeatDataset(x)
