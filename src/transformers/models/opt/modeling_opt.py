@@ -59,6 +59,7 @@ _CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION = "ArthurZ/opt-350m-dummy-sc"
 _SEQ_CLASS_EXPECTED_LOSS = 1.71
 _SEQ_CLASS_EXPECTED_OUTPUT = "'LABEL_0'"
 
+
 def _attention_to_position_ids(attention_mask: torch.Tensor) -> torch.Tensor:
     """
     Converts an attention mask to position ids.
@@ -123,7 +124,9 @@ class OPTAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         key_value_states: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None, # isn't needed in normal attention, but needed in flash attention so to keep the signature same
+        position_ids: Optional[
+            torch.Tensor
+        ] = None,  # isn't needed in normal attention, but needed in flash attention so to keep the signature same
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
@@ -658,7 +661,7 @@ class OPTDecoder(OPTPreTrainedModel):
 
             position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-                config.n_positions - 1]`. for padding use -1. 
+                config.n_positions - 1]`. for padding use -1.
 
                 [What are position IDs?](../glossary#position-ids)
             head_mask (`torch.Tensor` of shape `(num_hidden_layers, num_attention_heads)`, *optional*):
@@ -741,9 +744,9 @@ class OPTDecoder(OPTPreTrainedModel):
             )
 
         if position_ids is None:
-           position_ids = _attention_to_position_ids(attention_mask)
-           # cut positions if `past_key_values_length` is > 0
-           position_ids = position_ids[:, past_key_values_length:]
+            position_ids = _attention_to_position_ids(attention_mask)
+            # cut positions if `past_key_values_length` is > 0
+            position_ids = position_ids[:, past_key_values_length:]
 
         pos_embeds = self.embed_positions(position_ids)
 
@@ -973,7 +976,7 @@ class OPTForCausalLM(OPTPreTrainedModel):
                 [What are attention masks?](../glossary#attention-mask)
             position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-                config.n_positions - 1]`. for padding use -1. 
+                config.n_positions - 1]`. for padding use -1.
 
                 [What are position IDs?](../glossary#position-ids)
             head_mask (`torch.Tensor` of shape `(num_hidden_layers, num_attention_heads)`, *optional*):
@@ -1079,7 +1082,7 @@ class OPTForCausalLM(OPTPreTrainedModel):
         )
 
     def prepare_inputs_for_generation(
-        self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None,position_ids=None, **kwargs
+        self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, position_ids=None, **kwargs
     ):
         if past_key_values is not None:
             past_length = past_key_values[0][0].shape[2]
@@ -1096,11 +1099,10 @@ class OPTForCausalLM(OPTPreTrainedModel):
         if attention_mask is not None and position_ids is None:
             position_ids = _attention_to_position_ids(attention_mask)
             if past_key_values:
-                position_ids = position_ids[:, -input_ids.shape[1]:]
+                position_ids = position_ids[:, -input_ids.shape[1] :]
 
                 # This `clone` call is needed to avoid recapturing cuda graphs with `torch.compile`'s  `mode="reduce-overhead`, as otherwise the input `position_ids` would have various stride during the decoding. Here, simply using `.contiguous()` is not sufficient as in the batch size = 1 case, `position_ids` is already contiguous but with varying stride which retriggers a capture.
                 position_ids = position_ids.clone(memory_format=torch.contiguous_format)
-
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:
