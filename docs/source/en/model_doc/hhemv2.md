@@ -26,7 +26,7 @@ The model takes a list of pairs of (premise, hypothesis) as the input and return
 
 
 ```python
-from transformers import HHEMv2ForSequenceClassification
+from transformers import HHEMv2Model
 pairs = [ # Test data, List[Tuple[str, str]]
     ("The capital of France is Berlin.", "The capital of France is Paris."), # factual but hallucinated
     ('I am in California', 'I am in United States.'), # Consistent
@@ -37,7 +37,7 @@ pairs = [ # Test data, List[Tuple[str, str]]
     ("Mark Wahlberg was a fan of Manny.", "Manny was a fan of Mark Wahlberg.")
 ]
 # Step 1: Load the model
-model = HHEMv2ForSequenceClassification.from_pretrained('vectara/hallucination_evaluation_model')
+model = HHEMv2Model.from_pretrained('vectara/hallucination_evaluation_model')
 # Step 2: Use the model to predict
 model.predict(pairs) # note the predict() method. Do not do model(pairs). 
 # tensor([0.0111, 0.6474, 0.1290, 0.8969, 0.1846, 0.0050, 0.0543])
@@ -47,13 +47,10 @@ model.predict(pairs) # note the predict() method. Do not do model(pairs).
 
 [[autodoc]] HHEMv2Config
 
-## HHEMv2PreTrainedModel
 
-[[autodoc]] HHEMv2PreTrainedModel
+## HHEMv2Model
 
-## HHEMv2ForSequenceClassification
-
-[[autodoc]] HHEMv2ForSequenceClassification
+[[autodoc]] HHEMv2Model
     - forward
     - predict
 

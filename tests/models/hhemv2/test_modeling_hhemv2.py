@@ -40,7 +40,7 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        HHEMv2ForSequenceClassification,
+        HHEMv2Model,
         T5Tokenizer,
     )
 
@@ -158,7 +158,7 @@ class HHEMv2ModelTester:
         labels = torch.tensor(
             [[1] + [0] * (input_ids.shape[1] - 1)] * self.batch_size, dtype=torch.long, device=torch_device
         )
-        model = HHEMv2ForSequenceClassification(config=config).to(torch_device).eval()
+        model = HHEMv2Model(config=config).to(torch_device).eval()
         outputs = model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -184,12 +184,12 @@ class HHEMv2ModelTester:
 
 @require_torch
 class HHEMv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (HHEMv2ForSequenceClassification,) if is_torch_available() else ()
+    all_model_classes = (HHEMv2Model,) if is_torch_available() else ()
     all_generative_model_classes = ()
     all_parallelizable_model_classes = ()
     pipeline_model_mapping = (
         {
-            "text-classification": HHEMv2ForSequenceClassification,
+            "text-classification": HHEMv2Model,
         }
         if is_torch_available()
         else {}
@@ -212,7 +212,7 @@ class HHEMv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         model_name = "vectara/hallucination_evaluation_model"
-        model = HHEMv2ForSequenceClassification.from_pretrained(model_name)
+        model = HHEMv2Model.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
 
@@ -231,7 +231,7 @@ class HHEMv2ModelIntegrationTests(unittest.TestCase):
 
     @cached_property
     def model(self):
-        return HHEMv2ForSequenceClassification.from_pretrained(self.local_model_path).to(torch_device).eval()
+        return HHEMv2Model.from_pretrained(self.local_model_path).to(torch_device).eval()
 
     @cached_property
     def config(self):

@@ -29,7 +29,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_hhemv2"] = ["HHEMv2ForSequenceClassification"]
+    _import_structure["modeling_hhemv2"] = ["HHEMv2Model"]
 
 if TYPE_CHECKING:
     from .configuration_hhemv2 import HHEMv2Config
@@ -40,7 +40,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_hhemv2 import HHEMv2ForSequenceClassification
+        from .modeling_hhemv2 import HHEMv2Model
 
 else:
     import sys

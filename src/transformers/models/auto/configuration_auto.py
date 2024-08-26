@@ -555,7 +555,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("swinv2", "Swin Transformer V2"),
         ("switch_transformers", "SwitchTransformers"),
         ("t5", "T5"),
-        ("hhemv2", "HHEMv2ForSequenceClassification"),
+        ("hhemv2", "HHEMv2Model"),
         ("t5v1.1", "T5v1.1"),
         ("table-transformer", "Table Transformer"),
         ("tapas", "TAPAS"),

@@ -54,7 +54,7 @@ HHEMV2_START_DOCSTRING = r"""
 @add_start_docstrings(
     HHEMV2_START_DOCSTRING,
 )
-class HHEMv2ForSequenceClassification(T5PreTrainedModel):
+class HHEMv2Model(T5PreTrainedModel):
     config_class = HHEMv2Config
     _tied_weights_keys = ["transformer.shared.weight", "transformer.encoder.embed_tokens.weight"]
     _no_split_modules = None

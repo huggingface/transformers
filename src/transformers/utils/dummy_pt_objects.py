@@ -4677,7 +4677,7 @@ class GroupViTVisionModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class HHEMv2ForSequenceClassification(metaclass=DummyObject):
+class HHEMv2Model(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
