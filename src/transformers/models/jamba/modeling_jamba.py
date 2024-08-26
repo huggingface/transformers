@@ -685,8 +685,7 @@ class JambaMambaMixer(nn.Module):
 
         # 3. State Space Model sequence transformation
         # 3.a. input varying initialization of time_step, B and C
-        hidden_states_transposed = hidden_states.transpose(1, 2)
-        ssm_parameters = self.x_proj(hidden_states_transposed)
+        ssm_parameters = self.x_proj(hidden_states.transpose(1, 2))
         time_step, B, C = torch.split(
             ssm_parameters, [self.time_step_rank, self.ssm_state_size, self.ssm_state_size], dim=-1
         )
@@ -701,13 +700,12 @@ class JambaMambaMixer(nn.Module):
         # linear layers, and requires to call the forward pass directly.
         # Quantized model can't work with the original code:
         # ```discrete_time_step = self.dt_proj.weight @ time_step.transpose(1, 2)```
-        time_proj_bias = self.dt_proj.bias
+        time_proj_bias = self.dt_proj.bias.data
         with torch.no_grad():
-            self.dt_proj.bias.zero_()
-        discrete_time_step = self.dt_proj(time_step)
-        discrete_time_step = discrete_time_step.transpose(1, 2)
+            self.dt_proj.bias.data = torch.zeros_like(self.dt_proj.bias.data)
+        discrete_time_step = self.dt_proj(time_step).transpose(1, 2)
         with torch.no_grad():
-            self.dt_proj.bias.copy_(time_proj_bias)
+            self.dt_proj.bias.data = time_proj_bias
 
         A = -torch.exp(self.A_log.float())
         # 3.c perform the recurrence y ← SSM(A, B, C)(x)
