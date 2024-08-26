@@ -685,7 +685,8 @@ class JambaMambaMixer(nn.Module):
 
         # 3. State Space Model sequence transformation
         # 3.a. input varying initialization of time_step, B and C
-        ssm_parameters = self.x_proj(hidden_states.transpose(1, 2))
+        hidden_states_transposed = hidden_states.transpose(1, 2)
+        ssm_parameters = self.x_proj(hidden_states_transposed)
         time_step, B, C = torch.split(
             ssm_parameters, [self.time_step_rank, self.ssm_state_size, self.ssm_state_size], dim=-1
         )
