@@ -272,7 +272,7 @@ Flax, PyTorch, TensorFlow 설치 페이지에서 이들을 conda로 설치하는
 
 현재 사용 가능한 모델 체크포인트의 개수: ![](https://img.shields.io/endpoint?url=https://huggingface.co/api/shields/models&color=brightgreen)
 
-🤗 Transformers는 다음 모델들을 제공합니다: 각 모델의 요약은 [여기](https://huggingface.co/docs/transformers/model_summary)서 확인하세요.
+🤗 Transformers는 다음 모델들을 제공합니다: 각 모델의 요약은 [여기](https://huggingface.co/docs/transformers/ko/model_summary)서 확인하세요.
 
 각 모델이 Flax, PyTorch, TensorFlow으로 구현되었는지 또는 🤗 Tokenizers 라이브러리가 지원하는 토크나이저를 사용하는지 확인하려면, [이 표](https://huggingface.co/docs/transformers/ko/index#supported-framework)를 확인하세요.
 
