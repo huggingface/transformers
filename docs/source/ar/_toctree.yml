@@ -844,50 +844,49 @@
         title: X-CLIP
       title: Multimodal models
     - isExpanded: false
-sections:
+      sections:
+      - local: model_doc/decision_transformer
+        title: محول القرار
+      - local: model_doc/trajectory_transformer
+        title: محول المسار
+      title: نماذج التعلم التعزيزية
+    - isExpanded: false
+      sections:
+      - local: model_doc/autoformer
+        title: Autoformer
+      - local: model_doc/informer
+        title: المبلغ
+      - local: model_doc/patchtsmixer
+        title: PatchTSMixer
+      - local: model_doc/patchtst
+        title: PatchTST
+      - local: model_doc/time_series_transformer
+        title: محول السلسلة الزمنية
+      title: نماذج السلسلة الزمنية
+    - isExpanded: false
+      sections:
+      - local: model_doc/graphormer
+        title: Graphormer
+      title: نماذج الرسم البياني
+    title: النماذج
   - sections:
-    - local: model_doc/decision_transformer
-      title: محول القرار
-    - local: model_doc/trajectory_transformer
-      title: محول المسار
-    title: نماذج التعلم التعزيزية
-  - isExpanded: false
-    sections:
-    - local: model_doc/autoformer
-      title: Autoformer
-    - local: model_doc/informer
-      title: المبلغ
-    - local: model_doc/patchtsmixer
-      title: PatchTSMixer
-    - local: model_doc/patchtst
-      title: PatchTST
-    - local: model_doc/time_series_transformer
-      title: محول السلسلة الزمنية
-    title: نماذج السلسلة الزمنية
-  - isExpanded: false
-    sections:
-    - local: model_doc/graphormer
-      title: Graphormer
-    title: نماذج الرسم البياني
-  title: النماذج
-- sections:
-  - local: internal/modeling_utils
-    title: الطبقات المخصصة والمرافق
-  - local: internal/pipelines_utils
-    title: مرافق خطوط الأنابيب
-  - local: internal/tokenization_utils
-    title: مرافق مقسم النصوص 
-  - local: internal/trainer_utils
-    title: مرافق المدرب
-  - local: internal/generation_utils
-    title: مرافق التوليد
-  - local: internal/image_processing_utils
-    title: مرافق معالجة الصور
-  - local: internal/audio_utils
-    title: مرافق معالجة الصوت
-  - local: internal/file_utils
-    title: مرافق عامة
-  - local: internal/time_series_utils
-    title: مرافق السلاسل الزمنية
-  title: مساعدون داخليون
+    - local: internal/modeling_utils
+      title: الطبقات المخصصة والمرافق
+    - local: internal/pipelines_utils
+      title: مرافق خطوط الأنابيب
+    - local: internal/tokenization_utils
+      title: مرافق مقسم النصوص 
+    - local: internal/trainer_utils
+      title: مرافق المدرب
+    - local: internal/generation_utils
+      title: مرافق التوليد
+    - local: internal/image_processing_utils
+      title: مرافق معالجة الصور
+    - local: internal/audio_utils
+      title: مرافق معالجة الصوت
+    - local: internal/file_utils
+      title: مرافق عامة
+    - local: internal/time_series_utils
+      title: مرافق السلاسل الزمنية
+    title: مساعدون داخليون
   title: API
