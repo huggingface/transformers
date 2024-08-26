@@ -251,7 +251,7 @@ Transformers에 달린 100,000개의 별을 축하하기 위해, 우리는 커�
 pip install transformers
 ```
 
-예시들을 체험해보고 싶거나, 최최최첨단 코드를 원하거나, 새로운 버전이 나올 때까지 기다릴 수 없다면 [라이브러리를 소스에서 바로 설치](https://huggingface.co/docs/transformers/ko/installation)하셔야 합니다.
+예시들을 체험해보고 싶거나, 최최최첨단 코드를 원하거나, 새로운 버전이 나올 때까지 기다릴 수 없다면 [라이브러리를 소스에서 바로 설치](https://huggingface.co/docs/transformers/ko/installation#install-from-source)하셔야 합니다.
 
 ### conda로 설치하기
 
@@ -282,13 +282,12 @@ Flax, PyTorch, TensorFlow 설치 페이지에서 이들을 conda로 설치하는
 
 | 섹션 | 설명 |
 |-|-|
-| [도큐먼트](https://huggingface.co/transformers/) | 전체 API 도큐먼트와 튜토리얼 |
-| [과제 요약](https://huggingface.co/docs/transformers/task_summary) | 🤗 Transformers가 지원하는 과제들 |
-| [전처리 튜토리얼](https://huggingface.co/docs/transformers/preprocessing) | `Tokenizer` 클래스를 이용해 모델을 위한 데이터 준비하기 |
-| [학습과 fine-tuning](https://huggingface.co/docs/transformers/training) | 🤗 Transformers가 제공하는 모델 PyTorch/TensorFlow 학습 과정과 `Trainer` API에서 사용하기 |
+| [도큐먼트](https://huggingface.co/transformers/ko/) | 전체 API 도큐먼트와 튜토리얼 |
+| [과제 요약](https://huggingface.co/docs/transformers/ko/task_summary) | 🤗 Transformers가 지원하는 과제들 |
+| [전처리 튜토리얼](https://huggingface.co/docs/transformers/ko/preprocessing) | `Tokenizer` 클래스를 이용해 모델을 위한 데이터 준비하기 |
+| [학습과 fine-tuning](https://huggingface.co/docs/transformers/ko/training) | 🤗 Transformers가 제공하는 모델 PyTorch/TensorFlow 학습 과정과 `Trainer` API에서 사용하기 |
 | [퀵 투어: Fine-tuning/사용 스크립트](https://github.com/huggingface/transformers/tree/main/examples) | 다양한 과제에서 모델 fine-tuning하는 예시 스크립트 |
-| [모델 공유 및 업로드](https://huggingface.co/docs/transformers/model_sharing) | 커뮤니티에 fine-tune된 모델을 업로드 및 공유하기 |
-| [마이그레이션](https://huggingface.co/docs/transformers/migration) | `pytorch-transformers`나 `pytorch-pretrained-bert`에서 🤗 Transformers로 이동하기|
+| [모델 공유 및 업로드](https://huggingface.co/docs/transformers/ko/model_sharing) | 커뮤니티에 fine-tune된 모델을 업로드 및 공유하기 |
 
 ## 인용
 
