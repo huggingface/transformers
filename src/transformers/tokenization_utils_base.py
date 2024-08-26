@@ -65,8 +65,8 @@ from .utils import (
     requires_backends,
     to_py_obj,
 )
-from .utils.import_utils import PROTOBUF_IMPORT_ERROR
 from .utils.chat_template_utils import _compile_jinja_template, _render_with_assistant_indices
+from .utils.import_utils import PROTOBUF_IMPORT_ERROR
 
 
 if TYPE_CHECKING:
