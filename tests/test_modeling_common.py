@@ -4775,20 +4775,17 @@ class ModelTesterMixin:
 
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         cls = self._torch_compile_train_cls
-        batch_size = 1
-        seq_len = 10
-
         model = cls(config).to(torch_device)
 
         inputs = {
-            "input_ids": torch.randint(
-                low=1, high=model.config.vocab_size, size=(batch_size, seq_len), device=torch_device
+            "input_ids": torch.randint(low=1, high=model.config.vocab_size, size=(2, 10), device=torch_device),
+            "attention_mask": torch.tensor(
+                [[1, 1, 1, 1, 1, 0, 0, 0, 0, 0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]],
+                dtype=torch.int64,
+                device=torch_device,
             ),
-            "attention_mask": torch.ones((batch_size, seq_len), dtype=torch.int64, device=torch_device),
-            "position_ids": torch.arange(0, seq_len, device=torch_device).unsqueeze(0),
-            "labels": torch.randint(
-                low=1, high=model.config.vocab_size, size=(batch_size, seq_len), device=torch_device
-            ),
+            "position_ids": torch.arange(0, 10, device=torch_device).unsqueeze(0),
+            "labels": torch.randint(low=1, high=model.config.vocab_size, size=(2, 10), device=torch_device),
         }
 
         # eager backward
