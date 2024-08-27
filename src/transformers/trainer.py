@@ -1479,10 +1479,10 @@ class Trainer:
                     "You need to have `torchao>=0.4.0` in order to use torch 4-bit optimizers."
                     "Install it with `pip install torchao` or follow the instructions here: https://github.com/pytorch/ao"
                 )
-            if version.parse(importlib.metadata.version("torch")) < version.parse("2.3"):
+            if version.parse(importlib.metadata.version("torch")) <= version.parse("2.4"):
                 raise ImportError(
-                    "You need to have `torch>=2.3` in order to use torch 4-bit optimizers. "
-                    "Install it with `pip install --upgrade torch`"
+                    "You need to have `torch>2.4` in order to use torch 4-bit optimizers. "
+                    "Install it with `pip install --upgrade torch` it is available on pipy. Otherwise, you need to install torch nightly."
                 )
             from torchao.prototype.low_bit_optim import AdamW4bit
 
