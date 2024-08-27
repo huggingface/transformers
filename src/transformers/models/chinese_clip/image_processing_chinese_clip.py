@@ -294,17 +294,6 @@ class ChineseCLIPImageProcessor(BaseImageProcessor):
             if do_normalize:
                 image = self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
 
-            if do_resize:
-                image = self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
-
-            if do_center_crop:
-                image = self.center_crop(image=image, size=crop_size, input_data_format=input_data_format) 
-
-            if do_rescale:
-                image = self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
-
-            if do_normalize:
-                image = self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
             all_images.append(image)
         images = [
             to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
