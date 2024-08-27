@@ -289,8 +289,8 @@ class GenerationConfig(PushToHubMixin):
             more details.
         return_dict_in_generate (`bool`, *optional*, defaults to `False`):
             Whether or not to return a [`~utils.ModelOutput`], as opposed to returning exclusively the generated
-            sequence. This flag must be set to return the generation cache or other optional outputs (see flags
-            starting with `output_`)
+            sequence. This flag must be set to `True` to return the generation cache (when `use_cache` is `True`)
+            or optional outputs (see flags starting with `output_`)
 
         > Special tokens that can be used at generation time
 
