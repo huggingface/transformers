@@ -1040,7 +1040,7 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
     """,
     GPT_BIGCODE_START_DOCSTRING,
 )
-class GPTBigCodeForCausalLM(GPTBigCodePreTrainedModel):
+class GPTBigCodeForCausalLM(GenerationMixin, GPTBigCodePreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):

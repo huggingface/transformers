@@ -24,6 +24,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_causal_attention_mask
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -1349,7 +1350,7 @@ class BlenderbotSmallDecoderWrapper(BlenderbotSmallPreTrainedModel):
 
 
 # Copied from transformers.models.bart.modeling_bart.BartForCausalLM with Bart->BlenderbotSmall, facebook/bart-base->facebook/blenderbot_small-90M
-class BlenderbotSmallForCausalLM(BlenderbotSmallPreTrainedModel):
+class BlenderbotSmallForCausalLM(GenerationMixin, BlenderbotSmallPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):

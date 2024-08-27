@@ -40,13 +40,6 @@ from ..cache_utils import (
 )
 from ..integrations.deepspeed import is_deepspeed_zero3_enabled
 from ..modeling_outputs import CausalLMOutputWithPast, Seq2SeqLMOutput
-from ..models.auto import (
-    MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING,
-    MODEL_FOR_CAUSAL_LM_MAPPING,
-    MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
-    MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
-    MODEL_FOR_VISION_2_SEQ_MAPPING,
-)
 from ..pytorch_utils import isin_mps_friendly
 from ..tokenization_utils import ExtensionsTrie
 from ..utils import (
@@ -1113,32 +1106,6 @@ class GenerationMixin:
 
         return transition_scores
 
-    def _validate_model_class(self):
-        """
-        Confirms that the model class is compatible with generation. If not, raises an exception that points to the
-        right class to use.
-        """
-        if not is_torchdynamo_compiling() and not self.can_generate():
-            generate_compatible_mappings = [
-                MODEL_FOR_CAUSAL_LM_MAPPING,
-                MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING,
-                MODEL_FOR_VISION_2_SEQ_MAPPING,
-                MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
-                MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
-            ]
-            generate_compatible_classes = set()
-            for model_mapping in generate_compatible_mappings:
-                supported_models = model_mapping.get(type(self.config), default=None)
-                if supported_models is not None:
-                    generate_compatible_classes.add(supported_models.__name__)
-            exception_message = (
-                f"The current model class ({self.__class__.__name__}) is not compatible with `.generate()`, as "
-                "it doesn't have a language model head."
-            )
-            if generate_compatible_classes:
-                exception_message += f" Please use one of the following classes instead: {generate_compatible_classes}"
-            raise TypeError(exception_message)
-
     def _validate_assistant(self, assistant_model):
         if assistant_model is None:
             return
@@ -1777,7 +1744,6 @@ class GenerationMixin:
                     - [`~generation.GenerateBeamEncoderDecoderOutput`]
         """
         # 1. Handle `generation_config` and kwargs that might update it, and validate the `.generate()` call
-        self._validate_model_class()
         tokenizer = kwargs.pop("tokenizer", None)  # Pull this out first, we only use it for stopping criteria
         generation_config, model_kwargs = self._prepare_generation_config(generation_config, **kwargs)
         self._validate_model_kwargs(model_kwargs.copy())

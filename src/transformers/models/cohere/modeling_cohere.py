@@ -32,6 +32,7 @@ from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
+from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
@@ -972,7 +973,7 @@ class CohereModel(CoherePreTrainedModel):
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM with Llama->Cohere
-class CohereForCausalLM(CoherePreTrainedModel):
+class CohereForCausalLM(GenerationMixin, CoherePreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
     # Ignore copy

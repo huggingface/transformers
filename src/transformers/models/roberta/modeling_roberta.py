@@ -24,6 +24,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN, gelu
+from ...generation import GenerationMixin
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
@@ -860,7 +861,7 @@ class RobertaModel(RobertaPreTrainedModel):
 @add_start_docstrings(
     """RoBERTa Model with a `language modeling` head on top for CLM fine-tuning.""", ROBERTA_START_DOCSTRING
 )
-class RobertaForCausalLM(RobertaPreTrainedModel):
+class RobertaForCausalLM(GenerationMixin, RobertaPreTrainedModel):
     _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
 
     def __init__(self, config):

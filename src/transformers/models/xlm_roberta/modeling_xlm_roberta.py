@@ -24,6 +24,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN, gelu
+from ...generation import GenerationMixin
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
@@ -864,7 +865,7 @@ class XLMRobertaModel(XLMRobertaPreTrainedModel):
     XLM_ROBERTA_START_DOCSTRING,
 )
 # Copied from transformers.models.roberta.modeling_roberta.RobertaForCausalLM with Roberta->XLMRoberta, ROBERTA->XLM_ROBERTA
-class XLMRobertaForCausalLM(XLMRobertaPreTrainedModel):
+class XLMRobertaForCausalLM(GenerationMixin, XLMRobertaPreTrainedModel):
     _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
 
     def __init__(self, config):

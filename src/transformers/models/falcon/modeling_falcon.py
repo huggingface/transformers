@@ -25,6 +25,7 @@ from torch.nn import functional as F
 
 from ...activations import get_activation
 from ...cache_utils import Cache, DynamicCache, StaticCache
+from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import (
     AttentionMaskConverter,
 )
@@ -1220,7 +1221,7 @@ class FalconModel(FalconPreTrainedModel):
     "The Falcon Model transformer with a language modeling head on top (linear layer with weights tied to the input embeddings).",
     FALCON_START_DOCSTRING,
 )
-class FalconForCausalLM(FalconPreTrainedModel):
+class FalconForCausalLM(GenerationMixin, FalconPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config: FalconConfig):

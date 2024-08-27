@@ -25,6 +25,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_causal_attention_mask
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -1504,7 +1505,7 @@ class MarianDecoderWrapper(MarianPreTrainedModel):
 
 
 # Copied from transformers.models.bart.modeling_bart.BartForCausalLM with Bart->Marian, facebook/bart-base->Helsinki-NLP/opus-mt-fr-en
-class MarianForCausalLM(MarianPreTrainedModel):
+class MarianForCausalLM(GenerationMixin, MarianPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):

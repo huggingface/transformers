@@ -28,6 +28,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
+from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import _flash_attention_forward
 from ...modeling_outputs import (
@@ -1097,7 +1098,7 @@ class LlamaModel(LlamaPreTrainedModel):
         return causal_mask
 
 
-class LlamaForCausalLM(LlamaPreTrainedModel):
+class LlamaForCausalLM(GenerationMixin, LlamaPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):

@@ -212,7 +212,7 @@ def no_init_weights(_enable=True):
                 setattr(torch.nn.init, name, init_func)
 
 
-def get_parameter_device(parameter: Union[nn.Module, GenerationMixin, "ModuleUtilsMixin"]):
+def get_parameter_device(parameter: Union[nn.Module, "ModuleUtilsMixin"]):
     try:
         return next(parameter.parameters()).device
     except StopIteration:
@@ -227,7 +227,7 @@ def get_parameter_device(parameter: Union[nn.Module, GenerationMixin, "ModuleUti
         return first_tuple[1].device
 
 
-def get_first_parameter_dtype(parameter: Union[nn.Module, GenerationMixin, "ModuleUtilsMixin"]):
+def get_first_parameter_dtype(parameter: Union[nn.Module, "ModuleUtilsMixin"]):
     """
     Returns the first parameter dtype (can be non-floating) or asserts if none were found.
     """
@@ -245,7 +245,7 @@ def get_first_parameter_dtype(parameter: Union[nn.Module, GenerationMixin, "Modu
         return first_tuple[1].dtype
 
 
-def get_parameter_dtype(parameter: Union[nn.Module, GenerationMixin, "ModuleUtilsMixin"]):
+def get_parameter_dtype(parameter: Union[nn.Module, "ModuleUtilsMixin"]):
     """
     Returns the first found floating dtype in parameters if there is one, otherwise returns the last dtype it found.
     """
@@ -1295,7 +1295,7 @@ class ModuleUtilsMixin:
         return 6 * self.estimate_tokens(input_dict) * self.num_parameters(exclude_embeddings=exclude_embeddings)
 
 
-class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMixin, PeftAdapterMixin):
+class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMixin):
     r"""
     Base class for all models.
 
@@ -1624,11 +1624,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         Returns:
             `bool`: Whether this model can generate sequences with `.generate()`.
         """
-        # Detects whether `prepare_inputs_for_generation` has been overwritten, which is a requirement for generation.
-        # Alternativelly, the model can also have a custom `generate` function.
-        if "GenerationMixin" in str(cls.prepare_inputs_for_generation) and "GenerationMixin" in str(cls.generate):
-            return False
-        return True
+        return issubclass(cls, GenerationMixin)
 
     @classmethod
     def _check_and_enable_flash_attn_2(
@@ -4715,6 +4711,22 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             return False
 
         return self.hf_quantizer.is_trainable
+
+    def generate(self, *args, **kwargs):
+        raise NotImplementedError(
+            "`PreTrainedModel` no longer inherits `GenerationMixin`. Please ensure your custom model class "
+            f"({self.__class__.__name__}) inherits from `GenerationMixin` if you want to use its "
+            "`generate` method. `GenerationMixin` must be inherited before `PreTrainedModel` "
+            "(or a class inheriting from `PreTrainedModel` )."
+        )
+
+    def prepare_inputs_for_generation(self, *args, **kwargs):
+        raise NotImplementedError(
+            "`PreTrainedModel` no longer inherits `GenerationMixin`. Please ensure your custom model class "
+            f"({self.__class__.__name__}) inherits from `GenerationMixin` if you want to use its "
+            "`prepare_inputs_for_generation` method. `GenerationMixin` must be inherited before `PreTrainedModel` "
+            "(or a class inheriting from `PreTrainedModel` )."
+        )
 
 
 PreTrainedModel.push_to_hub = copy_func(PreTrainedModel.push_to_hub)

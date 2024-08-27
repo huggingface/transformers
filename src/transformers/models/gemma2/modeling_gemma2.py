@@ -28,6 +28,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, HybridCache
+from ...generation import GenerationMixin
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
@@ -943,7 +944,7 @@ class Gemma2Model(Gemma2PreTrainedModel):
         return causal_mask
 
 
-class Gemma2ForCausalLM(Gemma2PreTrainedModel):
+class Gemma2ForCausalLM(GenerationMixin, Gemma2PreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):

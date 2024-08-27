@@ -24,6 +24,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_causal_attention_mask
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -1830,7 +1831,7 @@ class MBartDecoderWrapper(MBartPreTrainedModel):
 
 
 # Copied from transformers.models.bart.modeling_bart.BartForCausalLM with Bart->MBart, facebook/bart-base->facebook/mbart-large-cc25
-class MBartForCausalLM(MBartPreTrainedModel):
+class MBartForCausalLM(GenerationMixin, MBartPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
