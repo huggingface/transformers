@@ -511,7 +511,7 @@ def convert_feature_extractor(feature_extractor, tiny_config):
         and hasattr(feature_extractor, "size")
         and isinstance(feature_extractor.size, dict)
     ):
-        largest_image_size = max(feature_extractor.size["height"], feature_extractor.size["width"])
+        largest_image_size = max(feature_extractor.size.values())
         if largest_image_size > 64:
             # hardcoded exceptions
             models_with_large_image_size = ("deformable_detr", "flava", "grounding_dino", "mgp_str", "swiftformer")
