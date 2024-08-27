@@ -271,6 +271,59 @@ except Exception:
 ALL_LAYERNORM_LAYERS.append(TimesFMLayerNorm)
 
 
+class TimesFMPositionalEmbedding(nn.Module):
+    """Generates position embedding for a given 1-d sequence.
+
+    Attributes:
+      min_timescale: Start of the geometric index. Determines the periodicity of
+        the added signal.
+      max_timescale: End of the geometric index. Determines the frequency of the
+        added signal.
+      embedding_dims: Dimension of the embedding to be generated.
+    """
+
+    def __init__(self, min_timescale=1, max_timescale=10000, embedding_dims=0):
+        super().__init__()
+
+        self.min_timescale = min_timescale
+        self.max_timescale = max_timescale
+        self.embedding_dims = embedding_dims
+
+    def forward(self, seq_length=None, position=None):
+        """Generates a tensor of sinusoids with different frequencies.
+
+        Args:
+          seq_length: an optional Python int defining the output sequence length.
+            if the `position` argument is specified.
+          position:   [B, seq_length], optional position for each token in the
+            sequence, only required when the sequence is packed.
+
+        Returns:
+          [B, seqlen, D] if `position` is specified, else [1, seqlen, D]
+        """
+        if position is None:
+            if seq_length is None:
+                raise ValueError("If position is None, seq_length should be specified.")
+            # [1, seqlen]
+            position = torch.arange(seq_length, dtype=torch.float32).unsqueeze(0)
+        else:
+            if position.ndim != 2:
+                raise ValueError(f"position should have 2 dimensions, got {position.ndim}")
+
+        num_timescales = self.embedding_dims // 2
+        log_timescale_increment = math.log(float(self.max_timescale) / float(self.min_timescale)) / max(
+            torch.tensor(num_timescales, dtype=torch.float32) - 1, 1
+        )
+        inv_timescales = self.min_timescale * torch.exp(
+            torch.arange(num_timescales, dtype=torch.float32) * -log_timescale_increment
+        )
+        scaled_time = position.unsqueeze(2) * inv_timescales.unsqueeze(0).unsqueeze(0)
+        signal = torch.cat([torch.sin(scaled_time), torch.cos(scaled_time)], dim=2).type(torch.float32)
+
+        signal = F.pad(signal, (0, 0, 0, self.embedding_dims % 2))
+        return signal
+
+
 class TimesFMDenseActDense(nn.Module):
     def __init__(self, config: TimesFMConfig):
         super().__init__()
