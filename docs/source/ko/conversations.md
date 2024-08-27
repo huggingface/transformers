@@ -181,31 +181,31 @@ LMSys 리더보드에는 독점 모델도 포함되어 있으니,
 from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
 
-# Prepare the input as before
+# 입력값을 사전에 준비해 놓습니다
 chat = [
     {"role": "system", "content": "You are a sassy, wise-cracking robot as imagined by Hollywood circa 1986."},
     {"role": "user", "content": "Hey, can you tell me any fun things to do in New York?"}
 ]
 
-# 1: Load the model and tokenizer
+# 1: 모델과 토크나이저를 불러옵니다
 model = AutoModelForCausalLM.from_pretrained("meta-llama/Meta-Llama-3-8B-Instruct", device_map="auto", torch_dtype=torch.bfloat16)
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Meta-Llama-3-8B-Instruct")
 
-# 2: Apply the chat template
+# 2: 채팅 템플릿에 적용합니다
 formatted_chat = tokenizer.apply_chat_template(chat, tokenize=False, add_generation_prompt=True)
 print("Formatted chat:\n", formatted_chat)
 
-# 3: Tokenize the chat (This can be combined with the previous step using tokenize=True)
+# 3: 채팅을 토큰화합니다 (바로 이전 과정에서 tokenized=True로 설정하면 한꺼번에 처리할 수 있습니다)
 inputs = tokenizer(formatted_chat, return_tensors="pt", add_special_tokens=False)
-# Move the tokenized inputs to the same device the model is on (GPU/CPU)
+# 토큰화된 입력값을 모델이 올라와 있는 기기(CPU/GPU)로 옮깁니다.
 inputs = {key: tensor.to(model.device) for key, tensor in inputs.items()}
 print("Tokenized inputs:\n", inputs)
 
-# 4: Generate text from the model
+# 4: 모델로부터 응답을 생성합니다
 outputs = model.generate(**inputs, max_new_tokens=512, temperature=0.1)
 print("Generated tokens:\n", outputs)
 
-# 5: Decode the output back to a string
+# 5: 모델이 출력한 토큰을 다시 문자열로 디코딩합니다
 decoded_output = tokenizer.decode(outputs[0][inputs['input_ids'].size(1):], skip_special_tokens=True)
 print("Decoded output:\n", decoded_output)
 ```
