@@ -1411,14 +1411,14 @@ class JambaModel(JambaPreTrainedModel):
         return causal_mask
 
     def _update_mamba_mask(self, attention_mask, cache_position):
+        """
+        No need for zeroing states when
+            1. Cached forward
+            2. Attending to all inputs
+        """
         mamba_mask = attention_mask
-
-        # No need for zeroing states when
-        # 1. Cached forward
-        # 2. Attending to all inputs
         if cache_position[0] > 0 or (attention_mask is not None and torch.all(attention_mask == 1)):
             mamba_mask = None
-
         return mamba_mask
 
 
