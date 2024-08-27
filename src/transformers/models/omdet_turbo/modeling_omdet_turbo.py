@@ -1333,7 +1333,6 @@ class OmDetTurboDecoder(OmDetTurboPreTrainedModel):
             self.task_project = nn.Linear(config.class_embed_dim, hidden_dim)
 
         # Transformer module
-        # self.decoder = OmDetTurboDeformableTransformerDecoder(config)
         self.layers = nn.ModuleList(
             [OmDetTurboDeformableTransformerDecoderLayer(config) for _ in range(config.decoder_num_layers)]
         )
@@ -1591,21 +1590,6 @@ class OmDetTurboDecoder(OmDetTurboPreTrainedModel):
         last_hidden_state = predicted_class_features
         decoder_bboxes = torch.stack(decoder_bboxes)
         decoder_class_logits = torch.stack(decoder_class_logits)
-
-        # last_hidden_state, decoder_bboxes, decoder_class_logits, attentions, hidden_states = self.decoder(
-        #     decoder_embeddings,
-        #     reference_points,
-        #     vision_features,
-        #     vision_shapes,
-        #     class_features,
-        #     task_features,
-        #     self.decoder_bbox_head,
-        #     self.decoder_class_head,
-        #     self.query_position_head,
-        #     attention_mask=attention_mask,
-        #     output_attentions=output_attentions,
-        #     output_hidden_states=output_hidden_states,
-        # )
 
         if not return_dict:
             return (
