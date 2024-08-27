@@ -580,9 +580,6 @@ def custom_object_save(obj: Any, folder: Union[str, os.PathLike], config: Option
 
     result = []
     # Copy module file to the output folder.
-    breakpoint()
-    # TODO Figure out why InternLM2 is registered for auto class but fake_custom isn't
-    # TODO From there, write a test to ensure correct saving even after the PR change
     object_file = sys.modules[obj.__module__].__file__
     dest_file = Path(folder) / (Path(object_file).name)
     shutil.copy(object_file, dest_file)
