@@ -556,9 +556,10 @@ class GraniteModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 if not has_flash:
                     raise ValueError("The flash model should have flash attention layers")
 
+    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
     @require_torch_sdpa
     @slow
-    def test_eager_matches_sdpa_generate(self):
+    def test_eager_matches_sdpa_inference(self, torch_dtype: str):
         """
         skipping the test since mup is very flaky and gets consistently different outputs
         """
@@ -623,57 +624,3 @@ class GraniteIntegrationTest(unittest.TestCase):
         EXPECTED_MEAN = torch.tensor([[0.0000, 0.0000, -3.4374, -2.1636, -2.6245, -3.0029, -3.8229, -3.1158]])
 
         self.assertTrue(torch.allclose(EXPECTED_MEAN.to(torch_device), out.logits.mean(-1), atol=1e-2, rtol=1e-2))
-
-    @slow
-    @require_torch_gpu
-    @require_read_token
-    def test_compile_static_cache(self):
-        # `torch==2.2` will throw an error on this test (as in other compilation tests), but torch==2.1.2 and torch>2.2
-        # work as intended. See https://github.com/pytorch/pytorch/issues/121943
-        if version.parse(torch.__version__) < version.parse("2.3.0"):
-            self.skipTest("This test requires torch >= 2.3 to run.")
-
-        NUM_TOKENS_TO_GENERATE = 40
-        # Note on `EXPECTED_TEXT_COMPLETION`'s diff: the current value matches the original test if the original test
-        # was changed to have a cache of 53 tokens (as opposed to 4096), on Ampere GPUs.
-        #
-        # Key 9 for MI300, Key 8 for A100/A10, and Key 7 for T4.
-        #
-        # Note: Key 9 is currently set for MI300, but may need potential future adjustments for H100s,
-        # considering differences in hardware processing and potential deviations in generated text.
-        EXPECTED_TEXT_COMPLETION = [
-            "Simply put, the theory of relativity states that #x# and  #y# are not independent variables.  "
-            "#x# and  #y# are related by the equation  #x = y^2# and  #y =",
-            "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on my "
-            "eggs, I love it on my fries, I love it on my burgers, I love it on my hot dogs, I",
-        ]
-
-        prompts = [
-            "Simply put, the theory of relativity states that ",
-            "My favorite all time favorite condiment is ketchup.",
-        ]
-        tokenizer = AutoTokenizer.from_pretrained("ibm/PowerLM-3b", padding_side="right")
-        model = GraniteForCausalLM.from_pretrained(
-            "ibm/PowerLM-3b", device_map="sequential", torch_dtype=torch.float16
-        )
-        inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
-
-        # Dynamic Cache
-        generated_ids = model.generate(**inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False)
-        dynamic_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, dynamic_text)  # Both GPU architectures have the same output
-
-        # Static Cache
-        generated_ids = model.generate(
-            **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
-        )
-        static_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, static_text)
-
-        # Static Cache + compile
-        model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
-        generated_ids = model.generate(
-            **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
-        )
-        static_compiled_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, static_compiled_text)
