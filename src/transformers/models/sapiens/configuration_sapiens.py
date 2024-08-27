@@ -103,6 +103,12 @@ class SapiensConfig(PretrainedConfig):
         qkv_bias=True,
         encoder_stride=16,
         use_cls_token=False,
+        # head
+        conv_out_channels=[768, 768, 768],
+        conv_kernel_sizes=[1, 1, 1],
+        deconv_out_channels=[768, 768, 768],
+        deconv_kernel_sizes=[4, 4, 4],
+        head_dropout2d_prob=0.0,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -122,6 +128,13 @@ class SapiensConfig(PretrainedConfig):
         self.qkv_bias = qkv_bias
         self.encoder_stride = encoder_stride
         self.use_cls_token = use_cls_token
+
+        # head
+        self.conv_out_channels = conv_out_channels
+        self.conv_kernel_sizes = conv_kernel_sizes
+        self.deconv_out_channels = deconv_out_channels
+        self.deconv_kernel_sizes = deconv_kernel_sizes
+        self.head_dropout2d_prob = head_dropout2d_prob
 
 
 class SapiensOnnxConfig(OnnxConfig):

@@ -519,6 +519,21 @@ class SapiensTransformer(nn.Module):
         )
 
 
+# Copied from transformers.models.vit.modeling_vit.ViTPooler with ViT->Sapiens
+class SapiensPooler(nn.Module):
+    def __init__(self, config: SapiensConfig):
+        super().__init__()
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        self.activation = nn.Tanh()
+
+    def forward(self, hidden_states):
+        # We "pool" the model by simply taking the hidden state corresponding
+        # to the first token.
+        first_token_tensor = hidden_states[:, 0]
+        pooled_output = self.dense(first_token_tensor)
+        pooled_output = self.activation(pooled_output)
+        return pooled_output
+
 
 # Copied from transformers.models.vit.modeling_vit.ViTPreTrainedModel with ViT->Sapiens,vit->sapiens
 class SapiensPreTrainedModel(PreTrainedModel):
@@ -670,18 +685,115 @@ class SapiensModel(SapiensPreTrainedModel):
         )
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTPooler with ViT->Sapiens
-class SapiensPooler(nn.Module):
+class ConvLayer(nn.Module):
+
+    def __init__(self, in_channels, out_channels, kernel_size):
+        super().__init__()
+        padding = (kernel_size - 1) // 2
+        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, padding=padding)
+        self.norm = nn.InstanceNorm2d(out_channels)
+        self.activation = nn.SiLU()
+
+    def forward(self, x):
+        x = self.conv(x)
+        x = self.norm(x)
+        x = self.activation(x)
+        return x
+
+
+class DeConvLayer(nn.Module):
+
+    def __init__(self, in_channels, out_channels, kernel_size):
+        super().__init__()
+        padding = (kernel_size - 1) // 2
+        output_padding = kernel_size % 2
+        self.deconv = nn.ConvTranspose2d(
+            in_channels, out_channels, kernel_size, stride=2, padding=padding, output_padding=output_padding, bias=False
+        )
+        self.norm = nn.InstanceNorm2d(out_channels)
+        self.activation = nn.SiLU()
+
+    def forward(self, x):
+        x = self.deconv(x)
+        x = self.norm(x)
+        x = self.activation(x)
+        return x
+
+
+class Head(nn.Module):
+
     def __init__(self, config: SapiensConfig):
         super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.activation = nn.Tanh()
+        self.config = config
 
-    def forward(self, hidden_states):
-        # We "pool" the model by simply taking the hidden state corresponding
-        # to the first token.
-        first_token_tensor = hidden_states[:, 0]
-        pooled_output = self.dense(first_token_tensor)
-        pooled_output = self.activation(pooled_output)
-        return pooled_output
+        conv_in_channels = [config.hidden_size] + config.conv_out_channels[:-1]
+        self.conv_layers = nn.ModuleList(
+            ConvLayer(in_channels, out_channels, kernel_size)
+            for in_channels, out_channels, kernel_size in zip(
+                conv_in_channels, config.conv_out_channels, config.conv_kernel_sizes
+            )
+        )
 
+        deconv_in_channels = [config.conv_out_channels[-1]] + config.deconv_out_channels[:-1]
+        self.deconv_layers = nn.ModuleList(
+            DeConvLayer(in_channels, out_channels, kernel_size)
+            for in_channels, out_channels, kernel_size in zip(
+                deconv_in_channels, config.deconv_out_channels, config.deconv_kernel_sizes
+            )
+        )
+
+        self.dropout = nn.Dropout2d(config.head_dropout2d_prob)
+        self.final_conv = nn.Conv2d(config.deconv_out_channels[-1], config.num_labels, kernel_size=1)
+
+    def forward(self, x):
+        for conv_layer in self.conv_layers:
+            x = conv_layer(x)
+
+        for deconv_layer in self.deconv_layers:
+            x = deconv_layer(x)
+
+        x = self.dropout(x)
+        out = self.final_conv(x)
+        return out
+
+
+class SapiensForSemanticSegmentation(SapiensPreTrainedModel):
+    def __init__(self, config: SapiensConfig):
+        super().__init__(config)
+        self.config = config
+        self.model = SapiensTransformer(config)
+        self.head = Head(config)
+
+        self.post_init()
+
+    def forward(
+        self,
+        pixel_values: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        interpolate_pos_encoding: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, MaskedImageModelingOutput]:
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        model_outputs = self.model(
+            pixel_values,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            interpolate_pos_encoding=interpolate_pos_encoding,
+            return_dict=return_dict,
+        )
+        logits = self.head(model_outputs.last_hidden_state)
+
+        if not return_dict:
+            return (logits,) + model_outputs[1:]
+
+        return dict(
+            logits=logits,
+            hidden_states=model_outputs.hidden_states,
+            attentions=model_outputs.attentions,
+        )

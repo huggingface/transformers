@@ -30,7 +30,6 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["feature_extraction_sapiens"] = ["SapiensFeatureExtractor"]
     _import_structure["image_processing_sapiens"] = ["SapiensImageProcessor"]
 
 
@@ -49,8 +48,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_sapiens"] = [
-        "SapiensForImageClassification",
-        "SapiensForMaskedImageModeling",
+        "SapiensForSemanticSegmentation",
         "SapiensModel",
         "SapiensPreTrainedModel",
     ]
@@ -64,7 +62,6 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .feature_extraction_sapiens import SapiensFeatureExtractor
         from .image_processing_sapiens import SapiensImageProcessor
 
     try:
@@ -82,8 +79,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_sapiens import (
-            SapiensForImageClassification,
-            SapiensForMaskedImageModeling,
+            SapiensForSemanticSegmentation,
             SapiensModel,
             SapiensPreTrainedModel,
         )
