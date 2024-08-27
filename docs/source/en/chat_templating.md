@@ -389,6 +389,15 @@ The model has called the function with valid arguments, in the format requested 
 inferred that we're most likely referring to the Paris in France, and it remembered that, as the home of SI units,
 the temperature in France should certainly be displayed in Celsius.
 
+<Tip>
+
+The output format above is specific to the `Hermes-2-Pro` model we're using in this example. Other models may emit different
+tool call formats, and you may need to do some manual parsing at this step. For example, `Llama-3.1` models will emit
+slightly different JSON, with `parameters` instead of `arguments`. Regardless of the format the model outputs, you 
+should add the tool call to the conversation in the format below, with `tool_calls`, `function` and `arguments` keys. 
+
+</Tip>
+
 Next, let's append the model's tool call to the conversation.
 
 ```python
@@ -776,14 +785,23 @@ it's time to put an end to them!
 
 ## Advanced: Template writing tips
 
-If you're unfamiliar with Jinja, we generally find that the easiest way to write a chat template is to first
-write a short Python script that formats messages the way you want, and then convert that script into a template.
+<Tip>
 
-Remember that the template handler will receive the conversation history as a variable called `messages`.  
+The easiest way to get started with writing Jinja templates is to take a look at some existing ones. You can use
+`print(tokenizer.chat_template)` for any chat model to see what template it's using. In general, models that support tool use have 
+much more complex templates than other models - so when you're just getting started, they're probably a bad example
+to learn from! You can also take a look at the 
+[Jinja documentation](https://jinja.palletsprojects.com/en/3.1.x/templates/#synopsis) for details
+of general Jinja formatting and syntax.
+
+</Tip>
+
+Jinja templates in `transformers` are identical to Jinja templates elsewhere. The main thing to know is that 
+the conversation history will be accessible inside your template as a variable called `messages`.  
 You will be able to access `messages` in your template just like you can in Python, which means you can loop over 
 it with `{% for message in messages %}` or access individual messages with `{{ messages[0] }}`, for example.
 
-You can also use the following tips to convert your code to Jinja:
+You can also use the following tips to write clean, efficient Jinja templates:
 
 ### Trimming whitespace
 
@@ -808,46 +826,35 @@ rather than like this:
 Adding `-` will strip any whitespace that comes before the block. The second example looks innocent, but the newline
 and indentation may end up being included in the output, which is probably not what you want!
 
-### For loops
-
-For loops in Jinja look like this:
-
-```
-{%- for message in messages %}
-    {{- message['content'] }}
-{%- endfor %}
-```
-
-Note that whatever's inside the {{ expression block }} will be printed to the output. You can use operators like
-`+` to combine strings inside expression blocks.
-
-### If statements
-
-If statements in Jinja look like this:
-
-```
-{%- if message['role'] == 'user' %}
-    {{- message['content'] }}
-{%- endif %}
-```
-
-Note how where Python uses whitespace to mark the beginnings and ends of `for` and `if` blocks, Jinja requires you
-to explicitly end them with `{% endfor %}` and `{% endif %}`.
-
 ### Special variables
 
-Inside your template, you will have access to the list of `messages`, but you can also access several other special
-variables. These include special tokens like `bos_token` and `eos_token`, as well as the `add_generation_prompt`
-variable that we discussed above. You can also use the `loop` variable to access information about the current loop
-iteration, for example  using `{% if loop.last %}` to check if the current message is the last message in the 
-conversation. Here's an example that puts these ideas together to add a generation prompt at the end of the
-conversation if add_generation_prompt is `True`:
+Inside your template, you will have access several special variables. The most important of these is `messages`, 
+which contains the chat history as a list of message dicts. However, there are several others. Not every
+variable will be used in every template. The most common other variables are:
 
-```
-{%- if loop.last and add_generation_prompt %}
-    {{- bos_token + 'Assistant:\n' }}
-{%- endif %}
-```
+- `tools` contains a list of tools in JSON schema format. Will be `None` or undefined if no tools are passed.
+- `documents` contains a list of documents in the format `{"title": "Title", "contents": "Contents"}`, used for retrieval-augmented generation. Will be `None` or undefined if no documents are passed.
+- `add_generation_prompt` is a bool that is `True` if the user has requested a generation prompt, and `False` otherwise. If this is set, your template should add the header for an assistant message to the end of the conversation. If your model doesn't have a specific header for assistant messages, you can ignore this flag.
+- **Special tokens** like `bos_token` and `eos_token`. These are extracted from `tokenizer.special_tokens_map`. The exact tokens available inside each template will differ depending on the parent tokenizer.
+
+<Tip>
+
+You can actually pass any `kwarg` to `apply_chat_template`, and it will be accessible inside the template as a variable. In general,
+we recommend trying to stick to the core variables above, as it will make your model harder to use if users have
+to write custom code to pass model-specific `kwargs`. However, we're aware that this field moves quickly, so if you
+have a new use-case that doesn't fit in the core API, feel free to use a new `kwarg` for it! If a new `kwarg`
+becomes common we may promote it into the core API and create a standard, documented format for it.
+
+</Tip>
+
+### Callable functions
+
+There is also a short list of callable functions available to you inside your templates. These are:
+
+- `raise_exception(msg)`: Raises a `TemplateException`. This is useful for debugging, and for telling users when they're
+doing something that your template doesn't support.
+- `strftime_now(format_str)`: Equivalent to `datetime.now().strftime(format_str)` in Python. This is used for getting
+the current date/time in a specific format, which is sometimes included in system messages.
 
 ### Compatibility with non-Python Jinja
 

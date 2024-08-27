@@ -105,6 +105,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                       [CPM-Ant](model_doc/cpmant)                        |       ✅        |         ❌         |      ❌      |
 |                          [CTRL](model_doc/ctrl)                          |       ✅        |         ✅         |      ❌      |
 |                           [CvT](model_doc/cvt)                           |       ✅        |         ✅         |      ❌      |
+|                           [DAC](model_doc/dac)                           |       ✅        |         ❌         |      ❌      |
 |                   [Data2VecAudio](model_doc/data2vec)                    |       ✅        |         ❌         |      ❌      |
 |                    [Data2VecText](model_doc/data2vec)                    |       ✅        |         ❌         |      ❌      |
 |                   [Data2VecVision](model_doc/data2vec)                   |       ✅        |         ✅         |      ❌      |
@@ -120,7 +121,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                          [DETR](model_doc/detr)                          |       ✅        |         ❌         |      ❌      |
 |                      [DialoGPT](model_doc/dialogpt)                      |       ✅        |         ✅         |      ✅      |
 |                         [DiNAT](model_doc/dinat)                         |       ✅        |         ❌         |      ❌      |
-|                        [DINOv2](model_doc/dinov2)                        |       ✅        |         ❌         |      ❌      |
+|                        [DINOv2](model_doc/dinov2)                        |       ✅        |         ❌         |      ✅      |
 |                    [DistilBERT](model_doc/distilbert)                    |       ✅        |         ✅         |      ✅      |
 |                           [DiT](model_doc/dit)                           |       ✅        |         ❌         |      ✅      |
 |                       [DonutSwin](model_doc/donut)                       |       ✅        |         ❌         |      ❌      |
@@ -259,6 +260,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                         [Qwen2](model_doc/qwen2)                         |       ✅        |         ❌         |      ❌      |
 |                   [Qwen2Audio](model_doc/qwen2_audio)                    |       ✅        |         ❌         |      ❌      |
 |                     [Qwen2MoE](model_doc/qwen2_moe)                      |       ✅        |         ❌         |      ❌      |
+|                      [Qwen2VL](model_doc/qwen2_vl)                       |       ✅        |         ❌         |      ❌      |
 |                           [RAG](model_doc/rag)                           |       ✅        |         ✅         |      ❌      |
 |                         [REALM](model_doc/realm)                         |       ✅        |         ❌         |      ❌      |
 |               [RecurrentGemma](model_doc/recurrent_gemma)                |       ✅        |         ❌         |      ❌      |
