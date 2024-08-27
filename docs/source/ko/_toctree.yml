@@ -27,8 +27,8 @@
     title: 에이전트
   - local: llm_tutorial
     title: 대규모 언어 모델로 생성하기
-  - local: in_translation
-    title: (번역중)Chatting with Transformers
+  - local: conversations
+    title: Transformers로 채팅하기
   title: 튜토리얼
 - sections:
   - isExpanded: false
