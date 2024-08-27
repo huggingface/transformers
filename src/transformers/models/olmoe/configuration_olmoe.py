@@ -51,6 +51,8 @@ class OlmoeConfig(PretrainedConfig):
             The maximum sequence length that this model might ever be used with.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
+            The epsilon used by the rms normalization layers.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
@@ -118,6 +120,7 @@ class OlmoeConfig(PretrainedConfig):
         hidden_act="silu",
         max_position_embeddings=4096,
         initializer_range=0.02,
+        rms_norm_eps=1e-05,
         use_cache=True,
         pad_token_id=1,
         bos_token_id=None,
@@ -149,6 +152,7 @@ class OlmoeConfig(PretrainedConfig):
         self.num_key_value_heads = num_key_value_heads
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
+        self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
         self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling

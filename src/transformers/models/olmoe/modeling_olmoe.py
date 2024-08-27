@@ -197,6 +197,9 @@ class OlmoeRMSNorm(nn.Module):
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
         return self.weight * hidden_states.to(input_dtype)
 
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+
 
 ALL_LAYERNORM_LAYERS.append(OlmoeRMSNorm)
 
@@ -388,8 +391,8 @@ class OlmoeAttention(nn.Module):
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
         self.o_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=config.attention_bias)
-        self.q_norm = OlmoeRMSNorm(self.hidden_size)
-        self.k_norm = OlmoeRMSNorm((self.hidden_size // self.num_heads) * self.num_key_value_heads)
+        self.q_norm = OlmoeRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
+        self.k_norm = OlmoeRMSNorm((self.hidden_size // self.num_heads) * self.num_key_value_heads, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -725,8 +728,8 @@ class OlmoeDecoderLayer(nn.Module):
         self.self_attn = OLMOE_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
 
         self.mlp = OlmoeSparseMoeBlock(config)
-        self.input_layernorm = OlmoeRMSNorm(config.hidden_size)
-        self.post_attention_layernorm = OlmoeRMSNorm(config.hidden_size)
+        self.input_layernorm = OlmoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = OlmoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -931,6 +934,7 @@ OLMOE_INPUTS_DOCSTRING = r"""
     "The bare Olmoe Model outputting raw hidden-states without any specific head on top.",
     OLMOE_START_DOCSTRING,
 )
+# Copied from transformers.models.llama.modeling_llama.LlamaModel with Llama->Olmoe
 class OlmoeModel(OlmoePreTrainedModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`OlmoeDecoderLayer`]
@@ -948,7 +952,7 @@ class OlmoeModel(OlmoePreTrainedModel):
         self.layers = nn.ModuleList(
             [OlmoeDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.norm = OlmoeRMSNorm(config.hidden_size)
+        self.norm = OlmoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = OlmoeRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
 
@@ -962,6 +966,7 @@ class OlmoeModel(OlmoePreTrainedModel):
         self.embed_tokens = value
 
     @add_start_docstrings_to_model_forward(OLMOE_INPUTS_DOCSTRING)
+    # Ignore copy
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1094,7 +1099,6 @@ class OlmoeModel(OlmoePreTrainedModel):
             router_logits=all_router_logits,
         )
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaModel._update_causal_mask
     def _update_causal_mask(
         self,
         attention_mask: torch.Tensor,
