@@ -505,6 +505,11 @@ jobs:
         run_tests_torch_cuda_extensions_single_gpu,
         run_tests_torch_cuda_extensions_multi_gpu
     ]
+    env:
+      CI_BRANCH_PUSH: ${{ github.event.ref }}
+      CI_BRANCH_WORKFLOW_RUN: ${{ github.event.workflow_run.head_branch }}
+      CI_SHA_PUSH: ${{ github.event.head_commit.id }}
+      CI_SHA_WORKFLOW_RUN: ${{ github.event.workflow_run.head_sha }}
     steps:
       - name: Preliminary job status
         shell: bash
@@ -518,11 +523,7 @@ jobs:
         shell: bash
         # For the meaning of these environment variables, see the job `Setup`
         run: |
-          CI_BRANCH_PUSH=${{ github.event.ref }}
           CI_BRANCH_PUSH=${CI_BRANCH_PUSH/'refs/heads/'/''}
-          CI_BRANCH_WORKFLOW_RUN=${{ github.event.workflow_run.head_branch }}
-          CI_SHA_PUSH=${{ github.event.head_commit.id }}
-          CI_SHA_WORKFLOW_RUN=${{ github.event.workflow_run.head_sha }}
           echo $CI_BRANCH_PUSH
           echo $CI_BRANCH_WORKFLOW_RUN
           echo $CI_SHA_PUSH
