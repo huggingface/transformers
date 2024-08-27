@@ -39,7 +39,7 @@ model_path = "ibm/PowerLM-3b"
 tokenizer = AutoTokenizer.from_pretrained(model_path)
 
 # drop device_map if running on CPU
-model = AutoModelForCausalLM.from_pretrained(model_path, device_map=device)
+model = AutoModelForCausalLM.from_pretrained(model_path, device_map="auto")
 model.eval()
 
 # change input text as desired
