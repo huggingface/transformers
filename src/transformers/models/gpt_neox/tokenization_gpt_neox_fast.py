@@ -85,8 +85,6 @@ class GPTNeoXTokenizerFast(PreTrainedTokenizerFast):
             Whether or not to add an `eos_token` at the end of sequences.
         trim_offsets (`bool`, *optional*, defaults to `True`):
             Whether or not the post-processing step should trim offsets to avoid including whitespaces.
-        padding_side (`str`, *optional*, defaults to 'right'):
-            The side on which padding is applied to. Should be either 'left' or 'right'.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -104,7 +102,6 @@ class GPTNeoXTokenizerFast(PreTrainedTokenizerFast):
         add_bos_token=False,
         add_eos_token=False,
         add_prefix_space=False,
-        padding_side="right",
         **kwargs,
     ):
         super().__init__(
@@ -118,7 +115,6 @@ class GPTNeoXTokenizerFast(PreTrainedTokenizerFast):
             add_bos_token=add_bos_token,
             add_eos_token=add_eos_token,
             add_prefix_space=add_prefix_space,
-            padding_side=padding_side,
             **kwargs,
         )
 

@@ -14,9 +14,10 @@
 
 from typing import TYPE_CHECKING
 
-from ...file_utils import _LazyModule, is_torch_available
 from ...utils import (
     OptionalDependencyNotAvailable,
+    _LazyModule,
+    is_torch_available,
 )
 
 
