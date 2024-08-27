@@ -21,6 +21,7 @@ import warnings
 from typing import List, Optional, Tuple, Union
 
 import torch
+import torch.nn.functional as F
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
@@ -270,12 +271,11 @@ except Exception:
 ALL_LAYERNORM_LAYERS.append(TimesFMLayerNorm)
 
 
-# Copied from transformers.models.t5.modeling_t5.T5DenseActDense with T5->TimesFM
 class TimesFMDenseActDense(nn.Module):
     def __init__(self, config: TimesFMConfig):
         super().__init__()
-        self.wi = nn.Linear(config.d_model, config.d_ff, bias=False)
-        self.wo = nn.Linear(config.d_ff, config.d_model, bias=False)
+        self.wi = nn.Linear(config.d_model, config.d_ff, bias=True)
+        self.wo = nn.Linear(config.d_ff, config.d_model, bias=True)
         self.dropout = nn.Dropout(config.dropout_rate)
         self.act = ACT2FN[config.dense_act_fn]
 
@@ -293,46 +293,12 @@ class TimesFMDenseActDense(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.t5.modeling_t5.T5DenseGatedActDense with T5->TimesFM,t5->timesfm
-class TimesFMDenseGatedActDense(nn.Module):
-    def __init__(self, config: TimesFMConfig):
-        super().__init__()
-        self.wi_0 = nn.Linear(config.d_model, config.d_ff, bias=False)
-        self.wi_1 = nn.Linear(config.d_model, config.d_ff, bias=False)
-        self.wo = nn.Linear(config.d_ff, config.d_model, bias=False)
-        self.dropout = nn.Dropout(config.dropout_rate)
-        self.act = ACT2FN[config.dense_act_fn]
-
-    def forward(self, hidden_states):
-        hidden_gelu = self.act(self.wi_0(hidden_states))
-        hidden_linear = self.wi_1(hidden_states)
-        hidden_states = hidden_gelu * hidden_linear
-        hidden_states = self.dropout(hidden_states)
-
-        # To make 8bit quantization work for google/flan-timesfm-xxl, self.wo is kept in float32.
-        # See https://github.com/huggingface/transformers/issues/20287
-        # we also make sure the weights are not in `int8` in case users will force `_keep_in_fp32_modules` to be `None``
-        if (
-            isinstance(self.wo.weight, torch.Tensor)
-            and hidden_states.dtype != self.wo.weight.dtype
-            and self.wo.weight.dtype != torch.int8
-        ):
-            hidden_states = hidden_states.to(self.wo.weight.dtype)
-
-        hidden_states = self.wo(hidden_states)
-        return hidden_states
-
-
-# Copied from transformers.models.t5.modeling_t5.T5LayerFF with T5->TimesFM
 class TimesFMLayerFF(nn.Module):
     def __init__(self, config: TimesFMConfig):
         super().__init__()
-        if config.is_gated_act:
-            self.DenseReluDense = TimesFMDenseGatedActDense(config)
-        else:
-            self.DenseReluDense = TimesFMDenseActDense(config)
 
-        self.layer_norm = TimesFMLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
+        self.DenseReluDense = TimesFMDenseActDense(config)
+        self.layer_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
     def forward(self, hidden_states):
@@ -342,7 +308,20 @@ class TimesFMLayerFF(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.t5.modeling_t5.T5Attention with T5->TimesFM
+class TimesFMPerHeadDimScale(nn.Module):
+    def __init__(self, config: TimesFMConfig):
+        super().__init__()
+
+        self.dim = config.d_model // config.num_heads
+        self.scale = nn.Parameter(torch.zeros(self.dim))
+
+    def forward(self, hidden_states):
+        r_softplus_0 = 1.442695041
+        scale = r_softplus_0 / math.sqrt(self.dim)
+        scale *= F.softplus(self.scale)
+        return hidden_states * scale
+
+
 class TimesFMAttention(nn.Module):
     def __init__(self, config: TimesFMConfig, has_relative_attention_bias=False):
         super().__init__()
@@ -357,10 +336,11 @@ class TimesFMAttention(nn.Module):
         self.inner_dim = self.n_heads * self.key_value_proj_dim
 
         # Mesh TensorFlow initialization to avoid scaling before softmax
-        self.q = nn.Linear(self.d_model, self.inner_dim, bias=False)
-        self.k = nn.Linear(self.d_model, self.inner_dim, bias=False)
-        self.v = nn.Linear(self.d_model, self.inner_dim, bias=False)
-        self.o = nn.Linear(self.inner_dim, self.d_model, bias=False)
+        self.q = nn.Linear(self.d_model, self.inner_dim, bias=True)
+        self.k = nn.Linear(self.d_model, self.inner_dim, bias=True)
+        self.v = nn.Linear(self.d_model, self.inner_dim, bias=True)
+        self.o = nn.Linear(self.inner_dim, self.d_model, bias=True)
+        self.per_head_dim_scale = TimesFMPerHeadDimScale(config)
 
         if self.has_relative_attention_bias:
             self.relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, self.n_heads)
@@ -515,7 +495,8 @@ class TimesFMAttention(nn.Module):
             return hidden_states
 
         # get query states
-        query_states = shape(self.q(hidden_states))  # (batch_size, n_heads, seq_length, dim_per_head)
+        unscaled_query_states = shape(self.q(hidden_states))  # (batch_size, n_heads, seq_length, dim_per_head)
+        query_states = self.per_head_dim_scale(unscaled_query_states)
 
         # get key/value states
         key_states = project(
