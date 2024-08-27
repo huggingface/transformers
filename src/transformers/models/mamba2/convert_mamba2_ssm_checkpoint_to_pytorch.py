@@ -53,15 +53,14 @@ def convert_ssm_config_to_hf_config(config_ssm: Dict, mamba2_model_dict: Dict) -
     hf_config.num_heads = (hf_config.hidden_size * hf_config.expand) // hf_config.head_dim
     hf_config.num_hidden_layers = config_ssm[config_dict["num_hidden_layers"]]
     hf_config.n_groups = config_ssm.get(config_dict["n_groups"], 1)
-    hf_config.residual_in_fp32 = config_ssm[config_dict["residual_in_fp32"]]
-    hf_config.tie_word_embeddings = config_ssm[config_dict["tie_word_embeddings"]]
+    hf_config.tie_word_embeddings = config_ssm["tie_embeddings"]
     hf_config.bos_token_id = config_dict["bos_token_id"]
     hf_config.pad_token_id = config_dict["pad_token_id"]
     hf_config.eos_token_id = config_dict["eos_token_id"]
 
     # Padded vocab size, mostly of 16 but 32 is also very common in different models
-    vocab_size = config_ssm[config_dict["vocab_size"]]
-    pad_vocab_size_multiple = config_ssm[config_dict["pad_vocab_size_multiple"]]
+    vocab_size = config_ssm["vocab_size"]
+    pad_vocab_size_multiple = config_ssm["pad_vocab_size_multiple"]
     if (vocab_size % pad_vocab_size_multiple) != 0:
         vocab_size += pad_vocab_size_multiple - (vocab_size % pad_vocab_size_multiple)
     hf_config.vocab_size = vocab_size
@@ -93,10 +92,6 @@ _MAMBA2_MODELS_DICT = {
         "hidden_size": "dim",
         "num_hidden_layers": "n_layers",
         "n_groups": "n_groups",
-        "residual_in_fp32": "residual_in_fp32",
-        "tie_word_embeddings": "tie_embeddings",
-        "vocab_size": "vocab_size",
-        "pad_vocab_size_multiple": "pad_vocab_size_multiple",
         "bos_token_id": 0,
         "pad_token_id": 1,
         "eos_token_id": 2,
@@ -108,10 +103,6 @@ _MAMBA2_MODELS_DICT = {
         "hidden_size": "d_model",
         "num_hidden_layers": "n_layer",
         "n_groups": "ngroups",
-        "residual_in_fp32": "residual_in_fp32",
-        "tie_word_embeddings": "tie_embeddings",
-        "vocab_size": "vocab_size",
-        "pad_vocab_size_multiple": "pad_vocab_size_multiple",
         "bos_token_id": 0,
         "pad_token_id": 0,
         "eos_token_id": 0,
