@@ -284,7 +284,7 @@ def infer_framework_load_model(
                 )
 
             try:
-                model = model_class.from_pretrained(model, **kwargs)
+                model = model_class.from_pretrained(model, config=config, **kwargs)
                 if hasattr(model, "eval"):
                     model = model.eval()
                 # Stop loading on the first successful load.
