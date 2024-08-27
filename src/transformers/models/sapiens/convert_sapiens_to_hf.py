@@ -191,7 +191,43 @@ def convert_sapiens_checkpoint(model_name, checkpoints_dir, save_dir):
                 "hidden_size": 1536,
             },
             "checkpoint_local_path": "sapiens_host/seg/checkpoints/sapiens_1b/sapiens_1b_seg_face_epoch_200.pth",
-        }
+        },
+        "normal-estimation-0.3b": {
+            "config": {
+                "num_labels": 3,
+                "num_hidden_layers": 24,
+                "hidden_size": 1024,
+                "patch_embeddings_padding": 2,
+            },
+            "checkpoint_local_path": "sapiens_host/normal/checkpoints/sapiens_0.3b/sapiens_0.3b_normal_render_people_epoch_66.pth",
+        },
+        "normal-estimation-0.6b": {
+            "config": {
+                "num_labels": 3,
+                "num_hidden_layers": 32,
+                "hidden_size": 1280,
+                "patch_embeddings_padding": 2,
+            },
+            "checkpoint_local_path": "sapiens_host/normal/checkpoints/sapiens_0.6b/sapiens_0.6b_normal_render_people_epoch_200.pth",
+        },
+        "normal-estimation-1b": {
+            "config": {
+                "num_labels": 3,
+                "num_hidden_layers": 40,
+                "hidden_size": 1536,
+                "patch_embeddings_padding": 2,
+            },
+            "checkpoint_local_path": "sapiens_host/normal/checkpoints/sapiens_1b/sapiens_1b_normal_render_people_epoch_115.pth",
+        },
+        "normal-estimation-2b": {
+            "config": {
+                "num_labels": 3,
+                "num_hidden_layers": 48,
+                "hidden_size": 1920,
+                "patch_embeddings_padding": 2,
+            },
+            "checkpoint_local_path": "sapiens_host/normal/checkpoints/sapiens_2b/sapiens_2b_normal_render_people_epoch_70.pth",
+        },
     }
     checkpoint_params = all_params[model_name]
     config_params = checkpoint_params["config"]
@@ -250,7 +286,7 @@ if __name__ == "__main__":
     # Required parameters
     parser.add_argument(
         "--model_name",
-        default="segmentation-body-0.6b",
+        default="normal-estimation-0.3b",
         type=str,
         help="Name of the model trained with DINO you'd like to convert.",
     )

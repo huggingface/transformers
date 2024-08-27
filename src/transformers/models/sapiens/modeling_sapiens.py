@@ -153,7 +153,6 @@ class SapiensEmbeddings(nn.Module):
         return embeddings
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTPatchEmbeddings with ViT->Sapiens
 class SapiensPatchEmbeddings(nn.Module):
     """
     This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
@@ -161,7 +160,7 @@ class SapiensPatchEmbeddings(nn.Module):
     Transformer.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: SapiensConfig):
         super().__init__()
         image_size, patch_size = config.image_size, config.patch_size
         num_channels, hidden_size = config.num_channels, config.hidden_size
@@ -173,8 +172,9 @@ class SapiensPatchEmbeddings(nn.Module):
         self.patch_size = patch_size
         self.num_channels = num_channels
         self.num_patches = num_patches
+        self.padding = config.patch_embeddings_padding
 
-        self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
+        self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size, padding=self.padding)
 
     def forward(self, pixel_values: torch.Tensor, interpolate_pos_encoding: bool = False) -> torch.Tensor:
         batch_size, num_channels, height, width = pixel_values.shape

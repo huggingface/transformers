@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2024 Google AI and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 Meta and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -102,6 +102,7 @@ class SapiensConfig(PretrainedConfig):
         num_channels=3,
         qkv_bias=True,
         encoder_stride=16,
+        patch_embeddings_padding=0,
         use_cls_token=False,
         # head
         conv_out_channels=[768, 768, 768],
@@ -128,6 +129,7 @@ class SapiensConfig(PretrainedConfig):
         self.qkv_bias = qkv_bias
         self.encoder_stride = encoder_stride
         self.use_cls_token = use_cls_token
+        self.patch_embeddings_padding = patch_embeddings_padding
 
         # head
         self.conv_out_channels = conv_out_channels
