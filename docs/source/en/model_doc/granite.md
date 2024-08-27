@@ -47,9 +47,6 @@ prompt = "Write a code to find the maximum value in a list of numbers."
 
 # tokenize the text
 input_tokens = tokenizer(prompt, return_tensors="pt")
-# transfer tokenized inputs to the device
-for i in input_tokens:
-    input_tokens[i] = input_tokens[i].to(device)
 # generate output tokens
 output = model.generate(**input_tokens, max_new_tokens=100)
 # decode output tokens into text
