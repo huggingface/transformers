@@ -25,9 +25,9 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...modeling_outputs import (
+    ModelOutput,
     BaseModelOutput,
     BaseModelOutputWithPooling,
-    ImageClassifierOutput,
     MaskedImageModelingOutput,
 )
 from ...modeling_utils import PreTrainedModel
@@ -40,7 +40,7 @@ from ...utils import (
     replace_return_docstrings,
 )
 from .configuration_sapiens import SapiensConfig
-
+from dataclasses import dataclass
 
 logger = logging.get_logger(__name__)
 
@@ -55,6 +55,23 @@ _EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
 _IMAGE_CLASS_CHECKPOINT = "google/sapiens-base-patch16-224"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "Egyptian cat"
 
+# TODO: outputs docstrings
+@dataclass
+class SapiensOutputWithFeatureMap(BaseModelOutput):
+    last_feature_map: Optional[torch.FloatTensor] = None
+
+@dataclass
+class SapiensModelOutputWithPooledOutput(SapiensOutputWithFeatureMap):
+    pooler_output: Optional[torch.FloatTensor] = None
+
+@dataclass
+class SapiensForSemanticSegmentationOutput(ModelOutput):
+    loss: Optional[torch.FloatTensor] = None
+    logits: Optional[torch.FloatTensor] = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    last_feature_map: Optional[torch.FloatTensor] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 class SapiensEmbeddings(nn.Module):
     """
@@ -483,12 +500,12 @@ class SapiensTransformer(nn.Module):
 
     def forward(
         self,
-        pixel_values: Optional[torch.Tensor] = None,
+        pixel_values: torch.Tensor,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+    ) -> Union[Tuple, SapiensOutputWithFeatureMap]:
 
         # TODO: maybe have a cleaner way to cast the input (from `ImageProcessor` side?)
         expected_dtype = self.embeddings.patch_embeddings.projection.weight.dtype
@@ -498,6 +515,7 @@ class SapiensTransformer(nn.Module):
         embedding_output = self.embeddings(
             pixel_values, interpolate_pos_encoding=interpolate_pos_encoding
         )
+        
 
         encoder_outputs = self.encoder(
             embedding_output,
@@ -509,11 +527,18 @@ class SapiensTransformer(nn.Module):
         sequence_output = encoder_outputs[0]
         sequence_output = self.layernorm(sequence_output)
 
+        # Reshape from [batch, seq_len, hidden_dim] to [batch, height, width, hidden_dim]
+        batch_size, _, height, width = pixel_values.shape
+        out_features_height = height // self.config.patch_size
+        out_features_width = width // self.config.patch_size
+        last_feature_map = sequence_output.reshape(batch_size, out_features_height, out_features_width, -1).permute(0, 3, 1, 2)
+
         if not return_dict:
             return (sequence_output,) + encoder_outputs[1:]
 
-        return BaseModelOutput(
+        return SapiensOutputWithFeatureMap(
             last_hidden_state=sequence_output,
+            last_feature_map=last_feature_map,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
@@ -655,7 +680,7 @@ class SapiensModel(SapiensPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+    ) -> Union[Tuple, SapiensModelOutputWithPooledOutput]:
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -677,7 +702,7 @@ class SapiensModel(SapiensPreTrainedModel):
             head_outputs = (sequence_output, pooled_output) if pooled_output is not None else (sequence_output,)
             return head_outputs + model_outputs[1:]
 
-        return BaseModelOutputWithPooling(
+        return SapiensModelOutputWithPooledOutput(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
             hidden_states=model_outputs.hidden_states,
@@ -692,9 +717,9 @@ class ConvLayer(nn.Module):
         padding = (kernel_size - 1) // 2
         self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, padding=padding)
         self.norm = nn.InstanceNorm2d(out_channels)
-        self.activation = nn.SiLU()
+        self.activation = nn.SiLU(inplace=True)
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.conv(x)
         x = self.norm(x)
         x = self.activation(x)
@@ -711,9 +736,9 @@ class DeConvLayer(nn.Module):
             in_channels, out_channels, kernel_size, stride=2, padding=padding, output_padding=output_padding, bias=False
         )
         self.norm = nn.InstanceNorm2d(out_channels)
-        self.activation = nn.SiLU()
+        self.activation = nn.SiLU(inplace=True)
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.deconv(x)
         x = self.norm(x)
         x = self.activation(x)
@@ -726,15 +751,7 @@ class Head(nn.Module):
         super().__init__()
         self.config = config
 
-        conv_in_channels = [config.hidden_size] + config.conv_out_channels[:-1]
-        self.conv_layers = nn.ModuleList(
-            ConvLayer(in_channels, out_channels, kernel_size)
-            for in_channels, out_channels, kernel_size in zip(
-                conv_in_channels, config.conv_out_channels, config.conv_kernel_sizes
-            )
-        )
-
-        deconv_in_channels = [config.conv_out_channels[-1]] + config.deconv_out_channels[:-1]
+        deconv_in_channels = [config.hidden_size] + config.deconv_out_channels[:-1]
         self.deconv_layers = nn.ModuleList(
             DeConvLayer(in_channels, out_channels, kernel_size)
             for in_channels, out_channels, kernel_size in zip(
@@ -742,15 +759,24 @@ class Head(nn.Module):
             )
         )
 
-        self.dropout = nn.Dropout2d(config.head_dropout2d_prob)
+        conv_in_channels = config.deconv_out_channels[-1:] + config.conv_out_channels[:-1]
+        self.conv_layers = nn.ModuleList(
+            ConvLayer(in_channels, out_channels, kernel_size)
+            for in_channels, out_channels, kernel_size in zip(
+                conv_in_channels, config.conv_out_channels, config.conv_kernel_sizes
+            )
+        )
+
+        self.dropout = nn.Dropout2d(config.head_dropout2d_prob, inplace=False)
         self.final_conv = nn.Conv2d(config.deconv_out_channels[-1], config.num_labels, kernel_size=1)
 
     def forward(self, x):
-        for conv_layer in self.conv_layers:
-            x = conv_layer(x)
-
+        
         for deconv_layer in self.deconv_layers:
             x = deconv_layer(x)
+        
+        for conv_layer in self.conv_layers:
+            x = conv_layer(x)
 
         x = self.dropout(x)
         out = self.final_conv(x)
@@ -773,27 +799,30 @@ class SapiensForSemanticSegmentation(SapiensPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, MaskedImageModelingOutput]:
+    ) -> Union[Tuple, SapiensForSemanticSegmentationOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        model_outputs = self.model(
+        model_outputs: SapiensOutputWithFeatureMap = self.model(
             pixel_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             interpolate_pos_encoding=interpolate_pos_encoding,
             return_dict=return_dict,
         )
-        logits = self.head(model_outputs.last_hidden_state)
+        logits = self.head(model_outputs.last_feature_map)
 
         if not return_dict:
             return (logits,) + model_outputs[1:]
 
-        return dict(
+        return SapiensForSemanticSegmentationOutput(
+            loss=None,
             logits=logits,
+            last_hidden_state=model_outputs.last_hidden_state,
+            last_feature_map=model_outputs.last_feature_map,
             hidden_states=model_outputs.hidden_states,
             attentions=model_outputs.attentions,
         )

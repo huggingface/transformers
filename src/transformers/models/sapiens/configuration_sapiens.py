@@ -88,16 +88,16 @@ class SapiensConfig(PretrainedConfig):
 
     def __init__(
         self,
-        hidden_size=768,
-        num_hidden_layers=12,
-        num_attention_heads=12,
-        intermediate_size=3072,
+        hidden_size=1024,
+        num_hidden_layers=24,
+        num_attention_heads=16,
+        intermediate_size=4096,
         hidden_act="gelu",
         hidden_dropout_prob=0.0,
         attention_probs_dropout_prob=0.0,
         initializer_range=0.02,
-        layer_norm_eps=1e-12,
-        image_size=224,
+        layer_norm_eps=1e-6,
+        image_size=[1024, 768],
         patch_size=16,
         num_channels=3,
         qkv_bias=True,
@@ -108,7 +108,7 @@ class SapiensConfig(PretrainedConfig):
         conv_kernel_sizes=[1, 1, 1],
         deconv_out_channels=[768, 768, 768],
         deconv_kernel_sizes=[4, 4, 4],
-        head_dropout2d_prob=0.0,
+        head_dropout2d_prob=0.1,
         **kwargs,
     ):
         super().__init__(**kwargs)
