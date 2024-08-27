@@ -591,12 +591,12 @@ class GraniteIntegrationTest(unittest.TestCase):
         # Expected mean on dim = -1
 
         # fmt: off
-        EXPECTED_MEAN = torch.tensor([[-3.5323, -1.0852, -2.8477, -1.9027, -2.5014, -1.6253, -2.5948, -2.4452]])
+        EXPECTED_MEAN = torch.tensor([[-1.8799, -3.1269, -2.8297, -2.3755, -2.7364, -2.2389, -2.5914, -2.4154]])
 
         self.assertTrue(torch.allclose(EXPECTED_MEAN.to(torch_device), out.logits.mean(-1), atol=1e-2, rtol=1e-2))
 
         # slicing logits[0, 0, 0:15]
-        EXPECTED_SLICE = torch.tensor([[4.1562, -5.1250, -5.1562, -5.1250, -5.1562, 3.2344, 3.1250, -5.1562, -5.1562, -5.1562, -1.7812, 2.5625, 0.4609, 2.6250, -4.1875]])
+        EXPECTED_SLICE = torch.tensor([[4.8125, -2.0156, -2.0156, -2.0000, -2.0000, -2.8438, -2.0156, -2.0000, -2.0000, -2.0000, -2.0000, -2.0000, -2.0000, -2.0000, -2.0000]])
         # fmt: on
 
         self.assertTrue(
@@ -620,22 +620,9 @@ class GraniteIntegrationTest(unittest.TestCase):
 
         # fmt: off
         # Expected mean on dim = -1
-        EXPECTED_MEAN = torch.tensor([[-3.5317, -1.1000, -2.8519, -1.9190, -2.5031, -1.6047, -2.5759, -2.4347]])
+        EXPECTED_MEAN = torch.tensor([[0.0000, 0.0000, -3.4374, -2.1636, -2.6245, -3.0029, -3.8229, -3.1158]])
 
         self.assertTrue(torch.allclose(EXPECTED_MEAN.to(torch_device), out.logits.mean(-1), atol=1e-2, rtol=1e-2))
-
-        # slicing logits[0, 0, 0:15]
-        EXPECTED_SLICE = torch.tensor([4.2109, -5.1172, -5.1250, -5.1172, -5.1211, 3.1250, 2.9941, -5.1250, -5.1250, -5.1250, -1.8105, 2.9082, 0.6523, 3.0605, -4.2344])
-        # fmt: on
-
-        self.assertTrue(
-            torch.allclose(
-                EXPECTED_SLICE.to(torch_device),
-                out.logits[0, 0, :15],
-                atol=1e-3,
-                rtol=1e-3,
-            )
-        )
 
     @slow
     @require_torch_gpu

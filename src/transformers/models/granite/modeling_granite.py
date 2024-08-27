@@ -107,9 +107,6 @@ def _prepare_4d_causal_attention_mask_with_cache_position(
     return causal_mask
 
 
-ALL_LAYERNORM_LAYERS.append(nn.RMSNorm)
-
-
 class GraniteRotaryEmbedding(nn.Module):
     def __init__(self, config: GraniteConfig):
         super().__init__()
