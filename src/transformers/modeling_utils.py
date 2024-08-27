@@ -2876,7 +2876,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             raise ValueError("`.to` is not supported for HQQ-quantized models.")
         # Checks if the model has been loaded in 8-bit
         if getattr(self, "quantization_method", None) == QuantizationMethod.BITS_AND_BYTES:
-            if self.is_loaded_in_4bit:
+            if getattr(self, "is_loaded_in_4bit", False):
                 if version.parse(importlib.metadata.version("bitsandbytes")) < version.parse("0.43.0"):
                     raise ValueError(
                         "`.to` is not supported for `4-bit`. Please use the model as it is, since the"
