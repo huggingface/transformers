@@ -726,8 +726,10 @@ class LlamaIntegrationTest(unittest.TestCase):
         An integration test for llama 3.1. It tests against a long output to ensure the subtle numerical differences
         from llama 3.1.'s RoPE can be detected
         """
+        # diff on `EXPECTED_TEXT`:
+        # 2024-08-26: updating from torch 2.3.1 to 2.4.0 slightly changes the results.
         EXPECTED_TEXT = (
-            "Tell me about the french revolution. The french revolution was a period of radical social and political "
+            "Tell me about the french revolution. The french revolution was a period of radical political and social "
             "upheaval in France that lasted from 1789 until 1799. It was a time of great change and upheaval, marked "
             "by the overthrow of the monarchy, the rise of the middle class, and the eventual establishment of the "
             "First French Republic.\nThe revolution began in 1789 with the Estates-General, a representative "
@@ -887,6 +889,7 @@ class LlamaIntegrationTest(unittest.TestCase):
         self.assertEqual(EXPECTED_TEXT_COMPLETION, static_text)
 
         # Static Cache + compile
+        model._cache = None  # clear cache object, initialized when we pass `cache_implementation="static"`
         model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
         generated_ids = model.generate(
             **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
