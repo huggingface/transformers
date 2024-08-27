@@ -2903,7 +2903,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 elif dtype_present_in_args:
                     raise ValueError(
                         "You cannot cast a bitsandbytes model in a new `dtype`. Make sure to load the model using `from_pretrained` using the"
-                         " desired `dtype` by passing the correct `torch_dtype` argument."
+                        " desired `dtype` by passing the correct `torch_dtype` argument."
                     )
             else:
                 raise ValueError(
