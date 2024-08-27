@@ -150,8 +150,9 @@ class GroundingDinoModelTester:
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
         pixel_mask = torch.ones([self.batch_size, self.image_size, self.image_size], device=torch_device)
 
-        # To avoid errors when running tests with `labels` `input_ids` have to follow this structure.
-        # Start with 101 which means [CLS], 102 means [SEP], and 1012 means dot symbol for the divider. (e.g. '[CLS] fish. shark. [SEP]')
+        # When using `GroundingDino` the text input template is '{label1}. {label2}. {label3. ... {labelN}.'
+        # Therefore to avoid errors when running tests with `labels` `input_ids` have to follow this structure.
+        # Otherwise when running `build_label_maps` it will throw an error when trying to split the input_ids into segments.
         input_ids = torch.tensor([101, 3869, 1012, 11420, 1012, 102])
         input_ids = input_ids.unsqueeze(0).expand(self.batch_size, -1)
 
