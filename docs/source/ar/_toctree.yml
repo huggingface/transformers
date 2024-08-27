@@ -195,13 +195,13 @@
     - local: perf_infer_gpu_one
       title: الإستدلال على وحدة معالجة الرسومات (GPU)
     title: تحسين الاستدلال
-- local: big_models
+  - local: big_models
     title: إنشاء نموذج كبير
-- local: debugging
+  - local: debugging
     title: تصحيح الأخطاء البرمجية
-- local: tf_xla
+  - local: tf_xla
     title: تكامل XLA لنماذج TensorFlow
-- local: perf_torch_compile
+  - local: perf_torch_compile
     title: تحسين الاستدلال باستخدام `torch.compile()`
   title: الأداء وقابلية التوسع
 - sections:
