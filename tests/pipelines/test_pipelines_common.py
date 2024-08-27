@@ -863,7 +863,7 @@ class CustomPipelineTest(unittest.TestCase):
         self.assertEqual(self.COUNT, 1)
 
     @require_torch
-    def test_custom_code_with_string_preprocessors(self):
+    def test_custom_code_with_string_tokenizer(self):
         # This test checks for an edge case - tokenizer loading used to fail when using a custom code model
         # with a separate tokenizer that was passed as a repo name rather than a tokenizer object.
         # See https://github.com/huggingface/transformers/issues/31669
@@ -876,6 +876,8 @@ class CustomPipelineTest(unittest.TestCase):
 
         self.assertIsInstance(text_generator, TextGenerationPipeline)  # Assert successful loading
 
+    @require_torch
+    def test_custom_code_with_string_feature_extractor(self):
         speech_recognizer = pipeline(
             "automatic-speech-recognition",
             model="Rocketknight1/fake-custom-wav2vec2",
@@ -885,6 +887,8 @@ class CustomPipelineTest(unittest.TestCase):
 
         self.assertIsInstance(speech_recognizer, AutomaticSpeechRecognitionPipeline)  # Assert successful loading
 
+    @require_torch
+    def test_custom_code_with_string_preprocessor(self):
         mask_generator = pipeline(
             "mask-generation",
             model="Rocketknight1/fake-custom-sam",
