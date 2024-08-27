@@ -66,6 +66,10 @@ def _prepare_for_hqq_linear(model, patch_params, has_been_replaced, current_key_
 
             has_been_replaced = True
 
+            # Add these fake parameters to avoid loading fail
+            for att in ["W_q", "meta"]:
+                setattr(module, att, None)
+
         if len(list(module.children())) > 0:
             _, has_been_replaced = _prepare_for_hqq_linear(
                 module,

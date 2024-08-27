@@ -143,8 +143,6 @@ class HqqHfQuantizer(HfQuantizer):
         parent_module = find_parent(model, layer_name)
         node = layer_name.split(".")[-1]
 
-        # print("create_quantized_param | ", 'layer_name', layer_name, type(module), hasattr(module, "quant_config")) #model.layers.0.mlp.down_proj
-
         # set module state_dict
         module_state_dict = {}
         for k, v in state_dict.items():
@@ -154,39 +152,27 @@ class HqqHfQuantizer(HfQuantizer):
                     unexpected_keys.remove(k)
 
         if self.pre_quantized:
-            if isinstance(module, HQQLinear):
-                return
-            else:
+            if isinstance(module, (torch.nn.Linear, HQQLinear)):
                 hqq_layer = HQQLinear(
                     linear_layer=None,
-                    quant_config=None,  # module.quant_config
+                    quant_config=None,
                     compute_dtype=self.torch_dtype,
                     device=target_device,
                 )
 
-                try:
-                    hqq_layer.load_state_dict(module_state_dict)
-                except Exception:
-                    # TODO @mobicham: Llama3 break with model.layers.28.mlp.down_proj because its parameters are split across 2 safetensors. How to fix this?
-                    # Currently setting a fake layer so that loading doesn't break
-                    print("Error loading, setting a fake layer for", layer_name, module_state_dict.keys())
-                    hqq_layer = HQQLinear(
-                        torch.nn.Linear(in_features=module.in_features, out_features=module.out_features, bias=False),
-                        module.quant_config,
-                        compute_dtype=self.torch_dtype,
-                        device=target_device,
-                        del_orig=True,
-                    )
+            hqq_layer.axis = None
+            hqq_layer.channel_wise = None
+            hqq_layer.load_state_dict(module_state_dict)
 
-                if hqq_layer.bias is not None and isinstance(hqq_layer.bias, torch.Tensor):
-                    hqq_layer.bias = torch.nn.Parameter(hqq_layer.bias)
+            if hqq_layer.bias is not None and isinstance(hqq_layer.bias, torch.Tensor):
+                hqq_layer.bias = torch.nn.Parameter(hqq_layer.bias)
 
-                if self.using_multi_gpu:
-                    hqq_layer = self._patch_layer_for_multigpu(hqq_layer)
+            if self.using_multi_gpu:
+                hqq_layer = self._patch_layer_for_multigpu(hqq_layer)
 
-                setattr(parent_module, node, hqq_layer)
-                torch.cuda.empty_cache()
-                return
+            setattr(parent_module, node, hqq_layer)
+            torch.cuda.empty_cache()
+            return
 
         # Step 1: populate module with weight/bias from module state dict
         for key in module_state_dict:

@@ -858,10 +858,14 @@ def _load_state_dict_into_meta_model(
 
     is_torch_e4m3fn_available = hasattr(torch, "float8_e4m3fn")
 
+    # We add this because HQQLinear dict has a very large state_dict (19 params/per module), which makes loading extremely slow
+    run_expected_keys_check = True
+    if isinstance(hf_quantizer, HqqHfQuantizer):
+        run_expected_keys_check = False
+
     for param_name, param in state_dict.items():
-        # print('param_name', param_name, param_name in loaded_state_dict_keys, param_name in expected_keys)
         # First part of the test is always true as load_state_dict_keys always contains state_dict keys.
-        if param_name not in loaded_state_dict_keys:  # or param_name not in expected_keys: #TODO @mobicham
+        if param_name not in loaded_state_dict_keys or ((param_name not in expected_keys) and run_expected_keys_check):
             continue
 
         if param_name.startswith(start_prefix):
@@ -894,19 +898,15 @@ def _load_state_dict_into_meta_model(
         # uses `param.copy_(input_param)` that preserves the contiguity of the parameter in the model.
         # Reference: https://github.com/pytorch/pytorch/blob/db79ceb110f6646523019a59bbd7b838f43d4a86/torch/nn/modules/module.py#L2040C29-L2040C29
 
-        # TODO @mobicham: We need this for Hqq Quantizer otherwise it would break because state_dict fields (W_q, etc.) are not in nn.Linear
-        check_old_param = True
-        if is_quantized:
-            if isinstance(hf_quantizer, HqqHfQuantizer):
-                check_old_param, old_param = False, None
-
-        if check_old_param:
-            old_param = model
-            splits = param_name.split(".")
-            for split in splits:
-                old_param = getattr(old_param, split)
-                if old_param is None:
-                    break
+        old_param = model
+        splits = param_name.split(".")
+        for split in splits:
+            old_param = getattr(old_param, split)
+            # Not all the attributes of a module are Parameters/Tensor
+            if not isinstance(old_param, (torch.nn.Parameter, torch.Tensor)):
+                old_param = None
+            if old_param is None:
+                break
 
         if old_param is not None:
             if dtype is None:
