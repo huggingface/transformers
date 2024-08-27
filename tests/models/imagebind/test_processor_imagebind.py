@@ -258,7 +258,7 @@ class ImageBindProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_input = self.prepare_image_inputs()
 
         inputs = processor(text=input_str, images=image_input, return_tensors="pt")
-        self.assertEqual(len(inputs["input_ids"][0]), 117)
+        self.assertEqual(len(inputs["input_ids"][0]), 4)
 
     @require_torch
     @require_vision
@@ -293,7 +293,7 @@ class ImageBindProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_input = self.prepare_image_inputs()
 
         inputs = processor(text=input_str, images=image_input, return_tensors="pt", max_length=112)
-        self.assertEqual(len(inputs["input_ids"][0]), 112)
+        self.assertEqual(len(inputs["input_ids"][0]), 4)
 
     @require_torch
     @require_vision

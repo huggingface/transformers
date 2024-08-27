@@ -61,7 +61,6 @@ class ImageBindProcessor(ProcessorMixin):
         images=None,
         text=None,
         audio=None,
-        return_tensors=None,
         **kwargs: Unpack[ImageBindProcessorKwargs],
     ) -> BatchEncoding:
         """
