@@ -24,7 +24,7 @@ import torch
 from safetensors import safe_open
 from safetensors.torch import save_model
 
-from transformers import LlamaTokenizerFast, Mamba2Config, Mamba2ForCausalLM, Mamba2TokenizerFast
+from transformers import GPTNeoXTokenizerFast, LlamaTokenizerFast, Mamba2Config, Mamba2ForCausalLM
 
 
 def load_state_dict_from_safetensors(mamba2_checkpoint_path: str, ckpt_name: str) -> Dict[str, torch.Tensor]:
@@ -80,7 +80,7 @@ def load_and_save_tokenizer(
         tokenizer_class = LlamaTokenizerFast
         tokenizer = tokenizer_class(tokenizer_model_path, legacy=False, from_slow=True)
     elif mamba2_model_type == "mamba_ssm":
-        tokenizer = Mamba2TokenizerFast.from_pretrained("state-spaces/mamba-130m-hf")
+        tokenizer = GPTNeoXTokenizerFast.from_pretrained("state-spaces/mamba-130m-hf", padding_side="left")
 
     # Save tokenizer
     if tokenizer is not None:

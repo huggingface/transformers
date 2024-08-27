@@ -95,10 +95,6 @@ trainer.train()
 
 [[autodoc]] Mamba2Config
 
-## Mamba2TokenizerFast
-
-[[autodoc]] Mamba2TokenizerFast
-
 ## Mamba2Model
 
 [[autodoc]] Mamba2Model
