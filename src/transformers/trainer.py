@@ -3439,7 +3439,7 @@ class Trainer:
             `torch.Tensor`: The tensor with training loss on this batch.
         """
         model.train()
-        if hasattr(self.optimizer, "train") and callable(getattr(self.optimizer, "train")):
+        if hasattr(self.optimizer, "train") and callable(self.optimizer.train):
             self.optimizer.train()
 
         inputs = self._prepare_inputs(inputs)
@@ -3992,7 +3992,7 @@ class Trainer:
         logger.info(f"  Batch size = {batch_size}")
 
         model.eval()
-        if hasattr(self.optimizer, "eval") and callable(getattr(self.optimizer, "eval")):
+        if hasattr(self.optimizer, "eval") and callable(self.optimizer.eval):
             self.optimizer.eval()
 
         self.callback_handler.eval_dataloader = dataloader
@@ -4607,7 +4607,7 @@ class Trainer:
             inputs_gatherer = DistributedTensorGatherer(world_size, num_examples, make_multiple_of=make_multiple_of)
 
         model.eval()
-        if hasattr(self.optimizer, "eval") and callable(getattr(self.optimizer, "eval")):
+        if hasattr(self.optimizer, "eval") and callable(self.optimizer.eval):
             self.optimizer.eval()
 
         if args.past_index >= 0:
