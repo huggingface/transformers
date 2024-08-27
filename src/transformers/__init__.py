@@ -647,6 +647,7 @@ _import_structure = {
     "models.plbart": ["PLBartConfig"],
     "models.poolformer": ["PoolFormerConfig"],
     "models.pop2piano": ["Pop2PianoConfig"],
+    "models.propainter": ["ProPainterConfig"],
     "models.prophetnet": [
         "ProphetNetConfig",
         "ProphetNetTokenizer",
@@ -780,7 +781,6 @@ _import_structure = {
     ],
     "models.visual_bert": ["VisualBertConfig"],
     "models.vit": ["ViTConfig"],
-    "models.propainter": ["ProPainterConfig"],
     "models.vit_mae": ["ViTMAEConfig"],
     "models.vit_msn": ["ViTMSNConfig"],
     "models.vitdet": ["VitDetConfig"],
@@ -1189,6 +1189,7 @@ else:
     _import_structure["models.perceiver"].extend(["PerceiverFeatureExtractor", "PerceiverImageProcessor"])
     _import_structure["models.pix2struct"].extend(["Pix2StructImageProcessor"])
     _import_structure["models.poolformer"].extend(["PoolFormerFeatureExtractor", "PoolFormerImageProcessor"])
+    _import_structure["models.propainter"].append("ProPainterImageProcessor")
     _import_structure["models.pvt"].extend(["PvtImageProcessor"])
     _import_structure["models.rt_detr"].extend(["RTDetrImageProcessor"])
     _import_structure["models.sam"].extend(["SamImageProcessor"])
@@ -2968,6 +2969,12 @@ else:
             "Pop2PianoPreTrainedModel",
         ]
     )
+    _import_structure["models.propainter"].extend(
+        [
+            "ProPainterModel",
+            "ProPainterPreTrainedModel",
+        ]
+    )
     _import_structure["models.prophetnet"].extend(
         [
             "ProphetNetDecoder",
@@ -3480,14 +3487,6 @@ else:
             "ViTForMaskedImageModeling",
             "ViTModel",
             "ViTPreTrainedModel",
-        ]
-    )
-    _import_structure["models.propainter"].extend(
-        [
-            "ProPainterForImageClassification",
-            "ProPainterForMaskedImageModeling",
-            "ProPainterModel",
-            "ProPainterPreTrainedModel",
         ]
     )
     _import_structure["models.vit_mae"].extend(
@@ -5420,6 +5419,7 @@ if TYPE_CHECKING:
     from .models.pop2piano import (
         Pop2PianoConfig,
     )
+    from .models.propainter import ProPainterConfig
     from .models.prophetnet import (
         ProphetNetConfig,
         ProphetNetTokenizer,
@@ -5572,7 +5572,6 @@ if TYPE_CHECKING:
         VisualBertConfig,
     )
     from .models.vit import ViTConfig
-    from .models.propainter import ProPainterConfig
     from .models.vit_mae import ViTMAEConfig
     from .models.vit_msn import ViTMSNConfig
     from .models.vitdet import VitDetConfig
@@ -5987,6 +5986,7 @@ if TYPE_CHECKING:
             PoolFormerFeatureExtractor,
             PoolFormerImageProcessor,
         )
+        from .models.propainter import ProPainterImageProcessor
         from .models.pvt import PvtImageProcessor
         from .models.rt_detr import RTDetrImageProcessor
         from .models.sam import SamImageProcessor
@@ -7429,6 +7429,10 @@ if TYPE_CHECKING:
             Pop2PianoForConditionalGeneration,
             Pop2PianoPreTrainedModel,
         )
+        from .models.propainter import (
+            ProPainterModel,
+            ProPainterPreTrainedModel,
+        )
         from .models.prophetnet import (
             ProphetNetDecoder,
             ProphetNetEncoder,
@@ -7826,12 +7830,6 @@ if TYPE_CHECKING:
             ViTForMaskedImageModeling,
             ViTModel,
             ViTPreTrainedModel,
-        )
-        from .models.propainter import (
-            ProPainterForImageClassification,
-            ProPainterForMaskedImageModeling,
-            ProPainterModel,
-            ProPainterPreTrainedModel,
         )
         from .models.vit_mae import (
             ViTMAEForPreTraining,

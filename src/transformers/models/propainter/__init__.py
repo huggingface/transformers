@@ -21,7 +21,7 @@ from ...utils import (
 )
 
 
-_import_structure = {"configuration_propainter": ["ProPainterConfig", "ProPainterOnnxConfig"]}
+_import_structure = {"configuration_propainter": ["ProPainterConfig"]}
 
 try:
     if not is_torchvision_available():
@@ -29,7 +29,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["image_processing_propainter_fast"] = ["ViTImageProcessorFast"]
+    _import_structure["image_processing_propainter"] = ["ProPainterImageProcessor"]
 
 try:
     if not is_torch_available():
@@ -38,14 +38,12 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_propainter"] = [
-        "ProPainterForImageClassification",
-        "ProPainterForMaskedImageModeling",
         "ProPainterModel",
         "ProPainterPreTrainedModel",
     ]
 
 if TYPE_CHECKING:
-    from .configuration_propainter import ProPainterConfig, ProPainterOnnxConfig
+    from .configuration_propainter import ProPainterConfig
 
     try:
         if not is_torchvision_available():
@@ -63,8 +61,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_propainter import (
-            ProPainterForImageClassification,
-            ProPainterForMaskedImageModeling,
             ProPainterModel,
             ProPainterPreTrainedModel,
         )
