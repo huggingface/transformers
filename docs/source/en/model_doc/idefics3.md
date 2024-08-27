@@ -18,23 +18,23 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The Idefics3 model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
+The Idefics3 model was proposed in [Building and better understanding vision-language models: insights and future directions](https://huggingface.co/papers/2408.12637) by Hugo Laurençon, Andrés Marafioti, Victor Sanh, and Léo Tronchon.
 
-Idefics3 is an adaptation of the Idefics2 model with three main differences: 
-- the use of Llama3 for the text model
+Idefics3 is an adaptation of the Idefics2 model with three main differences:
+- the use of Llama3 for the text model.
 - an updated processing logic for the images.
-- The removal of the perceiver. 
+- The removal of the perceiver.
 
 The resolutions of input images can be directly controlled, and they are decomposed into
 patches, or not, depending on the resolution. See [Idefics2] for more details on the model architecture.
 
 The abstract from the paper is the following:
 
-*<INSERT PAPER ABSTRACT HERE>*
+The field of vision-language models (VLMs), which take images and texts as inputs and output texts, is rapidly evolving and has yet to reach consensus on several key aspects of the development pipeline, including data, architecture, and training methods. This paper can be seen as a tutorial for building a VLM. We begin by providing a comprehensive overview of the current state-of-the-art approaches, highlighting the strengths and weaknesses of each, addressing the major challenges in the field, and suggesting promising research directions for underexplored areas. We then walk through the practical steps to build Idefics3-8B, a powerful VLM that significantly outperforms its predecessor Idefics2-8B, while being trained efficiently, exclusively on open datasets, and using a straightforward pipeline. These steps include the creation of Docmatix, a dataset for improving document understanding capabilities, which is 240 times larger than previously available datasets. We release the model along with the datasets created for its training.
 
 Tips:
 
-<INSERT TIPS ABOUT MODEL HERE>
+The input given to the model will be resized by default such that the longest side is 4*364. For faster inference, set do_resize to False.
 
 This model was contributed by [amyeroberts](https://huggingface.co/amyeroberts) and [andimarafioti](https://huggingface.co/andito).
 The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
