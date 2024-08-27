@@ -849,7 +849,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
 
         # handle case of empty token_ids for decoding with timestamps.
         # at this point token_ids is a list, so it is safe to use if not check.
-        if not token_ids:
+        if token_ids is None or len(token_ids) == 0:
             return token_ids
 
         has_prompt = token_ids[0] == prompt_token_id
