@@ -2861,27 +2861,49 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     def cuda(self, *args, **kwargs):
         if getattr(self, "quantization_method", None) == QuantizationMethod.HQQ:
             raise ValueError("`.cuda` is not supported for HQQ-quantized models.")
-        # Checks if the model has been loaded in 8-bit
+        # Checks if the model has been loaded in 4-bit or 8-bit with BNB
         if getattr(self, "quantization_method", None) == QuantizationMethod.BITS_AND_BYTES:
-            raise ValueError(
-                "Calling `cuda()` is not supported for `4-bit` or `8-bit` quantized models. Please use the model as it is, since the"
-                " model has already been set to the correct devices and casted to the correct `dtype`."
-            )
+            if getattr(self, "is_loaded_in_8bit", False):
+                raise ValueError(
+                    "Calling `cuda()` is not supported for `8-bit` quantized models. Please use the model as it is, since the"
+                    " model has already been set to the correct devices and casted to the correct `dtype`."
+                )
+            elif version.parse(importlib.metadata.version("bitsandbytes")) < version.parse("0.43.2"):
+                raise ValueError(
+                    "Calling `cuda()` is not supported for `4-bit` quantized models. Please use the model as it is, since the"
+                    " model has already been set to the correct devices and casted to the correct `dtype`. "
+                    "However, if you still want to move the model, you need to install bitsandbytes >= 0.43.2 "
+                )
         else:
             return super().cuda(*args, **kwargs)
 
     @wraps(torch.nn.Module.to)
     def to(self, *args, **kwargs):
+        # For BNB/GPTQ models, we prevent users from casting the model to another dytpe to restrict unwanted behaviours.
+        # the correct API should be to load the model with the desired dtype directly through `from_pretrained`.
+        dtype_present_in_args = "dtype" in kwargs
+
+        if not dtype_present_in_args:
+            for arg in args:
+                if isinstance(arg, torch.dtype):
+                    dtype_present_in_args = True
+                    break
+
         if getattr(self, "quantization_method", None) == QuantizationMethod.HQQ:
             raise ValueError("`.to` is not supported for HQQ-quantized models.")
-        # Checks if the model has been loaded in 8-bit
+        # Checks if the model has been loaded in 4-bit or 8-bit with BNB
         if getattr(self, "quantization_method", None) == QuantizationMethod.BITS_AND_BYTES:
             if getattr(self, "is_loaded_in_4bit", False):
-                if version.parse(importlib.metadata.version("bitsandbytes")) < version.parse("0.43.0"):
+                if version.parse(importlib.metadata.version("bitsandbytes")) < version.parse("0.43.2"):
                     raise ValueError(
                         "`.to` is not supported for `4-bit`. Please use the model as it is, since the"
                         " model has already been set to the correct devices and casted to the correct `dtype`. "
-                        "However, if you still want to move the model, you need to install bitsandbytes >= 0.43.0 "
+                        "However, if you still want to move the model, you need to install bitsandbytes >= 0.43.2 "
+                    )
+                elif dtype_present_in_args:
+                    raise ValueError(
+                        "You cannot cast a bitsandbytes model in a new `dtype`. Make sure to load the model using `from_pretrained` using the"
+                         " desired `dtype` by passing the correct `torch_dtype` argument."
                     )
             else:
                 raise ValueError(
@@ -2889,18 +2911,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     " model has already been set to the correct devices and casted to the correct `dtype`."
                 )
         elif getattr(self, "quantization_method", None) == QuantizationMethod.GPTQ:
-            # For GPTQ models, we prevent users from casting the model to another dytpe to restrict unwanted behaviours.
-            # the correct API should be to load the model with the desired dtype directly through `from_pretrained`.
-            dtype_present_in_args = False
-
-            if "dtype" not in kwargs:
-                for arg in args:
-                    if isinstance(arg, torch.dtype):
-                        dtype_present_in_args = True
-                        break
-            else:
-                dtype_present_in_args = True
-
             if dtype_present_in_args:
                 raise ValueError(
                     "You cannot cast a GPTQ model in a new `dtype`. Make sure to load the model using `from_pretrained` using the desired"
