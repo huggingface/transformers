@@ -15,7 +15,7 @@
 """BLIP-2 model configuration"""
 
 import os
-from typing import Union
+from typing import Optional, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
@@ -172,6 +172,8 @@ class Blip2QFormerConfig(PretrainedConfig):
             The frequency of adding cross-attention to the Transformer layers.
         encoder_hidden_size (`int`, *optional*, defaults to 1408):
             The hidden size of the hidden states for cross-attention.
+        use_qformer_text_input (`bool`, *optional*, defaults to `False`):
+            Whether to use BERT-style embeddings.
 
     Examples:
 
@@ -206,6 +208,7 @@ class Blip2QFormerConfig(PretrainedConfig):
         position_embedding_type="absolute",
         cross_attention_frequency=2,
         encoder_hidden_size=1408,
+        use_qformer_text_input=False,
         **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, **kwargs)
@@ -224,6 +227,7 @@ class Blip2QFormerConfig(PretrainedConfig):
         self.position_embedding_type = position_embedding_type
         self.cross_attention_frequency = cross_attention_frequency
         self.encoder_hidden_size = encoder_hidden_size
+        self.use_qformer_text_input = use_qformer_text_input
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
@@ -263,6 +267,8 @@ class Blip2Config(PretrainedConfig):
             Dictionary of configuration options used to initialize any [`PretrainedConfig`].
         num_query_tokens (`int`, *optional*, defaults to 32):
             The number of query tokens passed through the Transformer.
+        image_text_hidden_size (`int`, *optional*, defaults to 256):
+            Dimentionality of the hidden state of the image-text fusion layer.
 
         image_token_index (`int`, *optional*):
             Token index of special image token.
@@ -307,6 +313,7 @@ class Blip2Config(PretrainedConfig):
         qformer_config=None,
         text_config=None,
         num_query_tokens=32,
+        image_text_hidden_size=256,
         image_token_index=None,
         **kwargs,
     ):
@@ -333,6 +340,7 @@ class Blip2Config(PretrainedConfig):
         self.is_encoder_decoder = self.text_config.is_encoder_decoder
 
         self.num_query_tokens = num_query_tokens
+        self.image_text_hidden_size = image_text_hidden_size
         self.image_token_index = image_token_index
         self.qformer_config.encoder_hidden_size = self.vision_config.hidden_size
         self.use_decoder_only_language_model = self.text_config.model_type in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
@@ -344,12 +352,20 @@ class Blip2Config(PretrainedConfig):
         cls,
         vision_config: Blip2VisionConfig,
         qformer_config: Blip2QFormerConfig,
-        text_config: PretrainedConfig,
+        text_config: Optional[PretrainedConfig] = None,
         **kwargs,
     ):
         r"""
         Instantiate a [`Blip2Config`] (or a derived class) from a BLIP-2 vision model, Q-Former and language model
         configurations.
+
+        Args:
+            vision_config (`dict`):
+                Dictionary of configuration options used to initialize [`Blip2VisionConfig`].
+            qformer_config (`dict`):
+                Dictionary of configuration options used to initialize [`Blip2QFormerConfig`].
+            text_config (`dict`, *optional*):
+                Dictionary of configuration options used to initialize any [`PretrainedConfig`].
 
         Returns:
             [`Blip2Config`]: An instance of a configuration object
@@ -358,6 +374,6 @@ class Blip2Config(PretrainedConfig):
         return cls(
             vision_config=vision_config.to_dict(),
             qformer_config=qformer_config.to_dict(),
-            text_config=text_config.to_dict(),
+            text_config=text_config.to_dict() if text_config is not None else None,
             **kwargs,
         )
