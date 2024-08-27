@@ -741,6 +741,7 @@ _import_structure = {
     "models.swinv2": ["Swinv2Config"],
     "models.switch_transformers": ["SwitchTransformersConfig"],
     "models.t5": ["T5Config"],
+    "models.timesfm": ["TimesFMConfig"],
     "models.table_transformer": ["TableTransformerConfig"],
     "models.tapas": [
         "TapasConfig",
@@ -3354,6 +3355,18 @@ else:
             "load_tf_weights_in_t5",
         ]
     )
+    _import_structure["models.timesfm"].extend(
+        [
+            "TimesFMEncoderModel",
+            "TimesFMForConditionalGeneration",
+            "TimesFMForQuestionAnswering",
+            "TimesFMForSequenceClassification",
+            "TimesFMForTokenClassification",
+            "TimesFMModel",
+            "TimesFMPreTrainedModel",
+            "load_tf_weights_in_timesfm",
+        ]
+    )
     _import_structure["models.table_transformer"].extend(
         [
             "TableTransformerForObjectDetection",
@@ -5536,6 +5549,7 @@ if TYPE_CHECKING:
         SwitchTransformersConfig,
     )
     from .models.t5 import T5Config
+    from .models.timesfm import TimesFMConfig
     from .models.table_transformer import (
         TableTransformerConfig,
     )
@@ -7746,6 +7760,16 @@ if TYPE_CHECKING:
             T5Model,
             T5PreTrainedModel,
             load_tf_weights_in_t5,
+        )
+        from .models.timesfm import (
+            TimesFMEncoderModel,
+            TimesFMForConditionalGeneration,
+            TimesFMForQuestionAnswering,
+            TimesFMForSequenceClassification,
+            TimesFMForTokenClassification,
+            TimesFMModel,
+            TimesFMPreTrainedModel,
+            load_tf_weights_in_timesfm,
         )
         from .models.table_transformer import (
             TableTransformerForObjectDetection,
