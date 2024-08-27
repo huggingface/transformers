@@ -18,7 +18,6 @@ import tempfile
 import unittest
 
 import pytest
-from packaging import version
 from parameterized import parameterized
 
 from transformers import AutoTokenizer, GraniteConfig, is_torch_available, set_seed
