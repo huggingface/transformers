@@ -417,20 +417,22 @@ class GGUFQwen2Converter(Qwen2Converter):
 
 class GGUFPhi3Converter(LlamaConverter):
     def __init__(self, tokenizer_dict):
-        self.original_tokenizer = GGUFTokenizerSkeleton(tokenizer_dict)
+        self.proto = GGUFTokenizerSkeleton(tokenizer_dict)
+        self.original_tokenizer = self.proto
         self.additional_kwargs = {}
 
-    def converted(self) -> Tokenizer:
-        vocab = {word: i for i, word in enumerate(self.original_tokenizer.tokens)}
-        merges = self.original_tokenizer.merges
-        tokenizer = Tokenizer(BPE(vocab, merges, unk_token="<unk>", fuse_unk=True, byte_fallback=True))
-        tokenizer.decoder = decoders.Sequence(
-            [
-                decoders.ByteFallback(),
-                decoders.Fuse(),
-                decoders.Replace("▁", " "),
-            ]
-        )
+    def vocab(self, proto):
+        return list(zip(proto.tokens, proto.scores))
+
+    def merges(self, proto):
+        return proto.merges
+
+    def tokenizer(self, proto):
+        vocab_scores = self.vocab(self.proto)
+        merges = self.merges(self.proto)
+        bpe_vocab = {word: i for i, (word, _score) in enumerate(vocab_scores)}
+
+        tokenizer = Tokenizer(BPE(bpe_vocab, merges))
         # add the special tokens from phi3 tokenizer config
         tokenizer.add_special_tokens(
             [
@@ -449,10 +451,41 @@ class GGUFPhi3Converter(LlamaConverter):
             ]
         )
 
-        self.additional_kwargs["unk_token"] = "<unk>"
-        self.additional_kwargs["eos_token"] = "<|endoftext|>"
-        self.additional_kwargs["bos_token"] = "<s>"
-        self.additional_kwargs["pad_token"] = "<|endoftext|>"
+        self.additional_kwargs["unk_token"] = (
+            proto.tokens[proto.unk_token_id] if proto.unk_token_id is not None else None
+        )
+        self.additional_kwargs["eos_token"] = (
+            proto.tokens[proto.eos_token_id] if proto.eos_token_id is not None else None
+        )
+        self.additional_kwargs["bos_token"] = (
+            proto.tokens[proto.bos_token_id] if proto.bos_token_id is not None else None
+        )
+        self.additional_kwargs["pad_token"] = (
+            proto.tokens[proto.pad_token_id] if proto.pad_token_id is not None else None
+        )
+
+        return tokenizer
+
+    def decoder(self, replacement, add_prefix_space):
+        sequence = [
+            decoders.ByteFallback(),
+            decoders.Fuse(),
+            decoders.Replace(replacement, " "),
+        ]
+
+        if add_prefix_space:
+            sequence += [decoders.Strip(content=" ", left=1)]
+        return decoders.Sequence(sequence)
+
+    def converted(self) -> Tokenizer:
+        tokenizer = self.tokenizer(self.proto)
+
+        replacement = "▁"
+        add_prefix_space = True
+        if hasattr(self.original_tokenizer, "add_prefix_space"):
+            add_prefix_space = self.original_tokenizer.add_prefix_space
+
+        tokenizer.decoder = self.decoder(replacement, add_prefix_space)
 
         return tokenizer
 
