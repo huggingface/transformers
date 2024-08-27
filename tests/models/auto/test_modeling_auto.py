@@ -21,6 +21,7 @@ from collections import OrderedDict
 from pathlib import Path
 
 import pytest
+from huggingface_hub import Repository
 
 import transformers
 from transformers import BertConfig, GPT2Model, is_safetensors_available, is_torch_available
@@ -32,7 +33,6 @@ from transformers.testing_utils import (
     require_torch,
     slow,
 )
-from huggingface_hub import Repository
 
 from ..bert.test_modeling_bert import BertModelTester
 

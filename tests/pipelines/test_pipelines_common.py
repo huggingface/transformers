@@ -36,7 +36,7 @@ from transformers import (
     TFAutoModelForSequenceClassification,
     pipeline,
 )
-from transformers.pipelines import PIPELINE_REGISTRY, TextGenerationPipeline, get_task
+from transformers.pipelines import PIPELINE_REGISTRY, get_task
 from transformers.pipelines.base import Pipeline, _pad
 from transformers.testing_utils import (
     TOKEN,
