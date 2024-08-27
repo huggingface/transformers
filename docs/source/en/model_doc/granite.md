@@ -35,7 +35,6 @@ Tips:
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-device = "cuda" # or "cpu"
 model_path = "ibm/PowerLM-3b"
 tokenizer = AutoTokenizer.from_pretrained(model_path)
 
