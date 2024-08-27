@@ -40,6 +40,11 @@ jobs:
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
       test_map: ${{ steps.set-matrix.outputs.test_map }}
+    env:
+      CI_BRANCH_PUSH: ${{ github.event.ref }}
+      CI_BRANCH_WORKFLOW_RUN: ${{ github.event.workflow_run.head_branch }}
+      CI_SHA_PUSH: ${{ github.event.head_commit.id }}
+      CI_SHA_WORKFLOW_RUN: ${{ github.event.workflow_run.head_sha }}
     steps:
       # Necessary to get the correct branch name and commit SHA for `workflow_run` event
       # We also take into account the `push` event (we might want to test some changes in a branch)
@@ -52,11 +57,7 @@ jobs:
         # `CI_SHA_WORKFLOW_RUN`: The commit SHA that triggers this workflow by `workflow_run` event
         # `CI_SHA`: The non-empty commit SHA from the above two (one and only one of them is empty)
         run: |
-          CI_BRANCH_PUSH=${{ github.event.ref }}
           CI_BRANCH_PUSH=${CI_BRANCH_PUSH/'refs/heads/'/''}
-          CI_BRANCH_WORKFLOW_RUN=${{ github.event.workflow_run.head_branch }}
-          CI_SHA_PUSH=${{ github.event.head_commit.id }}
-          CI_SHA_WORKFLOW_RUN=${{ github.event.workflow_run.head_sha }}
           echo $CI_BRANCH_PUSH
           echo $CI_BRANCH_WORKFLOW_RUN
           echo $CI_SHA_PUSH
@@ -135,6 +136,11 @@ jobs:
     container:
       image: huggingface/transformers-all-latest-gpu-push-ci
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+    env:
+      CI_BRANCH_PUSH: ${{ github.event.ref }}
+      CI_BRANCH_WORKFLOW_RUN: ${{ github.event.workflow_run.head_branch }}
+      CI_SHA_PUSH: ${{ github.event.head_commit.id }}
+      CI_SHA_WORKFLOW_RUN: ${{ github.event.workflow_run.head_sha }}
     steps:
       # Necessary to get the correct branch name and commit SHA for `workflow_run` event
       # We also take into account the `push` event (we might want to test some changes in a branch)
@@ -142,11 +148,7 @@ jobs:
         shell: bash
         # For the meaning of these environment variables, see the job `Setup`
         run: |
-          CI_BRANCH_PUSH=${{ github.event.ref }}
           CI_BRANCH_PUSH=${CI_BRANCH_PUSH/'refs/heads/'/''}
-          CI_BRANCH_WORKFLOW_RUN=${{ github.event.workflow_run.head_branch }}
-          CI_SHA_PUSH=${{ github.event.head_commit.id }}
-          CI_SHA_WORKFLOW_RUN=${{ github.event.workflow_run.head_sha }}
           echo $CI_BRANCH_PUSH
           echo $CI_BRANCH_WORKFLOW_RUN
           echo $CI_SHA_PUSH
@@ -228,6 +230,11 @@ jobs:
     container:
       image: huggingface/transformers-all-latest-gpu-push-ci
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+    env:
+      CI_BRANCH_PUSH: ${{ github.event.ref }}
+      CI_BRANCH_WORKFLOW_RUN: ${{ github.event.workflow_run.head_branch }}
+      CI_SHA_PUSH: ${{ github.event.head_commit.id }}
+      CI_SHA_WORKFLOW_RUN: ${{ github.event.workflow_run.head_sha }}
     steps:
       # Necessary to get the correct branch name and commit SHA for `workflow_run` event
       # We also take into account the `push` event (we might want to test some changes in a branch)
@@ -235,11 +242,7 @@ jobs:
         shell: bash
         # For the meaning of these environment variables, see the job `Setup`
         run: |
-          CI_BRANCH_PUSH=${{ github.event.ref }}
           CI_BRANCH_PUSH=${CI_BRANCH_PUSH/'refs/heads/'/''}
-          CI_BRANCH_WORKFLOW_RUN=${{ github.event.workflow_run.head_branch }}
-          CI_SHA_PUSH=${{ github.event.head_commit.id }}
-          CI_SHA_WORKFLOW_RUN=${{ github.event.workflow_run.head_sha }}
           echo $CI_BRANCH_PUSH
           echo $CI_BRANCH_WORKFLOW_RUN
           echo $CI_SHA_PUSH
@@ -321,6 +324,11 @@ jobs:
     container:
       image: huggingface/transformers-pytorch-deepspeed-latest-gpu-push-ci
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+    env:
+      CI_BRANCH_PUSH: ${{ github.event.ref }}
+      CI_BRANCH_WORKFLOW_RUN: ${{ github.event.workflow_run.head_branch }}
+      CI_SHA_PUSH: ${{ github.event.head_commit.id }}
+      CI_SHA_WORKFLOW_RUN: ${{ github.event.workflow_run.head_sha }}
     steps:
       # Necessary to get the correct branch name and commit SHA for `workflow_run` event
       # We also take into account the `push` event (we might want to test some changes in a branch)
@@ -328,11 +336,7 @@ jobs:
         shell: bash
         # For the meaning of these environment variables, see the job `Setup`
         run: |
-          CI_BRANCH_PUSH=${{ github.event.ref }}
           CI_BRANCH_PUSH=${CI_BRANCH_PUSH/'refs/heads/'/''}
-          CI_BRANCH_WORKFLOW_RUN=${{ github.event.workflow_run.head_branch }}
-          CI_SHA_PUSH=${{ github.event.head_commit.id }}
-          CI_SHA_WORKFLOW_RUN=${{ github.event.workflow_run.head_sha }}
           echo $CI_BRANCH_PUSH
           echo $CI_BRANCH_WORKFLOW_RUN
           echo $CI_SHA_PUSH
@@ -411,6 +415,11 @@ jobs:
     container:
       image: huggingface/transformers-pytorch-deepspeed-latest-gpu-push-ci
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+    env:
+      CI_BRANCH_PUSH: ${{ github.event.ref }}
+      CI_BRANCH_WORKFLOW_RUN: ${{ github.event.workflow_run.head_branch }}
+      CI_SHA_PUSH: ${{ github.event.head_commit.id }}
+      CI_SHA_WORKFLOW_RUN: ${{ github.event.workflow_run.head_sha }}
     steps:
       # Necessary to get the correct branch name and commit SHA for `workflow_run` event
       # We also take into account the `push` event (we might want to test some changes in a branch)
@@ -418,11 +427,7 @@ jobs:
         shell: bash
         # For the meaning of these environment variables, see the job `Setup`
         run: |
-          CI_BRANCH_PUSH=${{ github.event.ref }}
           CI_BRANCH_PUSH=${CI_BRANCH_PUSH/'refs/heads/'/''}
-          CI_BRANCH_WORKFLOW_RUN=${{ github.event.workflow_run.head_branch }}
-          CI_SHA_PUSH=${{ github.event.head_commit.id }}
-          CI_SHA_WORKFLOW_RUN=${{ github.event.workflow_run.head_sha }}
           echo $CI_BRANCH_PUSH
           echo $CI_BRANCH_WORKFLOW_RUN
           echo $CI_SHA_PUSH
