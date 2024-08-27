@@ -729,8 +729,10 @@ class LlamaIntegrationTest(unittest.TestCase):
         An integration test for llama 3.1. It tests against a long output to ensure the subtle numerical differences
         from llama 3.1.'s RoPE can be detected
         """
+        # diff on `EXPECTED_TEXT`:
+        # 2024-08-26: updating from torch 2.3.1 to 2.4.0 slightly changes the results.
         EXPECTED_TEXT = (
-            "Tell me about the french revolution. The french revolution was a period of radical social and political "
+            "Tell me about the french revolution. The french revolution was a period of radical political and social "
             "upheaval in France that lasted from 1789 until 1799. It was a time of great change and upheaval, marked "
             "by the overthrow of the monarchy, the rise of the middle class, and the eventual establishment of the "
             "First French Republic.\nThe revolution began in 1789 with the Estates-General, a representative "
@@ -782,8 +784,8 @@ class LlamaIntegrationTest(unittest.TestCase):
             torch.allclose(
                 EXPECTED_SLICE[self.cuda_compute_capability_major_version].to(torch_device),
                 out.logits[0, 0, :15],
-                atol=1e-3,
-                rtol=1e-3,
+                atol=1e-2,
+                rtol=1e-2,
             )
         )
 
@@ -819,8 +821,8 @@ class LlamaIntegrationTest(unittest.TestCase):
             torch.allclose(
                 EXPECTED_SLICE[self.cuda_compute_capability_major_version].to(torch_device),
                 out.logits[0, 0, :15],
-                atol=1e-3,
-                rtol=1e-3,
+                atol=1e-2,
+                rtol=1e-2,
             )
         )
 
@@ -890,6 +892,7 @@ class LlamaIntegrationTest(unittest.TestCase):
         self.assertEqual(EXPECTED_TEXT_COMPLETION, static_text)
 
         # Static Cache + compile
+        model._cache = None  # clear cache object, initialized when we pass `cache_implementation="static"`
         model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
         generated_ids = model.generate(
             **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
@@ -1043,7 +1046,7 @@ class Mask4DTestHard(unittest.TestCase):
         max_cache_len = 16  # note that max_cache_len is greater than the attention_mask.shape[-1]
         past_key_values = StaticCache(
             config=self.model.config,
-            max_batch_size=1,
+            batch_size=1,
             max_cache_len=max_cache_len,
             device=torch_device,
             dtype=self.model.dtype,
@@ -1091,7 +1094,7 @@ class Mask4DTestHard(unittest.TestCase):
         max_cache_len = 16  # note that max_cache_len is greater than the attention_mask.shape[-1]
         past_key_values = StaticCache(
             config=self.model.config,
-            max_batch_size=1,
+            batch_size=1,
             max_cache_len=max_cache_len,
             device=torch_device,
             dtype=self.model.dtype,
