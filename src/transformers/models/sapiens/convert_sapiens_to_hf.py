@@ -228,6 +228,54 @@ def convert_sapiens_checkpoint(model_name, checkpoints_dir, save_dir):
             },
             "checkpoint_local_path": "sapiens_host/normal/checkpoints/sapiens_2b/sapiens_2b_normal_render_people_epoch_70.pth",
         },
+        "depth-estimation-0.3b": {
+            "config": {
+                "num_labels": 1,
+                "num_hidden_layers": 24,
+                "hidden_size": 1024,
+                "deconv_out_channels": [384, 384, 384, 384],
+                "deconv_kernel_sizes": [4, 4, 4, 4],
+                "conv_out_channels": [384, 384],
+                "conv_kernel_sizes": [1, 1],
+            },
+            "checkpoint_local_path": "sapiens_host/depth/checkpoints/sapiens_0.3b/sapiens_0.3b_render_people_epoch_100.pth",
+        },
+        "depth-estimation-0.6b": {
+            "config": {
+                "num_labels": 1,
+                "num_hidden_layers": 32,
+                "hidden_size": 1280,
+                "deconv_out_channels": [384, 384, 384, 384],
+                "deconv_kernel_sizes": [4, 4, 4, 4],
+                "conv_out_channels": [384, 384],
+                "conv_kernel_sizes": [1, 1],
+            },
+            "checkpoint_local_path": "sapiens_host/depth/checkpoints/sapiens_0.6b/sapiens_0.6b_render_people_epoch_70.pth",
+        },
+        "depth-estimation-1b": {
+            "config": {
+                "num_labels": 1,
+                "num_hidden_layers": 40,
+                "hidden_size": 1536,
+                "deconv_out_channels": [384, 384, 384, 384],
+                "deconv_kernel_sizes": [4, 4, 4, 4],
+                "conv_out_channels": [384, 384],
+                "conv_kernel_sizes": [1, 1],
+            },
+            "checkpoint_local_path": "sapiens_host/depth/checkpoints/sapiens_1b/sapiens_1b_render_people_epoch_88.pth",
+        },
+        "depth-estimation-2b": {
+            "config": {
+                "num_labels": 1,
+                "num_hidden_layers": 48,
+                "hidden_size": 1920,
+                "deconv_out_channels": [384, 384, 384, 384],
+                "deconv_kernel_sizes": [4, 4, 4, 4],
+                "conv_out_channels": [384, 384],
+                "conv_kernel_sizes": [1, 1],
+            },
+            "checkpoint_local_path": "sapiens_host/depth/checkpoints/sapiens_2b/sapiens_2b_render_people_epoch_25.pth",
+        },
     }
     checkpoint_params = all_params[model_name]
     config_params = checkpoint_params["config"]
@@ -286,7 +334,7 @@ if __name__ == "__main__":
     # Required parameters
     parser.add_argument(
         "--model_name",
-        default="normal-estimation-0.3b",
+        default="depth-estimation-0.3b",
         type=str,
         help="Name of the model trained with DINO you'd like to convert.",
     )
