@@ -18,7 +18,6 @@ import tempfile
 import unittest
 
 import pytest
-from packaging import version
 from parameterized import parameterized
 
 from transformers import AutoTokenizer, GraniteConfig, is_torch_available, set_seed
@@ -44,9 +43,6 @@ if is_torch_available():
 
     from transformers import (
         GraniteForCausalLM,
-        GraniteForQuestionAnswering,
-        GraniteForSequenceClassification,
-        GraniteForTokenClassification,
         GraniteModel,
     )
     from transformers.models.granite.modeling_granite import (
@@ -286,9 +282,6 @@ class GraniteModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         (
             GraniteModel,
             GraniteForCausalLM,
-            GraniteForSequenceClassification,
-            GraniteForQuestionAnswering,
-            GraniteForTokenClassification,
         )
         if is_torch_available()
         else ()
@@ -297,11 +290,7 @@ class GraniteModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     pipeline_model_mapping = (
         {
             "feature-extraction": GraniteModel,
-            "text-classification": GraniteForSequenceClassification,
             "text-generation": GraniteForCausalLM,
-            "zero-shot": GraniteForSequenceClassification,
-            "question-answering": GraniteForQuestionAnswering,
-            "token-classification": GraniteForTokenClassification,
         }
         if is_torch_available()
         else {}
@@ -315,7 +304,7 @@ class GraniteModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     model_split_percents = [0.5, 0.7, 0.8]
 
     # used in `test_torch_compile`
-    _torch_compile_test_ckpt = "mayank-mishra/granite-3b-mup"
+    _torch_compile_test_ckpt = "ibm/PowerLM-3b"
 
     def setUp(self):
         self.model_tester = GraniteModelTester(self)
@@ -334,60 +323,60 @@ class GraniteModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             config_and_inputs[0].position_embedding_type = type
             self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_granite_sequence_classification_model(self):
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.num_labels = 3
-        input_ids = input_dict["input_ids"]
-        attention_mask = input_ids.ne(1).to(torch_device)
-        sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
-        model = GraniteForSequenceClassification(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
-        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
+    # def test_granite_sequence_classification_model(self):
+    #     config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+    #     config.num_labels = 3
+    #     input_ids = input_dict["input_ids"]
+    #     attention_mask = input_ids.ne(1).to(torch_device)
+    #     sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
+    #     model = GraniteForSequenceClassification(config)
+    #     model.to(torch_device)
+    #     model.eval()
+    #     result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
+    #     self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
-    def test_granite_sequence_classification_model_for_single_label(self):
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.num_labels = 3
-        config.problem_type = "single_label_classification"
-        input_ids = input_dict["input_ids"]
-        attention_mask = input_ids.ne(1).to(torch_device)
-        sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
-        model = GraniteForSequenceClassification(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
-        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
+    # def test_granite_sequence_classification_model_for_single_label(self):
+    #     config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+    #     config.num_labels = 3
+    #     config.problem_type = "single_label_classification"
+    #     input_ids = input_dict["input_ids"]
+    #     attention_mask = input_ids.ne(1).to(torch_device)
+    #     sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
+    #     model = GraniteForSequenceClassification(config)
+    #     model.to(torch_device)
+    #     model.eval()
+    #     result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
+    #     self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
-    def test_granite_sequence_classification_model_for_multi_label(self):
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.num_labels = 3
-        config.problem_type = "multi_label_classification"
-        input_ids = input_dict["input_ids"]
-        attention_mask = input_ids.ne(1).to(torch_device)
-        sequence_labels = ids_tensor(
-            [self.model_tester.batch_size, config.num_labels], self.model_tester.type_sequence_label_size
-        ).to(torch.float)
-        model = GraniteForSequenceClassification(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
-        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
+    # def test_granite_sequence_classification_model_for_multi_label(self):
+    #     config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+    #     config.num_labels = 3
+    #     config.problem_type = "multi_label_classification"
+    #     input_ids = input_dict["input_ids"]
+    #     attention_mask = input_ids.ne(1).to(torch_device)
+    #     sequence_labels = ids_tensor(
+    #         [self.model_tester.batch_size, config.num_labels], self.model_tester.type_sequence_label_size
+    #     ).to(torch.float)
+    #     model = GraniteForSequenceClassification(config)
+    #     model.to(torch_device)
+    #     model.eval()
+    #     result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
+    #     self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
-    def test_granite_token_classification_model(self):
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.num_labels = 3
-        input_ids = input_dict["input_ids"]
-        attention_mask = input_ids.ne(1).to(torch_device)
-        token_labels = ids_tensor([self.model_tester.batch_size, self.model_tester.seq_length], config.num_labels)
-        model = GraniteForTokenClassification(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=attention_mask, labels=token_labels)
-        self.assertEqual(
-            result.logits.shape,
-            (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_labels),
-        )
+    # def test_granite_token_classification_model(self):
+    #     config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+    #     config.num_labels = 3
+    #     input_ids = input_dict["input_ids"]
+    #     attention_mask = input_ids.ne(1).to(torch_device)
+    #     token_labels = ids_tensor([self.model_tester.batch_size, self.model_tester.seq_length], config.num_labels)
+    #     model = GraniteForTokenClassification(config=config)
+    #     model.to(torch_device)
+    #     model.eval()
+    #     result = model(input_ids, attention_mask=attention_mask, labels=token_labels)
+    #     self.assertEqual(
+    #         result.logits.shape,
+    #         (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_labels),
+    #     )
 
     @unittest.skip("Granite buffers include complex numbers, which breaks this test")
     def test_save_load_fast_init_from_base(self):
@@ -500,12 +489,12 @@ class GraniteModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         Overwritting the common test as the test is flaky on tiny models
         """
         model = GraniteForCausalLM.from_pretrained(
-            "mayank-mishra/granite-3b-mup",
+            "ibm/PowerLM-3b",
             load_in_4bit=True,
             device_map={"": 0},
         )
 
-        tokenizer = AutoTokenizer.from_pretrained("mayank-mishra/granite-3b-mup")
+        tokenizer = AutoTokenizer.from_pretrained("ibm/PowerLM-3b")
 
         texts = ["hi", "Hello this is a very long sentence"]
 
@@ -518,7 +507,7 @@ class GraniteModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         output_native = tokenizer.batch_decode(output_native)
 
         model = GraniteForCausalLM.from_pretrained(
-            "mayank-mishra/granite-3b-mup",
+            "ibm/PowerLM-3b",
             load_in_4bit=True,
             device_map={"": 0},
             attn_implementation="flash_attention_2",
@@ -556,9 +545,10 @@ class GraniteModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 if not has_flash:
                     raise ValueError("The flash model should have flash attention layers")
 
+    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
     @require_torch_sdpa
     @slow
-    def test_eager_matches_sdpa_generate(self):
+    def test_eager_matches_sdpa_inference(self, torch_dtype: str):
         """
         skipping the test since mup is very flaky and gets consistently different outputs
         """
@@ -583,7 +573,7 @@ class GraniteIntegrationTest(unittest.TestCase):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
 
         model = GraniteForCausalLM.from_pretrained(
-            "mayank-mishra/granite-3b-mup", device_map="auto", torch_dtype=torch.bfloat16, attn_implementation="eager"
+            "ibm/PowerLM-3b", device_map="auto", torch_dtype=torch.bfloat16, attn_implementation="eager"
         )
 
         with torch.no_grad():
@@ -591,12 +581,12 @@ class GraniteIntegrationTest(unittest.TestCase):
         # Expected mean on dim = -1
 
         # fmt: off
-        EXPECTED_MEAN = torch.tensor([[-3.5323, -1.0852, -2.8477, -1.9027, -2.5014, -1.6253, -2.5948, -2.4452]])
+        EXPECTED_MEAN = torch.tensor([[-1.8799, -3.1269, -2.8297, -2.3755, -2.7364, -2.2389, -2.5914, -2.4154]])
 
         self.assertTrue(torch.allclose(EXPECTED_MEAN.to(torch_device), out.logits.mean(-1), atol=1e-2, rtol=1e-2))
 
         # slicing logits[0, 0, 0:15]
-        EXPECTED_SLICE = torch.tensor([[4.1562, -5.1250, -5.1562, -5.1250, -5.1562, 3.2344, 3.1250, -5.1562, -5.1562, -5.1562, -1.7812, 2.5625, 0.4609, 2.6250, -4.1875]])
+        EXPECTED_SLICE = torch.tensor([[4.8125, -2.0156, -2.0156, -2.0000, -2.0000, -2.8438, -2.0156, -2.0000, -2.0000, -2.0000, -2.0000, -2.0000, -2.0000, -2.0000, -2.0000]])
         # fmt: on
 
         self.assertTrue(
@@ -613,82 +603,13 @@ class GraniteIntegrationTest(unittest.TestCase):
     def test_model_3b_logits(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
 
-        model = GraniteForCausalLM.from_pretrained(
-            "mayank-mishra/granite-3b-mup", device_map="auto", torch_dtype=torch.float16
-        )
+        model = GraniteForCausalLM.from_pretrained("ibm/PowerLM-3b", device_map="auto", torch_dtype=torch.float16)
 
         with torch.no_grad():
             out = model(torch.tensor([input_ids]).to(torch_device))
 
         # fmt: off
         # Expected mean on dim = -1
-        EXPECTED_MEAN = torch.tensor([[-3.5317, -1.1000, -2.8519, -1.9190, -2.5031, -1.6047, -2.5759, -2.4347]])
+        EXPECTED_MEAN = torch.tensor([[0.0000, 0.0000, -3.4374, -2.1636, -2.6245, -3.0029, -3.8229, -3.1158]])
 
         self.assertTrue(torch.allclose(EXPECTED_MEAN.to(torch_device), out.logits.mean(-1), atol=1e-2, rtol=1e-2))
-
-        # slicing logits[0, 0, 0:15]
-        EXPECTED_SLICE = torch.tensor([4.2109, -5.1172, -5.1250, -5.1172, -5.1211, 3.1250, 2.9941, -5.1250, -5.1250, -5.1250, -1.8105, 2.9082, 0.6523, 3.0605, -4.2344])
-        # fmt: on
-
-        self.assertTrue(
-            torch.allclose(
-                EXPECTED_SLICE.to(torch_device),
-                out.logits[0, 0, :15],
-                atol=1e-3,
-                rtol=1e-3,
-            )
-        )
-
-    @slow
-    @require_torch_gpu
-    @require_read_token
-    def test_compile_static_cache(self):
-        # `torch==2.2` will throw an error on this test (as in other compilation tests), but torch==2.1.2 and torch>2.2
-        # work as intended. See https://github.com/pytorch/pytorch/issues/121943
-        if version.parse(torch.__version__) < version.parse("2.3.0"):
-            self.skipTest("This test requires torch >= 2.3 to run.")
-
-        NUM_TOKENS_TO_GENERATE = 40
-        # Note on `EXPECTED_TEXT_COMPLETION`'s diff: the current value matches the original test if the original test
-        # was changed to have a cache of 53 tokens (as opposed to 4096), on Ampere GPUs.
-        #
-        # Key 9 for MI300, Key 8 for A100/A10, and Key 7 for T4.
-        #
-        # Note: Key 9 is currently set for MI300, but may need potential future adjustments for H100s,
-        # considering differences in hardware processing and potential deviations in generated text.
-        EXPECTED_TEXT_COMPLETION = [
-            "Simply put, the theory of relativity states that #x# and  #y# are not independent variables.  "
-            "#x# and  #y# are related by the equation  #x = y^2# and  #y =",
-            "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on my "
-            "eggs, I love it on my fries, I love it on my burgers, I love it on my hot dogs, I",
-        ]
-
-        prompts = [
-            "Simply put, the theory of relativity states that ",
-            "My favorite all time favorite condiment is ketchup.",
-        ]
-        tokenizer = AutoTokenizer.from_pretrained("mayank-mishra/granite-3b-mup", padding_side="right")
-        model = GraniteForCausalLM.from_pretrained(
-            "mayank-mishra/granite-3b-mup", device_map="sequential", torch_dtype=torch.float16
-        )
-        inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
-
-        # Dynamic Cache
-        generated_ids = model.generate(**inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False)
-        dynamic_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, dynamic_text)  # Both GPU architectures have the same output
-
-        # Static Cache
-        generated_ids = model.generate(
-            **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
-        )
-        static_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, static_text)
-
-        # Static Cache + compile
-        model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
-        generated_ids = model.generate(
-            **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
-        )
-        static_compiled_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, static_compiled_text)

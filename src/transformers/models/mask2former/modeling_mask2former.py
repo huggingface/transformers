@@ -37,6 +37,7 @@ from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import is_torch_greater_or_equal_than_2_1
 from ...utils import is_accelerate_available, logging
 from ...utils.backbone_utils import load_backbone
+from ...utils.import_utils import is_torchdynamo_compiling
 from .configuration_mask2former import Mask2FormerConfig
 
 
@@ -1810,7 +1811,7 @@ class Mask2FormerMaskedAttentionDecoder(nn.Module):
             encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`):
                 Sequence of hidden-states at the output of the last layer of the encoder. Used in the
                 cross(masked)-attention of the decoder.
-            feature_size_list (`List[torch.Size]` ):
+            feature_size_list (`List[torch.Size]`):
                 This is a list containing shapes (height & width) of multi-scale features from the Pixel Decoder.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
@@ -1999,11 +2000,7 @@ class Mask2FormerMaskPredictor(nn.Module):
     def forward(self, outputs: torch.Tensor, pixel_embeddings: torch.Tensor, attention_mask_target_size: int = None):
         mask_embeddings = self.mask_embedder(outputs.transpose(0, 1))
 
-        is_tracing = (
-            torch.jit.is_tracing()
-            or isinstance(outputs, torch.fx.Proxy)
-            or (hasattr(torch, "_dynamo") and torch._dynamo.is_compiling())
-        )
+        is_tracing = torch.jit.is_tracing() or isinstance(outputs, torch.fx.Proxy) or is_torchdynamo_compiling()
         # Sum up over the channels
         if is_tracing and not is_torch_greater_or_equal_than_2_1:
             # Equivalent to einsum('bqc, bchw -> bqhw') but jit friendly

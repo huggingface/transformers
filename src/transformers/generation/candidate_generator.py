@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 import torch
 
 from ..cache_utils import DynamicCache
+from ..pytorch_utils import isin_mps_friendly
 from .logits_process import LogitsProcessorList, MinLengthLogitsProcessor
 
 
@@ -119,6 +120,10 @@ class AssistedCandidateGenerator(CandidateGenerator):
                     value.detach().to(device) if isinstance(value, torch.Tensor) else copy.deepcopy(value)
                 )
 
+        # Remove potential default "num_logits_to_keep" key
+        if "num_logits_to_keep" in assistant_kwargs.keys() and not assistant_model._supports_num_logits_to_keep():
+            del assistant_kwargs["num_logits_to_keep"]
+
         if "assistant_encoder_outputs" in model_kwargs:
             assistant_kwargs["encoder_outputs"] = model_kwargs["assistant_encoder_outputs"]
         elif assistant_model.config.is_encoder_decoder:
@@ -170,6 +175,9 @@ class AssistedCandidateGenerator(CandidateGenerator):
                     "Passing `MinLengthLogitsProcessor` when using `assisted_generation is disabled. "
                     "Please pass in `min_length` into `.generate()` instead"
                 )
+
+        # We need to roll back the cache in assisted generation, only DynamicCache is supported
+        self.generation_config.cache_implementation = None
 
     def get_candidates(self, input_ids: torch.LongTensor) -> Tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
         """
@@ -328,7 +336,7 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
                     # remove remaining candidate ids if an "eos" token is found, otherwise the target model may
                     # accept eos and the rest as valid, thus not stopping generation after "eos"
                     # NOTE: below code is written based on the fact that assisted decoding supports only bs=1
-                    mask = torch.isin(chosen_ids, self.eos_token_id)
+                    mask = isin_mps_friendly(chosen_ids, self.eos_token_id)
                     match_indices_eos = torch.nonzero(mask)
                     if match_indices_eos.numel() > 0:
                         first_eos_index = match_indices_eos[0].item()

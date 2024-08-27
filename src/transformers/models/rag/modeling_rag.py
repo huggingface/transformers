@@ -792,7 +792,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         reduce_loss (`bool`, *optional*):
             Only relevant if `labels` is passed. If `True`, the NLL loss is reduced using the `torch.Tensor.sum`
             operation.
-        kwargs (`Dict[str, any]`, optional, defaults to *{}*):
+        kwargs (`Dict[str, any]`, *optional*, defaults to `{}`):
              Legacy dictionary, which is required so that model can use *generate()* function.
 
         Returns:
@@ -1261,7 +1261,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
         reduce_loss (`bool`, *optional*):
             Only relevant if `labels` is passed. If `True`, the NLL loss is reduced using the `torch.Tensor.sum`
             operation.
-        kwargs (`Dict[str, any]`, optional, defaults to *{}*):
+        kwargs (`Dict[str, any]`, *optional*, defaults to `{}`):
             Legacy dictionary, which is required so that model can use *generate()* function.
 
         Returns:
@@ -1558,7 +1558,6 @@ class RagTokenForGeneration(RagPreTrainedModel):
                 generation_config=generation_config,
                 synced_gpus=False,
                 streamer=None,
-                logits_warper=None,
                 **model_kwargs,
             )
         elif generation_config.num_beams > 1:
@@ -1580,7 +1579,6 @@ class RagTokenForGeneration(RagPreTrainedModel):
                 stopping_criteria=prepared_stopping_criteria,
                 generation_config=generation_config,
                 synced_gpus=False,
-                logits_warper=None,
                 **model_kwargs,
             )
         else:

@@ -27,6 +27,7 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_read_token,
     require_torch,
+    require_torch_accelerator,
     require_torch_gpu,
     require_torch_sdpa,
     slow,
@@ -460,7 +461,7 @@ class GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         self.skipTest(reason="Gemma flash attention does not support right padding")
 
     @require_torch_sdpa
-    @require_torch_gpu
+    @require_torch_accelerator
     @slow
     def test_sdpa_equivalence(self):
         for model_class in self.all_model_classes:
@@ -628,9 +629,9 @@ class GemmaIntegrationTest(unittest.TestCase):
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
-    @pytest.mark.flash_attn_test
     @require_flash_attn
     @require_read_token
+    @pytest.mark.flash_attn_test
     def test_model_2b_flash_attn(self):
         model_id = "google/gemma-2b"
         EXPECTED_TEXTS = [
@@ -816,7 +817,7 @@ class GemmaIntegrationTest(unittest.TestCase):
         # Dynamic Cache
         generated_ids = model.generate(**inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False)
         dynamic_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION[8], dynamic_text)  # Both GPU architectures have the same output
+        self.assertEqual(EXPECTED_TEXT_COMPLETION, dynamic_text)  # Both GPU architectures have the same output
 
         # Static Cache
         generated_ids = model.generate(

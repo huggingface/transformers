@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
+    is_flax_available,
     is_torch_available,
 )
 
@@ -35,6 +36,18 @@ else:
         "Dinov2Backbone",
     ]
 
+try:
+    if not is_flax_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["modeling_flax_dinov2"] = [
+        "FlaxDinov2ForImageClassification",
+        "FlaxDinov2Model",
+        "FlaxDinov2PreTrainedModel",
+    ]
+
 if TYPE_CHECKING:
     from .configuration_dinov2 import Dinov2Config, Dinov2OnnxConfig
 
@@ -49,6 +62,18 @@ if TYPE_CHECKING:
             Dinov2ForImageClassification,
             Dinov2Model,
             Dinov2PreTrainedModel,
+        )
+
+    try:
+        if not is_flax_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .modeling_flax_dinov2 import (
+            FlaxDinov2ForImageClassification,
+            FlaxDinov2Model,
+            FlaxDinov2PreTrainedModel,
         )
 
 else:
