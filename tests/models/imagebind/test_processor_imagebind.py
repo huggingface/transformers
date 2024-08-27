@@ -20,7 +20,7 @@ import numpy as np
 import pytest
 
 from transformers import CLIPTokenizer, CLIPTokenizerFast, ImageBindFeatureExtractor
-from transformers.testing_utils import require_torchaudio, require_vision
+from transformers.testing_utils import require_torch, require_torchaudio, require_vision
 from transformers.utils import is_vision_available
 
 
@@ -29,10 +29,13 @@ if is_vision_available():
 
     from transformers import ImageBindImageProcessor, ImageBindProcessor
 
+from ...test_processing_common import ProcessorTesterMixin
 
 @require_vision
 @require_torchaudio
-class ImageBindProcessorTest(unittest.TestCase):
+class ImageBindProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    processor_class = ImageBindProcessor
+
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
         self.checkpoint = "EduardoPacheco/imagebind-huge"
