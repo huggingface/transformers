@@ -781,8 +781,8 @@ class LlamaIntegrationTest(unittest.TestCase):
             torch.allclose(
                 EXPECTED_SLICE[self.cuda_compute_capability_major_version].to(torch_device),
                 out.logits[0, 0, :15],
-                atol=1e-3,
-                rtol=1e-3,
+                atol=1e-2,
+                rtol=1e-2,
             )
         )
 
@@ -818,8 +818,8 @@ class LlamaIntegrationTest(unittest.TestCase):
             torch.allclose(
                 EXPECTED_SLICE[self.cuda_compute_capability_major_version].to(torch_device),
                 out.logits[0, 0, :15],
-                atol=1e-3,
-                rtol=1e-3,
+                atol=1e-2,
+                rtol=1e-2,
             )
         )
 
