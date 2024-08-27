@@ -41,7 +41,6 @@ class DecisionTransformerModelTester:
         act_dim=6,
         state_dim=17,
         hidden_size=23,
-        max_length=11,
         is_training=True,
     ):
         self.parent = parent
@@ -50,7 +49,6 @@ class DecisionTransformerModelTester:
         self.act_dim = act_dim
         self.state_dim = state_dim
         self.hidden_size = hidden_size
-        self.max_length = max_length
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
@@ -80,7 +78,6 @@ class DecisionTransformerModelTester:
             act_dim=self.act_dim,
             state_dim=self.state_dim,
             hidden_size=self.hidden_size,
-            max_length=self.max_length,
         )
 
     def create_and_check_model(
@@ -143,7 +140,6 @@ class DecisionTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, Pipe
     test_attention_outputs = False
     test_hidden_states_output = False
     test_inputs_embeds = False
-    test_model_common_attributes = False
     test_gradient_checkpointing = False
     test_torchscript = False
 
@@ -183,6 +179,10 @@ class DecisionTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, Pipe
             ]
 
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
+
+    @unittest.skip(reason="Model does not have input embeddings")
+    def test_model_get_set_embeddings(self):
+        pass
 
 
 @require_torch

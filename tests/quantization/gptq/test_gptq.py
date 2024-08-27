@@ -46,7 +46,6 @@ class GPTQConfigTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             GPTQConfig(bits=2, dataset="auto_gpt")
         GPTQConfig(bits=2, dataset="c4")
-        GPTQConfig(bits=2, dataset="ptb-new")
 
     def test_damp_percent(self):
         with self.assertRaises(ValueError):

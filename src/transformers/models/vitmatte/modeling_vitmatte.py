@@ -115,7 +115,12 @@ class VitMatteConvStream(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        in_channels = config.backbone_config.num_channels
+        # We use a default in-case there isn't a backbone config set. This is for backwards compatibility and
+        # to enable loading HF backbone models.
+        in_channels = 4
+        if config.backbone_config is not None:
+            in_channels = config.backbone_config.num_channels
+
         out_channels = config.convstream_hidden_sizes
 
         self.convs = nn.ModuleList()

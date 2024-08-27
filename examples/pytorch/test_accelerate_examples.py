@@ -313,6 +313,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
             {self.examples_dir}/pytorch/image-classification/run_image_classification_no_trainer.py
             --model_name_or_path google/vit-base-patch16-224-in21k
             --dataset_name hf-internal-testing/cats_vs_dogs_sample
+            --trust_remote_code
             --learning_rate 1e-4
             --per_device_train_batch_size 2
             --per_device_eval_batch_size 1

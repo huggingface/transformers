@@ -83,6 +83,7 @@ class EfficientNetModelTester:
 
     def get_config(self):
         return EfficientNetConfig(
+            image_size=self.image_size,
             num_channels=self.num_channels,
             kernel_sizes=self.kernel_sizes,
             in_channels=self.in_channels,
@@ -142,27 +143,22 @@ class EfficientNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     def setUp(self):
         self.model_tester = EfficientNetModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=EfficientNetConfig, has_text_modality=False, hidden_size=37
+            self,
+            config_class=EfficientNetConfig,
+            has_text_modality=False,
+            hidden_size=37,
+            common_properties=["num_channels", "image_size", "hidden_dim"],
         )
 
     def test_config(self):
-        self.create_and_test_config_common_properties()
-        self.config_tester.create_and_test_config_to_json_string()
-        self.config_tester.create_and_test_config_to_json_file()
-        self.config_tester.create_and_test_config_from_and_save_pretrained()
-        self.config_tester.create_and_test_config_with_num_labels()
-        self.config_tester.check_config_can_be_init_without_params()
-        self.config_tester.check_config_arguments_init()
-
-    def create_and_test_config_common_properties(self):
-        return
+        self.config_tester.run_common_tests()
 
     @unittest.skip(reason="EfficientNet does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
     @unittest.skip(reason="EfficientNet does not support input and output embeddings")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     @unittest.skip(reason="EfficientNet does not use feedforward chunking")
@@ -219,6 +215,12 @@ class EfficientNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     @slow
     def test_pipeline_image_feature_extraction(self):
         super().test_pipeline_image_feature_extraction()
+
+    @is_pipeline_test
+    @require_vision
+    @slow
+    def test_pipeline_image_feature_extraction_fp16(self):
+        super().test_pipeline_image_feature_extraction_fp16()
 
     @is_pipeline_test
     @require_vision

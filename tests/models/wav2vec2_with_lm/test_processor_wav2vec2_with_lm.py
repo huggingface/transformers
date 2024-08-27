@@ -463,7 +463,9 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
     def test_word_time_stamp_integration(self):
         import torch
 
-        ds = load_dataset("mozilla-foundation/common_voice_11_0", "en", split="train", streaming=True)
+        ds = load_dataset(
+            "mozilla-foundation/common_voice_11_0", "en", split="train", streaming=True, trust_remote_code=True
+        )
         ds = ds.cast_column("audio", datasets.Audio(sampling_rate=16_000))
         ds_iter = iter(ds)
         sample = next(ds_iter)

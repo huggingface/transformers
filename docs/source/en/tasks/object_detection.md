@@ -204,6 +204,8 @@ Instantiate the image processor from the same checkpoint as the model you want t
 ```py
 >>> from transformers import AutoImageProcessor
 
+>>> MAX_SIZE = IMAGE_SIZE
+
 >>> image_processor = AutoImageProcessor.from_pretrained(
 ...     MODEL_NAME,
 ...     do_resize=True,
@@ -224,8 +226,6 @@ and it uses the exact same dataset as an example. Apply some geometric and color
 
 ```py
 >>> import albumentations as A
-
->>> max_size = IMAGE_SIZE
 
 >>> train_augment_and_transform = A.Compose(
 ...     [

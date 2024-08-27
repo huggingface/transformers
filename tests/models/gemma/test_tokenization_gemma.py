@@ -23,7 +23,6 @@ from transformers import (
     AddedToken,
     GemmaTokenizer,
     GemmaTokenizerFast,
-    is_torch_available,
 )
 from transformers.convert_slow_tokenizer import convert_slow_tokenizer
 from transformers.testing_utils import (
@@ -41,10 +40,6 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 
 SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
-
-
-if is_torch_available():
-    pass
 
 
 @require_sentencepiece
@@ -68,7 +63,7 @@ class GemmaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     @require_torch
     def test_batch_tokenization(self):
         if not self.test_seq2seq:
-            return
+            self.skipTest(reason="test_seq2seq is set to False")
 
         tokenizers = self.get_tokenizers()
         for tokenizer in tokenizers:
@@ -88,7 +83,7 @@ class GemmaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                         return_tensors="pt",
                     )
                 except NotImplementedError:
-                    return
+                    self.skipTest(reason="Encountered NotImplementedError when calling tokenizer")
                 self.assertEqual(batch.input_ids.shape[1], 3)
                 # max_target_length will default to max_length if not specified
                 batch = tokenizer(text, max_length=3, return_tensors="pt")
@@ -99,7 +94,7 @@ class GemmaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertEqual(batch_encoder_only.attention_mask.shape[1], 3)
                 self.assertNotIn("decoder_input_ids", batch_encoder_only)
 
-    @unittest.skip("Unfortunately way too slow to build a BPE with SentencePiece.")
+    @unittest.skip(reason="Unfortunately way too slow to build a BPE with SentencePiece.")
     def test_save_slow_from_fast_and_reload_fast(self):
         pass
 
@@ -143,19 +138,18 @@ class GemmaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.tokenizer_integration_test_util(
             expected_encoding=expected_encoding,
             model_name="google/gemma-2b",
-            revision="",
             padding=False,
         )
 
-    @unittest.skip("worker 'gw4' crashed on CI, passing locally.")
+    @unittest.skip(reason="worker 'gw4' crashed on CI, passing locally.")
     def test_pickle_subword_regularization_tokenizer(self):
         pass
 
-    @unittest.skip("worker 'gw4' crashed on CI, passing locally.")
+    @unittest.skip(reason="worker 'gw4' crashed on CI, passing locally.")
     def test_subword_regularization_tokenizer(self):
         pass
 
-    @unittest.skip("Skipping")
+    @unittest.skip(reason="Skipping")
     def test_torch_encode_plus_sent_to_model(self):
         pass
 
@@ -193,6 +187,19 @@ class GemmaIntegrationTest(unittest.TestCase):
             },
         )
 
+    def test_user_added_tokens(self):
+        # Ensure that user added tokens are not split in the fast tokenizer
+        slow_tokenizer = self.tokenizer
+        fast_tokenizer = self.rust_tokenizer
+
+        user_added_token = "<mask>"
+
+        slow_tokens = slow_tokenizer.convert_ids_to_tokens(slow_tokenizer.encode(user_added_token))
+        fast_tokens = slow_tokenizer.convert_ids_to_tokens(fast_tokenizer.encode(user_added_token))
+
+        self.assertTrue(user_added_token in fast_tokens)
+        self.assertEqual(slow_tokens, fast_tokens)
+
     def test_fast_special_tokens(self):
         slow_tokenizer = self.tokenizer
         fast_tokenizer = self.rust_tokenizer
@@ -214,7 +221,18 @@ class GemmaIntegrationTest(unittest.TestCase):
         self.tokenizer.add_eos_token = False
         self.rust_tokenizer.add_eos_token = False
 
-    @unittest.skip("Not super important and always failing. Let's skip it")
+    def test_fast_merge_priority(self):
+        slow_tokenizer = self.tokenizer
+        fast_tokenizer = self.rust_tokenizer
+        text = "                                               "
+        target = [168, 153]
+        slow = slow_tokenizer.encode(text, add_special_tokens=False)
+        assert slow == target
+
+        fast = fast_tokenizer.encode(text, add_special_tokens=False)
+        assert fast == target
+
+    @unittest.skip(reason="Not super important and always failing. Let's skip it")
     @slow
     def test_conversion(self):
         # This is excruciatingly slow since it has to recreate the entire merge
@@ -314,7 +332,7 @@ class GemmaIntegrationTest(unittest.TestCase):
         pyth_tokenizer = self.tokenizer
         rust_tokenizer = self.rust_tokenizer
 
-        dataset = load_dataset("code_x_glue_ct_code_to_text", "go")
+        dataset = load_dataset("google/code_x_glue_ct_code_to_text", "go")
         for item in tqdm.tqdm(dataset["validation"]):
             string = item["code"]
             encoded1 = pyth_tokenizer.encode(string)
@@ -333,7 +351,7 @@ class GemmaIntegrationTest(unittest.TestCase):
 
             self.assertEqual(decoded1, decoded2)
 
-        dataset = load_dataset("xnli", "all_languages")
+        dataset = load_dataset("facebook/xnli", "all_languages")
 
         for item in tqdm.tqdm(dataset["train"]):
             for string in item["premise"].values():
@@ -433,6 +451,30 @@ class GemmaIntegrationTest(unittest.TestCase):
         expected_tokens = [[235322, 235371, 571, 235298, 2997, 73786, 1645, 108, 4521, 149907, 235371, 571, 235298, 615, 73786, 108], [235322, 235371, 571, 235298, 2997, 73786, 1645, 108, 4521, 149907, 235371, 571, 235298, 615, 73786, 108, 235322, 235371, 571, 235298, 2997, 73786, 105776, 108, 7731, 577, 4664, 692, 35606, 235371, 571, 235298, 615, 73786, 108], [235322, 235371, 571, 235298, 2997, 73786, 1645, 108, 4521, 149907, 235371, 571, 235298, 615, 73786, 108]]  # fmt: skip
         for tokenized_chat, expected_tokens in zip(tokenized_chats, expected_tokens):
             self.assertListEqual(tokenized_chat, expected_tokens)
+
+    def test_save_fast_load_slow(self):
+        # Ensure that we can save a fast tokenizer and load it as a slow tokenizer
+        slow_tokenizer = self.tokenizer
+        text = "a  "
+        target_encoded = [2, 235250, 139]
+        slow = slow_tokenizer.encode(text, add_special_tokens=True)
+        assert slow == target_encoded
+
+        slow_decoded = slow_tokenizer.decode(slow, skip_special_tokens=True)
+        assert slow_decoded == text
+
+        with tempfile.TemporaryDirectory() as dirname:
+            # Save fast tokenizer
+            self.rust_tokenizer.save_pretrained(dirname)
+
+            # Load slow tokenizer with fast files present in the directory
+            slow_tokenizer_from_fast = GemmaTokenizer.from_pretrained(dirname)
+
+        slow_from_fast = slow_tokenizer_from_fast.encode(text, add_special_tokens=True)
+        assert slow_from_fast == target_encoded
+
+        slow_from_fast_decoded = slow_tokenizer_from_fast.decode(slow, skip_special_tokens=True)
+        assert slow_from_fast_decoded == text
 
 
 @require_sentencepiece

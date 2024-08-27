@@ -378,11 +378,11 @@ class JetMoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
-    @unittest.skip("JetMoe buffers include complex numbers, which breaks this test")
+    @unittest.skip(reason="JetMoe buffers include complex numbers, which breaks this test")
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @unittest.skip("JetMoe uses MoA on all models so the KV cache is a non standard format")
+    @unittest.skip(reason="JetMoe uses MoA on all models so the KV cache is a non standard format")
     def test_past_key_values_format(self):
         pass
 
@@ -470,15 +470,7 @@ class JetMoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     @pytest.mark.flash_attn_test
     @slow
     def test_flash_attn_2_inference_equivalence_right_padding(self):
-        self.skipTest("JetMoe flash attention does not support right padding")
-
-    @unittest.skip("TODO: @ArthurZucker - Breaks after #30536 ")
-    def test_beam_sample_generate(self):
-        pass
-
-    @unittest.skip("TODO: @ArthurZucker - Breaks after #30536 ")
-    def test_generate_from_inputs_embeds_decoder_only(self):
-        pass
+        self.skipTest(reason="JetMoe flash attention does not support right padding")
 
 
 @require_torch
@@ -486,7 +478,7 @@ class JetMoeIntegrationTest(unittest.TestCase):
     @slow
     def test_model_8b_logits(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
-        model = JetMoeForCausalLM.from_pretrained("jetmoe/jetmoe-8b", device_map="auto")
+        model = JetMoeForCausalLM.from_pretrained("jetmoe/jetmoe-8b")
         input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
         with torch.no_grad():
             out = model(input_ids).logits.cpu()
@@ -506,7 +498,7 @@ class JetMoeIntegrationTest(unittest.TestCase):
         EXPECTED_TEXT_COMPLETION = """My favourite condiment is ....\nI love ketchup. I love"""
         prompt = "My favourite condiment is "
         tokenizer = AutoTokenizer.from_pretrained("jetmoe/jetmoe-8b", use_fast=False)
-        model = JetMoeForCausalLM.from_pretrained("jetmoe/jetmoe-8b", device_map="auto")
+        model = JetMoeForCausalLM.from_pretrained("jetmoe/jetmoe-8b")
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
 
         # greedy generation outputs
@@ -529,7 +521,7 @@ class JetMoeIntegrationTest(unittest.TestCase):
             "My favourite ",
         ]
         tokenizer = AutoTokenizer.from_pretrained("jetmoe/jetmoe-8b", use_fast=False)
-        model = JetMoeForCausalLM.from_pretrained("jetmoe/jetmoe-8b", device_map="auto")
+        model = JetMoeForCausalLM.from_pretrained("jetmoe/jetmoe-8b")
         input_ids = tokenizer(prompt, return_tensors="pt", padding=True).to(model.model.embed_tokens.weight.device)
         print(input_ids)
 

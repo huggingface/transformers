@@ -153,7 +153,7 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_rust_and_python_full_tokenizers(self):
         if not self.test_rust_tokenizer:
-            return
+            self.skipTest(reason="test_rust_tokenizer is set to False")
 
         tokenizer = self.get_tokenizer()
         rust_tokenizer = self.get_rust_tokenizer()
@@ -598,7 +598,7 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         from datasets import load_dataset
         from seqio import SentencePieceVocabulary
 
-        ds = load_dataset("xnli", "all_languages", split="train+test+validation")
+        ds = load_dataset("facebook/xnli", "all_languages", split="train+test+validation")
 
         # TODO @ArthurZucker fix the 3 commented tests with #23909
         input_texts = [

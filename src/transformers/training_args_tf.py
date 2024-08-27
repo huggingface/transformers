@@ -160,7 +160,7 @@ class TFTrainingArguments(TrainingArguments):
             Google Cloud Project name for the Cloud TPU-enabled project. If not specified, we will attempt to
             automatically detect from metadata.
         run_name (`str`, *optional*):
-            A descriptor for the run. Notably used for wandb logging.
+            A descriptor for the run. Notably used for wandb, mlflow and comet logging.
         xla (`bool`, *optional*):
             Whether to activate the XLA compilation or not.
     """
