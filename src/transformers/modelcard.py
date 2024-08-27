@@ -873,13 +873,17 @@ def extract_hyperparameters_from_trainer(trainer):
     if total_eval_batch_size != hyperparameters["eval_batch_size"]:
         hyperparameters["total_eval_batch_size"] = total_eval_batch_size
 
-    if trainer.args.adafactor:
-        hyperparameters["optimizer"] = "Adafactor"
-    else:
+    if trainer.args.optim:
+    
+        optimizer_name = trainer.args.optim
+        optimizer_args = trainer.args.optim_args
+
         hyperparameters["optimizer"] = (
-            f"Adam with betas=({trainer.args.adam_beta1},{trainer.args.adam_beta2}) and"
-            f" epsilon={trainer.args.adam_epsilon}"
+            f"Use {optimizer_name} And the args are:\n"
+            f"{optimizer_args}"
         )
+    else:
+        hyperparameters["optimizer"] = "Error: No optimizer found"
 
     hyperparameters["lr_scheduler_type"] = trainer.args.lr_scheduler_type.value
     if trainer.args.warmup_ratio != 0.0:
