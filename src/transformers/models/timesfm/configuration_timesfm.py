@@ -35,9 +35,6 @@ class TimesFMConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Arguments:
-        vocab_size (`int`, *optional*, defaults to 32128):
-            Vocabulary size of the TimesFM model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`TimesFMModel`] or [`TFTimesFMModel`].
         d_model (`int`, *optional*, defaults to 512):
             Size of the encoder layers and the pooler layer.
         d_kv (`int`, *optional*, defaults to 64):
@@ -77,13 +74,12 @@ class TimesFMConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=32128,
-        d_model=512,
-        d_kv=64,
-        d_ff=2048,
-        num_layers=6,
+        d_model=1280,
+        d_kv=80,
+        d_ff=1280,
+        num_layers=20,
         num_decoder_layers=None,
-        num_heads=8,
+        num_heads=16,
         relative_attention_num_buckets=32,
         relative_attention_max_distance=128,
         dropout_rate=0.1,
@@ -97,7 +93,6 @@ class TimesFMConfig(PretrainedConfig):
         classifier_dropout=0.0,
         **kwargs,
     ):
-        self.vocab_size = vocab_size
         self.d_model = d_model
         self.d_kv = d_kv
         self.d_ff = d_ff
