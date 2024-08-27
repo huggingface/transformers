@@ -15,17 +15,16 @@
 """Image processor class for ZoeDepth."""
 
 import math
-from typing import Dict, Iterable, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 
+
+if TYPE_CHECKING:
+    from .modeling_zoedepth import ZoeDepthDepthEstimatorOutput
+
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from ...image_transforms import (
-    PaddingMode,
-    colorize_depth,
-    pad,
-    to_channel_dimension_format,
-)
+from ...image_transforms import PaddingMode, pad, to_channel_dimension_format
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -452,17 +451,12 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
 
     def post_process_depth_estimation(
         self,
-        outputs,
+        outputs: "ZoeDepthDepthEstimatorOutput",
         source_sizes: Union[TensorType, List[Tuple[int, int]]],
         target_sizes: Optional[Union[TensorType, List[Tuple[int, int]], None]] = None,
-        outputs_flip=None,
-        remove_padding: Optional[Union[bool, None]] = None,
-        vmin_perc: Optional[float] = 1.0,
-        vmax_perc: Optional[float] = 99.0,
-        cmap: Optional[str] = "gray_r",
-        gamma_corrected: Optional[bool] = False,
-        normalize: Optional[bool] = False,
-    ) -> List[Dict]:
+        outputs_flip: Optional[Union["ZoeDepthDepthEstimatorOutput", None]] = None,
+        do_remove_padding: Optional[Union[bool, None]] = None,
+    ) -> List[TensorType]:
         """
         Converts the raw output of [`ZoeDepthDepthEstimatorOutput`] into final depth predictions and depth PIL images.
         Only supports PyTorch.
@@ -470,32 +464,21 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
         Args:
             outputs ([`ZoeDepthDepthEstimatorOutput`]):
                 Raw outputs of the model.
-            outputs_flip ([`ZoeDepthDepthEstimatorOutput`], *optional*):
-                Raw outputs of the model from flipped input (averaged out in the end).
             source_sizes (`TensorType` or `List[Tuple[int, int]]`):
                 Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the source size
                 (height, width) of each image in the batch before preprocessing.
             target_sizes (`TensorType` or `List[Tuple[int, int]]`, *optional*):
                 Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size
                 (height, width) of each image in the batch. If left to None, predictions will not be resized.
-            remove_padding (`bool`, *optional*):
+            outputs_flip ([`ZoeDepthDepthEstimatorOutput`], *optional*):
+                Raw outputs of the model from flipped input (averaged out in the end).
+            do_remove_padding (`bool`, *optional*):
                 By default ZoeDepth addes padding to fix the boundary artifacts in the output depth map, so we need
                 remove this padding during post_processing. The parameter exists here in case the user changed the image
                 preprocessing to not include padding.
 
-            vmin_perc (`float`, *optional*, defaults to `1.0`):
-                use the `vmin_perc`-th percentile as minimum value during normalization (outlier rejection).
-            vmax_perc (`float`, *optional*, defaults to `99.0`):
-                use the `vmax_perc`-th percentile as maximum value during normalization (outlier rejection).
-            normalize (`bool`, *optional*, defaults to `False`):
-                Apply normalization between [0,1] for the colored image values.
-            cmap (`str`, *optional*, defaults to `gray_r`):
-                matplotlib colormap to use (requires matplotlib).
-            gamma_corrected (`bool`, *optional*, defaults to `False`):
-                Apply gamma correction to colored image.
-
         Returns:
-            `List[Dict]`: A list of dictionaries, each dictionary containing the depth predictions and a depth PIL image
+            `List[TensorType]`: A list of dictionaries, each dictionary containing the depth predictions and a depth PIL image
             as predicted by the model.
         """
         requires_backends(self, "torch")
@@ -510,10 +493,10 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
                 "Make sure that you pass in as many target sizes as the batch dimension of the predicted depth"
             )
 
-        if remove_padding is None:
-            remove_padding = self.do_pad
+        if do_remove_padding is None:
+            do_remove_padding = self.do_pad
 
-        if (source_sizes is None and remove_padding) or (len(predicted_depth) != len(source_sizes)):
+        if (source_sizes is None and do_remove_padding) or (len(predicted_depth) != len(source_sizes)):
             raise ValueError(
                 "Make sure that you pass in as many source image sizes as the batch dimension of the logits"
             )
@@ -529,49 +512,45 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
         # Check [here](https://github.com/isl-org/ZoeDepth/blob/edb6daf45458569e24f50250ef1ed08c015f17a7/zoedepth/models/depth_model.py#L57)
         # for the original implementation.
         # In this section, we remove this padding to get the final depth image and depth prediction
-        fh = fw = 3
+        padding_factor_h = padding_factor_w = 3
 
         results = []
-        for i, d in enumerate(predicted_depth):
-            # d.shape = [1 if not flip else 2, H, W]
-            if source_sizes is not None:
+        target_sizes = [None] * len(predicted_depth) if target_sizes is None else target_sizes
+        source_sizes = [None] * len(predicted_depth) if source_sizes is None else source_sizes
+        for depth, target_size, source_size in zip(predicted_depth, target_sizes, source_sizes):
+            # depth.shape = [1 if not flip else 2, H, W]
+            if source_size is not None:
                 pad_h = pad_w = 0
-                s = source_sizes[i]
 
-                if remove_padding:
-                    pad_h = int(np.sqrt(s[0] / 2) * fh)
-                    pad_w = int(np.sqrt(s[1] / 2) * fw)
+                if do_remove_padding:
+                    pad_h = int(np.sqrt(source_size[0] / 2) * padding_factor_h)
+                    pad_w = int(np.sqrt(source_size[1] / 2) * padding_factor_w)
 
-                d = nn.functional.interpolate(
-                    d.unsqueeze(1), size=[s[0] + 2 * pad_h, s[1] + 2 * pad_w], mode="bicubic", align_corners=False
+                depth = nn.functional.interpolate(
+                    depth.unsqueeze(1),
+                    size=[source_size[0] + 2 * pad_h, source_size[1] + 2 * pad_w],
+                    mode="bicubic",
+                    align_corners=False,
                 )
 
                 if pad_h > 0:
-                    d = d[:, :, pad_h:-pad_h, :]
+                    depth = depth[:, :, pad_h:-pad_h, :]
                 if pad_w > 0:
-                    d = d[:, :, :, pad_w:-pad_w]
+                    depth = depth[:, :, :, pad_w:-pad_w]
 
-                d = d.squeeze(1)
-            # d.shape = [1 if not flip else 2, H, W]
+                depth = depth.squeeze(1)
+            # depth.shape = [1 if not flip else 2, H, W]
             if outputs_flip is not None:
-                d, d_f = d.chunk(2)
-                d = (d + torch.flip(d_f, dims=[-1])) / 2
-            # d.shape = [1, H, W]
-            if target_sizes is not None:
-                target_size = [target_sizes[i][0], target_sizes[i][1]]
-                d = nn.functional.interpolate(d.unsqueeze(1), size=target_size, mode="bicubic", align_corners=False)
-            d = d.squeeze()
-            # d.shape = [H, W]
-            results.append({"predicted_depth": d, "depth": None})
-
-            if is_vision_available():
-                results[-1]["depth"] = colorize_depth(
-                    d.detach().cpu().numpy(),
-                    vmin_perc=vmin_perc,
-                    vmax_perc=vmax_perc,
-                    cmap=cmap,
-                    gamma_corrected=gamma_corrected,
-                    normalize=normalize,
+                depth, depth_flipped = depth.chunk(2)
+                depth = (depth + torch.flip(depth_flipped, dims=[-1])) / 2
+            # depth.shape = [1, H, W]
+            if target_size is not None:
+                target_size = [target_size[0], target_size[1]]
+                depth = nn.functional.interpolate(
+                    depth.unsqueeze(1), size=target_size, mode="bicubic", align_corners=False
                 )
+            depth = depth.squeeze()
+            # depth.shape = [H, W]
+            results.append(depth)
 
         return results

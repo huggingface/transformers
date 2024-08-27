@@ -16,8 +16,6 @@ if is_vision_available():
     from ..image_utils import load_image
 
 if is_torch_available():
-    import torch
-
     from ..models.auto.modeling_auto import MODEL_FOR_DEPTH_ESTIMATION_MAPPING_NAMES
 
 logger = logging.get_logger(__name__)
@@ -102,34 +100,26 @@ class DepthEstimationPipeline(Pipeline):
 
     def _forward(self, model_inputs):
         target_size = model_inputs.pop("target_size")
-        if self.model.config.architectures == ["ZoeDepthForDepthEstimation"]:
-            # That added flipped inference is the default behaviour in the original repo
-            # https://github.com/isl-org/ZoeDepth/blob/edb6daf45458569e24f50250ef1ed08c015f17a7/zoedepth/models/depth_model.py#L99
-            model_outputs = self.model(
-                pixel_values=torch.cat(
-                    [model_inputs["pixel_values"], torch.flip(model_inputs["pixel_values"], dims=[3])]
-                )
-            )
         model_outputs = self.model(**model_inputs)
         model_outputs["target_size"] = target_size
         return model_outputs
 
     def postprocess(self, model_outputs):
-        if self.model.config.architectures == ["ZoeDepthForDepthEstimation"]:
-            model_outputs_pd, model_outputs_flip_pd = model_outputs.predicted_depth.chunk(2)
-            model_outputs.predicted_depth = None
-            model_outputs_flip = model_outputs.copy()
-            model_outputs.predicted_depth = model_outputs_pd
-            model_outputs_flip.predicted_depth = model_outputs_flip_pd
-            return self.image_processor.post_process_depth_estimation(
-                model_outputs,
-                [self.image_size[::-1]],
-                outputs_flip=model_outputs_flip,
-                normalize=True,
-            )[0]
-
-        return self.image_processor.post_process_depth_estimation(
+        outputs = self.image_processor.post_process_depth_estimation(
             model_outputs,
-            target_sizes=model_outputs["target_size"],
-            normalize=True,
-        )[0]
+            [self.image_size[::-1]],
+        )
+
+        outputs = [
+            {
+                "predicted_depth": output,
+                "depth": Image.fromarray(
+                    (((output - output.min()) / (output.max() - output.min())).detach().cpu().numpy() * 255).astype(
+                        "uint8"
+                    )
+                ),
+            }
+            for output in outputs
+        ]
+
+        return outputs[0] if len(outputs) == 1 else outputs

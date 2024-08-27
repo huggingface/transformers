@@ -401,22 +401,18 @@ class DPTModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = model(**inputs)
 
-        output = image_processor.post_process_depth_estimation(outputs=outputs)[0]
-        depth = output["depth"]
-        output = output["predicted_depth"]
+        predicted_depth = image_processor.post_process_depth_estimation(outputs=outputs)[0]
         expected_shape = torch.Size((384, 384))
-        self.assertTrue(output.shape == expected_shape)
-        self.assertTrue(depth.size[::-1] == expected_shape)
+        self.assertTrue(predicted_depth.shape == expected_shape)
 
-        output_l = image_processor.post_process_depth_estimation(outputs=outputs, target_sizes=[(500, 500)])[0]
-        depth_l = output_l["depth"]
-        output_l = output_l["predicted_depth"]
+        predicted_depth_l = image_processor.post_process_depth_estimation(outputs=outputs, target_sizes=[(500, 500)])[
+            0
+        ]
         expected_shape = torch.Size((500, 500))
-        self.assertTrue(output_l.shape == expected_shape)
-        self.assertTrue(depth_l.size[::-1] == expected_shape)
+        self.assertTrue(predicted_depth_l.shape == expected_shape)
 
         output_enlarged = torch.nn.functional.interpolate(
-            output.unsqueeze(0).unsqueeze(1), size=(500, 500), mode="bicubic", align_corners=False
+            predicted_depth.unsqueeze(0).unsqueeze(1), size=(500, 500), mode="bicubic", align_corners=False
         ).squeeze()
         self.assertTrue(output_enlarged.shape == expected_shape)
-        self.assertTrue(torch.allclose(output_l, output_enlarged, rtol=1e-3))
+        self.assertTrue(torch.allclose(predicted_depth_l, output_enlarged, rtol=1e-3))

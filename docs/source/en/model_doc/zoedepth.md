@@ -82,11 +82,16 @@ According to the [original implementation](https://github.com/isl-org/ZoeDepth/b
 ...     outputs,
 ...     source_size=[image.size[::-1]],
 ...     outputs_flip=outputs_flip,
-...     normalize=True,
 ... )
 
->>> predicted_depth = post_processed_output[0]["predicted_depth"]
->>> depth = post_processed_output[0]["depth"]
+>>> predicted_depth = post_processed_output[0]
+>>> depth = Image.fromarray(
+...     (
+...         (
+...             (predicted_depth - predicted_depth.min()) / (predicted_depth.max() - predicted_depth.min())
+...         ).detach().cpu().numpy() * 255
+...     ).astype("uint8")
+... )
 ```
 
 <Tip>

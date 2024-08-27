@@ -15,12 +15,16 @@
 """Image processor class for DPT."""
 
 import math
-from typing import Dict, Iterable, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Dict, Iterable, List, Optional, Tuple, Union
+
+
+if TYPE_CHECKING:
+    from ...modeling_outputs import DepthEstimatorOutput
 
 import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from ...image_transforms import colorize_depth, pad, resize, to_channel_dimension_format
+from ...image_transforms import pad, resize, to_channel_dimension_format
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -470,14 +474,9 @@ class DPTImageProcessor(BaseImageProcessor):
 
     def post_process_depth_estimation(
         self,
-        outputs,
+        outputs: "DepthEstimatorOutput",
         target_sizes: Optional[Union[TensorType, List[Tuple[int, int]], None]] = None,
-        vmin_perc: Optional[float] = 1.0,
-        vmax_perc: Optional[float] = 99.0,
-        cmap: Optional[str] = "gray_r",
-        gamma_corrected: Optional[bool] = False,
-        normalize: Optional[bool] = False,
-    ) -> List[Dict]:
+    ) -> List[TensorType]:
         """
         Converts the raw output of [`DepthEstimatorOutput`] into final depth predictions and depth PIL images.
         Only supports PyTorch.
@@ -488,24 +487,9 @@ class DPTImageProcessor(BaseImageProcessor):
             target_sizes (`TensorType` or `List[Tuple[int, int]]`, *optional*):
                 Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size (height,
                 width) of each image in the batch. If left to None, predictions will not be resized.
-            remove_padding (`bool`, *optional*):
-                By default ZoeDepth addes padding to fix the boundary artifacts in the output depth map, so we need remove
-                this padding during post_processing. The parameter exists here in case the user changed the image
-                preprocessing to not include padding.
-
-            vmin_perc (`float`, *optional*, defaults to `1.0`):
-                use the `vmin_perc`-th percentile as minimum value during normalization.
-            vmax_perc (`float`, *optional*, defaults to `99.0`):
-                use the `vmax_perc`-th percentile as maximum value during normalization.
-            normalize (`bool`, *optional*, defaults to `False`):
-                Apply normalization between [0,1] for the colored image values.
-            cmap (`str`, *optional*, defaults to `gray_r`):
-                matplotlib colormap to use (requires matplotlib).
-            gamma_corrected (`bool`, *optional*, defaults to `False`):
-                Apply gamma correction to colored image.
 
         Returns:
-            `List[Dict]`: A list of dictionaries, each dictionary containing the depth predictions and a depth PIL image as
+            `List[TensorType]`: A list of dictionaries, each dictionary containing the depth predictions and a depth PIL image as
             predicted by the model.
         """
         requires_backends(self, "torch")
@@ -518,23 +502,13 @@ class DPTImageProcessor(BaseImageProcessor):
             )
 
         results = []
-        for i, d in enumerate(predicted_depth):
-            if target_sizes is not None:
-                target_size = target_sizes[i]
-                d = torch.nn.functional.interpolate(
-                    d.unsqueeze(0).unsqueeze(1), size=target_size, mode="bicubic", align_corners=False
+        target_sizes = [None] * len(predicted_depth) if target_sizes is None else target_sizes
+        for depth, target_size in zip(predicted_depth, target_sizes):
+            if target_size is not None:
+                depth = torch.nn.functional.interpolate(
+                    depth.unsqueeze(0).unsqueeze(1), size=target_size, mode="bicubic", align_corners=False
                 ).squeeze()
 
-            results.append({"predicted_depth": d, "depth": None})
-
-            if is_vision_available():
-                results[-1]["depth"] = colorize_depth(
-                    d.detach().cpu().numpy(),
-                    vmin_perc=vmin_perc,
-                    vmax_perc=vmax_perc,
-                    cmap=cmap,
-                    gamma_corrected=gamma_corrected,
-                    normalize=normalize,
-                )
+            results.append(depth)
 
         return results

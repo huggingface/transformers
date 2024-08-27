@@ -122,7 +122,7 @@ Pass the prepared inputs through the model:
 ```py
 >>> import torch
 
->>> with torch.no_grad():   
+>>> with torch.no_grad():
 ...     outputs = model(pixel_values)
 ...     outputs_flip = model(pixel_values=torch.flip(inputs.pixel_values, dims=[3]))
 ```
@@ -138,9 +138,15 @@ Let's post-process the results to remove any padding and resize the depth map to
 ...     outputs,
 ...     source_size=[image.size[::-1]],
 ...     outputs_flip=outputs_flip,
-...     normalize=True,
 ... )
->>> depth = post_processed_output[0]["depth"]
+>>> predicted_depth = post_processed_output[0]
+>>> depth = Image.fromarray(
+...     (
+...         (
+...             (predicted_depth - predicted_depth.min()) / (predicted_depth.max() - predicted_depth.min())
+...         ).detach().cpu().numpy() * 255
+...     ).astype("uint8")
+... )
 ```
 
 <Tip>

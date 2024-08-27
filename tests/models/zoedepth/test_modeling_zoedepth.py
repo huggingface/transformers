@@ -287,7 +287,6 @@ class ZoeDepthModelIntegrationTest(unittest.TestCase):
         pad_input,
         images,
         outputs,
-        outputs_pil,
         raw_outputs,
         raw_outputs_flip=None,
     ):
@@ -295,29 +294,16 @@ class ZoeDepthModelIntegrationTest(unittest.TestCase):
             raw_outputs,
             [img.size[::-1] for img in images],
             outputs_flip=raw_outputs_flip,
-            cmap="gray",
             target_sizes=[tuple(np.array(img.size[::-1]) * 2) for img in images],
-            remove_padding=pad_input,
-            vmin_perc=0,
-            vmax_perc=100,
+            do_remove_padding=pad_input,
         )
-        outputs_large_pil = [out["depth"] for out in outputs_large]
-        outputs_large = [out["predicted_depth"] for out in outputs_large]
 
-        for img, out, out_pil, out_l, out_l_pil in zip(images, outputs, outputs_pil, outputs_large, outputs_large_pil):
+        for img, out, out_l in zip(images, outputs, outputs_large):
             out_l_reduced = torch.nn.functional.interpolate(
                 out_l.unsqueeze(0).unsqueeze(1), size=img.size[::-1], mode="bicubic", align_corners=False
             )
-            self.assertTrue((np.array(out_l_pil.size) == np.array(img.size) * 2).all())
             self.assertTrue((np.array(out_l.shape)[::-1] == np.array(img.size) * 2).all())
             self.assertTrue(torch.allclose(out, out_l_reduced, rtol=1e-2))
-            self.assertTrue(
-                np.allclose(
-                    np.array(out_pil.convert("L")),
-                    np.array(out_l_pil.convert("L").resize(out_pil.size)),
-                    rtol=1e-1,
-                )
-            )
 
     def check_post_processing_test(self, image_processor, images, model, pad_input=True, flip_aug=True):
         inputs = image_processor(images=images, return_tensors="pt", do_pad=pad_input).to(torch_device)
@@ -332,28 +318,15 @@ class ZoeDepthModelIntegrationTest(unittest.TestCase):
             raw_outputs,
             [img.size[::-1] for img in images],
             outputs_flip=raw_outputs_flip,
-            cmap="gray",
-            remove_padding=pad_input,
-            vmin_perc=0,
-            vmax_perc=100,
+            do_remove_padding=pad_input,
         )
-        outputs_pil = [out["depth"] for out in outputs]
-        outputs = [out["predicted_depth"] for out in outputs]
 
         expected_slice = torch.tensor(self.expected_slice_post_processing[pad_input, flip_aug]).to(torch_device)
-        for img, out_pil, out in zip(images, outputs_pil, outputs):
+        for img, out in zip(images, outputs):
             self.assertTrue(img.size == out.shape[::-1])
-            self.assertTrue(img.size == out_pil.size)
             self.assertTrue(torch.allclose(expected_slice, out[:3, :3], rtol=1e-3))
-            self.assertTrue(
-                np.allclose(
-                    np.array(Image.fromarray((out * 255 / out.max()).cpu().numpy().astype("uint8"))),
-                    np.array(out_pil.convert("L")),
-                    rtol=1e-1,
-                )
-            )
 
-        self.check_target_size(image_processor, pad_input, images, outputs, outputs_pil, raw_outputs, raw_outputs_flip)
+        self.check_target_size(image_processor, pad_input, images, outputs, raw_outputs, raw_outputs_flip)
 
     def test_post_processing_depth_estimation_post_processing_nopad_noflip(self):
         images = [prepare_img()] * 2
