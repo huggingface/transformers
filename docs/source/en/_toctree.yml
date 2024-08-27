@@ -412,6 +412,8 @@
         title: GPTSAN Japanese
       - local: model_doc/gpt-sw3
         title: GPTSw3
+      - local: model_doc/granite
+        title: Granite
       - local: model_doc/herbert
         title: HerBERT
       - local: model_doc/ibert
