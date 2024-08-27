@@ -75,18 +75,3 @@ This model was contributed by [mayank-mishra](https://huggingface.co/mayank-mish
 
 [[autodoc]] GraniteForCausalLM
     - forward
-
-## GraniteForSequenceClassification
-
-[[autodoc]] GraniteForSequenceClassification
-    - forward
-
-## GraniteForQuestionAnswering
-
-[[autodoc]] GraniteForQuestionAnswering
-    - forward
-
-## GraniteForTokenClassification
-
-[[autodoc]] GraniteForTokenClassification
-    - forward

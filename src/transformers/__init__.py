@@ -2321,9 +2321,6 @@ else:
     _import_structure["models.granite"].extend(
         [
             "GraniteForCausalLM",
-            "GraniteForQuestionAnswering",
-            "GraniteForSequenceClassification",
-            "GraniteForTokenClassification",
             "GraniteModel",
             "GranitePreTrainedModel",
         ]
@@ -6929,9 +6926,6 @@ if TYPE_CHECKING:
         )
         from .models.granite import (
             GraniteForCausalLM,
-            GraniteForQuestionAnswering,
-            GraniteForSequenceClassification,
-            GraniteForTokenClassification,
             GraniteModel,
             GranitePreTrainedModel,
         )
