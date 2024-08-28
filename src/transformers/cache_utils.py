@@ -1087,8 +1087,8 @@ class StaticCache(Cache):
         cache_position = cache_kwargs.get("cache_position")
         self.key_cache[layer_idx] = self.key_cache[layer_idx].to(device=key_states.device)
         self.value_cache[layer_idx] = self.value_cache[layer_idx].to(device=value_states.device)
-        k_out = self.key_cache[layer_idx]
-        v_out = self.value_cache[layer_idx]
+        k_out = self.key_cache[layer_idx].clone()
+        v_out = self.value_cache[layer_idx].clone()
 
         if cache_position is None:
             k_out.copy_(key_states)
