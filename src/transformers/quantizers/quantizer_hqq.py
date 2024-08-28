@@ -152,7 +152,9 @@ class HqqHfQuantizer(HfQuantizer):
                     unexpected_keys.remove(k)
 
         if self.pre_quantized:
-            if isinstance(module, (torch.nn.Linear, HQQLinear)):
+            if isinstance(module, HQQLinear):
+                return
+            else:
                 hqq_layer = HQQLinear(
                     linear_layer=None,
                     quant_config=None,
