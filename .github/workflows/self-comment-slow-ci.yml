@@ -99,7 +99,7 @@ jobs:
         NUMBER: ${{ github.event.issue.number }}
 
   testing-stuff-around:
-      if: contains()    # check if the comments come from pull request, exclude those from issue.
+      if:  contains(github.event.comment.html_url, '/pull/') #  uf the comments come from pull request, exclude those from issue.
       runs-on:  ubuntu-22.04
       steps:
         - name: say hello
