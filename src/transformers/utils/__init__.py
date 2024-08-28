@@ -277,6 +277,7 @@ def check_min_version(min_version):
             "versions of HuggingFace Transformers."
         )
 
+
 @lru_cache()
 def get_available_devices():
     """
