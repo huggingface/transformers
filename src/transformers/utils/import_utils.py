@@ -90,6 +90,7 @@ TORCH_FX_REQUIRED_VERSION = version.parse("1.10")
 ACCELERATE_MIN_VERSION = "0.21.0"
 FSDP_MIN_VERSION = "1.12.0"
 XLA_FSDPV2_MIN_VERSION = "2.2.0"
+HQQ_MIN_VERSION = "0.2.0"
 
 
 _accelerate_available, _accelerate_version = _is_package_available("accelerate", return_version=True)
@@ -174,8 +175,7 @@ _torchaudio_available = _is_package_available("torchaudio")
 _torchdistx_available = _is_package_available("torchdistx")
 _torchvision_available = _is_package_available("torchvision")
 _mlx_available = _is_package_available("mlx")
-_hqq_available = _is_package_available("hqq")
-
+_hqq_available, _hqq_version = _is_package_available("hqq", return_version=True)
 
 _torch_version = "N/A"
 _torch_available = False
@@ -309,8 +309,8 @@ def is_torch_deterministic():
         return True
 
 
-def is_hqq_available():
-    return _hqq_available
+def is_hqq_available(min_version: str = HQQ_MIN_VERSION):
+    return _hqq_available and version.parse(_hqq_version) >= version.parse(min_version)
 
 
 def is_pygments_available():
