@@ -874,7 +874,6 @@ def extract_hyperparameters_from_trainer(trainer):
         hyperparameters["total_eval_batch_size"] = total_eval_batch_size
 
     if trainer.args.optim:
-    
         optimizer_name = trainer.args.optim
         optimizer_args = trainer.args.optim_args
 
