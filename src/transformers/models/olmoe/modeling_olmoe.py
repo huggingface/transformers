@@ -1312,6 +1312,7 @@ class OlmoeForCausalLM(OlmoePreTrainedModel):
 
         return MoeCausalLMOutputWithPast(
             loss=loss,
+            aux_loss=aux_loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
