@@ -44,6 +44,13 @@ if is_vision_available():
     from transformers import CLIPImageProcessor
 
 
+def prepare_image_inputs():
+    """This function prepares a list of PIL images"""
+    image_inputs = [np.random.randint(255, size=(3, 30, 400), dtype=np.uint8)]
+    image_inputs = [Image.fromarray(np.moveaxis(x, 0, -1)) for x in image_inputs]
+    return image_inputs
+
+
 @require_torch
 @require_vision
 @require_torch
@@ -84,9 +91,7 @@ class ProcessorTesterMixin:
         """This function prepares a list of PIL images, or a list of numpy arrays if one specifies numpify=True,
         or a list of PyTorch tensors if one specifies torchify=True.
         """
-        image_inputs = [np.random.randint(255, size=(3, 30, 400), dtype=np.uint8)]
-        image_inputs = [Image.fromarray(np.moveaxis(x, 0, -1)) for x in image_inputs]
-        return image_inputs
+        return prepare_image_inputs()
 
     def test_processor_to_json_string(self):
         processor = self.get_processor()
