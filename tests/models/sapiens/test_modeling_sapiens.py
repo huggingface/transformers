@@ -37,7 +37,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import SapiensForImageClassification, SapiensForMaskedImageModeling, SapiensModel
+    from transformers import SapiensForSemanticSegmentation, SapiensModel
 
 
 if is_vision_available():

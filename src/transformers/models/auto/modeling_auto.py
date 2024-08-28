@@ -594,7 +594,6 @@ MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING_NAMES = OrderedDict(
         ("swin", "SwinForMaskedImageModeling"),
         ("swinv2", "Swinv2ForMaskedImageModeling"),
         ("vit", "ViTForMaskedImageModeling"),
-        ("sapiens", "SapiensForMaskedImageModeling"),
     ]
 )
 
@@ -662,7 +661,6 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("swinv2", "Swinv2ForImageClassification"),
         ("van", "VanForImageClassification"),
         ("vit", "ViTForImageClassification"),
-        ("sapiens", "SapiensForImageClassification"),
         ("vit_hybrid", "ViTHybridForImageClassification"),
         ("vit_msn", "ViTMSNForImageClassification"),
     ]
@@ -687,6 +685,7 @@ MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES = OrderedDict(
         ("mobilevitv2", "MobileViTV2ForSemanticSegmentation"),
         ("segformer", "SegformerForSemanticSegmentation"),
         ("upernet", "UperNetForSemanticSegmentation"),
+        ("sapiens", "SapiensForSemanticSegmentation"),
     ]
 )
 

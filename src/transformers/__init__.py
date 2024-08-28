@@ -1207,7 +1207,7 @@ else:
     _import_structure["models.videomae"].extend(["VideoMAEFeatureExtractor", "VideoMAEImageProcessor"])
     _import_structure["models.vilt"].extend(["ViltFeatureExtractor", "ViltImageProcessor", "ViltProcessor"])
     _import_structure["models.vit"].extend(["ViTFeatureExtractor", "ViTImageProcessor"])
-    _import_structure["models.sapiens"].extend(["SapiensFeatureExtractor", "SapiensImageProcessor"])
+    _import_structure["models.sapiens"].extend(["SapiensImageProcessor"])
     _import_structure["models.vitmatte"].append("VitMatteImageProcessor")
     _import_structure["models.vivit"].append("VivitImageProcessor")
     _import_structure["models.yolos"].extend(["YolosFeatureExtractor", "YolosImageProcessor"])
@@ -3498,8 +3498,7 @@ else:
     )
     _import_structure["models.sapiens"].extend(
         [
-            "SapiensForImageClassification",
-            "SapiensForMaskedImageModeling",
+            "SapiensForSemanticSegmentation",
             "SapiensModel",
             "SapiensPreTrainedModel",
         ]
@@ -4346,13 +4345,6 @@ else:
             "TFViTPreTrainedModel",
         ]
     )
-    _import_structure["models.sapiens"].extend(
-        [
-            "TFSapiensForImageClassification",
-            "TFSapiensModel",
-            "TFSapiensPreTrainedModel",
-        ]
-    )
     _import_structure["models.vit_mae"].extend(
         [
             "TFViTMAEForPreTraining",
@@ -4768,7 +4760,6 @@ else:
     _import_structure["models.vision_encoder_decoder"].append("FlaxVisionEncoderDecoderModel")
     _import_structure["models.vision_text_dual_encoder"].extend(["FlaxVisionTextDualEncoderModel"])
     _import_structure["models.vit"].extend(["FlaxViTForImageClassification", "FlaxViTModel", "FlaxViTPreTrainedModel"])
-    _import_structure["models.sapiens"].extend(["FlaxSapiensForImageClassification", "FlaxSapiensModel", "FlaxSapiensPreTrainedModel"])
     _import_structure["models.wav2vec2"].extend(
         [
             "FlaxWav2Vec2ForCTC",
@@ -6027,7 +6018,7 @@ if TYPE_CHECKING:
         from .models.videomae import VideoMAEFeatureExtractor, VideoMAEImageProcessor
         from .models.vilt import ViltFeatureExtractor, ViltImageProcessor, ViltProcessor
         from .models.vit import ViTFeatureExtractor, ViTImageProcessor
-        from .models.sapiens import SapiensFeatureExtractor, SapiensImageProcessor
+        from .models.sapiens import SapiensImageProcessor
         from .models.vitmatte import VitMatteImageProcessor
         from .models.vivit import VivitImageProcessor
         from .models.yolos import YolosFeatureExtractor, YolosImageProcessor
@@ -7862,8 +7853,7 @@ if TYPE_CHECKING:
             ViTPreTrainedModel,
         )
         from .models.sapiens import (
-            SapiensForImageClassification,
-            SapiensForMaskedImageModeling,
+            SapiensForSemanticSegmentation,
             SapiensModel,
             SapiensPreTrainedModel,
         )
@@ -8563,11 +8553,6 @@ if TYPE_CHECKING:
             TFViTModel,
             TFViTPreTrainedModel,
         )
-        from .models.sapiens import (
-            TFSapiensForImageClassification,
-            TFSapiensModel,
-            TFSapiensPreTrainedModel,
-        )
         from .models.vit_mae import (
             TFViTMAEForPreTraining,
             TFViTMAEModel,
@@ -8917,11 +8902,6 @@ if TYPE_CHECKING:
             FlaxViTForImageClassification,
             FlaxViTModel,
             FlaxViTPreTrainedModel,
-        )
-        from .models.sapiens import (
-            FlaxSapiensForImageClassification,
-            FlaxSapiensModel,
-            FlaxSapiensPreTrainedModel,
         )
         from .models.wav2vec2 import (
             FlaxWav2Vec2ForCTC,
