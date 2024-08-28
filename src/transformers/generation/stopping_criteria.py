@@ -252,6 +252,7 @@ class StopStringCriteria(StoppingCriteria):
         self.num_stop_strings = len(self.stop_strings)
         self.target_lens = torch.tensor([len(stop_string) for stop_string in stop_strings], dtype=torch.int32)
 
+
     def clean_and_embed_tokens_with_cache(self, token_list, token_indices, stop_strings, tokenizer):
         # We don't use the tokenizer in the cache key, because I don't trust it to have well-behaved equality
         if (token_list, token_indices, stop_strings) in STOP_STRING_EMBEDDING_CACHE:
@@ -348,7 +349,12 @@ class StopStringCriteria(StoppingCriteria):
         # we need a fallback to handle this case
         max_valid_positions = max(all_valid_positions) if all_valid_positions else 1
         # There should always be at least one valid end_len, however, so no fallback needed here
-        max_valid_end_lens = max(len(val) for positions in token_end_overlaps.values() for val in positions.values())
+        valid_end_lens = [len(val) for positions in token_end_overlaps.values() for val in positions.values()]
+        if not valid_end_lens:
+            raise ValueError("Stop string preprocessing was unable to identify tokens matching one or more of the "
+                             "supplied stop string(s). This is most often caused by the stop "
+                             "strings containing unusual characters that are not in the tokenizer vocabulary.")
+        max_valid_end_lens = max(valid_end_lens)
         vec_size = len(stop_strings) * (max_valid_positions + max_valid_end_lens) + 1
         gather_vec = np.full((len(token_list), vec_size), dtype=np.int32, fill_value=-1)
 
