@@ -51,12 +51,12 @@ jobs:
             /repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments \
             -f "body=This comment contains /pytest, running the specified job..."
 
-      - name: Create Check Run
-        id: create_check_run
+      - name: Create  Run
+        id: create_run
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}/jobs/${{ github.job }}
-        run:
+        run: |
           gh api \
             --method POST \
             -H "Accept: application/vnd.github+json" \
