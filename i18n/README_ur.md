@@ -292,7 +292,7 @@ conda install conda-forge::transformers
 
 ## تعلم المزيد
 
-| القسم | الوصف |
+| باب | تفصیل |
 |-|-|
 | [وثائق](https://huggingface.co/docs/transformers/) | وثائق واجهة برمجة التطبيقات (API) الكاملة والبرامج التعليمية |
 | [ملخص المهام](https://huggingface.co/docs/transformers/task_summary) | المهام التي يدعمها 🤗 Transformers |
@@ -301,9 +301,10 @@ conda install conda-forge::transformers
 | [جولة سريعة: البرامج النصية للضبط الدقيق/الاستخدام](https://github.com/huggingface/transformers/tree/main/examples) | البرامج النصية المثالية للضبط الدقيق للنماذج على مجموعة واسعة من المهام |
 | [مشاركة النماذج وتحميلها](https://huggingface.co/docs/transformers/model_sharing) | تحميل ومشاركة نماذجك المضبوطة بدقة مع المجتمع |
 
-## الاستشهاد
+## استشہاد
 
-لدينا الآن [ورقة](https://www.aclweb.org/anthology/2020.emnlp-demos.6/) يمكنك الاستشهاد بها لمكتبة 🤗 Transformers:
+ہم نے اب ایک [تحقیقی مقالہ](https://www.aclweb.org/anthology/2020.emnlp-demos.6/) تیار کیا ہے جسے آپ 🤗 Transformers لائبریری کے لیے حوالہ دے سکتے ہیں:
+
 ```bibtex
 @inproceedings{wolf-etal-2020-transformers،
     title = "Transformers: State-of-the-Art Natural Language Processing"،
