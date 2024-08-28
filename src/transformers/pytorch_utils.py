@@ -50,6 +50,30 @@ def softmax_backward_data(parent, grad_output, output, dim, self):
     return _softmax_backward_data(grad_output, output, parent.dim, self.dtype)
 
 
+def prune_embedding_layer(layer: nn.Embedding, index: torch.LongTensor) -> nn.Linear:
+    """
+    Prune an embedding layer to keep only entries in index.
+
+    Used to remove embedding channels.
+
+    Args:
+        layer (`torch.nn.Embedding`): The layer to prune.
+        index (`torch.LongTensor`): The indices to keep in the layer.
+
+    Returns:
+        `torch.nn.Embedding`: The pruned layer as a new layer with `requires_grad=True`.
+    """
+    index = index.to(layer.weight.device)
+    W = layer.weight.index_select(1, index).clone().detach()
+    new_size = list(layer.weight.size())
+    new_size[1] = len(index)
+    new_layer = nn.Embedding(new_size[0], new_size[1], padding_idx=layer.padding_idx).to(layer.weight.device)
+    new_layer.weight.requires_grad = False
+    new_layer.weight.copy_(W.contiguous())
+    new_layer.weight.requires_grad = True
+    return new_layer
+
+
 def prune_linear_layer(layer: nn.Linear, index: torch.LongTensor, dim: int = 0) -> nn.Linear:
     """
     Prune a linear layer to keep only entries in index.
