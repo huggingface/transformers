@@ -4,10 +4,14 @@ on:
   workflow_dispatch:
     branches-ignore:
       - main
-  # issue_comment:
-  #   types: [created]
-  #   branches-ignore:
-  #     - main
+  issue_comment:
+    types: 
+      - created
+      - labeled
+    branches-ignore:
+      - main
+  pull_request_review_comment:
+    types: [created, deleted]
 
 # concurrency:
 #   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
@@ -28,6 +32,13 @@ on:
 #   CUDA_VISIBLE_DEVICES: 0,1
 
 jobs:
+
+  run_if_label_matches:
+    if: github.event.label.name == 'run-slow'
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo 'The label was run-slow'
+
   pr_commented:
       # This job only runs for pull request comments
       name: PR comment
