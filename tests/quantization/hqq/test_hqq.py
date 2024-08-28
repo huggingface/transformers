@@ -94,7 +94,7 @@ class HqqConfigTest(unittest.TestCase):
         quantization_config = HqqConfig()
         hqq_orig_config = quantization_config.to_dict()
 
-        self.assertEqual(quantization_config.quant_config, hqq_orig_config['quant_config'])
+        self.assertEqual(quantization_config.quant_config, hqq_orig_config["quant_config"])
 
 
 @slow
@@ -163,21 +163,18 @@ class HQQSerializationTest(unittest.TestCase):
         with torch.no_grad():
             logits_ref = hqq_runner.model.forward(input_tensor).logits
 
-        #Save 
-        saved_model_id = 'quant_model'
+        # Save
+        saved_model_id = "quant_model"
         hqq_runner.model.save_pretrained(saved_model_id)
 
-        #Remove old model
+        # Remove old model
         del hqq_runner.model
         torch.cuda.empty_cache()
 
-        #Load and check if the logits match
+        # Load and check if the logits match
         model_loaded = AutoModelForCausalLM.from_pretrained(
-            'quant_model', 
-            torch_dtype=torch.float16, 
-            device_map=torch_device,
-            low_cpu_mem_usage=True
-            )
+            "quant_model", torch_dtype=torch.float16, device_map=torch_device, low_cpu_mem_usage=True
+        )
 
         with torch.no_grad():
             logits_loaded = model_loaded.forward(input_tensor).logits
