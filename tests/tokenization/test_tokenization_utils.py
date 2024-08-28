@@ -303,7 +303,6 @@ class TokenizerUtilsTest(unittest.TestCase):
                 ids = tokenizer(sentence)["input_ids"]
                 decoded_sent = tokenizer.decode(ids, skip_special_tokens=True)
                 self.assertEqual(decoded_sent, "[CLS] ஐ [SEP]")
-                 
 
     @require_torch
     def test_padding_accepts_tensors_pt(self):
