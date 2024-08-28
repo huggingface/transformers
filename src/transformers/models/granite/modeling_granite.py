@@ -1,10 +1,6 @@
 # coding=utf-8
-# Copyright 2024 EleutherAI and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 IBM and the HuggingFace Inc. team. All rights reserved.
 #
-# This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
-# and OPT implementations in this library. It has been modified from its
-# original forms to accommodate minor architectural differences compared
-# to GPT-NeoX and OPT used by the Meta AI team that trained the model.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -1041,8 +1037,8 @@ class GraniteForCausalLM(GranitePreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, GraniteForCausalLM
 
-        >>> model = GraniteForCausalLM.from_pretrained("meta-granite/Granite-2-7b-hf")
-        >>> tokenizer = AutoTokenizer.from_pretrained("meta-granite/Granite-2-7b-hf")
+        >>> model = GraniteForCausalLM.from_pretrained("ibm/PowerLM-3b")
+        >>> tokenizer = AutoTokenizer.from_pretrained("ibm/PowerLM-3b")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
