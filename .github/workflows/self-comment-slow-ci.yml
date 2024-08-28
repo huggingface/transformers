@@ -27,7 +27,7 @@ jobs:
       runs-on: ubuntu-22.04
       name: Find models to run slow tests
       # Triggered only if the required label `run-slow` is added
-      if: ${{ contains(github.event.pull_request.labels.*.name, 'run-slow') }} || (${{ github.event.issue.pull_request }} && contains(github.event.comment.body,'/pytest') ) }}
+      if: ${{ github.event.issue.pull_request }} &&  ${{ contains(github.event.comment.body,'/pytest') }}
       outputs:
         models: ${{ steps.models_to_run.outputs.models }}
       steps:
