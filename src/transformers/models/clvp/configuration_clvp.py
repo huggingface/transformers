@@ -17,6 +17,7 @@
 import os
 from typing import Union
 
+
 try:
     from typing import Self
 except ImportError:

@@ -33,6 +33,7 @@ from threading import Thread
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 from zipfile import is_zipfile
 
+
 try:
     from typing import Self
 except ImportError:
