@@ -193,7 +193,6 @@ _deps = [
     "pytest-rich",
 ]
 
-
 # this is a lookup table with items like:
 #
 # tokenizers: "tokenizers==0.9.4"
