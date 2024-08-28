@@ -71,7 +71,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          CHECK_RUN_ID=$(gh api \
+          gh api \
             --method POST \
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
@@ -86,7 +86,6 @@ jobs:
             -f "output[summary]=The current GitHub Actions run can be viewed here: $GITHUB_RUN_URL" \
             -f "output[text]=Detailed output goes here." \
             | jq -r '.id')
-          echo "CHECK_RUN_ID=$CHECK_RUN_ID" >> $GITHUB_ENV
 
       - name: Trigger specific job
         run: |
@@ -94,7 +93,6 @@ jobs:
           # Add the logic to trigger your specific job here
 
       - name: Update Check Run Status
-        if: always()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CHECK_RUN_ID: ${{ env.CHECK_RUN_ID }}
