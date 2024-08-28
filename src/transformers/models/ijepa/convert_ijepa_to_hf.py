@@ -169,6 +169,8 @@ def get_ijepa_config(model_name):
         config.layer_norm_eps = 1e-6
         config.mlp_ratio = 4
         config.intermediate_size = 5120
+        if model_name == "ijepa_vith16_1k":
+            config.image_size = 448
     elif "vitg" in model_name:
         config.hidden_size = 1408
         config.num_hidden_layers = 40
@@ -182,7 +184,7 @@ def get_ijepa_config(model_name):
 
 
 @torch.no_grad()
-def convert_ijepa_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
+def convert_ijepa_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, verify_logits):
     """
     Copy/paste/tweak model's weights to our IJEPA structure.
     """
@@ -214,28 +216,28 @@ def convert_ijepa_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     model = IJepaModel(config, add_pooling_layer=False).eval()
     model.load_state_dict(state_dict)
 
-    # Check outputs on an image, prepared by ViTImageProcessor
-    image_processor = ViTImageProcessor()
-    encoding = image_processor(images=prepare_img(), return_tensors="pt")
-    pixel_values = encoding["pixel_values"]
-    outputs = model(pixel_values)
+    if verify_logits:
+        # Check outputs on an image, prepared by ViTImageProcessor
+        image_processor = ViTImageProcessor()
+        encoding = image_processor(images=prepare_img(), return_tensors="pt")
+        pixel_values = encoding["pixel_values"]
+        with torch.no_grad():
+            outputs = model(pixel_values)
 
-    expected_slice = torch.Tensor(
-        [[-0.0621, -0.0054, -2.7513], [-0.1952, 0.0909, -3.9536], [0.0942, -0.0331, -1.2833]]
-    )
+        expected_slice = torch.Tensor(
+            [[-0.0621, -0.0054, -2.7513], [-0.1952, 0.0909, -3.9536], [0.0942, -0.0331, -1.2833]]
+        )
 
-    assert torch.allclose(
-        expected_slice,
-        outputs.last_hidden_state[0, :3, :3],
-        atol=1e-4,
-    )
+        assert torch.allclose(
+            expected_slice,
+            outputs.last_hidden_state[0, :3, :3],
+            atol=1e-4,
+        )
 
     if pytorch_dump_folder_path is not None:
         Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
         print(f"Saving model {model_name} to {pytorch_dump_folder_path}")
         model.save_pretrained(pytorch_dump_folder_path)
-        print(f"Saving image processor to {pytorch_dump_folder_path}")
-        image_processor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
         model_name_to_hf_name = {
@@ -272,9 +274,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "--push_to_hub",
         action="store_true",
-        help="Whether or not to push the model to the Hub.",
+        help="Whether or not to push the model to the 🤗 Hub.",
+    )
+    parser.add_argument(
+        "--verify_logits", action="store_false", help="Whether or not to verify logits after conversion."
     )
 
     parser.set_defaults()
     args = parser.parse_args()
-    convert_ijepa_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub)
+    convert_ijepa_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub, args.verify_logits)
