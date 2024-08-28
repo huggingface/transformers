@@ -53,6 +53,7 @@ from .integrations import (
 from .integrations.deepspeed import is_deepspeed_available
 from .utils import (
     ACCELERATE_MIN_VERSION,
+    GGUF_MIN_VERSION,
     is_accelerate_available,
     is_apex_available,
     is_aqlm_available,
@@ -407,7 +408,7 @@ def require_accelerate(test_case, min_version: str = ACCELERATE_MIN_VERSION):
     )(test_case)
 
 
-def require_gguf(test_case, min_version: str = "0.10.0"):
+def require_gguf(test_case, min_version: str = GGUF_MIN_VERSION):
     """
     Decorator marking a test that requires ggguf. These tests are skipped when gguf isn't installed.
     """
