@@ -62,7 +62,7 @@ jobs:
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
             /repos/${{ github.repository }}/statuses/${{ github.event.pull_request.head.sha }} \
-            -f "state=pending" -f "target_url=$GITHUB_RUN_URL" -f "description=The build succeeded!" -f "context=continuous-integration/pytest"
+            -f "target_url=$GITHUB_RUN_URL"
 
       - name: Create Check Run
         id: create_check_run
@@ -77,7 +77,7 @@ jobs:
             /repos/${{ github.repository }}/check-runs \
             -f "name=Custom slow tests" \
             -f "head_sha=${{ github.event.pull_request.head.sha }}" \
-            -f "details_url=$GITHUB_RUN_URL"
+            -f "details_url=$GITHUB_RUN_URL" \
             -f "status=in_progress" \
             -f "external_id=42" \
             -f "started_at=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
