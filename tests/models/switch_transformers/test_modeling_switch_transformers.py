@@ -770,7 +770,7 @@ class SwitchTransformersEncoderOnlyModelTester:
         self.is_training = is_training
 
     def get_large_model_config(self):
-        return SwitchTransformersConfig.from_pretrained("switch_base_8")
+        return SwitchTransformersConfig.from_pretrained("google/switch-base-8")
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)

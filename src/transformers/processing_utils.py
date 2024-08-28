@@ -522,7 +522,7 @@ class ProcessorMixin(PushToHubMixin):
                 token=kwargs.get("token"),
             )
 
-        if set(self.to_dict().keys()) == {"processor_class"}:
+        if set(processor_dict.keys()) == {"processor_class"}:
             return []
         return [output_processor_file]
 
@@ -736,12 +736,12 @@ class ProcessorMixin(PushToHubMixin):
         The order of operations is as follows:
             1) kwargs passed as before have highest priority to preserve BC.
                 ```python
-                high_priority_kwargs = {"crop_size" = (224, 224), "padding" = "max_length"}
+                high_priority_kwargs = {"crop_size" = {"height": 222, "width": 222}, "padding" = "max_length"}
                 processor(..., **high_priority_kwargs)
                 ```
             2) kwargs passed as modality-specific kwargs have second priority. This is the recommended API.
                 ```python
-                processor(..., text_kwargs={"padding": "max_length"}, images_kwargs={"crop_size": (224, 224)}})
+                processor(..., text_kwargs={"padding": "max_length"}, images_kwargs={"crop_size": {"height": 222, "width": 222}}})
                 ```
             3) kwargs passed during instantiation of a modality processor have fourth priority.
                 ```python
