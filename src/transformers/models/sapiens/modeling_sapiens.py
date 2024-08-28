@@ -25,9 +25,9 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...modeling_outputs import (
+    ModelOutput,
     BaseModelOutput,
     BaseModelOutputWithPooling,
-    ImageClassifierOutput,
     MaskedImageModelingOutput,
 )
 from ...modeling_utils import PreTrainedModel
@@ -40,7 +40,7 @@ from ...utils import (
     replace_return_docstrings,
 )
 from .configuration_sapiens import SapiensConfig
-
+from dataclasses import dataclass
 
 logger = logging.get_logger(__name__)
 
@@ -48,31 +48,53 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "SapiensConfig"
 
 # Base docstring
-_CHECKPOINT_FOR_DOC = "facebook/sapiens"
+_CHECKPOINT_FOR_DOC = "facebook/sapiens-hf"
 _EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
 
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "google/sapiens-base-patch16-224"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "Egyptian cat"
 
+# TODO: outputs docstrings
+@dataclass
+class SapiensOutputWithFeatureMap(BaseModelOutput):
+    last_feature_map: Optional[torch.FloatTensor] = None
 
-# Copied from transformers.models.vit.modeling_vit.ViTEmbeddings with ViT->Sapiens
+@dataclass
+class SapiensModelOutputWithPooledOutput(SapiensOutputWithFeatureMap):
+    pooler_output: Optional[torch.FloatTensor] = None
+
+@dataclass
+class SapiensForSemanticSegmentationOutput(ModelOutput):
+    loss: Optional[torch.FloatTensor] = None
+    logits: Optional[torch.FloatTensor] = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    last_feature_map: Optional[torch.FloatTensor] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+
 class SapiensEmbeddings(nn.Module):
     """
     Construct the CLS token, position and patch embeddings. Optionally, also the mask token.
     """
 
-    def __init__(self, config: SapiensConfig, use_mask_token: bool = False) -> None:
+    def __init__(self, config: SapiensConfig) -> None:
         super().__init__()
 
-        self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
-        self.mask_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size)) if use_mask_token else None
-        self.patch_embeddings = SapiensPatchEmbeddings(config)
-        num_patches = self.patch_embeddings.num_patches
-        self.position_embeddings = nn.Parameter(torch.randn(1, num_patches + 1, config.hidden_size))
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.config = config
+        self.use_cls_token = config.use_cls_token
 
+        self.patch_embeddings = SapiensPatchEmbeddings(config)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        
+        num_patches = self.patch_embeddings.num_patches
+        position_embeddings_size = num_patches + 1 if self.use_cls_token else num_patches
+        self.position_embeddings = nn.Parameter(torch.randn(1, position_embeddings_size, config.hidden_size))
+        
+        if config.use_cls_token:
+            self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
+
+    # TODO: Adapt interpolate_pos_encoding method
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
         """
         This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher
@@ -109,22 +131,16 @@ class SapiensEmbeddings(nn.Module):
     def forward(
         self,
         pixel_values: torch.Tensor,
-        bool_masked_pos: Optional[torch.BoolTensor] = None,
         interpolate_pos_encoding: bool = False,
     ) -> torch.Tensor:
-        batch_size, num_channels, height, width = pixel_values.shape
+        
+        batch_size, _, height, width = pixel_values.shape
         embeddings = self.patch_embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
 
-        if bool_masked_pos is not None:
-            seq_length = embeddings.shape[1]
-            mask_tokens = self.mask_token.expand(batch_size, seq_length, -1)
-            # replace the masked visual tokens by mask_tokens
-            mask = bool_masked_pos.unsqueeze(-1).type_as(mask_tokens)
-            embeddings = embeddings * (1.0 - mask) + mask_tokens * mask
-
         # add the [CLS] token to the embedded patch tokens
-        cls_tokens = self.cls_token.expand(batch_size, -1, -1)
-        embeddings = torch.cat((cls_tokens, embeddings), dim=1)
+        if self.use_cls_token:
+            cls_tokens = self.cls_token.expand(batch_size, -1, -1)
+            embeddings = torch.cat((cls_tokens, embeddings), dim=1)
 
         # add positional encoding to each token
         if interpolate_pos_encoding:
@@ -137,7 +153,6 @@ class SapiensEmbeddings(nn.Module):
         return embeddings
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTPatchEmbeddings with ViT->Sapiens
 class SapiensPatchEmbeddings(nn.Module):
     """
     This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
@@ -145,7 +160,7 @@ class SapiensPatchEmbeddings(nn.Module):
     Transformer.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: SapiensConfig):
         super().__init__()
         image_size, patch_size = config.image_size, config.patch_size
         num_channels, hidden_size = config.num_channels, config.hidden_size
@@ -157,8 +172,9 @@ class SapiensPatchEmbeddings(nn.Module):
         self.patch_size = patch_size
         self.num_channels = num_channels
         self.num_patches = num_patches
+        self.padding = config.patch_embeddings_padding
 
-        self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
+        self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size, padding=self.padding)
 
     def forward(self, pixel_values: torch.Tensor, interpolate_pos_encoding: bool = False) -> torch.Tensor:
         batch_size, num_channels, height, width = pixel_values.shape
@@ -336,8 +352,8 @@ class SapiensSdpaAttention(SapiensAttention):
         self.attention = SapiensSdpaSelfAttention(config)
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTIntermediate with ViT->Sapiens
-class SapiensIntermediate(nn.Module):
+# Copied from transformers.models.vit.modeling_vit.ViTIntermediate with ViTIntermediate->SapiensMLP
+class SapiensMLP(nn.Module):
     def __init__(self, config: SapiensConfig) -> None:
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
@@ -375,7 +391,6 @@ SAPIENS_ATTENTION_CLASSES = {
 }
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTLayer with VIT->SAPIENS,ViT->Sapiens
 class SapiensLayer(nn.Module):
     """This corresponds to the Block class in the timm implementation."""
 
@@ -384,7 +399,7 @@ class SapiensLayer(nn.Module):
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
         self.attention = SAPIENS_ATTENTION_CLASSES[config._attn_implementation](config)
-        self.intermediate = SapiensIntermediate(config)
+        self.mlp = SapiensMLP(config)
         self.output = SapiensOutput(config)
         self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -395,9 +410,12 @@ class SapiensLayer(nn.Module):
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
+
+        # in ViT, layernorm is applied before self-attention
+        normed_hidden_states = self.layernorm_before(hidden_states)
+        
         self_attention_outputs = self.attention(
-            self.layernorm_before(hidden_states),  # in Sapiens, layernorm is applied before self-attention
-            head_mask,
+            normed_hidden_states,
             output_attentions=output_attentions,
         )
         attention_output = self_attention_outputs[0]
@@ -408,7 +426,7 @@ class SapiensLayer(nn.Module):
 
         # in Sapiens, layernorm is also applied after self-attention
         layer_output = self.layernorm_after(hidden_states)
-        layer_output = self.intermediate(layer_output)
+        layer_output = self.mlp(layer_output)
 
         # second residual connection is done here
         layer_output = self.output(layer_output, hidden_states)
@@ -470,6 +488,76 @@ class SapiensEncoder(nn.Module):
         )
 
 
+class SapiensVisionTransformer(nn.Module):
+    def __init__(self, config: SapiensConfig):
+        super().__init__()
+        self.config = config
+
+        self.embeddings = SapiensEmbeddings(config)
+        self.encoder = SapiensEncoder(config)
+        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+
+    def forward(
+        self,
+        pixel_values: torch.Tensor,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        interpolate_pos_encoding: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, SapiensOutputWithFeatureMap]:
+
+        # TODO: maybe have a cleaner way to cast the input (from `ImageProcessor` side?)
+        expected_dtype = self.embeddings.patch_embeddings.projection.weight.dtype
+        if pixel_values.dtype != expected_dtype:
+            pixel_values = pixel_values.to(expected_dtype)
+
+        embedding_output = self.embeddings(
+            pixel_values, interpolate_pos_encoding=interpolate_pos_encoding
+        )
+
+        encoder_outputs = self.encoder(
+            embedding_output,
+            head_mask=None,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        sequence_output = encoder_outputs[0]
+        sequence_output = self.layernorm(sequence_output)
+
+        # Reshape from [batch, seq_len, hidden_dim] to [batch, hidden_dim, height, width]
+        batch_size, _, height, width = pixel_values.shape
+        out_features_height = height // self.config.patch_size
+        out_features_width = width // self.config.patch_size
+        last_feature_map = sequence_output.reshape(batch_size, out_features_height, out_features_width, -1).permute(0, 3, 1, 2)
+
+        if not return_dict:
+            return (sequence_output, last_feature_map) + encoder_outputs[1:]
+
+        return SapiensOutputWithFeatureMap(
+            last_hidden_state=sequence_output,
+            last_feature_map=last_feature_map,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
+        )
+
+
+# Copied from transformers.models.vit.modeling_vit.ViTPooler with ViT->Sapiens
+class SapiensPooler(nn.Module):
+    def __init__(self, config: SapiensConfig):
+        super().__init__()
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        self.activation = nn.Tanh()
+
+    def forward(self, hidden_states):
+        # We "pool" the model by simply taking the hidden state corresponding
+        # to the first token.
+        first_token_tensor = hidden_states[:, 0]
+        pooled_output = self.dense(first_token_tensor)
+        pooled_output = self.activation(pooled_output)
+        return pooled_output
+
+
 # Copied from transformers.models.vit.modeling_vit.ViTPreTrainedModel with ViT->Sapiens,vit->sapiens
 class SapiensPreTrainedModel(PreTrainedModel):
     """
@@ -484,6 +572,7 @@ class SapiensPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["SapiensEmbeddings", "SapiensLayer"]
     _supports_sdpa = True
 
+    # Ignore copy
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
@@ -504,11 +593,12 @@ class SapiensPreTrainedModel(PreTrainedModel):
                 std=self.config.initializer_range,
             ).to(module.position_embeddings.dtype)
 
-            module.cls_token.data = nn.init.trunc_normal_(
-                module.cls_token.data.to(torch.float32),
-                mean=0.0,
-                std=self.config.initializer_range,
-            ).to(module.cls_token.dtype)
+            if module.use_cls_token:
+                module.cls_token.data = nn.init.trunc_normal_(
+                    module.cls_token.data.to(torch.float32),
+                    mean=0.0,
+                    std=self.config.initializer_range,
+                ).to(module.cls_token.dtype)
 
 
 SAPIENS_START_DOCSTRING = r"""
@@ -551,23 +641,19 @@ SAPIENS_INPUTS_DOCSTRING = r"""
     "The bare Sapiens Model transformer outputting raw hidden-states without any specific head on top.",
     SAPIENS_START_DOCSTRING,
 )
-# Copied from transformers.models.vit.modeling_vit.ViTModel with VIT->SAPIENS,ViT->Sapiens
 class SapiensModel(SapiensPreTrainedModel):
-    def __init__(self, config: SapiensConfig, add_pooling_layer: bool = True, use_mask_token: bool = False):
+    def __init__(self, config: SapiensConfig, add_pooling_layer: bool = True):
         super().__init__(config)
         self.config = config
 
-        self.embeddings = SapiensEmbeddings(config, use_mask_token=use_mask_token)
-        self.encoder = SapiensEncoder(config)
-
-        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.model = SapiensVisionTransformer(config)
         self.pooler = SapiensPooler(config) if add_pooling_layer else None
 
         # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self) -> SapiensPatchEmbeddings:
-        return self.embeddings.patch_embeddings
+        return self.model.embeddings.patch_embeddings
 
     def _prune_heads(self, heads_to_prune: Dict[int, List[int]]) -> None:
         """
@@ -575,7 +661,7 @@ class SapiensModel(SapiensPreTrainedModel):
         class PreTrainedModel
         """
         for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
+            self.model.encoder.layer[layer].attention.prune_heads(heads)
 
     @add_start_docstrings_to_model_forward(SAPIENS_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
@@ -588,307 +674,158 @@ class SapiensModel(SapiensPreTrainedModel):
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
-        bool_masked_pos: Optional[torch.BoolTensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
-        r"""
-        bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`, *optional*):
-            Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
-        """
+    ) -> Union[Tuple, SapiensModelOutputWithPooledOutput]:
+
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if pixel_values is None:
-            raise ValueError("You have to specify pixel_values")
-
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
-
-        # TODO: maybe have a cleaner way to cast the input (from `ImageProcessor` side?)
-        expected_dtype = self.embeddings.patch_embeddings.projection.weight.dtype
-        if pixel_values.dtype != expected_dtype:
-            pixel_values = pixel_values.to(expected_dtype)
-
-        embedding_output = self.embeddings(
-            pixel_values, bool_masked_pos=bool_masked_pos, interpolate_pos_encoding=interpolate_pos_encoding
-        )
-
-        encoder_outputs = self.encoder(
-            embedding_output,
-            head_mask=head_mask,
+        model_outputs = self.model(
+            pixel_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            interpolate_pos_encoding=interpolate_pos_encoding,
             return_dict=return_dict,
         )
-        sequence_output = encoder_outputs[0]
-        sequence_output = self.layernorm(sequence_output)
+        sequence_output = model_outputs[0]
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
         if not return_dict:
             head_outputs = (sequence_output, pooled_output) if pooled_output is not None else (sequence_output,)
-            return head_outputs + encoder_outputs[1:]
+            return head_outputs + model_outputs[1:]
 
-        return BaseModelOutputWithPooling(
+        return SapiensModelOutputWithPooledOutput(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
+            hidden_states=model_outputs.hidden_states,
+            attentions=model_outputs.attentions,
         )
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTPooler with ViT->Sapiens
-class SapiensPooler(nn.Module):
+class SapiensHeadConvLayer(nn.Module):
+
+    def __init__(self, in_channels: int, out_channels: int, kernel_size: int):
+        super().__init__()
+        padding = (kernel_size - 1) // 2
+        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, padding=padding)
+        self.norm = nn.InstanceNorm2d(out_channels)
+        self.activation = nn.SiLU(inplace=True)
+
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
+        hidden_state = self.conv(hidden_state)
+        hidden_state = self.norm(hidden_state)
+        hidden_state = self.activation(hidden_state)
+        return hidden_state
+
+
+class SapiensHeadDeConvLayer(nn.Module):
+
+    def __init__(self, in_channels: int, out_channels: int, kernel_size: int, stride: int = 2, bias: bool = False):
+        super().__init__()
+        padding = (kernel_size - 1) // 2
+        output_padding = kernel_size % 2
+        self.deconv = nn.ConvTranspose2d(
+            in_channels, out_channels, kernel_size, stride=stride, padding=padding, output_padding=output_padding, bias=bias
+        )
+        self.norm = nn.InstanceNorm2d(out_channels)
+        self.activation = nn.SiLU(inplace=True)
+
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
+        hidden_state = self.deconv(hidden_state)
+        hidden_state = self.norm(hidden_state)
+        hidden_state = self.activation(hidden_state)
+        return hidden_state
+
+
+class SapiensHead(nn.Module):
+
     def __init__(self, config: SapiensConfig):
         super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.activation = nn.Tanh()
+        self.config = config
 
-    def forward(self, hidden_states):
-        # We "pool" the model by simply taking the hidden state corresponding
-        # to the first token.
-        first_token_tensor = hidden_states[:, 0]
-        pooled_output = self.dense(first_token_tensor)
-        pooled_output = self.activation(pooled_output)
-        return pooled_output
-
-
-@add_start_docstrings(
-    """Sapiens Model with a decoder on top for masked image modeling, as proposed in [SimMIM](https://arxiv.org/abs/2111.09886).
-
-    <Tip>
-
-    Note that we provide a script to pre-train this model on custom data in our [examples
-    directory](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-pretraining).
-
-    </Tip>
-    """,
-    SAPIENS_START_DOCSTRING,
-)
-# Copied from transformers.models.vit.modeling_vit.ViTForMaskedImageModeling with VIT->SAPIENS,ViT->Sapiens,vit->sapiens,google/vit-base-patch16-224-in21k->facebook/sapiens
-class SapiensForMaskedImageModeling(SapiensPreTrainedModel):
-    def __init__(self, config: SapiensConfig) -> None:
-        super().__init__(config)
-
-        self.sapiens = SapiensModel(config, add_pooling_layer=False, use_mask_token=True)
-
-        self.decoder = nn.Sequential(
-            nn.Conv2d(
-                in_channels=config.hidden_size,
-                out_channels=config.encoder_stride**2 * config.num_channels,
-                kernel_size=1,
-            ),
-            nn.PixelShuffle(config.encoder_stride),
+        # Build deconvolution layers (upsampling)
+        deconv_in_channels = [config.hidden_size] + config.deconv_out_channels[:-1]
+        self.deconv_layers = nn.ModuleList(
+            SapiensHeadDeConvLayer(in_channels, out_channels, kernel_size)
+            for in_channels, out_channels, kernel_size in zip(
+                deconv_in_channels, config.deconv_out_channels, config.deconv_kernel_sizes
+            )
         )
 
-        # Initialize weights and apply final processing
+        # Build convolution layers (refinement)
+        conv_in_channels = config.deconv_out_channels[-1:] + config.conv_out_channels[:-1]
+        self.conv_layers = nn.ModuleList(
+            SapiensHeadConvLayer(in_channels, out_channels, kernel_size)
+            for in_channels, out_channels, kernel_size in zip(
+                conv_in_channels, config.conv_out_channels, config.conv_kernel_sizes
+            )
+        )
+
+        self.dropout = nn.Dropout2d(config.head_dropout2d_prob, inplace=False)
+        self.final_conv = nn.Conv2d(config.deconv_out_channels[-1], config.num_labels, kernel_size=1)
+
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
+        
+        upsampled_hidden_state = hidden_state
+        for deconv_layer in self.deconv_layers:
+            upsampled_hidden_state = deconv_layer(upsampled_hidden_state)
+        
+        refined_hidden_state = upsampled_hidden_state
+        for conv_layer in self.conv_layers:
+            refined_hidden_state = conv_layer(refined_hidden_state)
+
+        refined_hidden_state = self.dropout(refined_hidden_state)
+        output = self.final_conv(refined_hidden_state)
+
+        return output
+
+
+class SapiensForSemanticSegmentation(SapiensPreTrainedModel):
+    def __init__(self, config: SapiensConfig):
+        super().__init__(config)
+        self.config = config
+        self.model = SapiensVisionTransformer(config)
+        self.head = SapiensHead(config)
+
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(SAPIENS_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=MaskedImageModelingOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
-        bool_masked_pos: Optional[torch.BoolTensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[tuple, MaskedImageModelingOutput]:
-        r"""
-        bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`):
-            Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
-
-        Returns:
-
-        Examples:
-        ```python
-        >>> from transformers import AutoImageProcessor, SapiensForMaskedImageModeling
-        >>> import torch
-        >>> from PIL import Image
-        >>> import requests
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/sapiens")
-        >>> model = SapiensForMaskedImageModeling.from_pretrained("facebook/sapiens")
-
-        >>> num_patches = (model.config.image_size // model.config.patch_size) ** 2
-        >>> pixel_values = image_processor(images=image, return_tensors="pt").pixel_values
-        >>> # create random boolean mask of shape (batch_size, num_patches)
-        >>> bool_masked_pos = torch.randint(low=0, high=2, size=(1, num_patches)).bool()
-
-        >>> outputs = model(pixel_values, bool_masked_pos=bool_masked_pos)
-        >>> loss, reconstructed_pixel_values = outputs.loss, outputs.reconstruction
-        >>> list(reconstructed_pixel_values.shape)
-        [1, 3, 224, 224]
-        ```"""
+    ) -> Union[Tuple, SapiensForSemanticSegmentationOutput]:
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if bool_masked_pos is not None and (self.config.patch_size != self.config.encoder_stride):
-            raise ValueError(
-                "When `bool_masked_pos` is provided, `patch_size` must be equal to `encoder_stride` to ensure that "
-                "the reconstructed image has the same dimensions as the input. "
-                f"Got `patch_size` = {self.config.patch_size} and `encoder_stride` = {self.config.encoder_stride}."
-            )
-
-        outputs = self.sapiens(
+        model_outputs: SapiensOutputWithFeatureMap = self.model(
             pixel_values,
-            bool_masked_pos=bool_masked_pos,
-            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             interpolate_pos_encoding=interpolate_pos_encoding,
             return_dict=return_dict,
         )
-
-        sequence_output = outputs[0]
-
-        # Reshape to (batch_size, num_channels, height, width)
-        sequence_output = sequence_output[:, 1:]
-        batch_size, sequence_length, num_channels = sequence_output.shape
-        height = width = math.floor(sequence_length**0.5)
-        sequence_output = sequence_output.permute(0, 2, 1).reshape(batch_size, num_channels, height, width)
-
-        # Reconstruct pixel values
-        reconstructed_pixel_values = self.decoder(sequence_output)
-
-        masked_im_loss = None
-        if bool_masked_pos is not None:
-            size = self.config.image_size // self.config.patch_size
-            bool_masked_pos = bool_masked_pos.reshape(-1, size, size)
-            mask = (
-                bool_masked_pos.repeat_interleave(self.config.patch_size, 1)
-                .repeat_interleave(self.config.patch_size, 2)
-                .unsqueeze(1)
-                .contiguous()
-            )
-            reconstruction_loss = nn.functional.l1_loss(pixel_values, reconstructed_pixel_values, reduction="none")
-            masked_im_loss = (reconstruction_loss * mask).sum() / (mask.sum() + 1e-5) / self.config.num_channels
+        logits = self.head(model_outputs.last_feature_map)
 
         if not return_dict:
-            output = (reconstructed_pixel_values,) + outputs[1:]
-            return ((masked_im_loss,) + output) if masked_im_loss is not None else output
+            return (logits,) + model_outputs[1:]
 
-        return MaskedImageModelingOutput(
-            loss=masked_im_loss,
-            reconstruction=reconstructed_pixel_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
-
-
-@add_start_docstrings(
-    """
-    Sapiens Model transformer with an image classification head on top (a linear layer on top of the final hidden state of
-    the [CLS] token) e.g. for ImageNet.
-
-    <Tip>
-
-        Note that it's possible to fine-tune Sapiens on higher resolution images than the ones it has been trained on, by
-        setting `interpolate_pos_encoding` to `True` in the forward of the model. This will interpolate the pre-trained
-        position embeddings to the higher resolution.
-
-    </Tip>
-    """,
-    SAPIENS_START_DOCSTRING,
-)
-# Copied from transformers.models.vit.modeling_vit.ViTForImageClassification with VIT->SAPIENS,ViT->Sapiens,vit->sapiens
-class SapiensForImageClassification(SapiensPreTrainedModel):
-    def __init__(self, config: SapiensConfig) -> None:
-        super().__init__(config)
-
-        self.num_labels = config.num_labels
-        self.sapiens = SapiensModel(config, add_pooling_layer=False)
-
-        # Classifier head
-        self.classifier = nn.Linear(config.hidden_size, config.num_labels) if config.num_labels > 0 else nn.Identity()
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    @add_start_docstrings_to_model_forward(SAPIENS_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_IMAGE_CLASS_CHECKPOINT,
-        output_type=ImageClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-        expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
-    )
-    def forward(
-        self,
-        pixel_values: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        interpolate_pos_encoding: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, ImageClassifierOutput]:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.sapiens(
-            pixel_values,
-            head_mask=head_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            interpolate_pos_encoding=interpolate_pos_encoding,
-            return_dict=return_dict,
-        )
-
-        sequence_output = outputs[0]
-
-        logits = self.classifier(sequence_output[:, 0, :])
-
-        loss = None
-        if labels is not None:
-            # move labels to correct device to enable model parallelism
-            labels = labels.to(logits.device)
-            if self.config.problem_type is None:
-                if self.num_labels == 1:
-                    self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
-                    self.config.problem_type = "single_label_classification"
-                else:
-                    self.config.problem_type = "multi_label_classification"
-
-            if self.config.problem_type == "regression":
-                loss_fct = MSELoss()
-                if self.num_labels == 1:
-                    loss = loss_fct(logits.squeeze(), labels.squeeze())
-                else:
-                    loss = loss_fct(logits, labels)
-            elif self.config.problem_type == "single_label_classification":
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-            elif self.config.problem_type == "multi_label_classification":
-                loss_fct = BCEWithLogitsLoss()
-                loss = loss_fct(logits, labels)
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return ((loss,) + output) if loss is not None else output
-
-        return ImageClassifierOutput(
-            loss=loss,
+        return SapiensForSemanticSegmentationOutput(
+            loss=None,
             logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            last_hidden_state=model_outputs.last_hidden_state,
+            last_feature_map=model_outputs.last_feature_map,
+            hidden_states=model_outputs.hidden_states,
+            attentions=model_outputs.attentions,
         )

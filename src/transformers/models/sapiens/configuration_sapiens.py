@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2024 Google AI and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 Meta and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -88,20 +88,28 @@ class SapiensConfig(PretrainedConfig):
 
     def __init__(
         self,
-        hidden_size=768,
-        num_hidden_layers=12,
-        num_attention_heads=12,
-        intermediate_size=3072,
+        hidden_size=1024,
+        num_hidden_layers=24,
+        num_attention_heads=16,
+        intermediate_size=4096,
         hidden_act="gelu",
         hidden_dropout_prob=0.0,
         attention_probs_dropout_prob=0.0,
         initializer_range=0.02,
-        layer_norm_eps=1e-12,
-        image_size=224,
+        layer_norm_eps=1e-6,
+        image_size=[1024, 768],
         patch_size=16,
         num_channels=3,
         qkv_bias=True,
         encoder_stride=16,
+        patch_embeddings_padding=0,
+        use_cls_token=False,
+        # head
+        conv_out_channels=[768, 768, 768],
+        conv_kernel_sizes=[1, 1, 1],
+        deconv_out_channels=[768, 768, 768],
+        deconv_kernel_sizes=[4, 4, 4],
+        head_dropout2d_prob=0.1,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -120,6 +128,15 @@ class SapiensConfig(PretrainedConfig):
         self.num_channels = num_channels
         self.qkv_bias = qkv_bias
         self.encoder_stride = encoder_stride
+        self.use_cls_token = use_cls_token
+        self.patch_embeddings_padding = patch_embeddings_padding
+
+        # head
+        self.conv_out_channels = conv_out_channels
+        self.conv_kernel_sizes = conv_kernel_sizes
+        self.deconv_out_channels = deconv_out_channels
+        self.deconv_kernel_sizes = deconv_kernel_sizes
+        self.head_dropout2d_prob = head_dropout2d_prob
 
 
 class SapiensOnnxConfig(OnnxConfig):

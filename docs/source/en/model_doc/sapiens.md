@@ -37,11 +37,6 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 [[autodoc]] SapiensConfig
 
-## SapiensFeatureExtractor
-
-[[autodoc]] SapiensFeatureExtractor
-    - __call__
-
 ## SapiensImageProcessor
 
 [[autodoc]] SapiensImageProcessor
@@ -60,14 +55,9 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 [[autodoc]] SapiensModel
     - forward
 
-## SapiensForMaskedImageModeling
+## SapiensForSemanticSegmentation
 
-[[autodoc]] SapiensForMaskedImageModeling
-    - forward
-
-## SapiensForImageClassification
-
-[[autodoc]] SapiensForImageClassification
+[[autodoc]] SapiensForSemanticSegmentation
     - forward
 
 </pt>
