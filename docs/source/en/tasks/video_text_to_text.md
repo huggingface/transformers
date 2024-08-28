@@ -1,0 +1,153 @@
+<!--Copyright 2024 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+
+⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+rendered properly in your Markdown viewer.
+
+-->
+
+# Video-text-to-text
+
+[[open-in-colab]]
+
+Video-text-to-text models, also known as video language models or vision language models with video input, are language models that take an video input. These models can tackle various tasks, from visual question answering to video captioning. 
+
+These models are almost the same as [image-text-to-text](../image_text_to_text.md) models by means of architecture. They have some adjustments and additions to their architecture to accept video data, which is essentially image frames with temporal dependencies. Some `image-text-to-text` models take in multiple images, but this condition alone is inadequate for the model to accept videos. Moreover, `video-text-to-text` models are often trained with all vision modalities, each row might have videos, multiple videos, images and multiple images. Some of these models can also take interleaved input, i.e. one can refer to a specific video inside text through inputting video token in text like "What is happening in this video? `<video>`". 
+
+In this guide, we provide a brief overview of video LMs and show how to use them with Transformers for inference.
+
+To begin with, there are multiple types of video LMs:
+- base models used for fine-tuning
+- chat fine-tuned models for conversation
+- instruction fine-tuned models
+
+This guide focuses on inference with an instruction-tuned model, [llava-hf/llava-interleave-qwen-7b-hf](https://huggingface.co/llava-hf/llava-interleave-qwen-7b-hf) which can take in interleaved data. Alternatively you can try [llava-interleave-qwen-0.5b-hf](https://huggingface.co/llava-hf/llava-interleave-qwen-0.5b-hf)] if your hardware doesn't allow running a 7B model.
+
+Let's begin installing the dependencies.
+
+```bash
+pip install -q transformers accelerate flash_attn 
+```
+
+Let's initialize the model and the processor. 
+
+```python
+from transformers import LlavaProcessor, LlavaForConditionalGeneration
+import torch
+model_id = "llava-hf/llava-interleave-qwen-0.5b-hf"
+
+processor = LlavaProcessor.from_pretrained(model_id)
+
+model = LlavaForConditionalGeneration.from_pretrained(model_id, torch_dtype=torch.float16)
+model.to("cuda")
+```
+
+Some models directly consume `<video>` token, and some take in `<image>` tokens inserted as many as the number of sampled frames. This model handles videos in latter fashion. We will write a simple utility to handle image tokens and another to get a video from a url and sample frames from it. 
+
+```python
+import uuid
+import requests
+import cv2
+
+def replace_video_with_images(text, frames):
+  return text.replace("<video>", "<image>" * frames)
+
+def sample_frames(url, num_frames):
+
+    response = requests.get(url)
+    path_id = str(uuid.uuid4())
+
+    path = f"./{path_id}.mp4" 
+
+    with open(path, "wb") as f:
+      f.write(response.content)
+
+    video = cv2.VideoCapture(path)
+    total_frames = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
+    interval = total_frames // num_frames
+    frames = []
+    for i in range(total_frames):
+        ret, frame = video.read()
+        pil_img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+        if not ret:
+            continue
+        if i % interval == 0:
+            frames.append(pil_img)
+    video.release()
+    return frames
+```
+
+Let's get our inputs.
+
+```python
+video_1 = "https://huggingface.co/spaces/merve/llava-interleave/resolve/main/cats_1.mp4"
+video_2 = "https://huggingface.co/spaces/merve/llava-interleave/resolve/main/cats_2.mp4"
+
+
+video_1 = sample_frames(video_1, 8)
+video_2 = sample_frames(video_2, 8)
+
+video_1
+
+# [<PIL.Image.Image image mode=RGB size=1920x1080>,
+# <PIL.Image.Image image mode=RGB size=1920x1080>,
+# <PIL.Image.Image image mode=RGB size=1920x1080>, ...]
+```
+
+Both videos have cats.
+
+<div class="container">
+  <div class="video-container">
+    <video width="400" controls>
+      <source src="https://huggingface.co/spaces/merve/llava-interleave/resolve/main/cats_1.mp4" type="video/mp4">
+    </video>
+  </div>
+
+  <div class="video-container">
+    <video width="400" controls>
+      <source src="https://huggingface.co/spaces/merve/llava-interleave/resolve/main/cats_2.mp4" type="video/mp4">
+    </video>
+  </div>
+</div>
+
+Now we can preprocess the inputs.
+
+This model has a prompt template that looks like following. First we'll put all sampled frames into one list. Since we have eight frames in each video, we will insert 12 `<image>` tokens to our prompt. Note that we are adding `assistant` at the end to trigger model to give answers. We can then preprocess.
+
+```python
+user_prompt = "Are these two cats in these two videos doing the same thing?"
+toks = "<image>" * 12
+prompt = "<|im_start|>user"+ toks + f"\n{user_prompt}<|im_end|><|im_start|>assistant"
+inputs = processor(prompt, images=videos).to(model.device, model.dtype)
+```
+
+The image inputs look like the following.
+
+<div class="flex justify-center">
+     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/cats.png" alt="Two cats sitting on a net"/>
+</div>
+
+<div class="flex justify-center">
+     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg" alt="A bee on a pink flower"/>
+</div>
+
+We can now infer. The model will output the question we've input and the answer, so we will take the text that is after our prompt and the "assistant" part.
+
+```python
+output = model.generate(**inputs, max_new_tokens=200, do_sample=False)
+print(processor.decode(output[0][2:], skip_special_tokens=True)[len(user_prompt)+10:])
+
+# No, the two cats in the video are not engaging in the same activity. One cat is lying down while the other is standing up.
+```
+
+And voila! 
+
+The chat templates and token streaming for `video-text-to-text` models work in similar fashion as [image-text-to-text](../image_text_to_text.md) models, so if you would like to learn more, please visit the task guide for it.
