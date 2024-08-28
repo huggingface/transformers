@@ -71,7 +71,7 @@ jobs:
       - name: Update Check Run Status
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CHECK_RUN_ID: ${{ env.CHECK_RUN_ID }}
+          GITHUB_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           gh api \
             --method POST \
