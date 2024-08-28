@@ -150,6 +150,7 @@ def convert_sapiens_checkpoint(model_name, checkpoints_dir, save_dir):
         "segmentation-body-0.3b": {
             "config": {
                 "num_labels": 28,
+                "num_heads": 16,
                 "num_hidden_layers": 24,
                 "hidden_size": 1024,
                 "label2id": SEGMENTATIONS_LABEL_TO_ID,
@@ -160,6 +161,7 @@ def convert_sapiens_checkpoint(model_name, checkpoints_dir, save_dir):
         "segmentation-body-0.6b": {
             "config": {
                 "num_labels": 28,
+                "num_heads": 16,
                 "num_hidden_layers": 32,
                 "hidden_size": 1280,
                 "label2id": SEGMENTATIONS_LABEL_TO_ID,
@@ -170,6 +172,7 @@ def convert_sapiens_checkpoint(model_name, checkpoints_dir, save_dir):
         "segmentation-body-1b": {
             "config": {
                 "num_labels": 28,
+                "num_heads": 24,
                 "num_hidden_layers": 40,
                 "hidden_size": 1536,
                 "label2id": SEGMENTATIONS_LABEL_TO_ID,
@@ -180,6 +183,7 @@ def convert_sapiens_checkpoint(model_name, checkpoints_dir, save_dir):
         "segmentation-body-2b": {
             "config": {
                 "num_labels": 28,
+                "num_heads": 32,
                 "num_hidden_layers": 48,
                 "hidden_size": 1920,
                 "label2id": SEGMENTATIONS_LABEL_TO_ID,
@@ -190,6 +194,7 @@ def convert_sapiens_checkpoint(model_name, checkpoints_dir, save_dir):
         "segmentation-face-1b": {
             "config": {
                 "num_labels": 19,
+                "num_heads": 24,
                 "num_hidden_layers": 40,
                 "hidden_size": 1536,
             },
@@ -198,6 +203,7 @@ def convert_sapiens_checkpoint(model_name, checkpoints_dir, save_dir):
         "normal-estimation-0.3b": {
             "config": {
                 "num_labels": 3,
+                "num_heads": 16,
                 "num_hidden_layers": 24,
                 "hidden_size": 1024,
                 "patch_embeddings_padding": 2,
@@ -207,6 +213,7 @@ def convert_sapiens_checkpoint(model_name, checkpoints_dir, save_dir):
         "normal-estimation-0.6b": {
             "config": {
                 "num_labels": 3,
+                "num_heads": 16,
                 "num_hidden_layers": 32,
                 "hidden_size": 1280,
                 "patch_embeddings_padding": 2,
@@ -216,8 +223,10 @@ def convert_sapiens_checkpoint(model_name, checkpoints_dir, save_dir):
         "normal-estimation-1b": {
             "config": {
                 "num_labels": 3,
+                "num_heads": 24,
                 "num_hidden_layers": 40,
                 "hidden_size": 1536,
+                "num_heads": 24,
                 "patch_embeddings_padding": 2,
             },
             "checkpoint_local_path": "sapiens_host/normal/checkpoints/sapiens_1b/sapiens_1b_normal_render_people_epoch_115.pth",
@@ -225,6 +234,7 @@ def convert_sapiens_checkpoint(model_name, checkpoints_dir, save_dir):
         "normal-estimation-2b": {
             "config": {
                 "num_labels": 3,
+                "num_heads": 32,
                 "num_hidden_layers": 48,
                 "hidden_size": 1920,
                 "patch_embeddings_padding": 2,
@@ -234,6 +244,7 @@ def convert_sapiens_checkpoint(model_name, checkpoints_dir, save_dir):
         "depth-estimation-0.3b": {
             "config": {
                 "num_labels": 1,
+                "num_heads": 16,
                 "num_hidden_layers": 24,
                 "hidden_size": 1024,
                 "deconv_out_channels": [384, 384, 384, 384],
@@ -246,6 +257,7 @@ def convert_sapiens_checkpoint(model_name, checkpoints_dir, save_dir):
         "depth-estimation-0.6b": {
             "config": {
                 "num_labels": 1,
+                "num_heads": 16,
                 "num_hidden_layers": 32,
                 "hidden_size": 1280,
                 "deconv_out_channels": [384, 384, 384, 384],
@@ -258,6 +270,7 @@ def convert_sapiens_checkpoint(model_name, checkpoints_dir, save_dir):
         "depth-estimation-1b": {
             "config": {
                 "num_labels": 1,
+                "num_heads": 24,
                 "num_hidden_layers": 40,
                 "hidden_size": 1536,
                 "deconv_out_channels": [384, 384, 384, 384],
@@ -270,6 +283,7 @@ def convert_sapiens_checkpoint(model_name, checkpoints_dir, save_dir):
         "depth-estimation-2b": {
             "config": {
                 "num_labels": 1,
+                "num_heads": 32,
                 "num_hidden_layers": 48,
                 "hidden_size": 1920,
                 "deconv_out_channels": [384, 384, 384, 384],
@@ -282,6 +296,7 @@ def convert_sapiens_checkpoint(model_name, checkpoints_dir, save_dir):
         "pose-estimation-1b": {
             "config": {
                 "num_labels": 308,
+                "num_heads": 24,
                 "num_hidden_layers": 40,
                 "hidden_size": 1536,
                 "deconv_out_channels": [768, 768],
