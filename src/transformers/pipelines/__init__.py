@@ -904,7 +904,11 @@ def pipeline(
 
     model_config = model.config
     hub_kwargs["_commit_hash"] = model.config._commit_hash
-    load_tokenizer = type(model_config) in TOKENIZER_MAPPING or model_config.tokenizer_class is not None
+    load_tokenizer = (
+        type(model_config) in TOKENIZER_MAPPING
+        or model_config.tokenizer_class is not None
+        or isinstance(tokenizer, str)
+    )
     load_feature_extractor = type(model_config) in FEATURE_EXTRACTOR_MAPPING or feature_extractor is not None
     load_image_processor = type(model_config) in IMAGE_PROCESSOR_MAPPING or image_processor is not None
 
