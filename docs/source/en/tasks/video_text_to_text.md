@@ -133,10 +133,12 @@ inputs = processor(prompt, images=videos).to(model.device, model.dtype)
 We can now infer. The model will output the question we've input and the answer, so we will take the text that is after our prompt and the "assistant" part.
 
 ```python
-output = model.generate(**inputs, max_new_tokens=200, do_sample=False)
+output = model.generate(**inputs, max_new_tokens=100, do_sample=False)
 print(processor.decode(output[0][2:], skip_special_tokens=True)[len(user_prompt)+10:])
 
-# No, the two cats in the video are not engaging in the same activity. One cat is lying down while the other is standing up.
+# The first cat is shown in a relaxed state, with its eyes closed and a content expression, while the second cat is shown in a more active state, with its mouth open wide, possibly in a yawn or a vocalization.
+
+
 ```
 
 And voila! 
