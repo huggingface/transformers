@@ -1,8 +1,13 @@
 name: PR comment github action tests
 
-on: 
+on:
   workflow_dispatch:
+    branches-ignore:
+      - main
   issue_comment:
+    types: [created]
+    branches-ignore:
+      - main
 
 # concurrency:
 #   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
