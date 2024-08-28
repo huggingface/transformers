@@ -1643,7 +1643,7 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
         past_key_values=None,
         attention_mask=None,
         inputs_embeds=None,
-        num_logits_to_keep=0,
+        num_logits_to_keep=None,
         **kwargs,
     ):
         past_length = 0
@@ -1687,6 +1687,9 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
         else:
             model_inputs = {"input_ids": input_ids}
 
+        if num_logits_to_keep is not None:
+            model_inputs["num_logits_to_keep"] = num_logits_to_keep
+
         image_hidden_states = kwargs.get("image_hidden_states", None)
         if image_hidden_states is not None:
             pixel_values = None
@@ -1703,7 +1706,6 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
                 "pixel_values": pixel_values,
                 "pixel_attention_mask": pixel_attention_mask,
                 "image_hidden_states": image_hidden_states,
-                "num_logits_to_keep": num_logits_to_keep,
             }
         )
         return model_inputs
