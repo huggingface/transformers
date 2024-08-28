@@ -185,7 +185,7 @@ def convert_sapiens_checkpoint(model_name, checkpoints_dir, save_dir):
                 "label2id": SEGMENTATIONS_LABEL_TO_ID,
                 "id2label": SEGMENTATIONS_ID_TO_LABEL,
             },
-            "checkpoint_local_path": "sapiens_host/seg/checkpoints/sapiens_2b/sapiens_2b_goliath_best_goliath_mIoU_8111_epoch_155.pth",
+            "checkpoint_local_path": "sapiens_host/seg/checkpoints/sapiens_2b/sapiens_2b_goliath_best_goliath_mIoU_8179_epoch_181.pth",
         },
         "segmentation-face-1b": {
             "config": {
@@ -302,6 +302,9 @@ def convert_sapiens_checkpoint(model_name, checkpoints_dir, save_dir):
     # define default Sapiens configuration
     config = SapiensConfig(**config_params)
 
+    with torch.device(args.device):
+        model = SapiensForSemanticSegmentation(config).eval()
+
     full_checkpoint_path = Path(checkpoints_dir) / checkpoint_params["checkpoint_local_path"]
     state_dict = torch.load(full_checkpoint_path, map_location=args.device, weights_only=True)["state_dict"]
 
@@ -318,7 +321,6 @@ def convert_sapiens_checkpoint(model_name, checkpoints_dir, save_dir):
     split_qkv_to_query_key_values_(state_dict)
 
     # load model and state dict
-    model = SapiensForSemanticSegmentation(config).eval().to(args.device)
     model.load_state_dict(state_dict)
 
     # Check outputs on an image, prepared by SapiensImageProcessor
@@ -358,9 +360,9 @@ if __name__ == "__main__":
     # Required parameters
     parser.add_argument(
         "--model_name",
-        default="pose-estimation-1b",
+        default="segmentation-body-2b",
         type=str,
-        help="Name of the model trained with DINO you'd like to convert.",
+        help="Name of the model you'd like to convert.",
     )
     parser.add_argument(
         "--checkpoints_dir",
@@ -376,7 +378,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--device",
-        default="cpu",
+        default="cuda",
         type=str,
         help="Device to use for the conversion (default: 'cpu').",
     )
