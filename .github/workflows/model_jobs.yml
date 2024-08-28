@@ -41,7 +41,8 @@ jobs:
       fail-fast: false
       matrix:
         folders: ${{ fromJson(inputs.folder_slices)[inputs.slice_id] }}
-    runs-on: ['${{ inputs.machine_type }}', nvidia-gpu, t4, '${{ inputs.runner }}']
+    runs-on:
+      group: '${{ inputs.machine_type }}'
     container:
       image: ${{ inputs.docker }}
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
