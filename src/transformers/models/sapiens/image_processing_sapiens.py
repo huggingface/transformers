@@ -14,7 +14,7 @@
 # limitations under the License.
 """Image processor class for Sapiens."""
 
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union, Tuple
 
 import numpy as np
 
@@ -28,6 +28,8 @@ from ...image_utils import (
     PILImageResampling,
     infer_channel_dimension_format,
     is_scaled_image,
+    is_torch_tensor,
+    is_torch_available,
     make_list_of_images,
     to_numpy_array,
     valid_images,
@@ -36,7 +38,90 @@ from ...image_utils import (
 from ...utils import TensorType, filter_out_non_signature_kwargs, logging
 
 
+if is_torch_available():
+    import torch
+
 logger = logging.get_logger(__name__)
+
+
+def interpolate_if_needed(logits, target_sizes, mode: str, align_corners: bool) -> List["torch.Tensor"]:
+    """
+    Interpolates logits if target sizes are provided and logit size is different from target size.
+    """
+    
+    if target_sizes is None:
+        return [logits_i for logits_i in logits]
+
+    if len(logits) != len(target_sizes):
+        raise ValueError(
+            "Make sure that you pass in as many target sizes as the batch dimension of the logits"
+        )
+
+    if is_torch_tensor(target_sizes):
+        target_sizes = target_sizes.numpy()
+
+    resized_logits = []
+    
+    for logits_i, target_size in zip(logits, target_sizes):    
+        
+        src_height, src_width = logits_i.shape[1:]
+        dst_height, dst_width = target_size
+
+        if src_height == dst_height and src_width == dst_width:
+            resized_logits_i = logits_i
+        else:
+            resized_logits_i = torch.nn.functional.interpolate(
+                logits_i.unsqueeze(dim=0), size=target_size, mode=mode, align_corners=align_corners
+            ).squeeze(dim=0)
+        
+        resized_logits.append(resized_logits_i)
+
+    return resized_logits
+
+
+def get_heatmap_maximum(heatmaps: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    """Get maximum response location and value from heatmaps.
+
+    Note:
+        batch_size: B
+        num_keypoints: K
+        heatmap height: H
+        heatmap width: W
+
+    Args:
+        heatmaps (np.ndarray): Heatmaps in shape (K, H, W) or (B, K, H, W)
+
+    Returns:
+        tuple:
+        - locs (np.ndarray): locations of maximum heatmap responses in shape
+            (K, 2) or (B, K, 2)
+        - vals (np.ndarray): values of maximum heatmap responses in shape
+            (K,) or (B, K)
+    """
+
+    assert isinstance(heatmaps, np.ndarray), ('heatmaps should be numpy.ndarray')
+    assert heatmaps.ndim == 3 or heatmaps.ndim == 4, (f'Invalid shape {heatmaps.shape}')
+
+    if heatmaps.ndim == 3:
+        num_keypoints, height, width = heatmaps.shape
+        batch_size = None
+        heatmaps_flatten = heatmaps.reshape(num_keypoints, -1)
+    else:
+        batch_size, num_keypoints, height, width = heatmaps.shape
+        heatmaps_flatten = heatmaps.reshape(batch_size * num_keypoints, -1)
+
+    indexes = np.argmax(heatmaps_flatten, axis=1)
+    y_coordinate, x_coordinate = np.unravel_index(indexes, shape=(height, width))
+    
+    keypoints = np.stack((x_coordinate, y_coordinate), axis=-1).astype(np.float32)
+    scores = np.amax(heatmaps_flatten, axis=1)
+    keypoints[scores <= 0] = -1
+
+    if batch_size is not None:
+        keypoints = keypoints.reshape(batch_size, num_keypoints, 2)
+        scores = scores.reshape(batch_size, num_keypoints)
+
+    return keypoints, scores
 
 
 class SapiensImageProcessor(BaseImageProcessor):
@@ -246,27 +331,206 @@ class SapiensImageProcessor(BaseImageProcessor):
             # We assume that all images have the same channel dimension format.
             input_data_format = infer_channel_dimension_format(images[0])
 
-        if do_resize:
-            images = [
-                self.resize(image=image, size=size_dict, resample=resample, input_data_format=input_data_format)
-                for image in images
-            ]
+        data = {"pixel_values": []}
 
-        if do_rescale:
-            images = [
-                self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
-                for image in images
-            ]
+        for image in images:
+            if do_resize:
+                image = self.resize(image=image, size=size_dict, resample=resample, input_data_format=input_data_format)
+            if do_rescale:
+                image = self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
+            if do_normalize:
+                image = self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
+            image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
 
-        if do_normalize:
-            images = [
-                self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
-                for image in images
-            ]
+            data["pixel_values"].append(image)
 
-        images = [
-            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
-        ]
-
-        data = {"pixel_values": images}
         return BatchFeature(data=data, tensor_type=return_tensors)
+
+    def post_process_semantic_segmentation(self, outputs, target_sizes: Optional[List[Tuple]] = None):
+        """
+        Converts the output of [`SapiensForSemanticSegmentation`] into semantic segmentation maps. Only supports PyTorch.
+
+        Args:
+            outputs ([`SapiensForSemanticSegmentation`]):
+                Raw outputs of the model.
+            target_sizes (`List[Tuple]` of length `batch_size`, *optional*):
+                List of tuples corresponding to the requested final size (height, width) of each prediction. If unset,
+                predictions will not be resized.
+
+        Returns:
+            semantic_segmentation: `List[torch.Tensor]` of length `batch_size`, where each item is a semantic
+            segmentation map of shape (height, width) corresponding to the target_sizes entry (if `target_sizes` is
+            specified). Each entry of each `torch.Tensor` correspond to a semantic class id.
+        """
+        logits = outputs.logits
+        logits = interpolate_if_needed(logits, target_sizes, mode="bilinear", align_corners=False)
+        segmentation_maps = [logits_i.argmax(dim=0) for logits_i in logits]
+        return segmentation_maps
+
+    def post_process_normal_estimation(
+            self, 
+            outputs,
+            target_sizes: Optional[List[Tuple]] = None,
+            segmentation_maps: Optional[List[torch.Tensor]] = None,
+        ):
+        """
+        Converts the output of [`SapiensForSemanticSegmentation`] into semantic segmentation maps. Only supports PyTorch.
+
+        Args:
+            outputs ([`SapiensForSemanticSegmentation`]):
+                Raw outputs of the model.
+            target_sizes (`List[Tuple]` of length `batch_size`, *optional*):
+                List of tuples corresponding to the requested final size (height, width) of each prediction. If unset,
+                predictions will not be resized.
+            segmentation_maps (`List[torch.Tensor]` of length `batch_size`, *optional*):
+
+
+        Returns:
+            semantic_segmentation: `List[torch.Tensor]` of length `batch_size`, where each item is a semantic
+            segmentation map of shape (height, width) corresponding to the target_sizes entry (if `target_sizes` is
+            specified). Each entry of each `torch.Tensor` correspond to a semantic class id.
+        """
+        
+        logits = outputs.logits
+        logits = interpolate_if_needed(logits, target_sizes, mode="bilinear", align_corners=False)
+
+        if segmentation_maps is not None:
+            if len(segmentation_maps) != len(logits):
+                raise ValueError(
+                    f"Make sure that you pass in as many segmentation maps as the batch dimension of the logits: {len(logits)}"
+                )
+            segmentation_maps = interpolate_if_needed(segmentation_maps, target_sizes, mode="nearest", align_corners=False)
+
+        output = []
+        for i, logits_i in enumerate(logits):
+            
+            norm = logits_i.norm(dim=0, keepdim=True)
+            normal_map = logits_i / (norm + 1e-5)
+            normal_map = normal_map.permute(1, 2, 0)
+
+            rgb_normal_map = (normal_map + 1.0) * 127.5
+            rgb_normal_map = rgb_normal_map[..., ::-1].to(torch.uint8)
+
+            if segmentation_maps is not None:
+                mask = segmentation_maps[i].unsqueeze(-1) == 0
+                mask = mask.to(rgb_normal_map.device)
+                rgb_normal_map[mask] = 0
+            
+            normal_map = normal_map.cpu().numpy()
+            rgb_normal_map = rgb_normal_map.cpu().numpy()
+
+            output.append({
+                "normal_map": normal_map,
+                "normal_map_rgb": rgb_normal_map,
+            })
+
+        return output
+    
+    def post_process_depth_estimation(
+            self, 
+            outputs,
+            target_sizes: Optional[List[Tuple]] = None,
+            segmentation_maps: Optional[List[torch.Tensor]] = None,
+        ):
+        """
+        Converts the output of [`SapiensForSemanticSegmentation`] into semantic segmentation maps. Only supports PyTorch.
+
+        Args:
+            outputs ([`SapiensForSemanticSegmentation`]):
+                Raw outputs of the model.
+            target_sizes (`List[Tuple]` of length `batch_size`, *optional*):
+                List of tuples corresponding to the requested final size (height, width) of each prediction. If unset,
+                predictions will not be resized.
+            segmentation_maps (`List[torch.Tensor]` of length `batch_size`, *optional*):
+
+
+        Returns:
+            semantic_segmentation: `List[torch.Tensor]` of length `batch_size`, where each item is a semantic
+            segmentation map of shape (height, width) corresponding to the target_sizes entry (if `target_sizes` is
+            specified). Each entry of each `torch.Tensor` correspond to a semantic class id.
+        """
+        
+        logits = outputs.logits
+        logits = interpolate_if_needed(logits, target_sizes, mode="bilinear", align_corners=False)
+
+        if segmentation_maps is not None:
+            if len(segmentation_maps) != len(logits):
+                raise ValueError(
+                    f"Make sure that you pass in as many segmentation maps as the batch dimension of the logits: {len(logits)}"
+                )
+            segmentation_maps = interpolate_if_needed(segmentation_maps, target_sizes, mode="nearest", align_corners=False)
+
+        output = []
+        for i, logits_i in enumerate(logits):
+            
+            depth_map = logits_i.squeeze(0)
+            depth_map = depth_map.cpu().numpy()
+
+            if segmentation_maps is not None:
+                mask = segmentation_maps[i] == 0
+                mask = mask.cpu().numpy()
+
+                depth_foreground = depth_map[mask]
+                normalized_depth = np.full_like(mask, 0, dtype=np.uint8)
+
+                # normalize by foreground to range 0..1 and invert
+                if len(depth_foreground) > 0:
+                    min_val, max_val = np.min(depth_foreground), np.max(depth_foreground)
+                    depth_normalized_foreground = 1 - ((depth_foreground - min_val) / (max_val - min_val))
+                    depth_normalized_foreground = (depth_normalized_foreground * 255.0).astype(np.uint8)
+                    normalized_depth[mask] = depth_normalized_foreground
+            else:
+                min_val, max_val = np.min(depth_map), np.max(depth_map)
+                normalized_depth = 1 - ((depth_map - min_val) / (max_val - min_val))
+                normalized_depth = (normalized_depth * 255.0).astype(np.uint8)
+
+
+            output.append(
+                {
+                    "depth_map": depth_map,
+                    "depth_map_normalized": normalized_depth,
+                }
+            )
+
+        return output
+
+
+    def post_process_pose_estimation(
+        self,
+        outputs,
+        target_sizes: Optional[List[Tuple]] = None,
+        threshold: float = 0.5,
+    ):
+        """
+        Converts the output of [`SapiensForPoseEstimation`] into pose estimation keypoints. Only supports PyTorch.
+
+        Args:
+            outputs ([`SapiensForPoseEstimation`]):
+                Raw outputs of the model.
+            target_sizes (`List[Tuple]` of length `batch_size`, *optional*):
+                List of tuples corresponding to the requested final size (height, width) of each prediction. If unset,
+                predictions will not be resized.
+
+        Returns:
+            keypoints: `List[np.ndarray]` of length `batch_size`, where each item is a numpy array of shape
+            (num_keypoints, 2) corresponding to the target_sizes entry (if `target_sizes` is specified).
+        """
+        heatmaps = outputs.logits
+        heatmaps = interpolate_if_needed(heatmaps, target_sizes, mode="bilinear", align_corners=False)
+
+        output = []
+        for heatmap in heatmaps:
+            heatmap = heatmap.cpu().numpy()
+            keypoints, scores = get_heatmap_maximum(heatmap)
+            keep = scores > threshold
+            keypoints = keypoints[keep]
+            scores = scores[keep]
+
+            output.append(
+                {
+                    "keypoints": keypoints,
+                    "scores": scores,
+                }
+            )
+
+        return output
