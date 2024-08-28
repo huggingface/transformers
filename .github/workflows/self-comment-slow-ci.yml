@@ -1,8 +1,6 @@
 name: PR comment github action tests
 
-on:
-  issue_comment:
-    types: [created, edited, deleted]
+on: issue_comment
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
@@ -23,6 +21,19 @@ env:
   CUDA_VISIBLE_DEVICES: 0,1
 
 jobs:
+
+    pr_commented:
+        # This job only runs for pull request comments
+        name: PR comment
+        if: ${{ github.event.issue.pull_request }}
+        runs-on: ubuntu-latest
+        steps:
+            - run: |
+                echo A comment on PR $NUMBER
+              env:
+                NUMBER: ${{ github.event.issue.number }}
+
+
     testing-stuff-around:
         if: contains(github.event.comment.html_url, '/pull/')    # check if the comments come from pull request, exclude those from issue.
           runs-on:  ubuntu-22.04
