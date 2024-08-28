@@ -171,19 +171,19 @@ class EvalPrediction:
         self.label_ids = label_ids
         self.inputs = inputs
         self.losses = losses
-        self.items = (self.predictions, self.label_ids)
+        self.elements = (self.predictions, self.label_ids)
         if self.inputs is not None:
-            self.items += (self.inputs,)
+            self.elements += (self.inputs,)
         if self.losses is not None:
-            self.items += (self.losses,)
+            self.elements += (self.losses,)
 
     def __iter__(self):
-        return iter(self.items)
+        return iter(self.elements)
 
     def __getitem__(self, idx):
-        if idx < 0 or idx >= len(self.items):
+        if idx < 0 or idx >= len(self.elements):
             raise IndexError("tuple index out of range")
-        return self.items[idx]
+        return self.elements[idx]
 
 
 class EvalLoopOutput(NamedTuple):
