@@ -246,72 +246,43 @@ class TokenizerUtilsTest(unittest.TestCase):
         self.assertEqual(batch["input_ids"].tolist(), [[0, 1, 2, tokenizer.pad_token_id], [0, 1, 2, 3]])
 
     @require_tokenizers
-    def test_decoding_fast_tokenizer(self):
-        tokenizer_f = BertTokenizerFast.from_pretrained("google-bert/bert-base-cased")
+    def test_decoding(self):
+        for tokenizer_class in [BertTokenizer, BertTokenizerFast]:
+            with self.subTest(f"{tokenizer_class}"):
+               tokenizer_f = tokenizer_class.from_pretrained("google-bert/bert-base-cased")
 
-        token_id = 2300
-        decoded_flat = tokenizer_f.decode(token_id)
-        decoded_list = tokenizer_f.decode([token_id])
+               token_id = 2300
+               decoded_flat = tokenizer_f.decode(token_id)
+               decoded_list = tokenizer_f.decode([token_id])
 
-        self.assertEqual(decoded_flat, "Force")
-        self.assertEqual(decoded_list, "Force")
+               self.assertEqual(decoded_flat, "Force")
+               self.assertEqual(decoded_list, "Force")
 
-        token_id = 0
-        decoded_flat = tokenizer_f.decode(token_id)
-        decoded_list = tokenizer_f.decode([token_id])
+               token_id = 0
+               decoded_flat = tokenizer_f.decode(token_id)
+               decoded_list = tokenizer_f.decode([token_id])
 
-        self.assertEqual(decoded_flat, "[PAD]")
-        self.assertEqual(decoded_list, "[PAD]")
+               self.assertEqual(decoded_flat, "[PAD]")
+               self.assertEqual(decoded_list, "[PAD]")
 
-        last_item_id = tokenizer_f.vocab_size - 1
-        decoded_flat = tokenizer_f.decode(last_item_id)
-        decoded_list = tokenizer_f.decode([last_item_id])
+               last_item_id = tokenizer_f.vocab_size - 1
+               decoded_flat = tokenizer_f.decode(last_item_id)
+               decoded_list = tokenizer_f.decode([last_item_id])
 
-        self.assertEqual(decoded_flat, "##：")
-        self.assertEqual(decoded_list, "##：")
+               self.assertEqual(decoded_flat, "##：")
+               self.assertEqual(decoded_list, "##：")
 
-    @require_tokenizers
-    def test_decoding_slow_tokenizer(self):
-        tokenizer_s = BertTokenizer.from_pretrained("google-bert/bert-base-cased", use_fast=False)
-
-        token_id = 2300
-        decoded_flat = tokenizer_s.decode(token_id)
-        decoded_list = tokenizer_s.decode([token_id])
-
-        self.assertEqual(decoded_flat, "Force")
-        self.assertEqual(decoded_list, "Force")
-
-        token_id = 0
-        decoded_flat = tokenizer_s.decode(token_id)
-        decoded_list = tokenizer_s.decode([token_id])
-
-        self.assertEqual(decoded_flat, "[PAD]")
-        self.assertEqual(decoded_list, "[PAD]")
-
-        last_item_id = tokenizer_s.vocab_size - 1
-        decoded_flat = tokenizer_s.decode(last_item_id)
-        decoded_list = tokenizer_s.decode([last_item_id])
-
-        self.assertEqual(decoded_flat, "##：")
-        self.assertEqual(decoded_list, "##：")
 
     @require_tokenizers
-    def test_decoding_extra_params_fast_tokenizer(self):
-        tokenizer_f = BertTokenizerFast.from_pretrained("google-bert/bert-base-cased")
-        tokenizer_f.add_tokens(["ஐ"], special_tokens=True)
-        sentence = "This is a beautiful flower ஐ"
-        ids = tokenizer_f(sentence)["input_ids"]
-        decoded_sent = tokenizer_f.decode(ids, skip_special_tokens=True)
-        self.assertEqual(decoded_sent, "This is a beautiful flower")
-
-    @require_tokenizers
-    def test_decoding_extra_params_slow_tokenizer(self):
-        tokenizer_s = BertTokenizer.from_pretrained("google-bert/bert-base-cased", use_fast=False)
-        tokenizer_s.add_tokens(["ஐ"], special_tokens=True)
-        sentence = "This is a beautiful flower ஐ"
-        ids = tokenizer_s(sentence)["input_ids"]
-        decoded_sent = tokenizer_s.decode(ids, skip_special_tokens=True)
-        self.assertEqual(decoded_sent, "This is a beautiful flower")
+    def test_decoding_extra_params(self):
+        for tokenizer_class in [BertTokenizer, BertTokenizerFast]:
+            with self.subTest(f"{tokenizer_class}"):
+                tokenizer_f = tokenizer_class.from_pretrained("google-bert/bert-base-cased")
+                tokenizer_f.add_tokens(["ஐ"], special_tokens=True)
+                sentence = "This is a beautiful flower ஐ"
+                ids = tokenizer_f(sentence)["input_ids"]
+                decoded_sent = tokenizer_f.decode(ids, skip_special_tokens=True)
+                self.assertEqual(decoded_sent, "This is a beautiful flower")
 
     @require_torch
     def test_padding_accepts_tensors_pt(self):
