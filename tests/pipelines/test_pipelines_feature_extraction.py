@@ -171,7 +171,7 @@ class FeatureExtractionPipelineTests(unittest.TestCase):
         elif isinstance(input_, float):
             return 0
         else:
-            raise ValueError("We expect lists of floats, nothing else")
+            raise TypeError("We expect lists of floats, nothing else")
         return shape
 
     def get_test_pipeline(self, model, tokenizer, processor, torch_dtype="float32"):
