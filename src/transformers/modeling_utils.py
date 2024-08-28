@@ -4714,18 +4714,32 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
     def generate(self, *args, **kwargs):
         raise NotImplementedError(
-            "`PreTrainedModel` no longer inherits `GenerationMixin`. Please ensure your custom model class "
-            f"({self.__class__.__name__}) inherits from `GenerationMixin` if you want to use its "
-            "`generate` method. `GenerationMixin` must be inherited before `PreTrainedModel` "
-            "(or a class inheriting from `PreTrainedModel` )."
+            f"{self.__class__.__name__} doesn't have a `generate` method. If you were not "
+            "expecting this exception, here are some things to check:"
+            "\n  1. If you are using a custom model (or `trust_remote_code=True`): Load your model with an "
+            "`AutoModel...` class. If that is not possible, make sure your model class inherits from "
+            "`GenerationMixin` as its first inherited class. `PreTrainedModel` no longer inherits "
+            "`GenerationMixin` as of v4.45"
+            "\n  2. If you are using a transformers model: You might be using a class that is not meant for "
+            "generation. Your model must be compatible with one of the following auto classes: "
+            "`AutoModelForCausalLM`, `ForConditionalGeneration`, `AutoModelForSpeechSeq2Seq`, and "
+            "`AutoModelForVision2Seq`"
+            "\n  3. If none of the cases above apply, please open an issue on GitHub 🤗"
         )
 
     def prepare_inputs_for_generation(self, *args, **kwargs):
         raise NotImplementedError(
-            "`PreTrainedModel` no longer inherits `GenerationMixin`. Please ensure your custom model class "
-            f"({self.__class__.__name__}) inherits from `GenerationMixin` if you want to use its "
-            "`prepare_inputs_for_generation` method. `GenerationMixin` must be inherited before `PreTrainedModel` "
-            "(or a class inheriting from `PreTrainedModel` )."
+            f"{self.__class__.__name__} doesn't have a `prepare_inputs_for_generation` method. If you were not "
+            "expecting this exception, here are some things to check:"
+            "\n  1. If you are using a custom model (or `trust_remote_code=True`): Load your model with an "
+            "`AutoModel...` class. If that is not possible, make sure your model class inherits from "
+            "`GenerationMixin` as its first inherited class. `PreTrainedModel` no longer inherits "
+            "`GenerationMixin` as of v4.45"
+            "\n  2. If you are using a transformers model: You might be using a class that is not meant for "
+            "generation. Your model must be compatible with one of the following auto classes: "
+            "`AutoModelForCausalLM`, `ForConditionalGeneration`, `AutoModelForSpeechSeq2Seq`, and "
+            "`AutoModelForVision2Seq`"
+            "\n  3. If none of the cases above apply, please open an issue on GitHub 🤗"
         )
 
 
