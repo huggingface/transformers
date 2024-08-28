@@ -1225,7 +1225,7 @@ class MarianModel(MarianPreTrainedModel):
 @add_start_docstrings(
     "The Marian Model with a language modeling head. Can be used for summarization.", MARIAN_START_DOCSTRING
 )
-class MarianMTModel(MarianPreTrainedModel):
+class MarianMTModel(GenerationMixin, MarianPreTrainedModel):
     base_model_prefix = "model"
     _keys_to_ignore_on_load_missing = [
         "final_logits_bias",

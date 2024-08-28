@@ -2915,7 +2915,7 @@ class SeamlessM4Tv2CodeHifiGan(PreTrainedModel):
     SEAMLESS_M4T_V2_START_DOCSTRING,
 )
 # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForTextToText with SeamlessM4T->SeamlessM4Tv2,SeamlessM4Tv2Tokenizer->SeamlessM4TTokenizer, SeamlessM4Tv2Processor->SeamlessM4TProcessor
-class SeamlessM4Tv2ForTextToText(SeamlessM4Tv2PreTrainedModel):
+class SeamlessM4Tv2ForTextToText(GenerationMixin, SeamlessM4Tv2PreTrainedModel):
     _keys_to_ignore_on_load_missing = ["speech_encoder", "t2u_model", "vocoder"]
     main_input_name = "input_ids"
 

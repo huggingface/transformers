@@ -2657,7 +2657,7 @@ class SeamlessM4TCodeHifiGan(PreTrainedModel):
     "The text-to-text SeamlessM4T Model transformer which can be used for T2TT.",
     SEAMLESS_M4T_START_DOCSTRING,
 )
-class SeamlessM4TForTextToText(SeamlessM4TPreTrainedModel):
+class SeamlessM4TForTextToText(GenerationMixin, SeamlessM4TPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["speech_encoder", "t2u_model", "vocoder"]
     main_input_name = "input_ids"
 

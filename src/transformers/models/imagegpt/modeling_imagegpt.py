@@ -26,6 +26,7 @@ from torch.cuda.amp import autocast
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
@@ -880,7 +881,7 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
     """,
     IMAGEGPT_START_DOCSTRING,
 )
-class ImageGPTForCausalImageModeling(ImageGPTPreTrainedModel):
+class ImageGPTForCausalImageModeling(GenerationMixin, ImageGPTPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config: ImageGPTConfig):
