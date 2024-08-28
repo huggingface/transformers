@@ -1197,7 +1197,7 @@ class BlenderbotModel(BlenderbotPreTrainedModel):
 @add_start_docstrings(
     "The Blenderbot Model with a language modeling head. Can be used for summarization.", BLENDERBOT_START_DOCSTRING
 )
-class BlenderbotForConditionalGeneration(BlenderbotPreTrainedModel):
+class BlenderbotForConditionalGeneration(GenerationMixin, BlenderbotPreTrainedModel):
     base_model_prefix = "model"
     _keys_to_ignore_on_load_missing = ["final_logits_bias"]
     _tied_weights_keys = ["decoder.embed_tokens.weight", "encoder.embed_tokens.weight", "lm_head.weight"]

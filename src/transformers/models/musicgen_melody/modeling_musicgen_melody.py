@@ -1590,7 +1590,7 @@ class MusicgenMelodyForCausalLM(GenerationMixin, MusicgenMelodyPreTrainedModel):
         decoder (`Optional[MusicgenMelodyForCausalLM]`, *optional*): MusicGen Melody decoder used to generate audio codes.
     """,
 )
-class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
+class MusicgenMelodyForConditionalGeneration(GenerationMixin, PreTrainedModel):
     config_class = MusicgenMelodyConfig
     main_input_name = "input_ids"
     supports_gradient_checkpointing = True

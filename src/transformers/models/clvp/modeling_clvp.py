@@ -1509,7 +1509,7 @@ class ClvpForCausalLM(GenerationMixin, ClvpPreTrainedModel):
     "together to filter out the best speech_ids.",
     CLVP_START_DOCSTRING,
 )
-class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
+class ClvpModelForConditionalGeneration(GenerationMixin, ClvpPreTrainedModel):
     config_class = ClvpConfig
 
     def __init__(self, config: ClvpConfig):

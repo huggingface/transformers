@@ -1857,7 +1857,7 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
     "The ProphetNet Model with a language modeling head. Can be used for sequence generation tasks.",
     PROPHETNET_START_DOCSTRING,
 )
-class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
+class ProphetNetForConditionalGeneration(GenerationMixin, ProphetNetPreTrainedModel):
     _tied_weights_keys = ["encoder.word_embeddings.weight", "decoder.word_embeddings.weight", "lm_head.weight"]
 
     def __init__(self, config: ProphetNetConfig):

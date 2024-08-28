@@ -23,10 +23,11 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
-from ... import PreTrainedModel
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...image_processing_utils import select_best_resolution
 from ...modeling_outputs import ModelOutput
+from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -346,7 +347,7 @@ LLAVA_NEXT_INPUTS_DOCSTRING = r"""
     """The LLAVA-NeXT model which consists of a vision backbone and a language model.""",
     LLAVA_NEXT_START_DOCSTRING,
 )
-class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
+class LlavaNextForConditionalGeneration(GenerationMixin, LlavaNextPreTrainedModel):
     def __init__(self, config: LlavaNextConfig):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config.vision_config)

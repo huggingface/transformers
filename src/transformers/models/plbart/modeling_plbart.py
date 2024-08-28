@@ -1255,7 +1255,7 @@ class PLBartModel(PLBartPreTrainedModel):
     "The PLBART Model with a language modeling head. Can be used for code-to-text, text-to-code and code-to-code.",
     PLBART_START_DOCSTRING,
 )
-class PLBartForConditionalGeneration(PLBartPreTrainedModel):
+class PLBartForConditionalGeneration(GenerationMixin, PLBartPreTrainedModel):
     base_model_prefix = "model"
     _keys_to_ignore_on_load_missing = ["final_logits_bias"]
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]

@@ -1663,7 +1663,7 @@ class MusicgenForCausalLM(GenerationMixin, MusicgenPreTrainedModel):
     "for music generation tasks with one or both of text and audio prompts.",
     MUSICGEN_START_DOCSTRING,
 )
-class MusicgenForConditionalGeneration(PreTrainedModel):
+class MusicgenForConditionalGeneration(GenerationMixin, PreTrainedModel):
     config_class = MusicgenConfig
     base_model_prefix = "encoder_decoder"
     main_input_name = "input_ids"

@@ -26,6 +26,7 @@ from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...deepspeed import is_deepspeed_zero3_enabled
+from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_causal_attention_mask
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -2439,7 +2440,7 @@ class SeamlessM4Tv2TextToUnitModel(SeamlessM4Tv2PreTrainedModel):
         embed_tokens_decoder (`nn.Embedding`, *optional*): input embedding of the decoder.
     """,
 )
-class SeamlessM4Tv2TextToUnitForConditionalGeneration(SeamlessM4Tv2PreTrainedModel):
+class SeamlessM4Tv2TextToUnitForConditionalGeneration(GenerationMixin, SeamlessM4Tv2PreTrainedModel):
     _keys_to_ignore_on_load_missing = [
         "vocoder",
         "speech_encoder",

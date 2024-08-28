@@ -22,10 +22,11 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
-from ... import PreTrainedModel
 from ...activations import ACT2FN
 from ...cache_utils import Cache, EncoderDecoderCache, StaticCache
+from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutput, ModelOutput
+from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -855,7 +856,7 @@ QWEN2AUDIO_INPUTS_DOCSTRING = r"""
     """The QWEN2AUDIO model which consists of a audio backbone and a language model.""",
     QWEN2AUDIO_START_DOCSTRING,
 )
-class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel):
+class Qwen2AudioForConditionalGeneration(GenerationMixin, Qwen2AudioPreTrainedModel):
     def __init__(self, config: Qwen2AudioConfig):
         super().__init__(config)
         self.audio_tower = AutoModel.from_config(config.audio_config, attn_implementation=config._attn_implementation)

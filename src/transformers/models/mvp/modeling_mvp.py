@@ -1352,7 +1352,7 @@ class MvpModel(MvpPreTrainedModel):
 @add_start_docstrings(
     "The MVP Model with a language modeling head. Can be used for various text generation tasks.", MVP_START_DOCSTRING
 )
-class MvpForConditionalGeneration(MvpPreTrainedModel):
+class MvpForConditionalGeneration(GenerationMixin, MvpPreTrainedModel):
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
 
     def __init__(self, config: MvpConfig):

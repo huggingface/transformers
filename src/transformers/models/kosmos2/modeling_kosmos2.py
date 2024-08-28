@@ -1865,7 +1865,7 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
     """,
     KOSMOS2_START_DOCSTRING,
 )
-class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel):
+class Kosmos2ForConditionalGeneration(GenerationMixin, Kosmos2PreTrainedModel):
     config_class = Kosmos2Config
     main_input_name = "pixel_values"
     _tied_weights_keys = ["text_model.lm_head.weight"]

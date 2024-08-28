@@ -1164,7 +1164,7 @@ class BlenderbotSmallModel(BlenderbotSmallPreTrainedModel):
     "The BlenderbotSmall Model with a language modeling head. Can be used for summarization.",
     BLENDERBOT_SMALL_START_DOCSTRING,
 )
-class BlenderbotSmallForConditionalGeneration(BlenderbotSmallPreTrainedModel):
+class BlenderbotSmallForConditionalGeneration(GenerationMixin, BlenderbotSmallPreTrainedModel):
     base_model_prefix = "model"
     _keys_to_ignore_on_load_missing = ["final_logits_bias"]
     _tied_weights_keys = ["decoder.embed_tokens.weight", "encoder.embed_tokens.weight", "lm_head.weight"]

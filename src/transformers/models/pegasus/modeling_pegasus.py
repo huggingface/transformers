@@ -1245,7 +1245,7 @@ class PegasusModel(PegasusPreTrainedModel):
 @add_start_docstrings(
     "The PEGASUS Model with a language modeling head. Can be used for summarization.", PEGASUS_START_DOCSTRING
 )
-class PegasusForConditionalGeneration(PegasusPreTrainedModel):
+class PegasusForConditionalGeneration(GenerationMixin, PegasusPreTrainedModel):
     base_model_prefix = "model"
     _keys_to_ignore_on_load_missing = ["final_logits_bias"]
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]

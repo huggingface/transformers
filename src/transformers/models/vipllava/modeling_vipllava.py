@@ -21,9 +21,10 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
-from ... import PreTrainedModel
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...modeling_outputs import ModelOutput
+from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -242,7 +243,7 @@ VIPLLAVA_INPUTS_DOCSTRING = r"""
     VIPLLAVA_START_DOCSTRING,
 )
 # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration with LLAVA->VIPLLAVA,Llava->VipLlava
-class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel):
+class VipLlavaForConditionalGeneration(GenerationMixin, VipLlavaPreTrainedModel):
     def __init__(self, config: VipLlavaConfig):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config.vision_config)

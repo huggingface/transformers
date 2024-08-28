@@ -1390,7 +1390,7 @@ class MBartModel(MBartPreTrainedModel):
     "The MBART Model with a language modeling head. Can be used for summarization, after fine-tuning the pretrained models.",
     MBART_START_DOCSTRING,
 )
-class MBartForConditionalGeneration(MBartPreTrainedModel):
+class MBartForConditionalGeneration(GenerationMixin, MBartPreTrainedModel):
     base_model_prefix = "model"
     _keys_to_ignore_on_load_missing = ["final_logits_bias"]
     _tied_weights_keys = ["model.encoder.embed_tokens.weight", "model.decoder.embed_tokens.weight", "lm_head.weight"]

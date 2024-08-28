@@ -31,6 +31,7 @@ from torch.nn import CrossEntropyLoss, LayerNorm
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, StaticCache
+from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import (
     AttentionMaskConverter,
 )
@@ -1306,7 +1307,7 @@ QWEN2_VL_INPUTS_DOCSTRING = r"""
 """
 
 
-class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel):
+class Qwen2VLForConditionalGeneration(GenerationMixin, Qwen2VLPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):

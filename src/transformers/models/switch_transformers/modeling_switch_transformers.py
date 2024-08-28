@@ -24,6 +24,7 @@ import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...modeling_outputs import (
     MoEModelOutput,
     MoEModelOutputWithPastAndCrossAttentions,
@@ -1456,7 +1457,7 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
 @add_start_docstrings(
     """SWITCH_TRANSFORMERS Model with a `language modeling` head on top.""", SWITCH_TRANSFORMERS_START_DOCSTRING
 )
-class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedModel):
+class SwitchTransformersForConditionalGeneration(GenerationMixin, SwitchTransformersPreTrainedModel):
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
 
     def __init__(self, config: SwitchTransformersConfig):

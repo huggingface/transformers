@@ -23,6 +23,7 @@ from torch import nn
 
 from ... import PreTrainedModel
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...modeling_outputs import ModelOutput
 from ...utils import (
     add_start_docstrings,
@@ -240,7 +241,7 @@ LLAVA_INPUTS_DOCSTRING = r"""
     """The LLAVA model which consists of a vision backbone and a language model.""",
     LLAVA_START_DOCSTRING,
 )
-class LlavaForConditionalGeneration(LlavaPreTrainedModel):
+class LlavaForConditionalGeneration(GenerationMixin, LlavaPreTrainedModel):
     def __init__(self, config: LlavaConfig):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config.vision_config)

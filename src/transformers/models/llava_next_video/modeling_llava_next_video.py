@@ -32,6 +32,7 @@ from torch import nn
 from ... import PreTrainedModel
 from ...activations import ACT2FN
 from ...cache_utils import Cache
+from ...generation import GenerationMixin
 from ...image_processing_utils import select_best_resolution
 from ...modeling_outputs import ModelOutput
 from ...utils import (
@@ -387,7 +388,7 @@ LLAVA_NEXT_VIDEO_INPUTS_DOCSTRING = r"""
     """The LLAVA-NeXT model which consists of a vision backbone and a language model.""",
     LLAVA_NEXT_VIDEO_START_DOCSTRING,
 )
-class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel):
+class LlavaNextVideoForConditionalGeneration(GenerationMixin, LlavaNextVideoPreTrainedModel):
     def __init__(
         self,
         config: LlavaNextVideoConfig,
