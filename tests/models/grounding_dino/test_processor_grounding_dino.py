@@ -26,6 +26,8 @@ from transformers.models.bert.tokenization_bert import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import IMAGE_PROCESSOR_NAME, is_torch_available, is_vision_available
 
+from ...test_processing_common import ProcessorTesterMixin
+
 
 if is_torch_available():
     import torch
@@ -40,7 +42,10 @@ if is_vision_available():
 
 @require_torch
 @require_vision
-class GroundingDinoProcessorTest(unittest.TestCase):
+class GroundingDinoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    from_pretrained_id = "IDEA-Research/grounding-dino-base"
+    processor_class = GroundingDinoProcessor
+
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
 
@@ -62,6 +67,13 @@ class GroundingDinoProcessorTest(unittest.TestCase):
         self.image_processor_file = os.path.join(self.tmpdirname, IMAGE_PROCESSOR_NAME)
         with open(self.image_processor_file, "w", encoding="utf-8") as fp:
             json.dump(image_processor_map, fp)
+
+        image_processor = GroundingDinoImageProcessor()
+        tokenizer = BertTokenizer.from_pretrained(self.from_pretrained_id)
+
+        processor = GroundingDinoProcessor(image_processor, tokenizer)
+
+        processor.save_pretrained(self.tmpdirname)
 
         self.batch_size = 7
         self.num_queries = 5
