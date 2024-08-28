@@ -33,7 +33,7 @@ env:
 
 jobs:
   reply-and-trigger:
-    if: github.event.comment.body contains '/pytest'
+    if: contains(github.event.comment.body,'/pytest')
     runs-on: ubuntu-latest
 
     steps:
