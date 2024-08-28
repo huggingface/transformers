@@ -22,6 +22,7 @@ import re
 import shutil
 import signal
 import sys
+import threading
 import typing
 import warnings
 from pathlib import Path
@@ -40,6 +41,7 @@ from .utils import (
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
+_HF_REMOTE_CODE_LOCK = threading.Lock()
 
 
 def init_hf_modules():
@@ -206,15 +208,18 @@ def get_class_in_module(class_name: str, module_path: Union[str, os.PathLike]) -
     if name.endswith(".py"):
         name = name[:-3]
     name = name.replace(os.path.sep, ".")
-    module_spec = importlib.util.spec_from_file_location(name, location=Path(HF_MODULES_CACHE) / module_path)
-    module = sys.modules.get(name)
-    if module is None:
-        module = importlib.util.module_from_spec(module_spec)
-        # insert it into sys.modules before any loading begins
-        sys.modules[name] = module
-    # reload in both cases
-    module_spec.loader.exec_module(module)
-    return getattr(module, class_name)
+    with _HF_REMOTE_CODE_LOCK:
+        module = sys.modules.get(name)
+        module_spec = importlib.util.spec_from_file_location(name, location=Path(HF_MODULES_CACHE) / module_path)
+        if module is None:
+            module = importlib.util.module_from_spec(module_spec)
+            # insert it into sys.modules before any loading begins
+            sys.modules[name] = module
+        # reload in both cases
+        if not getattr(module, "__transformers_initialized__", False):
+            module_spec.loader.exec_module(module)
+            module.__transformers_initialized__ = True
+        return getattr(module, class_name)
 
 
 def get_cached_module_file(
