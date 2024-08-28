@@ -198,7 +198,8 @@ class BatchEncoding(UserDict):
             You can give a tensor_type here to convert the lists of integers in PyTorch/TensorFlow/Numpy Tensors at
             initialization.
         prepend_batch_axis (`bool`, *optional*, defaults to `False`):
-            Whether or not to add a batch axis when converting to tensors (see `tensor_type` above).
+            Whether or not to add a batch axis when converting to tensors (see `tensor_type` above). Note that this
+            parameter has an effect if the parameter `tensor_type` is set, *otherwise has no effect*.
         n_sequences (`Optional[int]`, *optional*):
             You can give a tensor_type here to convert the lists of integers in PyTorch/TensorFlow/Numpy Tensors at
             initialization.
