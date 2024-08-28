@@ -23,6 +23,7 @@ import warnings
 from typing import Dict, List, Tuple
 
 from packaging import version
+
 from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import BPE, Unigram, WordPiece
 
@@ -1603,7 +1604,8 @@ def convert_slow_tokenizer(transformer_tokenizer, from_tiktoken=False) -> Tokeni
         try:
             logger.info("Converting from Tiktoken")
             return TikTokenConverter(
-                vocab_file=transformer_tokenizer.vocab_file, special_tokens=transformer_tokenizer.special_tokens
+                vocab_file=transformer_tokenizer.vocab_file,
+                additional_special_tokens=transformer_tokenizer.additional_special_tokens,
             ).converted()
         except Exception:
             raise ValueError(
