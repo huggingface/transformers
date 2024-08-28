@@ -152,7 +152,9 @@ class HqqHfQuantizer(HfQuantizer):
                     unexpected_keys.remove(k)
 
         if self.pre_quantized:
-            if isinstance(module, (torch.nn.Linear, HQQLinear)):
+            if isinstance(module, HQQLinear):
+                return
+            else:
                 hqq_layer = HQQLinear(
                     linear_layer=None,
                     quant_config=None,
@@ -171,6 +173,9 @@ class HqqHfQuantizer(HfQuantizer):
                 hqq_layer = self._patch_layer_for_multigpu(hqq_layer)
 
             setattr(parent_module, node, hqq_layer)
+
+            # cleanup
+            del module.__dict__, module
             torch.cuda.empty_cache()
             return
 
