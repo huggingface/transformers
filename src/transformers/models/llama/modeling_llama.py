@@ -39,7 +39,12 @@ from ...modeling_outputs import (
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import ALL_LAYERNORM_LAYERS, find_pruneable_heads_and_indices, prune_linear_layer, prune_embedding_layer
+from ...pytorch_utils import (
+    ALL_LAYERNORM_LAYERS,
+    find_pruneable_heads_and_indices,
+    prune_embedding_layer,
+    prune_linear_layer,
+)
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -117,7 +122,7 @@ class LlamaRMSNorm(nn.Module):
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
-        
+
     def _prune_embedding(self, index):
         self.weight.data = self.weight.data[index]
 
@@ -291,12 +296,12 @@ class LlamaMLP(nn.Module):
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
         self.act_fn = ACT2FN[config.hidden_act]
-        
+
     def _prune_embedding(self, index):
         self.gate_proj = prune_linear_layer(self.gate_proj, index, dim=1)
         self.up_proj = prune_linear_layer(self.up_proj, index, dim=1)
         self.down_proj = prune_linear_layer(self.down_proj, index, dim=0)
-        
+
     def _prune_neurons(self, index):
         self.gate_proj = prune_linear_layer(self.gate_proj, index, dim=0)
         self.up_proj = prune_linear_layer(self.up_proj, index, dim=0)
@@ -369,15 +374,13 @@ class LlamaAttention(nn.Module):
         # TODO (joao): remove in v4.45 (RoPE is computed in the model, not in the decoder layers)
         self.rotary_emb = LlamaRotaryEmbedding(config=self.config)
         self.pruned_heads = set()
-        
+
     def _prune_heads(self, heads):
         # Create masks for the heads to keep
         if len(heads) == 0:
             return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.num_heads, self.head_dim, self.pruned_heads
-        )
-        
+        heads, index = find_pruneable_heads_and_indices(heads, self.num_heads, self.head_dim, self.pruned_heads)
+
         # Prune linear layers
         self.q_proj = prune_linear_layer(self.q_proj, index)
         self.o_proj = prune_linear_layer(self.o_proj, index, dim=1)
@@ -386,8 +389,8 @@ class LlamaAttention(nn.Module):
         self.num_heads -= len(heads)
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.pruned_heads = self.pruned_heads.union(heads)
-        
-    def _prune_embedding(self, index):        
+
+    def _prune_embedding(self, index):
         # Prune linear layers
         self.q_proj = prune_linear_layer(self.q_proj, index, dim=1)
         self.k_proj = prune_linear_layer(self.k_proj, index, dim=1)
@@ -723,15 +726,15 @@ class LlamaDecoderLayer(nn.Module):
         self.mlp = LlamaMLP(config)
         self.input_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        
+
     def _prune_heads(self, heads_to_prune):
         self.self_attn._prune_heads(heads_to_prune)
-        
-    def _prune_neurons(self, index_to_keep):        
+
+    def _prune_neurons(self, index_to_keep):
         self.mlp._prune_neurons(index_to_keep)
-        
+
     def _prune_embeddings(self, index_to_keep):
-        self.embed_tokens = prune_embedding_layer(self.embed_tokens, index_to_keep, dim=1)    
+        self.embed_tokens = prune_embedding_layer(self.embed_tokens, index_to_keep, dim=1)
         self.mlp._prune_embedding(index_to_keep)
         self.input_layernorm._prune_embedding(index_to_keep)
         self.post_attention_layernorm._prune_embedding(index_to_keep)
@@ -957,15 +960,15 @@ class LlamaModel(LlamaPreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.embed_tokens = value
-        
+
     def prune_heads(self, heads_to_prune):
         for layer in self.layers:
             layer._prune_heads(heads_to_prune)
-        
-    def prune_neurons(self, index_to_keep):  
+
+    def prune_neurons(self, index_to_keep):
         for layer in self.layers:
-            layer._prune_neurons(index_to_keep)      
-    
+            layer._prune_neurons(index_to_keep)
+
     def prune_embeddings(self, index_to_keep):
         for layer in self.layers:
             layer._prune_embeddings(index_to_keep)
@@ -1100,6 +1103,11 @@ class LlamaModel(LlamaPreTrainedModel):
         past_key_values: Cache,
         output_attentions: bool,
     ):
+        # TODO: As of torch==2.2.0, the `attention_mask` passed to the model in `generate` is 2D and of dynamic length even when the static
+        # KV cache is used. This is an issue for torch.compile which then recaptures cudagraphs at each decode steps due to the dynamic shapes.
+        # (`recording cudagraph tree for symint key 13`, etc.), which is VERY slow. A workaround is `@torch.compiler.disable`, but this prevents using
+        # `fullgraph=True`. See more context in https://github.com/huggingface/transformers/pull/29114
+
         if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and 0.0 in attention_mask:
                 return attention_mask
