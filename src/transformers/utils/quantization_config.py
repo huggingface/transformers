@@ -194,7 +194,7 @@ class HqqConfig(QuantizationConfigMixin):
             Group-size value. Supported values are any value that is divisble by weight.shape[axis]).
         view_as_float (`bool`, *optional*, defaults to `False`):
             View the quantized weight as float (used in distributed training) if set to `True`.
-        axis (`int`, *optional*, defaults to 1):
+        axis (`Optional[int]`, *optional*, defaults to `None`):
             Axis along which grouping is performed. Supported values are 0 or 1.
         dynamic_config (dict, *optional*):
             Parameters for dynamic configuration. The key is the name tag of the layer and the value is a quantization config.
@@ -210,13 +210,17 @@ class HqqConfig(QuantizationConfigMixin):
         nbits: int = 4,
         group_size: int = 64,
         view_as_float: bool = False,
-        axis: int = 1,
+        axis: Optional[int] = None,
         dynamic_config: Optional[dict] = None,
         skip_modules: List[str] = ["lm_head"],
         **kwargs,
     ):
         if is_hqq_available():
             from hqq.core.quantize import BaseQuantizeConfig as HQQBaseQuantizeConfig
+
+        if axis is None:
+            axis = 1
+            logger.info("Setting axis=1 as faster backends such as TorchAO or BitBlas are only compatible with it.")
 
         if axis not in [0, 1]:
             raise ValueError("Invalid axis value. Only 0 and 1 are allowed.")
