@@ -194,7 +194,7 @@ class HqqConfig(QuantizationConfigMixin):
             Group-size value. Supported values are any value that is divisble by weight.shape[axis]).
         view_as_float (`bool`, *optional*, defaults to `False`):
             View the quantized weight as float (used in distributed training) if set to `True`.
-        axis (`int`, *optional*, defaults to 0):
+        axis (`int`, *optional*, defaults to 1):
             Axis along which grouping is performed. Supported values are 0 or 1.
         dynamic_config (dict, *optional*):
             Parameters for dynamic configuration. The key is the name tag of the layer and the value is a quantization config.
