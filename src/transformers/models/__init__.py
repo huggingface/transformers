@@ -249,6 +249,7 @@ from . import (
     vision_text_dual_encoder,
     visual_bert,
     vit,
+    sapiens,
     vit_mae,
     vit_msn,
     vitdet,
