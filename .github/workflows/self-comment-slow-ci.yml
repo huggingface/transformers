@@ -13,25 +13,46 @@ on:
   pull_request_review_comment:
     types: [created, deleted]
 
-# concurrency:
-#   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
-#   cancel-in-progress: true
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
 
-# env:
-#   HF_HOME: /mnt/cache
-#   TRANSFORMERS_IS_CI: yes
-#   OMP_NUM_THREADS: 8
-#   MKL_NUM_THREADS: 8
-#   RUN_SLOW: yes
-#   # For gated repositories, we still need to agree to share information on the Hub repo. page in order to get access.
-#   # This token is created under the bot `hf-transformers-bot`.
-#   HF_HUB_READ_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
-#   SIGOPT_API_TOKEN: ${{ secrets.SIGOPT_API_TOKEN }}
-#   TF_FORCE_GPU_ALLOW_GROWTH: true
-#   RUN_PT_TF_CROSS_TESTS: 1
-#   CUDA_VISIBLE_DEVICES: 0,1
+env:
+  HF_HOME: /mnt/cache
+  TRANSFORMERS_IS_CI: yes
+  OMP_NUM_THREADS: 8
+  MKL_NUM_THREADS: 8
+  RUN_SLOW: yes
+  # For gated repositories, we still need to agree to share information on the Hub repo. page in order to get access.
+  # This token is created under the bot `hf-transformers-bot`.
+  HF_HUB_READ_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
+  SIGOPT_API_TOKEN: ${{ secrets.SIGOPT_API_TOKEN }}
+  TF_FORCE_GPU_ALLOW_GROWTH: true
+  RUN_PT_TF_CROSS_TESTS: 1
+  CUDA_VISIBLE_DEVICES: 0,1
 
 jobs:
+  reply-and-trigger:
+    if: github.event.comment.body contains '/pytest'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Set up GitHub CLI
+        uses: actions/checkout@v4
+
+      - name: Reply to the comment
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api --method POST \
+            /repos/${{ github.repository }}/pulls/comments/${{ github.event.comment.id }}/replies \
+            -f body='This comment contains /pytest, running the specified job...'
+
+      - name: Trigger specific job
+        run: |
+          echo "Running the specific job because /pytest was found"
+          # Add the logic to trigger your specific job here
+          # This could be a script, another action, etc.
 
   run_if_label_matches:
     if: github.event.label.name == 'run-slow'
