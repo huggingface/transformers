@@ -24,6 +24,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -1521,7 +1522,7 @@ class Kosmos2TextModel(Kosmos2PreTrainedModel):
     """,
     KOSMOS2_START_DOCSTRING,
 )
-class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel):
+class Kosmos2TextForCausalLM(GenerationMixin, Kosmos2PreTrainedModel):
     config_class = Kosmos2TextConfig
     _tied_weights_keys = ["lm_head.weight"]
 

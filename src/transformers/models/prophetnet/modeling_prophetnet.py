@@ -26,6 +26,7 @@ from torch import Tensor, nn
 from torch.nn import LayerNorm
 
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -2073,7 +2074,7 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
     " language modeling.",
     PROPHETNET_START_DOCSTRING,
 )
-class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
+class ProphetNetForCausalLM(GenerationMixin, ProphetNetPreTrainedModel):
     _tied_weights_keys = [
         "prophetnet.word_embeddings.weight",
         "prophetnet.decoder.word_embeddings.weight",

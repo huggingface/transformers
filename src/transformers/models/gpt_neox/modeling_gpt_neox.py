@@ -30,6 +30,7 @@ from ...file_utils import (
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
+from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
@@ -1079,7 +1080,7 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
 @add_start_docstrings(
     """GPTNeoX Model with a `language modeling` head on top for CLM fine-tuning.""", GPT_NEOX_START_DOCSTRING
 )
-class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel):
+class GPTNeoXForCausalLM(GenerationMixin, GPTNeoXPreTrainedModel):
     _tied_weights_keys = ["embed_out.weight"]
 
     def __init__(self, config):
