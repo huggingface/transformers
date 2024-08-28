@@ -292,7 +292,6 @@ class ZeroShotImageClassificationPipelineTests(unittest.TestCase):
         output = image_classifier(
             image,
             candidate_labels=["2 cats", "a plane", "a remote"],
-            tokenizer_kwargs={"return_token_type_ids": False},
         )
 
         self.assertEqual(
@@ -308,7 +307,6 @@ class ZeroShotImageClassificationPipelineTests(unittest.TestCase):
             [image] * 5,
             candidate_labels=["2 cats", "a plane", "a remote"],
             batch_size=2,
-            tokenizer_kwargs={"return_token_type_ids": False},
         )
 
         self.assertEqual(

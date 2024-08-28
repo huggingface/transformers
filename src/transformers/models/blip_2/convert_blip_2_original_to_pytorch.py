@@ -155,6 +155,8 @@ def convert_blip2_checkpoint(
     else:
         tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-xl")
 
+    tokenizer.model_input_names = ["input_ids", "attention_mask"]
+
     if "itm" in model_name:
         eos_token_id = None
     else:
