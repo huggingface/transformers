@@ -51,7 +51,8 @@ jobs:
             /repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments \
             -f "body=This comment contains /pytest, running the specified job..."
 
-      - name: test checks
+
+      - name: Create Check Run
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -61,7 +62,7 @@ jobs:
             -H "X-GitHub-Api-Version: 2022-11-28" \
             /repos/${{ github.repository }}/check-runs \
             -f "name=mighty_readme" \
-            -f "head_sha=$HEAD_SHA" \
+            -f "head_sha=${{ github.event.pull_request.head.sha }}" \
             -f "status=in_progress" \
             -f "external_id=42" \
             -f "started_at=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
