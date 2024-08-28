@@ -346,6 +346,11 @@ def convert_sapiens_checkpoint(model_name, checkpoints_dir, save_dir):
     print(f"Saving image processor to {model_save_dir}")
     image_processor.save_pretrained(model_save_dir)
 
+    if args.push_to_hub:
+        print(f"Pushing model {model_name} to the HF Hub")
+        model.push_to_hub(model_name)
+        image_processor.push_to_hub(model_name)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -374,6 +379,11 @@ if __name__ == "__main__":
         default="cpu",
         type=str,
         help="Device to use for the conversion (default: 'cpu').",
+    )
+    parser.add_argument(
+        "--push_to_hub",
+        action="store_true",
+        help="Whether to upload the model to the HF Hub.",
     )
 
     args = parser.parse_args()
