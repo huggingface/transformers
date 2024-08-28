@@ -56,7 +56,7 @@ jobs:
         id: create_check_run
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          GITHUB_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}/jobs/${{ github.job }}
         run: |
           CHECK_RUN_ID=$(gh api \
             --method POST \
