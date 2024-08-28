@@ -65,6 +65,7 @@ jobs:
             -f "target_url=$GITHUB_RUN_URL" -f "state:pending"
 
       - name: Create Check Run
+        if: always()
         id: create_check_run
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
