@@ -63,8 +63,9 @@ jobs:
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
             /repos/${{ github.repository }}/check-runs \
-            -f "name=mighty_readme" \
+            -f "name=Custom slow tests" \
             -f "head_sha=${{ github.event.pull_request.head.sha }}" \
+            -f "details_url=$GITHUB_RUN_URL"
             -f "status=in_progress" \
             -f "external_id=42" \
             -f "started_at=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
