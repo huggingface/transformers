@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2024 Google AI, Ross Wightman, The HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -53,7 +53,7 @@ _CHECKPOINT_FOR_DOC = "facebook/I-JEPA"
 _EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
 
 # Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "google/ijepa-base-patch16-224"
+_IMAGE_CLASS_CHECKPOINT = "jmtzt/ijepa_huge_patch14_1k"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "Egyptian cat"
 
 
@@ -535,9 +535,11 @@ IJEPA_INPUTS_DOCSTRING = r"""
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
+
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
+
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
@@ -665,6 +667,35 @@ IJEPA_FOR_IMAGE_CLASSIFICATION_START_DOCSTRING = r"""
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
+IJEPA_FOR_IMAGE_CLASSIFICATION_INPUTS_DOCSTRING = r"""
+    Args:
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`ViTImageProcessor.__call__`]
+            for details.
+
+        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+"""
+
 
 @add_start_docstrings(
     """
@@ -687,7 +718,7 @@ class IJepaForImageClassification(IJepaPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(IJEPA_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(IJEPA_FOR_IMAGE_CLASSIFICATION_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
         output_type=ImageClassifierOutput,
@@ -703,12 +734,6 @@ class IJepaForImageClassification(IJepaPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, ImageClassifierOutput]:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.ijepa(
