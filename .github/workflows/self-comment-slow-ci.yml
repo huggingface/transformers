@@ -51,14 +51,14 @@ jobs:
           run: |
             echo "commit_message=$(git show -s --format=%s)" >> $GITHUB_ENV
 
-      - name: Parse comment and set machine type
-        if: github.event_name == 'issue_comment'
-        run: |
-          COMMENT=${{ github.event.comment.body }}
-          if [[ "$COMMENT" == *"--device"* ]]; then
-            DEVICE=$(echo "$COMMENT" | grep -oP '(?<=--device\s)\S+')
-            echo "machine_type=${DEVICE}" >> $GITHUB_OUTPUT
-          fi
+        - name: Parse comment and set machine type
+          if: github.event_name == 'issue_comment'
+          run: |
+            COMMENT=${{ github.event.comment.body }}
+            if [[ "$COMMENT" == *"--device"* ]]; then
+              DEVICE=$(echo "$COMMENT" | grep -oP '(?<=--device\s)\S+')
+              echo "machine_type=${DEVICE}" >> $GITHUB_OUTPUT
+            fi
 
         - name: Get models to run slow tests
           run: |
