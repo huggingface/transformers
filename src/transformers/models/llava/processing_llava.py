@@ -129,7 +129,6 @@ class LlavaProcessor(ProcessorMixin):
             raise ValueError("You have to specify at least one of `images` or `text`.")
 
         # check if images and text inputs are reversed for BC
-        text, images = images, text
         images, text = _validate_images_text_input_order(images, text)
 
         output_kwargs = self._merge_kwargs(
