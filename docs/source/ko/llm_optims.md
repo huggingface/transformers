@@ -54,7 +54,7 @@ rendered properly in your Markdown viewer.
 from transformers import AutoTokenizer, AutoModelForCausalLM
 mport torch
 import os
-os.environ["TOKENIZERS_PARALLELISM"] = "false"  # To prevent long warnings :)
+os.environ["TOKENIZERS_PARALLELISM"] = "false"  # 긴 경고 메시지를 방지하기 위해 설정 :)
 
 tokenizer = AutoTokenizer.from_pretrained("google/gemma-2b")
 model = AutoModelForCausalLM.from_pretrained("google/gemma-2b", device_map="auto")
@@ -70,35 +70,57 @@ print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
 ['The theory of special relativity states 1. The speed of light is constant in all inertial reference']
 ```
 
-두 가지 방법으로 모델을 정적 kv-cache를 사용하도록 설정할 수 있습니다. A100에서 7B 모델의 경우 두 방법 모두 순전파에서 4배 속도 향상이 가능합니다. 속도 향상은 모델 크기(더 큰 모델의 경우 속도 향상이 적음)와 하드웨어에 따라 다를 수 있습니다. [~GenerationMixin.generate] 메서드를 사용하는 경우, 속도는 최대 3배 빨라집니다. 순전파(여전히 4배 속도 향상)는 전체 [~GenerationMixin.generate] 코드의 일부일 뿐입니다.
+`generate` 함수는 내부적으로 동일한 캐시 객체를 재사용하려고 시도하며, 이를 통해 각 호출 시 재컴파일의 필요성을 제거합니다. 재컴파일을 피하는 것은 `torch.compile`의 성능을 최대한 활용하는 데 매우 중요하며, 다음 사항에 유의해야 합니다:
+1. 배치 크기가 변경되거나 호출 간 최대 출력 길이가 증가하면 캐시를 다시 초기화해야 하며, 이로 인해 새로운 컴파일이 발생합니다;
+2. 컴파일된 함수의 첫 몇 번의 호출은 함수가 컴파일되는 동안 더 느립니다.
 
-<hfoptions id="static-kv">
-<hfoption id="generation_config">
-
-모델의 `generation_config` 속성에 접근하여 `cache_implementation`을 “static”으로 설정하십시오.
-
-```py
-model.generation_config.cache_implementation = "static"
-```
-
-정적 kv-cache와 함께 순전파를 컴파일하기 위해 torch.compile을 호출합니다.
-
-```py
-compiled_model = torch.compile(model, mode="reduce-overhead", fullgraph=True)
-input_text = "The theory of special relativity states "
-input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
-
-outputs = compiled_model.generate(**input_ids)
-tokenizer.batch_decode(outputs, skip_special_tokens=True)
-['The theory of special relativity states 1. The speed of light is constant in all inertial reference']
-```
-
-내부적으로, 'generate'는 동일한 캐시 객체를 재사용하려고 시도하여 각 호출에서 다시 컴파일할 필요가 없도록 합니다. 그러나 배치 크기 또는 최대 출력 길이가 호출 간에 증가하면 캐시를 다시 초기화해야 하므로 새로 컴파일해야 합니다.
+> [!WARNING]
+> 다중 턴 대화와 같은 정적 캐시의 고급 사용을 위해서는, 캐시 객체를 [`~GenerationMixin.generate`] 외부에서 인스턴스화하고 조작하는 것을 권장합니다. 고급 사용법 탭을 참조하세요.
 
 </hfoption>
-<hfoption id="Static Cache">
+<hfoption id="advanced usage: control Static Cache">
 
-[`StaticCache`] 객체를 `past_key_values` 인수로 모델의 순전파에 전달하여 정적 kv-cache로 사용할 수 있습니다. 이 전략을 사용하여 현재 토큰과 위치, 이전에 생성된 토큰의 캐시 위치를 기준으로 다음 토큰을 디코딩하는 함수를 작성할 수 있습니다. 또한 [`StaticCache`] 객체를 [`~GenerationMixin.generate`]에 전달하여 동적 캐시처럼 호출 간에 사용할 수 있습니다.
+[`StaticCache`] 객체는 `past_key_values` 인수로 모델의 [`~GenerationMixin.generate`] 함수에 전달할 수 있습니다. 이 객체는 캐시 내용을 유지하므로, 동적 캐시를 사용하는 것처럼 새로운 [`~GenerationMixin.generate`] 호출에 이를 전달하여 생성을 계속할 수 있습니다.
+
+```py
+from transformers import AutoTokenizer, AutoModelForCausalLM, StaticCache
+import torch
+import os
+os.environ["TOKENIZERS_PARALLELISM"] = "false"  # 긴 경고 메시지를 방지하기 위해 설정 :)
+
+tokenizer = AutoTokenizer.from_pretrained("google/gemma-2b")
+model = AutoModelForCausalLM.from_pretrained("google/gemma-2b", device_map="auto")
+
+model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
+input_text = "The theory of special relativity states "
+input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
+prompt_length = input_ids.input_ids.shape[1]
+model.generation_config.max_new_tokens = 16
+
+past_key_values = StaticCache(
+    config=model.config,
+    batch_size=1,
+    # 캐시를 재사용할 계획이 있는 경우, 모든 경우에 충분한 캐시 길이를 설정해야 합니다
+    max_cache_len=prompt_length+(model.generation_config.max_new_tokens*2),
+    device=model.device,
+    dtype=model.dtype
+)
+outputs = model.generate(**input_ids, past_key_values=past_key_values)
+print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
+['The theory of special relativity states 1. The speed of light is constant in all inertial reference frames. 2']
+
+# 생성된 텍스트와 동일한 캐시 객체를 전달하여, 중단한 곳에서 생성을 계속합니다. 
+# 다중 턴 대화의 경우, 생성된 텍스트에 새로운 사용자 입력을 추가할 수 있습니다.
+new_input_ids = outputs
+outputs = model.generate(new_input_ids, past_key_values=past_key_values)
+print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
+['The theory of special relativity states 1. The speed of light is constant in all inertial reference frames. 2. The speed of light is constant in all inertial reference frames. 3.']
+```
+
+> [!TIP]
+> 동일한 [`StaticCache`] 객체를 새로운 프롬프트에 사용하려면, 호출 간에 `.reset()` 메서드를 사용하여 그 내용을 초기화하는 것이 좋습니다.
+
+더 깊이 들어가고 싶다면, [`StaticCache`] 객체를 모델의 `forward` 패스에 동일한 `past_key_values` 인수로 전달할 수도 있습니다. 이 전략을 사용하면, 현재 토큰과 이전에 생성된 토큰의 위치 및 캐시 위치를 바탕으로 다음 토큰을 디코딩하는 자체 함수를 작성할 수 있습니다.
 
 ```py
 from transformers import LlamaTokenizer, LlamaForCausalLM, StaticCache, logging
@@ -130,12 +152,9 @@ def decode_one_tokens(model, cur_token, input_pos, cache_position, past_key_valu
     return new_token
 ```
 
-`StaticCache` 메서드를 사용하여 정적 kv-cache와 torch.compile을 활성화하려면 몇 가지 중요한 작업을 수행해야 합니다:
-
+`StaticCache` 메서드를 사용하여 정적 kv-cache와 `torch.compile`을 활성화하려면 몇 가지 중요한 작업을 수행해야 합니다:
 1. 추론에 모델을 사용하기 전에 [`StaticCache`] 인스턴스를 초기화합니다. 여기서 최대 배치 크기와 시퀀스 길이와 같은 매개변수를 설정할 수 있습니다.
-
-2. 정적 kv-cache와 함께 순전파를 컴파일하기 위해 모델에 torch.compile을 호출합니다.
-
+2. 정적 kv-cache와 함께 순전파를 컴파일하기 위해 모델에 `torch.compile`을 호출합니다.
 3. [torch.backends.cuda.sdp_kernel](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html) 컨텍스트 관리자에서 `enable_math=True`를 설정하여 네이티브 PyTorch C++ 구현된 스케일된 점곱 어텐션(scaled dot product attention)을 활성화하여 추론 속도를 더욱 높입니다.
 
 ```py
@@ -170,8 +189,34 @@ text
  'My favorite all time favorite condiment is ketchup. I love it on everything. I love it on my eggs, my fries, my chicken, my burgers, my hot dogs, my sandwiches, my salads, my p']
 ```
 
-> [!TIP]
-> [`StaticCache`] 객체를 새 프롬프트에 재사용하려면 `.reset()` 메서드로 내용을 초기화하십시오.
+</hfoption>
+<hfoption id="advanced usage: end-to-end generate compilation">
+
+전체 `generate` 함수를 컴파일하는 것은 코드 측면에서 기본 사용법보다 더 간단합니다. `generate` 함수에 대해 `torch.compile`을 호출하여 전체 함수를 컴파일하면 됩니다. 정적 캐시의 사용을 지정할 필요는 없습니다. 정적 캐시는 호환되지만, 벤치마크에서는 동적 캐시(기본 설정)가 더 빠른 것으로 나타났습니다.
+
+```py
+from transformers import AutoTokenizer, AutoModelForCausalLM
+import torch
+import os
+os.environ["TOKENIZERS_PARALLELISM"] = "false"  # 긴 경고 메시지를 방지하기 위해 설정 :)
+
+tokenizer = AutoTokenizer.from_pretrained("google/gemma-2b")
+model = AutoModelForCausalLM.from_pretrained("google/gemma-2b", device_map="auto")
+
+model.generate = torch.compile(model.generate, mode="reduce-overhead", fullgraph=True)
+input_text = "The theory of special relativity states "
+input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
+
+outputs = model.generate(**input_ids)
+print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
+['The theory of special relativity states 1. The speed of light is constant in all inertial reference']
+```
+
+이 방법을 통해 모델의 forward 패스뿐만 아니라, 입력 준비, logit 처리기 작업 등을 포함한 모든 것을 컴파일합니다. 기본 사용 예제에 비해 `generate` 호출이 약간 더 빠를 수 있으며, 컴파일된 그래프는 더 특이한 하드웨어 장치나 사용 사례에 적합할 수 있습니다. 그러나 이 접근 방식을 사용하는 데는 몇 가지 큰 단점이 있습니다:
+1. 컴파일 속도가 훨씬 느립니다;
+2. `generate`의 모든 매개변수 설정은 `generation_config`를 통해서만 가능합니다;
+3. 많은 경고와 예외가 억제됩니다. -- 먼저 비컴파일 형태로 테스트하는 것을 권장합니다;
+4. 현재 작업 중이지만 기능 제한이 심합니다(예: 작성 시점에서는 EOS 토큰이 선택되어도 생성이 중단되지 않습니다).
 
 </hfoption>
 </hfoptions>
