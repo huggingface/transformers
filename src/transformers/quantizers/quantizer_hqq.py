@@ -62,7 +62,7 @@ class HqqHfQuantizer(HfQuantizer):
     def validate_environment(self, *args, **kwargs):
         if not (is_hqq_available()):
             raise ImportError(
-                "HQQ is not available. Please follow the instructions to install it: `https://github.com/mobiusml/hqq/`"
+                "A valid HQQ version (>=0.2.0) is not available. Please follow the instructions to install it: `https://github.com/mobiusml/hqq/`."
             )
 
         if kwargs.get("from_tf", False) or kwargs.get("from_flax", False):
