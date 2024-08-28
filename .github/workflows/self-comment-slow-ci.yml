@@ -1,6 +1,8 @@
 name: PR comment github action tests
 
-on: issue_comment
+on: 
+  workflow_dispatch:
+  issue_comment:
 
 # concurrency:
 #   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
@@ -32,6 +34,14 @@ jobs:
       env:
         NUMBER: ${{ github.event.issue.number }}
 
+  pr-comment:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+    steps:
+      - uses: xt0rted/pull-request-comment-branch@v2
 
   testing-stuff-around:
       if: contains(github.event.comment.html_url, '/pull/')    # check if the comments come from pull request, exclude those from issue.
