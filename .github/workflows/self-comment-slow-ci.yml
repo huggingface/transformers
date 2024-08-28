@@ -45,7 +45,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh api --method POST \
-            /repos/${{ github.repository }}/pulls/comments/${{ github.event.comment.id }}/replies \
+            /repos/${{ github.repository }}/pulls/comments/${{ github.event.comment.id }} \
             -f body='This comment contains /pytest, running the specified job...'
 
       - name: Trigger specific job
@@ -76,7 +76,7 @@ jobs:
       runs-on:  ubuntu-22.04
       steps:
         - name: say hello
-          if: contains(github.event.comment.body, '/support')   # check the comment if it contains the keywords
+          if: contains(github.event.comment.body, '/pytest')   # check the comment if it contains the keywords
           run: |
             echo say hello
         - name: test
