@@ -48,8 +48,15 @@ jobs:
             --method POST \
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
-            /repos/${{ github.repository }}/pulls/comments/${{ github.event.comment.id }}/replies \
+            /repos/${{ github.repository }}/issues/${{ github.event.issue.number }}/comments \
             -f "body=This comment contains /pytest, running the specified job..."
+
+        # gh api \
+        #   --method POST \
+        #   -H "Accept: application/vnd.github+json" \
+        #   -H "X-GitHub-Api-Version: 2022-11-28" \
+        #   /repos/${{ github.repository }}/pulls/comments/${{ github.event.comment.id }}/replies \
+        #   -f "body=This comment contains /pytest, running the specified job..."
 
       - name: Trigger specific job
         run: |
@@ -86,6 +93,7 @@ jobs:
           if: contains(github.event.comment.body, '/test')  # check the comment if it contains the keywords
           run: |
             echo test
+        
 
   find_models_to_run:
       runs-on: ubuntu-22.04
