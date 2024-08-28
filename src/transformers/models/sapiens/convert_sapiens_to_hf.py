@@ -65,7 +65,7 @@ SEGMENTATIONS_ID_TO_LABEL = {v: k for k, v in SEGMENTATIONS_LABEL_TO_ID.items()}
 
 
 # here we list all keys to be renamed (original name on the left, our name on the right)
-def create_rename_keys(config: SapiensConfig):
+def create_rename_keys(config: SapiensConfig, is_pose_model=False):
     rename_keys = []
     for i in range(config.num_hidden_layers):
         # encoder layers: attention, projection, 2 feedforward neural networks and 2 layernorms
@@ -100,15 +100,18 @@ def create_rename_keys(config: SapiensConfig):
     )
 
     # head
+    head_name = "head" if is_pose_model else "decode_head"
+    final_layer = "final_layer" if is_pose_model else "conv_seg"
+
     for i in range(len(config.deconv_out_channels)):
-        rename_keys.append((f"decode_head.deconv_layers.{i * 3}.weight", f"head.deconv_layers.{i}.deconv.weight"))
+        rename_keys.append((f"{head_name}.deconv_layers.{i * 3}.weight", f"head.deconv_layers.{i}.deconv.weight"))
     
     for i in range(len(config.conv_out_channels)):
-        rename_keys.append((f"decode_head.conv_layers.{i * 3}.weight", f"head.conv_layers.{i}.conv.weight"))
-        rename_keys.append((f"decode_head.conv_layers.{i * 3}.bias", f"head.conv_layers.{i}.conv.bias"))
+        rename_keys.append((f"{head_name}.conv_layers.{i * 3}.weight", f"head.conv_layers.{i}.conv.weight"))
+        rename_keys.append((f"{head_name}.conv_layers.{i * 3}.bias", f"head.conv_layers.{i}.conv.bias"))
     
-    rename_keys.append((f"decode_head.conv_seg.weight", "head.final_conv.weight"))
-    rename_keys.append((f"decode_head.conv_seg.bias", "head.final_conv.bias"))
+    rename_keys.append((f"{head_name}.{final_layer}.weight", "head.final_conv.weight"))
+    rename_keys.append((f"{head_name}.{final_layer}.bias", "head.final_conv.bias"))
 
     return rename_keys
 
@@ -276,6 +279,21 @@ def convert_sapiens_checkpoint(model_name, checkpoints_dir, save_dir):
             },
             "checkpoint_local_path": "sapiens_host/depth/checkpoints/sapiens_2b/sapiens_2b_render_people_epoch_25.pth",
         },
+        "pose-estimation-1b": {
+            "config": {
+                "num_labels": 308,
+                "num_hidden_layers": 40,
+                "hidden_size": 1536,
+                "deconv_out_channels": [768, 768],
+                "deconv_kernel_sizes": [4, 4],
+                "conv_out_channels": [768, 768],
+                "conv_kernel_sizes": [1, 1],
+                "patch_embeddings_padding": 2,
+            },
+            # original checkpoint can't be loaded without mmengine installed,
+            # using a resaved version with `state_dict` only
+            "checkpoint_local_path": "sapiens_host/pose/checkpoints/sapiens_1b/sapiens_1b_goliath_best_goliath_AP_640-resaved.pth",
+        },
     }
     checkpoint_params = all_params[model_name]
     config_params = checkpoint_params["config"]
@@ -285,10 +303,11 @@ def convert_sapiens_checkpoint(model_name, checkpoints_dir, save_dir):
     config = SapiensConfig(**config_params)
 
     full_checkpoint_path = Path(checkpoints_dir) / checkpoint_params["checkpoint_local_path"]
-    state_dict = torch.load(full_checkpoint_path, map_location="cpu", weights_only=True)["state_dict"]
-    
+    state_dict = torch.load(full_checkpoint_path, map_location=args.device, weights_only=True)["state_dict"]
+
     # rename state dict keys
-    rename_keys = create_rename_keys(config)
+    is_pose_model = "pose" in model_name
+    rename_keys = create_rename_keys(config, is_pose_model=is_pose_model)
     for src, dest in rename_keys:
         if src in state_dict:
             rename_key(state_dict, src, dest)
@@ -299,7 +318,7 @@ def convert_sapiens_checkpoint(model_name, checkpoints_dir, save_dir):
     split_qkv_to_query_key_values_(state_dict)
 
     # load model and state dict
-    model = SapiensForSemanticSegmentation(config).eval()
+    model = SapiensForSemanticSegmentation(config).eval().to(args.device)
     model.load_state_dict(state_dict)
 
     # Check outputs on an image, prepared by SapiensImageProcessor
@@ -334,7 +353,7 @@ if __name__ == "__main__":
     # Required parameters
     parser.add_argument(
         "--model_name",
-        default="depth-estimation-0.3b",
+        default="pose-estimation-1b",
         type=str,
         help="Name of the model trained with DINO you'd like to convert.",
     )
@@ -350,6 +369,13 @@ if __name__ == "__main__":
         type=str,
         help="Path to the directory where the converted model will be saved.",
     )
+    parser.add_argument(
+        "--device",
+        default="cpu",
+        type=str,
+        help="Device to use for the conversion (default: 'cpu').",
+    )
 
     args = parser.parse_args()
     convert_sapiens_checkpoint(args.model_name, args.checkpoints_dir, args.save_dir)
+
