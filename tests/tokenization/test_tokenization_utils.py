@@ -249,29 +249,28 @@ class TokenizerUtilsTest(unittest.TestCase):
     def test_decoding(self):
         for tokenizer_class in [BertTokenizer, BertTokenizerFast]:
             with self.subTest(f"{tokenizer_class}"):
-               tokenizer = tokenizer_class.from_pretrained("google-bert/bert-base-cased")
+                tokenizer = tokenizer_class.from_pretrained("google-bert/bert-base-cased")
 
-               token_id = 2300
-               decoded_flat = tokenizer.decode(token_id)
-               decoded_list = tokenizer.decode([token_id])
+                token_id = 2300
+                decoded_flat = tokenizer.decode(token_id)
+                decoded_list = tokenizer.decode([token_id])
 
-               self.assertEqual(decoded_flat, "Force")
-               self.assertEqual(decoded_list, "Force")
+                self.assertEqual(decoded_flat, "Force")
+                self.assertEqual(decoded_list, "Force")
 
-               token_id = 0
-               decoded_flat = tokenizer.decode(token_id)
-               decoded_list = tokenizer.decode([token_id])
+                token_id = 0
+                decoded_flat = tokenizer.decode(token_id)
+                decoded_list = tokenizer.decode([token_id])
 
-               self.assertEqual(decoded_flat, "[PAD]")
-               self.assertEqual(decoded_list, "[PAD]")
+                self.assertEqual(decoded_flat, "[PAD]")
+                self.assertEqual(decoded_list, "[PAD]")
 
-               last_item_id = tokenizer.vocab_size - 1
-               decoded_flat = tokenizer.decode(last_item_id)
-               decoded_list = tokenizer.decode([last_item_id])
+                last_item_id = tokenizer.vocab_size - 1
+                decoded_flat = tokenizer.decode(last_item_id)
+                decoded_list = tokenizer.decode([last_item_id])
 
-               self.assertEqual(decoded_flat, "##：")
-               self.assertEqual(decoded_list, "##：")
-
+                self.assertEqual(decoded_flat, "##：")
+                self.assertEqual(decoded_list, "##：")
 
     @require_tokenizers
     def test_decoding_extra_params(self):
