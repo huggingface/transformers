@@ -99,7 +99,7 @@ _deps = [
     "accelerate>=0.26.0",
     "av==9.2.0",  # Latest version of PyAV (10.0.0) has issues with audio stream.
     "beautifulsoup4",
-    "blobfile==2.1.1",
+    "blobfile",
     "codecarbon==1.2.0",
     "cookiecutter==1.7.3",
     "dataclasses",
@@ -178,7 +178,7 @@ _deps = [
     "tensorflow-probability<0.24",
     "tf2onnx",
     "timeout-decorator",
-    "tiktoken==0.7.0",
+    "tiktoken",
     "timm<=0.9.16",
     "tokenizers>=0.19,<0.20",
     "torch",

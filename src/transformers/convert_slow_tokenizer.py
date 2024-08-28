@@ -1454,7 +1454,7 @@ class TikTokenConverter:
         vocab_file=None,
         pattern=r"""(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+""",
         add_prefix_space=False,
-        special_tokens=None,
+        additional_special_tokens=None,
         *args,
         **kwargs,
     ):
@@ -1462,7 +1462,7 @@ class TikTokenConverter:
         self.vocab_file = vocab_file
         self.pattern = pattern
         self.add_prefix_space = add_prefix_space
-        self.special_tokens = special_tokens
+        self.additional_special_tokens = additional_special_tokens
 
     def extract_vocab_merges_from_model(self, tiktoken_url: str):
         try:
@@ -1511,7 +1511,7 @@ class TikTokenConverter:
             ]
         )
         tokenizer.decoder = decoders.ByteLevel()
-        tokenizer.add_special_tokens(self.special_tokens)
+        tokenizer.add_special_tokens(self.additional_special_tokens)
 
         tokenizer.post_processor = processors.ByteLevel(trim_offsets=False)
 
@@ -1578,7 +1578,7 @@ SLOW_TO_FAST_CONVERTERS = {
 }
 
 
-def convert_slow_tokenizer(transformer_tokenizer, tiktoken=False) -> Tokenizer:
+def convert_slow_tokenizer(transformer_tokenizer, from_tiktoken=False) -> Tokenizer:
     """
     Utilities to convert a slow tokenizer instance in a fast tokenizer instance.
 
@@ -1586,7 +1586,7 @@ def convert_slow_tokenizer(transformer_tokenizer, tiktoken=False) -> Tokenizer:
         transformer_tokenizer ([`~tokenization_utils_base.PreTrainedTokenizer`]):
             Instance of a slow tokenizer to convert in the backend tokenizer for
             [`~tokenization_utils_base.PreTrainedTokenizerFast`].
-       tiktoken (bool, optional): Whether to use the `tiktoken` library to convert the tokenizer instead of sentencepiece.
+       from_tiktoken (bool, optional): Whether to use the `tiktoken` library to convert the tokenizer instead of sentencepiece.
             Defaults to False.
 
     Return:
@@ -1595,7 +1595,7 @@ def convert_slow_tokenizer(transformer_tokenizer, tiktoken=False) -> Tokenizer:
     """
 
     tokenizer_class_name = transformer_tokenizer.__class__.__name__
-    if tokenizer_class_name in SLOW_TO_FAST_CONVERTERS and not tiktoken:
+    if tokenizer_class_name in SLOW_TO_FAST_CONVERTERS and not from_tiktoken:
         converter_class = SLOW_TO_FAST_CONVERTERS[tokenizer_class_name]
         return converter_class(transformer_tokenizer).converted()
 
@@ -1606,11 +1606,8 @@ def convert_slow_tokenizer(transformer_tokenizer, tiktoken=False) -> Tokenizer:
                 vocab_file=transformer_tokenizer.vocab_file, special_tokens=transformer_tokenizer.special_tokens
             ).converted()
         except Exception:
-            if tokenizer_class_name in SLOW_TO_FAST_CONVERTERS:
-                logger.info("Converting from Tiktoken failed, converting with SentencePiece.")
-                converter_class = SLOW_TO_FAST_CONVERTERS[tokenizer_class_name]
-                return converter_class(transformer_tokenizer).converted()
             raise ValueError(
-                f"Converting from Tiktoken failed, and no converter for SentencePiece was found. "
+                f"Converting from Tiktoken failed, if a converter for SentencePiece is available, provide a model path "
+                f"with a SentencePiece tokenizer.model file."
                 f"Currently available slow->fast convertors: {list(SLOW_TO_FAST_CONVERTERS.keys())}"
             )
