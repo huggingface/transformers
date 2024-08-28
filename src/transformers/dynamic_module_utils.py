@@ -15,6 +15,7 @@
 """Utilities to dynamically load objects from the Hub."""
 
 import filecmp
+import hashlib
 import importlib
 import importlib.util
 import os
@@ -208,17 +209,23 @@ def get_class_in_module(class_name: str, module_path: Union[str, os.PathLike]) -
     if name.endswith(".py"):
         name = name[:-3]
     name = name.replace(os.path.sep, ".")
+    module_file = Path(HF_MODULES_CACHE) / module_path
     with _HF_REMOTE_CODE_LOCK:
         module = sys.modules.get(name)
-        module_spec = importlib.util.spec_from_file_location(name, location=Path(HF_MODULES_CACHE) / module_path)
-        if module is None:
+        module_spec = importlib.util.spec_from_file_location(name, location=module_file)
+
+        # Hash the module file and all its relative imports to check if we need to reload it
+        module_files = [module_file] + sorted(map(Path, get_relative_import_files(module_file)))
+        module_hash = hashlib.sha256(b"".join(bytes(f) + f.read_bytes() for f in module_files)).hexdigest()
+
+        if module is None or force_reload:
             module = importlib.util.module_from_spec(module_spec)
             # insert it into sys.modules before any loading begins
             sys.modules[name] = module
         # reload in both cases
-        if not getattr(module, "__transformers_initialized__", False):
+        if getattr(module, "__transformers_module_hash__", "") != module_hash or force_reload:
             module_spec.loader.exec_module(module)
-            module.__transformers_initialized__ = True
+            module.__transformers_module_hash__ = module_hash
         return getattr(module, class_name)
 
 
