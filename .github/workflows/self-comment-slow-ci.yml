@@ -44,9 +44,12 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh api --method POST \
-            /repos/${{ github.repository }}/pulls/comments/${{ github.event.comment.id }} \
-            -f body='This comment contains /pytest, running the specified job...'
+          gh api \
+            --method POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            /repos/${{ github.repository }}/pulls/comments/${{ github.event.comment.id }}/replies \
+            -f "body=This comment contains /pytest, running the specified job..."
 
       - name: Trigger specific job
         run: |
