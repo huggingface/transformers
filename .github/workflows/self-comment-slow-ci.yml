@@ -21,17 +21,16 @@ on: issue_comment
 #   CUDA_VISIBLE_DEVICES: 0,1
 
 jobs:
-
-    pr_commented:
-        # This job only runs for pull request comments
-        name: PR comment
-        if: ${{ github.event.issue.pull_request }}
-        runs-on: ubuntu-latest
-        steps:
-            - run: |
-                echo A comment on PR $NUMBER
-              env:
-                NUMBER: ${{ github.event.issue.number }}
+  pr_commented:
+      # This job only runs for pull request comments
+      name: PR comment
+      if: ${{ github.event.issue.pull_request }}
+      runs-on: ubuntu-latest
+      steps:
+        - run: |
+            echo A comment on PR $NUMBER
+      env:
+        NUMBER: ${{ github.event.issue.number }}
 
 
   testing-stuff-around:
