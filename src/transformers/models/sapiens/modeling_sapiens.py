@@ -710,58 +710,60 @@ class SapiensModel(SapiensPreTrainedModel):
         )
 
 
-class ConvLayer(nn.Module):
+class SapiensHeadConvLayer(nn.Module):
 
-    def __init__(self, in_channels, out_channels, kernel_size):
+    def __init__(self, in_channels: int, out_channels: int, kernel_size: int):
         super().__init__()
         padding = (kernel_size - 1) // 2
         self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, padding=padding)
         self.norm = nn.InstanceNorm2d(out_channels)
         self.activation = nn.SiLU(inplace=True)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.conv(x)
-        x = self.norm(x)
-        x = self.activation(x)
-        return x
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
+        hidden_state = self.conv(hidden_state)
+        hidden_state = self.norm(hidden_state)
+        hidden_state = self.activation(hidden_state)
+        return hidden_state
 
 
-class DeConvLayer(nn.Module):
+class SapiensHeadDeConvLayer(nn.Module):
 
-    def __init__(self, in_channels, out_channels, kernel_size):
+    def __init__(self, in_channels: int, out_channels: int, kernel_size: int, stride: int = 2, bias: bool = False):
         super().__init__()
         padding = (kernel_size - 1) // 2
         output_padding = kernel_size % 2
         self.deconv = nn.ConvTranspose2d(
-            in_channels, out_channels, kernel_size, stride=2, padding=padding, output_padding=output_padding, bias=False
+            in_channels, out_channels, kernel_size, stride=stride, padding=padding, output_padding=output_padding, bias=bias
         )
         self.norm = nn.InstanceNorm2d(out_channels)
         self.activation = nn.SiLU(inplace=True)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.deconv(x)
-        x = self.norm(x)
-        x = self.activation(x)
-        return x
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
+        hidden_state = self.deconv(hidden_state)
+        hidden_state = self.norm(hidden_state)
+        hidden_state = self.activation(hidden_state)
+        return hidden_state
 
 
-class Head(nn.Module):
+class SapiensHead(nn.Module):
 
     def __init__(self, config: SapiensConfig):
         super().__init__()
         self.config = config
 
+        # Build deconvolution layers (upsampling)
         deconv_in_channels = [config.hidden_size] + config.deconv_out_channels[:-1]
         self.deconv_layers = nn.ModuleList(
-            DeConvLayer(in_channels, out_channels, kernel_size)
+            SapiensHeadConvLayer(in_channels, out_channels, kernel_size)
             for in_channels, out_channels, kernel_size in zip(
                 deconv_in_channels, config.deconv_out_channels, config.deconv_kernel_sizes
             )
         )
 
+        # Build convolution layers (refinement)
         conv_in_channels = config.deconv_out_channels[-1:] + config.conv_out_channels[:-1]
         self.conv_layers = nn.ModuleList(
-            ConvLayer(in_channels, out_channels, kernel_size)
+            SapiensHeadDeConvLayer(in_channels, out_channels, kernel_size)
             for in_channels, out_channels, kernel_size in zip(
                 conv_in_channels, config.conv_out_channels, config.conv_kernel_sizes
             )
@@ -770,17 +772,20 @@ class Head(nn.Module):
         self.dropout = nn.Dropout2d(config.head_dropout2d_prob, inplace=False)
         self.final_conv = nn.Conv2d(config.deconv_out_channels[-1], config.num_labels, kernel_size=1)
 
-    def forward(self, x):
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
         
+        upsampled_hidden_state = hidden_state
         for deconv_layer in self.deconv_layers:
-            x = deconv_layer(x)
+            upsampled_hidden_state = deconv_layer(upsampled_hidden_state)
         
+        refined_hidden_state = upsampled_hidden_state
         for conv_layer in self.conv_layers:
-            x = conv_layer(x)
+            refined_hidden_state = conv_layer(refined_hidden_state)
 
-        x = self.dropout(x)
-        out = self.final_conv(x)
-        return out
+        refined_hidden_state = self.dropout(refined_hidden_state)
+        output = self.final_conv(refined_hidden_state)
+
+        return output
 
 
 class SapiensForSemanticSegmentation(SapiensPreTrainedModel):
@@ -788,7 +793,7 @@ class SapiensForSemanticSegmentation(SapiensPreTrainedModel):
         super().__init__(config)
         self.config = config
         self.model = SapiensTransformer(config)
-        self.head = Head(config)
+        self.head = SapiensHead(config)
 
         self.post_init()
 
