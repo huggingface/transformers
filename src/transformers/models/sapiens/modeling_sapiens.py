@@ -488,14 +488,13 @@ class SapiensEncoder(nn.Module):
         )
 
 
-class SapiensTransformer(nn.Module):
+class SapiensVisionTransformer(nn.Module):
     def __init__(self, config: SapiensConfig):
         super().__init__()
         self.config = config
 
         self.embeddings = SapiensEmbeddings(config)
         self.encoder = SapiensEncoder(config)
-
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(
@@ -515,7 +514,6 @@ class SapiensTransformer(nn.Module):
         embedding_output = self.embeddings(
             pixel_values, interpolate_pos_encoding=interpolate_pos_encoding
         )
-        
 
         encoder_outputs = self.encoder(
             embedding_output,
@@ -527,14 +525,14 @@ class SapiensTransformer(nn.Module):
         sequence_output = encoder_outputs[0]
         sequence_output = self.layernorm(sequence_output)
 
-        # Reshape from [batch, seq_len, hidden_dim] to [batch, height, width, hidden_dim]
+        # Reshape from [batch, seq_len, hidden_dim] to [batch, hidden_dim, height, width]
         batch_size, _, height, width = pixel_values.shape
         out_features_height = height // self.config.patch_size
         out_features_width = width // self.config.patch_size
         last_feature_map = sequence_output.reshape(batch_size, out_features_height, out_features_width, -1).permute(0, 3, 1, 2)
 
         if not return_dict:
-            return (sequence_output,) + encoder_outputs[1:]
+            return (sequence_output, last_feature_map) + encoder_outputs[1:]
 
         return SapiensOutputWithFeatureMap(
             last_hidden_state=sequence_output,
@@ -648,7 +646,7 @@ class SapiensModel(SapiensPreTrainedModel):
         super().__init__(config)
         self.config = config
 
-        self.model = SapiensTransformer(config)
+        self.model = SapiensVisionTransformer(config)
         self.pooler = SapiensPooler(config) if add_pooling_layer else None
 
         # Initialize weights and apply final processing
@@ -754,7 +752,7 @@ class SapiensHead(nn.Module):
         # Build deconvolution layers (upsampling)
         deconv_in_channels = [config.hidden_size] + config.deconv_out_channels[:-1]
         self.deconv_layers = nn.ModuleList(
-            SapiensHeadConvLayer(in_channels, out_channels, kernel_size)
+            SapiensHeadDeConvLayer(in_channels, out_channels, kernel_size)
             for in_channels, out_channels, kernel_size in zip(
                 deconv_in_channels, config.deconv_out_channels, config.deconv_kernel_sizes
             )
@@ -763,7 +761,7 @@ class SapiensHead(nn.Module):
         # Build convolution layers (refinement)
         conv_in_channels = config.deconv_out_channels[-1:] + config.conv_out_channels[:-1]
         self.conv_layers = nn.ModuleList(
-            SapiensHeadDeConvLayer(in_channels, out_channels, kernel_size)
+            SapiensHeadConvLayer(in_channels, out_channels, kernel_size)
             for in_channels, out_channels, kernel_size in zip(
                 conv_in_channels, config.conv_out_channels, config.conv_kernel_sizes
             )
@@ -792,7 +790,7 @@ class SapiensForSemanticSegmentation(SapiensPreTrainedModel):
     def __init__(self, config: SapiensConfig):
         super().__init__(config)
         self.config = config
-        self.model = SapiensTransformer(config)
+        self.model = SapiensVisionTransformer(config)
         self.head = SapiensHead(config)
 
         self.post_init()
