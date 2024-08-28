@@ -734,7 +734,8 @@ class LlamaDecoderLayer(nn.Module):
         self.mlp._prune_neurons(index_to_keep)
 
     def _prune_embeddings(self, index_to_keep):
-        self.embed_tokens = prune_embedding_layer(self.embed_tokens, index_to_keep, dim=1)
+        
+        self.self_attn._prune_embedding(index_to_keep)
         self.mlp._prune_embedding(index_to_keep)
         self.input_layernorm._prune_embedding(index_to_keep)
         self.post_attention_layernorm._prune_embedding(index_to_keep)
@@ -970,6 +971,7 @@ class LlamaModel(LlamaPreTrainedModel):
             layer._prune_neurons(index_to_keep)
 
     def prune_embeddings(self, index_to_keep):
+        self.embed_tokens = prune_embedding_layer(self.embed_tokens, index_to_keep, dim=1)
         for layer in self.layers:
             layer._prune_embeddings(index_to_keep)
 
