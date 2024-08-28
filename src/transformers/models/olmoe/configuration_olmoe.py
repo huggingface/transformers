@@ -134,7 +134,7 @@ class OlmoeConfig(PretrainedConfig):
         num_experts_per_tok=8,
         num_experts=64,
         output_router_logits=False,
-        router_aux_loss_coef=0.001,
+        router_aux_loss_coef=0.01,
         norm_topk_prob=False,
         **kwargs,
     ):
