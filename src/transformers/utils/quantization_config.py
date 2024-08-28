@@ -219,6 +219,10 @@ class HqqConfig(QuantizationConfigMixin):
         if is_hqq_available():
             from hqq.core.quantize import BaseQuantizeConfig as HQQBaseQuantizeConfig
 
+        for deprecated_key in ["quant_zero", "quant_scale", "offload_meta"]:
+            if deprecated_key in kwargs:
+                logger.info(deprecated_key + " is deprecated. This parameter will be ignored in quantzation settings.")
+
         if axis is None:
             axis = 1
             logger.info("Setting axis=1 as faster backends such as TorchAO or BitBlas are only compatible with it.")
