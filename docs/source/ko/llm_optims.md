@@ -18,28 +18,56 @@ rendered properly in your Markdown viewer.
 이 가이드는 LLM 추론을 가속하기 위해 Transformers에서 사용할 수 있는 최적화 기술을 사용하는 방법을 보여줍니다.
 
 > [!TIP]
-> Hugging Face는 LLM을 추론에 최적화하여 배포하고 서비스하는 데 전념하는 라이브러리인 [Text Generation Inference (TGI)](https://hf.co/docs/text-generation-inference)을 제공합니다. 이 라이브러리는 처리량 증가를 위한 지속적인 배칭과 다중 GPU 추론을 위한 텐서 병렬화와 같은 Transformers에 포함되지 않은 더 많은 최적화 기능을 포함합니다.
+> Hugging Face는 LLM을 추론에 최적화하여 배포하고 서비스하는 데 전념하는 라이브러리인 [Text Generation Inference (TGI)](https://hf.co/docs/text-generation-inference)을 제공합니다. 이 라이브러리는 처리량 증가를 위한 지속적인 배칭과 다중 GPU 추론을 위한 텐서 병렬화와 같은 Transformers에 포함되지 않은 배포 지향 최적화 기능을 포함합니다.
 
-## 정적 kv-cache와 torch.compile [[static-kv-cache-and-torchcompile]]
+## 정적 kv-cache와 `torch.compile`[[static-kv-cache-and-torchcompile]]
 
 디코딩 중에 LLM은 각 입력 토큰에 대한 key-value(kv) 값을 계산합니다. LLM은 자기회귀(autoregressive)이기 때문에 생성된 출력이 현재 입력의 일부가 되어 매번 동일한 kv 값을 계산합니다. 이는 매번 동일한 kv 값을 다시 계산하기 때문에 효율적이지 않습니다.
 
-이를 최적화하기 위해, 이전 키(key)와 값(value)을 재계산하지 않고 저장하는 kv-cache를 사용할 수 있습니다. 그러나 kv-cache는 각 생성 단계에서 증가하며 동적이기 때문에 PyTorch 코드를 빠르고 최적화된 커널로 통합하는 강력한 최적화 도구인 [torch.compile](./perf_torch_compile)을 사용하는 데 제약이 있습니다.
+이를 최적화하기 위해, 이전 키(key)와 값(value)을 재계산하지 않고 저장하는 kv-cache를 사용할 수 있습니다. 그러나 kv-cache는 각 생성 단계에서 증가하며 동적이기 때문에 PyTorch 코드를 빠르고 최적화된 커널로 통합하는 강력한 최적화 도구인 [`torch.compile`](./perf_torch_compile)을 사용하는 데 제약이 있습니다.
 
-*정적 kv-cache*는 최댓값을 미리 할당하여 이 문제를 해결하여 torch.compile과 결합할 수 있게 합니다. 이를 통해 최대 4배의 속도 향상이 가능합니다.
+*정적 kv-cache*는 최댓값을 미리 할당하여 이 문제를 해결하여 `torch.compile`과 결합할 수 있게 합니다. 이를 통해 최대 4배의 속도 향상이 가능합니다. 속도 향상은 모델 크기(더 큰 모델은 속도 향상이 적음)와 하드웨어에 따라 다를 수 있습니다.
 
 > [!WARNING]
-현재 [Llama](./model_doc/llama2) 및 몇 가지 다른 모델만 정적 kv-cache와 torch.compile을 지원합니다. 실시간 모델 호환성 목록은 [이 이슈](https://github.com/huggingface/transformers/issues/28981)를 확인하십시오.
+현재 [Llama](./model_doc/llama2) 및 몇 가지 다른 모델만 정적 kv-cache와 `torch.compile`을 지원합니다. 실시간 모델 호환성 목록은 [이 이슈](https://github.com/huggingface/transformers/issues/28981)를 확인하십시오.
 
-이 예제에서는 [Gemma](https://hf.co/google/gemma-2b) 모델을 로드해 보겠습니다.
+작업의 복잡성에 따라 세 가지 방식의 정적 kv-cache 사용 방법이 있습니다:
+1.	기본 사용법: `generation_config`에서 플래그를 설정하기만 하면 됩니다(권장);
+2.	고급 사용법: 여러 번의 생성이나 맞춤형 생성 루프를 위해 캐시 객체를 처리합니다;
+3.	고급 사용법: 단일 그래프가 필요한 경우, 전체 `generate` 함수를 하나의 그래프로 컴파일합니다.
+
+올바른 탭을 선택하여 각 방법에 대한 추가 지침을 확인하세요.
+
+> [!TIP]
+> `torch.compile`을 사용할 때 어떤 전략을 사용하든, LLM 입력을 제한된 값 세트로 왼쪽에 패딩하면 모양과 관련된 재컴파일을 피할 수 있습니다. [`pad_to_multiple_of` tokenizer flag](https://huggingface.co/docs/transformers/main_classes/tokenizer#transformers.PreTrainedTokenizer.__call__.pad_to_multiple_of)가 유용할 것입니다!
+
+<hfoptions id="static-kv">
+<hfoption id="basic usage: generation_config">
+
+이 예제에서는 [Gemma](https://hf.co/google/gemma-2b) 모델을 사용해 보겠습니다. 필요한 작업은 다음과 같습니다:
+1. 모델의 `generation_config` 속성에 접근하여 `cache_implementation`을 "static"으로 설정합니다;
+2. 모델의 `forward` 패스를 정적 kv-cache와 함께 컴파일하기 위해 `torch.compile`을 호출합니다.
+
+이렇게 하면 끝입니다!
 
 ```py
 from transformers import AutoTokenizer, AutoModelForCausalLM
+mport torch
+import os
+os.environ["TOKENIZERS_PARALLELISM"] = "false"  # To prevent long warnings :)
 
 tokenizer = AutoTokenizer.from_pretrained("google/gemma-2b")
-model = AutoModelForCausalLM.from_pretrained(
-    "google/gemma-2b", device_map="auto"
-)
+model = AutoModelForCausalLM.from_pretrained("google/gemma-2b", device_map="auto")
+
+model.generation_config.cache_implementation = "static"
+
+model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
+input_text = "The theory of special relativity states "
+input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
+
+outputs = model.generate(**input_ids)
+print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
+['The theory of special relativity states 1. The speed of light is constant in all inertial reference']
 ```
 
 두 가지 방법으로 모델을 정적 kv-cache를 사용하도록 설정할 수 있습니다. A100에서 7B 모델의 경우 두 방법 모두 순전파에서 4배 속도 향상이 가능합니다. 속도 향상은 모델 크기(더 큰 모델의 경우 속도 향상이 적음)와 하드웨어에 따라 다를 수 있습니다. [~GenerationMixin.generate] 메서드를 사용하는 경우, 속도는 최대 3배 빨라집니다. 순전파(여전히 4배 속도 향상)는 전체 [~GenerationMixin.generate] 코드의 일부일 뿐입니다.
