@@ -53,10 +53,13 @@ jobs:
 
 
       - name: Create Check Run
+        id: create_check_run
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          gh api \
+          gh auth login --with-token <<< "${{ secrets.GITHUB_TOKEN }}"
+          CHECK_RUN_ID=$(gh api \
             --method POST \
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
@@ -67,28 +70,54 @@ jobs:
             -f "external_id=42" \
             -f "started_at=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
             -f "output[title]=Mighty Readme report" \
-            -f "output[summary]=This is the summary of the check run." \
-            -f "output[text]=Detailed output goes here."
-        # COMMENT_ID=${{ github.event.comment.id }}
-        # gh api \
-        #   --method POST \
-        #   -H "Accept: application/vnd.github+json" \
-        #   -H "X-GitHub-Api-Version: 2022-11-28" \
-        #   /repos/${{ github.repository }}/issues/comments/$COMMENT_ID \
-        #   -f "body=This comment contains /pytest, running the specified job..."
-
-        # gh api \
-        #   --method POST \
-        #   -H "Accept: application/vnd.github+json" \
-        #   -H "X-GitHub-Api-Version: 2022-11-28" \
-        #   /repos/${{ github.repository }}/pulls/comments/${{ github.event.comment.id }}/replies \
-        #   -f "body=This comment contains /pytest, running the specified job..."
+            -f "output[summary]=The current GitHub Actions run can be viewed here: $GITHUB_RUN_URL" \
+            -f "output[text]=Detailed output goes here." \
+            | jq -r '.id')
+          echo "CHECK_RUN_ID=$CHECK_RUN_ID" >> $GITHUB_ENV
 
       - name: Trigger specific job
         run: |
           echo "Running the specific job because /pytest was found"
           # Add the logic to trigger your specific job here
-          # This could be a script, another action, etc.
+
+      - name: Update Check Run Status
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CHECK_RUN_ID: ${{ env.CHECK_RUN_ID }}
+        run: |
+          gh auth login --with-token <<< "${{ secrets.GITHUB_TOKEN }}"
+          gh api \
+            --method PATCH \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            /repos/${{ github.repository }}/check-runs/${{ env.CHECK_RUN_ID }} \
+            -f "name=mighty_readme" \
+            -f "started_at=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
+            -f "status=completed" \
+            -f "conclusion=success" \
+            -f "completed_at=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
+            -f "output[title]=Mighty Readme report" \
+            -f "output[summary]=There are 0 failures, 2 warnings, and 1 notices." \
+            -f "output[text]=You may have some misspelled words on lines 2 and 4. You also may want to add a section in your README about how to install your app." \
+            -f "output[annotations[][path]]=README.md" \
+            -f "output[annotations[][annotation_level]]=warning" \
+            -f "output[annotations[][title]]=Spell Checker" \
+            -f "output[annotations[][message]]=Check your spelling for 'banaas'." \
+            -f "output[annotations[][raw_details]]=Do you mean 'bananas' or 'banana'?" \
+            -f "output[annotations[][start_line]]=2" \
+            -f "output[annotations[][end_line]]=2" \
+            -f "output[annotations[][path]]=README.md" \
+            -f "output[annotations[][annotation_level]]=warning" \
+            -f "output[annotations[][title]]=Spell Checker" \
+            -f "output[annotations[][message]]=Check your spelling for 'aples'" \
+            -f "output[annotations[][raw_details]]=Do you mean 'apples' or 'Naples'" \
+            -f "output[annotations[][start_line]]=4" \
+            -f "output[annotations[][end_line]]=4" \
+            -f "output[images[][alt]]=Super bananas" \
+            -f "output[images[][image_url]]=http://example.com/images/42"
+
+      
 
   run_if_label_matches:
     if: github.event.label.name == 'run-slow'
