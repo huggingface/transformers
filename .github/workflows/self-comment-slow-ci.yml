@@ -23,16 +23,18 @@ env:
   CUDA_VISIBLE_DEVICES: 0,1
 
 jobs:
-    testing-stuff-around:
-        if: contains(github.event.comment.html_url, '/pull/')    # check if the comments come from pull request, exclude those from issue.
-          runs-on:  ubuntu-22.04
-            steps:
-              - name: say hello
-                if: contains(github.event.comment.body, '/support')   # check the comment if it contains the keywords
-                run: echo say hello
-              - name: test
-                if: contains(github.event.comment.body, '/test')  # check the comment if it contains the keywords
-                run: echo test
+  testing-stuff-around:
+      if: contains(github.event.comment.html_url, '/pull/')    # check if the comments come from pull request, exclude those from issue.
+      runs-on:  ubuntu-22.04
+      steps:
+        - name: say hello
+          if: contains(github.event.comment.body, '/support')   # check the comment if it contains the keywords
+          run: |
+            echo say hello
+        - name: test
+          if: contains(github.event.comment.body, '/test')  # check the comment if it contains the keywords
+          run: |
+            echo test
 
   find_models_to_run:
       runs-on: ubuntu-22.04
