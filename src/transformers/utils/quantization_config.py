@@ -192,12 +192,6 @@ class HqqConfig(QuantizationConfigMixin):
             Number of bits. Supported values are (8, 4, 3, 2, 1).
         group_size (`int`, *optional*, defaults to 64):
             Group-size value. Supported values are any value that is divisble by weight.shape[axis]).
-        quant_zero (`bool`, *optional*, defaults to `True`):
-            Quantize the zero-point if set to `True`.
-        quant_scale (`bool`, *optional*, defaults to `False`):
-            Quantize the scaling if set to `True`.
-        offload_meta (`bool`, *optional*, defaults to `False`):
-            Offload the meta-data to the CPU if set to `True`.
         view_as_float (`bool`, *optional*, defaults to `False`):
             View the quantized weight as float (used in distributed training) if set to `True`.
         axis (`int`, *optional*, defaults to 0):
@@ -215,11 +209,8 @@ class HqqConfig(QuantizationConfigMixin):
         self,
         nbits: int = 4,
         group_size: int = 64,
-        quant_zero: bool = True,
-        quant_scale: bool = False,
-        offload_meta: bool = False,
         view_as_float: bool = False,
-        axis: int = 0,
+        axis: int = 1,
         dynamic_config: Optional[dict] = None,
         skip_modules: List[str] = ["lm_head"],
         **kwargs,
@@ -239,9 +230,6 @@ class HqqConfig(QuantizationConfigMixin):
                 **{
                     "nbits": nbits,
                     "group_size": group_size,
-                    "quant_zero": quant_zero,
-                    "quant_scale": quant_scale,
-                    "offload_meta": offload_meta,
                     "view_as_float": view_as_float,
                     "axis": axis,
                 }
