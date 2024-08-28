@@ -129,15 +129,6 @@ prompt = "<|im_start|>user"+ toks + f"\n{user_prompt}<|im_end|><|im_start|>assis
 inputs = processor(prompt, images=videos).to(model.device, model.dtype)
 ```
 
-The image inputs look like the following.
-
-<div class="flex justify-center">
-     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/cats.png" alt="Two cats sitting on a net"/>
-</div>
-
-<div class="flex justify-center">
-     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg" alt="A bee on a pink flower"/>
-</div>
 
 We can now infer. The model will output the question we've input and the answer, so we will take the text that is after our prompt and the "assistant" part.
 
