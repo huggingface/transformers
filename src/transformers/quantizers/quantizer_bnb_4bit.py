@@ -209,7 +209,7 @@ class Bnb4BitHfQuantizer(HfQuantizer):
                         unexpected_keys.remove(k)
 
             param_kwargs = {}
-            if self.is_bnb_gte_0_43_3:
+            if self.is_bnb_supports_quant_storage_module:
                 param_kwargs["module"] = module
 
             new_value = bnb.nn.Params4bit.from_prequantized(
@@ -325,7 +325,12 @@ class Bnb4BitHfQuantizer(HfQuantizer):
         return True
 
     @cached_property
-    def is_bnb_gte_0_43_3(self) -> bool:
+    def is_bnb_supports_quant_storage_module(self) -> bool:
+        """
+        determines if the current version of bitsandbytes supports
+        the `module` parameter in `Params4bit.from_prequantized`
+        :return:
+        """
         return version.parse(importlib.metadata.version("bitsandbytes")) >= version.parse("0.43.3")
 
     @property
