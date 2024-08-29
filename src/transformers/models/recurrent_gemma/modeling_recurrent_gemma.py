@@ -24,6 +24,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import BaseModelOutputWithNoAttention, CausalLMOutput
 from ...modeling_utils import PreTrainedModel
@@ -777,7 +778,7 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM with LLAMA->RECURRENTGEMMA,Llama->RecurrentGemma,llama->gemma
-class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
+class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):

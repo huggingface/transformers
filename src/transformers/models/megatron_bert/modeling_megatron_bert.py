@@ -27,6 +27,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
@@ -1110,7 +1111,7 @@ class MegatronBertForPreTraining(MegatronBertPreTrainedModel):
     """MegatronBert Model with a `language modeling` head on top for CLM fine-tuning.""",
     MEGATRON_BERT_START_DOCSTRING,
 )
-class MegatronBertForCausalLM(MegatronBertPreTrainedModel):
+class MegatronBertForCausalLM(MegatronBertPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["cls.predictions.decoder"]
 
     def __init__(self, config):

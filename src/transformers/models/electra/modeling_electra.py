@@ -25,6 +25,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN, get_activation
+from ...generation import GenerationMixin
 from ...modeling_outputs import (
     BaseModelOutputWithCrossAttentions,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -1524,7 +1525,7 @@ class ElectraForMultipleChoice(ElectraPreTrainedModel):
 @add_start_docstrings(
     """ELECTRA Model with a `language modeling` head on top for CLM fine-tuning.""", ELECTRA_START_DOCSTRING
 )
-class ElectraForCausalLM(ElectraPreTrainedModel):
+class ElectraForCausalLM(ElectraPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["generator_lm_head.weight"]
 
     def __init__(self, config):

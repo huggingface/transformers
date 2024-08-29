@@ -25,6 +25,7 @@ from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache, StaticCache
+from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -1910,7 +1911,7 @@ class WhisperDecoderWrapper(WhisperPreTrainedModel):
     """,
     WHISPER_START_DOCSTRING,
 )
-class WhisperForCausalLM(WhisperPreTrainedModel):
+class WhisperForCausalLM(WhisperPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["proj_out.weight"]
     main_input_name = "input_ids"
 

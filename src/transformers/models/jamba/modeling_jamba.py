@@ -30,6 +30,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache  # we need __iter__ and __len__ of pkv
+from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import (
     AttentionMaskConverter,
 )
@@ -1386,7 +1387,7 @@ class JambaModel(JambaPreTrainedModel):
 
 
 # Adapted from transformers.models.mixtral.modeling_mixtral.MixtralForCausalLM with MIXTRAL->JAMBA, Mixtral->Jamba
-class JambaForCausalLM(JambaPreTrainedModel):
+class JambaForCausalLM(JambaPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config: JambaConfig):

@@ -66,6 +66,7 @@ if is_torch_available():
         BertModel,
         FunnelBaseModel,
         FunnelModel,
+        GenerationMixin,
         GPT2Config,
         GPT2LMHeadModel,
         ResNetBackbone,
@@ -529,3 +530,20 @@ class AutoModelTest(unittest.TestCase):
         _MODEL_MAPPING_NAMES = OrderedDict([("bert", "GPT2Model")])
         _MODEL_MAPPING = _LazyAutoMapping(_CONFIG_MAPPING_NAMES, _MODEL_MAPPING_NAMES)
         self.assertEqual(_MODEL_MAPPING[BertConfig], GPT2Model)
+
+    def test_generation_mixin_added_inheritance(self):
+        """
+        Tests that our inheritance patching for generate-compatible models works as expected. Without this feature,
+        old Hub models lose the ability to call `generate`.
+        """
+        model = AutoModelForCausalLM.from_pretrained(
+            "hf-internal-testing/test_dynamic_model_generation", trust_remote_code=True
+        )
+        self.assertTrue(model.__class__.__name__ == "NewModelForCausalLM")
+
+        # It inherits from GenerationMixin. This means it can `generate`. This check would fail from v4.50, if patching
+        # was not present.
+        self.assertTrue(isinstance(model, GenerationMixin))
+        # More precisely, it directly inherits from GenerationMixin. This check would fail from v4.45, if patching
+        # was not present.
+        self.assertTrue("GenerationMixin" in str(model.__class__.__bases__))

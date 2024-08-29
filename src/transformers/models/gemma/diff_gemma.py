@@ -34,6 +34,7 @@ from transformers.models.llama.modeling_llama import (
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
+from ...generation import GenerationMixin
 from ...modeling_flash_attention_utils import _flash_attention_forward
 from ...modeling_outputs import CausalLMOutputWithPast
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
@@ -520,7 +521,7 @@ class GemmaModel(LlamaModel):
 
 
 # Example where we ony modify the docstring and call super
-class GemmaForCausalLM(LlamaForCausalLM):
+class GemmaForCausalLM(LlamaForCausalLM, GenerationMixin):
     def forward(
         self,
         input_ids: torch.LongTensor = None,

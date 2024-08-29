@@ -24,6 +24,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -1274,7 +1275,7 @@ class InstructBlipQFormerModel(InstructBlipPreTrainedModel):
     """,
     INSTRUCTBLIP_START_DOCSTRING,
 )
-class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
+class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, GenerationMixin):
     config_class = InstructBlipConfig
     main_input_name = "pixel_values"
 

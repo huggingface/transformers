@@ -23,6 +23,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN, gelu
+from ...generation import GenerationMixin
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
@@ -956,7 +957,7 @@ class XmodModel(XmodPreTrainedModel):
     "X-MOD Model with a `language modeling` head on top for CLM fine-tuning.",
     XMOD_START_DOCSTRING,
 )
-class XmodForCausalLM(XmodPreTrainedModel):
+class XmodForCausalLM(XmodPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
 
     # Copied from transformers.models.roberta.modeling_roberta.RobertaForCausalLM.__init__ with Roberta->Xmod

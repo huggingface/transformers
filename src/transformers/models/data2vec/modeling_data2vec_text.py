@@ -23,6 +23,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN, gelu
+from ...generation import GenerationMixin
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
@@ -866,7 +867,7 @@ class Data2VecTextModel(Data2VecTextPreTrainedModel):
 @add_start_docstrings(
     """Data2VecText Model with a `language modeling` head on top for CLM fine-tuning.""", DATA2VECTEXT_START_DOCSTRING
 )
-class Data2VecTextForCausalLM(Data2VecTextPreTrainedModel):
+class Data2VecTextForCausalLM(Data2VecTextPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
 
     def __init__(self, config):

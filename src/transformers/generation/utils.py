@@ -40,13 +40,6 @@ from ..cache_utils import (
 )
 from ..integrations.deepspeed import is_deepspeed_zero3_enabled
 from ..modeling_outputs import CausalLMOutputWithPast, Seq2SeqLMOutput
-from ..models.auto import (
-    MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING,
-    MODEL_FOR_CAUSAL_LM_MAPPING,
-    MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
-    MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
-    MODEL_FOR_VISION_2_SEQ_MAPPING,
-)
 from ..pytorch_utils import isin_mps_friendly
 from ..tokenization_utils import ExtensionsTrie
 from ..utils import (
@@ -1118,26 +1111,21 @@ class GenerationMixin:
         Confirms that the model class is compatible with generation. If not, raises an exception that points to the
         right class to use.
         """
+        # TODO(joao): remove this function in v4.50, i.e. when we remove the inheritance of `GenerationMixin` from
+        # `PreTrainedModel`. With that inheritance removed, all model classes inheriting from `GenerationMixin` can
+        # safely call `GenerationMixin.generate`
         if not is_torchdynamo_compiling() and not self.can_generate():
-            generate_compatible_mappings = [
-                MODEL_FOR_CAUSAL_LM_MAPPING,
-                MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING,
-                MODEL_FOR_VISION_2_SEQ_MAPPING,
-                MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
-                MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
+            terminations_with_generation_support = [
+                "ForCausalLM",
+                "ForConditionalGeneration",
+                "ForSpeechSeq2Seq",
+                "ForVision2Seq",
             ]
-            generate_compatible_classes = set()
-            for model_mapping in generate_compatible_mappings:
-                supported_models = model_mapping.get(type(self.config), default=None)
-                if supported_models is not None:
-                    generate_compatible_classes.add(supported_models.__name__)
-            exception_message = (
+            raise TypeError(
                 f"The current model class ({self.__class__.__name__}) is not compatible with `.generate()`, as "
-                "it doesn't have a language model head."
+                "it doesn't have a language model head. Classes that support generation often end in one of these "
+                f"names: {terminations_with_generation_support}."
             )
-            if generate_compatible_classes:
-                exception_message += f" Please use one of the following classes instead: {generate_compatible_classes}"
-            raise TypeError(exception_message)
 
     def _validate_assistant(self, assistant_model):
         if assistant_model is None:

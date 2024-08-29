@@ -26,6 +26,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
+from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
@@ -1153,7 +1154,7 @@ class Phi3Model(Phi3PreTrainedModel):
         return causal_mask
 
 
-class Phi3ForCausalLM(Phi3PreTrainedModel):
+class Phi3ForCausalLM(Phi3PreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
     # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.__init__ with Llama->Phi3

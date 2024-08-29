@@ -30,6 +30,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
+from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import (
     MoeCausalLMOutputWithPast,
@@ -1191,7 +1192,7 @@ class Qwen2MoeModel(Qwen2MoePreTrainedModel):
         return causal_mask
 
 
-class Qwen2MoeForCausalLM(Qwen2MoePreTrainedModel):
+class Qwen2MoeForCausalLM(Qwen2MoePreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):

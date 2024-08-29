@@ -25,6 +25,7 @@ from torch import nn
 from torch.nn.functional import normalize
 
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -1027,7 +1028,7 @@ class BlipModel(BlipPreTrainedModel):
     """,
     BLIP_START_DOCSTRING,
 )
-class BlipForConditionalGeneration(BlipPreTrainedModel):
+class BlipForConditionalGeneration(BlipPreTrainedModel, GenerationMixin):
     config_class = BlipConfig
     _tied_weights_keys = ["text_decoder.cls.predictions.decoder.bias"]
     main_input_name = "pixel_values"

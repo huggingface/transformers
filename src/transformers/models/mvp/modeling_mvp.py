@@ -24,6 +24,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_causal_attention_mask
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -1351,7 +1352,7 @@ class MvpModel(MvpPreTrainedModel):
 @add_start_docstrings(
     "The MVP Model with a language modeling head. Can be used for various text generation tasks.", MVP_START_DOCSTRING
 )
-class MvpForConditionalGeneration(MvpPreTrainedModel):
+class MvpForConditionalGeneration(MvpPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
 
     def __init__(self, config: MvpConfig):
@@ -1791,7 +1792,7 @@ class MvpDecoderWrapper(MvpPreTrainedModel):
         return self.decoder(*args, **kwargs)
 
 
-class MvpForCausalLM(MvpPreTrainedModel):
+class MvpForCausalLM(MvpPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):

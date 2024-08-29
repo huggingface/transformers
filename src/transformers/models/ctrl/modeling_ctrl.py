@@ -22,6 +22,7 @@ import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import Conv1D, find_pruneable_heads_and_indices, prune_linear_layer
@@ -503,7 +504,7 @@ class CTRLModel(CTRLPreTrainedModel):
     """,
     CTRL_START_DOCSTRING,
 )
-class CTRLLMHeadModel(CTRLPreTrainedModel):
+class CTRLLMHeadModel(CTRLPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):

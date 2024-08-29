@@ -21,9 +21,10 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
-from ... import PreTrainedModel
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutputWithPooling, ModelOutput
+from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -238,7 +239,7 @@ VIDEO_LLAVA_INPUTS_DOCSTRING = r"""
     """The VideoLlava model which consists of a vision backbone and a language model.""",
     VIDEO_LLAVA_START_DOCSTRING,
 )
-class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
+class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMixin):
     def __init__(self, config: VideoLlavaConfig):
         super().__init__(config)
         self.video_tower = AutoModel.from_config(config.vision_config)

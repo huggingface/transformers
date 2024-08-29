@@ -22,6 +22,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
@@ -1040,7 +1041,7 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
     """,
     GPT_BIGCODE_START_DOCSTRING,
 )
-class GPTBigCodeForCausalLM(GPTBigCodePreTrainedModel):
+class GPTBigCodeForCausalLM(GPTBigCodePreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):

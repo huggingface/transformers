@@ -25,6 +25,7 @@ from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...cache_utils import MambaCache
+from ...generation import GenerationMixin
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     ModelOutput,
@@ -702,7 +703,7 @@ class FalconMambaModel(FalconMambaPreTrainedModel):
     FALCONMAMBA_START_DOCSTRING,
 )
 # Copied from transformers.models.mamba.modeling_mamba.MambaForCausalLM with MAMBA->FALCONMAMBA,Mamba->FalconMamba,mamba->falcon_mamba,FalconMambaCache->MambaCache
-class FalconMambaForCausalLM(FalconMambaPreTrainedModel):
+class FalconMambaForCausalLM(FalconMambaPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):

@@ -26,6 +26,7 @@ from torch.nn import functional as F
 
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
+from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
@@ -856,7 +857,7 @@ class BloomModel(BloomPreTrainedModel):
     """,
     BLOOM_START_DOCSTRING,
 )
-class BloomForCausalLM(BloomPreTrainedModel):
+class BloomForCausalLM(BloomPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config: BloomConfig):

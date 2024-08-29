@@ -24,6 +24,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     ModelOutput,
@@ -931,7 +932,7 @@ class Mamba2Model(Mamba2PreTrainedModel):
     """,
     MAMBA2_START_DOCSTRING,
 )
-class Mamba2ForCausalLM(Mamba2PreTrainedModel):
+class Mamba2ForCausalLM(Mamba2PreTrainedModel, GenerationMixin):
     _tied_weights_keys = []
 
     def __init__(self, config):

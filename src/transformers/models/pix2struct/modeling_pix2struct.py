@@ -22,6 +22,7 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
@@ -1553,7 +1554,7 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
     "A conditional generation model with a language modeling head. Can be used for sequence generation tasks.",
     PIX2STRUCT_START_DOCSTRING,
 )
-class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
+class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel, GenerationMixin):
     config_class = Pix2StructConfig
     main_input_name = "flattened_patches"
     _tied_weights_keys = ["decoder.lm_head.weight"]

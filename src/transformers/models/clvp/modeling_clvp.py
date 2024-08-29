@@ -26,7 +26,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
-from ...generation import GenerationConfig
+from ...generation import GenerationConfig, GenerationMixin
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_causal_attention_mask
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -1278,7 +1278,7 @@ class ClvpModel(ClvpPreTrainedModel):
     "The CLVP decoder model with a language modelling head on top.",
     CLVP_START_DOCSTRING,
 )
-class ClvpForCausalLM(ClvpPreTrainedModel):
+class ClvpForCausalLM(ClvpPreTrainedModel, GenerationMixin):
     def __init__(self, config):
         super().__init__(config)
 
@@ -1509,7 +1509,7 @@ class ClvpForCausalLM(ClvpPreTrainedModel):
     "together to filter out the best speech_ids.",
     CLVP_START_DOCSTRING,
 )
-class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
+class ClvpModelForConditionalGeneration(ClvpPreTrainedModel, GenerationMixin):
     config_class = ClvpConfig
 
     def __init__(self, config: ClvpConfig):

@@ -23,6 +23,7 @@ from torch import Tensor, device, nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
@@ -808,7 +809,7 @@ class BlipTextModel(BlipTextPreTrainedModel):
 
 
 # Adapted from https://github.com/salesforce/BLIP/blob/main/models/med.py#L811
-class BlipTextLMHeadModel(BlipTextPreTrainedModel):
+class BlipTextLMHeadModel(BlipTextPreTrainedModel, GenerationMixin):
     def __init__(self, config):
         super().__init__(config)
 

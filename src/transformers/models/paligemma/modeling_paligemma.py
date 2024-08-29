@@ -22,6 +22,7 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...cache_utils import Cache, StaticCache
+from ...generation import GenerationMixin
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     ModelOutput,
@@ -236,7 +237,7 @@ PALIGEMMA_INPUTS_DOCSTRING = r"""
     """The PALIGEMMA model which consists of a vision backbone and a language model.""",
     PALIGEMMA_START_DOCSTRING,
 )
-class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
+class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixin):
     def __init__(self, config: PaliGemmaConfig):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config=config.vision_config)

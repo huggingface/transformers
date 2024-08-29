@@ -25,6 +25,7 @@ from torch.nn import functional as F
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
+from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import (
     MoeCausalLMOutputWithPast,
@@ -1195,7 +1196,7 @@ class JetMoeModel(JetMoePreTrainedModel):
         return causal_mask
 
 
-class JetMoeForCausalLM(JetMoePreTrainedModel):
+class JetMoeForCausalLM(JetMoePreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):

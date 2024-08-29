@@ -24,6 +24,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, LayerNorm, MSELoss
 from torch.nn import functional as F
 
 from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
+from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import _prepare_4d_causal_attention_mask
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
@@ -500,7 +501,7 @@ class MptModel(MptPreTrainedModel):
     """,
     MPT_START_DOCSTRING,
 )
-class MptForCausalLM(MptPreTrainedModel):
+class MptForCausalLM(MptPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config: MptConfig):

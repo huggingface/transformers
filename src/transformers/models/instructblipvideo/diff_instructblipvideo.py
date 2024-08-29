@@ -45,6 +45,7 @@ from transformers.models.instructblip.modeling_instructblip import (
     InstructBlipVisionModel,
 )
 
+from ...generation import GenerationMixin
 from ...utils import logging
 
 
@@ -128,7 +129,7 @@ class InstructBlipVideoQFormerModel(InstructBlipQFormerModel):
     pass
 
 
-class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGeneration):
+class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGeneration, GenerationMixin):
     def forward(
         self,
         pixel_values: torch.FloatTensor,

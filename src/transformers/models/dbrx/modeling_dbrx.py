@@ -23,6 +23,7 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
+from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
@@ -1223,7 +1224,7 @@ class DbrxModel(DbrxPreTrainedModel):
 
 
 @add_start_docstrings("The DBRX Model transformer for causal language modeling.", DBRX_START_DOCSTRING)
-class DbrxForCausalLM(DbrxPreTrainedModel):
+class DbrxForCausalLM(DbrxPreTrainedModel, GenerationMixin):
     def __init__(self, config: DbrxConfig):
         super().__init__(config)
         self.transformer = DbrxModel(config)

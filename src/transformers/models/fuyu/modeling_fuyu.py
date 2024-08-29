@@ -20,6 +20,7 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
+from ...generation import GenerationMixin
 from ...modeling_outputs import CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...models.auto.modeling_auto import AutoModelForCausalLM
@@ -145,7 +146,7 @@ FUYU_INPUTS_DOCSTRING = r"""
     "Fuyu Model with a language modeling head on top for causal language model conditioned on image patches and text.",
     FUYU_START_DOCSTRING,
 )
-class FuyuForCausalLM(FuyuPreTrainedModel):
+class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
     def __init__(self, config: FuyuConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id

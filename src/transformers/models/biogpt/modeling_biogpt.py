@@ -23,6 +23,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import _prepare_4d_causal_attention_mask
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
@@ -596,7 +597,7 @@ class BioGptModel(BioGptPreTrainedModel):
 @add_start_docstrings(
     """BioGPT Model with a `language modeling` head on top for CLM fine-tuning.""", BIOGPT_START_DOCSTRING
 )
-class BioGptForCausalLM(BioGptPreTrainedModel):
+class BioGptForCausalLM(BioGptPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["output_projection.weight"]
 
     def __init__(self, config):

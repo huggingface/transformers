@@ -22,6 +22,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
+from ...generation import GenerationMixin
 from ...generation.logits_process import (
     AlternatingCodebooksLogitsProcessor,
     BarkEosPrioritizerLogitsProcessor,
@@ -546,7 +547,7 @@ BARK_CAUSAL_MODEL_INPUTS_DOCSTRING = r"""
 
 
 # GPT2-like autoregressive model
-class BarkCausalModel(BarkPreTrainedModel):
+class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
     config_class = BarkSubModelConfig
 
     def __init__(self, config):
