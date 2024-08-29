@@ -50,6 +50,13 @@ def get_rt_detr_config(model_name: str) -> RTDetrConfig:
         config.encoder_in_channels = [128, 256, 512]
         config.hidden_expansion = 0.5
         config.decoder_layers = 3
+    elif model_name == "rtdetr_v2_r18vd":
+        config.backbone_config.hidden_sizes = [64, 128, 256, 512]
+        config.backbone_config.depths = [2, 2, 2, 2]
+        config.backbone_config.layer_type = "basic"
+        config.encoder_in_channels = [128, 256, 512]
+        config.hidden_expansion = 0.5
+        config.decoder_layers = 3
     elif model_name == "rtdetr_r34vd":
         config.backbone_config.hidden_sizes = [64, 128, 256, 512]
         config.backbone_config.depths = [3, 4, 6, 3]
@@ -555,6 +562,7 @@ def convert_rt_detr_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
     # load original model from torch hub
     model_name_to_checkpoint_url = {
         "rtdetr_r18vd": "https://github.com/lyuwenyu/storage/releases/download/v0.1/rtdetr_r18vd_dec3_6x_coco_from_paddle.pth",
+        "rtdetr_v2_r18vd": "https://github.com/lyuwenyu/storage/releases/download/v0.2/rtdetrv2_r18vd_120e_coco_rerun_48.1.pth",
         "rtdetr_r34vd": "https://github.com/lyuwenyu/storage/releases/download/v0.1/rtdetr_r34vd_dec4_6x_coco_from_paddle.pth",
         "rtdetr_r50vd_m": "https://github.com/lyuwenyu/storage/releases/download/v0.1/rtdetr_r50vd_m_6x_coco_from_paddle.pth",
         "rtdetr_r50vd": "https://github.com/lyuwenyu/storage/releases/download/v0.1/rtdetr_r50vd_6x_coco_from_paddle.pth",
