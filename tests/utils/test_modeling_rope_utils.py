@@ -337,6 +337,7 @@ class RopeTest(unittest.TestCase):
                 "long_factor": long_factor,
             }
             self.assertEqual(config.rope_scaling.get("attention_factor"), None)
+            # Verify that "TypeError: '<' not supported between instances of 'NoneType' and 'int'"" is not raised.
             rope_config_validation(config)
 
         # Check 2: Factor == 1.0 -> short factor is applied to the default frequencies
