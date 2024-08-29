@@ -130,7 +130,7 @@ inputs = processor(prompt, images=videos).to(model.device, model.dtype)
 ```
 
 
-We can now infer. The model will output the question we've input and the answer, so we will take the text that is after our prompt and the "assistant" part.
+Use [`~GenerationMixin.generate`] for inference. The model outputs the question in our input and answer, so only take the text after the prompt and `assistant` part. 
 
 ```python
 output = model.generate(**inputs, max_new_tokens=100, do_sample=False)
