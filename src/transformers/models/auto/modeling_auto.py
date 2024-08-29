@@ -1082,7 +1082,6 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("gpt_bigcode", "GPTBigCodeForTokenClassification"),
         ("gpt_neo", "GPTNeoForTokenClassification"),
         ("gpt_neox", "GPTNeoXForTokenClassification"),
-        ("granitemoe", "GraniteMoeForTokenClassification"),
         ("ibert", "IBertForTokenClassification"),
         ("layoutlm", "LayoutLMForTokenClassification"),
         ("layoutlmv2", "LayoutLMv2ForTokenClassification"),
