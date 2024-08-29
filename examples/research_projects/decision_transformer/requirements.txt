@@ -115,7 +115,7 @@ mujoco-py==2.1.2.14
 multidict==6.0.2
 multiprocess==0.70.12.2
 mypy-extensions==0.4.3
-nltk==3.7
+nltk==3.9
 numba==0.55.1
 numpy==1.22.3
 oauthlib==3.2.2
@@ -205,7 +205,7 @@ tensorboard==2.8.0
 tensorboard-data-server==0.6.1
 tensorboard-plugin-wit==1.8.1
 tensorboardX==2.5
-tensorflow==2.11.1
+tensorflow==2.12.1
 tensorflow-io-gcs-filesystem==0.24.0
 termcolor==1.1.0
 text-unidecode==1.3

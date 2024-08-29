@@ -94,7 +94,6 @@ def main():
 
     short_validation_dataset = dataset.filter(lambda x: (len(x["question"]) + len(x["context"])) < 4 * 4096)
     short_validation_dataset = short_validation_dataset.filter(lambda x: x["category"] != "null")
-    short_validation_dataset
 
     model_id = "vasudevgupta/flax-bigbird-natural-questions"
     model = FlaxBigBirdForNaturalQuestions.from_pretrained(model_id)
