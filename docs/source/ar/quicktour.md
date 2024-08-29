@@ -475,7 +475,7 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 ...     data_collator=data_collator,
 ... )  # doctest: +SKIP
 ```
-عندما تكون مستعدًا، اتصل بـ [`~Trainer.train`] لبدء التدريب:
+عندما تكون مستعدًا، استدعِ [`~Trainer.train`] لبدء التدريب:
 
 ```py
 >>> trainer.train()  # doctest: +SKIP
