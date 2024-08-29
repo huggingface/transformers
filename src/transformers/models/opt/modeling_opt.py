@@ -571,7 +571,7 @@ OPT_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.n_positions - 1]`. for padding use -1. 
+            config.n_positions - 1]`. for padding use -1.
 
             [What are position IDs?](../glossary#position-ids)
 """
