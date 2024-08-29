@@ -285,9 +285,11 @@ class TextGenerationPipeline(Pipeline):
 
         if isinstance(prompt_text, Chat):
             tokenizer_kwargs.pop("add_special_tokens", None)  # ignore add_special_tokens on chats
-            # If the user passes a chat that ends in an assistant message, we treat it as a prefill
+            continue_final_message = generate_kwargs.pop("continue_final_message", None)
+            # If the user passes a chat that ends in an assistant message, we treat it as a prefill by default
             # because very few models support multiple separate, consecutive assistant messages
-            continue_final_message = prompt_text.messages[-1]["role"] == "assistant"
+            if continue_final_message is None:
+                continue_final_message = prompt_text.messages[-1]["role"] == "assistant"
             inputs = self.tokenizer.apply_chat_template(
                 prompt_text.messages,
                 add_generation_prompt=not continue_final_message,
