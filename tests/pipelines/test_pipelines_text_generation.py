@@ -234,7 +234,6 @@ class TextGenerationPipelineTests(unittest.TestCase):
                 [
                     {"role": "system", "content": "This is a system message."},
                     {"role": "user", "content": "This is a test"},
-                    {"role": "assistant", "content": "This is a reply"},
                 ],
             ]
 
