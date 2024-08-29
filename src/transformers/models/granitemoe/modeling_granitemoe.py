@@ -1106,6 +1106,7 @@ class GraniteMoeModel(GraniteMoePreTrainedModel):
                     output_attentions,
                     use_cache,
                     cache_position,
+                    output_router_logits,
                     position_embeddings,
                 )
             else:
@@ -1117,6 +1118,7 @@ class GraniteMoeModel(GraniteMoePreTrainedModel):
                     output_attentions=output_attentions,
                     use_cache=use_cache,
                     cache_position=cache_position,
+                    output_router_logits=output_router_logits,
                     position_embeddings=position_embeddings,
                 )
 
