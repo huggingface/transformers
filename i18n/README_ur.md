@@ -142,7 +142,7 @@ limitations under the License.
 ```python
 >>> from transformers import pipeline
 
-# خصص خط أنابيب للتحليل الشعوري
+# جذبات کے تجزیے کے لیے ایک پائپ لائن مختص کریں
 >>> classifier = pipeline('sentiment-analysis')
 >>> classifier('We are very happy to introduce pipeline to the transformers repository.')
 [{'label': 'POSITIVE', 'score': 0.9996980428695679}]
@@ -158,7 +158,7 @@ limitations under the License.
 >>> from PIL import Image
 >>> from transformers import pipeline
 
-# قم بتنزيل صورة بها قطط لطيفة
+# جذبات کے تجزیے کے لیے ایک پائپ لائن مختص کریں
 >>> url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/coco_sample.png"
 >>> image_data = requests.get(url, stream=True).raw
 >>> image = Image.open(image_data)
