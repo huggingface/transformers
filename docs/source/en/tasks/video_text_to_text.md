@@ -143,4 +143,4 @@ print(processor.decode(output[0][2:], skip_special_tokens=True)[len(user_prompt)
 
 And voila! 
 
-The chat templates and token streaming for `video-text-to-text` models work in similar fashion as [image-text-to-text](../image_text_to_text.md) models, so if you would like to learn more, please visit the task guide for it.
+To learn more about chat templates and token streaming for video-text-to-text models, refer to the [image-text-to-text](../image_text_to_text) task guide because these models work similarly.
