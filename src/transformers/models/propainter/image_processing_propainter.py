@@ -171,15 +171,12 @@ class NumpyToTensor:
     to a torch.FloatTensor of shape (C x H x W) in the range [0.0, 1.0]
     """
 
-    def __call__(self, image: np.ndarray, is_mask_frame: bool = False):
+    def __call__(self, image: np.ndarray):
         # Same as in PyTorch, we assume incoming numpy images are in HWC format
-        if is_mask_frame:
-            image =  np.stack(image, axis=2)
-        elif not is_mask_frame:
-            image =  np.stack(image, axis=2)
-        else:
-            raise NotImplementedError(f"Image is_mask_frame {is_mask_frame}")
+        
+        image =  np.stack(image, axis=2)
         image = torch.from_numpy(image).permute(2, 0, 1, 3).contiguous()
+        image = image.float().div(255)
         return image
 
 class ProPainterImageProcessor(BaseImageProcessor):
@@ -351,7 +348,7 @@ class ProPainterImageProcessor(BaseImageProcessor):
             image = self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
 
         if is_mask_frame:
-            image = convert_to_grayscale_and_dilation(image, input_data_format=input_data_format)
+            image = convert_to_grayscale_and_dilation(image, input_data_format=input_data_format, mask_dilation=mask_dilation)
 
         if do_center_crop:
             image = self.center_crop(image, size=crop_size, input_data_format=input_data_format)
@@ -453,6 +450,7 @@ class ProPainterImageProcessor(BaseImageProcessor):
         videos = images[:len(images)//2]
 
         to_tensors = NumpyToTensor()
+
         if not valid_images(images):
             raise ValueError(
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
@@ -461,6 +459,7 @@ class ProPainterImageProcessor(BaseImageProcessor):
 
         videos = make_batched(videos)
         masks = make_batched(masks)
+
         video_size = get_image_size(videos[0][0])
         video_size = (video_size[0]-video_size[0]%8, video_size[1]-video_size[1]%8)
 
@@ -486,6 +485,7 @@ class ProPainterImageProcessor(BaseImageProcessor):
             ]
             for video in videos
         ]
+
         pixel_values_masks = []
         if scale_hw is None:
             for mask in masks:
@@ -520,13 +520,12 @@ class ProPainterImageProcessor(BaseImageProcessor):
 
         if scale_hw is None:
             #masks is for both flow_masks, masks_dilated, just add the same data to both variables in case of inpainting
-            flow_masks = masks_dilated = [to_tensors(mask, True).unsqueeze(0) for mask in pixel_values_masks]
+            flow_masks = masks_dilated = [to_tensors(mask).unsqueeze(0) for mask in pixel_values_masks]
             size = video_size #height, width
         else:
-            flow_masks, = [to_tensors(mask, True).unsqueeze(0) for mask in flow_masks]
-            masks_dilated = [to_tensors(mask, True).unsqueeze(0) for mask in masks_dilated]
+            flow_masks, = [to_tensors(mask).unsqueeze(0) for mask in flow_masks]
+            masks_dilated = [to_tensors(mask).unsqueeze(0) for mask in masks_dilated]
             size = (height_extr, width_extr)
-
         videos_inp = [[np.array(frame).transpose(1,2,0).astype(np.uint8) for frame in video] for video in videos]
         videos = [to_tensors(video).unsqueeze(0) * 2 - 1 for video in videos]
 
