@@ -15,7 +15,7 @@
 Image/Text processor class for ImageBind
 """
 
-from typing import List, Union
+from typing import List, Optional, Union
 
 try:
     from typing import Unpack
@@ -23,12 +23,29 @@ except ImportError:
     from typing_extensions import Unpack
 
 from ...image_utils import ImageInput
-from ...processing_utils import ProcessingKwargs, ProcessorMixin
-from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
+from ...processing_utils import AudioKwargs, ImagesKwargs, ProcessingKwargs, ProcessorMixin
+from ...tokenization_utils_base import AudioInput, BatchEncoding, PreTokenizedInput, TextInput
 
+class ImageBindProcessorImagesKwargs(ImagesKwargs, total=False):
+    do_convert_rgb: bool = None
+    do_chunk: bool = None
+    chunk_duration: float = None
+    num_chunks: int = None
+    num_frames_per_chunk: int = None
+    fps: int = None
+
+class ImageBindProcessorAudioKwargs(AudioKwargs, total=False):
+    do_normalize: Optional[bool] = None
+    mean: Optional[float] = None
+    std: Optional[float] = None
+    do_chunk: Optional[bool] = None
+    chunk_duration: Optional[float] = None
+    num_chunks: Optional[int] = None
 
 class ImageBindProcessorKwargs(ProcessingKwargs, total=False):
     # see processing_utils.ProcessingKwargs documentation for usage.
+    images_kwargs: ImageBindProcessorImagesKwargs
+    audio_kwargs: ImageBindProcessorAudioKwargs
     _defaults = {}
 
 
@@ -78,7 +95,7 @@ class ImageBindProcessor(ProcessorMixin):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            audio (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`, `List[List[List[float]]]`):
+            audio (`AudioInput`, `List[float]`, `List[List[float]]`, `List[List[List[float]]]`):
                 The sequence or batch of sequences to be padded. Each sequence can be a numpy array, a list of numpy
                 arrays or a (possibly nested) list of float values. The supported input types are as follows:
 
