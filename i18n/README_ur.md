@@ -91,30 +91,32 @@ limitations under the License.
 - [DistillBERT کا استعمال کرتے ہوئے سوالات کے جوابات دینا](https://huggingface.co/distilbert/distilbert-base-uncased-distilled-squad?text=Which+name+is+also+used+to+describe+the+Amazon+rainforest+in+English%3F&context=The+Amazon+rainforest+%28Portuguese%3A+Floresta+Amaz%C3%B4nica+or+Amaz%C3%B4nia%3B+Spanish%3A+Selva+Amaz%C3%B3nica%2C+Amazon%C3%ADa+or+usually+Amazonia%3B+French%3A+For%C3%AAt+amazonienne%3B+Dutch%3A+Amazoneregenwoud%29%2C+also+known+in+English+as+Amazonia+or+the+Amazon+Jungle%2C+is+a+moist+broadleaf+forest+that+covers+most+of+the+Amazon+basin+of+South+America.+This+basin+encompasses+7%2C000%2C000+square+kilometres+%282%2C700%2C000+sq+mi%29%2C+of+which+5%2C500%2C000+square+kilometres+%282%2C100%2C000+sq+mi%29+are+covered+by+the+rainforest.+This+region+includes+territory+belonging+to+nine+nations.+The+majority+of+the+forest+is+contained+within+Brazil%2C+with+60%25+of+the+rainforest%2C+followed+by+Peru+with+13%25%2C+Colombia+with+10%25%2C+and+with+minor+amounts+in+Venezuela%2C+Ecuador%2C+Bolivia%2C+Guyana%2C+Suriname+and+French+Guiana.+States+or+departments+in+four+nations+contain+%22Amazonas%22+in+their+names.+The+Amazon+represents+over+half+of+the+planet%27s+remaining+rainforests%2C+and+comprises+the+largest+and+most+biodiverse+tract+of+tropical+rainforest+in+the+world%2C+with+an+estimated+390+billion+individual+trees+divided+into+16%2C000+species)
 - [ کا استعمال کرتے ہوئے ترجمہ T5](https://huggingface.co/google-t5/t5-base?text=My+name+is+Wolfgang+and+I+live+in+Berlin)
 
-کمپیوٹر ویژن میں:
-- [تصویروں کی درجہ بندی ViT کے استعمال سے](https://huggingface.co/google/vit-base-patch16-224)
-- [چیزوں کا پتہ لگانے کے لیے DETR کا استعمال ](https://huggingface.co/facebook/detr-resnet-50)
-- [SegFormer کے ساتھ معنوی تقسیم](https://huggingface.co/nvidia/segformer-b0-finetuned-ade-512-512)
-- [التجزئة الشاملة باستخدام Mask2Former](https://huggingface.co/facebook/mask2former-swin-large-coco-panoptic)
-- [تقدير العمق باستخدام Depth Anything](https://huggingface.co/docs/transformers/main/model_doc/depth_anything)
-- [تصنيف الفيديو باستخدام VideoMAE](https://huggingface.co/docs/transformers/model_doc/videomae)
-- [التجزئة الشاملة باستخدام OneFormer](https://huggingface.co/shi-labs/oneformer_ade20k_dinat_large)
+کمپیوٹر وژن میں:
+- [وی آئی ٹی کے ساتھ امیج کی درجہ بندی](https://huggingface.co/google/vit-base-patch16-224)
+- [ڈی ای ٹی آر کے ساتھ اشیاء کی شناخت](https://huggingface.co/facebook/detr-resnet-50)
+- [سیگفارمر کے ساتھ سیمانٹک سیگمینٹیشن](https://huggingface.co/nvidia/segformer-b0-finetuned-ade-512-512)
+- [ماسک2فارمر کے ساتھ پینوسٹک سیگمینٹیشن](https://huggingface.co/facebook/mask2former-swin-large-coco-panoptic)
+- [ڈپتھ اینتھنگ کے ساتھ گہرائی کا اندازہ](https://huggingface.co/docs/transformers/main/model_doc/depth_anything)
+- [ویڈیو ایم اے ای کے ساتھ ویڈیو کی درجہ بندی](https://huggingface.co/docs/transformers/model_doc/videomae)
+- [ونفارمر کے ساتھ یونیورسل سیگمینٹیشن](https://huggingface.co/shi-labs/oneformer_ade20k_dinat_large)
 
-في الصوت:
-- [الاعتراف التلقائي بالكلام مع Whisper](https://huggingface.co/openai/whisper-large-v3)
-- [اكتشاف الكلمات الرئيسية باستخدام Wav2Vec2](https://huggingface.co/superb/wav2vec2-base-superb-ks)
-- [تصنيف الصوت باستخدام محول طيف الصوت](https://huggingface.co/MIT/ast-finetuned-audioset-10-10-0.4593)
 
-في المهام متعددة الطرائق:
-- [الرد على الأسئلة الجدولية باستخدام TAPAS](https://huggingface.co/google/tapas-base-finetuned-wtq)
-- [الرد على الأسئلة المرئية باستخدام ViLT](https://huggingface.co/dandelin/vilt-b32-finetuned-vqa)
-- [وصف الصورة باستخدام LLaVa](https://huggingface.co/llava-hf/llava-1.5-7b-hf)
-- [تصنيف الصور بدون تدريب باستخدام SigLIP](https://huggingface.co/google/siglip-so400m-patch14-384)
-- [الرد على أسئلة المستندات باستخدام LayoutLM](https://huggingface.co/impira/layoutlm-document-qa)
-- [تصنيف الفيديو بدون تدريب باستخدام X-CLIP](https://huggingface.co/docs/transformers/model_doc/xclip)
-- [كشف الأشياء بدون تدريب باستخدام OWLv2](https://huggingface.co/docs/transformers/en/model_doc/owlv2)
-- [تجزئة الصور بدون تدريب باستخدام CLIPSeg](https://huggingface.co/docs/transformers/model_doc/clipseg)
-- [توليد الأقنعة التلقائي باستخدام SAM](https://huggingface.co/docs/transformers/model_doc/sam)
+آڈیو:
+- [خودکار تقریر کی پہچان Whisper کے ساتھ](https://huggingface.co/openai/whisper-large-v3)
+- [کلیدی الفاظ کی تلاش Wav2Vec2 کے ساتھ](https://huggingface.co/superb/wav2vec2-base-superb-ks)
+- [آڈیو کی درجہ بندی Audio Spectrogram Transformer کے ساتھ](https://huggingface.co/MIT/ast-finetuned-audioset-10-10-0.4593)
+
+ملٹی ماڈل ٹاسک میں:
+
+- [ٹیبل سوال جواب کے لیے TAPAS](https://huggingface.co/google/tapas-base-finetuned-wtq)
+- [ویژول سوال جواب کے لیے ViLT](https://huggingface.co/dandelin/vilt-b32-finetuned-vqa)
+- [امیج کیپشننگ کے لیے LLaVa](https://huggingface.co/llava-hf/llava-1.5-7b-hf)
+- [زیرو شاٹ امیج کلاسیفیکیشن کے لیے SigLIP](https://huggingface.co/google/siglip-so400m-patch14-384)
+- [دستاویزی سوال جواب کے لیے LayoutLM](https://huggingface.co/impira/layoutlm-document-qa)
+- [زیرو شاٹ ویڈیو کلاسیفیکیشن کے لیے X-CLIP](https://huggingface.co/docs/transformers/model_doc/xclip)
+- [زیرو شاٹ آبجیکٹ ڈیٹیکشن کے لیے OWLv2](https://huggingface.co/docs/transformers/en/model_doc/owlv2)
+- [زیرو شاٹ امیج سیگمنٹیشن کے لیے CLIPSeg](https://huggingface.co/docs/transformers/model_doc/clipseg)
+- [خودکار ماسک جنریشن کے لیے SAM](https://huggingface.co/docs/transformers/model_doc/sam)
 
 
 ## ٹرانسفارمرز کے 100 منصوبے
