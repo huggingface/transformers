@@ -93,6 +93,11 @@ class GraniteMoeConfig(PretrainedConfig):
         logits_scaling (`float`, *optional*, defaults to 1.0): divisor for output logits
         residual_multiplier (`float`, *optional*, defaults to 1.0): residual multiplier
         attention_multiplier (`float`, *optional*, defaults to 1.0): attention multiplier
+        num_local_experts (`<fill_type>`, *optional*, defaults to 8): <fill_docstring>
+        num_experts_per_tok (`<fill_type>`, *optional*, defaults to 2): <fill_docstring>
+        output_router_logits (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
+        router_aux_loss_coef (`<fill_type>`, *optional*, defaults to 0.001): <fill_docstring>
+        router_jitter_noise (`<fill_type>`, *optional*, defaults to 0.0): <fill_docstring>
 
     ```python
     >>> from transformers import GraniteMoeModel, GraniteMoeConfig

@@ -323,61 +323,6 @@ class GraniteModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             config_and_inputs[0].position_embedding_type = type
             self.model_tester.create_and_check_model(*config_and_inputs)
 
-    # def test_granite_sequence_classification_model(self):
-    #     config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-    #     config.num_labels = 3
-    #     input_ids = input_dict["input_ids"]
-    #     attention_mask = input_ids.ne(1).to(torch_device)
-    #     sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
-    #     model = GraniteForSequenceClassification(config)
-    #     model.to(torch_device)
-    #     model.eval()
-    #     result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
-    #     self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
-
-    # def test_granite_sequence_classification_model_for_single_label(self):
-    #     config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-    #     config.num_labels = 3
-    #     config.problem_type = "single_label_classification"
-    #     input_ids = input_dict["input_ids"]
-    #     attention_mask = input_ids.ne(1).to(torch_device)
-    #     sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
-    #     model = GraniteForSequenceClassification(config)
-    #     model.to(torch_device)
-    #     model.eval()
-    #     result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
-    #     self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
-
-    # def test_granite_sequence_classification_model_for_multi_label(self):
-    #     config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-    #     config.num_labels = 3
-    #     config.problem_type = "multi_label_classification"
-    #     input_ids = input_dict["input_ids"]
-    #     attention_mask = input_ids.ne(1).to(torch_device)
-    #     sequence_labels = ids_tensor(
-    #         [self.model_tester.batch_size, config.num_labels], self.model_tester.type_sequence_label_size
-    #     ).to(torch.float)
-    #     model = GraniteForSequenceClassification(config)
-    #     model.to(torch_device)
-    #     model.eval()
-    #     result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
-    #     self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
-
-    # def test_granite_token_classification_model(self):
-    #     config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-    #     config.num_labels = 3
-    #     input_ids = input_dict["input_ids"]
-    #     attention_mask = input_ids.ne(1).to(torch_device)
-    #     token_labels = ids_tensor([self.model_tester.batch_size, self.model_tester.seq_length], config.num_labels)
-    #     model = GraniteForTokenClassification(config=config)
-    #     model.to(torch_device)
-    #     model.eval()
-    #     result = model(input_ids, attention_mask=attention_mask, labels=token_labels)
-    #     self.assertEqual(
-    #         result.logits.shape,
-    #         (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_labels),
-    #     )
-
     @unittest.skip("Granite buffers include complex numbers, which breaks this test")
     def test_save_load_fast_init_from_base(self):
         pass

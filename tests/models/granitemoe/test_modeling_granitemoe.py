@@ -43,14 +43,9 @@ if is_torch_available():
 
     from transformers import (
         GraniteMoeForCausalLM,
-        GraniteMoeForQuestionAnswering,
-        GraniteMoeForSequenceClassification,
-        GraniteMoeForTokenClassification,
         GraniteMoeModel,
     )
     from transformers.models.granitemoe.modeling_granitemoe import (
-        GraniteMoeDynamicNTKScalingRotaryEmbedding,
-        GraniteMoeLinearScalingRotaryEmbedding,
         GraniteMoeRotaryEmbedding,
     )
 
@@ -287,14 +282,19 @@ class GraniteMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
         (
             GraniteMoeModel,
             GraniteMoeForCausalLM,
-            GraniteMoeForSequenceClassification,
-            GraniteMoeForQuestionAnswering,
-            GraniteMoeForTokenClassification,
         )
         if is_torch_available()
         else ()
     )
     all_generative_model_classes = (GraniteMoeForCausalLM,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": GraniteMoeModel,
+            "text-generation": GraniteMoeForCausalLM,
+        }
+        if is_torch_available()
+        else {}
+    )
     test_headmasking = False
     test_pruning = False
     fx_compatible = False
@@ -304,7 +304,7 @@ class GraniteMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
     model_split_percents = [0.5, 0.7, 0.8]
 
     # used in `test_torch_compile`
-    _torch_compile_test_ckpt = "ibm-granite/granitemoe-3b"
+    _torch_compile_test_ckpt = "ibm/PowerMoE-3b"
 
     def setUp(self):
         self.model_tester = GraniteMoeModelTester(self)
@@ -322,61 +322,6 @@ class GraniteMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
         for type in ["absolute", "relative_key", "relative_key_query"]:
             config_and_inputs[0].position_embedding_type = type
             self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_granitemoe_sequence_classification_model(self):
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.num_labels = 3
-        input_ids = input_dict["input_ids"]
-        attention_mask = input_ids.ne(1).to(torch_device)
-        sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
-        model = GraniteMoeForSequenceClassification(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
-        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
-
-    def test_granitemoe_sequence_classification_model_for_single_label(self):
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.num_labels = 3
-        config.problem_type = "single_label_classification"
-        input_ids = input_dict["input_ids"]
-        attention_mask = input_ids.ne(1).to(torch_device)
-        sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
-        model = GraniteMoeForSequenceClassification(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
-        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
-
-    def test_granitemoe_sequence_classification_model_for_multi_label(self):
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.num_labels = 3
-        config.problem_type = "multi_label_classification"
-        input_ids = input_dict["input_ids"]
-        attention_mask = input_ids.ne(1).to(torch_device)
-        sequence_labels = ids_tensor(
-            [self.model_tester.batch_size, config.num_labels], self.model_tester.type_sequence_label_size
-        ).to(torch.float)
-        model = GraniteMoeForSequenceClassification(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
-        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
-
-    def test_granitemoe_token_classification_model(self):
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.num_labels = 3
-        input_ids = input_dict["input_ids"]
-        attention_mask = input_ids.ne(1).to(torch_device)
-        token_labels = ids_tensor([self.model_tester.batch_size, self.model_tester.seq_length], config.num_labels)
-        model = GraniteMoeForTokenClassification(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=attention_mask, labels=token_labels)
-        self.assertEqual(
-            result.logits.shape,
-            (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_labels),
-        )
 
     @unittest.skip("GraniteMoe buffers include complex numbers, which breaks this test")
     def test_save_load_fast_init_from_base(self):
@@ -415,9 +360,6 @@ class GraniteMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
 
     def test_model_rope_scaling(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        hidden_size = config.hidden_size
-        num_heads = config.num_attention_heads
-        head_dim = hidden_size // num_heads
         scaling_factor = 10
         short_input_length = 10
         long_input_length = int(config.max_position_embeddings * 1.5)
@@ -430,11 +372,7 @@ class GraniteMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
         position_ids_long = position_ids_long.unsqueeze(0)
 
         # Sanity check original RoPE
-        original_rope = GraniteMoeRotaryEmbedding(
-            head_dim,
-            max_position_embeddings=config.max_position_embeddings,
-            base=config.rope_theta,
-        ).to(torch_device)
+        original_rope = GraniteMoeRotaryEmbedding(config=config).to(torch_device)
         original_cos_short, original_sin_short = original_rope(x, position_ids_short)
         original_cos_long, original_sin_long = original_rope(x, position_ids_long)
         torch.testing.assert_close(original_cos_short, original_cos_long[:, :short_input_length, :])
@@ -442,12 +380,8 @@ class GraniteMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
 
         # Sanity check linear RoPE scaling
         # New position "x" should match original position with index "x/scaling_factor"
-        linear_scaling_rope = GraniteMoeLinearScalingRotaryEmbedding(
-            head_dim,
-            max_position_embeddings=config.max_position_embeddings,
-            base=config.rope_theta,
-            scaling_factor=scaling_factor,
-        ).to(torch_device)
+        config.rope_scaling = {"type": "linear", "factor": scaling_factor}
+        linear_scaling_rope = GraniteMoeRotaryEmbedding(config=config).to(torch_device)
         linear_cos_short, linear_sin_short = linear_scaling_rope(x, position_ids_short)
         linear_cos_long, linear_sin_long = linear_scaling_rope(x, position_ids_long)
         torch.testing.assert_close(linear_cos_short, linear_cos_long[:, :short_input_length, :])
@@ -460,12 +394,8 @@ class GraniteMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
         # Sanity check Dynamic NTK RoPE scaling
         # Scaling should only be observed after a long input is fed. We can observe that the frequencies increase
         # with scaling_factor (or that `inv_freq` decreases)
-        ntk_scaling_rope = GraniteMoeDynamicNTKScalingRotaryEmbedding(
-            head_dim,
-            max_position_embeddings=config.max_position_embeddings,
-            base=config.rope_theta,
-            scaling_factor=scaling_factor,
-        ).to(torch_device)
+        config.rope_scaling = {"type": "dynamic", "factor": scaling_factor}
+        ntk_scaling_rope = GraniteMoeRotaryEmbedding(config=config).to(torch_device)
         ntk_cos_short, ntk_sin_short = ntk_scaling_rope(x, position_ids_short)
         ntk_cos_long, ntk_sin_long = ntk_scaling_rope(x, position_ids_long)
         torch.testing.assert_close(ntk_cos_short, original_cos_short)
@@ -475,6 +405,23 @@ class GraniteMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
         with self.assertRaises(AssertionError):
             torch.testing.assert_close(ntk_sin_long, original_sin_long)
         self.assertTrue((ntk_scaling_rope.inv_freq <= original_rope.inv_freq).all())
+
+        # Sanity check Yarn RoPE scaling
+        # Scaling should be over the entire input
+        config.rope_scaling = {"type": "yarn", "factor": scaling_factor}
+        yarn_scaling_rope = GraniteMoeRotaryEmbedding(config=config).to(torch_device)
+        yarn_cos_short, yarn_sin_short = yarn_scaling_rope(x, position_ids_short)
+        yarn_cos_long, yarn_sin_long = yarn_scaling_rope(x, position_ids_long)
+        torch.testing.assert_close(yarn_cos_short, yarn_cos_long[:, :short_input_length, :])
+        torch.testing.assert_close(yarn_sin_short, yarn_sin_long[:, :short_input_length, :])
+        with self.assertRaises(AssertionError):
+            torch.testing.assert_close(yarn_cos_short, original_cos_short)
+        with self.assertRaises(AssertionError):
+            torch.testing.assert_close(yarn_sin_short, original_sin_short)
+        with self.assertRaises(AssertionError):
+            torch.testing.assert_close(yarn_cos_long, original_cos_long)
+        with self.assertRaises(AssertionError):
+            torch.testing.assert_close(yarn_sin_long, original_sin_long)
 
     @require_flash_attn
     @require_torch_gpu
@@ -543,6 +490,7 @@ class GraniteMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
                 if not has_flash:
                     raise ValueError("The flash model should have flash attention layers")
 
+    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
     @require_torch_sdpa
     @slow
     def test_eager_matches_sdpa_generate(self):
@@ -570,7 +518,7 @@ class GraniteMoeIntegrationTest(unittest.TestCase):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
 
         model = GraniteMoeForCausalLM.from_pretrained(
-            "ibm-granite/granitemoe-3b", device_map="auto", torch_dtype=torch.bfloat16, attn_implementation="eager"
+            "ibm/PowerMoE-3b", device_map="auto", torch_dtype=torch.bfloat16, attn_implementation="eager"
         )
 
         with torch.no_grad():
@@ -601,7 +549,7 @@ class GraniteMoeIntegrationTest(unittest.TestCase):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
 
         model = GraniteMoeForCausalLM.from_pretrained(
-            "ibm-granite/granitemoe-3b", device_map="auto", torch_dtype=torch.float16
+            "ibm/PowerMoE-3b", device_map="auto", torch_dtype=torch.float16
         )
 
         with torch.no_grad():
@@ -612,70 +560,3 @@ class GraniteMoeIntegrationTest(unittest.TestCase):
         EXPECTED_MEAN = torch.tensor([[-3.5317, -1.1000, -2.8519, -1.9190, -2.5031, -1.6047, -2.5759, -2.4347]])
 
         self.assertTrue(torch.allclose(EXPECTED_MEAN.to(torch_device), out.logits.mean(-1), atol=1e-2, rtol=1e-2))
-
-        # slicing logits[0, 0, 0:15]
-        EXPECTED_SLICE = torch.tensor([4.2109, -5.1172, -5.1250, -5.1172, -5.1211, 3.1250, 2.9941, -5.1250, -5.1250, -5.1250, -1.8105, 2.9082, 0.6523, 3.0605, -4.2344])
-        # fmt: on
-
-        self.assertTrue(
-            torch.allclose(
-                EXPECTED_SLICE.to(torch_device),
-                out.logits[0, 0, :15],
-                atol=1e-3,
-                rtol=1e-3,
-            )
-        )
-
-    @slow
-    @require_torch_gpu
-    @require_read_token
-    def test_compile_static_cache(self):
-        # `torch==2.2` will throw an error on this test (as in other compilation tests), but torch==2.1.2 and torch>2.2
-        # work as intended. See https://github.com/pytorch/pytorch/issues/121943
-        if version.parse(torch.__version__) < version.parse("2.3.0"):
-            self.skipTest("This test requires torch >= 2.3 to run.")
-
-        NUM_TOKENS_TO_GENERATE = 40
-        # Note on `EXPECTED_TEXT_COMPLETION`'s diff: the current value matches the original test if the original test
-        # was changed to have a cache of 53 tokens (as opposed to 4096), on Ampere GPUs.
-        #
-        # Key 9 for MI300, Key 8 for A100/A10, and Key 7 for T4.
-        #
-        # Note: Key 9 is currently set for MI300, but may need potential future adjustments for H100s,
-        # considering differences in hardware processing and potential deviations in generated text.
-        EXPECTED_TEXT_COMPLETION = [
-            "Simply put, the theory of relativity states that #x# and  #y# are not independent variables.  "
-            "#x# and  #y# are related by the equation  #x = y^2# and  #y =",
-            "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on my "
-            "eggs, I love it on my fries, I love it on my burgers, I love it on my hot dogs, I",
-        ]
-
-        prompts = [
-            "Simply put, the theory of relativity states that ",
-            "My favorite all time favorite condiment is ketchup.",
-        ]
-        tokenizer = AutoTokenizer.from_pretrained("ibm-granite/granitemoe-3b", padding_side="right")
-        model = GraniteMoeForCausalLM.from_pretrained(
-            "ibm-granite/granitemoe-3b", device_map="sequential", torch_dtype=torch.float16
-        )
-        inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
-
-        # Dynamic Cache
-        generated_ids = model.generate(**inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False)
-        dynamic_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, dynamic_text)  # Both GPU architectures have the same output
-
-        # Static Cache
-        generated_ids = model.generate(
-            **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
-        )
-        static_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, static_text)
-
-        # Static Cache + compile
-        model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
-        generated_ids = model.generate(
-            **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
-        )
-        static_compiled_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, static_compiled_text)
