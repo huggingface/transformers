@@ -986,7 +986,6 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
         ("gpt_neo", "GPTNeoForQuestionAnswering"),
         ("gpt_neox", "GPTNeoXForQuestionAnswering"),
         ("gptj", "GPTJForQuestionAnswering"),
-        ("granitemoe", "GraniteMoeForQuestionAnswering"),
         ("ibert", "IBertForQuestionAnswering"),
         ("layoutlmv2", "LayoutLMv2ForQuestionAnswering"),
         ("layoutlmv3", "LayoutLMv3ForQuestionAnswering"),

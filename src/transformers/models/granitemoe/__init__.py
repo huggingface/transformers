@@ -34,9 +34,6 @@ else:
         "GraniteMoeForCausalLM",
         "GraniteMoeModel",
         "GraniteMoePreTrainedModel",
-        "GraniteMoeForSequenceClassification",
-        "GraniteMoeForQuestionAnswering",
-        "GraniteMoeForTokenClassification",
     ]
 
 if TYPE_CHECKING:
@@ -50,9 +47,6 @@ if TYPE_CHECKING:
     else:
         from .modeling_granitemoe import (
             GraniteMoeForCausalLM,
-            GraniteMoeForQuestionAnswering,
-            GraniteMoeForSequenceClassification,
-            GraniteMoeForTokenClassification,
             GraniteMoeModel,
             GraniteMoePreTrainedModel,
         )

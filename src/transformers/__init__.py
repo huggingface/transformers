@@ -2337,9 +2337,6 @@ else:
     _import_structure["models.granitemoe"].extend(
         [
             "GraniteMoeForCausalLM",
-            "GraniteMoeForQuestionAnswering",
-            "GraniteMoeForSequenceClassification",
-            "GraniteMoeForTokenClassification",
             "GraniteMoeModel",
             "GraniteMoePreTrainedModel",
         ]
@@ -6966,9 +6963,6 @@ if TYPE_CHECKING:
         )
         from .models.granitemoe import (
             GraniteMoeForCausalLM,
-            GraniteMoeForQuestionAnswering,
-            GraniteMoeForSequenceClassification,
-            GraniteMoeForTokenClassification,
             GraniteMoeModel,
             GraniteMoePreTrainedModel,
         )

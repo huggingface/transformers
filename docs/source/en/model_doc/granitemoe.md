@@ -46,18 +46,3 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 [[autodoc]] GraniteMoeForCausalLM
     - forward
-
-## GraniteMoeForSequenceClassification
-
-[[autodoc]] GraniteMoeForSequenceClassification
-    - forward
-
-## GraniteMoeForQuestionAnswering
-
-[[autodoc]] GraniteMoeForQuestionAnswering
-    - forward
-
-## GraniteMoeForTokenClassification
-
-[[autodoc]] GraniteMoeForTokenClassification
-    - forward
