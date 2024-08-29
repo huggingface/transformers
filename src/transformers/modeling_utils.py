@@ -1638,9 +1638,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 "overwritten. However, it doesn't directly inherit from `GenerationMixin`. From 👉v4.50👈 onwards, "
                 "`PreTrainedModel` will NOT inherit from `GenerationMixin`, and this model will lose the ability "
                 "to call `generate` and other related functions."
-                "\n  -If you are the owner of the model architecture code, please modify your model class such that "
+                "\n  - If you're using `trust_remote_code=True`, you can get rid of this warning by loading the "
+                "model with an auto class. See https://huggingface.co/docs/transformers/en/model_doc/auto#auto-classes"
+                "\n  - If you are the owner of the model architecture code, please modify your model class such that "
                 "it inherits from `GenerationMixin` (after `PreTrainedModel`, otherwise you'll get an exception)."
-                "\n  -If you are not the owner of the model architecture class, please contact the model code owner "
+                "\n  - If you are not the owner of the model architecture class, please contact the model code owner "
                 "to update it."
             )
             return True
