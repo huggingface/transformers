@@ -314,12 +314,10 @@ class TextGenerationPipelineTests(unittest.TestCase):
         chat1 = [
             {"role": "system", "content": "This is a system message."},
             {"role": "user", "content": "This is a test"},
-            {"role": "assistant", "content": "This is a reply"},
         ]
         chat2 = [
             {"role": "system", "content": "This is a system message."},
             {"role": "user", "content": "This is a second test"},
-            {"role": "assistant", "content": "This is a reply"},
         ]
         outputs = text_generator(chat1, do_sample=False, max_new_tokens=10)
         expected_chat1 = chat1 + [
@@ -339,7 +337,7 @@ class TextGenerationPipelineTests(unittest.TestCase):
         expected_chat2 = chat2 + [
             {
                 "role": "assistant",
-                "content": " factors factors factors factors factors factors factors factors factors factors",
+                "content": " stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs",
             }
         ]
 
