@@ -602,10 +602,12 @@ class SpmConverter(Converter):
             for id, p in enumerate(proto.pieces)
             if p.type in [3, 4]
         ]
-        tokenizer.add_tokens([
-            AddedToken(token, normalized=False, special=special)
-            for id, token, special in sorted(spm_added_tokens, key=lambda x: x[0])
-        ])
+        tokenizer.add_tokens(
+            [
+                AddedToken(token, normalized=False, special=special)
+                for id, token, special in sorted(spm_added_tokens, key=lambda x: x[0])
+            ]
+        )
 
         return tokenizer
 

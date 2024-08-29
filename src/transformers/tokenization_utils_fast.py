@@ -789,9 +789,11 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                         tokens = [special_tokens_map.get(token, token) for token in tokens]
                     post_processor["special_tokens"][key]["tokens"] = tokens
                     for token in tokens:
-                        token_id =tokenizer.token_to_id(token)
+                        token_id = tokenizer.token_to_id(token)
                         if token_id is None:
-                            raise ValueError("Attempted to set a token in the post processor that does not exist in the mapping")
+                            raise ValueError(
+                                "Attempted to set a token in the post processor that does not exist in the mapping"
+                            )
 
                     post_processor["special_tokens"][key]["ids"] = [tokenizer.token_to_id(token) for token in tokens]
 
@@ -802,7 +804,9 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                         token = special_tokens_map[token]
                     token_id = tokenizer.token_to_id(token)
                     if token_id is None:
-                        raise ValueError("Attempted to set a token in the post processor that does not exist in the mapping")
+                        raise ValueError(
+                            "Attempted to set a token in the post processor that does not exist in the mapping"
+                        )
                     post_processor[special_token] = [token, token_id]
 
             trained_tokenizer_json["post_processor"] = post_processor
