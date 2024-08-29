@@ -17,7 +17,7 @@ from typing import Dict, Optional, Union
 
 import numpy as np
 
-from ... import is_vision_available
+from ... import is_torch_available, is_vision_available
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import resize, to_channel_dimension_format
 from ...image_utils import (
@@ -31,6 +31,9 @@ from ...image_utils import (
 )
 from ...utils import TensorType, logging, requires_backends
 
+
+if is_torch_available():
+    import torch
 
 if is_vision_available():
     import PIL
@@ -270,3 +273,28 @@ class SuperPointImageProcessor(BaseImageProcessor):
         data = {"pixel_values": images}
 
         return BatchFeature(data=data, tensor_type=return_tensors)
+
+    def post_process_keypoint_detection(self, outputs, target_sizes, unwrap_batch_dim=True):
+        if len(outputs.mask) != len(target_sizes):
+            raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the logits")
+        if target_sizes.shape[1] != 2:
+            raise ValueError("Each element of target_sizes must contain the size (h, w) of each image of the batch")
+
+        for keypoints, target_size in zip(outputs.keypoints, target_sizes):
+            keypoints[:, 0] = keypoints[:, 0] * target_size[1]
+            keypoints[:, 1] = keypoints[:, 1] * target_size[0]
+
+        # Convert masked_keypoints to int
+        masked_keypoints = outputs.keypoints.to(torch.int32)
+
+        outputs.keypoints = masked_keypoints
+
+        results = []
+        for i, image_mask in enumerate(outputs.mask):
+            indices = torch.nonzero(image_mask).squeeze(1)
+            keypoints = outputs.keypoints[i][indices]
+            scores = outputs.scores[i][indices]
+            descriptors = outputs.descriptors[i][indices]
+            results.append({"keypoints": keypoints, "scores": scores, "descriptors": descriptors})
+
+        return results

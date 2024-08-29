@@ -258,6 +258,9 @@ class SuperPointInterestPointDecoder(nn.Module):
         # Convert (y, x) to (x, y)
         keypoints = torch.flip(keypoints, [1]).float()
 
+        # Convert to relative coordinates
+        keypoints = keypoints / torch.tensor([width, height], device=keypoints.device)
+
         return keypoints, scores
 
 
