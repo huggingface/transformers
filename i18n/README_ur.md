@@ -92,13 +92,13 @@ limitations under the License.
 - [&#8207;T5 کے ساتھ ترجمہ](https://huggingface.co/google-t5/t5-base?text=My+name+is+Wolfgang+and+I+live+in+Berlin)
   
 کمپیوٹر وژن میں:
-- [وی آئی ٹی کے ساتھ امیج کی درجہ بندی](https://huggingface.co/google/vit-base-patch16-224)
-- [ڈی ای ٹی آر کے ساتھ اشیاء کی شناخت](https://huggingface.co/facebook/detr-resnet-50)
-- [سیگفارمر کے ساتھ سیمانٹک سیگمینٹیشن](https://huggingface.co/nvidia/segformer-b0-finetuned-ade-512-512)
-- [ماسک2فارمر کے ساتھ پینوسٹک سیگمینٹیشن](https://huggingface.co/facebook/mask2former-swin-large-coco-panoptic)
-- [ڈپتھ اینتھنگ کے ساتھ گہرائی کا اندازہ](https://huggingface.co/docs/transformers/main/model_doc/depth_anything)
-- [ویڈیو ایم اے ای کے ساتھ ویڈیو کی درجہ بندی](https://huggingface.co/docs/transformers/model_doc/videomae)
-- [ونفارمر کے ساتھ یونیورسل سیگمینٹیشن](https://huggingface.co/shi-labs/oneformer_ade20k_dinat_large)
+- [&#8207;ViT کے ساتھ امیج کی درجہ بندی](https://huggingface.co/google/vit-base-patch16-224)
+- [&#8207;DETR کے ساتھ اشیاء کی شناخت](https://huggingface.co/facebook/detr-resnet-50)
+- [&#8207;SegFormer کے ساتھ سیمانٹک سیگمینٹیشن](https://huggingface.co/nvidia/segformer-b0-finetuned-ade-512-512)
+- [&#8207;Mask2Former کے ساتھ پینوسٹک سیگمینٹیشن](https://huggingface.co/facebook/mask2former-swin-large-coco-panoptic)
+- [&#8207;Depth Anything کے ساتھ گہرائی کا اندازہ](https://huggingface.co/docs/transformers/main/model_doc/depth_anything)
+- [&#8207;VideoMAE کے ساتھ ویڈیو کی درجہ بندی](https://huggingface.co/docs/transformers/model_doc/videomae)
+- [&#8207;OneFormer کے ساتھ یونیورسل سیگمینٹیشن](https://huggingface.co/shi-labs/oneformer_ade20k_dinat_large)
 
 
 آڈیو:
