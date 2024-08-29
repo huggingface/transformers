@@ -101,7 +101,7 @@ label: NEGATIVE, with score: 0.5309
 >>> dataset = dataset.cast_column("audio", Audio(sampling_rate=speech_recognizer.feature_extractor.sampling_rate))
 ```
 
-يتم تحميل الملفات الصوتية وإعادة أخذ العينات تلقائيًا عند استدعاء العمود "audio".
+يتم تحميل الملفات الصوتية وإعادة تشكيلها تلقائيًا عند استدعاء العمود "audio".
 استخرج المصفوفات الموجية الخام من أول 4 عينات ومررها كقائمة إلى خط الأنابيب:
 
 ```py
