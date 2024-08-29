@@ -330,9 +330,9 @@ class FalconMambaMixer(nn.Module):
             ssm_parameters, [self.time_step_rank, self.ssm_state_size, self.ssm_state_size], dim=-1
         )
 
-        B = rms_forward(B)
-        C = rms_forward(C)
-        time_step = rms_forward(time_step)
+        B = rms_forward(B, variance_epsilon=self.rms_eps)
+        C = rms_forward(C, variance_epsilon=self.rms_eps)
+        time_step = rms_forward(time_step, variance_epsilon=self.rms_eps)
 
         discrete_time_step = self.dt_proj(time_step)  # [batch, seq_len, intermediate_size]
         discrete_time_step = nn.functional.softplus(discrete_time_step).transpose(
