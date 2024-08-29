@@ -131,6 +131,7 @@ class TextGenerationPipeline(Pipeline):
         stop_sequence=None,
         truncation=None,
         max_length=None,
+        continue_final_message=None,
         **generate_kwargs,
     ):
         preprocess_params = {}
@@ -165,6 +166,9 @@ class TextGenerationPipeline(Pipeline):
                 )
             preprocess_params["handle_long_generation"] = handle_long_generation
 
+        if continue_final_message is not None:
+            preprocess_params["continue_final_message"] = continue_final_message
+
         preprocess_params.update(generate_kwargs)
         forward_params = generate_kwargs
 
@@ -183,6 +187,8 @@ class TextGenerationPipeline(Pipeline):
             postprocess_params["return_type"] = return_type
         if clean_up_tokenization_spaces is not None:
             postprocess_params["clean_up_tokenization_spaces"] = clean_up_tokenization_spaces
+        if continue_final_message is not None:
+            postprocess_params["continue_final_message"] = continue_final_message
 
         if stop_sequence is not None:
             stop_sequence_ids = self.tokenizer.encode(stop_sequence, add_special_tokens=False)
@@ -272,6 +278,7 @@ class TextGenerationPipeline(Pipeline):
         truncation=None,
         padding=None,
         max_length=None,
+        continue_final_message=None,
         **generate_kwargs,
     ):
         # Only set non-None tokenizer kwargs, so as to rely on the tokenizer's defaults
@@ -287,7 +294,8 @@ class TextGenerationPipeline(Pipeline):
             tokenizer_kwargs.pop("add_special_tokens", None)  # ignore add_special_tokens on chats
             # If the user passes a chat that ends in an assistant message, we treat it as a prefill by default
             # because very few models support multiple separate, consecutive assistant messages
-            continue_final_message = prompt_text.messages[-1]["role"] == "assistant"
+            if continue_final_message is None:
+                continue_final_message = prompt_text.messages[-1]["role"] == "assistant"
             inputs = self.tokenizer.apply_chat_template(
                 prompt_text.messages,
                 add_generation_prompt=not continue_final_message,
@@ -362,7 +370,13 @@ class TextGenerationPipeline(Pipeline):
             generated_sequence = tf.reshape(generated_sequence, (in_b, out_b // in_b, *generated_sequence.shape[1:]))
         return {"generated_sequence": generated_sequence, "input_ids": input_ids, "prompt_text": prompt_text}
 
-    def postprocess(self, model_outputs, return_type=ReturnType.FULL_TEXT, clean_up_tokenization_spaces=True):
+    def postprocess(
+        self,
+        model_outputs,
+        return_type=ReturnType.FULL_TEXT,
+        clean_up_tokenization_spaces=True,
+        continue_final_message=None,
+    ):
         generated_sequence = model_outputs["generated_sequence"][0]
         input_ids = model_outputs["input_ids"]
         prompt_text = model_outputs["prompt_text"]
@@ -397,13 +411,18 @@ class TextGenerationPipeline(Pipeline):
                         all_text = prompt_text + all_text
                     elif isinstance(prompt_text, Chat):
                         # Explicit list parsing is necessary for parsing chat datasets
-                        if (final_message := prompt_text.messages[-1])["role"] == "assistant":
+                        if continue_final_message is None:
+                            continue_final_message = prompt_text.messages[-1]["role"] == "assistant"
+                        if continue_final_message:
                             # With assistant prefill, concat onto the end of the last message
                             all_text = list(prompt_text.messages)[:-1] + [
-                                {"role": "assistant", "content": final_message["content"] + all_text}
+                                {
+                                    "role": prompt_text.messages[-1]["role"],
+                                    "content": prompt_text.messages[-1]["content"] + all_text,
+                                }
                             ]
                         else:
-                            # When we're not doing assistant prefill, the output is a new message
+                            # When we're not starting from a prefill, the output is a new assistant message
                             all_text = list(prompt_text.messages) + [{"role": "assistant", "content": all_text}]
                 record = {"generated_text": all_text}
             records.append(record)
