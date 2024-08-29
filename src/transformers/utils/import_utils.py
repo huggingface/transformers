@@ -530,7 +530,7 @@ def is_torch_tf32_available():
     import torch
 
     if is_torch_musa_available():
-        deivce_info = torch.musa.get_device_properties(torch.musa.current_device())
+        device_info = torch.musa.get_device_properties(torch.musa.current_device())
         if f"{device_info.major}{device_info.minor}" >= "22":
             return True
         return False
