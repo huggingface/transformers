@@ -86,27 +86,30 @@ class ZeroShotImageClassificationPipeline(Pipeline):
                 - An image loaded in PIL directly
 
             candidate_labels (`List[str]`):
-                The candidate labels for this image
+                The candidate labels for this image. They will be formatted using *hypothesis_template*.
 
             hypothesis_template (`str`, *optional*, defaults to `"This is a photo of {}"`):
-                The sentence used in cunjunction with *candidate_labels* to attempt the image classification by
-                replacing the placeholder with the candidate_labels. Then likelihood is estimated by using
-                logits_per_image
+                The format used in conjunction with *candidate_labels* to attempt the image classification by
+                replacing the placeholder with the candidate_labels. Pass "{}" if *candidate_labels* are
+                already formatted.
 
             timeout (`float`, *optional*, defaults to None):
                 The maximum time in seconds to wait for fetching images from the web. If None, no timeout is set and
                 the call may block forever.
 
-        Return:
-            A list of dictionaries containing result, one dictionary per proposed label. The dictionaries contain the
-            following keys:
+            tokenizer_kwargs (`dict`, *optional*):
+                Additional dictionary of keyword arguments passed along to the tokenizer.
 
-            - **label** (`str`) -- The label identified by the model. It is one of the suggested `candidate_label`.
-            - **score** (`float`) -- The score attributed by the model for that label (between 0 and 1).
+        Return:
+            A list of dictionaries containing one entry per proposed label. Each dictionary contains the
+            following keys:
+            - **label** (`str`) -- One of the suggested *candidate_labels*.
+            - **score** (`float`) -- The score attributed by the model to that label. It is a value between
+                0 and 1, computed as the `softmax` of `logits_per_image`.
         """
         return super().__call__(images, **kwargs)
 
-    def _sanitize_parameters(self, **kwargs):
+    def _sanitize_parameters(self, tokenizer_kwargs=None, **kwargs):
         preprocess_params = {}
         if "candidate_labels" in kwargs:
             preprocess_params["candidate_labels"] = kwargs["candidate_labels"]
@@ -114,10 +117,21 @@ class ZeroShotImageClassificationPipeline(Pipeline):
             preprocess_params["timeout"] = kwargs["timeout"]
         if "hypothesis_template" in kwargs:
             preprocess_params["hypothesis_template"] = kwargs["hypothesis_template"]
+        if tokenizer_kwargs is not None:
+            preprocess_params["tokenizer_kwargs"] = tokenizer_kwargs
 
         return preprocess_params, {}, {}
 
-    def preprocess(self, image, candidate_labels=None, hypothesis_template="This is a photo of {}.", timeout=None):
+    def preprocess(
+        self,
+        image,
+        candidate_labels=None,
+        hypothesis_template="This is a photo of {}.",
+        timeout=None,
+        tokenizer_kwargs=None,
+    ):
+        if tokenizer_kwargs is None:
+            tokenizer_kwargs = {}
         image = load_image(image, timeout=timeout)
         inputs = self.image_processor(images=[image], return_tensors=self.framework)
         if self.framework == "pt":
@@ -125,7 +139,7 @@ class ZeroShotImageClassificationPipeline(Pipeline):
         inputs["candidate_labels"] = candidate_labels
         sequences = [hypothesis_template.format(x) for x in candidate_labels]
         padding = "max_length" if self.model.config.model_type == "siglip" else True
-        text_inputs = self.tokenizer(sequences, return_tensors=self.framework, padding=padding)
+        text_inputs = self.tokenizer(sequences, return_tensors=self.framework, padding=padding, **tokenizer_kwargs)
         inputs["text_inputs"] = [text_inputs]
         return inputs
 

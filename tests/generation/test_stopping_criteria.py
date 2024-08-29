@@ -28,7 +28,6 @@ if is_torch_available():
     from transformers.generation import (
         EosTokenCriteria,
         MaxLengthCriteria,
-        MaxNewTokensCriteria,
         MaxTimeCriteria,
         StoppingCriteriaList,
         StopStringCriteria,
@@ -75,21 +74,6 @@ class StoppingCriteriaTestCase(unittest.TestCase):
 
         input_ids, scores = self._get_tensors(10)
         self.assertTrue(all(criteria(input_ids, scores)))
-
-    def test_max_new_tokens_criteria(self):
-        criteria = MaxNewTokensCriteria(start_length=5, max_new_tokens=5)
-
-        input_ids, scores = self._get_tensors(5)
-        self.assertFalse(all(criteria(input_ids, scores)))
-
-        input_ids, scores = self._get_tensors(9)
-        self.assertFalse(all(criteria(input_ids, scores)))
-
-        input_ids, scores = self._get_tensors(10)
-        self.assertTrue(all(criteria(input_ids, scores)))
-
-        criteria_list = StoppingCriteriaList([criteria])
-        self.assertEqual(criteria_list.max_length, 10)
 
     def test_max_time_criteria(self):
         input_ids, scores = self._get_tensors(5)

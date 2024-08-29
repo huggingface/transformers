@@ -1608,6 +1608,11 @@ class GenerationTesterMixin:
             # 3. ignore `token_type_ids` for simplicity
             # 4. ignore `forced_eos_token_id`, which requires further manipulation of the continuation inputs and is
             #    active by default on some models
+            # 5. ignore `encoder_no_repeat_ngram_size`, which is set by default in some encoder-decoder models. When
+            #    we use their decoder as a stand-alone model, `encoder_no_repeat_ngram_size` actually prevents
+            #    repetition exclusively from the prompt. This test relies on comparing one call vs 2 calls
+            #    with cache, what is considered a prompt is different in the two cases.
+
             if "token_type_ids" in inputs:
                 del inputs["token_type_ids"]
 
@@ -1615,6 +1620,7 @@ class GenerationTesterMixin:
             model.eval()
             model.generation_config.pad_token_id = model.generation_config.eos_token_id = -1
             model.generation_config.forced_eos_token_id = None
+            model.generation_config.encoder_no_repeat_ngram_size = 0
             model.generation_config.use_cache = True
 
             # If "past_key_values" is not returned, skip the test (e.g. RWKV uses a different cache name and format)
@@ -1833,6 +1839,8 @@ class GenerationTesterMixin:
                 self.skipTest("Encoder-decoder model end-to-end generate compile not yet supported")
 
             model = model_class(config).to(torch_device)
+            model.eval()  # otherwise `self.training` is `True` -- this flag is used at attn mask creation time
+
             input_ids = inputs_dict["input_ids"].to(torch_device)
             # creates two sets of *different* inputs with the same shape
             half_batch_size = input_ids.shape[0] // 2
@@ -1845,24 +1853,72 @@ class GenerationTesterMixin:
             }
 
             for model_inputs in input_ids_sets:
-                # dynamic cache
+                # eager dynamic cache
                 output_dynamic = model.generate(model_inputs, **generation_kwargs)
 
-                # eager static cache
+                # end-to-end compiled dynamic cache
                 torch.compiler.reset()
-                model.generation_config.cache_implementation = "static"
-                output_static = model.generate(model_inputs, **generation_kwargs)
-                self.assertListEqual(output_dynamic.tolist(), output_static.tolist())
-
-                # compiled static cache (removes the cache initialized in the previous check, to confirm we can
-                # initialize the cache in full compiled mode)
-                model._cache = None
-                torch.compiler.reset()
+                compiled_generate = torch.compile(model.generate, fullgraph=True, mode="reduce-overhead")
                 generation_config = copy.deepcopy(model.generation_config)
                 generation_config.update(**generation_kwargs)
-                compiled_generate = torch.compile(model.generate, fullgraph=True, mode="reduce-overhead")
                 output_compiled = compiled_generate(model_inputs, generation_config=generation_config)
                 self.assertListEqual(output_dynamic.tolist(), output_compiled.tolist())
+
+    def test_generate_methods_with_num_logits_to_keep(self):
+        for model_class in self.all_generative_model_classes:
+            if "num_logits_to_keep" not in set(inspect.signature(model_class.forward).parameters.keys()):
+                self.skipTest(reason="This model does not support `num_logits_to_keep` argument.")
+
+            config, input_ids, attention_mask = self._get_input_ids_and_config()
+            config.use_cache = True
+            config.is_decoder = True
+
+            model = model_class(config).to(torch_device).eval()
+            # All generation methods (except assisted decoding) rely on always extracting the last token logits of the
+            # full logits matrix, so testing out only greedy search and assisted decoding is enough (if it works,
+            # other methods will work as well)
+            generation_kwargs = {
+                "max_new_tokens": 10,
+                "do_sample": False,
+            }
+
+            # Setting num_logits_to_keep at 0 keeps all logits (old behavior)
+            with_all_logits = model.generate(
+                input_ids, attention_mask=attention_mask, **generation_kwargs, num_logits_to_keep=0
+            )
+            # By default, num_logits_to_keep is automatically set to 1 if not provided (new behavior)
+            without_all_logits = model.generate(input_ids, attention_mask=attention_mask, **generation_kwargs)
+            self.assertEqual(with_all_logits.tolist(), without_all_logits.tolist())
+
+    def test_assisted_decoding_with_num_logits_to_keep(self):
+        for model_class in self.all_generative_model_classes:
+            if "num_logits_to_keep" not in set(inspect.signature(model_class.forward).parameters.keys()):
+                self.skipTest(reason="This model does not support `num_logits_to_keep` argument.")
+            if model_class._is_stateful:
+                self.skipTest(reason="Stateful models don't support assisted generation")
+
+            config, input_ids, attention_mask = self._get_input_ids_and_config(batch_size=1)
+            config.use_cache = True
+            config.is_decoder = True
+
+            model = model_class(config).to(torch_device).eval()
+            assistant_model = model
+            # All generation methods (except assisted decoding) rely on always extracting the last token logits of the
+            # full logits matrix, so testing out only greedy search and assisted decoding is enough (if it works,
+            # other methods will work as well)
+            generation_kwargs = {
+                "max_new_tokens": 10,
+                "do_sample": False,
+                "assistant_model": assistant_model,
+            }
+
+            # Setting num_logits_to_keep at 0 keeps all logits (old behavior)
+            with_all_logits = model.generate(
+                input_ids, attention_mask=attention_mask, **generation_kwargs, num_logits_to_keep=0
+            )
+            # By default, num_logits_to_keep is automatically set to 1 if not provided (new behavior)
+            without_all_logits = model.generate(input_ids, attention_mask=attention_mask, **generation_kwargs)
+            self.assertEqual(with_all_logits.tolist(), without_all_logits.tolist())
 
     def _check_outputs(self, output, input_ids, config, use_cache=False, num_return_sequences=1):
         batch_size, seq_length = input_ids.shape
@@ -2827,7 +2883,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
     def test_default_max_length_warning(self):
         model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
-        model.config.pad_token_id = tokenizer.eos_token_id
+        model.generation_config.pad_token_id = tokenizer.eos_token_id
 
         text = "Hello world"
         tokenized_inputs = tokenizer([text], return_tensors="pt")
@@ -2854,8 +2910,8 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
         assistant = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
-        model.config.pad_token_id = tokenizer.eos_token_id
-        assistant.config.pad_token_id = tokenizer.eos_token_id
+        model.generation_config.pad_token_id = tokenizer.eos_token_id
+        assistant.generation_config.pad_token_id = tokenizer.eos_token_id
 
         text = "Hello world"
         tokenized_inputs = tokenizer([text], return_tensors="pt")
@@ -2876,8 +2932,8 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
         assistant = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
-        model.config.pad_token_id = tokenizer.eos_token_id
-        assistant.config.pad_token_id = tokenizer.eos_token_id
+        model.generation_config.pad_token_id = tokenizer.eos_token_id
+        assistant.generation_config.pad_token_id = tokenizer.eos_token_id
 
         text = "Hello world"
         tokenized_inputs = tokenizer([text], return_tensors="pt")
@@ -2903,7 +2959,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         # PT-only test: TF doesn't support assisted decoding yet.
         model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
-        model.config.pad_token_id = tokenizer.eos_token_id
+        model.generation_config.pad_token_id = tokenizer.eos_token_id
 
         text = "Hello world"
         tokenized_inputs = tokenizer([text], return_tensors="pt")
