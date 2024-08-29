@@ -114,7 +114,7 @@ label: NEGATIVE, with score: 0.5309
 
 ### ااستخدم نموذجًا ومجزئًا آخرين في خط الأنابيب
 
-يمكن لخط الأنابيب [`pipeline`] استيعاب أي نموذج من [Hub](https://huggingface.co/models)، مما يجعله سهل التكيف مع حالات الاستخدام الأخرى. على سبيل المثال، إذا كنت تريد نموذجًا قادرًا على التعامل مع النص الفرنسي، فاستخدم العلامات على Hub لتصفية نموذج مناسب. تعيد النتيجة الأولى المرشحة نموذج BERT متعدد اللغات [BERT model](https://huggingface.co/nlptown/bert-base-multilingual-uncased-sentiment) الذي تم ضبطه مسبقًا للتحليل النصي والذي يمكنك استخدامه للنص الفرنسي:
+يمكن لخط الأنابيب [`pipeline`] استيعاب أي نموذج من [Hub](https://huggingface.co/models)، مما يسهل التكيف مع حالات الاستخدام الأخرى. على سبيل المثال، إذا كنت تريد نموذجًا قادرًا على التعامل مع النص الفرنسي، فاستخدم العلامات على Hub لفلتره نموذج مناسب. تعيد النتيجة الأولى المرشحة نموذج BERT متعدد اللغات [BERT model](https://huggingface.co/nlptown/bert-base-multilingual-uncased-sentiment) الذي تم ضبطه مسبقًا للتحليل المشاعر والذي يمكنك استخدامه للنص الفرنسي:
 
 ```py
 >>> model_name = "nlptown/bert-base-multilingual-uncased-sentiment"
