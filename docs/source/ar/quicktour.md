@@ -252,7 +252,7 @@ label: NEGATIVE, with score: 0.5309
 >>> pt_outputs = pt_model(**pt_batch)
 ```
 
-يقوم النموذج بإخراج التنشيطات النهائية في سمة `logits`. طبق دالة softmax على `logits` لاسترداد الاحتمالات:
+يُخرج النموذج التنشيطات النهائية في سمة `logits`. طبق دالة softmax على `logits` للحصول على الاحتمالات:
 
 ```py
 >>> from torch import nn
