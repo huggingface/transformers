@@ -215,7 +215,9 @@ class TextGenerationPipeline(Pipeline):
                 One or several prompts (or one list of prompts) to complete. If strings or a list of string are
                 passed, this pipeline will continue each prompt. Alternatively, a "chat", in the form of a list
                 of dicts with "role" and "content" keys, can be passed, or a list of such chats. When chats are passed,
-                the model's chat template will be used to format them before passing them to the model.
+                the model's chat template will be used to format them before passing them to the model. If the final
+                message in the input chat is an "assistant" message, the model will continue that message instead
+                of starting a new one.
             return_tensors (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the tensors of predictions (as token indices) in the outputs. If set to
                 `True`, the decoded text is not returned.
@@ -283,9 +285,13 @@ class TextGenerationPipeline(Pipeline):
 
         if isinstance(prompt_text, Chat):
             tokenizer_kwargs.pop("add_special_tokens", None)  # ignore add_special_tokens on chats
+            # If the user passes a chat that ends in an assistant message, we treat it as a prefill
+            # because very few models support multiple separate, consecutive assistant messages
+            assistant_prefill = prompt_text.messages[-1]["role"] == "assistant"
             inputs = self.tokenizer.apply_chat_template(
                 prompt_text.messages,
-                add_generation_prompt=True,
+                add_generation_prompt=not assistant_prefill,
+                assistant_prefill=assistant_prefill,
                 return_dict=True,
                 return_tensors=self.framework,
                 **tokenizer_kwargs,

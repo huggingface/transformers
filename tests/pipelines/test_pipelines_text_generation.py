@@ -192,6 +192,23 @@ class TextGenerationPipelineTests(unittest.TestCase):
         )
 
     @require_torch
+    def test_small_chat_model_assistant_prefill(self):
+        # Here we check that passing a chat that ends in an assistant message is handled correctly
+        # by continuing the final message rather than starting a new one
+        text_generator = pipeline(
+            task="text-generation", model="rocketknight1/tiny-gpt2-with-chatml-template", framework="pt"
+        )
+        # Using `do_sample=False` to force deterministic output
+        chat1 = [
+            {"role": "system", "content": "This is a system message."},
+            {"role": "user", "content": "This is a test"},
+            {"role": "assistant", "content": "This is"},
+        ]
+        outputs = text_generator(chat1, do_sample=False, max_new_tokens=10)
+        breakpoint()
+        print()
+
+    @require_torch
     def test_small_chat_model_with_dataset_pt(self):
         from torch.utils.data import Dataset
 
