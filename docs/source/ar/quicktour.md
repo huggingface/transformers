@@ -95,7 +95,7 @@ label: NEGATIVE, with score: 0.5309
 >>> dataset = load_dataset("PolyAI/minds14", name="en-US", split="train")  # doctest: +IGNORE_RESULT
 ```
 
-يجب التأكد من أن معدل أخذ العينات لمجموعة البيانات يتطابق مع معدل أخذ العينات الذي تم تدريب [`facebook/wav2vec2-base-960h`](https://huggingface.co/facebook/wav2vec2-base-960h) عليه:
+يجب التأكد من أن نفس الجودة الصوتية (معدل أخذ العينات) لمجموعة البيانات يتطابق مع معدل أخذ العينات الذي تم تدريب [`facebook/wav2vec2-base-960h`](https://huggingface.co/facebook/wav2vec2-base-960h) عليه:
 
 ```py
 >>> dataset = dataset.cast_column("audio", Audio(sampling_rate=speech_recognizer.feature_extractor.sampling_rate))
