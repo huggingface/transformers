@@ -205,8 +205,23 @@ class TextGenerationPipelineTests(unittest.TestCase):
             {"role": "assistant", "content": "This is"},
         ]
         outputs = text_generator(chat1, do_sample=False, max_new_tokens=10)
-        breakpoint()
-        print()
+
+        # Assert that we continued the last message and there isn't a sneaky <|im_end|>
+        self.assertEqual(
+            outputs,
+            [
+                {
+                    "generated_text": [
+                        {"role": "system", "content": "This is a system message."},
+                        {"role": "user", "content": "This is a test"},
+                        {
+                            "role": "assistant",
+                            "content": "This is stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs",
+                        },
+                    ]
+                }
+            ],
+        )
 
     @require_torch
     def test_small_chat_model_with_dataset_pt(self):

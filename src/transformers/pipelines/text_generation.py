@@ -397,8 +397,14 @@ class TextGenerationPipeline(Pipeline):
                         all_text = prompt_text + all_text
                     elif isinstance(prompt_text, Chat):
                         # Explicit list parsing is necessary for parsing chat datasets
-                        all_text = list(prompt_text.messages) + [{"role": "assistant", "content": all_text}]
-
+                        if (final_message := prompt_text.messages[-1])["role"] == "assistant":
+                            # With assistant prefill, concat onto the end of the last message
+                            all_text = list(prompt_text.messages)[:-1] + [
+                                {"role": "assistant", "content": final_message["content"] + all_text}
+                            ]
+                        else:
+                            # When we're not doing assistant prefill, the output is a new message
+                            all_text = list(prompt_text.messages) + [{"role": "assistant", "content": all_text}]
                 record = {"generated_text": all_text}
             records.append(record)
 
