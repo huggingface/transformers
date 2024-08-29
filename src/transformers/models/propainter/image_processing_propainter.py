@@ -366,6 +366,7 @@ class ProPainterImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
+        masks: ImageInput,
         do_resize: bool = None,
         size: Dict[str, int] = None,
         resample: PILImageResampling = None,
@@ -388,6 +389,9 @@ class ProPainterImageProcessor(BaseImageProcessor):
         Args:
             images (`ImageInput`):
                 Video frames to preprocess. Expects a single or batch of video frames with pixel values ranging from 0
+                to 255. If passing in frames with pixel values between 0 and 1, set `do_rescale=False`.
+            masks (`ImageInput`):
+                masks for each frames to preprocess. Expects a single or batch of masks frames with pixel values ranging from 0
                 to 255. If passing in frames with pixel values between 0 and 1, set `do_rescale=False`.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
@@ -445,10 +449,6 @@ class ProPainterImageProcessor(BaseImageProcessor):
         crop_size = crop_size if crop_size is not None else self.crop_size
         crop_size = get_size_dict(crop_size, param_name="crop_size")
 
-        #This is to separate the video frames and the masks from one single variable
-        masks = images[len(images)//2:]
-        videos = images[:len(images)//2]
-
         to_tensors = NumpyToTensor()
 
         if not valid_images(images):
@@ -456,6 +456,13 @@ class ProPainterImageProcessor(BaseImageProcessor):
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
+        if not valid_images(masks):
+            raise ValueError(
+                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
+                "torch.Tensor, tf.Tensor or jax.ndarray."
+            )
+
+        videos = images
 
         videos = make_batched(videos)
         masks = make_batched(masks)
