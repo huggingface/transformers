@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 [[open-in-colab]]
 
-Video-text-to-text models, also known as video language models or vision language models with video input, are language models that take an video input. These models can tackle various tasks, from visual question answering to video captioning. 
+Video-text-to-text models, also known as video language models or vision language models with video input, are language models that take a video input. These models can tackle various tasks, from visual question answering to video captioning. 
 
 These models are almost the same as [image-text-to-text](../image_text_to_text.md) models by means of architecture. They have some adjustments and additions to their architecture to accept video data, which is essentially image frames with temporal dependencies. Some `image-text-to-text` models take in multiple images, but this condition alone is inadequate for the model to accept videos. Moreover, `video-text-to-text` models are often trained with all vision modalities, each row might have videos, multiple videos, images and multiple images. Some of these models can also take interleaved input, i.e. one can refer to a specific video inside text through inputting video token in text like "What is happening in this video? `<video>`". 
 
