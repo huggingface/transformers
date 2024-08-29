@@ -172,7 +172,19 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         super().__init__(**kwargs)
         self._tokenizer.encode_special_tokens = self.split_special_tokens
 
-        self._add_tokens(list(added_tokens_decoder.values()))
+        added_tokens_decoder_hash = {hash(repr(token)) for token in self.added_tokens_decoder}
+        tokens_to_add = [
+            token
+            for index, token in sorted(added_tokens_decoder.items(), key=lambda x: x[0])
+            if hash(repr(token)) not in added_tokens_decoder_hash
+        ]
+        encoder = list(self.added_tokens_encoder.keys()) + [str(token) for token in tokens_to_add]
+        # if some of the special tokens are strings, we check if we don't already have a token
+        tokens_to_add += [
+            token for token in self.all_special_tokens_extended if token not in encoder and token not in tokens_to_add
+        ]
+
+        self._add_tokens(tokens_to_add)
 
     @property
     def is_fast(self) -> bool:
