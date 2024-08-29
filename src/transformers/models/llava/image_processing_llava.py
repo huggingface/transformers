@@ -183,13 +183,13 @@ class LlavaImageProcessor(BaseImageProcessor):
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> np.array:
         """
-        Pads an image to make it square.
+        Pads an image to a square.
 
         Args:
             image (`np.ndarray`):
                 The image to pad.
             background_color (`int` or `Tuple[int, int, int]`, *optional*, defaults to 0):
-
+                The color to use for the padding. Can be an integer or a tuple of integers representing the RGB values.
             input_data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format for the input image. Can be one of:
                     - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
