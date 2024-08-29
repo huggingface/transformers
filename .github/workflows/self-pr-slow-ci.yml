@@ -2,8 +2,6 @@ name: PR slow CI
 
 on:
   pull_request:
-    paths:
-      - "*"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
