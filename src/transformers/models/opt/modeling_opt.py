@@ -793,11 +793,11 @@ class OPTDecoder(OPTPreTrainedModel):
                     decoder_layer.__call__,
                     hidden_states,
                     causal_attention_mask,
-                    position_ids,
                     head_mask[idx] if head_mask is not None else None,
                     None,
                     output_attentions,
                     use_cache,
+                    position_ids,
                 )
             else:
                 layer_outputs = decoder_layer(
