@@ -1131,8 +1131,8 @@ def parse_commit_message(commit_message: str) -> Dict[str, bool]:
 
 
 JOB_TO_TEST_FILE = {
-    "torch_and_tf": r"tests/models/.*/test_modeling_(tf_|?!flax).*",
-    "torch_and_flax": r"tests/models/.*/test_modeling_(flax|?!tf).*",
+    "torch_and_tf": r"tests/models/.*/test_modeling_(tf_|(?!flax)).*",
+    "torch_and_flax": r"tests/models/.*/test_modeling_(flax|(?!tf)).*",
     "tf": r"tests/models/.*/test_modeling_tf_.*",
     "torch": r"tests/models/.*/test_modeling_(?!(flax_|tf_)).*",
     "generate": r"tests/models/.*/test_modeling_(?!(flax_|tf_)).*",
@@ -1147,7 +1147,7 @@ JOB_TO_TEST_FILE = {
     "pipeline_tf": r"tests/models/.*/test_modeling_tf_.*",
     "pipeline_torch": r"tests/models/.*/test_modeling_(?!(flax_|tf_)).*",
     "hub": r"tests/.*(?!(flax_|tf_)).*",
-    "onnx": r"tests/models/.*/test_modeling_(tf_|?!flax).*",
+    "onnx": r"tests/models/.*/test_modeling_(tf_|(?!flax)).*",
 }
 
 

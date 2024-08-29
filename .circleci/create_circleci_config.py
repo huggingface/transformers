@@ -135,7 +135,7 @@ class CircleCIJob:
             {"run": {"name": "Create `test-results` directory", "command": "mkdir test-results"}},
             {"run": {"name": "Show files being tested tests", "command": f'echo {" ".join(self.tests_to_run)} | tr " " "\\n" >> {self.name}_test_list.txt'}},
             {"run": {"name": "Split tests across parallel nodes: show current parallel tests",
-                     "command": f"TESTS=$(circleci tests split {self.name}_test_list.txt) --split-by=timings && echo $TESTS > splitted_tests.txt && echo $TESTS | tr ' ' '\n'" if self.parallelism else f"cp {self.name}_test_list.txt  splitted_tests.txt"}
+                     "command": f"TESTS=$(circleci tests split  --split-by=timings {self.name}_test_list.txt) && echo $TESTS > splitted_tests.txt && echo $TESTS | tr ' ' '\n'" if self.parallelism else f"cp {self.name}_test_list.txt  splitted_tests.txt"}
             },
             {"run": {
                 "name": "Run tests",
