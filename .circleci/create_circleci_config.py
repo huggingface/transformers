@@ -114,7 +114,7 @@ class CircleCIJob:
                 # Examples special case: we need to download NLTK files in advance to avoid cuncurrency issues
         timeout_cmd = f"timeout {self.command_timeout} " if self.command_timeout else ""
         marker_cmd = f"-m \"{self.marker}\"" if self.marker is not None else ""
-        additional_flags = f"-p no:warning -o junit_family=xunit1 --junitxml=test-results/junit.xml"
+        additional_flags = f"-v -p no:warning -o junit_family=xunit1 --junitxml=test-results/junit.xml"
         steps = [
             "checkout",
             {"attach_workspace": {"at": "test_preparation"}},
@@ -135,7 +135,7 @@ class CircleCIJob:
             {"run": {"name": "Create `test-results` directory", "command": "mkdir test-results"}},
             {"run": {"name": "Show files being tested tests", "command": f'echo {" ".join(self.tests_to_run)} | tr " " "\\n" >> {self.name}_test_list.txt'}},
             {"run": {"name": "Split tests across parallel nodes: show current parallel tests",
-                     "command": f"TESTS=$(circleci tests split {self.name}_test_list.txt) && echo $TESTS > splitted_tests.txt && echo $TESTS" if self.parallelism else f"cp {self.name}_test_list.txt  splitted_tests.txt"}
+                     "command": f"TESTS=$(circleci tests split {self.name}_test_list.txt) && echo $TESTS > splitted_tests.txt && echo $TESTS | tr ' ' '\n'" if self.parallelism else f"cp {self.name}_test_list.txt  splitted_tests.txt"}
             },
             {"run": {
                 "name": "Run tests",
