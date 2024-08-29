@@ -493,7 +493,7 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 
 ## التدريب باستخدام TensorFlow
 
-جميع النماذج عبارة عن [`tf.keras.Model`](https://www.tensorflow.org/api_docs/python/tf/keras/Model) قياسية، لذا يمكن تدريبها في TensorFlow باستخدام واجهة برمجة تطبيقات Keras. يوفر 🤗 Transformers طريقة [`~TFPreTrainedModel.prepare_tf_dataset`] لتحميل مجموعة البيانات الخاصة بك بسهولة كـ `tf.data.Dataset` حتى تتمكن من البدء في التدريب على الفور باستخدام طرق `compile` و`fit` في Keras.
+جميع النماذج عبارة عن [`tf.keras.Model`](https://www.tensorflow.org/api_docs/python/tf/keras/Model) قياسية، لذا يمكن تدريبها في TensorFlow باستخدام واجهة برمجة تطبيقات Keras. يوفر 🤗 Transformers طريقة [`~TFPreTrainedModel.prepare_tf_dataset`] لتحميل مجموعة البيانات الخاصة بك بسهولة كـ `tf.data.Dataset` حتى تتمكن من البدء في التدريب على الفور باستخدام دالتي `compile` و`fit` في Keras.
 
 1. ستبدأ بـ [`TFPreTrainedModel`] أو [`tf.keras.Model`](https://www.tensorflow.org/api_docs/python/tf/keras/Model):
 
