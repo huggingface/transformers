@@ -35,6 +35,7 @@ jobs:
             - run: mkdir -p test_preparation
             - run: python utils/tests_fetcher.py | tee tests_fetched_summary.txt
             - run: python utils/tests_fetcher.py --filter_tests
+            - run: yq eval -o=json test_preparation/generated_config.yml > test_preparation/generated_config.json
             - store_artifacts:
                   path: test_preparation
             - run: export "GIT_COMMIT_MESSAGE=$(git show -s --format=%s)" && echo $GIT_COMMIT_MESSAGE && python .circleci/create_circleci_config.py --fetcher_folder test_preparation
