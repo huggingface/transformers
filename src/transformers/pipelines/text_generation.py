@@ -221,9 +221,7 @@ class TextGenerationPipeline(Pipeline):
                 One or several prompts (or one list of prompts) to complete. If strings or a list of string are
                 passed, this pipeline will continue each prompt. Alternatively, a "chat", in the form of a list
                 of dicts with "role" and "content" keys, can be passed, or a list of such chats. When chats are passed,
-                the model's chat template will be used to format them before passing them to the model. If the final
-                message in the input chat is an "assistant" message, the model will continue that message instead
-                of starting a new one.
+                the model's chat template will be used to format them before passing them to the model.
             return_tensors (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the tensors of predictions (as token indices) in the outputs. If set to
                 `True`, the decoded text is not returned.
@@ -234,6 +232,10 @@ class TextGenerationPipeline(Pipeline):
                 *return_text* is set to True.
             clean_up_tokenization_spaces (`bool`, *optional*, defaults to `True`):
                 Whether or not to clean up the potential extra spaces in the text output.
+            continue_final_message( `bool`, *optional*): This indicates that you want the model to continue the
+                last message in the input chat rather than starting a new one, allowing you to "prefill" its response.
+                By default this is `True` when the final message in the input chat has the `assistant` role and
+                `False` otherwise, but you can manually override that behaviour by setting this flag.
             prefix (`str`, *optional*):
                 Prefix added to prompt.
             handle_long_generation (`str`, *optional*):
