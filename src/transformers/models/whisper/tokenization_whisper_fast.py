@@ -580,8 +580,8 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
             token_ids = self._convert_to_list(token_ids)
 
         # handle case of empty token_ids for decoding with timestamps.
-        # at this point token_ids is a list, so it is safe to check length of list.
-        if len(token_ids) == 0:
+        # at this point token_ids is a list, so it is safe to use if not check.
+        if not token_ids:
             return token_ids
 
         has_prompt = token_ids[0] == prompt_token_id
@@ -602,6 +602,8 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
                 token_ids = token_ids.cpu().numpy()
             elif "tensorflow" in str(type(token_ids)):
                 token_ids = token_ids.numpy()
+        elif "jaxlib" in str(type(token_ids)):
+            token_ids = token_ids.tolist()
         # now the token ids are either a numpy array, or a list of lists
         if isinstance(token_ids, np.ndarray):
             token_ids = token_ids.tolist()
