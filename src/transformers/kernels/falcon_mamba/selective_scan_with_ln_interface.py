@@ -24,8 +24,15 @@ try:
 except ImportError:
     causal_conv1d_cuda = None
 
+import mamba_ssm
 import selective_scan_cuda
-from mamba_ssm.ops.triton.layer_norm import _layer_norm_fwd
+
+
+# For BC for old mamba-ssm versions: https://github.com/huggingface/transformers/pull/33195#discussion_r1736401127
+if hasattr(mamba_ssm.ops.triton, "layernorm"):
+    from mamba_ssm.ops.triton.layernorm import _layer_norm_fwd
+else:
+    from mamba_ssm.ops.triton.layer_norm import _layer_norm_fwd
 
 
 class SelectiveScanFn(torch.autograd.Function):
