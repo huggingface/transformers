@@ -173,7 +173,7 @@ label: NEGATIVE, with score: 0.5309
 >>> tokenizer = AutoTokenizer.from_pretrained(model_name)
 ```
 
-مرر نصك إلى المعالج:
+مرر نصك إلى المجزئ:
 
 ```py
 >>> encoding = tokenizer("We are very happy to show you the 🤗 Transformers library.")
