@@ -163,7 +163,6 @@ limitations under the License.
 >>> image_data = requests.get(url, stream=True).raw
 >>> image = Image.open(image_data)
 
-# خصص خط أنابيب لكشف الأشياء
 >>> object_detector = pipeline('object-detection')
 >>> object_detector(image)
 [{'score': 0.9982201457023621،
