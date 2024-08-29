@@ -245,7 +245,7 @@ def _validate_bnb_multi_backend_availability(raise_exception):
 
 def _validate_bnb_cuda_backend_availability(raise_exception):
     if not torch.cuda.is_available():
-        log_msg = "CUDA is required but not available for bitsandbytes. Please consider installing the multi-platform enabled version of bitsandbytes, which is currently a work in progress. 
+        log_msg = f"CUDA is required but not available for bitsandbytes. Please consider installing the multi-platform enabled version of bitsandbytes, which is currently a work in progress. 
         Please check currently supported platforms and installation instructions at https://huggingface.co/docs/bitsandbytes/main/en/installation#multi-backend"
         if raise_exception:
             logger.error(log_msg)
