@@ -90,7 +90,7 @@ TORCH_FX_REQUIRED_VERSION = version.parse("1.10")
 ACCELERATE_MIN_VERSION = "0.26.0"
 FSDP_MIN_VERSION = "1.12.0"
 XLA_FSDPV2_MIN_VERSION = "2.2.0"
-HQQ_MIN_VERSION = "0.2.0"
+HQQ_MIN_VERSION = "0.2.1"
 
 
 _accelerate_available, _accelerate_version = _is_package_available("accelerate", return_version=True)

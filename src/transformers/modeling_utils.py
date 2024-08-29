@@ -83,6 +83,7 @@ from .utils import (
     is_accelerate_available,
     is_bitsandbytes_available,
     is_flash_attn_2_available,
+    is_hqq_available,
     is_offline_mode,
     is_optimum_available,
     is_peft_available,
@@ -884,14 +885,9 @@ def _load_state_dict_into_meta_model(
 
     is_torch_e4m3fn_available = hasattr(torch, "float8_e4m3fn")
 
-    # We add this because HQQLinear dict has a very large state_dict (19 params/per module), which makes loading extremely slow
-    run_expected_keys_check = True
-    if isinstance(hf_quantizer, HqqHfQuantizer):
-        run_expected_keys_check = False
-
     for param_name, param in state_dict.items():
         # First part of the test is always true as load_state_dict_keys always contains state_dict keys.
-        if param_name not in loaded_state_dict_keys or ((param_name not in expected_keys) and run_expected_keys_check):
+        if param_name not in loaded_state_dict_keys or param_name not in expected_keys:
             continue
 
         if param_name.startswith(start_prefix):
@@ -4115,6 +4111,41 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         model_state_dict = model.state_dict()
         expected_keys = list(model_state_dict.keys())
         prefix = model.base_model_prefix
+
+        # Collects all quantizable (linear) layers
+        def _find_hqq_quantizable_layers(model, layers):
+            for name, module in model.named_children():
+                if isinstance(module, (torch.nn.Linear)):
+                    layers.add(module.name)
+                _find_hqq_quantizable_layers(module, layers)
+
+        # Adds missing keys for HQQLinear
+        def _fix_hqq_keys(keys):
+            new_keys = keys
+            if is_hqq_available():
+                from hqq.core.quantize import HQQLinear
+
+                # Name modules
+                for name, module in model.named_modules():
+                    module.name = name
+
+                # valid modules are Linear layers that have HQQLinear state_dict. We ignore skip_modules and any layers with Linear state_dict() params
+                _valid_modules = set()
+                _find_hqq_quantizable_layers(model, _valid_modules)
+                _valid_modules -= set(model.config.quantization_config["skip_modules"])
+                _valid_modules -= {_key.replace(".weight", "") for _key in loaded_keys if _key.endswith(".weight")}
+
+                # Append new expected layers based on _ref_keys
+                _ref_keys = HQQLinear(
+                    linear_layer=None, quant_config=None, compute_dtype=torch.float16, device="cpu"
+                ).state_dict_keys()
+                for _module in _valid_modules:
+                    new_keys += [_module + "." + _ref_key for _ref_key in _ref_keys]
+
+            return new_keys
+
+        if isinstance(hf_quantizer, HqqHfQuantizer):
+            expected_keys = _fix_hqq_keys(expected_keys)
 
         def _fix_key(key):
             if "beta" in key:

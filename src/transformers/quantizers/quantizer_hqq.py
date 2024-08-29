@@ -62,7 +62,7 @@ class HqqHfQuantizer(HfQuantizer):
     def validate_environment(self, *args, **kwargs):
         if not (is_hqq_available()):
             raise ImportError(
-                "A valid HQQ version (>=0.2.0) is not available. Please follow the instructions to install it: `https://github.com/mobiusml/hqq/`."
+                "A valid HQQ version (>=0.2.1) is not available. Please follow the instructions to install it: `https://github.com/mobiusml/hqq/`."
             )
 
         if kwargs.get("from_tf", False) or kwargs.get("from_flax", False):
@@ -162,8 +162,6 @@ class HqqHfQuantizer(HfQuantizer):
                     device=target_device,
                 )
 
-            hqq_layer.axis = None
-            hqq_layer.channel_wise = None
             hqq_layer.load_state_dict(module_state_dict)
 
             if hqq_layer.bias is not None and isinstance(hqq_layer.bias, torch.Tensor):
