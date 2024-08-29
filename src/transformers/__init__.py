@@ -461,6 +461,7 @@ _import_structure = {
     "models.gpt_neox_japanese": ["GPTNeoXJapaneseConfig"],
     "models.gpt_sw3": [],
     "models.gptj": ["GPTJConfig"],
+    "models.granite": ["GraniteConfig"],
     "models.grounding_dino": [
         "GroundingDinoConfig",
         "GroundingDinoProcessor",
@@ -1245,6 +1246,7 @@ else:
         "HybridCache",
         "MambaCache",
         "OffloadedCache",
+        "OffloadedStaticCache",
         "QuantizedCache",
         "QuantizedCacheConfig",
         "QuantoQuantizedCache",
@@ -1578,10 +1580,13 @@ else:
     _import_structure["models.blip_2"].extend(
         [
             "Blip2ForConditionalGeneration",
+            "Blip2ForImageTextRetrieval",
             "Blip2Model",
             "Blip2PreTrainedModel",
             "Blip2QFormerModel",
+            "Blip2TextModelWithProjection",
             "Blip2VisionModel",
+            "Blip2VisionModelWithProjection",
         ]
     )
     _import_structure["models.bloom"].extend(
@@ -2320,6 +2325,13 @@ else:
             "GPTJForSequenceClassification",
             "GPTJModel",
             "GPTJPreTrainedModel",
+        ]
+    )
+    _import_structure["models.granite"].extend(
+        [
+            "GraniteForCausalLM",
+            "GraniteModel",
+            "GranitePreTrainedModel",
         ]
     )
     _import_structure["models.grounding_dino"].extend(
@@ -5213,6 +5225,7 @@ if TYPE_CHECKING:
         GPTNeoXJapaneseConfig,
     )
     from .models.gptj import GPTJConfig
+    from .models.granite import GraniteConfig
     from .models.grounding_dino import (
         GroundingDinoConfig,
         GroundingDinoProcessor,
@@ -6040,6 +6053,7 @@ if TYPE_CHECKING:
             HybridCache,
             MambaCache,
             OffloadedCache,
+            OffloadedStaticCache,
             QuantizedCache,
             QuantizedCacheConfig,
             QuantoQuantizedCache,
@@ -6327,10 +6341,13 @@ if TYPE_CHECKING:
         )
         from .models.blip_2 import (
             Blip2ForConditionalGeneration,
+            Blip2ForImageTextRetrieval,
             Blip2Model,
             Blip2PreTrainedModel,
             Blip2QFormerModel,
+            Blip2TextModelWithProjection,
             Blip2VisionModel,
+            Blip2VisionModelWithProjection,
         )
         from .models.bloom import (
             BloomForCausalLM,
@@ -6931,6 +6948,11 @@ if TYPE_CHECKING:
             GPTJForSequenceClassification,
             GPTJModel,
             GPTJPreTrainedModel,
+        )
+        from .models.granite import (
+            GraniteForCausalLM,
+            GraniteModel,
+            GranitePreTrainedModel,
         )
         from .models.grounding_dino import (
             GroundingDinoForObjectDetection,
