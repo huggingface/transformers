@@ -83,7 +83,6 @@ from .utils import (
     is_accelerate_available,
     is_bitsandbytes_available,
     is_flash_attn_2_available,
-    is_hqq_available,
     is_offline_mode,
     is_optimum_available,
     is_peft_available,
@@ -4112,40 +4111,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         expected_keys = list(model_state_dict.keys())
         prefix = model.base_model_prefix
 
-        # Collects all quantizable (linear) layers
-        def _find_hqq_quantizable_layers(model, layers):
-            for name, module in model.named_children():
-                if isinstance(module, (torch.nn.Linear)):
-                    layers.add(module.name)
-                _find_hqq_quantizable_layers(module, layers)
-
-        # Adds missing keys for HQQLinear
-        def _fix_hqq_keys(keys):
-            new_keys = keys
-            if is_hqq_available():
-                from hqq.core.quantize import HQQLinear
-
-                # Name modules
-                for name, module in model.named_modules():
-                    module.name = name
-
-                # valid modules are Linear layers that have HQQLinear state_dict. We ignore skip_modules and any layers with Linear state_dict() params
-                _valid_modules = set()
-                _find_hqq_quantizable_layers(model, _valid_modules)
-                _valid_modules -= set(model.config.quantization_config["skip_modules"])
-                _valid_modules -= {_key.replace(".weight", "") for _key in loaded_keys if _key.endswith(".weight")}
-
-                # Append new expected layers based on _ref_keys
-                _ref_keys = HQQLinear(
-                    linear_layer=None, quant_config=None, compute_dtype=torch.float16, device="cpu"
-                ).state_dict_keys()
-                for _module in _valid_modules:
-                    new_keys += [_module + "." + _ref_key for _ref_key in _ref_keys]
-
-            return new_keys
-
         if isinstance(hf_quantizer, HqqHfQuantizer):
-            expected_keys = _fix_hqq_keys(expected_keys)
+            expected_keys = hf_quantizer.update_expected_keys(model, expected_keys, loaded_keys)
 
         def _fix_key(key):
             if "beta" in key:

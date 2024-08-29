@@ -99,6 +99,52 @@ class HqqHfQuantizer(HfQuantizer):
         else:
             return missing_keys
 
+    # Adds missing keys for HQQLinear modules that are loaded but the model with initialized with torch.nn.Linear
+    def update_expected_keys(self, model: "PreTrainedModel", keys: List[str], loaded_keys: List[str]) -> List[str]:
+        # Collects all quantizable (linear) layers
+        def _find_hqq_quantizable_layers(model, layers):
+            for name, module in model.named_children():
+                if isinstance(module, (torch.nn.Linear)):
+                    layers.add(module.name)
+                _find_hqq_quantizable_layers(module, layers)
+
+        new_keys = set(keys)
+        if is_hqq_available():
+            from hqq.core.quantize import HQQLinear
+
+            # Name modules
+            for name, module in model.named_modules():
+                module.name = name
+
+            # valid modules are Linear layers that have HQQLinear state_dict. We ignore skip_modules and any layers with Linear state_dict() params
+            _valid_modules = set()
+            _find_hqq_quantizable_layers(model, _valid_modules)
+            _valid_modules -= set(model.config.quantization_config["skip_modules"])
+
+            # Append new expected layers based on _ref_keys
+            _ref_keys = HQQLinear(
+                linear_layer=None, quant_config=None, compute_dtype=torch.float16, device="cpu"
+            ).state_dict_keys() - {"bias"}
+
+            # Clean-up
+            _rm_keys = set()
+            for key in new_keys:
+                if any(_module in key for _module in _valid_modules):
+                    _rm_keys.add(key)
+            new_keys -= _rm_keys
+            # At this point, new_keys contains all the keys of the layers that are NOT HQQLinear or torch.nn.Linear
+
+            # Re-populate Linear/HQQLinear
+            for _module in _valid_modules:
+                if _module + ".weight" in loaded_keys:
+                    new_keys.add(_module + ".weight")
+                else:
+                    new_keys.update({_module + "." + _ref_key for _ref_key in _ref_keys})
+                if _module + ".bias" in loaded_keys:
+                    new_keys.add(_module + ".bias")
+
+        return list(new_keys)
+
     def check_quantized_param(
         self,
         model: "PreTrainedModel",
