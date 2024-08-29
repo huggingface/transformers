@@ -1328,7 +1328,7 @@ class TokenizerTesterMixin:
                 )
 
     @require_jinja
-    def test_assistant_prefill(self):
+    def test_continue_final_message(self):
         dummy_template = """
         {%- for message in messages %}
             {{- "<|im_start|>" + message['role'] + "\n" + message['content'] + "<|im_end|>" + "\n"}}
@@ -1342,14 +1342,14 @@ class TokenizerTesterMixin:
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 output = tokenizer.apply_chat_template(
-                    dummy_conversation, chat_template=dummy_template, tokenize=False, assistant_prefill=False
+                    dummy_conversation, chat_template=dummy_template, tokenize=False, continue_final_message=False
                 )
                 self.assertEqual(
                     output,
                     "<|im_start|>system\nsystem message<|im_end|>\n<|im_start|>user\nuser message<|im_end|>\n<|im_start|>assistant\nassistant message<|im_end|>\n",
                 )
                 prefill_output = tokenizer.apply_chat_template(
-                    dummy_conversation, chat_template=dummy_template, tokenize=False, assistant_prefill=True
+                    dummy_conversation, chat_template=dummy_template, tokenize=False, continue_final_message=True
                 )
                 # Assert that the final message is unterminated
                 self.assertEqual(

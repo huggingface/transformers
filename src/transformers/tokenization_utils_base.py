@@ -1704,7 +1704,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         documents: Optional[List[Dict[str, str]]] = None,
         chat_template: Optional[str] = None,
         add_generation_prompt: bool = False,
-        assistant_prefill: bool = False,
+        continue_final_message: bool = False,
         tokenize: bool = True,
         padding: bool = False,
         truncation: bool = False,
@@ -1738,13 +1738,14 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             chat_template (`str`, *optional*):
                 A Jinja template to use for this conversion. It is usually not necessary to pass anything to this
                 argument, as the model's template will be used by default.
-            add_generation_prompt (bool, *optional*): Whether to end the prompt with the token(s) that indicate
-                the start of an assistant message. This is useful when you want to generate a response from the model.
+            add_generation_prompt (bool, *optional*): If this is set, a prompt with the token(s) that indicate
+                the start of an assistant message will be appended to the formatted output. This is useful when you want to generate a response from the model.
                 Note that this argument will be passed to the chat template, and so it must be supported in the
                 template for this argument to have any effect.
-            assistant_prefill (bool, *optional*): If this is set, the chat will be formatted so that the model
-                continues the final message in the chat rather than starting a new one. If using this option, the
-                final message in the `conversation` must have the `assistant` role.
+            continue_final_message (bool, *optional*): If this is set, the chat will be formatted so that the final
+                message in the chat is open-ended, without any EOS tokens. The model will continue this message
+                rather than starting a new one. This allows you to "prefill" part of
+                the model's response for it. Cannot be used at the same time as `add_generation_prompt`.
             tokenize (`bool`, defaults to `True`):
                 Whether to tokenize the output. If `False`, the output will be a string.
             padding (`bool`, defaults to `False`):
@@ -1807,19 +1808,13 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             conversations = [conversation]
             is_batched = False
 
-        if assistant_prefill:
+        if continue_final_message:
             if add_generation_prompt:
                 raise ValueError(
-                    "assistant_prefill and add_generation_prompt are not compatible. Use assistant_prefill when you want the model to continue the final message, and add_generation_prompt when you want to add the header that will prompt it to start a new message instead."
+                    "continue_final_message and add_generation_prompt are not compatible. Use continue_final_message when you want the model to continue the final message, and add_generation_prompt when you want to add a header that will prompt it to start a new assistant message instead."
                 )
             if return_assistant_tokens_mask:
-                raise ValueError("assistant_prefill is not compatible with return_assistant_tokens_mask.")
-            for conversation in conversations:
-                if conversation[-1]["role"] != "assistant":
-                    raise ValueError(
-                        "assistant_prefill is set, but the final message in the conversation does not have the "
-                        "assistant role."
-                    )
+                raise ValueError("continue_final_message is not compatible with return_assistant_tokens_mask.")
 
         # We accept either JSON schemas or functions for tools. If we get functions, we convert them to schemas
         if tools is not None:
@@ -1867,7 +1862,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     add_generation_prompt=add_generation_prompt,
                     **template_kwargs,
                 )
-            if assistant_prefill:
+            if continue_final_message:
                 final_message = chat[-1]["content"]
                 rendered_chat = rendered_chat[: rendered_chat.rindex(final_message) + len(final_message)].rstrip()
             rendered.append(rendered_chat)

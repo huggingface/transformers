@@ -190,7 +190,7 @@ class TextGenerationPipelineTests(unittest.TestCase):
         )
 
     @require_torch
-    def test_small_chat_model_assistant_prefill(self):
+    def test_small_chat_model_continue_final_message(self):
         # Here we check that passing a chat that ends in an assistant message is handled correctly
         # by continuing the final message rather than starting a new one
         text_generator = pipeline(
