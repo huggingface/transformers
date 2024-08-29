@@ -330,6 +330,15 @@ class RopeTest(unittest.TestCase):
             _, attention_scale = rope_fn(config=config, device=torch_device, seq_len=1)
             self.assertEqual(attention_scale, 0.5)
 
+            config.rope_scaling = {
+                "rope_type": "longrope",
+                "factor": factor,
+                "short_factor": short_factor,
+                "long_factor": long_factor,
+            }
+            self.assertEqual(config.rope_scaling.get("attention_factor"), None)
+            rope_config_validation(config)
+
         # Check 2: Factor == 1.0 -> short factor is applied to the default frequencies
         factor = 1.0
         config.rope_scaling = {
