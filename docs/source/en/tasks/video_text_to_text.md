@@ -50,7 +50,7 @@ model = LlavaForConditionalGeneration.from_pretrained(model_id, torch_dtype=torc
 model.to("cuda")
 ```
 
-Some models directly consume `<video>` token, and some take in `<image>` tokens inserted as many as the number of sampled frames. This model handles videos in latter fashion. We will write a simple utility to handle image tokens and another to get a video from a url and sample frames from it. 
+Some models directly consume the `<video>` token, and others accept `<image>` tokens equal to the number of sampled frames. This model handles videos in the latter fashion. We will write a simple utility to handle image tokens, and another utility to get a video from a url and sample frames from it. 
 
 ```python
 import uuid
