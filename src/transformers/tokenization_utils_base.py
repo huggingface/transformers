@@ -1704,6 +1704,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         documents: Optional[List[Dict[str, str]]] = None,
         chat_template: Optional[str] = None,
         add_generation_prompt: bool = False,
+        assistant_prefill: bool = False,
         tokenize: bool = True,
         padding: bool = False,
         truncation: bool = False,
@@ -1741,6 +1742,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 the start of an assistant message. This is useful when you want to generate a response from the model.
                 Note that this argument will be passed to the chat template, and so it must be supported in the
                 template for this argument to have any effect.
+            assistant_prefill (bool, *optional*): If this is set, the chat will be formatted so that the model
+                continues the final message in the chat rather than starting a new one. If using this option, the
+                final message in the `conversation` must have the `assistant` role.
             tokenize (`bool`, defaults to `True`):
                 Whether to tokenize the output. If `False`, the output will be a string.
             padding (`bool`, defaults to `False`):
@@ -1803,6 +1807,20 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             conversations = [conversation]
             is_batched = False
 
+        if assistant_prefill:
+            if add_generation_prompt:
+                raise ValueError(
+                    "assistant_prefill and add_generation_prompt are not compatible. Use assistant_prefill when you want the model to continue the final message, and add_generation_prompt when you want to add the header that will prompt it to start a new message instead."
+                )
+            if return_assistant_tokens_mask:
+                raise ValueError("assistant_prefill is not compatible with return_assistant_tokens_mask.")
+            for conversation in conversations:
+                if conversation[-1]["role"] != "assistant":
+                    raise ValueError(
+                        "assistant_prefill is set, but the final message in the conversation does not have the "
+                        "assistant role."
+                    )
+
         # We accept either JSON schemas or functions for tools. If we get functions, we convert them to schemas
         if tools is not None:
             tool_schemas = []
@@ -1849,6 +1867,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     add_generation_prompt=add_generation_prompt,
                     **template_kwargs,
                 )
+            if assistant_prefill:
+                final_message = chat[-1]["content"]
+                rendered_chat = rendered_chat[: rendered_chat.rindex(final_message) + len(final_message)].rstrip()
             rendered.append(rendered_chat)
 
         if not is_batched:
