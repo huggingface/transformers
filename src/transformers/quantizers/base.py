@@ -117,7 +117,7 @@ class HfQuantizer(ABC):
             expected_keys (`List[str]`, *optional*):
                 The list of the expected keys in the initialized model.
             loaded_keys (`List[str]`, *optional*):
-               The list of the loaded keys in the checkpoint.
+                The list of the loaded keys in the checkpoint.
         """
         return expected_keys
 
