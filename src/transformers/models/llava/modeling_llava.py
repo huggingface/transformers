@@ -574,6 +574,7 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
             cache_position=cache_position,
             **kwargs,
         )
+        model_inputs.pop("num_logits_to_keep", None)
 
         if legacy_processing:
             model_inputs["pixel_values"] = pixel_values
