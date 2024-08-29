@@ -121,8 +121,10 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             gguf_param = load_gguf_checkpoint(kwargs.get("vocab_file"))
             architecture = gguf_param["config"]["model_type"]
             tokenizer_dict = gguf_param["tokenizer"]
+            tokenizer_config = gguf_param["tokenizer_config"]
             fast_tokenizer, additional_kwargs = convert_gguf_tokenizer(architecture, tokenizer_dict)
 
+            kwargs.update(tokenizer_config)
             if len(additional_kwargs) > 0:
                 kwargs.update(additional_kwargs)
 
