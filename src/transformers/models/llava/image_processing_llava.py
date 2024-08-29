@@ -21,8 +21,10 @@ from PIL import Image
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import (
+    PaddingMode,
     convert_to_rgb,
     get_resize_output_image_size,
+    pad,
     resize,
     to_channel_dimension_format,
 )
@@ -32,6 +34,7 @@ from ...image_utils import (
     ChannelDimension,
     ImageInput,
     PILImageResampling,
+    get_image_size,
     infer_channel_dimension_format,
     is_scaled_image,
     make_list_of_images,
@@ -55,7 +58,7 @@ class LlavaImageProcessor(BaseImageProcessor):
     Constructs a LLaVa image processor.
 
     Args:
-        do_pad (`bool`, *optional*, defaults to `True`):
+        do_pad (`bool`, *optional*, defaults to `False`):
             Whether to pad the image to a square. Can be overridden by `do_pad` in the `preprocess` method.
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden by
@@ -95,7 +98,7 @@ class LlavaImageProcessor(BaseImageProcessor):
 
     def __init__(
         self,
-        do_pad: bool = True,
+        do_pad: bool = False,
         do_resize: bool = True,
         size: Dict[str, int] = None,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
@@ -154,10 +157,13 @@ class LlavaImageProcessor(BaseImageProcessor):
             # `shortest_edge` key.
             delattr(self, "use_square_size")
 
-    def pad_to_square(image: Image.Image, background_color: Union[int, Tuple[int, int, int]] = 0) -> Image.Image:
+    def pad_to_square_original(
+        self, image: Image.Image, background_color: Union[int, Tuple[int, int, int]] = 0
+    ) -> Image.Image:
         """
         Pads an image to make it square.
         """
+        print("Image size:", image.size)
         width, height = image.size
         if width == height:
             return image
@@ -169,6 +175,51 @@ class LlavaImageProcessor(BaseImageProcessor):
             result = Image.new(image.mode, (height, height), background_color)
             result.paste(image, ((height - width) // 2, 0))
             return result
+
+    def pad_to_square(
+        self,
+        image: np.array,
+        background_color: Union[int, Tuple[int, int, int]] = 0,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    ) -> np.array:
+        """
+        Pads an image to make it square.
+
+        Args:
+            image (`np.ndarray`):
+                The image to pad.
+            background_color (`int` or `Tuple[int, int, int]`, *optional*, defaults to 0):
+
+            input_data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format for the input image. Can be one of:
+                    - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                    - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                If unset, will use the inferred format of the input image.
+
+        Returns:
+            `np.ndarray`: The padded image.
+        """
+        height, width = get_image_size(image, input_data_format)
+
+        if height == width:
+            return image
+
+        max_dim = max(height, width)
+        pad_height = max_dim - height
+        pad_width = max_dim - width
+
+        padding = (
+            (pad_height // 2, pad_height - pad_height // 2),
+            (pad_width // 2, pad_width - pad_width // 2),
+        )
+
+        return pad(
+            image=image,
+            padding=padding,
+            mode=PaddingMode.CONSTANT,
+            constant_values=background_color,
+            input_data_format=input_data_format,
+        )
 
     def resize(
         self,
@@ -347,7 +398,14 @@ class LlavaImageProcessor(BaseImageProcessor):
             input_data_format = infer_channel_dimension_format(images[0])
 
         if do_pad:
-            images = [self.pad_to_square(image=image) for image in images]
+            images = [
+                self.pad_to_square(
+                    image=image,
+                    background_color=tuple(int(x * 255) for x in self.image_mean),
+                    input_data_format=input_data_format,
+                )
+                for image in images
+            ]
 
         if do_resize:
             images = [

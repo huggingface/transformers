@@ -13,7 +13,7 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_vision_available
 
 
 _import_structure = {
@@ -33,6 +33,14 @@ else:
         "LlavaPreTrainedModel",
     ]
 
+try:
+    if not is_vision_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["image_processing_llava"] = ["LlavaImageProcessor"]
+
 
 if TYPE_CHECKING:
     from .configuration_llava import LlavaConfig
@@ -48,6 +56,14 @@ if TYPE_CHECKING:
             LlavaForConditionalGeneration,
             LlavaPreTrainedModel,
         )
+
+    try:
+        if not is_vision_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .image_processing_llava import LlavaImageProcessor
 
 else:
     import sys
