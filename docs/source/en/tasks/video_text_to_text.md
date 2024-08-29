@@ -18,9 +18,9 @@ rendered properly in your Markdown viewer.
 
 [[open-in-colab]]
 
-Video-text-to-text models, also known as video language models or vision language models with video input, are language models that take a video input. These models can tackle various tasks, from visual question answering to video captioning. 
+Video-text-to-text models, also known as video language models or vision language models with video input, are language models that take a video input. These models can tackle various tasks, from video question answering to video captioning. 
 
-These models have nearly the same architecture as [image-text-to-text](../image_text_to_text.md) models except for some changes to accept video data, which are essentially image frames with temporal dependencies. Some image-text-to-text models take in multiple images, but this alone is inadequate for a model to accept videos. Moreover, video-text-to-text models are often trained with all vision modalities. Each row might have videos, multiple videos, images and multiple images. Some of these models can also take interleaved inputs. For example, you can refer to a specific video inside a string of text by adding a video token in text like "What is happening in this video? `<video>`". 
+These models have nearly the same architecture as [image-text-to-text](../image_text_to_text.md) models except for some changes to accept video data, since video data is essentially image frames with temporal dependencies. Some image-text-to-text models take in multiple images, but this alone is inadequate for a model to accept videos. Moreover, video-text-to-text models are often trained with all vision modalities. Each example might have videos, multiple videos, images and multiple images. Some of these models can also take interleaved inputs. For example, you can refer to a specific video inside a string of text by adding a video token in text like "What is happening in this video? `<video>`". 
 
 In this guide, we provide a brief overview of video LMs and show how to use them with Transformers for inference.
 
@@ -29,7 +29,7 @@ To begin with, there are multiple types of video LMs:
 - chat fine-tuned models for conversation
 - instruction fine-tuned models
 
-This guide focuses on inference with an instruction-tuned model, [llava-hf/llava-interleave-qwen-7b-hf](https://huggingface.co/llava-hf/llava-interleave-qwen-7b-hf) which can take in interleaved data. Alternatively, you can try [llava-interleave-qwen-0.5b-hf](https://huggingface.co/llava-hf/llava-interleave-qwen-0.5b-hf)] if your hardware doesn't allow running a 7B model.
+This guide focuses on inference with an instruction-tuned model, [llava-hf/llava-interleave-qwen-7b-hf](https://huggingface.co/llava-hf/llava-interleave-qwen-7b-hf) which can take in interleaved data. Alternatively, you can try [llava-interleave-qwen-0.5b-hf](https://huggingface.co/llava-hf/llava-interleave-qwen-0.5b-hf) if your hardware doesn't allow running a 7B model.
 
 Let's begin installing the dependencies.
 
@@ -129,8 +129,7 @@ prompt = "<|im_start|>user"+ toks + f"\n{user_prompt}<|im_end|><|im_start|>assis
 inputs = processor(prompt, images=videos).to(model.device, model.dtype)
 ```
 
-
-Use [`~GenerationMixin.generate`] for inference. The model outputs the question in our input and answer, so only take the text after the prompt and `assistant` part. 
+We can now call [`~GenerationMixin.generate`] for inference. The model outputs the question in our input and answer, so we only take the text after the prompt and `assistant` part from the model output. 
 
 ```python
 output = model.generate(**inputs, max_new_tokens=100, do_sample=False)
