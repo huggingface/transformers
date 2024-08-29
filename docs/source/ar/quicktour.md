@@ -186,7 +186,7 @@ label: NEGATIVE, with score: 0.5309
 يعيد المجزئ قاموسًا يحتوي على:
 
 * [input_ids](./glossary#input-ids): التمثيلات الرقمية لرموزك.
-* [attention_mask](./glossary#attention-mask): تشير إلى الرموز التي يجب الاهتمام بها.
+* [attention_mask](./glossary#attention-mask): تشير إلى الرموز التي يجب الانتباه بها.
 
 يمكن للمعالج أيضًا قبول قائمة من الإدخالات، وتقسيم النص وإكماله لإرجاع دفعة ذات طول موحد:
 
