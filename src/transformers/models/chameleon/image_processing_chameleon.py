@@ -323,7 +323,9 @@ class ChameleonImageProcessor(BaseImageProcessor):
                 image = self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
 
             if do_normalize:
-                image = self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
+                image = self.normalize(
+                    image=image, mean=image_mean, std=image_std, input_data_format=input_data_format
+                )
 
             all_images.append(image)
         images = [
