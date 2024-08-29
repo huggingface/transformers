@@ -52,7 +52,7 @@ rendered properly in your Markdown viewer.
 
 ```py
 from transformers import AutoTokenizer, AutoModelForCausalLM
-mport torch
+import torch
 import os
 os.environ["TOKENIZERS_PARALLELISM"] = "false"  # 긴 경고 메시지를 방지하기 위해 설정 :)
 
@@ -71,7 +71,7 @@ print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
 ```
 
 `generate` 함수는 내부적으로 동일한 캐시 객체를 재사용하려고 시도하며, 이를 통해 각 호출 시 재컴파일의 필요성을 제거합니다. 재컴파일을 피하는 것은 `torch.compile`의 성능을 최대한 활용하는 데 매우 중요하며, 다음 사항에 유의해야 합니다:
-1. 배치 크기가 변경되거나 호출 간 최대 출력 길이가 증가하면 캐시를 다시 초기화해야 하며, 이로 인해 새로운 컴파일이 발생합니다;
+1. 배치 크기가 변경되거나 호출 간 최대 출력 길이가 증가하면 캐시를 다시 초기화해야 하며, 이로 인해 새로 컴파일을 해야 합니다;
 2. 컴파일된 함수의 첫 몇 번의 호출은 함수가 컴파일되는 동안 더 느립니다.
 
 > [!WARNING]
@@ -215,7 +215,7 @@ print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
 이 방법을 통해 모델의 forward 패스뿐만 아니라, 입력 준비, logit 처리기 작업 등을 포함한 모든 것을 컴파일합니다. 기본 사용 예제에 비해 `generate` 호출이 약간 더 빠를 수 있으며, 컴파일된 그래프는 더 특이한 하드웨어 장치나 사용 사례에 적합할 수 있습니다. 그러나 이 접근 방식을 사용하는 데는 몇 가지 큰 단점이 있습니다:
 1. 컴파일 속도가 훨씬 느립니다;
 2. `generate`의 모든 매개변수 설정은 `generation_config`를 통해서만 가능합니다;
-3. 많은 경고와 예외가 억제됩니다. -- 먼저 비컴파일 형태로 테스트하는 것을 권장합니다;
+3. 많은 경고와 예외가 억제됩니다. -- 먼저 컴파일 되지 않은 형태로 테스트하는 것을 권장합니다;
 4. 현재 작업 중이지만 기능 제한이 심합니다(예: 작성 시점에서는 EOS 토큰이 선택되어도 생성이 중단되지 않습니다).
 
 </hfoption>
