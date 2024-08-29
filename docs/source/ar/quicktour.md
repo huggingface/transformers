@@ -183,7 +183,7 @@ label: NEGATIVE, with score: 0.5309
  'attention_mask': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]}
 ```
 
-يعيد المعالج قاموسًا يحتوي على:
+يعيد المجزئ قاموسًا يحتوي على:
 
 * [input_ids](./glossary#input-ids): التمثيلات الرقمية لرموزك.
 * [attention_mask](./glossary#attention-mask): تشير إلى الرموز التي يجب الاهتمام بها.
