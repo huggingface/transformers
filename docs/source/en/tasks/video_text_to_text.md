@@ -29,7 +29,7 @@ To begin with, there are multiple types of video LMs:
 - chat fine-tuned models for conversation
 - instruction fine-tuned models
 
-This guide focuses on inference with an instruction-tuned model, [llava-hf/llava-interleave-qwen-7b-hf](https://huggingface.co/llava-hf/llava-interleave-qwen-7b-hf) which can take in interleaved data. Alternatively you can try [llava-interleave-qwen-0.5b-hf](https://huggingface.co/llava-hf/llava-interleave-qwen-0.5b-hf)] if your hardware doesn't allow running a 7B model.
+This guide focuses on inference with an instruction-tuned model, [llava-hf/llava-interleave-qwen-7b-hf](https://huggingface.co/llava-hf/llava-interleave-qwen-7b-hf) which can take in interleaved data. Alternatively, you can try [llava-interleave-qwen-0.5b-hf](https://huggingface.co/llava-hf/llava-interleave-qwen-0.5b-hf)] if your hardware doesn't allow running a 7B model.
 
 Let's begin installing the dependencies.
 
