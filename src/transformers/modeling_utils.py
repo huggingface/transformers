@@ -56,7 +56,6 @@ from .pytorch_utils import (  # noqa: F401
     prune_linear_layer,
 )
 from .quantizers import AutoHfQuantizer, HfQuantizer
-from .quantizers.quantizer_hqq import HqqHfQuantizer
 from .quantizers.quantizers_utils import get_module_from_name
 from .safetensors_conversion import auto_conversion
 from .utils import (
@@ -4111,7 +4110,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         expected_keys = list(model_state_dict.keys())
         prefix = model.base_model_prefix
 
-        if isinstance(hf_quantizer, HqqHfQuantizer):
+        if hf_quantizer is not None:
             expected_keys = hf_quantizer.update_expected_keys(model, expected_keys, loaded_keys)
 
         def _fix_key(key):

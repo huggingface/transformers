@@ -100,9 +100,11 @@ class HqqHfQuantizer(HfQuantizer):
             return missing_keys
 
     # Adds missing keys for HQQLinear modules that are loaded but the model with initialized with torch.nn.Linear
-    def update_expected_keys(self, model: "PreTrainedModel", keys: List[str], loaded_keys: List[str]) -> List[str]:
+    def update_expected_keys(
+        self, model: "PreTrainedModel", expected_keys: List[str], loaded_keys: List[str]
+    ) -> List[str]:
         if not self.pre_quantized:
-            return keys
+            return expected_keys
 
         # Collects all quantizable (linear) layers
         def _find_hqq_quantizable_layers(model, layers):
@@ -111,7 +113,7 @@ class HqqHfQuantizer(HfQuantizer):
                     layers.add(module.name)
                 _find_hqq_quantizable_layers(module, layers)
 
-        new_keys = set(keys)
+        new_keys = set(expected_keys)
         if is_hqq_available():
             from hqq.core.quantize import HQQLinear
 

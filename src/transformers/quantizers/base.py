@@ -109,6 +109,18 @@ class HfQuantizer(ABC):
         """
         return missing_keys
 
+    def update_expected_keys(self, model, expected_keys: List[str], loaded_keys: List[str]) -> List[str]:
+        """
+        Override this method if you want to adjust the `update_expected_keys`.
+
+        Args:
+            expected_keys (`List[str]`, *optional*):
+                The list of the expected keys in the initialized model.
+            loaded_keys (`List[str]`, *optional*):
+               The list of the loaded keys in the checkpoint.
+        """
+        return expected_keys
+
     def get_special_dtypes_update(self, model, torch_dtype: "torch.dtype") -> Dict[str, "torch.dtype"]:
         """
         returns dtypes for modules that are not quantized - used for the computation of the device_map in case
@@ -212,15 +224,19 @@ class HfQuantizer(ABC):
         )
 
     @abstractmethod
-    def _process_model_before_weight_loading(self, model, **kwargs): ...
+    def _process_model_before_weight_loading(self, model, **kwargs):
+        ...
 
     @abstractmethod
-    def _process_model_after_weight_loading(self, model, **kwargs): ...
-
-    @property
-    @abstractmethod
-    def is_serializable(self): ...
+    def _process_model_after_weight_loading(self, model, **kwargs):
+        ...
 
     @property
     @abstractmethod
-    def is_trainable(self): ...
+    def is_serializable(self):
+        ...
+
+    @property
+    @abstractmethod
+    def is_trainable(self):
+        ...
