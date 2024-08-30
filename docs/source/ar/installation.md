@@ -231,7 +231,7 @@ model = T5Model.from_pretrained("./path/to/local/directory", local_files_only=Tr
     >>> hf_hub_download(repo_id="bigscience/T0_3B", filename="config.json", cache_dir="./your/path/bigscience_t0")
     ```
 
-بمجرد تنزيل ملفك وتخزينه مؤقتًا محليًا، حدد مساره المحلي لتحميله واستخدامه:
+بمجرد تنزيل ملفك وتخزينه مؤقتًا محليًا، حدد مساره المحلي الخاص به لتحميله واستخدامه:
 
 ```py
 >>> from transformers import AutoConfig
