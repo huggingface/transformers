@@ -293,7 +293,7 @@ class SuperPointImageProcessor(BaseImageProcessor):
             an image in the batch as predicted by the model.
         """
         if len(outputs.mask) != len(target_sizes):
-            raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the logits")
+            raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the mask")
         if target_sizes.shape[1] != 2:
             raise ValueError("Each element of target_sizes must contain the size (h, w) of each image of the batch")
 

@@ -15,6 +15,7 @@ import unittest
 
 import numpy as np
 
+from transformers.models.superpoint.modeling_superpoint import SuperPointKeypointDescriptionOutput
 from transformers.testing_utils import require_torch, require_vision, slow
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -28,7 +29,7 @@ if is_torch_available():
     import torch
 
 if is_vision_available():
-    from transformers import SuperPointForKeypointDetection, SuperPointImageProcessor
+    from transformers import SuperPointImageProcessor
 
 
 class SuperPointImageProcessingTester(unittest.TestCase):
@@ -71,6 +72,23 @@ class SuperPointImageProcessingTester(unittest.TestCase):
             equal_resolution=equal_resolution,
             numpify=numpify,
             torchify=torchify,
+        )
+
+    def prepare_keypoint_detection_output(self, pixel_values):
+        max_number_keypoints = 50
+        batch_size = len(pixel_values)
+        mask = torch.zeros((batch_size, max_number_keypoints))
+        keypoints = torch.zeros((batch_size, max_number_keypoints, 2))
+        scores = torch.zeros((batch_size, max_number_keypoints))
+        descriptors = torch.zeros((batch_size, max_number_keypoints, 16))
+        for i in range(batch_size):
+            random_number_keypoints = np.random.randint(0, max_number_keypoints)
+            mask[i, :random_number_keypoints] = 1
+            keypoints[i, :random_number_keypoints] = torch.rand((random_number_keypoints, 2))
+            scores[i, :random_number_keypoints] = torch.rand((random_number_keypoints,))
+            descriptors[i, :random_number_keypoints] = torch.rand((random_number_keypoints, 16))
+        return SuperPointKeypointDescriptionOutput(
+            loss=None, keypoints=keypoints, scores=scores, descriptors=descriptors, mask=mask, hidden_states=None
         )
 
 
@@ -117,10 +135,9 @@ class SuperPointImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
     @slow
     def test_post_processing_keypoint_detection(self):
         image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
-        model = SuperPointForKeypointDetection.from_pretrained("magic-leap-community/superpoint")
         image_inputs = self.image_processor_tester.prepare_image_inputs()
         pre_processed_images = image_processor.preprocess(image_inputs, return_tensors="pt")
-        outputs = model(**pre_processed_images)
+        outputs = self.image_processor_tester.prepare_keypoint_detection_output(**pre_processed_images)
         image_sizes = torch.tensor([image.size for image in image_inputs]).flip(1)
         post_processed_outputs = image_processor.post_process_keypoint_detection(outputs, image_sizes)
 
