@@ -327,10 +327,12 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test(self):
         model = LlavaOnevisionForConditionalGeneration.from_pretrained(
-            "llava-hf/llava-onevision-qwen2-0.5b-ov-hf", device_map=torch_device
+            "llava-hf/llava-onevision-qwen2-0.5b-ov-hf", torch_dtype="float16", device_map=torch_device
         )
 
-        inputs = self.processor(images=self.image, text=self.prompt_image, return_tensors="pt").to(torch_device)
+        inputs = self.processor(images=self.image, text=self.prompt_image, return_tensors="pt").to(
+            torch_device, torch.float16
+        )
         self.assertTrue(inputs.input_ids.shape[1] == 6567)  # should expand num-image-tokens times
         self.assertTrue(inputs.pixel_values.shape == torch.Size([1, 10, 3, 384, 384]))
         self.assertTrue(inputs.image_sizes.tolist() == [[899, 1024]])
@@ -341,7 +343,7 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
             output = model(**inputs)
 
         expected_slice = torch.tensor(
-            [[-12.2601, -14.5049, -12.8159], [3.3944, 5.0435, 9.5309], [3.4951, 4.4647, 7.8321]],
+            [[-12.3125, -14.5703, -12.8750], [3.3945, 5.0625, 9.5469], [3.5254, 4.4453, 7.9492]],
             dtype=torch.float32,
             device=torch_device,
         )
@@ -360,7 +362,7 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test_batch(self):
         model = LlavaOnevisionForConditionalGeneration.from_pretrained(
-            "llava-hf/llava-onevision-qwen2-0.5b-ov-hf", device_map=torch_device
+            "llava-hf/llava-onevision-qwen2-0.5b-ov-hf", torch_dtype="float16", device_map=torch_device
         )
 
         inputs = self.processor(
@@ -369,11 +371,11 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
             videos=self.video,
             return_tensors="pt",
             padding=True,
-        ).to(torch_device)
+        ).to(torch_device, torch.float16)
 
         output = model.generate(**inputs, max_new_tokens=20)
 
-        EXPECTED_DECODED_TEXT = ['user\n\nWhat do you see in this image?\nassistant\nThe image is a radar chart that compares the performance of different models in a specific task, likely related', 'user\n\nWhat do you see in this video?\nassistant\nThe video shows a young child sitting on a bed, wearing glasses and looking at a book. The']  # fmt: skip
+        EXPECTED_DECODED_TEXT = ['user\n\nWhat do you see in this image?\nassistant\nThe image is a radar chart that compares the performance of different models in a specific task, likely related', 'user\n\nWhat do you see in this video?\nassistant\nA child wearing a light blue sleeveless top and pink pants is seen sitting on a bed, eng']  # fmt: skip
 
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
@@ -386,14 +388,17 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
         # related to (#29835)
         model = LlavaOnevisionForConditionalGeneration.from_pretrained(
             "llava-hf/llava-onevision-qwen2-0.5b-ov-hf",
+            torch_dtype="float16",
             device_map=torch_device,
         )
 
-        inputs = self.processor(text=self.prompt_video, videos=self.video, return_tensors="pt").to(torch_device)
+        inputs = self.processor(text=self.prompt_video, videos=self.video, return_tensors="pt").to(
+            torch_device, torch.float16
+        )
 
         # verify generation
         output = model.generate(**inputs, max_new_tokens=40)
-        EXPECTED_DECODED_TEXT = 'user\n\nWhat do you see in this video?\nassistant\nThe video shows a young child sitting on a bed, wearing glasses and looking at a book. The child appears to be engaged with the book, possibly reading or looking at the pages. The room has'  # fmt: skip
+        EXPECTED_DECODED_TEXT = 'user\n\nWhat do you see in this video?\nassistant\nA child wearing a light blue sleeveless top and pink pants is seen sitting on a bed, engrossed in reading a book. The room is cluttered with various items, including a blanket,'  # fmt: skip
 
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
@@ -406,6 +411,7 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
         # related to (#29835)
         model = LlavaOnevisionForConditionalGeneration.from_pretrained(
             "llava-hf/llava-onevision-qwen2-0.5b-ov-hf",
+            torch_dtype="float16",
             device_map=torch_device,
         )
 
@@ -414,7 +420,9 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
         prompt = (
             "user\n<image><image>\nWhat is the difference between these images?<|im_end|>\n<|im_start|>assistant\n"
         )
-        inputs = self.processor(text=prompt, images=[self.image, image], return_tensors="pt").to(torch_device)
+        inputs = self.processor(text=prompt, images=[self.image, image], return_tensors="pt").to(
+            torch_device, torch.float16
+        )
 
         # verify generation
         output = model.generate(**inputs, max_new_tokens=40)
@@ -431,15 +439,18 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
         # related to (#29835)
         model = LlavaOnevisionForConditionalGeneration.from_pretrained(
             "llava-hf/llava-onevision-qwen2-0.5b-ov-hf",
+            torch_dtype="float16",
             device_map=torch_device,
         )
 
         prompt = "user\n<video><video>\nAre these videos identical?<|im_end|>\n<|im_start|>assistant\n"
-        inputs = self.processor(text=prompt, videos=[self.video, self.video], return_tensors="pt").to(torch_device)
+        inputs = self.processor(text=prompt, videos=[self.video, self.video], return_tensors="pt").to(
+            torch_device, torch.float16
+        )
 
         # verify generation
         output = model.generate(**inputs, max_new_tokens=40)
-        EXPECTED_DECODED_TEXT = "user\n\nAre these videos identical?\nassistant\nNo, the video provided is not identical to the one you've asked about. The video shows a child sitting on a bed, reading a book, but it appears to be a different scene with different"  # fmt: skip
+        EXPECTED_DECODED_TEXT = "user\n\nAre these videos identical?\nassistant\nNo, the video is not identical; it shows a different child in different positions and activities."  # fmt: skip
 
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
@@ -450,7 +461,7 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test_batch_different_resolutions(self):
         model = LlavaOnevisionForConditionalGeneration.from_pretrained(
-            "llava-hf/llava-onevision-qwen2-0.5b-ov-hf", device_map=torch_device
+            "llava-hf/llava-onevision-qwen2-0.5b-ov-hf", torch_dtype="float16", device_map=torch_device
         )
 
         url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -463,7 +474,7 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
             images=[lowres_img, cats_image],
             return_tensors="pt",
             padding=True,
-        ).to(torch_device)
+        ).to(torch_device, torch.float16)
 
         # verify generation
         output = model.generate(**inputs, max_new_tokens=50)
@@ -478,6 +489,7 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_small_model_integration_test_batch_matches_single(self):
         model = LlavaOnevisionForConditionalGeneration.from_pretrained(
             "llava-hf/llava-onevision-qwen2-0.5b-ov-hf",
+            torch_dtype="float16",
             device_map=torch_device,
         )
 
@@ -491,11 +503,11 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
             images=[lowres_img, cats_image],
             return_tensors="pt",
             padding=True,
-        ).to(torch_device)
+        ).to(torch_device, torch.float16)
 
         inputs_single = self.processor(
             text=self.prompt_image, images=lowres_img, return_tensors="pt", padding=True
-        ).to(torch_device)
+        ).to(torch_device, torch.float16)
 
         # verify generation
         output_batched = model.generate(**inputs_batched, max_new_tokens=50)

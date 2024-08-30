@@ -461,6 +461,20 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel):
         feature_lens = torch.tensor(feature_lens, dtype=torch.long, device=image_features.device)
         return image_features, feature_lens
 
+    def apply_pooling(self, image_features):
+        height = width = self.config.vision_config.image_size // self.config.vision_config.patch_size
+        batch_frames, seq_len, dim = image_features.shape
+        image_features = image_features.view(batch_frames, height, width, -1)
+        image_features = image_features.permute(0, 3, 1, 2).contiguous()
+
+        height, weight = image_features.shape[2:]
+        scaled_shape = [math.ceil(height / 2), math.ceil(weight / 2)]
+        image_features = nn.functional.interpolate(image_features, size=scaled_shape, mode="bilinear")
+
+        image_features = image_features.permute(0, 2, 3, 1)
+        image_features = image_features.view(batch_frames, -1, dim)
+        return image_features
+
     @add_start_docstrings(LLAVA_ONEVISION_INPUTS_DOCSTRING)
     def forward(
         self,
@@ -598,16 +612,23 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel):
                 selected_image_feature = selected_image_feature[:, 1:]
             elif vision_feature_select_strategy == "full":
                 selected_image_feature = selected_image_feature
-
             image_features = self.multi_modal_projector(selected_image_feature)
-            image_features = torch.split(image_features, image_num_patches, dim=0)
 
-            image_features, feature_lens = self.pack_image_features(
-                image_features,
-                sizes,
-                image_newline=self.image_newline,
-                vision_aspect_ratio=vision_aspect_ratio,
-            )
+            # apply pooling if we are working with videos, otherwise unpad and pack image features
+            if special_token == self.config.video_token_index:
+                image_features = self.apply_pooling(image_features)
+                image_features = image_features.flatten(0, 1)
+                image_features = torch.cat(
+                    (image_features, self.image_newline[None, :].to(image_features.device)), dim=0
+                )
+            else:
+                image_features = torch.split(image_features, image_num_patches, dim=0)
+                image_features, feature_lens = self.pack_image_features(
+                    image_features,
+                    sizes,
+                    image_newline=self.image_newline,
+                    vision_aspect_ratio=vision_aspect_ratio,
+                )
 
             special_image_mask = (
                 (input_ids == special_token).unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)

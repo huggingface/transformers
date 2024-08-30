@@ -161,14 +161,13 @@ class LlavaOnevisionConfig(PretrainedConfig):
             vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
         elif vision_config is None:
             vision_config = CONFIG_MAPPING["siglip_vision_model"](
-                intermediate_size=4096,
-                hidden_size=1024,
+                hidden_size=1152,
+                intermediate_size=4304,
                 patch_size=14,
-                image_size=336,
-                num_hidden_layers=24,
-                num_attention_heads=16,
-                vocab_size=32000,
-                projection_dim=768,
+                image_size=384,
+                num_hidden_layers=26,
+                num_attention_heads=14,
+                vision_use_head=False,
             )
 
         self.vision_config = vision_config

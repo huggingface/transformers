@@ -163,7 +163,7 @@ class LlavaOnevisionProcessor(ProcessorMixin):
                 to_numpy_array(image_inputs["pixel_values"][0][0]),
                 channel_dim=output_kwargs["images_kwargs"].get("data_format"),
             )
-            text = self._expand_special_token_num_visual_times(text, image_sizes, height, width, self.image_token)
+            text = self._expand_image_tokens(text, image_sizes, height, width, self.image_token)
 
         if videos is not None:
             video_inputs = self.video_processor(videos, **output_kwargs["videos_kwargs"])
@@ -172,16 +172,17 @@ class LlavaOnevisionProcessor(ProcessorMixin):
             one_video = to_numpy_array(video_inputs["pixel_values_videos"][0])
             height, width = get_image_size(one_video[0], channel_dim=output_kwargs["images_kwargs"].get("data_format"))
             num_frames = one_video.shape[0]  # frame dim is always after batch dim
-            text = self._expand_special_token_num_visual_times(
-                text, image_sizes, height, width, self.video_token, num_frames=num_frames
-            )
+            patches_height_width = int(math.sqrt(self.num_image_tokens))
+            pooled_height_width = math.ceil(patches_height_width / 2)
+            num_video_tokens = num_frames * pooled_height_width * pooled_height_width
+            text = [sample.replace(self.video_token, self.video_token * num_video_tokens) for sample in text]
 
         # Padding side can be in TextKwargs but is not accepted by the tokenizer
         _ = output_kwargs["text_kwargs"].pop("padding_side", None)
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
         return BatchFeature(data={**text_inputs, **image_inputs, **video_inputs})
 
-    def _expand_special_token_num_visual_times(
+    def _expand_image_tokens(
         self,
         text: List[TextInput],
         image_sizes: Iterable[Union[List[int], int]],
