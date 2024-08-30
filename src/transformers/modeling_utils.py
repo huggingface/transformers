@@ -2865,14 +2865,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if getattr(self, "quantization_method", None) == QuantizationMethod.BITS_AND_BYTES:
             if getattr(self, "is_loaded_in_8bit", False):
                 raise ValueError(
-                    "Calling `cuda()` is not supported for `8-bit` quantized models. Please use the model as it is, since the"
-                    " model has already been set to the correct devices and casted to the correct `dtype`."
+                    "Calling `cuda()` is not supported for `8-bit` quantized models. "
+                    " Please use the model as it is, since the model has already been set to the correct devices."
                 )
             elif version.parse(importlib.metadata.version("bitsandbytes")) < version.parse("0.43.2"):
                 raise ValueError(
-                    "Calling `cuda()` is not supported for `4-bit` quantized models. Please use the model as it is, since the"
-                    " model has already been set to the correct devices and casted to the correct `dtype`. "
-                    "However, if you still want to move the model, you need to install bitsandbytes >= 0.43.2 "
+                    "Calling `cuda()` is not supported for `4-bit` quantized models with the installed version of bitsandbytes. "
+                    f"The current device is `{self.device}`. If you intended to move the model, please install bitsandbytes >= 0.43.2."
                 )
         else:
             return super().cuda(*args, **kwargs)
@@ -2893,22 +2892,21 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             raise ValueError("`.to` is not supported for HQQ-quantized models.")
         # Checks if the model has been loaded in 4-bit or 8-bit with BNB
         if getattr(self, "quantization_method", None) == QuantizationMethod.BITS_AND_BYTES:
-            if getattr(self, "is_loaded_in_4bit", False):
-                if version.parse(importlib.metadata.version("bitsandbytes")) < version.parse("0.43.2"):
-                    raise ValueError(
-                        "`.to` is not supported for `4-bit`. Please use the model as it is, since the"
-                        " model has already been set to the correct devices and casted to the correct `dtype`. "
-                        "However, if you still want to move the model, you need to install bitsandbytes >= 0.43.2 "
-                    )
-                elif dtype_present_in_args:
-                    raise ValueError(
-                        "You cannot cast a bitsandbytes model in a new `dtype`. Make sure to load the model using `from_pretrained` using the"
-                        " desired `dtype` by passing the correct `torch_dtype` argument."
-                    )
-            else:
+            if dtype_present_in_args:
+                raise ValueError(
+                    "You cannot cast a bitsandbytes model in a new `dtype`. Make sure to load the model using `from_pretrained` using the"
+                    " desired `dtype` by passing the correct `torch_dtype` argument."
+                )
+
+            if getattr(self, "is_loaded_in_8bit", False):
                 raise ValueError(
                     "`.to` is not supported for `8-bit` bitsandbytes models. Please use the model as it is, since the"
                     " model has already been set to the correct devices and casted to the correct `dtype`."
+                )
+            elif version.parse(importlib.metadata.version("bitsandbytes")) < version.parse("0.43.2"):
+                raise ValueError(
+                    "Calling `to()` is not supported for `4-bit` quantized models with the installed version of bitsandbytes. "
+                    f"The current device is `{self.device}`. If you intended to move the model, please install bitsandbytes >= 0.43.2."
                 )
         elif getattr(self, "quantization_method", None) == QuantizationMethod.GPTQ:
             if dtype_present_in_args:
