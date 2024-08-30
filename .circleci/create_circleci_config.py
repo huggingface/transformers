@@ -346,7 +346,13 @@ def create_circleci_config(folder=None):
     if folder is None:
         folder = os.getcwd()
     os.environ["test_preparation_dir"] = folder
-    jobs = [k for k in ALL_TESTS if os.path.isfile(os.path.join("test_preparation" , f"{k.job_name}_test_list.txt") )]
+
+    def has_file_with_contents(file_path):
+        return os.path.isfile(file_path) and os.path.getsize(file_path) > 0
+
+    jobs = [
+        k for k in ALL_TESTS if has_file_with_contents(os.path.join("test_preparation", f"{k.job_name}_test_list.txt"))
+    ]
     print("The following jobs will be run ", jobs)
 
     if len(jobs) == 0:
