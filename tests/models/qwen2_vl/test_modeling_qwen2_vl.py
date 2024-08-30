@@ -493,3 +493,31 @@ class Qwen2VLIntegrationTest(unittest.TestCase):
             self.processor.batch_decode(output, skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
         )
+    
+    def extract_vision_info(self, conversations: list[dict] | list[list[dict]]) -> list[dict]:
+        """
+        Extracts vision information (image or video data) from a list of conversations.
+
+        Args:
+            conversations: A list of conversations, where each conversation is either a dictionary
+                        or a list of dictionaries representing messages.
+
+        Returns:
+            A list of dictionaries, each containing information about an image or video found
+            within the conversations.
+        """
+        vision_infos = []
+        if isinstance(conversations[0], dict):
+            conversations = [conversations]
+        for conversation in conversations:
+            for message in conversation:
+                if isinstance(message["content"], list):
+                    for ele in message["content"]:
+                        if (
+                            "image" in ele
+                            or "image_url" in ele
+                            or "video" in ele
+                            or ele["type"] in ("image", "image_url", "video")
+                        ):
+                            vision_infos.append(ele)
+        return vision_infos
