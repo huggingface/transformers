@@ -402,27 +402,32 @@ class Agent:
                 memory.append(thought_message)
 
             if "plan" in step_log and not summary_mode:
-                thought_message = {"role": MessageRole.ASSISTANT, "content": "<plan>\n" + step_log["plan"].strip() + "\n<end_plan"}
+                thought_message = {
+                    "role": MessageRole.ASSISTANT,
+                    "content": "<plan>\n" + step_log["plan"].strip() + "\n<end_plan",
+                }
                 memory.append(thought_message)
 
             if "tool_call" in step_log and summary_mode:
                 tool_call_message = {
                     "role": MessageRole.ASSISTANT,
-                    "content": f"<step_{i}_tool_call>\n " + str(step_log["tool_call"]).strip() + f"\n<end_step_{i}_tool_call>",
+                    "content": f"<step_{i}_tool_call>\n "
+                    + str(step_log["tool_call"]).strip()
+                    + f"\n<end_step_{i}_tool_call>",
                 }
                 memory.append(tool_call_message)
 
             if "task" in step_log:
                 tool_call_message = {
                     "role": MessageRole.USER,
-                    "content": "<new_task>\n" + step_log["task"]+"\n<end_new_task>",
+                    "content": "<new_task>\n" + step_log["task"] + "\n<end_new_task>",
                 }
                 memory.append(tool_call_message)
 
             if "error" in step_log or "observation" in step_log:
                 if "error" in step_log:
                     message_content = (
-                        f"<error>\n"
+                        "<error>\n"
                         + str(step_log["error"])
                         + "\nNow let's retry: take care not to repeat previous errors! If you have retried several times, try a completely different approach.\n<end_error>"
                     )
@@ -799,13 +804,13 @@ Now begin!""",
             )
 
             final_plan_redaction = f"""Here is the plan of action that I will follow to solve the task:
-<plan>
+```
 {answer_plan}
-<end_plan>"""
+```"""
             final_facts_redaction = f"""Here are the facts that I know so far:
-<facts_list>
+```
 {answer_facts}
-<end_facts_list>""".strip()
+```""".strip()
             self.logs.append({"plan": final_plan_redaction, "facts": final_facts_redaction})
             self.logger.debug("===== Initial plan: =====")
             self.logger.debug(final_plan_redaction)
@@ -846,9 +851,9 @@ Now begin!""",
             # Log final facts and plan
             final_plan_redaction = PLAN_UPDATE_FINAL_PLAN_REDACTION.format(task=task, plan_update=plan_update)
             final_facts_redaction = f"""Here is the updated list of the facts that I know:
-<updated_facts_list>
+```
 {facts_update}
-<end_updated_facts_list>"""
+```"""
             self.logs.append({"plan": final_plan_redaction, "facts": final_facts_redaction})
             self.logger.debug("===== Updated plan: =====")
             self.logger.debug(final_plan_redaction)
@@ -1022,9 +1027,7 @@ class ReactCodeAgent(ReactAgent):
 
         try:
             additional_args = {"grammar": self.grammar} if self.grammar is not None else {}
-            llm_output = self.llm_engine(
-                self.prompt, stop_sequences=["<end_code>", "<end_action>"], **additional_args
-            )
+            llm_output = self.llm_engine(self.prompt, stop_sequences=["<end_code>", "<end_action>"], **additional_args)
         except Exception as e:
             raise AgentGenerationError(f"Error in generating llm output: {e}.")
 
