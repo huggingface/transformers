@@ -1155,7 +1155,7 @@ def create_test_list_from_filter(full_test_list, out_path):
     for job_name, _filter in JOB_TO_TEST_FILE.items():
         file_name = os.path.join(out_path, f"{job_name}_test_list.txt")
         if job_name == "tests_hub":
-            files_to_test = "tests"
+            files_to_test = ["tests"]
         else:
             files_to_test = list(re.findall(_filter, all_test_files))
         print(job_name, file_name)
