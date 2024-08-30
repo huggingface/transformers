@@ -255,7 +255,7 @@ examples_torch_job = CircleCIJob(
     docker_image=[{"image":"huggingface/transformers-examples-torch"}],
     # TODO @ArthurZucker remove this once docker is easier to build
     install_steps=["uv venv && uv pip install . && uv pip install -r examples/pytorch/_tests_requirements.txt"],
-    pytest_num_workers=1,
+    pytest_num_workers=8,
 )
 
 
@@ -277,7 +277,7 @@ hub_job = CircleCIJob(
         'git config --global user.name "ci"',
     ],
     marker="is_staging_test",
-    pytest_num_workers=1,
+    pytest_num_workers=2,
 )
 
 
