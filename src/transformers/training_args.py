@@ -1357,7 +1357,7 @@ class TrainingArguments:
     include_inputs_for_metrics: bool = field(
         default=False,
         metadata={
-            "help": "This argument is deprecated and will be removed in version 5 of 🤗 Transformers. Use `include_for_metrics` instead"
+            "help": "This argument is deprecated and will be removed in version 5 of 🤗 Transformers. Use `include_for_metrics` instead."
         },
     )
     include_for_metrics: List[str] = field(
