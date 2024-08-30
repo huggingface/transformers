@@ -92,10 +92,6 @@ class CircleCIJob:
             else:
                 self.tests_to_run = []
                 print("not Found")
-        if self.parallelism is None:
-            self.parallelism = 0
-        else:
-            self.parallelism = min(self.parallelism, 32, len(self.tests_to_run))
 
     def to_dict(self):
         env = COMMON_ENV_VARIABLES.copy()
