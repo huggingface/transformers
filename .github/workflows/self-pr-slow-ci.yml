@@ -63,7 +63,7 @@ jobs:
         matrix:
           folders: ${{ fromJson(needs.find_models_to_run.outputs.models) }}
           machine_type: [single-gpu]
-      runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, ci]
+      runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, daily-ci]
       container:
         image: huggingface/transformers-all-latest-gpu
         options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
