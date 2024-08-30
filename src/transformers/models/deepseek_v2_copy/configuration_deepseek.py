@@ -132,7 +132,7 @@ class DeepseekV2Config(PretrainedConfig):
         q_lora_rank=1536,
         qk_rope_head_dim=64,
         v_head_dim=128,
-        qk_nope_head_dim=128,
+        qk_non_pe_head_dim=128,
         topk_method="gready",
         n_group=None,
         topk_group=None,
@@ -174,7 +174,7 @@ class DeepseekV2Config(PretrainedConfig):
         self.q_lora_rank = q_lora_rank
         self.qk_rope_head_dim = qk_rope_head_dim
         self.v_head_dim = v_head_dim
-        self.qk_nope_head_dim = qk_nope_head_dim
+        self.qk_non_pe_head_dim = qk_non_pe_head_dim
         self.topk_method = topk_method
         self.n_group = n_group
         self.topk_group = topk_group

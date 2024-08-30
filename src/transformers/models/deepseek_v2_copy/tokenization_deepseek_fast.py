@@ -26,7 +26,7 @@ from ...utils.versions import require_version
 require_version("tokenizers>=0.13.3")
 
 if is_sentencepiece_available():
-    from .tokenization_deepseek_v2 import DeepseekV2Tokenizer
+    from .tokenization_deepseek import DeepseekV2Tokenizer
 else:
     DeepseekV2Tokenizer = None
 

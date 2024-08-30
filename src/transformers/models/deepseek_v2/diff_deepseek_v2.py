@@ -1,6 +1,10 @@
 # coding=utf-8
-# Copyright 2024 Google Inc. HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 DeepSeek-AI and The HuggingFace Inc. team. All rights reserved.
 #
+# This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
+# and OPT implementations in this library. It has been modified from its
+# original forms to accommodate minor architectural differences compared
+# to GPT-NeoX and OPT used by the Meta AI team that trained the model.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,40 +17,40 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+""" PyTorch DeepSeek model."""
 import math
 import warnings
-
 from typing import List, Optional, Tuple, Union
+
 import numpy as np
 import torch
-import torch
-import torch.utils.checkpoint
 import torch.distributed as dist
+import torch.nn.functional as F
+import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
-from torch.nn import functional as F
 
-from ...modeling_utils import PreTrainedModel
-from transformers.models.persimmon.modeling_persimmon import (
-    PersimmonRotaryEmbedding,
-    PersimmonLinearScalingRotaryEmbedding,
-    PersimmonDynamicNTKScalingRotaryEmbedding,
-    PersimmonForCausalLM,
-    rotate_half,
-    PERSIMMON_INPUTS_DOCSTRING
-)
-
-from transformers.models.llama.modeling_llama import LlamaRMSNorm
-from transformers.configuration_utils import PretrainedConfig
-
+from transformers import PretrainedConfig, logger
+from transformers.activations import ACT2FN
+from transformers.cache_utils import Cache, DynamicCache
 from transformers.modeling_attn_mask_utils import (
     _prepare_4d_causal_attention_mask,
 )
-
-from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache
-from ...utils import (
+from transformers.modeling_outputs import (
+    BaseModelOutputWithPast,
+    CausalLMOutputWithPast,
+    SequenceClassifierOutputWithPast,
+)
+from transformers.modeling_utils import PreTrainedModel
+from transformers.models.llama.modeling_llama import LlamaRMSNorm
+from transformers.models.persimmon.modeling_persimmon import PersimmonRotaryEmbedding, \
+    PersimmonLinearScalingRotaryEmbedding, PersimmonDynamicNTKScalingRotaryEmbedding, PERSIMMON_INPUTS_DOCSTRING, \
+    PersimmonForCausalLM
+from transformers.pytorch_utils import (
+    ALL_LAYERNORM_LAYERS,
+    is_torch_greater_or_equal_than_1_13,
+)
+from transformers.utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
@@ -54,19 +58,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-
-from transformers.modeling_outputs import (
-    BaseModelOutputWithPast,
-    CausalLMOutputWithPast,
-    SequenceClassifierOutputWithPast,
-)
-
-if is_flash_attn_2_available():
-    from ...modeling_flash_attention_utils import _flash_attention_forward
-
-
-logger = logging.get_logger(__name__)
-
+from transformers.utils.import_utils import is_torch_fx_available
 
 DeepseekV2_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
@@ -281,6 +273,10 @@ class DeepseekV2Config(PretrainedConfig):
             **kwargs,
         )
 
+class DeepseekV2RMSNorm(LlamaRMSNorm):
+    pass
+
+ALL_LAYERNORM_LAYERS.append(DeepseekV2RMSNorm)
 
 # copy entire class
 #TODO: confirm OK to skip this change: self.max_seq_len_cached = None, dtype=torch.int64).type_as(self.inv_freq == dtype=self.inv_freq.dtype
@@ -380,20 +376,12 @@ class DeepseekV2YarnRotaryEmbedding(DeepseekV2RotaryEmbedding):
         self.register_buffer("sin_cached", (emb.sin() * _mscale).to(dtype), persistent=False)
 
 
-class DeepseekV2MLP(nn.Module):
-    def __init__(self, config, hidden_size=None, intermediate_size=None):
-        super().__init__()
-        self.config = config
-        self.hidden_size = config.hidden_size if hidden_size is None else hidden_size
-        self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
-        self.act_fn = ACT2FN[config.hidden_act]
-
-    def forward(self, x):
-        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
-        return down_proj
+# Copied from transformers.models.llama.modeling_llama.rotate_half
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
 
 
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
@@ -429,7 +417,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
-
 
 class DeepseekV2MLP(nn.Module):
     def __init__(self, config, hidden_size=None, intermediate_size=None):
@@ -577,7 +564,7 @@ class DeepseekV2MoE(nn.Module):
             self.shared_experts = DeepseekV2MLP(config=config, intermediate_size=intermediate_size)
 
     def forward(self, hidden_states):
-        shared_hidden_states = self.shared_experts(hidden_states)
+        identity = hidden_states
         orig_shape = hidden_states.shape
         topk_idx, topk_weight, aux_loss = self.gate(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
@@ -593,7 +580,7 @@ class DeepseekV2MoE(nn.Module):
         else:
             y = self.moe_infer(hidden_states, topk_idx, topk_weight).view(*orig_shape)
         if self.config.n_shared_experts is not None:
-            y = y + shared_hidden_states
+            y = y + self.shared_experts(identity)
         return y
 
     @torch.no_grad()
@@ -628,16 +615,6 @@ class DeepseekV2MoE(nn.Module):
             .type(new_x.dtype)
         )
         return final_out
-
-
-#  self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=False)
-        self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
-        self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
-        self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
-
-
-class DeepseekV2RMSNorm(LlamaRMSNorm):
-    pass
 
 class DeepseekV2Attention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
@@ -954,6 +931,68 @@ class DeepseekV2DecoderLayer(nn.Module):
         self.post_attention_layernorm = DeepseekV2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
 
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        output_attentions: Optional[bool] = False,
+        use_cache: Optional[bool] = False,
+        **kwargs,
+    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+        # TODO: no diff
+        """
+        Args:
+            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            attention_mask (`torch.FloatTensor`, *optional*):
+                attention mask of size `(batch_size, sequence_length)` if flash attention is used or `(batch_size, 1,
+                query_sequence_length, key_sequence_length)` if default attention is used.
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+                returned tensors for more detail.
+            use_cache (`bool`, *optional*):
+                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
+                (see `past_key_values`).
+            past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
+        """
+        if "padding_mask" in kwargs:
+            warnings.warn(
+                "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
+            )
+        residual = hidden_states
+
+        hidden_states = self.input_layernorm(hidden_states)
+
+        # Self Attention
+        hidden_states, self_attn_weights, present_key_value = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_value=past_key_value,
+            output_attentions=output_attentions,
+            use_cache=use_cache,
+            **kwargs,
+        )
+        hidden_states = residual + hidden_states
+
+        # Fully Connected
+        residual = hidden_states
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = residual + hidden_states
+
+        outputs = (hidden_states,)
+
+        if output_attentions:
+            outputs += (self_attn_weights,)
+
+        if use_cache:
+            outputs += (present_key_value,)
+
+        return outputs
+
 #same as persimmon but without cache_position
 DeepseekV2_INPUTS_DOCSTRING = PERSIMMON_INPUTS_DOCSTRING[:PERSIMMON_INPUTS_DOCSTRING.index('cache_position')].rstrip()
 
@@ -971,6 +1010,19 @@ class DeepseekV2PreTrainedModel(PreTrainedModel):
     _supports_flash_attn_2 = True
     _supports_cache_class = True
 
+
+    def _init_weights(self, module):
+        #TODO: no diff
+        std = self.config.initializer_range
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+
 @add_start_docstrings(
     "The bare DeepseekV2 Model outputting raw hidden-states without any specific head on top.",
     DeepseekV2_START_DOCSTRING,
@@ -982,6 +1034,32 @@ class DeepseekV2Model(DeepseekV2PreTrainedModel):
     Args:
         config: DeepseekV2Config
     """
+
+    def __init__(self, config: DeepseekV2Config):
+        super().__init__(config)
+        self.padding_idx = config.pad_token_id
+        self.vocab_size = config.vocab_size
+        torch.manual_seed(42)
+        torch.cuda.manual_seed(42)
+        torch.cuda.manual_seed_all(42)  # if you are using multiple GPUs
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
+        self.layers = nn.ModuleList(
+            [DeepseekV2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
+        self.norm = DeepseekV2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
+        self.gradient_checkpointing = False
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return self.embed_tokens
+
+    def set_input_embeddings(self, value):
+        self.embed_tokens = value
 
     @add_start_docstrings_to_model_forward(DeepseekV2_INPUTS_DOCSTRING)
     def forward(
