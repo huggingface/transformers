@@ -110,19 +110,18 @@ def parse_json_blob(json_blob: str) -> Dict[str, str]:
 
 def parse_code_blob(code_blob: str) -> str:
     try:
-        pattern = r"```(?:py|python)?\n(.*?)\n```"
-        match = re.search(pattern, code_blob, re.DOTALL)
-        return match.group(1).strip()
+        return code_blob.strip()
     except Exception as e:
         raise ValueError(
             f"""
 The code blob you used is invalid: due to the following error: {e}
-This means that the regex pattern {pattern} was not respected: make sure to include code with the correct pattern, for instance:
-Thoughts: Your thoughts
-Code:
-```py
+This means that the regex pattern was not respected: make sure to include code with the correct pattern, for instance:
+<thoughts>
+Your thoughts
+<end_thoughts>
+<code>
 # Your python code here
-```<end_action>"""
+<end_code>"""
         )
 
 
@@ -136,27 +135,6 @@ def parse_json_tool_call(json_blob: str) -> Tuple[str, Dict[str, str]]:
     else:
         raise ValueError(
             f"Missing keys: {[key for key in ['action', 'action_input'] if key not in tool_call]} in blob {tool_call}"
-        )
-
-
-def parse_text_tool_call(text: str) -> Tuple[str, Union[str, Dict[str, str]]]:
-    """
-    Expects a text in the format: 'Action:', 'Action input:', 'Observation:'. 'Action input:' contains a json string with input arguments.
-    """
-    try:
-        if "Observation:" in text:
-            text = text.split("Observation:")[0]
-        if "Action:" in text:
-            text = text.split("Action:")[1]
-        tool_name, tool_input = text.split("Action input:")
-        if "{" in tool_input:
-            tool_input = parse_json_blob(tool_input)
-        else:
-            tool_input = tool_input.strip().replace('"', "")
-        return tool_name.strip().replace('"', "").replace("\\", ""), tool_input
-    except Exception as e:
-        raise ValueError(
-            f"Error in parsing the text tool call: {e}. Be sure to provide the correct format. DO NOT repeat your previous incorrect tool call."
         )
 
 
@@ -406,7 +384,7 @@ class Agent:
         prompt_message = {"role": MessageRole.SYSTEM, "content": self.logs[0]["system_prompt"]}
         task_message = {
             "role": MessageRole.USER,
-            "content": "Task: " + self.logs[0]["task"],
+            "content": "<task>" + self.logs[0]["task"] + "<end_task>",
         }
         if summary_mode:
             memory = [task_message]
@@ -419,37 +397,37 @@ class Agent:
             if "facts" in step_log:
                 thought_message = {
                     "role": MessageRole.ASSISTANT,
-                    "content": "[FACTS LIST]:\n" + step_log["facts"].strip(),
+                    "content": "<facts_list>\n" + step_log["facts"].strip() + "\n<end_facts_list>",
                 }
                 memory.append(thought_message)
 
             if "plan" in step_log and not summary_mode:
-                thought_message = {"role": MessageRole.ASSISTANT, "content": "[PLAN]:\n" + step_log["plan"].strip()}
+                thought_message = {"role": MessageRole.ASSISTANT, "content": "<plan>\n" + step_log["plan"].strip() + "\n<end_plan"}
                 memory.append(thought_message)
 
             if "tool_call" in step_log and summary_mode:
                 tool_call_message = {
                     "role": MessageRole.ASSISTANT,
-                    "content": f"[STEP {i} TOOL CALL]: " + str(step_log["tool_call"]).strip(),
+                    "content": f"<step_{i}_tool_call>\n " + str(step_log["tool_call"]).strip() + f"\n<end_step_{i}_tool_call>",
                 }
                 memory.append(tool_call_message)
 
             if "task" in step_log:
                 tool_call_message = {
                     "role": MessageRole.USER,
-                    "content": "New task:\n" + step_log["task"],
+                    "content": "<new_task>\n" + step_log["task"]+"\n<end_new_task>",
                 }
                 memory.append(tool_call_message)
 
             if "error" in step_log or "observation" in step_log:
                 if "error" in step_log:
                     message_content = (
-                        f"[OUTPUT OF STEP {i}] Error: "
+                        f"<error>\n"
                         + str(step_log["error"])
-                        + "\nNow let's retry: take care not to repeat previous errors! If you have retried several times, try a completely different approach.\n"
+                        + "\nNow let's retry: take care not to repeat previous errors! If you have retried several times, try a completely different approach.\n<end_error>"
                     )
                 elif "observation" in step_log:
-                    message_content = f"[OUTPUT OF STEP {i}] Observation:\n{step_log['observation']}"
+                    message_content = f"<observation>\n{step_log['observation']}\n<end_observation>"
                 tool_response_message = {"role": MessageRole.TOOL_RESPONSE, "content": message_content}
                 memory.append(tool_response_message)
 
@@ -597,7 +575,7 @@ class CodeAgent(Agent):
         prompt_message = {"role": MessageRole.SYSTEM, "content": self.system_prompt}
         task_message = {
             "role": MessageRole.USER,
-            "content": "Task: " + self.task,
+            "content": "<task>" + self.task + "<end_task>",
         }
 
         self.prompt = [prompt_message, task_message]
@@ -612,7 +590,7 @@ class CodeAgent(Agent):
 
         # Parse
         try:
-            _, code_action = self.extract_action(llm_output=llm_output, split_token="Code:")
+            _, code_action = self.extract_action(llm_output=llm_output, split_token="<code>")
         except Exception as e:
             self.logger.debug(
                 f"Error in extracting action, trying to parse the whole output as code. Error trace: {e}"
@@ -821,13 +799,13 @@ Now begin!""",
             )
 
             final_plan_redaction = f"""Here is the plan of action that I will follow to solve the task:
-```
+<plan>
 {answer_plan}
-```"""
+<end_plan>"""
             final_facts_redaction = f"""Here are the facts that I know so far:
-```
+<facts_list>
 {answer_facts}
-```""".strip()
+<end_facts_list>""".strip()
             self.logs.append({"plan": final_plan_redaction, "facts": final_facts_redaction})
             self.logger.debug("===== Initial plan: =====")
             self.logger.debug(final_plan_redaction)
@@ -868,9 +846,9 @@ Now begin!""",
             # Log final facts and plan
             final_plan_redaction = PLAN_UPDATE_FINAL_PLAN_REDACTION.format(task=task, plan_update=plan_update)
             final_facts_redaction = f"""Here is the updated list of the facts that I know:
-```
+<updated_facts_list>
 {facts_update}
-```"""
+<end_updated_facts_list>"""
             self.logs.append({"plan": final_plan_redaction, "facts": final_facts_redaction})
             self.logger.debug("===== Updated plan: =====")
             self.logger.debug(final_plan_redaction)
@@ -934,7 +912,7 @@ class ReactJsonAgent(ReactAgent):
 
         # Parse
         self.logger.debug("===== Extracting action =====")
-        rationale, action = self.extract_action(llm_output=llm_output, split_token="Action:")
+        rationale, action = self.extract_action(llm_output=llm_output, split_token="<action>")
 
         try:
             tool_name, arguments = self.tool_parser(action)
@@ -1045,7 +1023,7 @@ class ReactCodeAgent(ReactAgent):
         try:
             additional_args = {"grammar": self.grammar} if self.grammar is not None else {}
             llm_output = self.llm_engine(
-                self.prompt, stop_sequences=["<end_action>", "Observation:"], **additional_args
+                self.prompt, stop_sequences=["<end_code>", "<end_action>"], **additional_args
             )
         except Exception as e:
             raise AgentGenerationError(f"Error in generating llm output: {e}.")
@@ -1057,7 +1035,7 @@ class ReactCodeAgent(ReactAgent):
         # Parse
         self.logger.debug("===== Extracting action =====")
         try:
-            rationale, raw_code_action = self.extract_action(llm_output=llm_output, split_token="Code:")
+            rationale, raw_code_action = self.extract_action(llm_output=llm_output, split_token="<code>")
         except Exception as e:
             self.logger.debug(f"Error in extracting action, trying to parse the whole output. Error trace: {e}")
             rationale, raw_code_action = llm_output, llm_output
@@ -1066,6 +1044,7 @@ class ReactCodeAgent(ReactAgent):
             code_action = parse_code_blob(raw_code_action)
         except Exception as e:
             error_msg = f"Error in code parsing: {e}. Make sure to provide correct code"
+            print("CODE GIVEN:", raw_code_action)
             raise AgentParsingError(error_msg)
 
         current_step_logs["rationale"] = rationale
