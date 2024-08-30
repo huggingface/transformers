@@ -636,6 +636,13 @@ def convert_rt_detr_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
                 [0.7698693, 0.4124569, 0.46036878],
             ]
         )
+    elif model_name == "rtdetr_v2_r18vd":
+        expected_slice_logits = torch.tensor(
+            [[-3.7047, -5.1914, -6.1787], [-4.0108, -9.3449, -5.2047], [-4.1287, -4.7461, -5.8633]]
+        )
+        expected_slice_boxes = torch.tensor(
+            [[0.2582, 0.5497, 0.4764], [0.1684, 0.1985, 0.2120], [0.7665, 0.4146, 0.4669]]
+        )
     elif model_name == "rtdetr_r34vd":
         expected_slice_logits = torch.tensor(
             [
@@ -788,3 +795,4 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     convert_rt_detr_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub, args.repo_id)
+                                                

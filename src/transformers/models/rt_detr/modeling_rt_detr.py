@@ -771,6 +771,76 @@ def multi_scale_deformable_attention(
     return output.transpose(1, 2).contiguous()
 
 
+def multi_scale_deformable_attention_v2(
+    value: Tensor,
+    value_spatial_shapes: Tensor,
+    sampling_locations: Tensor,
+    attention_weights: Tensor,
+    num_points_list: List[int],
+    method="default",
+) -> Tensor:
+    batch_size, _, num_heads, hidden_dim = value.shape
+    _, num_queries, num_heads, num_levels, num_points, _ = sampling_locations.shape
+    value_list = (
+        value.permute(0, 2, 3, 1)
+        .flatten(0, 1)
+        .split([height.item() * width.item() for height, width in value_spatial_shapes], dim=1)
+    )
+    # sampling_offsets [8, 480, 8, 12, 2]
+    if method == "default":
+        sampling_grids = 2 * sampling_locations - 1
+    elif method == "discrete":
+        sampling_grids = sampling_locations
+    sampling_grids = sampling_grids.permute(0, 2, 1, 3, 4).flatten(0, 1)
+    sampling_grids = sampling_grids.split(num_points_list, dim=-2)
+    sampling_value_list = []
+    for level_id, (height, width) in enumerate(value_spatial_shapes):
+        # batch_size, height*width, num_heads, hidden_dim
+        # -> batch_size, height*width, num_heads*hidden_dim
+        # -> batch_size, num_heads*hidden_dim, height*width
+        # -> batch_size*num_heads, hidden_dim, height, width
+        value_l_ = value_list[level_id].reshape(batch_size * num_heads, hidden_dim, height, width)
+        # batch_size, num_queries, num_heads, num_points, 2
+        # -> batch_size, num_heads, num_queries, num_points, 2
+        # -> batch_size*num_heads, num_queries, num_points, 2
+        sampling_grid_l_ = sampling_grids[level_id]
+        # batch_size*num_heads, hidden_dim, num_queries, num_points
+        if method == "default":
+            sampling_value_l_ = nn.functional.grid_sample(
+                value_l_, sampling_grid_l_, mode="bilinear", padding_mode="zeros", align_corners=False
+            )
+        elif method == "discrete":
+            sampling_coord = (sampling_grid_l_ * torch.tensor([[width, height]], device=value.device) + 0.5).to(
+                torch.int64
+            )
+
+            # FIX ME? for rectangle input
+            sampling_coord = sampling_coord.clamp(0, height - 1)
+            sampling_coord = sampling_coord.reshape(batch_size * num_heads, num_queries * num_points_list[level_id], 2)
+            sampling_idx = (
+                torch.arange(sampling_coord.shape[0], device=value.device)
+                .unsqueeze(-1)
+                .repeat(1, sampling_coord.shape[1])
+            )
+            sampling_value_l_ = value_l_[sampling_idx, :, sampling_coord[..., 1], sampling_coord[..., 0]]
+            sampling_value_l_ = sampling_value_l_.permute(0, 2, 1).reshape(
+                batch_size * num_heads, hidden_dim, num_queries, num_points_list[level_id]
+            )
+        sampling_value_list.append(sampling_value_l_)
+    # (batch_size, num_queries, num_heads, num_levels, num_points)
+    # -> (batch_size, num_heads, num_queries, num_levels, num_points)
+    # -> (batch_size, num_heads, 1, num_queries, num_levels*num_points)
+    attention_weights = attention_weights.transpose(1, 2).reshape(
+        batch_size * num_heads, 1, num_queries, num_levels * num_points
+    )
+    output = (
+        (torch.stack(sampling_value_list, dim=-2).flatten(-2) * attention_weights)
+        .sum(-1)
+        .view(batch_size, num_heads * hidden_dim, num_queries)
+    )
+    return output.transpose(1, 2).contiguous()
+
+
 # Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrMultiscaleDeformableAttention with DeformableDetr->RTDetr
 class RTDetrMultiscaleDeformableAttention(nn.Module):
     """
@@ -952,8 +1022,8 @@ class RTDetrV2MultiscaleDeformableAttention(nn.Module):
 
         n_points_list = [n_points for _ in range(num_heads)]
         self.n_points_list = n_points_list
-        n_points_scale = [1/n for n in n_points_list for _ in range(n)]
-        self.register_buffer('n_points_scale', torch.tensor(n_points_scale, dtype=torch.float32))
+        n_points_scale = [1 / n for n in n_points_list for _ in range(n)]
+        self.register_buffer("n_points_scale", torch.tensor(n_points_scale, dtype=torch.float32))
 
         self.sampling_offsets = nn.Linear(config.d_model, num_heads * self.n_levels * n_points * 2)
         self.attention_weights = nn.Linear(config.d_model, num_heads * self.n_levels * n_points)
@@ -1043,7 +1113,9 @@ class RTDetrV2MultiscaleDeformableAttention(nn.Module):
 
         if self.disable_custom_kernels:
             # PyTorch implementation
-            output = multi_scale_deformable_attention(value, spatial_shapes, sampling_locations, attention_weights, self.num_points_list)
+            output = multi_scale_deformable_attention_v2(
+                value, spatial_shapes, sampling_locations, attention_weights, self.num_points_list
+            )
         else:
             try:
                 # custom kernel
@@ -1057,11 +1129,12 @@ class RTDetrV2MultiscaleDeformableAttention(nn.Module):
                 )
             except Exception:
                 # PyTorch implementation
-                output = multi_scale_deformable_attention(value, spatial_shapes, sampling_locations, attention_weights, self.num_points_list)
+                output = multi_scale_deformable_attention_v2(
+                    value, spatial_shapes, sampling_locations, attention_weights, self.num_points_list
+                )
         output = self.output_proj(output)
 
         return output, attention_weights
-
 
 
 class RTDetrMultiheadAttention(nn.Module):
@@ -1196,11 +1269,20 @@ class RTDetrDecoderLayer(nn.Module):
 
         self.self_attn_layer_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
         # cross-attention
-        self.encoder_attn = RTDetrMultiscaleDeformableAttention(
-            config,
-            num_heads=config.decoder_attention_heads,
-            n_points=config.decoder_n_points,
-        )
+        if config.decoder_version == "v1":
+            self.encoder_attn = RTDetrMultiscaleDeformableAttention(
+                config,
+                num_heads=config.decoder_attention_heads,
+                n_points=config.decoder_n_points,
+            )
+        elif config.decoder_version == "v2":
+            self.encoder_attn = RTDetrV2MultiscaleDeformableAttention(
+                config,
+                num_heads=config.decoder_attention_heads,
+                n_points=config.decoder_n_points,
+            )
+        else:
+            assert config.decoder_version in ["v1", "v2"]
         self.encoder_attn_layer_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
         # feedforward neural networks
         self.fc1 = nn.Linear(config.d_model, config.decoder_ffn_dim)
@@ -2841,8 +2923,4 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
             encoder_attentions=outputs.encoder_attentions,
             init_reference_points=outputs.init_reference_points,
             enc_topk_logits=outputs.enc_topk_logits,
-            enc_topk_bboxes=outputs.enc_topk_bboxes,
-            enc_outputs_class=outputs.enc_outputs_class,
-            enc_outputs_coord_logits=outputs.enc_outputs_coord_logits,
-            denoising_meta_values=outputs.denoising_meta_values,
-        )
+            enc_topk_bboxes=ou
