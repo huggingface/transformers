@@ -979,6 +979,7 @@ def create_module_to_test_map(
                 or "/".join(Path(t).parts[1:3]) in module
             ):
                 filtered_tests += [t]
+        return filtered_tests
 
     return {
         module: (filter_tests(tests, module=module) if has_many_models(tests) else tests)
@@ -1159,8 +1160,9 @@ def create_test_list_from_filter(full_test_list, out_path):
         else:
             files_to_test = list(re.findall(_filter, all_test_files))
         print(job_name, file_name)
-        with open(file_name, "w") as f:
-            f.write("\n".join(files_to_test))
+        if len(files_to_test) > 0:  # No tests -> no file with test list
+            with open(file_name, "w") as f:
+                f.write("\n".join(files_to_test))
 
 
 if __name__ == "__main__":
