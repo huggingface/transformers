@@ -171,7 +171,7 @@ python examples/pytorch/translation/run_translation.py --model_name_or_path goog
 
 يجب أن يعمل هذا البرنامج النصي دون توقف أو انتظار انتهاء المهلة الزمنية لأنه لن يحاول تنزيل النموذج من Hub.
 
-يمكنك أيضًا تجاوز تحميل نموذج من Hub من كل مكالمة [`~PreTrainedModel.from_pretrained`] باستخدام معلمة [`local_files_only`]. عندما يتم تعيينه على `True`، يتم تحميل الملفات المحلية فقط:
+يمكنك أيضًا تجاوز تحميل نموذج من Hub من كل استدعاء [`~PreTrainedModel.from_pretrained`] باستخدام معلمة [`local_files_only`]. عندما يتم تعيينها على `True`، يتم تحميل الملفات المحلية فقط:
 
 ```py
 from transformers import T5Model
