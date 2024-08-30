@@ -412,6 +412,7 @@ class TextGenerationPipelineTests(unittest.TestCase):
             "RwkvForCausalLM",
             "XGLMForCausalLM",
             "GPTNeoXForCausalLM",
+            "GPTNeoXJapaneseForCausalLM",
             "FuyuForCausalLM",
         ]
         if (

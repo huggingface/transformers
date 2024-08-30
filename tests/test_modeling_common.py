@@ -4665,7 +4665,7 @@ class ModelTesterMixin:
             if not model_class._supports_static_cache:
                 self.skipTest(f"{model_class.__name__} is not guaranteed to work with custom 4D attention masks")
             config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-            if getattr(config, "sliding_window", 0) > 0:
+            if getattr(config, "sliding_window", 0) is not None and getattr(config, "sliding_window", 0) > 0:
                 self.skipTest(f"{model_class.__name__} with sliding window attention is not supported by this test")
             model = model_class(config).to(device=torch_device, dtype=torch.float32)
 
@@ -4714,7 +4714,7 @@ class ModelTesterMixin:
                 self.skipTest(f"{model_class.__name__} does not support cache class")
 
             config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
-            if getattr(config, "sliding_window", 0) > 0:
+            if getattr(config, "sliding_window", 0) is not None and getattr(config, "sliding_window", 0) > 0:
                 self.skipTest(f"{model_class.__name__} with sliding window attention is not supported by this test")
 
             model = model_class(config).to(device=torch_device, dtype=torch.float32)

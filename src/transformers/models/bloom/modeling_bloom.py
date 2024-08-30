@@ -326,14 +326,11 @@ class BloomAttention(nn.Module):
 
         # reshape qkv for further computations
         query_layer = query_layer.reshape(batch_size * self.num_heads, -1, self.head_dim)
-        key_layer = key_layer.reshape(batch_size * self.num_heads, -1, self.head_dim).transpose(1, 2)
+        key_layer = key_layer.reshape(batch_size * self.num_heads, -1, self.head_dim).transpose(-1, -2)
         value_layer = value_layer.reshape(batch_size * self.num_heads, -1, self.head_dim)
 
-        kv_length = cache_position[-1] + 1  # cache position is 0-indexed while length should start from 1
-
         # [batch_size * num_heads, q_length, kv_length]
-        # we use `torch.Tensor.baddbmm` instead of `torch.baddbmm` as the latter isn't supported by TorchScript v1.11
-        matmul_result = alibi.baddbmm(
+        attention_scores = alibi.baddbmm(
             batch1=query_layer,
             batch2=key_layer,
             beta=self.beta,
@@ -341,9 +338,9 @@ class BloomAttention(nn.Module):
         )
 
         # change view to [batch_size, num_heads, q_length, kv_length]
-        attn_weights = matmul_result.view(batch_size, self.num_heads, q_length, kv_length)
+        attn_weights = attention_scores.view(batch_size, self.num_heads, q_length, -1)
         if attention_mask is not None:  # no matter the length, we just slice it
-            causal_mask = attention_mask[:, :, :, :kv_length]
+            causal_mask = attention_mask[:, :, :, : key_layer.shape[-1]]
             attn_weights = attn_weights + causal_mask
 
         # cast attention scores to fp32, compute scaled softmax and cast back to initial dtype
@@ -356,7 +353,7 @@ class BloomAttention(nn.Module):
             attention_probs = attention_probs * head_mask
 
         # change view [batch_size x num_heads, q_length, kv_length]
-        attention_probs_reshaped = attention_probs.view(batch_size * self.num_heads, q_length, kv_length)
+        attention_probs_reshaped = attention_probs.view(batch_size * self.num_heads, q_length, -1)
 
         # matmul: [batch_size * num_heads, q_length, head_dim]
         context_layer = torch.bmm(attention_probs_reshaped, value_layer)
@@ -496,6 +493,8 @@ class BloomPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["BloomBlock"]
     _skip_keys_device_placement = "past_key_values"
     _supports_cache_class = True
+    _supports_static_cache = True
+    _supports_quantized_cache = True
 
     def __init__(self, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
@@ -894,9 +893,25 @@ class BloomForCausalLM(BloomPreTrainedModel):
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and cache_position[0] == 0:
-            model_inputs = {"inputs_embeds": inputs_embeds}
+            model_inputs = {"inputs_embeds": inputs_embeds, "input_ids": None}
         else:
-            model_inputs = {"input_ids": input_ids.contiguous()}  # `contiguous()` needed for compilation use cases
+            # This `clone` call is needed to avoid recapturing cuda graphs with `torch.compile`'s  `mode="reduce-overhead`, as otherwise the
+            # input `position_ids` would have various stride during the decoding. Here, simply using `.contiguous()` is not sufficient as in
+            # the batch size = 1 case, `position_ids` is already contiguous but with varying stride which retriggers a capture.
+            model_inputs = {"input_ids": input_ids.clone(memory_format=torch.contiguous_format), "inputs_embeds": None}
+
+        # This part differs from other models because BLOOM needs a 2D mask to construct alibi tensor
+        # The only difference is the usage of 2D instead of 4D mask, but the shape will be static
+        if isinstance(past_key_values, StaticCache) and attention_mask is not None:
+            target_length = past_key_values.get_max_length()
+            batch_size, seq_length = attention_mask.shape
+            diff = target_length - seq_length
+
+            new_attn_mask = torch.zeros(batch_size, diff, device=attention_mask.device, dtype=attention_mask.dtype)
+            attention_mask = torch.cat(
+                [attention_mask, new_attn_mask],
+                dim=-1,
+            )
 
         model_inputs.update(
             {
