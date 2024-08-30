@@ -56,8 +56,11 @@ jobs:
                     --output test_preparation/artifacts.json
             - run:
                 name: "Show Artifacts"
-                command: cat test_preparation/artifacts.json
-
+                command: |
+                jq -r '.items[] | {(.path | split("/")[-1]): .url}' test_preparation/artifacts.json \
+                | jq -s 'add' \
+                > transformed_artifacts.json
+                
             - store_artifacts:
                 path: test_preparation
             - continuation/continue:
