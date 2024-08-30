@@ -2417,44 +2417,6 @@ class GenerationTesterMixin:
 
                 self.assertTrue(torch.allclose(out, out_fa))
 
-
-@require_torch
-class UtilsFunctionsTest(unittest.TestCase):
-    def test_speculative_sampling(self):
-        # assume vocab size 10, input length 5 + 3 generated candidates
-        candidate_input_ids = torch.tensor([[8, 0, 3, 9, 8, 1, 4, 5]])  # input tokens
-        candidate_logits = torch.tensor(
-            [
-                [
-                    [-10.0, 10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0],  # generated 1
-                    [-10.0, -10.0, -10.0, -10.0, 10.0, -10.0, -10.0, -10.0, -10.0, -10.0],  # generated 4
-                    [-10.0, -10.0, -10.0, -10.0, -10.0, 10.0, -10.0, -10.0, -10.0, -10.0],  # generated 5
-                ]
-            ]
-        )
-        candidate_length = 3
-        inf = float("inf")
-        new_logits = torch.tensor(
-            [
-                [
-                    [-10.0, 10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0],  # accepts 1
-                    [-10.0, -10.0, -10.0, -10.0, 10.0, -10.0, -10.0, -10.0, -10.0, -10.0],  # accepts 4
-                    [-inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf, 10.0, -inf],  # rejects 5, accepts 8
-                    [-10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0],  # N/A
-                ]
-            ]
-        )
-        last_assistant_token_is_eos = False
-        validated_tokens, n_matches = _speculative_sampling(
-            candidate_input_ids,
-            candidate_logits,
-            candidate_length,
-            new_logits,
-            last_assistant_token_is_eos,
-        )
-        self.assertTrue(n_matches.item() == 2)
-        self.assertTrue(validated_tokens.tolist()[0] == [1, 4, 8])
-
     @require_torch_sdpa
     @slow
     def test_eager_matches_sdpa_generate(self):
@@ -2815,7 +2777,6 @@ class UtilsFunctionsTest(unittest.TestCase):
         # For the recording step, we expect only two cuda graphs and this step should be much faster than the first.
         self.assertTrue(record_time < 0.15 * graph_warmup_time)
         self.assertTrue(opt_time < record_time)
-
 
 
 @pytest.mark.generate
@@ -4244,6 +4205,41 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         # Assert that the generated texts are identical for padded and non-padded inputs
         self.assertEqual(generated_text_no_padding, generated_text_with_padding)
         self.assertEqual(generated_text_no_padding, "Ich muss diese Aufgabe vor Ende des Tages beenden.")
+
+    def test_speculative_sampling(self):
+        # assume vocab size 10, input length 5 + 3 generated candidates
+        candidate_input_ids = torch.tensor([[8, 0, 3, 9, 8, 1, 4, 5]])  # input tokens
+        candidate_logits = torch.tensor(
+            [
+                [
+                    [-10.0, 10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0],  # generated 1
+                    [-10.0, -10.0, -10.0, -10.0, 10.0, -10.0, -10.0, -10.0, -10.0, -10.0],  # generated 4
+                    [-10.0, -10.0, -10.0, -10.0, -10.0, 10.0, -10.0, -10.0, -10.0, -10.0],  # generated 5
+                ]
+            ]
+        )
+        candidate_length = 3
+        inf = float("inf")
+        new_logits = torch.tensor(
+            [
+                [
+                    [-10.0, 10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0],  # accepts 1
+                    [-10.0, -10.0, -10.0, -10.0, 10.0, -10.0, -10.0, -10.0, -10.0, -10.0],  # accepts 4
+                    [-inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf, 10.0, -inf],  # rejects 5, accepts 8
+                    [-10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0],  # N/A
+                ]
+            ]
+        )
+        last_assistant_token_is_eos = False
+        validated_tokens, n_matches = _speculative_sampling(
+            candidate_input_ids,
+            candidate_logits,
+            candidate_length,
+            new_logits,
+            last_assistant_token_is_eos,
+        )
+        self.assertTrue(n_matches.item() == 2)
+        self.assertTrue(validated_tokens.tolist()[0] == [1, 4, 8])
 
 
 @require_torch
