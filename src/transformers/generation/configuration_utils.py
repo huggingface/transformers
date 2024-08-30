@@ -1180,14 +1180,14 @@ class GenerationConfig(PushToHubMixin):
         config = cls.from_dict(config_dict, return_unused_kwargs=False, _from_model_config=True)
 
         # Special case: some models have generation attributes set in the decoder. Use them if still unset in the
-        # generation config.
-        for decoder_name in ("decoder", "generator", "text_config"):
-            if decoder_name in config_dict:
-                default_generation_config = GenerationConfig()
-                decoder_config = config_dict[decoder_name]
-                for attr in config.to_dict().keys():
-                    if attr in decoder_config and getattr(config, attr) == getattr(default_generation_config, attr):
-                        setattr(config, attr, decoder_config[attr])
+        # generation config (which in turn is defined from the outter attributes of model config).
+        decoder_config = model_config.get_decoder_config()
+        if decoder_config is not model_config:
+            default_generation_config = GenerationConfig()
+            for attr in config.to_dict().keys():
+                is_unset = getattr(config, attr) == getattr(default_generation_config, attr)
+                if attr in decoder_config and is_unset:
+                    setattr(config, attr, decoder_config[attr])
 
         config._original_object_hash = hash(config)  # Hash to detect whether the instance was modified
         return config
