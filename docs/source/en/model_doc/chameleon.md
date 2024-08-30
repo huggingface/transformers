@@ -128,7 +128,7 @@ processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokeniza
 
 ### Quantization using Bitsandbytes
 
-The model can be loaded in 8 or 4 bits, greatly reducing the memory requirements while maintaining the performance of the original model. First make sure to install bitsandbytes, `pip install bitsandbytes` and make sure to have access to a CUDA compatible GPU device. Simply change the snippet above with:
+The model can be loaded in 8 or 4 bits, greatly reducing the memory requirements while maintaining the performance of the original model. First make sure to install bitsandbytes, `pip install bitsandbytes`. Simply change the snippet above with:
 
 ```python
 from transformers import ChameleonForConditionalGeneration, BitsAndBytesConfig
