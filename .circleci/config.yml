@@ -35,20 +35,29 @@ jobs:
             - run: mkdir -p test_preparation
             - run: python utils/tests_fetcher.py | tee tests_fetched_summary.txt
             - run: python utils/tests_fetcher.py --filter_tests
-            - run: yq eval -o=json test_preparation/generated_config.yml > test_preparation/generated_config.json
-            - store_artifacts:
-                  path: test_preparation
             - run: export "GIT_COMMIT_MESSAGE=$(git show -s --format=%s)" && echo $GIT_COMMIT_MESSAGE && python .circleci/create_circleci_config.py --fetcher_folder test_preparation
             - run: |
-                  if [ ! -s test_preparation/generated_config.yml ]; then
-                      echo "No tests to run, exiting early!"
-                      circleci-agent step halt
-                  fi
+                if [ ! -s test_preparation/generated_config.yml ]; then
+                    echo "No tests to run, exiting early!"
+                    circleci-agent step halt
+                fi
             - store_artifacts:
-                path: test_preparation/generated_config.yml
-            - store_artifacts:
-                path: test_preparation/filtered_test_list_cross_tests.txt
+                path: test_preparation
+            - run:
+                name: "Retrieve Artifact Paths"
+                command: |
+                    project_slug="gh/${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}"
+                    job_number=${CIRCLE_BUILD_NUM}
+                    curl --request GET \
+                    --url https://circleci.com/api/v2/project/${project_slug}/${job_number}/artifacts \
+                    --header "authorization: Basic REPLACE_BASIC_AUTH" \
+                    --output artifacts.json
+            - run:
+                name: "Show Artifacts"
+                command: cat artifacts.json
+
             - continuation/continue:
+                parameters: {"test_lists": $cat test_preparation/test_lists.json}
                 configuration_path: test_preparation/generated_config.yml
 
     # To run all tests for the nightly build
