@@ -51,7 +51,7 @@ jobs:
     strategy:
       matrix:
         machine_type: [single-gpu]
-    runs-on: ['${{ inputs.machine_type }}', nvidia-gpu, t4, '${{ inputs.runner }}']
+    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, '${{ inputs.runner }}']
     container:
       image: huggingface/transformers-all-latest-gpu
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
