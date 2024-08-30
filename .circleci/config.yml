@@ -41,6 +41,10 @@ jobs:
                     echo "No tests to run, exiting early!"
                     circleci-agent step halt
                 fi
+
+            - store_artifacts:
+                path: test_preparation
+
             - run:
                 name: "Retrieve Artifact Paths"
                 env:
@@ -53,12 +57,13 @@ jobs:
             - run:
                 name: "Show Artifacts"
                 command: |
+                    cat test_preparation/artifacts.json
                     jq -r '.items[] | {(.path | split("/")[-1]): .url}' test_preparation/artifacts.json \
                     | jq -s 'add' \
-                    > transformed_artifacts.json
+                    > test_preparation/transformed_artifacts.json
                 
             - store_artifacts:
-                path: test_preparation
+                path: test_preparation/transformed_artifacts.json
             - continuation/continue:
                 parameters:  artifacts.json
                 configuration_path: test_preparation/generated_config.yml
