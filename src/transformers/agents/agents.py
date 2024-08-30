@@ -1163,8 +1163,8 @@ And even if your task resolution is not successful, please return as much contex
             full_task = full_task.replace("\n<<additional_prompting>>", "").strip()
         return full_task
 
-    def __call__(self, task, **kwargs):
-        full_task = self.write_full_task(task)
+    def __call__(self, request, **kwargs):
+        full_task = self.write_full_task(request)
         output = self.agent.run(full_task, **kwargs)
         if self.provide_run_summary:
             answer = f"Here is the report from the work of your managed agent '{self.name}':\n"
