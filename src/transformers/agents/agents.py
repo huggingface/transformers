@@ -1136,11 +1136,12 @@ class ReactCodeAgent(ReactAgent):
 
 
 class ManagedAgent:
-    def __init__(self, agent, name, description, additional_prompting=None):
+    def __init__(self, agent, name, description, additional_prompting=None, provide_run_summary=False):
         self.agent = agent
         self.name = name
         self.description = description
         self.additional_prompting = additional_prompting
+        self.provide_run_summary = provide_run_summary
 
     def write_full_task(self, task):
         full_task = f"""You're a helpful agent named '{self.name}'.
@@ -1164,4 +1165,30 @@ And even if your task resolution is not successful, please return as much contex
 
     def __call__(self, task, **kwargs):
         full_task = self.write_full_task(task)
-        return self.agent.run(full_task, **kwargs)
+        output = self.agent.run(full_task, **kwargs)
+        if self.provide_run_summary:
+            answer = f"Here is the report from the work of your managed agent '{self.name}':\n"
+            for message in self.agent.write_inner_memory_from_logs(summary_mode=True):
+                content = message["content"]
+                if "tool_arguments" in str(content):
+                    if len(str(content)) < 1000 or "[FACTS]" in str(content):
+                        answer += "" + str(content) + "\n"
+                    else:
+                        try:
+                            answer += f"{json.loads(content)['tool_name']}\n"
+                        except Exception:
+                            answer += f"{content[:1000]}(...)\n"
+                else:
+                    if len(str(content)) > 2000:
+                        answer += (
+                            ">>> Tool output too long to show, showing only the beginning:\n"
+                            + str(content)[:500]
+                            + "\n(...)\n\n"
+                        )
+                    else:
+                        answer += ">>> " + str(content) + "\n\n"
+            answer += "\nNow here is the managed agent's final answer deducted from the above steps:\n"
+            answer += str(output)
+            return answer
+        else:
+            return output
