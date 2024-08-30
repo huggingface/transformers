@@ -58,7 +58,7 @@ jobs:
                 name: "Show Artifacts"
                 command: |
                     cat test_preparation/artifacts.json
-                    jq '{path_to_prepared_tests: ( .items | map({(.path | split("/")[-1]): .url}) | add ) }' test_preparation/artifacts.json \
+                    jq '( .items | map({(.path | split("/")[-1]): .url}) | add )' test_preparation/artifacts.json \
                     > test_preparation/transformed_artifacts.json
                 
             - store_artifacts:
