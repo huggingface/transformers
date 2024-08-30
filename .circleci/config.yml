@@ -41,8 +41,6 @@ jobs:
                     echo "No tests to run, exiting early!"
                     circleci-agent step halt
                 fi
-            - store_artifacts:
-                path: test_preparation
             - run:
                 name: "Retrieve Artifact Paths"
                 command: |
@@ -51,11 +49,13 @@ jobs:
                     curl --request GET \
                     --url https://circleci.com/api/v2/project/${project_slug}/${job_number}/artifacts \
                     --header "authorization: Basic REPLACE_BASIC_AUTH" \
-                    --output artifacts.json
+                    --output test_preparation/artifacts.json
             - run:
                 name: "Show Artifacts"
-                command: cat artifacts.json
+                command: cat test_preparation/artifacts.json
 
+            - store_artifacts:
+                path: test_preparation
             - continuation/continue:
                 parameters:  artifacts.json
                 configuration_path: test_preparation/generated_config.yml
