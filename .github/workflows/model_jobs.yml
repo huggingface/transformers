@@ -141,7 +141,7 @@ jobs:
       - name: delete 1 cache
         working-directory: /transformers
         run: |
-          rm -rf /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo
+          rm -rf /mnt/cache/hub/models--hf-internal-testing--config-no-model
 
       - name: Run all tests on GPU
         working-directory: /transformers
