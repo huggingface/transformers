@@ -351,7 +351,7 @@ def create_circleci_config(folder=None):
 
     if len(jobs) == 0:
         jobs = [EmptyJob()]
-
+    print({j.job_name + "_test_list":{"type":"string", "default":''} for j in jobs})
     config = {
         "version": "2.1",
         "parameters": {
