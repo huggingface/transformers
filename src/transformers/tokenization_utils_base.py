@@ -1738,11 +1738,13 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             chat_template (`str`, *optional*):
                 A Jinja template to use for this conversion. It is usually not necessary to pass anything to this
                 argument, as the model's template will be used by default.
-            add_generation_prompt (bool, *optional*): If this is set, a prompt with the token(s) that indicate
+            add_generation_prompt (bool, *optional*): 
+                If this is set, a prompt with the token(s) that indicate
                 the start of an assistant message will be appended to the formatted output. This is useful when you want to generate a response from the model.
                 Note that this argument will be passed to the chat template, and so it must be supported in the
                 template for this argument to have any effect.
-            continue_final_message (bool, *optional*): If this is set, the chat will be formatted so that the final
+            continue_final_message (bool, *optional*): 
+                If this is set, the chat will be formatted so that the final
                 message in the chat is open-ended, without any EOS tokens. The model will continue this message
                 rather than starting a new one. This allows you to "prefill" part of
                 the model's response for it. Cannot be used at the same time as `add_generation_prompt`.
