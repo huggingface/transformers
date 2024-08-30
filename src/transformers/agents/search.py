@@ -26,7 +26,7 @@ class DuckDuckGoSearch(Tool):
     def forward(self, query: str) -> str:
         try:
             from duckduckgo_search import DDGS
-        except:
+        except ImportError:
             raise ImportError(
                 "You must install `duckduckgo_search`: for instance run `pip install duckduckgo-search`."
             )
