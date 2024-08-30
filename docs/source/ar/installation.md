@@ -24,7 +24,7 @@ python -m venv .env
 source .env/bin/activate
 ```
 
-قم بتنشيط البيئة الافتراضية على Windows:
+قم بتفعيل البيئة الافتراضية على Windows:
 
 ```bash
 .env/Scripts/activate
