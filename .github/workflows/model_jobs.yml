@@ -138,10 +138,10 @@ jobs:
         run: |
           ls -l /mnt/cache/hub/models--BAAI--AltCLIP/snapshots/b989a7bc9f73809acc4df8265e63174c74791ba6/pytorch_model.bin
 
-#      - name: delete 1 cache
-#        working-directory: /transformers
-#        run: |
-#          rm -rf /mnt/cache/hub/models--kakaobrain--align-base/
+      - name: delete 1 cache
+        working-directory: /transformers
+        run: |
+          rm -rf /mnt/cache/hub/models--BAAI--AltCLIP/snapshots/b989a7bc9f73809acc4df8265e63174c74791ba6/pytorch_model.bin
 
       - name: Run all tests on GPU
         working-directory: /transformers
@@ -159,9 +159,15 @@ jobs:
           echo "hello" > /transformers/reports/${{ inputs.machine_type }}_run_models_gpu_${{ matrix.folders }}_test_reports/hello.txt
           echo "${{ inputs.machine_type }}_run_models_gpu_${{ matrix.folders }}_test_reports"
 
+      - name: Check cache 9
+        working-directory: /transformers
+        run: |
+          ls -l /mnt/cache/hub/models--BAAI--AltCLIP/snapshots/b989a7bc9f73809acc4df8265e63174c74791ba6/pytorch_model.bin
+
       - name: "Test suite reports artifacts: ${{ inputs.machine_type }}_run_models_gpu_${{ env.matrix_folders }}_test_reports"
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
           name: ${{ inputs.machine_type }}_run_models_gpu_${{ env.matrix_folders }}_test_reports
           path: /transformers/reports/${{ inputs.machine_type }}_run_models_gpu_${{ matrix.folders }}_test_reports
+
