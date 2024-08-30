@@ -49,7 +49,7 @@ jobs:
                     project_slug="gh/${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}"
                     job_number=${CIRCLE_BUILD_NUM}
                     url="https://circleci.com/api/v2/project/${project_slug}/${job_number}/artifacts"
-                    wget -O test_preparation/artifacts.json ${url}
+                    curl -o  test_preparation/artifacts.json ${url}
             - run:
                 name: "Show Artifacts"
                 command: |
