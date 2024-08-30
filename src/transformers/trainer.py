@@ -4138,7 +4138,7 @@ class Trainer:
                     for k, v in generation_inputs.items()
                     if k.replace("generation_", "") not in gen_keys and "generation" not in k
                 }
-                generated_tokens = self.model.generate(
+                generated_tokens = model.generate(
                     **generation_inputs_common,
                     **generation_only_inputs,
                     generation_config=gen_config,

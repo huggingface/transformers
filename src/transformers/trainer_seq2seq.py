@@ -307,7 +307,7 @@ class Seq2SeqTrainer(Trainer):
             generation_inputs = {
                 k: v for k, v in inputs.items() if k not in ("decoder_input_ids", "decoder_attention_mask")
             }
-        generated_tokens = self.model.generate(**generation_inputs, **gen_kwargs)
+        generated_tokens = model.generate(**generation_inputs, **gen_kwargs)
 
         # Temporary hack to ensure the generation config is not initialized for each iteration of the evaluation loop
         # TODO: remove this hack when the legacy code that initializes generation_config from a model config is
