@@ -1481,6 +1481,7 @@ class GenerationMixin:
         model_kwargs: Dict,
         assistant_model: "PreTrainedModel",
         batch_size: int,
+        max_cache_length: int,
         device: torch.device,
     ) -> bool:
         """
@@ -1547,8 +1548,8 @@ class GenerationMixin:
                     )
                 model_kwargs[cache_name] = self._get_cache(
                     cache_implementation=generation_config.cache_implementation,
-                    batch_size=generation_config.num_beams * generation_config.num_return_sequences * batch_size,
-                    max_cache_len=generation_config.max_length,
+                    batch_size=max(generation_config.num_beams, generation_config.num_return_sequences) * batch_size,
+                    max_cache_len=max_cache_length,
                     device=device,
                     model_kwargs=model_kwargs,
                 )
@@ -1888,7 +1889,16 @@ class GenerationMixin:
         # TODO (joao): remove `user_defined_cache` after v4.47 (remove default conversion to legacy format)
         cache_name = "past_key_values" if "mamba" not in self.__class__.__name__.lower() else "cache_params"
         user_defined_cache = model_kwargs.get(cache_name)
-        self._prepare_cache_for_generation(generation_config, model_kwargs, assistant_model, batch_size, device)
+        max_cache_length = generation_config.max_length
+        if (
+            inputs_tensor.shape[1] != input_ids_length
+            and model_input_name == "inputs_embeds"
+            and not self.config.is_encoder_decoder
+        ):
+            max_cache_length += inputs_tensor.shape[1]
+        self._prepare_cache_for_generation(
+            generation_config, model_kwargs, assistant_model, batch_size, max_cache_length, device
+        )
 
         # 8. determine generation mode
         generation_mode = generation_config.get_generation_mode(assistant_model)
@@ -1936,8 +1946,8 @@ class GenerationMixin:
                 raise ValueError("assisted generate is only supported for batch_size = 1")
             if not model_kwargs["use_cache"]:
                 raise ValueError("assisted generate requires `use_cache=True`")
-            if generation_config.cache_implementation == "static":
-                raise ValueError("assisted generate is not supported with `static_cache`")
+            if generation_config.cache_implementation in ["static", "hybrid", "sliding_window"]:
+                raise ValueError("assisted generate is not supported with Static cache classes`")
             if self._is_stateful:
                 # In assisted generation we need the ability to confirm whether the model would pick certain tokens,
                 # which is not possible with stateful models (they can't reset to a previous subset of generated text)
