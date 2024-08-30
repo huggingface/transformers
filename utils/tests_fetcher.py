@@ -1143,8 +1143,8 @@ JOB_TO_TEST_FILE = {
     "tests_exotic_models": r"tests/models/.*(?=layoutlmv|nat|deta|udop|nougat).*",
     "tests_custom_tokenizers": r"tests/models/.*/test_tokenization_(?=bert_japanese|openai|clip).*",
     # "repo_utils": r"tests/[^models].*test.*", TODO later on we might want to do
-    "pipeline_tf": r"tests/models/.*/test_modeling_tf_.*",
-    "pipeline_torch": r"tests/models/.*/test_modeling_(?!(?:flax_|tf_)).*",
+    "pipelines_tf": r"tests/models/.*/test_modeling_tf_.*",
+    "pipelines_torch": r"tests/models/.*/test_modeling_(?!(?:flax_|tf_)).*",
     "tests_hub": r"tests/.*(?!(?:flax_|tf_)).*",
     "tests_onnx": r"tests/models/.*/test_modeling_(?:tf_|(?!flax)).*",
 }
