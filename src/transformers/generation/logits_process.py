@@ -15,12 +15,12 @@
 
 import inspect
 import math
-import warnings
 from typing import Callable, Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
 
+from ..pytorch_utils import isin_mps_friendly
 from ..utils import add_start_docstrings
 from ..utils.logging import get_logger
 
@@ -160,7 +160,7 @@ class MinLengthLogitsProcessor(LogitsProcessor):
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         vocab_tensor = torch.arange(scores.shape[-1], device=scores.device)
-        eos_token_mask = torch.isin(vocab_tensor, self.eos_token_id)
+        eos_token_mask = isin_mps_friendly(vocab_tensor, self.eos_token_id)
         scores_processed = scores.clone()
         if input_ids.shape[-1] < self.min_length:
             scores_processed = torch.where(eos_token_mask, -math.inf, scores)
@@ -232,7 +232,7 @@ class MinNewTokensLengthLogitsProcessor(LogitsProcessor):
         new_tokens_length = input_ids.shape[-1] - self.prompt_length_to_skip
         scores_processed = scores.clone()
         vocab_tensor = torch.arange(scores.shape[-1], device=scores.device)
-        eos_token_mask = torch.isin(vocab_tensor, self.eos_token_id)
+        eos_token_mask = isin_mps_friendly(vocab_tensor, self.eos_token_id)
         if new_tokens_length < self.min_new_tokens:
             scores_processed = torch.where(eos_token_mask, -math.inf, scores)
 
@@ -1796,7 +1796,7 @@ class SuppressTokensAtBeginLogitsProcessor(LogitsProcessor):
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         vocab_tensor = torch.arange(scores.shape[-1], device=scores.device)
-        suppress_token_mask = torch.isin(vocab_tensor, self.begin_suppress_tokens)
+        suppress_token_mask = isin_mps_friendly(vocab_tensor, self.begin_suppress_tokens)
         scores_processed = scores
         if input_ids.shape[-1] == self.begin_index:
             scores_processed = torch.where(suppress_token_mask, -float("inf"), scores)
@@ -1839,37 +1839,9 @@ class SuppressTokensLogitsProcessor(LogitsProcessor):
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         vocab_tensor = torch.arange(scores.shape[-1], device=scores.device)
-        suppress_token_mask = torch.isin(vocab_tensor, self.suppress_tokens)
+        suppress_token_mask = isin_mps_friendly(vocab_tensor, self.suppress_tokens)
         scores = torch.where(suppress_token_mask, -float("inf"), scores)
         return scores
-
-
-class ForceTokensLogitsProcessor(LogitsProcessor):
-    r"""
-    This processor takes a list of pairs of integers which indicates a mapping from generation indices to token
-    indices that will be forced before generation. The processor will set their log probs to `inf` so that they are
-    sampled at their corresponding index. Originally created for
-    [Whisper](https://huggingface.co/docs/transformers/model_doc/whisper).
-    """
-
-    def __init__(self, force_token_map: List[List[int]], _has_warned: Optional[bool] = False):
-        self.force_token_map = dict(force_token_map)
-        if not _has_warned:
-            # TODO(Sanchit): remove this processor entirely in v4.40
-            warnings.warn(
-                "This `ForceTokensLogitsProcessor` has been deprecated and will be removed in v4.40. Should you need to provide prompt ids for generation, specify `input_ids` to the generate method for decoder-only models, or `decoder_input_ids` for encoder-decoder models.",
-                FutureWarning,
-            )
-
-    @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        generation_idx = input_ids.shape[-1]
-        current_token = self.force_token_map.get(generation_idx, None)
-        scores_processed = scores
-        if current_token is not None:
-            scores_processed = torch.full_like(scores, -float("inf"))
-            scores_processed[:, current_token] = 0
-        return scores_processed
 
 
 class WhisperTimeStampLogitsProcessor(LogitsProcessor):
