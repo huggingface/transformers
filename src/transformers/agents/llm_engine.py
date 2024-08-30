@@ -17,6 +17,7 @@
 from copy import deepcopy
 from enum import Enum
 from typing import Dict, List, Optional
+
 from huggingface_hub import InferenceClient
 
 from ..pipelines.base import Pipeline
@@ -68,6 +69,7 @@ llama_role_conversions = {
 
 class HfApiEngine:
     """This engine leverages Hugging Face's Inference API service, either serverless or with a dedicated endpoint."""
+
     def __init__(self, model: str = "meta-llama/Meta-Llama-3.1-8B-Instruct"):
         self.model = model
         self.client = InferenceClient(self.model, timeout=120)
@@ -94,8 +96,10 @@ class HfApiEngine:
                 response = response[: -len(stop_seq)]
         return response
 
+
 class TransformersEngine:
     """This engine uses a pre-initialized local text-generation pipeline."""
+
     def __init__(self, pipeline: Pipeline):
         self.pipeline = pipeline
 
@@ -106,7 +110,12 @@ class TransformersEngine:
         messages = get_clean_message_list(messages, role_conversions=llama_role_conversions)
 
         # Get LLM output
-        output = self.pipeline(messages, stop_strings=(stop_sequences if len(stop_sequences) > 0 else None), max_length=1500, tokenizer=self.pipeline.tokenizer)
+        output = self.pipeline(
+            messages,
+            stop_strings=(stop_sequences if len(stop_sequences) > 0 else None),
+            max_length=1500,
+            tokenizer=self.pipeline.tokenizer,
+        )
 
         response = output[0]["generated_text"][-1]["content"]
 
@@ -115,6 +124,7 @@ class TransformersEngine:
             if response[-len(stop_seq) :] == stop_seq:
                 response = response[: -len(stop_seq)]
         return response
+
 
 DEFAULT_JSONAGENT_REGEX_GRAMMAR = {
     "type": "regex",
