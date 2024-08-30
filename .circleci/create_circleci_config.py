@@ -100,7 +100,7 @@ class CircleCIJob:
         job = {
             "docker": self.docker_image,
             "environment": env,
-            "if": f"[[ ! -z \"<<pipeline.parameters.{self.job_name}_test_list>>\" ]]" or "pr_documentation" in self.name
+            "if": f"[[ ! -z \"<<pipeline.parameters.{self.job_name}_test_list>>\" ]]" if "pr_documentation" not in self.name else "true"
         }
         if self.resource_class is not None:
             job["resource_class"] = self.resource_class
