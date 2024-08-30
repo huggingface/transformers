@@ -347,7 +347,7 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
             output = model(**inputs)
 
         expected_slice = torch.tensor(
-            [[-12.3125, -14.5703, -12.8750], [3.3945, 5.0625, 9.5469], [3.5254, 4.4453, 7.9492]],
+            [[-12.3125, -14.5625, -12.8750], [3.4023, 5.0508, 9.5469], [3.5762, 4.4922, 7.8906]],
             dtype=torch.float32,
             device=torch_device,
         )
@@ -355,7 +355,7 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # verify generation
         output = model.generate(**inputs, max_new_tokens=100)
-        EXPECTED_DECODED_TEXT = 'user\n\nWhat do you see in this image?\nassistant\nThe image is a radar chart that compares the performance of different models in a specific task, likely related to natural language processing or machine learning. The chart is divided into several axes, each representing a different model or method. The models are color-coded and labeled with their respective names. The axes are labeled with terms such as "VQA," "GQA," "MQA," "VQAv2," "MM-Vet," "LLaVA-Bench," "LLaVA-1'  # fmt: skip
+        EXPECTED_DECODED_TEXT = 'user\n\nWhat do you see in this image?\nassistant\nThe image is a radar chart that compares the performance of different models in a specific task, likely related to natural language processing or machine learning. The chart is divided into several axes, each representing a different model or method. The models are color-coded and labeled with their respective names. The axes are labeled with terms such as "VQA," "GQA," "MQA," "VIZ," "TextVQA," "SQA-IMG," and "MQE." The radar chart shows'  # fmt: skip
 
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
