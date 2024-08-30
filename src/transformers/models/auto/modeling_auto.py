@@ -194,6 +194,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("phi3", "Phi3Model"),
         ("plbart", "PLBartModel"),
         ("poolformer", "PoolFormerModel"),
+        ("propainter", "ProPainterModel"),
         ("prophetnet", "ProphetNetModel"),
         ("pvt", "PvtModel"),
         ("pvt_v2", "PvtV2Model"),
@@ -255,7 +256,6 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("vision-text-dual-encoder", "VisionTextDualEncoderModel"),
         ("visual_bert", "VisualBertModel"),
         ("vit", "ViTModel"),
-        ("propainter", "ProPainterModel"),
         ("vit_hybrid", "ViTHybridModel"),
         ("vit_mae", "ViTMAEModel"),
         ("vit_msn", "ViTMSNModel"),
@@ -564,6 +564,7 @@ MODEL_FOR_IMAGE_MAPPING_NAMES = OrderedDict(
         ("mobilevitv2", "MobileViTV2Model"),
         ("nat", "NatModel"),
         ("poolformer", "PoolFormerModel"),
+        ("propainter", "ProPainterModel"),
         ("pvt", "PvtModel"),
         ("regnet", "RegNetModel"),
         ("resnet", "ResNetModel"),
@@ -579,7 +580,6 @@ MODEL_FOR_IMAGE_MAPPING_NAMES = OrderedDict(
         ("van", "VanModel"),
         ("videomae", "VideoMAEModel"),
         ("vit", "ViTModel"),
-        ("propainter", "ProPainterModel"),
         ("vit_hybrid", "ViTHybridModel"),
         ("vit_mae", "ViTMAEModel"),
         ("vit_msn", "ViTMSNModel"),
@@ -596,7 +596,6 @@ MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING_NAMES = OrderedDict(
         ("swin", "SwinForMaskedImageModeling"),
         ("swinv2", "Swinv2ForMaskedImageModeling"),
         ("vit", "ViTForMaskedImageModeling"),
-        ("propainter", "ProPainterForMaskedImageModeling"),
     ]
 )
 
@@ -664,7 +663,6 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("swinv2", "Swinv2ForImageClassification"),
         ("van", "VanForImageClassification"),
         ("vit", "ViTForImageClassification"),
-        ("propainter", "ProPainterForImageClassification"),
         ("vit_hybrid", "ViTHybridForImageClassification"),
         ("vit_msn", "ViTMSNForImageClassification"),
     ]
