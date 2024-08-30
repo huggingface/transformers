@@ -948,8 +948,8 @@ class DynamicPipelineTester(unittest.TestCase):
                 {
                     "pair-classification": {
                         "impl": "custom_pipeline.PairClassificationPipeline",
-                        "pt": ["AutoModelForSequenceClassification"],
-                        "tf": [],
+                        "pt": ("AutoModelForSequenceClassification",),
+                        "tf": (),
                     }
                 },
             )
@@ -971,8 +971,8 @@ class DynamicPipelineTester(unittest.TestCase):
             {
                 "pair-classification": {
                     "impl": f"{USER}/test-dynamic-pipeline--custom_pipeline.PairClassificationPipeline",
-                    "pt": ["AutoModelForSequenceClassification"],
-                    "tf": [],
+                    "pt": ("AutoModelForSequenceClassification",),
+                    "tf": (),
                 }
             },
         )
