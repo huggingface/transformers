@@ -207,9 +207,14 @@ class InstructBlipProcessor(ProcessorMixin):
         self.qformer_tokenizer.save_pretrained(qformer_tokenizer_path)
 
         # We modify the attributes so that only the tokenizer and image processor are saved in the main folder
-        self.attributes = ["image_processor", "tokenizer"]
+        qformer_present = "qformer_tokenizer" in self.attributes
+        if qformer_present:
+            self.attributes.remove("qformer_tokenizer")
+
         outputs = super().save_pretrained(save_directory, **kwargs)
-        self.attributes = ["image_processor", "tokenizer", "qformer_tokenizer"]
+
+        if qformer_present:
+            self.attributes += ["qformer_tokenizer"]
         return outputs
 
     # overwrite to load the Q-Former tokenizer from a separate folder
