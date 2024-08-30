@@ -354,11 +354,13 @@ Sometimes you would want to first fill-in cache object with key/values for certa
 >>> model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, device_map="cuda")
 >>> tokenizer = AutoTokenizer.from_pretrained(model_id)
 
+>>> # init StaticCache with big enough max-length (1024 tokens for the below example) 
+>>> prompt_cache = StaticCache(config=model.config, max_batch_size=1, max_cache_len=1024, device="cuda", dtype=torch.bfloat16)
 >>> INITIAL_PROMPT = "You are a helpful assistant. "
->>> prompt_cache = DynamicCache()
 >>> inputs_initial_prompt = tokenizer(INITIAL_PROMPT, return_tensors="pt").to("cuda")
->>> # This is the common prompt cached
->>> prompt_cache = model(**inputs_initial_prompt, past_key_values = prompt_cache).past_key_values
+>>> # This is the common prompt cached, we need to run forward without grad to be abel to copy
+>>> with torch.no.grad():
+...      prompt_cache = model(**inputs_initial_prompt, past_key_values = prompt_cache).past_key_values
 
 >>> prompts = ["Help me to write a blogpost about travelling.", "What is the capital of France?"]
 >>> responses = []
@@ -370,5 +372,5 @@ Sometimes you would want to first fill-in cache object with key/values for certa
 ...   responses.append(response)
 
 >>> print(responses)
-["You are a helpful assistant. Help me to write a blogpost about travelling.", "You are a helpful assistant. What is the capital of France?"]
+['<s> You are a helpful assistant. Help me to write a blogpost about travelling.\n\nTitle: The Ultimate Guide to Travelling: Tips, Tricks, and', '<s> You are a helpful assistant. What is the capital of France?\n\nYes, the capital of France is Paris.</s>']
 ```
