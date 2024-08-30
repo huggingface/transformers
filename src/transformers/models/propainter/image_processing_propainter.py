@@ -527,14 +527,14 @@ class ProPainterImageProcessor(BaseImageProcessor):
 
         if scale_hw is None:
             #masks is for both flow_masks, masks_dilated, just add the same data to both variables in case of inpainting
-            flow_masks = masks_dilated = [to_tensors(mask).unsqueeze(0) for mask in pixel_values_masks]
+            flow_masks = masks_dilated = torch.stack([to_tensors(mask) for mask in pixel_values_masks], dim=0)
             size = video_size #height, width
         else:
-            flow_masks, = [to_tensors(mask).unsqueeze(0) for mask in flow_masks]
-            masks_dilated = [to_tensors(mask).unsqueeze(0) for mask in masks_dilated]
+            flow_masks, = torch.stack([to_tensors(mask) for mask in flow_masks], dim=0)
+            masks_dilated = torch.stack([to_tensors(mask) for mask in masks_dilated], dim=0)
             size = (height_extr, width_extr)
         videos_inp = [[np.array(frame).transpose(1,2,0).astype(np.uint8) for frame in video] for video in videos]
-        videos = [to_tensors(video).unsqueeze(0) * 2 - 1 for video in videos]
+        videos = torch.stack([to_tensors(video) * 2 - 1 for video in videos], dim=0)
 
         data = {"pixel_values_inp": videos_inp, "pixel_values": videos, "flow_masks": flow_masks, "masks_dilated": masks_dilated, "size": size}
         return BatchFeature(data=data, tensor_type=return_tensors)
