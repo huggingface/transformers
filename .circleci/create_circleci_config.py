@@ -118,6 +118,7 @@ class CircleCIJob:
         steps = [
             "checkout",
             {"attach_workspace": {"at": "test_preparation"}},
+            {"run": "sudo apt-get install -y curl"},
             {"run": " && ".join(self.install_steps)},
             {"run": {"name": "Download NLTK files", "command": """python -c "import nltk; nltk.download('punkt', quiet=True)" """} if "example" in self.name else "echo Skipping"},
             {"run": {
