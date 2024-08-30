@@ -15,7 +15,6 @@ import unittest
 
 import numpy as np
 
-from transformers.models.superpoint.modeling_superpoint import SuperPointKeypointDescriptionOutput
 from transformers.testing_utils import require_torch, require_vision, slow
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -30,6 +29,7 @@ if is_torch_available():
 
 if is_vision_available():
     from transformers import SuperPointImageProcessor
+    from transformers.models.superpoint.modeling_superpoint import SuperPointKeypointDescriptionOutput
 
 
 class SuperPointImageProcessingTester(unittest.TestCase):
