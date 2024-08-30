@@ -25,9 +25,6 @@ from ...test_image_processing_common import (
 )
 
 
-if is_torch_available():
-    import torch
-
 if is_vision_available():
     from transformers import SuperPointImageProcessor
 
@@ -75,6 +72,7 @@ class SuperPointImageProcessingTester(unittest.TestCase):
         )
 
     def prepare_keypoint_detection_output(self, pixel_values):
+        import torch
         max_number_keypoints = 50
         batch_size = len(pixel_values)
         mask = torch.zeros((batch_size, max_number_keypoints))
