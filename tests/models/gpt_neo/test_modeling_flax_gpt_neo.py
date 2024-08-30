@@ -183,7 +183,6 @@ class FlaxGPTNeoModelTester:
 @require_flax
 class FlaxGPTNeoModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unittest.TestCase):
     all_model_classes = (FlaxGPTNeoModel, FlaxGPTNeoForCausalLM) if is_flax_available() else ()
-    all_generative_model_classes = (FlaxGPTNeoForCausalLM,) if is_flax_available() else ()
 
     def setUp(self):
         self.model_tester = FlaxGPTNeoModelTester(self)

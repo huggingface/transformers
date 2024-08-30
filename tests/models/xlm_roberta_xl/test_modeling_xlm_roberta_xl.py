@@ -373,7 +373,6 @@ class XLMRobertaXLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (XLMRobertaXLForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": XLMRobertaXLModel,
@@ -519,7 +518,7 @@ class XLMRobertaXLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
     # TODO: Remove this and use the parent method (in common tests) once XLM RoBERTa XL supports low_cpu_mem_usage=True.
     @require_torch_sdpa
     @slow
-    # Copied from tests.test_modeling_common.ModelTesterMixin.test_eager_matches_sdpa_generate
+    # Copied from tests.generation.test_utils.GenerationTesterMixin.test_eager_matches_sdpa_generate
     def test_eager_matches_sdpa_generate(self):
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")

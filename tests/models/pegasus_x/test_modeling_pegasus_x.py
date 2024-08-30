@@ -203,7 +203,6 @@ class PegasusXModelTester:
 @require_torch
 class PegasusXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (PegasusXModel, PegasusXForConditionalGeneration) if is_torch_available() else ()
-    all_generative_model_classes = (PegasusXForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": PegasusXModel,
@@ -850,7 +849,6 @@ class PegasusXStandaloneDecoderModelTester:
 @require_torch
 class PegasusXStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (PegasusXDecoder,) if is_torch_available() else ()
-    all_generative_model_classes = ()
     test_pruning = False
     is_encoder_decoder = False
     test_head_masking = False

@@ -237,7 +237,6 @@ class FlaxLongT5ModelTester:
 @require_flax
 class FlaxLongT5ModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unittest.TestCase):
     all_model_classes = (FlaxLongT5Model, FlaxLongT5ForConditionalGeneration) if is_flax_available() else ()
-    all_generative_model_classes = (FlaxLongT5ForConditionalGeneration,) if is_flax_available() else ()
     is_encoder_decoder = True
 
     def setUp(self):

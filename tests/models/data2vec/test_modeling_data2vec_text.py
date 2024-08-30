@@ -373,7 +373,6 @@ class Data2VecTextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (Data2VecTextForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": Data2VecTextModel,

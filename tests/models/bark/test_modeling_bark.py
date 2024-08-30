@@ -53,7 +53,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        BarkCausalModel,
         BarkCoarseModel,
         BarkFineModel,
         BarkModel,
@@ -527,7 +526,6 @@ class BarkModelTester:
 @require_torch
 class BarkSemanticModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (BarkSemanticModel,) if is_torch_available() else ()
-    all_generative_model_classes = (BarkCausalModel,) if is_torch_available() else ()
 
     is_encoder_decoder = False
     fx_compatible = False
@@ -616,7 +614,6 @@ class BarkSemanticModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
 class BarkCoarseModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     # Same tester as BarkSemanticModelTest, except for model_class and config_class
     all_model_classes = (BarkCoarseModel,) if is_torch_available() else ()
-    all_generative_model_classes = (BarkCausalModel,) if is_torch_available() else ()
 
     is_encoder_decoder = False
     fx_compatible = False

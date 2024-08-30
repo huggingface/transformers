@@ -283,7 +283,6 @@ class RecurrentGemmaModelTester:
 @require_torch
 class RecurrentGemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (RecurrentGemmaForCausalLM,) if is_torch_available() else ()
-    # all_generative_model_classes = (RecurrentGemmaForCausalLM,) if is_torch_available() else () #TODO @gante not fully supported
     pipeline_model_mapping = (
         {
             "feature-extraction": RecurrentGemmaModel,

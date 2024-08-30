@@ -176,7 +176,6 @@ class FlaxGemmaModelTester:
 @require_flax
 class FlaxGemmaModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unittest.TestCase):
     all_model_classes = (FlaxGemmaModel, FlaxGemmaForCausalLM) if is_flax_available() else ()
-    all_generative_model_classes = (FlaxGemmaForCausalLM,) if is_flax_available() else ()
 
     def setUp(self):
         self.model_tester = FlaxGemmaModelTester(self)

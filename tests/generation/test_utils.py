@@ -14,11 +14,11 @@
 # limitations under the License.
 
 
-import time
-import os
 import copy
 import inspect
+import os
 import tempfile
+import time
 import unittest
 import warnings
 
@@ -28,7 +28,7 @@ from packaging import version
 from parameterized import parameterized
 from pytest import mark
 
-from transformers import is_torch_available, pipeline, set_seed, AutoTokenizer, GenerationConfig
+from transformers import AutoTokenizer, GenerationConfig, is_torch_available, pipeline, set_seed
 from transformers.models.auto import get_values
 from transformers.models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
 from transformers.testing_utils import (

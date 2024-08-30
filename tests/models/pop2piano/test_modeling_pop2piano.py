@@ -507,7 +507,6 @@ class Pop2PianoModelTester:
 @require_torch
 class Pop2PianoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Pop2PianoForConditionalGeneration,) if is_torch_available() else ()
-    all_generative_model_classes = ()
     pipeline_model_mapping = (
         {"automatic-speech-recognition": Pop2PianoForConditionalGeneration} if is_torch_available() else {}
     )

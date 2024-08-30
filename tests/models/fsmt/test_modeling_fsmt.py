@@ -163,7 +163,6 @@ def prepare_fsmt_inputs_dict(
 @require_torch
 class FSMTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (FSMTModel, FSMTForConditionalGeneration) if is_torch_available() else ()
-    all_generative_model_classes = (FSMTForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": FSMTModel,

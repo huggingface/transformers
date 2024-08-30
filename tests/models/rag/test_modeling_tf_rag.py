@@ -64,11 +64,6 @@ class TFRagTestMixin:
         if is_tf_available() and is_datasets_available() and is_faiss_available()
         else ()
     )
-    all_generative_model_classes = (
-        (TFRagTokenForGeneration, TFRagSequenceForGeneration)
-        if is_tf_available() and is_datasets_available() and is_faiss_available()
-        else ()
-    )
 
     retrieval_vector_size = 32
     n_docs = 3

@@ -419,7 +419,6 @@ class BartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (BartForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": BartModel,
@@ -1502,7 +1501,6 @@ class BartStandaloneDecoderModelTester:
 @require_torch
 class BartStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (BartDecoder, BartForCausalLM) if is_torch_available() else ()
-    all_generative_model_classes = (BartForCausalLM,) if is_torch_available() else ()
     fx_comptatible = True
     test_pruning = False
     is_encoder_decoder = False

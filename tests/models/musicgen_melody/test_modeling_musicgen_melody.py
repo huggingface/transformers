@@ -489,7 +489,7 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
     @require_torch_gpu
     @mark.flash_attn_test
     @slow
-    # Copied from tests.test_modeling_common.ModelTesterMixin.test_flash_attn_2_generate_left_padding
+    # Copied from tests.generation.test_utils.GenerationTesterMixin.test_flash_attn_2_generate_left_padding
     def test_flash_attn_2_generate_left_padding(self):
         # Ignore copy
         for model_class in self.greedy_sample_model_classes:
@@ -535,7 +535,7 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
     @require_torch_gpu
     @mark.flash_attn_test
     @slow
-    # Copied from tests.test_modeling_common.ModelTesterMixin.test_flash_attn_2_generate_padding_right
+    # Copied from tests.generation.test_utils.GenerationTesterMixin.test_flash_attn_2_generate_padding_right
     def test_flash_attn_2_generate_padding_right(self):
         # Ignore copy
         for model_class in self.greedy_sample_model_classes:
@@ -1775,7 +1775,7 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     @require_torch_gpu
     @mark.flash_attn_test
     @slow
-    # Copied from tests.test_modeling_common.ModelTesterMixin.test_flash_attn_2_generate_left_padding
+    # Copied from tests.generation.test_utils.GenerationTesterMixin.test_flash_attn_2_generate_left_padding
     def test_flash_attn_2_generate_left_padding(self):
         # Ignore copy
         for model_class in self.greedy_sample_model_classes:
@@ -1824,7 +1824,7 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     @require_torch_gpu
     @mark.flash_attn_test
     @slow
-    # Copied from tests.test_modeling_common.ModelTesterMixin.test_flash_attn_2_generate_padding_right
+    # Copied from tests.generation.test_utils.GenerationTesterMixin.test_flash_attn_2_generate_padding_right
     def test_flash_attn_2_generate_padding_right(self):
         # Ignore copy
         for model_class in self.greedy_sample_model_classes:
@@ -1872,7 +1872,7 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     @require_torch_gpu
     @mark.flash_attn_test
     @slow
-    # Copied from tests.test_modeling_common.ModelTesterMixin.test_flash_attn_2_generate_use_cache
+    # Copied from tests.generation.test_utils.GenerationTesterMixin.test_flash_attn_2_generate_use_cache
     def test_flash_attn_2_generate_use_cache(self):
         max_new_tokens = 30
 
@@ -2171,7 +2171,7 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
     @require_torch_sdpa
     @slow
-    # Copied from tests.test_modeling_common.ModelTesterMixin.test_eager_matches_sdpa_generate
+    # Copied from tests.generation.test_utils.GenerationTesterMixin.test_eager_matches_sdpa_generate
     def test_eager_matches_sdpa_generate(self):
         max_new_tokens = 30
 

@@ -358,7 +358,6 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (SeamlessM4TForSpeechToText,) if is_torch_available() else ()
 
     input_name = "input_features"
 
@@ -647,7 +646,6 @@ class SeamlessM4TModelWithTextInputTest(
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (SeamlessM4TForTextToText,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "automatic-speech-recognition": SeamlessM4TForSpeechToText,
