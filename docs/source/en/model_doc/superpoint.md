@@ -86,23 +86,27 @@ model = SuperPointForKeypointDetection.from_pretrained("magic-leap-community/sup
 
 inputs = processor(images, return_tensors="pt")
 outputs = model(**inputs)
+image_sizes = torch.tensor([image.size for image in images]).flip(1)
+outputs = processor.post_process_keypoint_detection(outputs, image_sizes)
 
-for i in range(len(images)):
-    image_mask = outputs.mask[i]
-    image_indices = torch.nonzero(image_mask).squeeze()
-    image_keypoints = outputs.keypoints[i][image_indices]
-    image_scores = outputs.scores[i][image_indices]
-    image_descriptors = outputs.descriptors[i][image_indices]
+for output in outputs:
+    keypoints = output["keypoints"]
+    scores = output["scores"]
+    descriptors = output["descriptors"]
 ```
 
-You can then print the keypoints on the image to visualize the result :
+You can then print the keypoints on the image of your choice to visualize the result :
 ```python
-import cv2
-for keypoint, score in zip(image_keypoints, image_scores):
-    keypoint_x, keypoint_y = int(keypoint[0].item()), int(keypoint[1].item())
-    color = tuple([score.item() * 255] * 3)
-    image = cv2.circle(image, (keypoint_x, keypoint_y), 2, color)
-cv2.imwrite("output_image.png", image)
+import matplotlib.pyplot as plt
+plt.axis("off")
+plt.imshow(image)
+plt.scatter(
+    keypoints[:, 0],
+    keypoints[:, 1],
+    c=scores * 100,
+    s=scores * 20
+)
+plt.savefig(f"output_image.png")
 ```
 
 This model was contributed by [stevenbucaille](https://huggingface.co/stevenbucaille).

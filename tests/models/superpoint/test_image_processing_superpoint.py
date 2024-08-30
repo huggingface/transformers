@@ -16,7 +16,7 @@ import unittest
 import numpy as np
 
 from transformers.testing_utils import require_torch, require_vision, slow
-from transformers.utils import is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import (
     ImageProcessingTestMixin,
@@ -24,11 +24,11 @@ from ...test_image_processing_common import (
 )
 
 
-if is_vision_available():
-    from transformers import SuperPointForKeypointDetection, SuperPointImageProcessor, is_torch_available
-
 if is_torch_available():
     import torch
+
+if is_vision_available():
+    from transformers import SuperPointForKeypointDetection, SuperPointImageProcessor
 
 
 class SuperPointImageProcessingTester(unittest.TestCase):
@@ -121,7 +121,7 @@ class SuperPointImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
         image_inputs = self.image_processor_tester.prepare_image_inputs()
         pre_processed_images = image_processor.preprocess(image_inputs, return_tensors="pt")
         outputs = model(**pre_processed_images)
-        image_sizes = torch.tensor([image.size for image in image_inputs])
+        image_sizes = torch.tensor([image.size for image in image_inputs]).flip(1)
         post_processed_outputs = image_processor.post_process_keypoint_detection(outputs, image_sizes)
 
         self.assertTrue(len(post_processed_outputs) == self.image_processor_tester.batch_size)
