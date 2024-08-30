@@ -318,7 +318,7 @@ py_command = 'from utils.tests_fetcher import get_doctest_files; to_test = get_d
 py_command = f"$(python3 -c '{py_command}')"
 command = f'echo """{py_command}""" > pr_documentation_tests_temp.txt'
 doc_test_job = CircleCIJob(
-    "pr_documentation_tests",
+    "tests_pr_documentation",
     docker_image=[{"image":"huggingface/transformers-consistency"}],
     additional_env={"TRANSFORMERS_VERBOSITY": "error", "DATASETS_VERBOSITY": "error", "SKIP_CUDA_DOCTEST": "1"},
     install_steps=[
