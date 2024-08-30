@@ -369,6 +369,7 @@ class GitModelTester:
             attention_mask=None,
             pixel_values=pixel_values,
             do_sample=False,
+            min_length=20,
             max_length=20,
             num_beams=2,
             num_return_sequences=2,
