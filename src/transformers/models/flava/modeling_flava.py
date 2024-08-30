@@ -27,6 +27,7 @@ from torch import nn
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
+from ...modeling_vision_utils import interpolate_pos_encoding as _interpolate_pos_encoding
 from ...utils import (
     ModelOutput,
     add_code_sample_docstrings,
@@ -262,39 +263,7 @@ class FlavaImageEmbeddings(nn.Module):
         self.config = config
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
-        """
-        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher
-        resolution images.
-
-        Source:
-        https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/image_transformer.py#L174
-        """
-
-        npatch = embeddings.shape[1] - 1
-        num_pos = self.position_embeddings.shape[1] - 1
-        if npatch == num_pos and height == width:
-            return self.position_embeddings
-        class_pos_embed = self.position_embeddings[:, 0]
-        patch_pos_embed = self.position_embeddings[:, 1:]
-        dim = embeddings.shape[-1]
-        num_h_patches = height // self.config.patch_size
-        num_w_patches = width // self.config.patch_size
-        # we add a small number to avoid floating point error in the interpolation
-        # see discussion at https://github.com/facebookresearch/dino/issues/8
-        num_h_patches, num_w_patches = num_h_patches + 0.1, num_w_patches + 0.1
-        patch_pos_embed = nn.functional.interpolate(
-            patch_pos_embed.reshape(1, int(math.sqrt(num_pos)), int(math.sqrt(num_pos)), dim).permute(0, 3, 1, 2),
-            scale_factor=(num_h_patches / math.sqrt(num_pos), num_w_patches / math.sqrt(num_pos)),
-            mode="bicubic",
-            align_corners=False,
-        )
-        if int(num_h_patches) != patch_pos_embed.shape[-2] or int(num_w_patches) != patch_pos_embed.shape[-1]:
-            raise ValueError(
-                f"Number of patches for images ({int(num_h_patches), int(num_w_patches)}) don't match the "
-                f"shape of position embedding ({patch_pos_embed.shape[-2], patch_pos_embed.shape[-1]})"
-            )
-        patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
-        return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1)
+        return _interpolate_pos_encoding(embeddings, self.position_embeddings, height, width, self.config.patch_size)
 
     def forward(
         self,

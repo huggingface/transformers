@@ -28,6 +28,7 @@ from torch import nn
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
+from ...modeling_vision_utils import interpolate_pos_encoding as _interpolate_pos_encoding
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
     ModelOutput,
@@ -224,39 +225,7 @@ class ViTMAEEmbeddings(nn.Module):
         torch.nn.init.normal_(self.cls_token, std=self.config.initializer_range)
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
-        """
-        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher
-        resolution images.
-
-        Source:
-        https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174
-        """
-        num_patches = embeddings.shape[1] - 1
-        num_positions = self.position_embeddings.shape[1] - 1
-
-        if num_patches == num_positions and height == width:
-            return self.position_embeddings
-
-        class_pos_embed = self.position_embeddings[:, 0, :]
-        patch_pos_embed = self.position_embeddings[:, 1:, :]
-        dim = embeddings.shape[-1]
-        h0 = height // self.config.patch_size
-        w0 = width // self.config.patch_size
-        # we add a small number to avoid floating point error in the interpolation
-        # see discussion at https://github.com/facebookresearch/dino/issues/8
-        h0, w0 = h0 + 0.1, w0 + 0.1
-        patch_pos_embed = patch_pos_embed.reshape(1, int(math.sqrt(num_positions)), int(math.sqrt(num_positions)), dim)
-        patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
-        patch_pos_embed = nn.functional.interpolate(
-            patch_pos_embed,
-            scale_factor=(h0 / math.sqrt(num_positions), w0 / math.sqrt(num_positions)),
-            mode="bicubic",
-            align_corners=False,
-        )
-        if int(h0) != patch_pos_embed.shape[-2] or int(w0) != patch_pos_embed.shape[-1]:
-            raise ValueError("Width or height does not match with the interpolated position embeddings")
-        patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
-        return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1)
+        return _interpolate_pos_encoding(embeddings, self.position_embeddings, height, width, self.config.patch_size)
 
     def random_masking(self, sequence, noise=None):
         """

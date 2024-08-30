@@ -32,6 +32,7 @@ from ...modeling_outputs import (
     ModelOutput,
 )
 from ...modeling_utils import PreTrainedModel
+from ...modeling_vision_utils import interpolate_pos_encoding as _interpolate_pos_encoding
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -319,47 +320,12 @@ class HieraEmbeddings(nn.Module):
     def interpolate_pos_encoding(
         self, embeddings: torch.Tensor, pos_embeds: torch.Tensor, height: int, width: int
     ) -> torch.Tensor:
-        """
-        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher
-        resolution images.
-
-        Adapted from:
-        https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174
-        """
-
-        num_patches = embeddings.shape[1]
-        num_positions = pos_embeds.shape[1]
-        if num_patches == num_positions and height == width:
-            return pos_embeds
-        dim = embeddings.shape[-1]
-        h0 = height // self.patch_stride[0]
-        w0 = width // self.patch_stride[1]
-        # we add a small number to avoid floating point error in the interpolation
-        # see discussion at https://github.com/facebookresearch/dino/issues/8
-        h0, w0 = h0 + 0.1, w0 + 0.1
-        pos_embeds = pos_embeds.reshape(1, int(math.sqrt(num_positions)), int(math.sqrt(num_positions)), dim)
-        pos_embeds = pos_embeds.permute(0, 3, 1, 2)
-        pos_embeds = nn.functional.interpolate(
-            pos_embeds,
-            scale_factor=(h0 / math.sqrt(num_positions), w0 / math.sqrt(num_positions)),
-            mode="bicubic",
-            align_corners=False,
-        )
-        if int(h0) != pos_embeds.shape[-2] or int(w0) != pos_embeds.shape[-1]:
-            raise ValueError("The interpolated position encoding does not have the right size")
-        pos_embeds = pos_embeds.permute(0, 2, 3, 1).view(1, -1, dim)
-        return pos_embeds
+        return _interpolate_pos_encoding(embeddings, pos_embeds, height, width, self.patch_stride, num_class_embeds=0)
 
     def get_position_embedding(
         self, embeddings: torch.Tensor, height: int, width: int, interpolate_pos_encoding: bool
     ) -> torch.FloatTensor:
-        position_embeddings = self.position_embeddings
-        position_embeddings = (
-            self.interpolate_pos_encoding(embeddings, position_embeddings, height, width)
-            if interpolate_pos_encoding
-            else position_embeddings
-        )
-        return position_embeddings
+        return self.interpolate_pos_encoding(embeddings, self.position_embeddings, height, width) if interpolate_pos_encoding else self.position_embeddings
 
     def forward(
         self,

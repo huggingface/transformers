@@ -123,7 +123,9 @@ class PvtPatchEmbeddings(nn.Module):
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
         num_patches = height * width
-        if num_patches == self.config.image_size * self.config.image_size:
+
+        # always interpolate when tracing to ensure the exported model works for dynamic input shapes
+        if not torch.jit.is_tracing() and num_patches == self.config.image_size * self.config.image_size:
             return self.position_embeddings
         embeddings = embeddings.reshape(1, height, width, -1).permute(0, 3, 1, 2)
         interpolated_embeddings = F.interpolate(embeddings, size=(height, width), mode="bilinear")
