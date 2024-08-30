@@ -112,7 +112,7 @@ class InstructBlipVideoVisionEmbeddings(nn.Module):
         self.position_embedding = nn.Parameter(torch.randn(1, self.num_positions, self.embed_dim))
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
-        return _interpolate_pos_encoding(embeddings, self.position_embeddings, height, width, self.config.patch_size)
+        return _interpolate_pos_encoding(embeddings, self.position_embedding, height, width, self.patch_size)
 
     def forward(self, pixel_values: torch.FloatTensor, interpolate_pos_encoding: bool = False) -> torch.Tensor:
         batch_size, _, height, width = pixel_values.shape

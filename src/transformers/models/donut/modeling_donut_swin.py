@@ -167,6 +167,7 @@ class DonutSwinEmbeddings(nn.Module):
 
         self.norm = nn.LayerNorm(config.embed_dim)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.config = config
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
         return _interpolate_pos_encoding(embeddings, self.position_embeddings, height, width, self.config.patch_size)

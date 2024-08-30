@@ -40,6 +40,7 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     logging,
     replace_return_docstrings,
+    torch_int,
 )
 from .configuration_data2vec_vision import Data2VecVisionConfig
 
@@ -543,7 +544,7 @@ class Data2VecVisionRelativePositionBias(nn.Module):
 
         old_sub_table = old_sub_table.reshape(1, old_width, old_height, -1).permute(0, 3, 1, 2)
         new_sub_table = nn.functional.interpolate(
-            old_sub_table, size=(int(new_height), int(new_width)), mode="bilinear"
+            old_sub_table, size=(torch_int(new_height), torch_int(new_width)), mode="bilinear"
         )
         new_sub_table = new_sub_table.permute(0, 2, 3, 1).reshape(new_num_relative_distance - 3, -1)
 
