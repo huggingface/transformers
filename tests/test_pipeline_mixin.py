@@ -675,14 +675,7 @@ def validate_test_components(test_case, task, model, tokenizer, processor):
     # Avoid `IndexError` in embedding layers
     CONFIG_WITHOUT_VOCAB_SIZE = ["CanineConfig"]
     if tokenizer is not None:
-        config_vocab_size = getattr(model.config, "vocab_size", None)
-        # For CLIP-like models
-        if config_vocab_size is None:
-            if hasattr(model.config, "text_config"):
-                config_vocab_size = getattr(model.config.text_config, "vocab_size", None)
-            elif hasattr(model.config, "text_encoder"):
-                config_vocab_size = getattr(model.config.text_encoder, "vocab_size", None)
-
+        config_vocab_size = getattr(model.config.get_text_config(), "vocab_size", None)
         if config_vocab_size is None and model.config.__class__.__name__ not in CONFIG_WITHOUT_VOCAB_SIZE:
             raise ValueError(
                 "Could not determine `vocab_size` from model configuration while `tokenizer` is not `None`."

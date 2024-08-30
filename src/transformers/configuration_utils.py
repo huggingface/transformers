@@ -1059,14 +1059,25 @@ class PretrainedConfig(PushToHubMixin):
     def get_text_config(self) -> "PretrainedConfig":
         """
         Returns the config that is meant to be used with text IO. On most models, it is the original config instance
-        itself. On specific composite models, it corresponds to the decoder config.
+        itself. On specific composite models, it is under a set of valid names.
+
+        If there are multiple valid names in a composite model, throws an error.
         """
-        possible_decoder_names = ("decoder", "generator", "text_config")
-        for decoder_attribute_name in possible_decoder_names:
-            if hasattr(self, decoder_attribute_name):
-                decoder_config = getattr(self, decoder_attribute_name, None)
-                if decoder_config is not None:
-                    return decoder_attribute_name
+        possible_text_config_names = ("decoder", "generator", "text_config", "text_encoder")
+        valid_text_config_names = []
+        for text_config_name in possible_text_config_names:
+            if hasattr(self, text_config_name):
+                text_config = getattr(self, text_config_name, None)
+                if text_config is not None:
+                    valid_text_config_names += [text_config_name]
+
+        if len(valid_text_config_names) > 1:
+            raise ValueError(
+                f"Multiple valid text configs were found in the model config: {valid_text_config_names}. "
+                "Don't use `get_text_config`, as it is ambiguous -- access the text configs directly."
+            )
+        elif len(valid_text_config_names) == 1:
+            return getattr(self, valid_text_config_names[0])
         return self
 
 
