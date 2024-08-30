@@ -229,7 +229,7 @@ class CommonPipelineTest(unittest.TestCase):
     @require_torch
     def test_auto_model_pipeline_registration_from_local_dir(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
-            _ = Repository(local_dir=tmp_dir, clone_from="Rocketknight1/fake-custom-model-test")
+            _ = Repository(local_dir=tmp_dir, clone_from="hf-internal-testing/tiny-random-custom-architecture")
             pipe = pipeline("text-generation", tmp_dir, trust_remote_code=True)
 
             self.assertIsInstance(pipe, TextGenerationPipeline)  # Assert successful load

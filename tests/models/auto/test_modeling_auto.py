@@ -533,7 +533,7 @@ class AutoModelTest(unittest.TestCase):
 
     def test_dynamic_saving_from_local_repo(self):
         with tempfile.TemporaryDirectory() as tmp_dir, tempfile.TemporaryDirectory() as tmp_dir_out:
-            _ = Repository(local_dir=tmp_dir, clone_from="Rocketknight1/fake-custom-model-test")
+            _ = Repository(local_dir=tmp_dir, clone_from="hf-internal-testing/tiny-random-custom-architecture")
             model = AutoModelForCausalLM.from_pretrained(tmp_dir, trust_remote_code=True)
             model.save_pretrained(tmp_dir_out)
             _ = AutoModelForCausalLM.from_pretrained(tmp_dir_out, trust_remote_code=True)
