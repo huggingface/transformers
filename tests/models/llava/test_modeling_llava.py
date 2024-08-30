@@ -515,6 +515,26 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         # Make sure that `generate` works
         _ = model.generate(**inputs, max_new_tokens=20)
 
+    slow
+
+    @require_bitsandbytes
+    def test_generation_siglip_backbone(self):
+        model_id = "llava-hf/llava-interleave-qwen-0.5b-hf"
+        model = LlavaForConditionalGeneration.from_pretrained(model_id, torch_dtype="float16")
+        processor = AutoProcessor.from_pretrained(model_id)
+
+        image_file = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        raw_image = Image.open(requests.get(image_file, stream=True).raw)
+        inputs = processor("<image>\nUSER: Describe the image.\nASSISTANT:", raw_image, return_tensors="pt").to(
+            torch_device, torch.float16
+        )
+
+        # Make sure that `generate` works
+        output = model.generate(**inputs, max_new_tokens=30)
+
+        EXPECTED_DECODED_TEXT = ""
+        self.assertTrue(processor.batch_decode(output, skip_special_tokens=True)[0] == EXPECTED_DECODED_TEXT)
+
     @slow
     @require_bitsandbytes
     def test_expansion_in_processing(self):

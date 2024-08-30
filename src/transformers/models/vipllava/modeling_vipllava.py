@@ -464,6 +464,7 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel):
                     inputs_embeds, attention_mask, labels, position_ids = self._merge_input_ids_with_image_features(
                         image_features, inputs_embeds, input_ids, attention_mask, labels
                     )
+                    cache_position = torch.arange(attention_mask.shape[1], device=attention_mask.device)
                 else:
                     # Retrieve the first layer to inspect the logits and mask out the hidden states
                     # that are set to 0
@@ -493,6 +494,9 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel):
 
                     attention_mask = torch.cat((extended_attention_mask, attention_mask[:, -target_length:]), dim=1)
                     position_ids = torch.sum(attention_mask, dim=1).unsqueeze(-1) - 1
+                    cache_position = torch.arange(attention_mask.shape[1], device=attention_mask.device)[
+                        -target_length:
+                    ]
 
             # TODO: @raushan retain only the new behavior after v4.47
             else:
@@ -569,9 +573,7 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel):
             **kwargs,
         )
 
-        if legacy_processing:
-            model_inputs["pixel_values"] = pixel_values
-        elif cache_position[0] == 0:
+        if legacy_processing or cache_position[0] == 0:
             # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
             # Otherwise we need pixel values to be passed to model
             model_inputs["pixel_values"] = pixel_values

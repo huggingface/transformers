@@ -471,16 +471,17 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
             output = model(**inputs)
 
         expected_slice = torch.tensor(
-            [[-0.0308, -0.0313, -0.0314], [-0.3064, -0.3013, -0.2986], [-0.1226, -0.1246, -0.1210]],
+            [[-0.1287, -0.1294, -0.1284], [-0.2744, -0.2698, -0.2671], [-0.1071, -0.1091, -0.1056]],
             dtype=torch.float32,
             device=torch_device,
         )
         assert torch.allclose(output.logits[0, -3:, -3:], expected_slice, atol=1e-3)
-        assert torch.allclose(output.loss, torch.tensor(6.8619, device=torch_device))
+        assert torch.allclose(output.loss, torch.tensor(7.0206, device=torch_device))
 
         # verify generation
         output = model.generate(**inputs, max_new_tokens=50)
-        EXPECTED_DECODED_TEXT = '[INST]  \nWhat is shown in this image? [/INST] The image shows a forested area with a misty or foggy atmosphere. In the foreground, there is a grassy field with a few deer grazing. The deer are partially obscured by the fog, and the trees in the background'  # fmt: skip
+        print(self.processor.decode(output[0], skip_special_tokens=True))
+        EXPECTED_DECODED_TEXT = '[INST]  \nWhat is shown in this image? [/INST] The image shows two deer, likely fawns, in a grassy area with trees in the background. The setting appears to be a forest or woodland, and the photo is taken during what seems to be either dawn or dusk, given'  # fmt: skip
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
@@ -566,6 +567,46 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
             self.assertIn(
                 "Padding side is set to 'right' but the model is in inference mode. For correct", logs.output[0]
             )
+
+    @slow
+    @require_bitsandbytes
+    def test_expansion_in_processing_multiimage(self):
+        model_id = "llava-hf/llava-v1.6-mistral-7b-hf"
+        model = LlavaNextForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
+        processor = AutoProcessor.from_pretrained(model_id)
+
+        prompt = "USER: <image><image>\nDescribe the similarity between the two images:\nASSISTANT:"
+        image_file = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        raw_image = Image.open(requests.get(image_file, stream=True).raw)
+        deer_image = Image.open(
+            requests.get(
+                "https://4.img-dpreview.com/files/p/TS560x560~forums/56876524/03975b28741443319e9a94615e35667e",
+                stream=True,
+            ).raw
+        )
+
+        # check processing with expansion of inputs
+        processor.vision_feature_select_strategy = "default"
+        processor.num_image_tokens = 577
+        inputs_expanded = processor(text=prompt, images=[raw_image, deer_image], return_tensors="pt").to(
+            torch_device, torch.float16
+        )
+        self.assertTrue(inputs_expanded.input_ids.shape[-1] == 3969)
+
+        # check processing without expansion of inputs (legacy behavior)
+        processor.vision_feature_select_strategy = None
+        processor.num_image_tokens = None
+        inputs = processor(text=prompt, images=[raw_image, deer_image], return_tensors="pt").to(
+            torch_device, torch.float16
+        )
+        self.assertTrue(inputs.input_ids.shape[-1] == 23)
+
+        # generate exactly 20 tokens
+        output = model.generate(**inputs, min_new_tokens=20, max_new_tokens=20)
+        output_expanded = model.generate(**inputs_expanded, min_new_tokens=20, max_new_tokens=20)
+
+        # check that both inputs are handled correctly and generate the same output
+        self.assertListEqual(output_expanded[:, -20:].tolist(), output[:, -20:].tolist())
 
     @slow
     @require_bitsandbytes

@@ -140,30 +140,29 @@ class LlavaNextProcessor(ProcessorMixin):
         elif not isinstance(text, list) and not isinstance(text[0], str):
             raise ValueError("Invalid input text. Please provide a string, or a list of strings")
 
-        if self.patch_size is None or self.vision_feature_select_strategy is None:
-            prompt_strings = text
-            logger.warning_once(
-                "Expanding inputs for image tokens in LLaVa-NeXT should be done in processing. "
-                "Please add `patch_size` and `vision_feature_select_strategy` to the model's processing config or set directly "
-                "with `processor.patch_size = {{patch_size}}` and processor.vision_feature_select_strategy = {{vision_feature_select_strategy}}`. "
-                "Using processors without these attributes in the config is deprecated and will throw an error in v4.47."
-            )
-        # cannot infer image expansion length if no images are found
-        elif not image_inputs:
-            prompt_strings = text
-        else:
-            image_sizes = image_inputs["image_sizes"]
-            height, width = get_image_size(to_numpy_array(image_inputs["pixel_values"][0][0]))
-            prompt_strings = []
-            for image_size, sample in zip(image_sizes, text):
-                # Replace the image token with the expanded image token sequence
-                orig_height, orig_width = image_size
-                num_image_tokens = self._get_number_of_features(orig_height, orig_width, height, width)
-                if self.vision_feature_select_strategy == "default":
-                    num_image_tokens -= 1
-
-                sample = sample.replace(self.image_token, self.image_token * num_image_tokens)
-                prompt_strings.append(sample)
+        prompt_strings = text
+        if image_inputs:
+            if self.oatch_size is None or self.vision_feature_select_strategy is None:
+                logger.warning_once(
+                    "Expanding inputs for image tokens in LLaVa-NeXT should be done in processing. "
+                    "Please add `oatch_size` and `vision_feature_select_strategy` to the model's processing config or set directly "
+                    "with `processor.oatch_size = {{oatch_size}}` and processor.vision_feature_select_strategy = {{vision_feature_select_strategy}}`. "
+                    "Using processors without these attributes in the config is deprecated and will throw an error in v4.47."
+                )
+            else:
+                image_sizes = iter(image_inputs["image_sizes"])
+                height, width = get_image_size(to_numpy_array(image_inputs["pixel_values"][0][0]))
+                prompt_strings = []
+                for sample in text:
+                    while self.image_token in sample:
+                        image_size = next(image_sizes)
+                        orig_height, orig_width = image_size
+                        num_image_tokens = self._get_number_of_features(orig_height, orig_width, height, width)
+                        if self.vision_feature_select_strategy == "default":
+                            num_image_tokens -= 1
+                        sample = sample.replace(self.image_token, "<placeholder>" * num_image_tokens, 1)
+                    prompt_strings.append(sample)
+                prompt_strings = [sample.replace("<placeholder>", self.image_token) for sample in prompt_strings]
 
         text_inputs = self.tokenizer(
             prompt_strings,
@@ -199,8 +198,8 @@ class LlavaNextProcessor(ProcessorMixin):
         because it divided each image into patches depending on its resolution. Therefore we need to calculate how many
         patches an image is divided into and get the number of features from that.
         """
-        current_width = patches_height * scale_height
-        current_height = patches_width * scale_width
+        current_height = patches_height * scale_height
+        current_width = patches_width * scale_width
 
         original_aspect_ratio = width / height
         current_aspect_ratio = current_width / current_height

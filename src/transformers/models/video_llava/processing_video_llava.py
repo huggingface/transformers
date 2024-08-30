@@ -155,7 +155,7 @@ class VideoLlavaProcessor(ProcessorMixin):
             )
         elif encoded_images is not None:
             # Replace the image token with the expanded image token sequence
-            if "pixel_values" in encoded_images:
+            if "pixel_values_images" in encoded_images.keys():
                 height, width = get_image_size(to_numpy_array(encoded_images.get("pixel_values")[0]))
                 num_frames = 1
             else:

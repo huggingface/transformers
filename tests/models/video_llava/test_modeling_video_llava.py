@@ -383,18 +383,19 @@ class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         # Let' s make sure we test the preprocessing to replace what is used
         model = VideoLlavaForConditionalGeneration.from_pretrained("LanguageBind/Video-LLaVA-7B-hf", load_in_4bit=True)
 
-        prompt = "USER: <video>Why is this video funny? ASSISTANT:"
+        prompt = "USER: <video>\nWhy is this video funny? ASSISTANT:"
         video_file = hf_hub_download(
             repo_id="raushan-testing-hf/videos-test", filename="video_demo.npy", repo_type="dataset"
         )
         video_file = np.load(video_file)
         inputs = self.processor(prompt, videos=video_file, return_tensors="pt")
 
-        EXPECTED_INPUT_IDS = torch.tensor([[1,  3148, 1001, 29901, 29871, 32001, 3750, 338, 445, 4863, 2090, 1460, 29973, 319, 1799, 9047, 13566, 29901]])  # fmt: skip
+        EXPECTED_INPUT_IDS = torch.tensor([[1,  3148, 1001, 29901, 29871, 32001, 13, 11008, 338, 445, 4863, 2090, 1460, 29973, 319, 1799, 9047, 13566, 29901]])  # fmt: skip
+
         self.assertTrue(torch.equal(inputs["input_ids"], EXPECTED_INPUT_IDS))
 
         output = model.generate(**inputs, do_sample=False, max_new_tokens=20)
-        EXPECTED_DECODED_TEXT = "USER:  Why is this video funny? ASSISTANT: The video is funny because the baby is playing with a Wii remote while sitting on a bed"  # fmt: skip
+        EXPECTED_DECODED_TEXT = "USER: \nWhy is this video funny? ASSISTANT: The video is funny because it shows a baby sitting on a bed and reading a book, which"  # fmt: skip
 
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
@@ -404,12 +405,11 @@ class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     @require_bitsandbytes
     def test_small_model_integration_test_mixed_inputs(self):
-        # Let' s make sure we test the preprocessing to replace what is used
         model = VideoLlavaForConditionalGeneration.from_pretrained("LanguageBind/Video-LLaVA-7B-hf", load_in_4bit=True)
 
         prompts = [
-            "USER: <image>What are the cats in the image doing? ASSISTANT:",
-            "USER: <video>Why is this video funny? ASSISTANT:",
+            "USER: <image>\nWhat are the cats in the image doing? ASSISTANT:",
+            "USER: <video>\nWhy is this video funny? ASSISTANT:",
         ]
         video_file = hf_hub_download(
             repo_id="raushan-testing-hf/videos-test", filename="video_demo.npy", repo_type="dataset"
@@ -422,8 +422,8 @@ class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, do_sample=False, max_new_tokens=20)
 
         EXPECTED_DECODED_TEXT = [
-            'USER:  What are the cats in the image doing? ASSISTANT: The cats in the image are lying down on a red couch, possibly sleeping or rest',
-            'USER:  Why is this video funny? ASSISTANT: The video is funny because the baby is playing with a Wii remote while sitting on a bed'
+            'USER: \nWhat are the cats in the image doing? ASSISTANT: The cats in the image are sleeping or resting on a couch.',
+            'USER: \nWhy is this video funny? ASSISTANT: The video is funny because it shows a baby sitting on a bed and reading a book. The'
         ]  # fmt: skip
 
         self.assertEqual(
@@ -434,12 +434,10 @@ class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     @require_bitsandbytes
     def test_small_model_integration_test_llama(self):
-        # Let' s make sure we test the preprocessing to replace what is used
-
         model = VideoLlavaForConditionalGeneration.from_pretrained("LanguageBind/Video-LLaVA-7B-hf", load_in_4bit=True)
         processor = VideoLlavaProcessor.from_pretrained("LanguageBind/Video-LLaVA-7B-hf")
 
-        prompt = "USER: <video>Describe the video in details. ASSISTANT:"
+        prompt = "USER: <video>\nDescribe the video in details. ASSISTANT:"
         video_file = hf_hub_download(
             repo_id="raushan-testing-hf/videos-test", filename="video_demo.npy", repo_type="dataset"
         )
@@ -447,11 +445,11 @@ class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         inputs = self.processor(prompt, videos=video_file, return_tensors="pt").to(torch_device, torch.float16)
 
         output = model.generate(**inputs, max_new_tokens=900, do_sample=False)
-        EXPECTED_DECODED_TEXT = "USER:  Describe the video in details. ASSISTANT: The video features a young child sitting on a bed, holding a book and reading it. " \
-            "The child appears to be enjoying the book, as they are fully engaged in the reading process. The bed is located in a bedroom, and there is a chair nearby. " \
-            "The child is wearing a light blue shirt and pink pants, and they have glasses on. The room is well-lit, and there is a clock on the wall. The child seems " \
-            "to be in a comfortable and relaxed environment, which is conducive to reading and learning. Overall, the video captures a heartwarming moment of a child " \
-            "engaging in a simple yet essential activity, which is reading."  # fmt: skip
+        EXPECTED_DECODED_TEXT = "USER: \nDescribe the video in details. ASSISTANT: The video features a young child sitting on a bed, holding a book and reading it. " \
+                "The child appears to be enjoying the book, as they are fully engaged in the activity. The bed is located in a bedroom, and there is a chair nearby. " \
+                "The child is wearing a blue shirt and glasses, which suggests that they might have a visual impairment. The room is well-lit, and there is a clock on " \
+                "the wall, indicating the time. The child's focus on the book indicates that they are interested in the content and are actively participating in the " \
+                "reading process. Overall, the video captures a heartwarming moment of a child engaging in a simple yet essential activity, which is reading."  # fmt: skip
 
         self.assertEqual(
             processor.decode(output[0], skip_special_tokens=True),
@@ -461,15 +459,13 @@ class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     @require_bitsandbytes
     def test_small_model_integration_test_llama_batched(self):
-        # Let' s make sure we test the preprocessing to replace what is used
-
         model = VideoLlavaForConditionalGeneration.from_pretrained("LanguageBind/Video-LLaVA-7B-hf", load_in_4bit=True)
         processor = VideoLlavaProcessor.from_pretrained("LanguageBind/Video-LLaVA-7B-hf")
         processor.tokenizer.padding_side = "left"
 
         prompts = [
-            "USER: <video>What is the baby doing? ASSISTANT:",
-            "USER: <video>Who is sitting next to the woman? ASSISTANT:",
+            "USER: <video>\nWhat is the baby doing? ASSISTANT:",
+            "USER: <video>\nWho is sitting next to the woman? ASSISTANT:",
         ]
         video_1 = np.load(
             hf_hub_download(repo_id="raushan-testing-hf/videos-test", filename="video_demo.npy", repo_type="dataset")
@@ -483,8 +479,8 @@ class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=20)
 
         EXPECTED_DECODED_TEXT = [
-            'USER:  What is the baby doing? ASSISTANT: The baby is sitting on a bed and reading a book.Ъ',
-            'USER:  Who is sitting next to the woman? ASSISTANT: A small dog is sitting next to the woman.Ъ'
+            'USER: \nWhat is the baby doing? ASSISTANT: The baby is sitting on a bed and reading a book.',
+            'USER: \nWho is sitting next to the woman? ASSISTANT: A small dog is sitting next to the woman.'
         ]  # fmt: skip
 
         self.assertEqual(processor.batch_decode(output, skip_special_tokens=True), EXPECTED_DECODED_TEXT)
@@ -492,8 +488,6 @@ class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     @require_bitsandbytes
     def test_small_model_integration_test_llama_batched_regression(self):
-        # Let' s make sure we test the preprocessing to replace what is used
-
         # Multi-image & multi-prompt (e.g. 3 images and 2 prompts now fails with SDPA, this tests if "eager" works as before)
         model = VideoLlavaForConditionalGeneration.from_pretrained(
             "LanguageBind/Video-LLaVA-7B-hf", load_in_4bit=True, attn_implementation="eager"
@@ -502,8 +496,8 @@ class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         processor.tokenizer.padding_side = "left"
 
         prompts = [
-            "USER: <video>What is the baby doing? ASSISTANT:",
-            "USER: <video>Who is sitting next to the woman? ASSISTANT: A small dog is sitting next to the woman. USER: <video>What about this video? ASSITANT:",
+            "USER: <video>\nWhat is the baby doing? ASSISTANT:",
+            "USER: <video>\nWho is sitting next to the woman? ASSISTANT: A small dog is sitting next to the woman. USER: <video>\nWhat about this video? ASSITANT:",
         ]
         video_1 = np.load(
             hf_hub_download(repo_id="raushan-testing-hf/videos-test", filename="video_demo.npy", repo_type="dataset")
@@ -518,8 +512,8 @@ class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # fmt: off
         EXPECTED_DECODED_TEXT = [
-            'USER:  What is the baby doing? ASSISTANT: The baby is sitting on a bed and reading a book.Ъ',
-            'USER:  Who is sitting next to the woman? ASSISTANT: A small dog is sitting next to the woman. USER:  What about this video? ASSITANT: The video shows a baby sitting on a bed, reading a book. The baby is wearing glass'
+            'USER: \nWhat is the baby doing? ASSISTANT: The baby is sitting on a bed and reading a book.',
+            'USER: \nWho is sitting next to the woman? ASSISTANT: A small dog is sitting next to the woman. USER: \nWhat about this video? ASSITANT: The video shows a baby sitting on a bed and reading a book.'
         ]
         # fmt: on
 
@@ -593,12 +587,42 @@ class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
     @slow
     @require_bitsandbytes
+    def test_expansion_in_processing_images(self):
+        model_id = "LanguageBind/Video-LLaVA-7B-hf"
+        model = VideoLlavaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
+        processor = VideoLlavaProcessor.from_pretrained(model_id)
+
+        prompt = "USER: <image>\nDescribe the image in details. ASSISTANT:"
+        url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        image = Image.open(requests.get(url, stream=True).raw)
+
+        # check processing with expansion of inputs
+        processor.vision_feature_select_strategy = "default"
+        processor.num_image_tokens = 257
+        inputs_expanded = processor(prompt, images=image, return_tensors="pt").to(torch_device, torch.float16)
+        self.assertTrue(inputs_expanded.input_ids.shape[-1] == 274)
+
+        # check processing without expansion of inputs (legacy behavior)
+        processor.vision_feature_select_strategy = None
+        processor.num_image_tokens = None
+        inputs = processor(prompt, images=image, return_tensors="pt").to(torch_device, torch.float16)
+        self.assertTrue(inputs.input_ids.shape[-1] == 19)
+
+        # generate exactly 20 tokens
+        output = model.generate(**inputs, min_new_tokens=20, max_new_tokens=20)
+        output_expanded = model.generate(**inputs_expanded, min_new_tokens=20, max_new_tokens=20)
+
+        # check that both inputs are handled correctly and generate the same output
+        self.assertListEqual(output_expanded[:, -20:].tolist(), output[:, -20:].tolist())
+
+    @slow
+    @require_bitsandbytes
     def test_expansion_in_processing(self):
         model_id = "LanguageBind/Video-LLaVA-7B-hf"
         model = VideoLlavaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
         processor = VideoLlavaProcessor.from_pretrained(model_id)
 
-        prompt = "USER: <video>Describe the video in details. ASSISTANT:"
+        prompt = "USER: <video>\nDescribe the video in details. ASSISTANT:"
         video_file = hf_hub_download(
             repo_id="raushan-testing-hf/videos-test", filename="video_demo.npy", repo_type="dataset"
         )
@@ -608,13 +632,13 @@ class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         processor.vision_feature_select_strategy = "default"
         processor.patch_size = 14
         inputs_expanded = processor(prompt, videos=video_file, return_tensors="pt").to(torch_device, torch.float16)
-        self.assertTrue(inputs_expanded.input_ids.shape[-1] == 2073)
+        self.assertTrue(inputs_expanded.input_ids.shape[-1] == 2074)
 
         # check processing without expansion of inputs (legacy behavior)
         processor.vision_feature_select_strategy = None
         processor.patch_size = None
         inputs = processor(prompt, videos=video_file, return_tensors="pt").to(torch_device, torch.float16)
-        self.assertTrue(inputs.input_ids.shape[-1] == 18)
+        self.assertTrue(inputs.input_ids.shape[-1] == 19)
 
         # generate exactly 20 tokens
         output = model.generate(**inputs, min_new_tokens=20, max_new_tokens=20)

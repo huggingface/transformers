@@ -18,6 +18,7 @@ import gc
 import unittest
 
 import numpy as np
+import requests
 from huggingface_hub import hf_hub_download
 
 from transformers import (
@@ -549,6 +550,76 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
         processor.patch_size = None
         inputs = processor(self.prompt_video, videos=[self.video], return_tensors="pt").to(torch_device)
         self.assertTrue(inputs.input_ids.shape[-1] == 19)
+
+        # generate exactly 20 tokens
+        output = model.generate(**inputs, min_new_tokens=20, max_new_tokens=20)
+        output_expanded = model.generate(**inputs_expanded, min_new_tokens=20, max_new_tokens=20)
+
+        # check that both inputs are handled correctly and generate the same output
+        self.assertListEqual(output_expanded[:, -20:].tolist(), output[:, -20:].tolist())
+
+    @slow
+    @require_bitsandbytes
+    def test_expansion_in_processing_images(self):
+        model_id = "llava-hf/LLaVA-NeXT-Video-7B-hf"
+        model = LlavaNextVideoForConditionalGeneration.from_pretrained(
+            "llava-hf/LLaVA-NeXT-Video-7B-hf", load_in_4bit=True
+        )
+        processor = AutoProcessor.from_pretrained(model_id)
+
+        # check processing with expansion of inputs
+        processor.vision_feature_select_strategy = "default"
+        processor.num_image_tokens = 577
+        inputs_expanded = processor(self.prompt_image, images=[self.image], return_tensors="pt").to(torch_device)
+        self.assertTrue(inputs_expanded.input_ids.shape[-1] == 2652)
+
+        # check processing without expansion of inputs (legacy behavior)
+        processor.vision_feature_select_strategy = None
+        processor.num_image_tokens = None
+        inputs = processor(self.prompt_image, images=[self.image], return_tensors="pt").to(torch_device)
+        self.assertTrue(inputs.input_ids.shape[-1] == 19)
+
+        # generate exactly 20 tokens
+        output = model.generate(**inputs, min_new_tokens=20, max_new_tokens=20)
+        output_expanded = model.generate(**inputs_expanded, min_new_tokens=20, max_new_tokens=20)
+
+        # check that both inputs are handled correctly and generate the same output
+        self.assertListEqual(output_expanded[:, -20:].tolist(), output[:, -20:].tolist())
+
+    @slow
+    @require_bitsandbytes
+    def test_expansion_in_processing_multiimage(self):
+        model_id = "llava-hf/LLaVA-NeXT-Video-7B-hf"
+        model = LlavaNextVideoForConditionalGeneration.from_pretrained(
+            "llava-hf/LLaVA-NeXT-Video-7B-hf", load_in_4bit=True
+        )
+        processor = AutoProcessor.from_pretrained(model_id)
+
+        prompt = "USER: <image><image>\nDescribe the similarity between the two images:\nASSISTANT:"
+        image_file = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        raw_image = Image.open(requests.get(image_file, stream=True).raw)
+        deer_image = Image.open(
+            requests.get(
+                "https://4.img-dpreview.com/files/p/TS560x560~forums/56876524/03975b28741443319e9a94615e35667e",
+                stream=True,
+            ).raw
+        )
+
+        # check processing with expansion of inputs
+        processor.vision_feature_select_strategy = "default"
+        processor.num_image_tokens = 577
+        inputs_expanded = processor(text=prompt, images=[raw_image, deer_image], return_tensors="pt").to(
+            torch_device, torch.float16
+        )
+        self.assertTrue(inputs_expanded.input_ids.shape[-1] == 3968)
+
+        # check processing without expansion of inputs (legacy behavior)
+        processor.vision_feature_select_strategy = None
+        processor.num_image_tokens = None
+        inputs = processor(text=prompt, images=[raw_image, deer_image], return_tensors="pt").to(
+            torch_device, torch.float16
+        )
+        self.assertTrue(inputs.input_ids.shape[-1] == 22)
 
         # generate exactly 20 tokens
         output = model.generate(**inputs, min_new_tokens=20, max_new_tokens=20)
