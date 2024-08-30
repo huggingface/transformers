@@ -100,7 +100,7 @@ python -c "from transformers import pipeline; print(pipeline('sentiment-analysis
 python -c "from transformers import pipeline; print(pipeline('sentiment-analysis')('I love you'))"
 ```
 
-## التثبيت القابل للتحرير
+## التثبيت القابل للتعديل
 
 ستحتاج إلى تثبيت قابل للتحرير إذا كنت ترغب في:
 
