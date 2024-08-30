@@ -120,7 +120,7 @@ Both videos have cats.
 
 Now we can preprocess the inputs.
 
-This model has a prompt template that looks like following. First we'll put all sampled frames into one list. Since we have eight frames in each video, we will insert 12 `<image>` tokens to our prompt. Note that we are adding `assistant` at the end to trigger model to give answers. We can then preprocess.
+This model has a prompt template that looks like following. First, we'll put all the sampled frames into one list. Since we have eight frames in each video, we will insert 12 `<image>` tokens to our prompt. Add `assistant` at the end of the prompt to trigger the model to give answers. Then we can preprocess.
 
 ```python
 user_prompt = "Are these two cats in these two videos doing the same thing?"
