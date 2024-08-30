@@ -3971,7 +3971,7 @@ class Trainer:
             # Prediction step
             losses, logits, labels = self.prediction_step(model, inputs, prediction_loss_only, ignore_keys=ignore_keys)
             main_input_name = getattr(self.model, "main_input_name", "input_ids")
-            inputs_decode = self._prepare_input(inputs[main_input_name]) if args.include_inputs_for_metrics else None
+            inputs_decode = self._prepare_input(inputs[main_input_name]) if "inputs" in args.include_for_metrics else None
 
             if is_torch_xla_available():
                 xm.mark_step()
@@ -4006,8 +4006,8 @@ class Trainer:
                 if self.compute_metrics is not None and logits is not None and labels is not None:
                     is_last_step = self.accelerator.gradient_state.end_of_dataloader
                     batch_kwargs = {}
-                    batch_kwargs["losses"] = losses if args.include_loss_for_metrics else None
-                    batch_kwargs["inputs"] = inputs if args.include_inputs_for_metrics else None
+                    batch_kwargs["losses"] = losses if "loss" in args.include_for_metrics else None
+                    batch_kwargs["inputs"] = inputs if "inputs" in args.include_for_metrics else None
                     metrics = self.compute_metrics(
                         EvalPrediction(predictions=logits, label_ids=labels, **batch_kwargs),
                         compute_result=is_last_step,
@@ -4060,8 +4060,8 @@ class Trainer:
             and all_labels is not None
             and not self.args.batch_eval_metrics
         ):
-            eval_set_kwargs["losses"] = all_losses if args.include_loss_for_metrics else None
-            eval_set_kwargs["inputs"] = all_inputs if args.include_inputs_for_metrics else None
+            eval_set_kwargs["losses"] = all_losses if "loss" in args.include_for_metrics else None
+            eval_set_kwargs["inputs"] = all_inputs if "inputs" in args.include_for_metrics else None
             metrics = self.compute_metrics(
                 EvalPrediction(predictions=all_preds, label_ids=all_labels, **eval_set_kwargs)
             )
@@ -4558,7 +4558,7 @@ class Trainer:
         for step, inputs in enumerate(dataloader):
             loss, logits, labels = self.prediction_step(model, inputs, prediction_loss_only, ignore_keys=ignore_keys)
             main_input_name = getattr(self.model, "main_input_name", "input_ids")
-            inputs_decode = self._prepare_input(inputs[main_input_name]) if args.include_inputs_for_metrics else None
+            inputs_decode = self._prepare_input(inputs[main_input_name])  if "inputs" in args.include_for_metrics else None
 
             if loss is not None:
                 losses = loss.repeat(batch_size)
@@ -4579,8 +4579,8 @@ class Trainer:
                 if self.compute_metrics is not None and preds_host is not None and labels_host is not None:
                     is_last_step = self.accelerator.gradient_state.end_of_dataloader
                     batch_kwargs = {}
-                    batch_kwargs["losses"] = losses_host if args.include_loss_for_metrics else None
-                    batch_kwargs["inputs"] = inputs_host if args.include_inputs_for_metrics else None
+                    batch_kwargs["losses"] = losses_host if "loss" in args.include_for_metrics else None
+                    batch_kwargs["inputs"] = inputs_host if "inputs" in args.include_for_metrics else None
                     metrics = self.compute_metrics(
                         EvalPrediction(predictions=preds_host, label_ids=labels_host, **batch_kwargs),
                         compute_result=is_last_step,
@@ -4623,8 +4623,8 @@ class Trainer:
             and label_ids is not None
             and not self.args.batch_eval_metrics
         ):
-            eval_set_kwargs["losses"] = eval_loss if args.include_loss_for_metrics else None
-            eval_set_kwargs["inputs"] = inputs_ids if args.include_inputs_for_metrics else None
+            eval_set_kwargs["losses"] = eval_loss if "loss" in args.include_for_metrics else None
+            eval_set_kwargs["inputs"] = inputs_ids if "inputs" in args.include_for_metrics else None
             metrics = self.compute_metrics(EvalPrediction(predictions=preds, label_ids=label_ids, **eval_set_kwargs))
         elif metrics is None:
             metrics = {}
