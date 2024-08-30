@@ -17,7 +17,7 @@
 from .tools import Tool
 
 
-class DuckDuckGoSearch(Tool):
+class DuckDuckGoSearchTool(Tool):
     name = "web_search"
     description = """Perform a web search based on your query (think a Google search) then returns the top search results as a list of dict elements.
     Each result has keys 'title', 'href' and 'body'."""
