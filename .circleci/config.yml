@@ -44,7 +44,7 @@ jobs:
             - run:
                 name: "Retrieve Artifact Paths"
                 env:
-                    CIRCLE_TOKEN: ${{ secrets.CI_SLACK_BOT_TOKEN }}
+                    CIRCLE_TOKEN: ${{ secrets.CI_ARTIFACT_TOKEN }}
                 command: |
                     project_slug="gh/${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}"
                     job_number=${CIRCLE_BUILD_NUM}
