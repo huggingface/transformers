@@ -34,7 +34,7 @@ The field of vision-language models (VLMs), which take images and texts as input
 
 Tips:
 
-The input given to the model will be resized by default such that the longest side is 4*364. For faster inference, set do_resize to False.
+- The input given to the model will be resized by default such that the longest side is 4*364. For faster inference, set `do_resize` to `False`.
 
 This model was contributed by [amyeroberts](https://huggingface.co/amyeroberts) and [andimarafioti](https://huggingface.co/andito).
 The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
