@@ -1056,8 +1056,6 @@ def infer_tests_to_run(
         test_map = create_module_to_test_map(reverse_map=reverse_map, filter_models=filter_models)
         for f in modified_files + impacted_files:
             if f in test_map:
-                if test_map[f] is None:
-                    breakpoint()
                 test_files_to_run.extend(test_map[f])
         test_files_to_run = sorted(set(test_files_to_run))
         # Remove repo utils tests
