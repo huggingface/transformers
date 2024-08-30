@@ -121,27 +121,27 @@ jobs:
       - name: Check cache 5
         working-directory: /transformers
         run: |
-          ls -l /mnt/cache/hub/models--BAAI--AltCLIP
+          ls -l /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo
 
       - name: Check cache 6
         working-directory: /transformers
         run: |
-          ls -l /mnt/cache/hub/models--BAAI--AltCLIP/snapshots
+          ls -l /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/.no_exist
 
       - name: Check cache 7
         working-directory: /transformers
         run: |
-          ls -l /mnt/cache/hub/models--BAAI--AltCLIP/snapshots/b989a7bc9f73809acc4df8265e63174c74791ba6
+          ls -l /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/.no_exist/42ce72ae70f7d34c14dbc3a856379a5d5b72de47
 
       - name: Check cache 8
         working-directory: /transformers
         run: |
-          ls -l /mnt/cache/hub/models--BAAI--AltCLIP/snapshots/b989a7bc9f73809acc4df8265e63174c74791ba6/pytorch_model.bin
+          ls -l /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/.no_exist/42ce72ae70f7d34c14dbc3a856379a5d5b72de47/config.json
 
       - name: delete 1 cache
         working-directory: /transformers
         run: |
-          rm -rf /mnt/cache/hub/models--BAAI--AltCLIP/snapshots/b989a7bc9f73809acc4df8265e63174c74791ba6/pytorch_model.bin
+          rm -rf /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo
 
       - name: Run all tests on GPU
         working-directory: /transformers
