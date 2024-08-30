@@ -115,7 +115,6 @@ class CircleCIJob:
         additional_flags = f" -p no:warning -o junit_family=xunit1 --junitxml=test-results/junit.xml"
         steps = [
             "checkout",
-            {"when": {"condition": f"<<pipeline.parameters.{self.job_name}_test_list>>"}} if "pr_documentation" not in self.name else {},
             {"attach_workspace": {"at": "test_preparation"}},
             {"run": "apt-get update && apt-get install -y curl"},
             {"run": " && ".join(self.install_steps)},
@@ -347,7 +346,7 @@ def create_circleci_config(folder=None):
     if folder is None:
         folder = os.getcwd()
     os.environ["test_preparation_dir"] = folder
-    jobs = [k for k in ALL_TESTS if len(k.tests_to_run) > 0]
+    jobs = [k for k in ALL_TESTS if os.path.isdir(k.job_name + "_test_list.txt" )]
     print("The following jobs will be run ", jobs)
 
     if len(jobs) == 0:
@@ -359,7 +358,7 @@ def create_circleci_config(folder=None):
             # Only used to accept the parameters from the trigger
             "nightly": {"type": "boolean", "default": False},
             "tests_to_run": {"type": "string", "default": ''},
-            **{j.job_name + "_test_list":{"type":"string", "default":''} for j in ALL_TESTS},
+            **{j.job_name + "_test_list":{"type":"string", "default":''} for j in jobs},
         },
         "jobs" : {j.job_name: j.to_dict() for j in jobs},
         "workflows": {"version": 2, "run_tests": {"jobs": [j.job_name for j in jobs]}}
