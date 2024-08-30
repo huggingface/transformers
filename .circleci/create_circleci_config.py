@@ -111,7 +111,7 @@ class CircleCIJob:
         )
                 # Examples special case: we need to download NLTK files in advance to avoid cuncurrency issues
         timeout_cmd = f"timeout {self.command_timeout} " if self.command_timeout else ""
-        marker_cmd = f"-m \"{self.marker}\"" if self.marker is not None else ""
+        marker_cmd = f"-m '{self.marker}'" if self.marker is not None else ""
         additional_flags = f" -p no:warning -o junit_family=xunit1 --junitxml=test-results/junit.xml"
         steps = [
             "checkout",
@@ -138,7 +138,7 @@ class CircleCIJob:
             },
             {"run": {
                 "name": "Run tests",
-                "command": f"({timeout_cmd} python3 -m pytest -n {self.pytest_num_workers} {additional_flags} {' '.join(pytest_flags)} {marker_cmd} $(cat splitted_tests.txt) | tee tests_output.txt)"}
+                "command": f"({timeout_cmd} python3 -m pytest {marker_cmd} -n {self.pytest_num_workers} {additional_flags} {' '.join(pytest_flags)} $(cat splitted_tests.txt) | tee tests_output.txt)"}
             },
             {"run": {"name": "Expand to show skipped tests", "when": "always", "command": f"python3 .circleci/parse_test_outputs.py --file tests_output.txt --skip"}},
             {"run": {"name": "Failed tests: show reasons",   "when": "always", "command": f"python3 .circleci/parse_test_outputs.py --file tests_output.txt --fail"}},
