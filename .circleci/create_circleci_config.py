@@ -261,6 +261,7 @@ examples_torch_job = CircleCIJob(
 
 examples_tensorflow_job = CircleCIJob(
     "examples_tensorflow",
+    additional_env={"OMP_NUM_THREADS": 8},
     docker_image=[{"image":"huggingface/transformers-examples-tf"}],
     parallelism=4,
     pytest_num_workers=4,
