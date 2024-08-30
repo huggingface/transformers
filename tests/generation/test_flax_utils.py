@@ -66,7 +66,6 @@ def random_attention_mask(shape, rng=None):
 @require_flax
 class FlaxGenerationTesterMixin:
     model_tester = None
-    all_generative_model_classes = ()
 
     def _get_input_ids_and_config(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()

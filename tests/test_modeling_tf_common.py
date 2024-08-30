@@ -114,12 +114,15 @@ def _config_zero_init(config):
 class TFModelTesterMixin:
     model_tester = None
     all_model_classes = ()
-    all_generative_model_classes = ()
     test_mismatched_shapes = True
     test_resize_embeddings = True
     test_head_masking = True
     is_encoder_decoder = False
     has_attentions = True
+
+    @property
+    def all_generative_model_classes(self):
+        return tuple(model_class for model_class in self.all_model_classes if model_class.can_generate())
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False) -> dict:
         inputs_dict = copy.deepcopy(inputs_dict)
