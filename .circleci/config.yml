@@ -57,7 +57,7 @@ jobs:
                 command: cat artifacts.json
 
             - continuation/continue:
-                parameters: {"test_lists": $cat test_preparation/test_lists.json}
+                parameters:  artifacts.json
                 configuration_path: test_preparation/generated_config.yml
 
     # To run all tests for the nightly build
