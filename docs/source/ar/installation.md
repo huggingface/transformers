@@ -169,7 +169,7 @@ HF_DATASETS_OFFLINE=1 HF_HUB_OFFLINE=1 \
 python examples/pytorch/translation/run_translation.py --model_name_or_path google-t5/t5-small --dataset_name wmt16 --dataset_config ro-en ...
 ```
 
-يجب أن يعمل هذا البرنامج النصي دون تعليق أو انتظار انتهاء المهلة لأنه لن يحاول تنزيل النموذج من Hub.
+يجب أن يعمل هذا البرنامج النصي دون توقف أو انتظار انتهاء المهلة الزمنية لأنه لن يحاول تنزيل النموذج من Hub.
 
 يمكنك أيضًا تجاوز تحميل نموذج من Hub من كل مكالمة [`~PreTrainedModel.from_pretrained`] باستخدام معلمة [`local_files_only`]. عندما يتم تعيينه على `True`، يتم تحميل الملفات المحلية فقط:
 
