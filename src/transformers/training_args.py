@@ -2063,9 +2063,8 @@ class TrainingArguments:
             )
 
         if self.include_inputs_for_metrics:
-            warnings.warn(
-                "Using `include_inputs_for_metrics` is deprecated and will be removed in version 5 of 🤗 Transformers. Please use `include_for_metrics` list argument instead.",
-                FutureWarning,
+            logger.warning(
+                "Using `include_inputs_for_metrics` is deprecated and will be removed in version 5 of 🤗 Transformers. Please use `include_for_metrics` list argument instead."
             )
             self.include_for_metrics.append("inputs")
 
