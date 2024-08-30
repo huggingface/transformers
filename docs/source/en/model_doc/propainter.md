@@ -1,9 +1,9 @@
 <!--Copyright 2024 The HuggingFace Team. All rights reserved.
 
-Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+Licensed under the S-Lab License, Version 1.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
 
-http://www.apache.org/licenses/LICENSE-2.0
+https://github.com/sczhou/ProPainter/blob/main/LICENSE
 
 Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
@@ -27,6 +27,8 @@ The abstract from the paper is the following:
 ## Usage tips:
 
 - The model is used for both video inpainting and video outpainting. To switch between modes, you need to give a value in form of `tuple(h,w)` to `scale_hw` kwarg to the `ProPainterImageProcessor`. In the usage example, we have provided both ways to give video frames and masks whether their data is in form of .mp4 or .jpg or any other image/video extensions.
+
+This model was contributed by [ruffy369](https://huggingface.co/ruffy369). The original code can be found [here](https://github.com/sczhou/ProPainter).
 
 ## Usage example
 
@@ -119,8 +121,6 @@ import transformers as t
 model = t.ProPainterModel.from_pretrained("ruffy369/ProPainter")
 
 ```
-
-This model was contributed by [ruffy369](https://huggingface.co/ruffy369). The original code can be found [here](https://github.com/sczhou/ProPainter).
 
 
 ## ProPainterConfig

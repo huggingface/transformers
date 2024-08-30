@@ -1,11 +1,11 @@
 # coding=utf-8
-# Copyright 2024 Google AI and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 S-Lab, Nanyang Technological University and The HuggingFace Inc. team. All rights reserved.
 #
-# Licensed under the Apache License, Version 2.0 (the "License");
+# Licensed under the S-Lab License, Version 1.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+#     https://github.com/sczhou/ProPainter/blob/main/LICENSE
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -28,10 +28,12 @@ logger = logging.get_logger(__name__)
 
 class ProPainterConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`ProPainterModel`]. It is used to instantiate an ProPainter
+    This is the configuration class to store the configuration of a [`ProPainterModel`]. It is used to instantiate a ProPainter
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the ProPainter
-    [ruffy369/propainter](https://huggingface.co/ruffy369/propainter) architecture.
+    defaults will yield a similar configuration to that of the ProPainter [ruffy369/propainter](https://huggingface.co/ruffy369/propainter) 
+    architecture. 
+    
+    The original configuration and code can be referred from [here](https://github.com/sczhou/ProPainter)
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.

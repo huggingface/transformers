@@ -1,10 +1,10 @@
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
-# Licensed under the Apache License, Version 2.0 (the "License");
+# Licensed under the S-Lab License, Version 1.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+#     https://github.com/sczhou/ProPainter/blob/main/LICENSE
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -25,7 +25,7 @@ from transformers import (
     ProPainterProcessor,
 )
 
-
+#Adapted weights from original model code at https://github.com/sczhou/ProPainter
 EPILOG_TXT = """Example:
     python transformers/src/transformers/models/propainter/convert_propainter_to_hf.py --text_model_id lmsys/vicuna-7b-v1.5 --vision_model_id openai/clip-vit-large-patch14 --output_hub_path org/video_llava-7b --old_state_dict_id LanguageBind/Video-LLaVA-7B
 
