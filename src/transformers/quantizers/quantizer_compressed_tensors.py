@@ -76,8 +76,14 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
 
         return [key for key in missing_keys if not _is_decompressed_key(key)]
 
-    def _process_model_after_weight_loading(self, model, resolved_archive_file, **kwargs):
-        self.compressor.decompress(model_path=resolved_archive_file, model=model)
+    def _process_model_before_weight_loading(self, model, **kwargs):
+        from compressed_tensors.quantization import apply_quantization_config
+
+        ct_quantization_config = self.compressor.quantization_config
+        apply_quantization_config(model, ct_quantization_config, run_compressed=True)
+
+    def _process_model_after_weight_loading(self, model, **kwargs):
+        pass
 
     @property
     def is_trainable(self):

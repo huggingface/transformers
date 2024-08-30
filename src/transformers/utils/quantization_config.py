@@ -1063,6 +1063,8 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
             format the model is represented as
         quantization_status (`QuantizationStatus`, *optional*, defaults to `"initialized"`):
             status of model in the quantization lifecycle, ie 'initialized', 'calibration', 'frozen'
+        kv_cache_scheme (`typing.Union[QuantizationArgs, NoneType]`, *optional*):
+            specifies quantization of the kv cache. If None, kv cache is not quantized.
         global_compression_ratio (`typing.Union[float, NoneType]`, *optional*):
             0-1 float percentage of model compression
         ignore (`typing.Union[typing.List[str], NoneType]`, *optional*):
@@ -1078,6 +1080,7 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         config_groups: Dict[str, Union["QuantizationScheme", List[str]]] = None,  # noqa: F821
         format: str = "dense",
         quantization_status: "QuantizationStatus" = "initialized",  # noqa: F821
+        kv_cache_scheme: Optional["QuantizationArgs"] = None,  # noqa: F821
         global_compression_ratio: Optional[float] = None,
         ignore: Optional[List[str]] = None,
         sparsity_config: Dict[str, Any] = None,
@@ -1098,6 +1101,7 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
                     "quant_method": quant_method,
                     "format": format,
                     "quantization_status": quantization_status,
+                    "kv_cache_scheme": kv_cache_scheme,
                     "global_compression_ratio": global_compression_ratio,
                     "ignore": ignore,
                     **kwargs,
