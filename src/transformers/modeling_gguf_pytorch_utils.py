@@ -130,6 +130,18 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
         if gguf_key in reader_keys:
             logger.info(f"Some keys were not parsed and added into account {gguf_key} | {value}")
 
+    # retrieve config vocab_size from tokenizer
+    # Pleas refer to https://github.com/huggingface/transformers/issues/32526 for more details
+    if "vocab_size" not in parsed_parameters["config"]:
+        tokenizer_parameters = parsed_parameters["tokenizer"]
+        if "tokens" in tokenizer_parameters:
+            parsed_parameters["config"]["vocab_size"] = len(tokenizer_parameters["tokens"])
+        else:
+            logger.warning(
+                "Can't find a way to retrieve missing config vocab_size from tokenizer parameters. "
+                "This will use default value from model config class and cause unexpected behavior."
+            )
+
     if return_tensors:
         tensor_key_mapping = GGUF_TO_TRANSFORMERS_MAPPING["tensors"][architecture]
 
