@@ -1026,7 +1026,7 @@ class PretrainedConfig(PushToHubMixin):
         try:
             default_config = self.__class__()
         except ValueError:
-            decoder_config = self.get_decoder_config()
+            decoder_config = self.get_text_config()
             if decoder_config is not self:
                 default_config = decoder_config.__class__()
 
@@ -1056,11 +1056,10 @@ class PretrainedConfig(PushToHubMixin):
 
         return non_default_generation_parameters
 
-    def get_decoder_config(self) -> "PretrainedConfig":
+    def get_text_config(self) -> "PretrainedConfig":
         """
-        Returns the config that is meant to be used for decoding purposes in generation. For composite models, such
-        as vision-language models, this is defined by a specific attribute. On most models, it is the original config
-        instance itself.
+        Returns the config that is meant to be used with text IO. On most models, it is the original config instance
+        itself. On specific composite models, it corresponds to the decoder config.
         """
         possible_decoder_names = ("decoder", "generator", "text_config")
         for decoder_attribute_name in possible_decoder_names:
