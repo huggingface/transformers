@@ -1145,7 +1145,7 @@ JOB_TO_TEST_FILE = {
     # "repo_utils": r"tests/[^models].*test.*", TODO later on we might want to do
     "pipelines_tf": r"tests/models/.*/test_modeling_tf_.*",
     "pipelines_torch": r"tests/models/.*/test_modeling_(?!(?:flax_|tf_)).*",
-    "tests_hub": r"tests/.*(?!(?:flax_|tf_)).*",
+    "tests_hub": r"tests/.*",
     "tests_onnx": r"tests/models/.*/test_modeling_(?:tf_|(?!flax)).*",
 }
 
