@@ -2923,4 +2923,8 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
             encoder_attentions=outputs.encoder_attentions,
             init_reference_points=outputs.init_reference_points,
             enc_topk_logits=outputs.enc_topk_logits,
-            enc_topk_bboxes=ou
+            enc_topk_bboxes=outputs.enc_topk_bboxes,
+            enc_outputs_class=outputs.enc_outputs_class,
+            enc_outputs_coord_logits=outputs.enc_outputs_coord_logits,
+            denoising_meta_values=outputs.denoising_meta_values,
+        )
