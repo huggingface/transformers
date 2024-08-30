@@ -104,7 +104,8 @@ plt.scatter(
     keypoints[:, 0],
     keypoints[:, 1],
     c=scores * 100,
-    s=scores * 20
+    s=scores * 50,
+    alpha=0.8
 )
 plt.savefig(f"output_image.png")
 ```
