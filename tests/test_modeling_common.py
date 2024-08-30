@@ -4831,8 +4831,11 @@ class ModelTesterMixin:
 
             config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
             batch_size, sequence_length = inputs["input_ids"].shape
-            vocab_size = config.vocab_size
+            vocab_size = config.text_config.vocab_size if hasattr(config, "text_config") else config.vocab_size
             model = model_class(config).to(device=torch_device).eval()
+            _ = inputs.pop(
+                "labels", None
+            )  # some models have labels but `num_logits_to_keep` should not be used in train mode
 
             # num_logits_to_keep=0 is a special case meaning "keep all logits"
             all_logits = model(**inputs, num_logits_to_keep=0).logits

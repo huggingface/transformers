@@ -301,6 +301,10 @@ class LlavaOnevisionForConditionalGenerationModelTest(ModelTesterMixin, Generati
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
+    @unittest.skip("VLMs can't do assisted decoding yet!")
+    def test_assisted_decoding_with_num_logits_to_keep(self):
+        pass
+
 
 @require_torch
 class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
