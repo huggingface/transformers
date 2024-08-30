@@ -18,7 +18,7 @@
 python -m venv .env
 ```
 
-قم بتنشيط البيئة الافتراضية. على Linux وMacOs:
+قم بتفعيل البيئة الافتراضية. على Linux وMacOs:
 
 ```bash
 source .env/bin/activate
