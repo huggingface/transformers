@@ -57,7 +57,7 @@ _import_structure = {
     "agents": [
         "Agent",
         "CodeAgent",
-        "HfEngine",
+        "HfApiEngine",
         "PipelineTool",
         "ReactAgent",
         "ReactCodeAgent",
@@ -65,6 +65,7 @@ _import_structure = {
         "Tool",
         "Toolbox",
         "ToolCollection",
+        "TransformersEngine",
         "launch_gradio_demo",
         "load_tool",
         "stream_to_gradio",
@@ -4815,7 +4816,7 @@ if TYPE_CHECKING:
     from .agents import (
         Agent,
         CodeAgent,
-        HfEngine,
+        HfApiEngine,
         PipelineTool,
         ReactAgent,
         ReactCodeAgent,
@@ -4823,6 +4824,7 @@ if TYPE_CHECKING:
         Tool,
         Toolbox,
         ToolCollection,
+        TransformersEngine,
         launch_gradio_demo,
         load_tool,
         stream_to_gradio,
