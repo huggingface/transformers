@@ -1180,7 +1180,7 @@ class GenerationConfig(PushToHubMixin):
         config = cls.from_dict(config_dict, return_unused_kwargs=False, _from_model_config=True)
 
         # Special case: some models have generation attributes set in the decoder. Use them if still unset in the
-        # generation config (which in turn is defined from the outter attributes of model config).
+        # generation config (which in turn is defined from the outer attributes of model config).
         decoder_config = model_config.get_text_config()
         if decoder_config is not model_config:
             default_generation_config = GenerationConfig()
