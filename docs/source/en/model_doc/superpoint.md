@@ -123,6 +123,7 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 [[autodoc]] SuperPointImageProcessor
 
 - preprocess
+- post_process_keypoint_detection
 
 ## SuperPointForKeypointDetection
 

@@ -15,7 +15,7 @@ import unittest
 
 import numpy as np
 
-from transformers.testing_utils import require_torch, require_vision
+from transformers.testing_utils import require_torch, require_vision, slow
 from transformers.utils import is_vision_available
 
 from ...test_image_processing_common import (
@@ -25,7 +25,10 @@ from ...test_image_processing_common import (
 
 
 if is_vision_available():
-    from transformers import SuperPointImageProcessor
+    from transformers import SuperPointForKeypointDetection, SuperPointImageProcessor, is_torch_available
+
+if is_torch_available():
+    import torch
 
 
 class SuperPointImageProcessingTester(unittest.TestCase):
@@ -110,3 +113,25 @@ class SuperPointImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
         pre_processed_images = image_processor.preprocess(image_inputs)
         for image in pre_processed_images["pixel_values"]:
             self.assertTrue(np.all(image[0, ...] == image[1, ...]) and np.all(image[1, ...] == image[2, ...]))
+
+    @slow
+    def test_post_processing_keypoint_detection(self):
+        image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
+        model = SuperPointForKeypointDetection.from_pretrained("magic-leap-community/superpoint")
+        image_inputs = self.image_processor_tester.prepare_image_inputs()
+        pre_processed_images = image_processor.preprocess(image_inputs, return_tensors="pt")
+        outputs = model(**pre_processed_images)
+        image_sizes = torch.tensor([image.size for image in image_inputs])
+        post_processed_outputs = image_processor.post_process_keypoint_detection(outputs, image_sizes)
+
+        self.assertTrue(len(post_processed_outputs) == self.image_processor_tester.batch_size)
+        for post_processed_output, image_size in zip(post_processed_outputs, image_sizes):
+            self.assertTrue("keypoints" in post_processed_output)
+            self.assertTrue("descriptors" in post_processed_output)
+            self.assertTrue("scores" in post_processed_output)
+            keypoints = post_processed_output["keypoints"]
+            all_below_image_size = torch.all(keypoints[:, 0] <= image_size[1]) and torch.all(
+                keypoints[:, 1] <= image_size[0]
+            )
+            all_above_zero = torch.all(keypoints[:, 0] >= 0) and torch.all(keypoints[:, 1] >= 0)
+            self.assertTrue(all_below_image_size and all_above_zero)
