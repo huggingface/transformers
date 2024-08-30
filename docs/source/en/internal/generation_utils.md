@@ -140,9 +140,6 @@ generation.
 [[autodoc]] ForcedEOSTokenLogitsProcessor
     - __call__
 
-[[autodoc]] ForceTokensLogitsProcessor
-    - __call__
-
 [[autodoc]] HammingDiversityLogitsProcessor
     - __call__
 
@@ -156,9 +153,6 @@ generation.
     - __call__
 
 [[autodoc]] LogitsProcessorList
-    - __call__
-
-[[autodoc]] LogitsWarper
     - __call__
 
 [[autodoc]] MinLengthLogitsProcessor
@@ -396,6 +390,11 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
     - get_seq_length
     - reset
 
+[[autodoc]] OffloadedStaticCache
+    - update
+    - get_seq_length
+    - reset
+
 [[autodoc]] HybridCache
     - update
     - get_seq_length
@@ -421,4 +420,3 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
 
 [[autodoc]] WatermarkDetector
     - __call__
-
