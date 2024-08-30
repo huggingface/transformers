@@ -104,7 +104,7 @@ class TransformersEngine:
         self.pipeline = pipeline
 
     def __call__(
-        self, messages: List[Dict[str, str]], stop_sequences: List[str] = [], grammar: Optional[str] = None
+        self, messages: List[Dict[str, str]], stop_sequences: Optional[List[str]] = None, grammar: Optional[str] = None
     ) -> str:
         # Get clean message list
         messages = get_clean_message_list(messages, role_conversions=llama_role_conversions)
@@ -112,7 +112,7 @@ class TransformersEngine:
         # Get LLM output
         output = self.pipeline(
             messages,
-            stop_strings=(stop_sequences if len(stop_sequences) > 0 else None),
+            stop_strings=stop_sequences,
             max_length=1500,
             tokenizer=self.pipeline.tokenizer,
         )
@@ -120,9 +120,10 @@ class TransformersEngine:
         response = output[0]["generated_text"][-1]["content"]
 
         # Remove stop sequences from LLM output
-        for stop_seq in stop_sequences:
-            if response[-len(stop_seq) :] == stop_seq:
-                response = response[: -len(stop_seq)]
+        if stop_sequences is not None:
+            for stop_seq in stop_sequences:
+                if response[-len(stop_seq) :] == stop_seq:
+                    response = response[: -len(stop_seq)]
         return response
 
 

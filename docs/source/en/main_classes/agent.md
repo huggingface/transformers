@@ -92,19 +92,18 @@ These engines have the following specification:
 For convenience, we have added a `TransformersEngine` that implements the points above, taking a pre-initialized `Pipeline` as input.
 
 ```python
->>> from transformers.agents.llm_engine import TransformersEngine
->>> from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
+>>> from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline, TransformersEngine
 
->>> model_name = "meta-llama/Meta-Llama-3.1-8B-Instruct"
+>>> model_name = "HuggingFaceTB/SmolLM-135M-Instruct"
 >>> tokenizer = AutoTokenizer.from_pretrained(model_name)
 >>> model = AutoModelForCausalLM.from_pretrained(model_name)
 
 >>> pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)
 
 >>> engine = TransformersEngine(pipe)
->>> engine([{"role": "user", "content": "Ok!"}])
+>>> engine([{"role": "user", "content": "Ok!"}], stop_sequences=["great"])
 
-"It's enough work for today, see you next week."
+"What a "
 ```
 
 [[autodoc]] TransformersEngine

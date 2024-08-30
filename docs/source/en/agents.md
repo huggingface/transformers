@@ -126,7 +126,8 @@ Additionally, `llm_engine` can also take a `grammar` argument. In the case where
 
 You will also need a `tools` argument which accepts a list of `Tools` - it can be an empty list. You can also add the default toolbox on top of your `tools` list by defining the optional argument `add_base_tools=True`.
 
-Now you can create an agent, like [`CodeAgent`], and run it. For convenience, we also provide the [`HfApiEngine`] class that initializes a `huggingface_hub.InferenceClient` under the hood. You can also create a [`TransformersEngine`] with a pre-initialized pipeline to run inference on your local machine using `transformers`.
+Now you can create an agent, like [`CodeAgent`], and run it. You can also create a [`TransformersEngine`] with a pre-initialized pipeline to run inference on your local machine using `transformers`.
+For convenience, since agentic behaviours generally require stronger models such as `Llama-3.1-70B-Instruct` that are harder to run locally for now, we also provide the [`HfApiEngine`] class that initializes a `huggingface_hub.InferenceClient` under the hood. 
 
 ```python
 from transformers import CodeAgent, HfApiEngine
