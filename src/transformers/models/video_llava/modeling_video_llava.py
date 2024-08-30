@@ -23,7 +23,6 @@ from torch import nn
 
 from ... import PreTrainedModel
 from ...activations import ACT2FN
-from ...cache_utils import Cache
 from ...modeling_outputs import BaseModelOutputWithPooling, ModelOutput
 from ...utils import (
     add_start_docstrings,
@@ -126,6 +125,7 @@ class VideoLlavaPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["VideoLlavaVisionAttention"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
+    _supports_cache_class = True
 
     def _init_weights(self, module):
         std = (
@@ -227,6 +227,10 @@ VIDEO_LLAVA_INPUTS_DOCSTRING = r"""
             more detail.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+        cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
+            Indices depicting the position of the input sequence tokens in the sequence. Contrarily to `position_ids`,
+            this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
+            the complete sequence length.
 """
 
 
@@ -412,6 +416,7 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, VideoLlavaCausalLMOutputWithPast]:
         r"""
         Args:
@@ -502,51 +507,71 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
             else self.config.vision_feature_select_strategy
         )
 
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError(
+                "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
+            )
+
+        if (pixel_values_images is not None or pixel_values_videos is not None) and inputs_embeds is not None:
+            raise ValueError(
+                "You cannot specify both pixel_values and inputs_embeds at the same time, and must specify either one"
+            )
+
+        legacy_processing = False
         if inputs_embeds is None:
-            # 1. Extra the input embeddings
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-            # 2. Merge text and images
-            if (pixel_values_images is not None or pixel_values_videos is not None) and input_ids.shape[1] != 1:
-                image_outputs, video_outputs, num_frames = self._get_vision_features(
-                    pixel_values_images=pixel_values_images,
-                    pixel_values_videos=pixel_values_videos,
-                    vision_feature_layer=vision_feature_layer,
-                    vision_feature_select_strategy=vision_feature_select_strategy,
-                )
+            # if the number of image/video tokens is more than image embeddings seq length, then prob we expanded it in processing
+            # not very reliable, but we don't expect one to actually pass 500+ images for one prompt
+            img_token_count = (input_ids == self.config.image_token_index).sum(1).max()
+            video_token_count = (input_ids == self.config.video_token_index).sum(1).max()
+            inputs_expanded = (
+                img_token_count < self.config.image_seq_length and video_token_count < self.config.video_seq_length
+            )
+            pixels_present = (
+                input_ids.shape[-1] == 1 and pixel_values_images is not None and pixel_values_videos is not None
+            )
+            legacy_processing = inputs_expanded or pixels_present
 
-                # first add image embeds where possible, then expand again and add video embeds
-                if image_outputs is not None:
-                    visual_features = self.multi_modal_projector(image_outputs)
-                    (
-                        inputs_embeds,
-                        attention_mask,
-                        labels,
-                        position_ids,
-                        input_ids,
-                    ) = self._merge_input_ids_with_visual_features(
-                        visual_features, inputs_embeds, input_ids, attention_mask, labels
-                    )
-                if video_outputs is not None:
-                    visual_features = self.multi_modal_projector(video_outputs)
-                    (
-                        inputs_embeds,
-                        attention_mask,
-                        labels,
-                        position_ids,
-                        _,
-                    ) = self._merge_input_ids_with_visual_features(
-                        visual_features,
-                        inputs_embeds,
-                        input_ids,
-                        attention_mask,
-                        labels,
-                        num_frames=num_frames,
-                    )
-            else:
-                # In case input_ids.shape[1] == 1 & past_key_values != None, we are in the case of
-                # generation with cache
-                if past_key_values is not None and input_ids.shape[1] == 1:
+        if pixel_values_images is not None or pixel_values_videos is not None:
+            image_outputs, video_outputs, num_frames = self._get_vision_features(
+                pixel_values_images=pixel_values_images,
+                pixel_values_videos=pixel_values_videos,
+                vision_feature_layer=vision_feature_layer,
+                vision_feature_select_strategy=vision_feature_select_strategy,
+            )
+
+            image_features = video_features = None
+            if image_outputs is not None:
+                image_features = self.multi_modal_projector(image_outputs)
+            if video_outputs is not None:
+                video_features = self.multi_modal_projector(video_outputs)
+
+            if legacy_processing:
+                logger.warning_once(
+                    "Expanding inputs for image tokens in Video-LLaVa should be done in processing. "
+                    "Please add `patch_size` and `vision_feature_select_strategy` to the model's processing config or set directly "
+                    "with `processor.patch_size = {{patch_size}}` and processor.vision_feature_select_strategy = {{vision_feature_select_strategy}}`. "
+                    "Using processors without these attributes in the config is deprecated and will throw an error in v4.47."
+                )
+                if input_ids.shape[1] != 1:
+                    for features, frames in ((image_features, 1), (video_features, num_frames)):
+                        if features is not None:
+                            (
+                                inputs_embeds,
+                                attention_mask,
+                                labels,
+                                position_ids,
+                                input_ids,
+                            ) = self._merge_input_ids_with_visual_features(
+                                features,
+                                inputs_embeds,
+                                input_ids,
+                                attention_mask,
+                                labels,
+                                num_frames=frames,
+                            )
+                else:
                     # Retrieve the first layer to inspect the logits and mask out the hidden states
                     # that are set to 0
                     first_layer_past_key_value = past_key_values[0][0][:, :, :, 0]
@@ -576,6 +601,22 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
                     attention_mask = torch.cat((extended_attention_mask, attention_mask[:, -target_length:]), dim=1)
                     position_ids = torch.sum(attention_mask, dim=1).unsqueeze(-1) - 1
 
+            # TODO: @raushan retain only the new behavior after v4.47
+            else:
+                if image_outputs is not None:
+                    special_image_mask = (
+                        (input_ids == self.config.image_token_index).unsqueeze(-1).expand_as(inputs_embeds)
+                    )
+                    image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+                    inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
+
+                if video_outputs is not None:
+                    special_image_mask = (
+                        (input_ids == self.config.video_token_index).unsqueeze(-1).expand_as(inputs_embeds)
+                    )
+                    video_features = video_features.to(inputs_embeds.device, inputs_embeds.dtype)
+                    inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, video_features)
+
         outputs = self.language_model(
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -585,6 +626,7 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            cache_position=cache_position,
         )
 
         logits = outputs[0]
@@ -625,61 +667,32 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
         pixel_values_images=None,
         pixel_values_videos=None,
         attention_mask=None,
+        cache_position=None,
         **kwargs,
     ):
-        if past_key_values is not None:
-            if isinstance(past_key_values, Cache):
-                cache_length = past_key_values.get_seq_length()
-                past_length = past_key_values.seen_tokens
-            else:
-                cache_length = past_length = past_key_values[0][0].shape[2]
-
-            # Keep only the unprocessed tokens:
-            # 1 - If the length of the attention_mask exceeds the length of input_ids, then we are in a setting where
-            # some of the inputs are exclusively passed as part of the cache (e.g. when passing input_embeds as
-            # input)
-            if attention_mask is not None and attention_mask.shape[1] > input_ids.shape[1]:
-                input_ids = input_ids[:, -(attention_mask.shape[1] - past_length) :]
-            # 2 - If the past_length is smaller than input_ids', then input_ids holds all input tokens. We can discard
-            # input_ids based on the past_length.
-            elif past_length < input_ids.shape[1]:
-                input_ids = input_ids[:, past_length:]
-            # 3 - Otherwise (past_length >= input_ids.shape[1]), let's assume input_ids only has unprocessed tokens.
-            else:
-                input_ids = input_ids[:, input_ids.shape[1] - 1 :]
-            # If the cache has seen more tokens than it can hold, then the cache has a size limit. Let's discard the
-            # older attention values, as their corresponding values are not part of the input.
-            if cache_length < past_length and attention_mask is not None:
-                attention_mask = attention_mask[:, -(cache_length + input_ids.shape[1]) :]
-
-            pixel_values_videos = None
-            pixel_values_images = None
-
-        position_ids = kwargs.get("position_ids", None)
-        if attention_mask is not None and position_ids is None:
-            # create position_ids on the fly for batch generation
-            position_ids = attention_mask.long().cumsum(-1) - 1
-            position_ids.masked_fill_(attention_mask == 0, 1)
-            if past_key_values:
-                position_ids = position_ids[:, -input_ids.shape[1] :]
-
-        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        if inputs_embeds is not None and past_key_values is None:
-            model_inputs = {"inputs_embeds": inputs_embeds}
-        else:
-            model_inputs = {"input_ids": input_ids}
-
-        model_inputs.update(
-            {
-                "position_ids": position_ids,
-                "past_key_values": past_key_values,
-                "use_cache": kwargs.get("use_cache"),
-                "attention_mask": attention_mask,
-                "pixel_values_videos": pixel_values_videos,
-                "pixel_values_images": pixel_values_images,
-            }
+        # Trigger the new behavior if we have more than image embeddings seq length tokens for images
+        legacy_processing = input_ids is not None and (
+            (input_ids == self.config.image_token_index).sum(1).max() < self.config.image_seq_length
+            and (input_ids == self.config.video_token_index).sum(1).max() < self.config.video_seq_length
         )
-        return model_inputs
 
-    def _reorder_cache(self, *args, **kwargs):
-        return self.language_model._reorder_cache(*args, **kwargs)
+        model_inputs = self.language_model.prepare_inputs_for_generation(
+            input_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            cache_position=cache_position,
+            **kwargs,
+        )
+
+        if legacy_processing:
+            model_inputs["pixel_values_images"] = pixel_values_images
+            model_inputs["pixel_values_videos"] = pixel_values_videos
+
+        elif cache_position[0] == 0:
+            # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
+            # Otherwise we need pixel values to be passed to model
+            model_inputs["pixel_values_images"] = pixel_values_images
+            model_inputs["pixel_values_videos"] = pixel_values_videos
+
+        return model_inputs

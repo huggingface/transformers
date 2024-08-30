@@ -1154,6 +1154,51 @@ class TokenizerTesterMixin:
                 )  # Check that no error raised
 
     @require_jinja
+    def test_jinja_loopcontrols(self):
+        break_template = """
+        {%- for message in messages %}
+            {{- message.role + " " + message.content }}
+            {%- if loop.first %}
+                {%- break %}
+            {%- endif %}
+        {%- endfor %}""".strip()
+
+        dummy_conversation = [
+            {"role": "system", "content": "1"},
+            {"role": "user", "content": "2"},
+            {"role": "assistant", "content": "3"},
+        ]
+
+        tokenizers = self.get_tokenizers()
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                break_output = tokenizer.apply_chat_template(
+                    dummy_conversation, chat_template=break_template, tokenize=False
+                )
+                self.assertEqual(break_output, "system 1")  # Loop should break after first iter
+
+    @require_jinja
+    def test_jinja_strftime(self):
+        strftime_template = """{{- strftime_now("%Y-%m-%d") }}""".strip()
+
+        dummy_conversation = [
+            {"role": "system", "content": "1"},
+            {"role": "user", "content": "2"},
+            {"role": "assistant", "content": "3"},
+        ]
+
+        tokenizers = self.get_tokenizers()
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                strftime_output = tokenizer.apply_chat_template(
+                    dummy_conversation, chat_template=strftime_template, tokenize=False
+                )
+
+                # Assert that we get a date formatted as expected
+                self.assertEqual(len(strftime_output), 10)
+                self.assertEqual(len(strftime_output.split("-")), 3)
+
+    @require_jinja
     def test_chat_template_return_assistant_tokens_mask(self):
         dummy_template = (
             "{% for message in messages %}"
@@ -4247,52 +4292,6 @@ class TokenizerTesterMixin:
                     # Should not raise an error
                     self.rust_tokenizer_class.from_pretrained(tmp_dir_2)
 
-    # TODO This is ran for all models but only tests bert...
-    def test_clean_up_tokenization_spaces(self):
-        tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-uncased")
-        assert tokenizer.clean_up_tokenization_spaces is True
-
-        tokens = tokenizer.encode("This shouldn't be! He'll go.")
-        decoded = tokenizer.decode(tokens)
-        assert decoded == "[CLS] this shouldn't be! he'll go. [SEP]"
-
-        tokenizer.clean_up_tokenization_spaces = False
-        decoded = tokenizer.decode(tokens)
-        assert decoded == "[CLS] this shouldn ' t be ! he ' ll go . [SEP]"
-        assert decoded == tokenizer.decode(tokens, clean_up_tokenization_spaces=False)
-
-        # Fast from slow
-        with tempfile.TemporaryDirectory() as tmp_dir_2:
-            tokenizer.save_pretrained(tmp_dir_2)
-            tokenizer_fast = BertTokenizerFast.from_pretrained(tmp_dir_2)
-            del tokenizer
-
-        assert tokenizer_fast.clean_up_tokenization_spaces is False
-        decoded = tokenizer_fast.decode(tokens)
-        # fast and slow don't have the same output when we don't cleanup
-        # tokenization space. Here `be!` vs `be !` and `go.` vs `go .`
-        assert decoded == "[CLS] this shouldn ' t be! he ' ll go. [SEP]"
-
-        tokenizer_fast.clean_up_tokenization_spaces = True
-        assert tokenizer_fast.clean_up_tokenization_spaces is True
-
-        decoded = tokenizer_fast.decode(tokens)
-        assert decoded == "[CLS] this shouldn't be! he'll go. [SEP]"
-
-        # Slow from fast
-        with tempfile.TemporaryDirectory() as tmp_dir_2:
-            tokenizer_fast.clean_up_tokenization_spaces = False
-            tokenizer_fast.save_pretrained(tmp_dir_2)
-            tokenizer = BertTokenizer.from_pretrained(tmp_dir_2)
-
-        assert tokenizer.clean_up_tokenization_spaces is False
-        decoded = tokenizer.decode(tokens)
-        assert decoded == "[CLS] this shouldn ' t be ! he ' ll go . [SEP]"
-
-        tokenizer.clean_up_tokenization_spaces = True
-        decoded = tokenizer.decode(tokens)
-        assert decoded == "[CLS] this shouldn't be! he'll go. [SEP]"
-
     def test_split_special_tokens(self):
         if not self.test_slow_tokenizer:
             self.skipTest(reason="test_slow_tokenizer is set to False")
@@ -4454,3 +4453,11 @@ class TokenizerTesterMixin:
                         replace_additional_special_tokens=False,
                     )
                     self.assertEqual(tokenizer_2.additional_special_tokens, ["<other>", "<another>", "<tok>"])
+
+    def test_tokenizer_initialization_with_conflicting_key(self):
+        get_tokenizer_func = self.get_rust_tokenizer if self.test_rust_tokenizer else self.get_tokenizer
+        with self.assertRaises(AttributeError, msg="conflicts with the method"):
+            get_tokenizer_func(add_special_tokens=True)
+
+        with self.assertRaises(AttributeError, msg="conflicts with the method"):
+            get_tokenizer_func(get_vocab=True)
