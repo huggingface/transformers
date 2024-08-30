@@ -98,6 +98,21 @@ jobs:
         working-directory: /transformers
         run: pip freeze
 
+      - name: Check cache 1
+        working-directory: /transformers
+        run: |
+          ls -l /mnt/cache/.cache/huggingface
+
+      - name: Check cache 2
+        working-directory: /transformers
+        run: |
+          ls -l /mnt/cache
+
+      - name: Check cache 3
+        working-directory: /transformers
+        run: |
+          echo $HF_HOME
+
       - name: Run all tests on GPU
         working-directory: /transformers
         run: python3 -m pytest -rsfE -v --make-reports=${{ inputs.machine_type }}_run_models_gpu_${{ matrix.folders }}_test_reports tests/${{ matrix.folders }}
