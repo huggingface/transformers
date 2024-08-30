@@ -26,7 +26,7 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
-from transformers.testing_utils import require_bitsandbytes, require_torch, require_torch_multi_gpu, slow, torch_device
+from transformers.testing_utils import require_bitsandbytes, require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -486,7 +486,7 @@ class Idefics3ForConditionalGenerationIntegrationTest(unittest.TestCase):
         torch.cuda.empty_cache()
 
     @slow
-    @require_torch_multi_gpu
+    @unittest.skip("multi-gpu tests are disabled for now")
     def test_integration_test(self):
         model = Idefics3ForConditionalGeneration.from_pretrained(
             "HuggingFaceM4/Idefics3-8B-Llama3",
@@ -508,7 +508,7 @@ class Idefics3ForConditionalGenerationIntegrationTest(unittest.TestCase):
 
     @slow
     @require_bitsandbytes
-    @require_torch_multi_gpu
+    @unittest.skip("multi-gpu tests are disabled for now")
     def test_integration_test_4bit(self):
         # Let' s make sure we test the preprocessing to replace what is used
         model = Idefics3ForConditionalGeneration.from_pretrained(

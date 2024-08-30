@@ -21,12 +21,13 @@ rendered properly in your Markdown viewer.
 The Idefics3 model was proposed in [Building and better understanding vision-language models: insights and future directions](https://huggingface.co/papers/2408.12637) by Hugo Laurençon, Andrés Marafioti, Victor Sanh, and Léo Tronchon.
 
 Idefics3 is an adaptation of the Idefics2 model with three main differences:
-- the use of Llama3 for the text model.
-- an updated processing logic for the images.
-- The removal of the perceiver.
 
-The resolutions of input images can be directly controlled, and they are decomposed into
-patches, or not, depending on the resolution. See [Idefics2] for more details on the model architecture.
+- It uses Llama3 for the text model.
+- It uses an updated processing logic for the images.
+- It removes the perceiver.
+
+Input images are either upsampled such that the longest side is 4*364 (if `do_resize` is set `True`) or processed in their original resolution.
+In any case, the image processors decomposes images in patches of 364x364 pixels.
 
 The abstract from the paper is the following:
 
@@ -34,10 +35,9 @@ The abstract from the paper is the following:
 
 Tips:
 
-- The input given to the model will be resized by default such that the longest side is 4*364. For faster inference, set `do_resize` to `False`.
+- By default, the input given to the model will be resized by default such that the longest side is 4*364. For faster inference, set `do_resize` to `False`.
 
 This model was contributed by [amyeroberts](https://huggingface.co/amyeroberts) and [andimarafioti](https://huggingface.co/andito).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 
 ## Idefics3Config

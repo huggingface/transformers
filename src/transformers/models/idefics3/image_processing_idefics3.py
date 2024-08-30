@@ -158,10 +158,7 @@ def get_resize_output_image_size(
     if resolution_max_side > max_image_size:
         raise ValueError("`resolution_max_side` cannot be larger than `max_image_size`")
 
-    if isinstance(image, Image.Image):
-        width, height = image.size
-    else:
-        height, width = get_image_size(image, channel_dim=input_data_format)
+    height, width = get_image_size(image, channel_dim=input_data_format)
 
     # Find the output size, when rescaling the longest edge to max_len and preserving the aspect ratio
     height, width = _resize_output_size_rescale_to_max_len(height, width, max_len=resolution_max_side)
@@ -248,6 +245,7 @@ def make_pixel_mask(
     return mask
 
 
+# Custom to_pil_image function to support image_mode
 def to_pil_image(
     image: Union[np.ndarray, "PIL.Image.Image", "torch.Tensor", "tf.Tensor", "jnp.ndarray"],
     do_rescale: Optional[bool] = None,
@@ -308,6 +306,7 @@ def convert_to_rgb(
     """
     if not isinstance(image, PIL.Image.Image):
         mode = "P" if palette is not None else None
+        # Custom to_pil_image function to support image_mode
         image = to_pil_image(image, image_mode=mode, input_data_format=input_data_format)
         if image.mode == "P" and palette is not None:
             image.putpalette(palette)
@@ -355,18 +354,18 @@ class Idefics3ImageProcessor(BaseImageProcessor):
             Only has an effect if the input image is in the PIL format.
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the image. The longest edge of the image is resized to  be <= `size["longest_edge"]`, with the
-            shortest edge resized to keep the input aspect ratio, with a minimum size of `size["shortest_edge"]`.
-        size (`Dict`, *optional*):
-            Controls the size of the output image. This is a dictionary containing the keys "shortest_edge" and "longest_edge".
+            shortest edge resized to keep the input aspect ratio.
+        size (`Dict`, *optional*, defaults to `{"longest_edge": 4 * 364}`):
+            Controls the size of the output image. This is a dictionary containing the key "longest_edge".
             The image will be resized such that the longest edge is <= `size["longest_edge"]` and the shortest edge is resized
-            to keep the input aspect ratio, with a lower bound of `size["shortest_edge"]`.
+            to keep the input aspect ratio.
         resample (`Resampling`, *optional*, defaults to `Resampling.LANCZOS`):
             Resampling filter to use when resizing the image.
         do_image_splitting (`bool`, *optional*, defaults to `True`):
             Whether to split the image into sub-images concatenated with the original image. They are split into patches
             such that each patch has a size of `max_image_size["height"]` x `max_image_size["width"]`.
-        max_image_size (`Dict`, *optional*, defaults to `self.max_image_size`):
-            Maximum resolution of the images accepted by the model. This is a dictionary containing the key "longest".
+        max_image_size (`Dict`, *optional*, defaults to `{"longest_edge": 364}`):
+            Maximum resolution of the patches of images accepted by the model. This is a dictionary containing the key "longest_edge".
         do_rescale (`bool`, *optional*, defaults to `True`):
             Whether to rescale the image. If set to `True`, the image is rescaled to have pixel values between 0 and 1.
         rescale_factor (`float`, *optional*, defaults to `1/255`):
@@ -437,7 +436,7 @@ class Idefics3ImageProcessor(BaseImageProcessor):
                 Image to resize.
             size (`Dict[str, int]`):
                 Size of the output image.
-            resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
+            resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.LANCZOS`):
                 Resampling filter to use when resizing the image.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
@@ -458,6 +457,7 @@ class Idefics3ImageProcessor(BaseImageProcessor):
             image_mode = None
             if image.ndim == 2 or image.shape[-1] == 1:
                 image_mode = "P"
+            # Custom to_pil_image function to support image_mode
             image = to_pil_image(image, input_data_format=input_data_format, image_mode=image_mode)
 
         resized_image = image.resize((size[1], size[0]), resample=resample)
@@ -496,10 +496,7 @@ class Idefics3ImageProcessor(BaseImageProcessor):
             resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.LANCZOS`):
                 Resampling filter to use when resizing the image.
         """
-        if isinstance(image, Image.Image):
-            width, height = image.size
-        else:
-            height, width = get_image_size(image, channel_dim=input_data_format)
+        height, width = get_image_size(image, channel_dim=input_data_format)
         max_height = max_width = max_image_size["longest_edge"]
 
         frames = []
@@ -523,41 +520,69 @@ class Idefics3ImageProcessor(BaseImageProcessor):
                     end_y = min(start_y + optimal_height, height)
 
                     # Crop the image
-                    if isinstance(image, Image.Image):
-                        cropped_image = image.crop((start_x, start_y, end_x, end_y))
-                    else:
-                        cropped_image = _crop(
-                            image,
-                            start_x,
-                            start_y,
-                            end_x,
-                            end_y,
-                            input_data_format=input_data_format,
-                            data_format=data_format,
-                        )
+                    cropped_image = _crop(
+                        image,
+                        start_x,
+                        start_y,
+                        end_x,
+                        end_y,
+                        input_data_format=input_data_format,
+                        data_format=data_format,
+                    )
                     frames.append(cropped_image)
 
             # For the global image at the end, we resize it to match the max_image_size, for cpu memory efficiency
             global_image_height, global_image_width = max_height, max_width
             if height != global_image_height or width != global_image_width:
-                if isinstance(image, Image.Image):
-                    image = image.resize((global_image_width, global_image_height), resample=resample)
-                else:
-                    image = self.resize(
-                        image,
-                        {"height": global_image_height, "width": global_image_width},
-                        resample=resample,
-                        input_data_format=input_data_format,
-                    )
+                image = self.resize(
+                    image,
+                    {"height": global_image_height, "width": global_image_width},
+                    resample=resample,
+                    input_data_format=input_data_format,
+                )
         else:
             num_splits_h, num_splits_w = 0, 0
 
-        if data_format is not None and not isinstance(image, Image.Image):
+        if data_format is not None:
             image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
 
         frames.append(image)
 
         return frames, num_splits_h, num_splits_w
+
+    def resize_for_vision_encoder(
+        self,
+        image: np.ndarray,
+        vision_encoder_max_size: int,
+        resample: PILImageResampling = PILImageResampling.LANCZOS,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    ):
+        """
+        Resize images to be multiples of `vision_encoder_max_size` while preserving the aspect ratio.
+
+        Args:
+            image (`np.ndarray`):
+                Images to resize.
+            vision_encoder_max_size (`int`):
+                Maximum size of the output image. If the image is larger than this size, it will be split into
+                patches of this size, and the original image will be concatenated with the patches, resized to max_size.
+            resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.LANCZOS`):
+                Resampling filter to use when resizing the image.
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format of the input image. If not provided, it will be inferred
+        """
+        height, width, _ = image.shape
+        aspect_ratio = width / height
+        if width >= height:
+            width = math.ceil(width / vision_encoder_max_size) * vision_encoder_max_size
+            height = int(width / aspect_ratio)
+            height = math.ceil(height / vision_encoder_max_size) * vision_encoder_max_size
+        elif height > width:
+            height = math.ceil(height / vision_encoder_max_size) * vision_encoder_max_size
+            width = int(height * aspect_ratio)
+            width = math.ceil(width / vision_encoder_max_size) * vision_encoder_max_size
+        new_size = {"height": height, "width": width}
+        return self.resize(image, size=new_size, resample=resample, input_data_format=input_data_format)
 
     def _pad_image(
         self,
@@ -764,12 +789,19 @@ class Idefics3ImageProcessor(BaseImageProcessor):
             )
 
         # save the palettes for conversion to RGB
-        palettes = [
-            image[0].getpalette() if isinstance(image[0], Image.Image) and image[0].mode == "P" else None
-            for image in images_list
+        palettes_list = [
+            [im.getpalette() if isinstance(im, Image.Image) and im.mode == "P" else None for im in images]
+            for images in images_list
         ]
+
         # All transformations expect numpy arrays.
         images_list = [[to_numpy_array(image) for image in images] for images in images_list]
+
+        if is_scaled_image(images_list[0][0]) and do_rescale:
+            logger.warning_once(
+                "It looks like you are trying to rescale already rescaled images. If the input"
+                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
+            )
 
         new_images_list = []
         for images in images_list:
@@ -797,9 +829,6 @@ class Idefics3ImageProcessor(BaseImageProcessor):
             resample=resample,
         )
 
-        # # All transformations expect numpy arrays.
-        # images_list = [[to_numpy_array(image) for image in images] for images in images_list]
-
         if do_resize:
             images_list = [
                 [
@@ -812,77 +841,54 @@ class Idefics3ImageProcessor(BaseImageProcessor):
         # Resize might already change the channel dimension, so we will recompute it
         input_data_format = infer_channel_dimension_format(images_list[0][0], num_channels=(1, 3, 4))
 
-        # We will resize both height and width of each image to the nearest 364 multiple, disregarding the aspect ratio
-        # for size=(10, 364) -> rescaled_size=(364, 364)
-        # for size=(11, 365) -> rescaled_size=(364, 364*2)
-        new_images_list = []
-        if "longest_edge" in max_image_size:
-            vision_encoder_max_size = max_image_size["longest_edge"]
-        elif isinstance(max_image_size, int):
-            vision_encoder_max_size = max_image_size
-        else:
-            raise ValueError("Invalid max_image_size, must be a dictionary with key 'longest_edge' or an integer.")
-
-        for images in images_list:
-            new_images = []
-            for img in images:
-                if isinstance(img, Image.Image):
-                    width, height = img.size
-                else:
-                    height, width, _ = img.shape
-                aspect_ratio = width / height
-                if width >= height:
-                    width = math.ceil(width / vision_encoder_max_size) * vision_encoder_max_size
-                    height = int(width / aspect_ratio)
-                    height = math.ceil(height / vision_encoder_max_size) * vision_encoder_max_size
-                elif height > width:
-                    height = math.ceil(height / vision_encoder_max_size) * vision_encoder_max_size
-                    width = int(height * aspect_ratio)
-                    width = math.ceil(width / vision_encoder_max_size) * vision_encoder_max_size
-                new_size = {"height": height, "width": width}
-                new_images.append(
-                    self.resize(img, size=new_size, resample=resample, input_data_format=input_data_format)
-                )
-            new_images_list.append(new_images)
-        images_list = new_images_list
-        del new_images_list
-
         if do_image_splitting:
+            # We first resize both height and width of each image to the nearest 364 multiple, disregarding the aspect ratio
+            # for size=(10, 364) -> rescaled_size=(364, 364)
+            # for size=(11, 365) -> rescaled_size=(364, 364*2)
+            images_list = [
+                [
+                    self.resize_for_vision_encoder(
+                        image, max_image_size["longest_edge"], resample=resample, input_data_format=input_data_format
+                    )
+                    for image in images
+                ]
+                for images in images_list
+            ]
             images_list_split_arrays = []
+            palettes_list_split_arrays = []
             images_list_rows = []
             images_list_cols = []
-            for images in images_list:
+            for images, palettes in zip(images_list, palettes_list):
                 split_image_arrays = []
+                split_palettes_arrays = []
                 image_rows = []
                 image_cols = []
-                for image in images:
+                for image, palette in zip(images, palettes):
                     split_image_array, rows, cols = self.split_image(
                         image,
                         max_image_size=max_image_size,
                         input_data_format=input_data_format,
                     )
                     split_image_arrays.extend(split_image_array)
+                    split_palettes_arrays.extend([palette] * len(split_image_array))
                     image_rows.append(rows)
                     image_cols.append(cols)
                 images_list_split_arrays.append(split_image_arrays)
+                palettes_list_split_arrays.append(split_palettes_arrays)
                 images_list_rows.append(image_rows)
                 images_list_cols.append(image_cols)
             images_list = images_list_split_arrays
+            palettes_list = palettes_list_split_arrays
         else:
             images_list_rows = [[0] * len(images) for images in images_list]
             images_list_cols = [[0] * len(images) for images in images_list]
 
         if do_convert_rgb:
             images_list = [
-                [convert_to_rgb(image, palette, input_data_format=input_data_format) for image in images]
-                for images, palette in zip(images_list, palettes)
+                [convert_to_rgb(img, plt, input_data_format=input_data_format) for img, plt in zip(images, palettes)]
+                for images, palettes in zip(images_list, palettes_list)
             ]
 
-        if is_scaled_image(images_list[0][0]) and do_rescale:
-            logger.warning_once(
-                "It looks like you are trying to rescale already rescaled images. If the input"
-                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
-            )
         if do_rescale:
             rescaled_images_array = []
             for image in images_list:
@@ -913,9 +919,13 @@ class Idefics3ImageProcessor(BaseImageProcessor):
                 for images in images_list
             ]
 
-        data = {"pixel_values": np.array(images_list) if do_pad else images_list}  # Faster tensor conversion
+        data = {
+            "pixel_values": np.array(images_list) if do_pad and return_tensors is not None else images_list
+        }  # Faster tensor conversion
         if pixel_attention_mask is not None:
-            data["pixel_attention_mask"] = np.array(pixel_attention_mask) if do_pad else pixel_attention_mask
+            data["pixel_attention_mask"] = (
+                np.array(pixel_attention_mask) if do_pad and return_tensors is not None else pixel_attention_mask
+            )
 
         encoding = BatchFeature(data=data, tensor_type=return_tensors)
 
