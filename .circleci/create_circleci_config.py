@@ -100,7 +100,6 @@ class CircleCIJob:
         job = {
             "docker": self.docker_image,
             "environment": env,
-            "if":  f"<<pipeline.parameters.{self.job_name}_test_list>>" if "pr_documentation" not in self.name else "true"
         }
         if self.resource_class is not None:
             job["resource_class"] = self.resource_class
@@ -116,6 +115,7 @@ class CircleCIJob:
         additional_flags = f" -p no:warning -o junit_family=xunit1 --junitxml=test-results/junit.xml"
         steps = [
             "checkout",
+            {"when": {"condition": f"<<pipeline.parameters.{self.job_name}_test_list>>"}} if "pr_documentation" not in self.name else {},
             {"attach_workspace": {"at": "test_preparation"}},
             {"run": "apt-get update && apt-get install -y curl"},
             {"run": " && ".join(self.install_steps)},
