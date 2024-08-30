@@ -133,7 +133,7 @@ class CircleCIJob:
                  "command": """dpkg-query --show --showformat='${Installed-Size}\t${Package}\n' | sort -rh | head -25 | sort -h | awk '{ package=$2; sub(".*/", "", package); printf("%.5f GB %s\n", $1/1024/1024, package)}' || true"""}
             },
             {"run": {"name": "Create `test-results` directory", "command": "mkdir test-results"}},
-            {"run": {"name": "Show files being tested tests", "command": f'cat << pipeline.parameters.{self.name}_test_list >> | tr " " "\\n" >> {self.name}_test_list.txt'}},
+            {"run": {"name": "Show files being tested tests", "command": f'cat << pipeline.parameters.{self.name}_test_list >> | tr " " "\\n" >> {self.name}_test_list.txt' if self.name != "pr_documentation_tests" else ""}},
             {"run": {"name": "Split tests across parallel nodes: show current parallel tests",
                      "command": f"TESTS=$(circleci tests split  --split-by=timings {self.name}_test_list.txt) && echo $TESTS > splitted_tests.txt && echo $TESTS | tr ' ' '\n'" if self.parallelism else f"cp {self.name}_test_list.txt  splitted_tests.txt"}
             },
@@ -318,7 +318,7 @@ py_command = 'from utils.tests_fetcher import get_doctest_files; to_test = get_d
 py_command = f"$(python3 -c '{py_command}')"
 command = f'echo """{py_command}""" > pr_documentation_tests_temp.txt'
 doc_test_job = CircleCIJob(
-    "tests_pr_documentation",
+    "pr_documentation_tests",
     docker_image=[{"image":"huggingface/transformers-consistency"}],
     additional_env={"TRANSFORMERS_VERBOSITY": "error", "DATASETS_VERBOSITY": "error", "SKIP_CUDA_DOCTEST": "1"},
     install_steps=[
