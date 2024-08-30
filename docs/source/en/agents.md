@@ -282,7 +282,8 @@ Transformers comes with a default toolbox for empowering agents, that you can ad
 - **Speech to text**: given an audio recording of a person talking, transcribe the speech into text ([Whisper](./model_doc/whisper))
 - **Text to speech**: convert text to speech ([SpeechT5](./model_doc/speecht5))
 - **Translation**: translates a given sentence from source language to target language.
-- **Python code interpreter**: runs your the LLM generated Python code in a secure environment. This tool will only be added to [`ReactJsonAgent`] if you use `add_base_tools=True`, since code-based tools can already execute Python code
+- **DuckDuckGo search***: performs a web search using DuckDuckGo browser.
+- **Python code interpreter**: runs your the LLM generated Python code in a secure environment. This tool will only be added to [`ReactJsonAgent`] if you initialize it with `add_base_tools=True`, since code-based agent can already natively execute Python code
 
 
 You can manually use a tool by calling the [`load_tool`] function and a task to perform.

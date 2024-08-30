@@ -19,8 +19,9 @@ from .tools import Tool
 
 class DuckDuckGoSearch(Tool):
     name = "web_search"
-    description = "Perform a web search based on your query (think a Google search) then returns the top search results as a list."
-    inputs = {"query": {"type": "text", "description": "The informational web search query to perform."}}
+    description = """Perform a web search based on your query (think a Google search) then returns the top search results as a list of dict elements.
+    Each result has keys 'title', 'href' and 'body'."""
+    inputs = {"query": {"type": "text", "description": "The search query to perform."}}
     output_type = "list"
 
     def forward(self, query: str) -> str:
@@ -28,7 +29,7 @@ class DuckDuckGoSearch(Tool):
             from duckduckgo_search import DDGS
         except ImportError:
             raise ImportError(
-                "You must install `duckduckgo_search`: for instance run `pip install duckduckgo-search`."
+                "You must install package `duckduckgo_search`: for instance run `pip install duckduckgo-search`."
             )
         results = DDGS().text(query, max_results=7)
         return results
