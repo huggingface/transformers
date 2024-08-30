@@ -121,17 +121,27 @@ jobs:
       - name: Check cache 5
         working-directory: /transformers
         run: |
-          ls -l /mnt/cache/hub/models--kakaobrain--align-base
+          ls -l /mnt/cache/hub/models--BAAI--AltCLIP
 
       - name: Check cache 6
         working-directory: /transformers
         run: |
-          ls -l /mnt/cache/hub/models--kakaobrain--align-base/blobs
+          ls -l /mnt/cache/hub/models--BAAI--AltCLIP/snapshots
 
-      - name: delete 1 cache
+      - name: Check cache 7
         working-directory: /transformers
         run: |
-          rm -rf /mnt/cache/hub/models--kakaobrain--align-base/
+          ls -l /mnt/cache/hub/models--BAAI--AltCLIP/snapshots/b989a7bc9f73809acc4df8265e63174c74791ba6
+
+      - name: Check cache 8
+        working-directory: /transformers
+        run: |
+          ls -l /mnt/cache/hub/models--BAAI--AltCLIP/snapshots/b989a7bc9f73809acc4df8265e63174c74791ba6/pytorch_model.bin
+
+#      - name: delete 1 cache
+#        working-directory: /transformers
+#        run: |
+#          rm -rf /mnt/cache/hub/models--kakaobrain--align-base/
 
       - name: Run all tests on GPU
         working-directory: /transformers
