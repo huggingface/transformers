@@ -59,7 +59,8 @@ jobs:
                 command: |
                     cat test_preparation/artifacts.json | jq '.items | map({(.path | split("/")[-1][:-4]): .url}) | add | del(.["generated_config"])' > test_preparation/transformed_artifacts.json
             
-            # To avoid too long config.yaml on the continuation orb, we pass the links to the artifacts as parameters.
+            # To avoid too long generated_config.yaml on the continuation orb, we pass the links to the artifacts as parameters.
+            # Otherwise the list of tests was just too big. Explicit is good but for that it was a limitation.
             # We used:
 
             # https://circleci.com/docs/api/v2/index.html#operation/getJobArtifacts : to get the job artifacts
