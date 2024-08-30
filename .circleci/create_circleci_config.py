@@ -330,7 +330,7 @@ doc_test_job = CircleCIJob(
         "touch dummy.py",
         command,
         "cat pr_documentation_tests_temp.txt",
-        "tail -n1 pr_documentation_tests_temp.txt | tee pr_documentation_tests.txt"
+        "tail -n1 pr_documentation_tests_temp.txt | tee pr_documentation_tests_test_list.txt"
     ],
     tests_to_run="$(cat pr_documentation_tests.txt)",  # noqa
     pytest_options={"-doctest-modules": None, "doctest-glob": "*.md", "dist": "loadfile", "rvsA": None},
