@@ -1318,10 +1318,10 @@ else:
     )
     _import_structure["modeling_flash_attention_utils"] = []
     _import_structure["modeling_outputs"] = []
-    _import_structure["modeling_vision_utils"] = []
     _import_structure["modeling_rope_utils"] = ["ROPE_INIT_FUNCTIONS"]
     _import_structure["modeling_utils"] = ["PreTrainedModel"]
 
+    _import_structure["modeling_vision_utils"] = []
     # PyTorch models structure
 
     _import_structure["models.albert"].extend(
