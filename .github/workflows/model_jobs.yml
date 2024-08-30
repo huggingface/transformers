@@ -98,10 +98,10 @@ jobs:
         working-directory: /transformers
         run: pip freeze
 
-      - name: Check cache 1
-        working-directory: /transformers
-        run: |
-          ls -l /mnt/cache/.cache/huggingface
+#      - name: Check cache 1
+#        working-directory: /transformers
+#        run: |
+#          ls -l /mnt/cache/.cache/huggingface
 
       - name: Check cache 2
         working-directory: /transformers
@@ -112,6 +112,21 @@ jobs:
         working-directory: /transformers
         run: |
           echo $HF_HOME
+
+      - name: Check cache 4
+        working-directory: /transformers
+        run: |
+          ls -l /mnt/cache/hub
+
+      - name: Check cache 5
+        working-directory: /transformers
+        run: |
+          ls -l /mnt/cache/hub/models--kakaobrain--align-base
+
+      - name: Check cache 6
+        working-directory: /transformers
+        run: |
+          ls -l /mnt/cache/hub/models--kakaobrain--align-base/blobs
 
       - name: Run all tests on GPU
         working-directory: /transformers
