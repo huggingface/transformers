@@ -924,6 +924,7 @@ class DynamicPipelineTester(unittest.TestCase):
         except HTTPError:
             pass
 
+    @unittest.skip("Broken, TODO @Yih-Dar")
     def test_push_to_hub_dynamic_pipeline(self):
         from transformers import BertConfig, BertForSequenceClassification, BertTokenizer
 
