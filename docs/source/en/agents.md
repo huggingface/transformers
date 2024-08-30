@@ -126,12 +126,12 @@ Additionally, `llm_engine` can also take a `grammar` argument. In the case where
 
 You will also need a `tools` argument which accepts a list of `Tools` - it can be an empty list. You can also add the default toolbox on top of your `tools` list by defining the optional argument `add_base_tools=True`.
 
-Now you can create an agent, like [`CodeAgent`], and run it. For convenience, we also provide the [`HfEngine`] class that uses `huggingface_hub.InferenceClient` under the hood.
+Now you can create an agent, like [`CodeAgent`], and run it. For convenience, we also provide the [`HfApiEngine`] class that uses `huggingface_hub.InferenceClient` under the hood.
 
 ```python
-from transformers import CodeAgent, HfEngine
+from transformers import CodeAgent, HfApiEngine
 
-llm_engine = HfEngine(model="meta-llama/Meta-Llama-3-70B-Instruct")
+llm_engine = HfApiEngine(model="meta-llama/Meta-Llama-3-70B-Instruct")
 agent = CodeAgent(tools=[], llm_engine=llm_engine, add_base_tools=True)
 
 agent.run(
@@ -141,7 +141,7 @@ agent.run(
 ```
 
 This will be handy in case of emergency baguette need!
-You can even leave the argument `llm_engine` undefined, and an [`HfEngine`] will be created by default.
+You can even leave the argument `llm_engine` undefined, and an [`HfApiEngine`] will be created by default.
 
 ```python
 from transformers import CodeAgent
@@ -521,14 +521,14 @@ import gradio as gr
 from transformers import (
     load_tool,
     ReactCodeAgent,
-    HfEngine,
+    HfApiEngine,
     stream_to_gradio,
 )
 
 # Import tool from Hub
 image_generation_tool = load_tool("m-ric/text-to-image")
 
-llm_engine = HfEngine("meta-llama/Meta-Llama-3-70B-Instruct")
+llm_engine = HfApiEngine("meta-llama/Meta-Llama-3-70B-Instruct")
 
 # Initialize the agent with the image generation tool
 agent = ReactCodeAgent(tools=[image_generation_tool], llm_engine=llm_engine)
