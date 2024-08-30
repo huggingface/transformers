@@ -128,6 +128,11 @@ jobs:
         run: |
           ls -l /mnt/cache/hub/models--kakaobrain--align-base/blobs
 
+      - name: delete 1 cache
+        working-directory: /transformers
+        run: |
+          rm -rf /mnt/cache/hub/models--kakaobrain--align-base/
+
       - name: Run all tests on GPU
         working-directory: /transformers
         run: python3 -m pytest -rsfE -v --make-reports=${{ inputs.machine_type }}_run_models_gpu_${{ matrix.folders }}_test_reports tests/${{ matrix.folders }}
