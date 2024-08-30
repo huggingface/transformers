@@ -58,7 +58,7 @@ _CONFIG_FOR_DOC = "ProPainterConfig"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "ruffy369/propainter"
-_EXPECTED_OUTPUT_SHAPE = [80, 240, 432, 3]
+_EXPECTED_OUTPUT_SHAPE = ["batch_size", 80, 240, 432, 3]
 
 class ProPainterResidualBlock(nn.Module):
     def __init__(self, in_channels, channels, norm_fn='group', stride=1):

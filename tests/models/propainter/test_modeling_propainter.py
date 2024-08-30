@@ -14,8 +14,13 @@
 # limitations under the License.
 """Testing suite for the PyTorch ProPainter model."""
 
+import gc
 import unittest
 
+import numpy as np
+import requests
+
+from datasets import load_dataset
 from transformers import ProPainterConfig
 from transformers.testing_utils import (
     require_accelerate,
@@ -36,14 +41,12 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
     from torch import nn
-
-    from transformers import ProPainterForImageClassification, ProPainterForMaskedImageModeling, ProPainterModel
+    from transformers import ProPainterModel
 
 
 if is_vision_available():
     from PIL import Image
-
-    from transformers import ViTImageProcessor
+    from transformers import ProPainterImageProcessor
 
 
 class ProPainterModelTester:
@@ -52,132 +55,72 @@ class ProPainterModelTester:
         parent,
         batch_size=13,
         image_size=30,
-        patch_size=2,
         num_channels=3,
         is_training=True,
-        use_labels=True,
         hidden_size=32,
         num_hidden_layers=2,
         num_attention_heads=4,
-        intermediate_size=37,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        type_sequence_label_size=10,
-        initializer_range=0.02,
-        scope=None,
-        encoder_stride=2,
-        mask_ratio=0.5,
-        attn_implementation="eager",
+        num_frames=8,
+        # hidden_act="gelu",
+        # hidden_dropout_prob=0.1,
+        # attention_probs_dropout_prob=0.1,
+        # type_sequence_label_size=10,
+        # initializer_range=0.02,
+        # GAN_LOSS="hinge",
     ):
         self.parent = parent
         self.batch_size = batch_size
         self.image_size = image_size
-        self.patch_size = patch_size
         self.num_channels = num_channels
         self.is_training = is_training
-        self.use_labels = use_labels
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.type_sequence_label_size = type_sequence_label_size
-        self.initializer_range = initializer_range
-        self.scope = scope
-        self.encoder_stride = encoder_stride
-        self.attn_implementation = attn_implementation
-
-        # in ProPainter, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
-        num_patches = (image_size // patch_size) ** 2
-        self.seq_length = num_patches + 1
-        self.mask_ratio = mask_ratio
-        self.num_masks = int(mask_ratio * self.seq_length)
-        self.mask_length = num_patches
+        self.num_frames = num_frames
+        # self.hidden_act = hidden_act
+        # self.hidden_dropout_prob = hidden_dropout_prob
+        # self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        # self.type_sequence_label_size = type_sequence_label_size
+        # self.initializer_range = initializer_range
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor([self.batch_size, self.num_frames, 3, self.image_size, self.image_size])
 
-        labels = None
-        if self.use_labels:
-            labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
+        pixel_values_inp = pixel_values.cpu.numpy()
+        pixel_values_inp = [[pixel_values_inp[b, t].transpose(1, 2, 0) for t in range(pixel_values_inp.shape[1])] for b in range(pixel_values_inp.shape[0])]
 
+        masks = ids_tensor([self.batch_size, self.num_frames, 1, self.image_size, self.image_size], vocab_size=2).float()
+        flow_masks = masks_dilated = masks
         config = self.get_config()
 
-        return config, pixel_values, labels
+        return config, pixel_values_inp, pixel_values, flow_masks, masks_dilated, (self.image_size, self.image_size)
 
     def get_config(self):
         return ProPainterConfig(
-            image_size=self.image_size,
-            patch_size=self.patch_size,
             num_channels=self.num_channels,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
-            intermediate_size=self.intermediate_size,
-            hidden_act=self.hidden_act,
-            hidden_dropout_prob=self.hidden_dropout_prob,
-            attention_probs_dropout_prob=self.attention_probs_dropout_prob,
-            is_decoder=False,
-            initializer_range=self.initializer_range,
-            encoder_stride=self.encoder_stride,
-            attn_implementation=self.attn_implementation,
         )
 
-    def create_and_check_model(self, config, pixel_values, labels):
+    def create_and_check_model(self, config, pixel_values_inp, pixel_values, flow_masks, masks_dilated, size):
         model = ProPainterModel(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(pixel_values)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-
-    def create_and_check_for_masked_image_modeling(self, config, pixel_values, labels):
-        model = ProPainterForMaskedImageModeling(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(pixel_values)
-        self.parent.assertEqual(
-            result.reconstruction.shape, (self.batch_size, self.num_channels, self.image_size, self.image_size)
-        )
-
-        # test greyscale images
-        config.num_channels = 1
-        model = ProPainterForMaskedImageModeling(config)
-        model.to(torch_device)
-        model.eval()
-
-        pixel_values = floats_tensor([self.batch_size, 1, self.image_size, self.image_size])
-        result = model(pixel_values)
-        self.parent.assertEqual(result.reconstruction.shape, (self.batch_size, 1, self.image_size, self.image_size))
-
-    def create_and_check_for_image_classification(self, config, pixel_values, labels):
-        config.num_labels = self.type_sequence_label_size
-        model = ProPainterForImageClassification(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(pixel_values, labels=labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
-
-        # test greyscale images
-        config.num_channels = 1
-        model = ProPainterForImageClassification(config)
-        model.to(torch_device)
-        model.eval()
-
-        pixel_values = floats_tensor([self.batch_size, 1, self.image_size, self.image_size])
-        result = model(pixel_values)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
+        result = model(pixel_values_inp, pixel_values, flow_masks, masks_dilated, size)
+        self.parent.assertEqual(result.reconstruction.shape, (self.batch_size, self.num_frames, self.image_size, self.image_size, 3))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
             config,
+            pixel_values_inp,
             pixel_values,
-            labels,
+            flow_masks,
+            masks_dilated,
+            size,
         ) = config_and_inputs
-        inputs_dict = {"pixel_values": pixel_values}
+        inputs_dict = {"pixel_values_inp": pixel_values_inp, "pixel_values": pixel_values, "flow_masks": flow_masks, "masks_dilated": masks_dilated, "size": size}
         return config, inputs_dict
 
 
@@ -191,8 +134,6 @@ class ProPainterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     all_model_classes = (
         (
             ProPainterModel,
-            ProPainterForImageClassification,
-            ProPainterForMaskedImageModeling,
         )
         if is_torch_available()
         else ()
@@ -221,38 +162,31 @@ class ProPainterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     def test_inputs_embeds(self):
         pass
 
+    @unittest.skip(reason="ProPainter does not have get_input_embeddings method and get_output_embeddings method")
     def test_model_get_set_embeddings(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            self.assertIsInstance(model.get_input_embeddings(), (nn.Module))
-            x = model.get_output_embeddings()
-            self.assertTrue(x is None or isinstance(x, nn.Linear))
+        pass
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_for_masked_image_modeling(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_masked_image_modeling(*config_and_inputs)
-
-    def test_for_image_classification(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
-
     @slow
     def test_model_from_pretrained(self):
-        model_name = "google/propainter-base-patch16-224"
+        model_name = "ruffy369/ProPainter"
         model = ProPainterModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats
-def prepare_img():
-    image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-    return image
+def prepare_video():
+    ds = load_dataset("ruffy369/propainter-object-removal")
+    ds_images = ds['train']["image"]
+    num_frames = len(ds_images)//2
+    video = [np.array(ds_images[i]) for i in range(num_frames)]
+    #stack to convert H,W mask frame to compatible H,W,C frame
+    masks = [np.stack([np.array(ds_images[i])] * 3, axis=-1) for i in range(num_frames, 2*num_frames)]
+    return video, masks
+
 
 
 @require_torch
@@ -260,54 +194,30 @@ def prepare_img():
 class ProPainterModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return ViTImageProcessor.from_pretrained("google/propainter-base-patch16-224") if is_vision_available() else None
+        return ProPainterImageProcessor() if is_vision_available() else None
 
     @slow
     def test_inference_image_classification_head(self):
-        model = ProPainterForImageClassification.from_pretrained("google/propainter-base-patch16-224").to(torch_device)
+        model = ProPainterModel.from_pretrained("ruffy369/ProPainter").to(torch_device)
 
         image_processor = self.default_image_processor
-        image = prepare_img()
-        inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
+        video, masks = prepare_video()
+        inputs = image_processor(images=video, masks=masks, return_tensors="pt").to(torch_device)
 
         # forward pass
         with torch.no_grad():
             outputs = model(**inputs)
 
         # verify the logits
-        expected_shape = torch.Size((1, 1000))
-        self.assertEqual(outputs.logits.shape, expected_shape)
-
-        expected_slice = torch.tensor([-0.2744, 0.8215, -0.0836]).to(torch_device)
-
-        self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
-
-    @slow
-    def test_inference_interpolate_pos_encoding(self):
-        # ProPainter models have an `interpolate_pos_encoding` argument in their forward method,
-        # allowing to interpolate the pre-trained position embeddings in order to use
-        # the model on higher resolutions. The DINO model by Facebook AI leverages this
-        # to visualize self-attention on higher resolution images.
-        model = ProPainterModel.from_pretrained("facebook/dino-propainters8").to(torch_device)
-
-        image_processor = ViTImageProcessor.from_pretrained("facebook/dino-propainters8", size=480)
-        image = prepare_img()
-        inputs = image_processor(images=image, return_tensors="pt")
-        pixel_values = inputs.pixel_values.to(torch_device)
-
-        # forward pass
-        with torch.no_grad():
-            outputs = model(pixel_values, interpolate_pos_encoding=True)
-
-        # verify the logits
-        expected_shape = torch.Size((1, 3601, 384))
-        self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
+        expected_shape = torch.Size((80, 240, 432, 3))
+        self.assertEqual(outputs.reconstruction, expected_shape)
 
         expected_slice = torch.tensor(
-            [[4.2340, 4.3906, -6.6692], [4.5463, 1.8928, -6.7257], [4.4429, 0.8496, -5.8585]]
+            [[0.5458, 0.5546, 0.5638], [0.5526, 0.5565, 0.5651], [0.5396, 0.5426, 0.5621]]
         ).to(torch_device)
 
-        self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
+        print("gggggggggggg", outputs.reconstruction[0, 0, :3, :3])
+        self.assertTrue(torch.allclose(outputs.reconstruction[0, 0, :3, :3], expected_slice, atol=1e-4))
 
     @slow
     @require_accelerate
@@ -317,13 +227,12 @@ class ProPainterModelIntegrationTest(unittest.TestCase):
         r"""
         A small test to make sure that inference work in half precision without any problem.
         """
-        model = ProPainterModel.from_pretrained("facebook/dino-propainters8", torch_dtype=torch.float16, device_map="auto")
+        model = ProPainterModel.from_pretrained("ruffy369/ProPainter", torch_dtype=torch.float16, device_map="auto")
         image_processor = self.default_image_processor
 
-        image = prepare_img()
-        inputs = image_processor(images=image, return_tensors="pt")
-        pixel_values = inputs.pixel_values.to(torch_device)
+        video, masks = prepare_video()
+        inputs = image_processor(images=video, masks=masks, return_tensors="pt").to(torch_device)
 
         # forward pass to make sure inference works in fp16
         with torch.no_grad():
-            _ = model(pixel_values)
+            _ = model(**inputs)

@@ -533,7 +533,7 @@ class ProPainterImageProcessor(BaseImageProcessor):
             flow_masks, = torch.stack([to_tensors(mask) for mask in flow_masks], dim=0)
             masks_dilated = torch.stack([to_tensors(mask) for mask in masks_dilated], dim=0)
             size = (height_extr, width_extr)
-        videos_inp = [[np.array(frame).transpose(1,2,0).astype(np.uint8) for frame in video] for video in videos]
+        videos_inp = [[np.array(frame).transpose(1,2,0).astype(np.uint8) for frame in video] for video in videos][0]
         videos = torch.stack([to_tensors(video) * 2 - 1 for video in videos], dim=0)
 
         data = {"pixel_values_inp": videos_inp, "pixel_values": videos, "flow_masks": flow_masks, "masks_dilated": masks_dilated, "size": size}
