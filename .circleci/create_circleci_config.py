@@ -130,12 +130,12 @@ class CircleCIJob:
             },
             {"run": {
                 "name": "Show biggest libraries",
-                 "command": """dpkg-query --show --showformat='${Installed-Size}\t${Package}\n' | sort -rh | head -25 | sort -h | awk '{ package=$2; sub(".*/", "", package); printf("%.5f GB %s\n", $1/1024/1024, package)}' || true"""}
+                "command": """dpkg-query --show --showformat='${Installed-Size}\t${Package}\n' | sort -rh | head -25 | sort -h | awk '{ package=$2; sub(".*/", "", package); printf("%.5f GB %s\n", $1/1024/1024, package)}' || true"""}
             },
             {"run": {"name": "Create `test-results` directory", "command": "mkdir test-results"}},
-            {"run": {"name": "Show files being tested tests", "command": f'cat << pipeline.parameters.{self.name}_test_list >> | tr " " "\\n" >> {self.name}_test_list.txt' if self.name != "pr_documentation_tests" else ""}},
+            {"run": {"name": "Get files to test", "command":f'curl -o  << pipeline.parameters.{self.name}_test_list >>  | tr " " "\\n" >> {self.name}_test_list.txt' if "pr_documentation" not in self.name else ''}},
             {"run": {"name": "Split tests across parallel nodes: show current parallel tests",
-                     "command": f"TESTS=$(circleci tests split  --split-by=timings {self.name}_test_list.txt) && echo $TESTS > splitted_tests.txt && echo $TESTS | tr ' ' '\n'" if self.parallelism else f"cp {self.name}_test_list.txt  splitted_tests.txt"}
+                    "command": f"TESTS=$(circleci tests split  --split-by=timings {self.name}_test_list.txt) && echo $TESTS > splitted_tests.txt && echo $TESTS | tr ' ' '\n'" if self.parallelism else f"cp {self.name}_test_list.txt  splitted_tests.txt"}
             },
             {"run": {
                 "name": "Run tests",
