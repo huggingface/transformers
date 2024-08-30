@@ -133,6 +133,7 @@ class SuperPointImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
             self.assertTrue(np.all(image[0, ...] == image[1, ...]) and np.all(image[1, ...] == image[2, ...]))
 
     @slow
+    @require_torch
     def test_post_processing_keypoint_detection(self):
         image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
         image_inputs = self.image_processor_tester.prepare_image_inputs()
