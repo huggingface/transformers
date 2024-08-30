@@ -47,7 +47,7 @@ jobs:
                     CIRCLE_TOKEN: ${{ secrets.CI_ARTIFACT_TOKEN }}
                 command: |
                     project_slug="gh/${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}"
-                    job_number=${CI_JOB_NAME}
+                    job_number=${CIRCLE_BUILD_NUM}
                     echo https://circleci.com/api/v2/project/${project_slug}/${job_number}/artifacts
                     curl --request GET \
                     --url https://circleci.com/api/v2/project/${project_slug}/${job_number}/artifacts \
