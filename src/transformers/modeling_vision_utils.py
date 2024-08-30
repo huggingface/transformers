@@ -26,6 +26,7 @@ if is_torch_available():
 
 logger = get_logger(__name__)
 
+
 def interpolate_pos_encoding(
     embeddings: torch.Tensor,
     position_embeddings: torch.Tensor,
@@ -61,7 +62,7 @@ def interpolate_pos_encoding(
     new_height = height // ph
     new_width = width // pw
 
-    sqrt_num_positions = torch_int(num_positions ** 0.5)
+    sqrt_num_positions = torch_int(num_positions**0.5)
     patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
     patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
 

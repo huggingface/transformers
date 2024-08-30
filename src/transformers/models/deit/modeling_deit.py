@@ -77,7 +77,9 @@ class DeiTEmbeddings(nn.Module):
         self.patch_size = config.patch_size
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
-        return _interpolate_pos_encoding(embeddings, self.position_embeddings, height, width, self.patch_size, num_class_embeds=2)
+        return _interpolate_pos_encoding(
+            embeddings, self.position_embeddings, height, width, self.patch_size, num_class_embeds=2
+        )
 
     def forward(
         self,

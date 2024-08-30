@@ -325,7 +325,11 @@ class HieraEmbeddings(nn.Module):
     def get_position_embedding(
         self, embeddings: torch.Tensor, height: int, width: int, interpolate_pos_encoding: bool
     ) -> torch.FloatTensor:
-        return self.interpolate_pos_encoding(embeddings, self.position_embeddings, height, width) if interpolate_pos_encoding else self.position_embeddings
+        return (
+            self.interpolate_pos_encoding(embeddings, self.position_embeddings, height, width)
+            if interpolate_pos_encoding
+            else self.position_embeddings
+        )
 
     def forward(
         self,

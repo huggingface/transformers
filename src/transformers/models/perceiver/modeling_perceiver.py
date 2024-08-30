@@ -2768,15 +2768,15 @@ class PerceiverTrainablePositionEncoding(PerceiverAbstractPositionEncoding):
 
     def interpolate_pos_encoding(self, position_embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
         num_positions = position_embeddings.shape[0]
-        new_height = new_width = torch_int(num_positions ** 0.5)
+        new_height = new_width = torch_int(num_positions**0.5)
 
         # always interpolate when tracing to ensure the exported model works for dynamic input shapes
         if not torch.jit.is_tracing() and height == new_height and width == new_width:
             return position_embeddings
 
-        position_embeddings = position_embeddings.reshape(
-            1, new_height, new_width, self._num_channels
-        ).permute(0, 3, 1, 2)
+        position_embeddings = position_embeddings.reshape(1, new_height, new_width, self._num_channels).permute(
+            0, 3, 1, 2
+        )
 
         position_embeddings = nn.functional.interpolate(
             position_embeddings,

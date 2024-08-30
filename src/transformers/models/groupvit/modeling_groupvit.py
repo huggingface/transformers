@@ -368,7 +368,9 @@ class GroupViTVisionEmbeddings(nn.Module):
         self.config = config
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
-        return _interpolate_pos_encoding(embeddings, self.position_embeddings, height, width, self.config.patch_size, num_class_embeds=0)
+        return _interpolate_pos_encoding(
+            embeddings, self.position_embeddings, height, width, self.config.patch_size, num_class_embeds=0
+        )
 
     def forward(self, pixel_values: torch.Tensor, interpolate_pos_encoding: bool = False) -> torch.Tensor:
         batch_size, num_channels, height, width = pixel_values.shape

@@ -270,7 +270,9 @@ class SiglipVisionEmbeddings(nn.Module):
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
         position_embeddings = self.position_embedding.weight.unsqueeze(0)
-        return _interpolate_pos_encoding(embeddings, position_embeddings, height, width, self.patch_size, num_class_embeds=0)
+        return _interpolate_pos_encoding(
+            embeddings, position_embeddings, height, width, self.patch_size, num_class_embeds=0
+        )
 
     def forward(self, pixel_values: torch.FloatTensor, interpolate_pos_encoding=False) -> torch.Tensor:
         _, _, height, width = pixel_values.shape

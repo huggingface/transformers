@@ -626,7 +626,7 @@ class DPTReassembleStage(nn.Module):
                 if patch_height is not None and patch_width is not None:
                     hidden_state = hidden_state.reshape(batch_size, patch_height, patch_width, num_channels)
                 else:
-                    size = torch_int(sequence_length ** 0.5)
+                    size = torch_int(sequence_length**0.5)
                     hidden_state = hidden_state.reshape(batch_size, size, size, num_channels)
                 hidden_state = hidden_state.permute(0, 3, 1, 2).contiguous()
 

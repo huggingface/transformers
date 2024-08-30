@@ -75,7 +75,14 @@ class Dinov2Embeddings(nn.Module):
         self.config = config
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
-        return _interpolate_pos_encoding(embeddings, self.position_embeddings, height, width, self.config.patch_size, interpolate_dtype=torch.float32)
+        return _interpolate_pos_encoding(
+            embeddings,
+            self.position_embeddings,
+            height,
+            width,
+            self.config.patch_size,
+            interpolate_dtype=torch.float32,
+        )
 
     def forward(self, pixel_values: torch.Tensor, bool_masked_pos: Optional[torch.Tensor] = None) -> torch.Tensor:
         batch_size, _, height, width = pixel_values.shape

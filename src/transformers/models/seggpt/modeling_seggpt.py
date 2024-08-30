@@ -155,7 +155,7 @@ class SegGptEmbeddings(nn.Module):
     def interpolate_pos_encoding(self, height: int, width: int) -> torch.Tensor:
         patch_pos_embed = self.position_embeddings[:, 1:]
         num_patches = patch_pos_embed.shape[1]
-        pretrain_patch_size = torch_int(num_patches ** 0.5)
+        pretrain_patch_size = torch_int(num_patches**0.5)
 
         # always interpolate when tracing to ensure the exported model works for dynamic input shapes
         if torch.jit.is_tracing() or pretrain_patch_size != height or pretrain_patch_size != width:
