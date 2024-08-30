@@ -412,8 +412,9 @@ class TextGenerationPipeline(Pipeline):
                     if isinstance(prompt_text, str):
                         all_text = prompt_text + all_text
                     elif isinstance(prompt_text, Chat):
-                        # Explicit list parsing is necessary for parsing chat datasets
                         if continue_final_message is None:
+                            # If the user passes a chat ending in an assistant message, we treat it as a prefill by
+                            # default because very few models support multiple separate, consecutive assistant messages
                             continue_final_message = prompt_text.messages[-1]["role"] == "assistant"
                         if continue_final_message:
                             # With assistant prefill, concat onto the end of the last message
