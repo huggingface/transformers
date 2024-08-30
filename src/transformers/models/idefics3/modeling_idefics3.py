@@ -391,8 +391,6 @@ class Idefics3VisionMLP(nn.Module):
 class Idefics3SimpleMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.config = config
-
         input_size = config.vision_config.hidden_size * (config.scale_factor**2)
         output_size = config.text_config.hidden_size
         self.proj = nn.Linear(input_size, output_size, bias=False)
@@ -894,9 +892,9 @@ class Idefics3Model(Idefics3PreTrainedModel):
         num_images, _, vision_hidden_size = image_hidden_states.shape
         special_image_token_mask = input_ids == self.image_token_id
         new_inputs_embeds = inputs_embeds.clone()
-        reshaped_image_hidden_states = image_hidden_states.view(-1, vision_hidden_size).to(
-            inputs_embeds.dtype
-        )  # cast to the dtype of the input_embeds to support quantized models
+        reshaped_image_hidden_states = image_hidden_states.view(-1, vision_hidden_size)
+        # cast to the dtype of the input_embeds to support quantized models
+        reshaped_image_hidden_states = reshaped_image_hidden_states.to(inputs_embeds.dtype)
         new_inputs_embeds[special_image_token_mask] = reshaped_image_hidden_states
         return new_inputs_embeds
 

@@ -253,7 +253,7 @@ class Idefics3Processor(ProcessorMixin):
         )
 
         # Temporary fix for "padding_side" in init_kwargs
-        _ = output_kwargs["text_kwargs"].pop("padding_side", None)
+        output_kwargs["text_kwargs"].pop("padding_side", None)
 
         image_seq_len = output_kwargs["images_kwargs"].pop("image_seq_len", None)
         image_seq_len = image_seq_len if image_seq_len is not None else self.image_seq_len
@@ -278,17 +278,7 @@ class Idefics3Processor(ProcessorMixin):
             n_images_in_images = [len(sample) for sample in images]
 
             # Load images if they are URLs
-            new_images = []
-            for sample in images:
-                new_images.append([])
-                for im in sample:
-                    if is_valid_image(im):
-                        new_images[-1].append(im)  # already loaded
-                    elif isinstance(im, str):
-                        new_images[-1].append(load_image(im))
-
-            images = new_images
-            del new_images
+            images = [[load_image(im) if is_url(im) else im for im in sample] for sample in images]
 
             image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
             inputs.update(image_inputs)

@@ -220,12 +220,12 @@ def get_max_height_width(
     if input_data_format is None:
         input_data_format = infer_channel_dimension_format(images_list[0][0])
 
-    image_sizes = []
+    max_height = max_width = float("-inf")
     for images in images_list:
         for image in images:
-            image_sizes.append(get_image_size(image, channel_dim=input_data_format))
-
-    max_height, max_width = max_across_indices(image_sizes)
+            height, width = get_image_size(image, channel_dim=input_data_format)
+            max_height = max(height, max_height)
+            max_width = max(width, max_width)
     return (max_height, max_width)
 
 
@@ -755,11 +755,6 @@ class Idefics3ImageProcessor(BaseImageProcessor):
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
         do_pad = do_pad if do_pad is not None else self.do_pad
 
-        if not do_image_splitting:
-            logger.warning_once(
-                "Idefics3 was trained on splitted image to support high resolution. Setting do_image_splitting=False will degrade the performance."
-            )
-
         images_list = make_list_of_images(images)
 
         if not valid_images(images_list[0]):
@@ -768,10 +763,11 @@ class Idefics3ImageProcessor(BaseImageProcessor):
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
 
+        # save the palettes for conversion to RGB
         palettes = [
             image[0].getpalette() if isinstance(image[0], Image.Image) and image[0].mode == "P" else None
             for image in images_list
-        ]  # save the palettes for conversion to RGB
+        ]
         # All transformations expect numpy arrays.
         images_list = [[to_numpy_array(image) for image in images] for images in images_list]
 

@@ -144,9 +144,9 @@ class Idefics3Config(PretrainedConfig):
             The id of the "image" token.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether or not to tie the word embeddings with the token embeddings.
-        vision_config (`IdeficsVisionConfig` or `dict`, *optional*):
-            Custom vision config or dict
-        text_config (`LlamaConfig` or `dict`, *optional*):
+        vision_config (`IdeficsVisionConfig` or `dict`, *optional*, defaults to `IdeficsVisionConfig`):
+            Custom vision config or dict for the vision tower
+        text_config (`PretrainedConfig` or `dict`, *optional*, defaults to `LlamaConfig`):
             Custom text config or dict for the text model
         scale_factor (`int`, *optional*, defaults to 2):
             The scale factor for the image encoder.
