@@ -158,7 +158,7 @@ class CircleCIJob:
 
     @property
     def job_name(self):
-        return self.name if "examples" in self.name else f"tests_{self.name}"
+        return self.name if ("examples" in self.name or "pipeline" in self.name) else f"tests_{self.name}"
 
 
 # JOBS
