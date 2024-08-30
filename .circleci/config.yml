@@ -50,7 +50,7 @@ jobs:
                     job_number=${CIRCLE_BUILD_NUM}
                     curl --request GET \
                     --url https://circleci.com/api/v2/project/${project_slug}/${job_number}/artifacts \
-                    --header "authorization: Basic ${CIRCLE_TOKEN}" \
+                    --header "Circle-Token: ${CIRCLE_TOKEN}" \
                     --output test_preparation/artifacts.json
             - run:
                 name: "Show Artifacts"
