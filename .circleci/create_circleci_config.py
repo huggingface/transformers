@@ -133,7 +133,7 @@ class CircleCIJob:
                 "command": """dpkg-query --show --showformat='${Installed-Size}\t${Package}\n' | sort -rh | head -25 | sort -h | awk '{ package=$2; sub(".*/", "", package); printf("%.5f GB %s\n", $1/1024/1024, package)}' || true"""}
             },
             {"run": {"name": "Create `test-results` directory", "command": "mkdir test-results"}},
-            {"run": {"name": "Get files to test", "command":f'curl -L -o {self.name}_test_list.txt ${{pipeline.parameters.{self.name}_test_list}}' if self.name != "pr_documentation_tests" else ''}},
+            {"run": {"name": "Get files to test", "command":f'curl -L -o {self.name}_test_list.txt <<pipeline.parameters.{self.name}_test_list>>' if self.name != "pr_documentation_tests" else ''}},
             {"run": {"name": "Split tests across parallel nodes: show current parallel tests",
                     "command": f"TESTS=$(circleci tests split  --split-by=timings {self.name}_test_list.txt) && echo $TESTS > splitted_tests.txt && echo $TESTS | tr ' ' '\n'" if self.parallelism else f"cp {self.name}_test_list.txt  splitted_tests.txt"}
             },
