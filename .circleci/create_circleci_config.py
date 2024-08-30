@@ -32,7 +32,7 @@ COMMON_ENV_VARIABLES = {
     "RUN_PT_FLAX_CROSS_TESTS": False,
 }
 # Disable the use of {"s": None} as the output is way too long, causing the navigation on CircleCI impractical
-COMMON_PYTEST_OPTIONS = {"max-worker-restart": 0, "dist": "loadfile", "v": None, "rsf":None}
+COMMON_PYTEST_OPTIONS = {"max-worker-restart": 0, "dist": "loadfile", "vvv": None, "rsf":None}
 DEFAULT_DOCKER_IMAGE = [{"image": "cimg/python:3.8.12"}]
 
 
@@ -53,7 +53,7 @@ class CircleCIJob:
     docker_image: List[Dict[str, str]] = None
     install_steps: List[str] = None
     marker: Optional[str] = None
-    parallelism: Optional[int] = 1
+    parallelism: Optional[int] = 0
     pytest_num_workers: int = 12
     pytest_options: Dict[str, Any] = None
     resource_class: Optional[str] = "2xlarge"
@@ -93,7 +93,7 @@ class CircleCIJob:
                 self.tests_to_run = []
                 print("not Found")
         if self.parallelism is None:
-            self.parallelism = 1
+            self.parallelism = 0
         else:
             self.parallelism = min(self.parallelism, 32, len(self.tests_to_run))
 
@@ -116,7 +116,7 @@ class CircleCIJob:
                 # Examples special case: we need to download NLTK files in advance to avoid cuncurrency issues
         timeout_cmd = f"timeout {self.command_timeout} " if self.command_timeout else ""
         marker_cmd = f"-m \"{self.marker}\"" if self.marker is not None else ""
-        additional_flags = f"-vvv -p no:warning -o junit_family=xunit1 --junitxml=test-results/junit.xml"
+        additional_flags = f" -p no:warning -o junit_family=xunit1 --junitxml=test-results/junit.xml"
         steps = [
             "checkout",
             {"attach_workspace": {"at": "test_preparation"}},
@@ -154,7 +154,7 @@ class CircleCIJob:
             {"store_artifacts": {"path": "splitted_tests.txt"}},
             {"store_artifacts": {"path": "installed.txt"}},
         ]
-        if self.parallelism is not None:
+        if self.parallelism:
             job["parallelism"] = self.parallelism
         job["steps"] = steps
         return job
