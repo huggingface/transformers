@@ -146,7 +146,7 @@ Transformers에 달린 100,000개의 별을 축하하기 위해, 우리는 커�
 >>> from PIL import Image
 >>> from transformers import pipeline
 
-# Download an image with cute cats
+# 귀여운 고양이가 있는 이미지를 다운로드하세요
 >>> url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/coco_sample.png"
 >>> image_data = requests.get(url, stream=True).raw
 >>> image = Image.open(image_data)
