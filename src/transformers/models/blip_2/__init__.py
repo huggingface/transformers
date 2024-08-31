@@ -33,10 +33,13 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_blip_2"] = [
         "Blip2Model",
+        "Blip2VisionModelWithProjection",
         "Blip2QFormerModel",
         "Blip2PreTrainedModel",
         "Blip2ForConditionalGeneration",
+        "Blip2ForImageTextRetrieval",
         "Blip2VisionModel",
+        "Blip2TextModelWithProjection",
     ]
 
 if TYPE_CHECKING:
@@ -55,10 +58,13 @@ if TYPE_CHECKING:
     else:
         from .modeling_blip_2 import (
             Blip2ForConditionalGeneration,
+            Blip2ForImageTextRetrieval,
             Blip2Model,
             Blip2PreTrainedModel,
             Blip2QFormerModel,
+            Blip2TextModelWithProjection,
             Blip2VisionModel,
+            Blip2VisionModelWithProjection,
         )
 
 else:
