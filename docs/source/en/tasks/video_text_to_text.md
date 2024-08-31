@@ -85,17 +85,18 @@ def sample_frames(url, num_frames):
     return frames
 ```
 
-Let's get our inputs.
+Let's get our inputs. We will sample frames and concatenate them.
 
 ```python
 video_1 = "https://huggingface.co/spaces/merve/llava-interleave/resolve/main/cats_1.mp4"
 video_2 = "https://huggingface.co/spaces/merve/llava-interleave/resolve/main/cats_2.mp4"
 
+video_1 = sample_frames(video_1, 6)
+video_2 = sample_frames(video_2, 6)
 
-video_1 = sample_frames(video_1, 8)
-video_2 = sample_frames(video_2, 8)
+videos = video_1 + video_2
 
-video_1
+videos
 
 # [<PIL.Image.Image image mode=RGB size=1920x1080>,
 # <PIL.Image.Image image mode=RGB size=1920x1080>,
