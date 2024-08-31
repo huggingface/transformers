@@ -214,6 +214,7 @@ class LlavaImageProcessor(BaseImageProcessor):
 
         return result
 
+    # Copied from transformers.models.clip.image_processing_clip.CLIPImageProcessor.resize
     def resize(
         self,
         image: np.ndarray,
@@ -389,10 +390,6 @@ class LlavaImageProcessor(BaseImageProcessor):
             # We assume that all images have the same channel dimension format.
             input_data_format = infer_channel_dimension_format(images[0])
 
-        print("Input data format:", input_data_format)
-        for image in images:
-            print(image.shape)
-
         if do_pad:
             images = [
                 self.pad_to_square(
@@ -402,10 +399,6 @@ class LlavaImageProcessor(BaseImageProcessor):
                 )
                 for image in images
             ]
-
-        print("After padding:")
-        for image in images:
-            print(image.shape)
 
         if do_resize:
             images = [
