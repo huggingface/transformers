@@ -737,7 +737,7 @@ class GenerationConfig(PushToHubMixin):
                 if getattr(self, extra_output_flag) is True:
                     warnings.warn(
                         f"`return_dict_in_generate` is NOT set to `True`, but `{extra_output_flag}` is. When "
-                        f"`return_dict_in_generate` is not `True`, `{extra_output_flag}` will not be respected.",
+                        f"`return_dict_in_generate` is not `True`, `{extra_output_flag}` is ignored.",
                         UserWarning,
                     )
 
