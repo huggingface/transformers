@@ -364,14 +364,13 @@ class TimesFMLayerFF(nn.Module):
 class TimesFMPerHeadDimScale(nn.Module):
     def __init__(self, config: TimesFMConfig):
         super().__init__()
-
-        self.dim = config.d_model // config.num_heads
-        self.scale = nn.Parameter(torch.zeros(self.dim))
+        dim = config.d_model // config.num_heads
+        r_softplus_0 = 1.442695041
+        self.scale_factor = r_softplus_0 / math.sqrt(dim)
+        self.scale = nn.Parameter(torch.empty(self.dim))
 
     def forward(self, hidden_states):
-        r_softplus_0 = 1.442695041
-        scale = r_softplus_0 / math.sqrt(self.dim)
-        scale *= F.softplus(self.scale)
+        scale = self.scale_factor * F.softplus(self.scale)
         return hidden_states * scale
 
 
@@ -890,16 +889,8 @@ class TimesFMPreTrainedModel(PreTrainedModel):
             module.wo.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
             if hasattr(module.wo, "bias") and module.wo.bias is not None:
                 module.wo.bias.data.zero_()
-        elif isinstance(module, TimesFMDenseGatedActDense):
-            module.wi_0.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
-            if hasattr(module.wi_0, "bias") and module.wi_0.bias is not None:
-                module.wi_0.bias.data.zero_()
-            module.wi_1.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
-            if hasattr(module.wi_1, "bias") and module.wi_1.bias is not None:
-                module.wi_1.bias.data.zero_()
-            module.wo.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
-            if hasattr(module.wo, "bias") and module.wo.bias is not None:
-                module.wo.bias.data.zero_()
+        elif isinstance(module, TimesFMPerHeadDimScale):
+            module.scale.data.zero_()
         elif isinstance(module, TimesFMAttention):
             # Mesh TensorFlow attention initialization to avoid scaling before softmax
             # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/transformer/attention.py#L136
