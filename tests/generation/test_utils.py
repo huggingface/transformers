@@ -831,7 +831,7 @@ class GenerationTesterMixin:
 
             # Sample constraints
             min_id = 3
-            max_id = config.get_text_config().vocab_size
+            max_id = config.get_text_config(decoder=True).vocab_size
 
             force_tokens = torch.randint(min_id, max_id, (1, 2)).tolist()[0]
             constraints = [
@@ -889,7 +889,7 @@ class GenerationTesterMixin:
 
             # Sample constraints
             min_id = 3
-            max_id = model.config.get_text_config().vocab_size
+            max_id = model.config.get_text_config(decoder=True).vocab_size
             force_tokens = torch.randint(min_id, max_id, (1, 2)).tolist()[0]
             constraints = [
                 PhrasalConstraint(force_tokens),
@@ -2012,14 +2012,14 @@ class GenerationTesterMixin:
                 self.assertTrue(output.past_key_values is None)
 
     def _check_scores(self, batch_size, scores, length, config):
-        vocab_size = config.get_text_config().vocab_size
+        vocab_size = config.get_text_config(decoder=True).vocab_size
         expected_shape = (batch_size, vocab_size)
         self.assertIsInstance(scores, tuple)
         self.assertEqual(len(scores), length)
         self.assertListEqual([iter_scores.shape for iter_scores in scores], [expected_shape] * len(scores))
 
     def _check_logits(self, batch_size, scores, config):
-        vocab_size = config.get_text_config().vocab_size
+        vocab_size = config.get_text_config(decoder=True).vocab_size
         self.assertIsInstance(scores, tuple)
         self.assertListEqual([iter_scores.shape[0] for iter_scores in scores], [batch_size] * len(scores))
         # vocabulary difference equal to one (imagegptmodel?) or zero (all other models)

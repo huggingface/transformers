@@ -209,7 +209,7 @@ def get_modules_to_fuse(model, quantization_config):
         current_fused_mapping = AWQ_FUSED_MAPPINGS[model.config.model_type]
 
         # Properly deal with the case where we have a multi-modal model as well (e.g. Llava)
-        config = model.config.get_text_config()
+        config = model.config.get_text_config(decoder=True)
 
         # Handle hidden_size, num_attention_heads, num_key_value_heads on our own.
         hidden_size = config.hidden_size
@@ -342,7 +342,7 @@ def _fuse_awq_mlp(model, current_module_name, fuse_module_names, module, target_
         previous_device = gate_proj.qweight.device
 
         # Deal also with the case model has `text_config` attribute
-        config = model.config.get_text_config()
+        config = model.config.get_text_config(decoder=True)
         hidden_act = config.hidden_act
         activation_fn = ACT2FN[hidden_act]
         new_module = target_cls(gate_proj, down_proj, up_proj, activation_fn)
