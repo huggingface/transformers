@@ -1064,7 +1064,7 @@ class PretrainedConfig(PushToHubMixin):
         If `decoder` is set to `True`, then only search for decoder config names.
         """
         decoder_possible_text_config_names = ("decoder", "generator", "text_config")
-        encoder_possible_text_config_names = "text_encoder"
+        encoder_possible_text_config_names = ("text_encoder",)
         if decoder:
             possible_text_config_names = decoder_possible_text_config_names
         else:
