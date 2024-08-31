@@ -336,6 +336,8 @@ class GenerationConfig(PushToHubMixin):
             present in `generate`'s signature will be used in the model forward pass.
     """
 
+    extra_output_flags = ("output_attentions", "output_hidden_states", "output_scores", "output_logits")
+
     def __init__(self, **kwargs):
         # Parameters that control the length of the output
         self.max_length = kwargs.pop("max_length", 20)
@@ -731,7 +733,7 @@ class GenerationConfig(PushToHubMixin):
 
         # 7. other incorrect combinations
         if self.return_dict_in_generate is not True:
-            for extra_output_flag in ("output_attentions", "output_hidden_states", "output_scores", "output_logits"):
+            for extra_output_flag in self.extra_output_flags:
                 if getattr(self, extra_output_flag) is True:
                     warnings.warn(
                         f"`return_dict_in_generate` is NOT set to `True`, but `{extra_output_flag}` is. When "
@@ -1201,6 +1203,11 @@ class GenerationConfig(PushToHubMixin):
                 for attr in config.to_dict().keys():
                     if attr in decoder_config and getattr(config, attr) == getattr(default_generation_config, attr):
                         setattr(config, attr, decoder_config[attr])
+
+        # If any `output_...` flag is set to `True`, we ensure `return_dict_in_generate` is set to `True`.
+        if config.return_dict_in_generate is False:
+            if any(getattr(config, extra_output_flag, False) for extra_output_flag in config.extra_output_flags):
+                config.return_dict_in_generate = True
 
         config._original_object_hash = hash(config)  # Hash to detect whether the instance was modified
         return config
