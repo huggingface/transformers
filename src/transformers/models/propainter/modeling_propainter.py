@@ -3158,6 +3158,12 @@ class ProPainterModel(ProPainterPreTrainedModel):
     def feature_propagation(self,pixel_values, updated_frames,updated_masks,masks_dilated,pred_flows_bi,original_frames, output_attentions: bool = False,output_hidden_states: bool = False,return_dict: bool = True):
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
+
+        #If accidentally user provides `pixel_values_inp` as tensor.(The type of inputs are exactly followed with the original code)
+        if type(original_frames) is torch.Tensor:
+            original_frames = original_frames.cpu().numpy()
+            original_frames = [original_frames[i] for i in range(original_frames.shape[0])]
+
         if self.training:
             batch_size, _, num_channels, height, width = self.size
             # ---- feature propagation + Transformer ----

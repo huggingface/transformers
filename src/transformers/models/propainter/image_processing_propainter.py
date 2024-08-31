@@ -536,7 +536,7 @@ class ProPainterImageProcessor(BaseImageProcessor):
 
         # This input kwarg is only utilised during inference on a single batch or one video for predictions
         if len(videos)==1:
-            videos_inp = [[np.array(frame).transpose(1,2,0).astype(np.uint8) for frame in video] for video in videos]
+            videos_inp = [[np.array(frame).transpose(1,2,0).astype(np.uint8) for frame in video] for video in videos][0]
         else:
             videos_inp = None
 

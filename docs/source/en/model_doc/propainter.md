@@ -113,18 +113,19 @@ video = [np.array(ds_images[i]) for i in range(num_frames)]
 masks = [np.stack([np.array(ds_images[i])] * 3, axis=-1) for i in range(num_frames, 2*num_frames)]
 
 ####################################################START OF THE IMAGE PROCESSOR AND MODEL FORWARD PASS################################################
+import transformers
 from transformers import ProPainterImageProcessor
 image_processor = ProPainterImageProcessor()
 inputs = image_processor(images = video, masks = masks)
 
-import transformers as t
-model = t.ProPainterModel.from_pretrained("ruffy369/ProPainter")
+device = "cuda"
 
-#For inference and getting that flashy final output(can be commented out)
-model.eval()
+model = transformers.ProPainterModel.from_pretrained("ruffy369/ProPainter").to(device)
 
+#(You can also directly give **inputs to the model after inputs.to(device): (model(**inputs). The below line is just to demonstrate that the first inputs is a list of numpy arrays whose type is followed with the original code)
+# The first input is always provided for inference as its not utilised during training
 with torch.no_grad():
-    outputs = model(**inputs)
+    outputs = model(inputs["pixel_values_inp"],inputs["pixel_values"].to(device),inputs["flow_masks"].to(device),inputs["masks_dilated"].to(device))
 #for training or calculating a simple backward pass
 
 ```
