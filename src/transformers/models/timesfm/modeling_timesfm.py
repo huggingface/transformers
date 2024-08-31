@@ -951,10 +951,9 @@ class TimesFMPreTrainedModel(PreTrainedModel):
 
 
 class TimesFMStack(TimesFMPreTrainedModel):
-    def __init__(self, config, embed_tokens=None):
+    def __init__(self, config):
         super().__init__(config)
 
-        self.embed_tokens = embed_tokens
         self.is_decoder = config.is_decoder
 
         self.block = nn.ModuleList(
@@ -965,59 +964,8 @@ class TimesFMStack(TimesFMPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
         # Model parallel
-        self.model_parallel = False
         self.device_map = None
         self.gradient_checkpointing = False
-
-    @add_start_docstrings(PARALLELIZE_DOCSTRING)
-    def parallelize(self, device_map=None):
-        warnings.warn(
-            "`TimesFMStack.parallelize` is deprecated and will be removed in v5 of Transformers, you should load your model"
-            " with `device_map='balanced'` in the call to `from_pretrained`. You can also provide your own"
-            " `device_map` but it needs to be a dictionary module_name to device, so for instance {'block.0': 0,"
-            " 'block.1': 1, ...}",
-            FutureWarning,
-        )
-        # Check validity of device_map
-        self.device_map = (
-            get_device_map(len(self.block), range(torch.cuda.device_count())) if device_map is None else device_map
-        )
-        assert_device_map(self.device_map, len(self.block))
-        self.model_parallel = True
-        self.first_device = "cpu" if "cpu" in self.device_map.keys() else "cuda:" + str(min(self.device_map.keys()))
-        self.last_device = "cuda:" + str(max(self.device_map.keys()))
-        # Load onto devices
-        for k, v in self.device_map.items():
-            for layer in v:
-                cuda_device = "cuda:" + str(k)
-                self.block[layer] = self.block[layer].to(cuda_device)
-
-        # Set embed_tokens to first layer
-        self.embed_tokens = self.embed_tokens.to(self.first_device)
-        # Set final layer norm to last device
-        self.final_layer_norm = self.final_layer_norm.to(self.last_device)
-
-    @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
-    def deparallelize(self):
-        warnings.warn(
-            "Like `parallelize`, `deparallelize` is deprecated and will be removed in v5 of Transformers.",
-            FutureWarning,
-        )
-        self.model_parallel = False
-        self.device_map = None
-        self.first_device = "cpu"
-        self.last_device = "cpu"
-        for i in range(len(self.block)):
-            self.block[i] = self.block[i].to("cpu")
-        self.embed_tokens = self.embed_tokens.to("cpu")
-        self.final_layer_norm = self.final_layer_norm.to("cpu")
-        torch.cuda.empty_cache()
-
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, new_embeddings):
-        self.embed_tokens = new_embeddings
 
     def forward(
         self,
@@ -1399,7 +1347,7 @@ class TimesFMModel(TimesFMPreTrainedModel):
         super().__init__(config)
         self.freq_emb = nn.Embedding(config.freq_size, config.d_model)
         self.horizon_ff_layer = TimesFMResidualBlock(
-            input_dims=config.hidden_size,
+            input_dims=config.d_model,
             output_dims=config.horizon_len * (1 + len(config.quantiles)),
             hidden_dims=config.d_ff,
             dropout=config.dropout_rate,
@@ -1950,57 +1898,8 @@ class TimesFMEncoderModel(TimesFMPreTrainedModel):
         self.model_parallel = False
         self.device_map = None
 
-    @add_start_docstrings(PARALLELIZE_DOCSTRING)
-    def parallelize(self, device_map=None):
-        warnings.warn(
-            "`TimesFMEncoderModel.parallelize` is deprecated and will be removed in v5 of Transformers, you should load"
-            " your model with `device_map='balanced'` in the call to `from_pretrained`. You can also provide your own"
-            " `device_map` but it needs to be a dictionary module_name to device, so for instance {'block.0': 0,"
-            " 'block.1': 1, ...}",
-            FutureWarning,
-        )
-        self.device_map = (
-            get_device_map(len(self.encoder.block), range(torch.cuda.device_count()))
-            if device_map is None
-            else device_map
-        )
-        assert_device_map(self.device_map, len(self.encoder.block))
-        self.encoder.parallelize(self.device_map)
-        self.model_parallel = True
-
-    @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
-    def deparallelize(self):
-        warnings.warn(
-            "Like `parallelize`, `deparallelize` is deprecated and will be removed in v5 of Transformers.",
-            FutureWarning,
-        )
-        self.encoder.deparallelize()
-        self.encoder = self.encoder.to("cpu")
-        self.model_parallel = False
-        self.device_map = None
-        torch.cuda.empty_cache()
-
-    def get_input_embeddings(self):
-        return self.shared
-
-    def set_input_embeddings(self, new_embeddings):
-        self.shared = new_embeddings
-        self.encoder.set_input_embeddings(new_embeddings)
-
-    def _tie_weights(self):
-        if self.config.tie_word_embeddings:
-            self._tie_or_clone_weights(self.encoder.embed_tokens, self.shared)
-
     def get_encoder(self):
         return self.encoder
-
-    def _prune_heads(self, heads_to_prune):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.block[layer].layer[0].SelfAttention.prune_heads(heads)
 
     @add_start_docstrings_to_model_forward(TIMESFM_ENCODER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
