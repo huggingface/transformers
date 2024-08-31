@@ -151,7 +151,7 @@ Transformers에 달린 100,000개의 별을 축하하기 위해, 우리는 커�
 >>> image_data = requests.get(url, stream=True).raw
 >>> image = Image.open(image_data)
 
-# Allocate a pipeline for object detection
+# 객체 감지를 위한 파이프라인을 할당하세요
 >>> object_detector = pipeline('object-detection')
 >>> object_detector(image)
 [{'score': 0.9982201457023621,
