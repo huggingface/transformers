@@ -120,6 +120,13 @@ inputs = image_processor(images = video, masks = masks)
 import transformers as t
 model = t.ProPainterModel.from_pretrained("ruffy369/ProPainter")
 
+#For inference and getting that flashy final output(can be commented out)
+model.eval()
+
+with torch.no_grad():
+    outputs = model(**inputs)
+#for training or calculating a simple backward pass
+
 ```
 
 

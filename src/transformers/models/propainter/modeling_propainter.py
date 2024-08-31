@@ -2995,149 +2995,210 @@ class ProPainterModel(ProPainterPreTrainedModel):
     )
 
     def compute_flow(self,pixel_values,output_hidden_states: bool = False):
-        short_clip_len = self._get_short_clip_len(pixel_values.size(-1))
-        if pixel_values.size(1) > short_clip_len:
-            all_hidden_states = () if output_hidden_states else None
-            gt_flows_f_list, gt_flows_b_list = [], []
-            for f in range(0, self.video_length, short_clip_len):
-                end_f = min(self.video_length, f + short_clip_len)
-                if f == 0:
-                    flows_f, flows_b = self.optical_flow_model(pixel_values[:,f:end_f], iters=self.config.raft_iter)
-                else:
-                    flows_f, flows_b = self.optical_flow_model(pixel_values[:,f-1:end_f], iters=self.config.raft_iter)
-                _flows_f, _flows_b = flows_f, flows_b
-                if output_hidden_states:
-                    all_hidden_states = all_hidden_states + (_flows_f.half(),_flows_b.half(),)
-                gt_flows_f_list.append(flows_f)
-                gt_flows_b_list.append(flows_b)
-                torch.cuda.empty_cache()
-                
-            gt_flows_f = torch.cat(gt_flows_f_list, dim=1)
-            gt_flows_b = torch.cat(gt_flows_b_list, dim=1)
-            gt_flows_bi = (gt_flows_f, gt_flows_b)
-        else:
-            gt_flows_bi = self.optical_flow_model(pixel_values, iters=self.config.raft_iter)
+        all_hidden_states = () if output_hidden_states else None
+        if self.training:
+            gt_local_frames = pixel_values[:, :self.config.num_local_frames_propainter, ...] #batch_size, temporal_length, num_channels, height, width (before slicing)
+            # get gt optical flow
+            gt_flows_bi = self.optical_flow_model(gt_local_frames, iters=self.config.raft_iter)
             all_hidden_states = gt_flows_bi
             all_hidden_states = all_hidden_states.half()
-            torch.cuda.empty_cache()
+        else:
+            short_clip_len = self._get_short_clip_len(pixel_values.size(-1))
+            if pixel_values.size(1) > short_clip_len:
+                gt_flows_f_list, gt_flows_b_list = [], []
+                for f in range(0, self.video_length, short_clip_len):
+                    end_f = min(self.video_length, f + short_clip_len)
+                    if f == 0:
+                        flows_f, flows_b = self.optical_flow_model(pixel_values[:,f:end_f], iters=self.config.raft_iter)
+                    else:
+                        flows_f, flows_b = self.optical_flow_model(pixel_values[:,f-1:end_f], iters=self.config.raft_iter)
+                    _flows_f, _flows_b = flows_f, flows_b
+                    if output_hidden_states:
+                        all_hidden_states = all_hidden_states + (_flows_f.half(),_flows_b.half(),)
+                    gt_flows_f_list.append(flows_f)
+                    gt_flows_b_list.append(flows_b)
+                    torch.cuda.empty_cache()
+                    
+                gt_flows_f = torch.cat(gt_flows_f_list, dim=1)
+                gt_flows_b = torch.cat(gt_flows_b_list, dim=1)
+                gt_flows_bi = (gt_flows_f, gt_flows_b)
+            else:
+                gt_flows_bi = self.optical_flow_model(pixel_values, iters=self.config.raft_iter)
+                all_hidden_states = gt_flows_bi
+                all_hidden_states = all_hidden_states.half()
+                torch.cuda.empty_cache()
         return gt_flows_bi, all_hidden_states
     
-    def complete_flow(self,gt_flows_bi, flow_masks, output_hidden_states: bool = False):        
-        flow_length = gt_flows_bi[0].size(1)
-        if flow_length > self.config.subvideo_length:
-            all_hidden_states = () if output_hidden_states else None
-            pred_flows_f, pred_flows_b, pred_flows_bi_loss, pred_edges_bi_loss= [], [], []
-            pad_len = 5
-            for f in range(0, flow_length, self.config.subvideo_length):
-                s_f = max(0, f - pad_len)
-                e_f = min(flow_length, f + self.config.subvideo_length + pad_len)
-                pad_len_s = max(0, f) - s_f
-                pad_len_e = e_f - min(flow_length, f + self.config.subvideo_length)
-                pred_flows_bi_sub, pred_edges_bi = self.flow_completion_net.forward_bidirect_flow(
-                    (gt_flows_bi[0][:, s_f:e_f], gt_flows_bi[1][:, s_f:e_f]), 
-                    flow_masks[:, s_f:e_f+1])
-                _pred_flows_bi_sub, _pred_edges_bi = pred_flows_bi_sub, pred_edges_bi
-                if output_hidden_states:
-                    all_hidden_states = all_hidden_states + tuple(tensor.half() for tensor in _pred_flows_bi_sub) + tuple(tensor.half() for tensor in _pred_edges_bi)
+    def complete_flow(self,gt_flows_bi, flow_masks, output_hidden_states: bool = False):
+        all_hidden_states = () if output_hidden_states else None
 
-                pred_flows_bi_loss.append(pred_flows_bi_sub)
-                pred_edges_bi_loss.append(pred_edges_bi)
-                pred_flows_bi_sub = self.flow_completion_net.combine_flow(
-                    (gt_flows_bi[0][:, s_f:e_f], gt_flows_bi[1][:, s_f:e_f]), 
-                    pred_flows_bi_sub, 
-                    flow_masks[:, s_f:e_f+1])
-
-                pred_flows_f.append(pred_flows_bi_sub[0][:, pad_len_s:e_f-s_f-pad_len_e])
-                pred_flows_b.append(pred_flows_bi_sub[1][:, pad_len_s:e_f-s_f-pad_len_e])
-                torch.cuda.empty_cache()
-                
-            pred_flows_f = torch.cat(pred_flows_f, dim=1)
-            pred_flows_b = torch.cat(pred_flows_b, dim=1)
-            pred_flows_bi = (pred_flows_f, pred_flows_b)
-
-            pred_flows_bi_loss = torch.cat(pred_flows_bi_loss)
-            pred_edges_bi_loss = torch.cat(pred_edges_bi_loss)
-        else:
-            pred_flows_bi, pred_edges_bi = self.flow_completion_net.forward_bidirect_flow(gt_flows_bi, flow_masks)
+        if self.training:
+            local_masks = flow_masks[:, :self.config.num_local_frames_propainter, ...].contiguous()
+            pred_flows_bi, pred_edges_bi = self.flow_completion_net.forward_bidirect_flow(gt_flows_bi, local_masks)
             _pred_flows_bi, _pred_edges_bi = pred_flows_bi, pred_edges_bi
             all_hidden_states = tuple(tensor.half() for tensor in _pred_flows_bi) + tuple(tensor.half() for tensor in _pred_edges_bi)
             pred_flows_bi_loss = pred_flows_bi
+            pred_flows_bi = self.flow_completion_net.combine_flow(gt_flows_bi, pred_flows_bi, local_masks)
 
-            pred_flows_bi = self.flow_completion_net.combine_flow(gt_flows_bi, pred_flows_bi, flow_masks)
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + tuple(tensor.half() for tensor in pred_flows_bi)
+        else:
+            flow_length = gt_flows_bi[0].size(1)
+            if flow_length > self.config.subvideo_length:
+                pred_flows_f, pred_flows_b, pred_flows_bi_loss, pred_edges_bi_loss= [], [], []
+                pad_len = 5
+                for f in range(0, flow_length, self.config.subvideo_length):
+                    s_f = max(0, f - pad_len)
+                    e_f = min(flow_length, f + self.config.subvideo_length + pad_len)
+                    pad_len_s = max(0, f) - s_f
+                    pad_len_e = e_f - min(flow_length, f + self.config.subvideo_length)
+                    pred_flows_bi_sub, pred_edges_bi = self.flow_completion_net.forward_bidirect_flow(
+                        (gt_flows_bi[0][:, s_f:e_f], gt_flows_bi[1][:, s_f:e_f]), 
+                        flow_masks[:, s_f:e_f+1])
+                    _pred_flows_bi_sub, _pred_edges_bi = pred_flows_bi_sub, pred_edges_bi
+                    if output_hidden_states:
+                        all_hidden_states = all_hidden_states + tuple(tensor.half() for tensor in _pred_flows_bi_sub) + tuple(tensor.half() for tensor in _pred_edges_bi)
 
-            torch.cuda.empty_cache()
+                    pred_flows_bi_loss.append(pred_flows_bi_sub)
+                    pred_edges_bi_loss.append(pred_edges_bi)
+                    pred_flows_bi_sub = self.flow_completion_net.combine_flow(
+                        (gt_flows_bi[0][:, s_f:e_f], gt_flows_bi[1][:, s_f:e_f]), 
+                        pred_flows_bi_sub, 
+                        flow_masks[:, s_f:e_f+1])
+
+                    pred_flows_f.append(pred_flows_bi_sub[0][:, pad_len_s:e_f-s_f-pad_len_e])
+                    pred_flows_b.append(pred_flows_bi_sub[1][:, pad_len_s:e_f-s_f-pad_len_e])
+
+                    if output_hidden_states:
+                        all_hidden_states = all_hidden_states + (pred_flows_bi_sub[0][:, pad_len_s:e_f-s_f-pad_len_e].half(),pred_flows_bi_sub[1][:, pad_len_s:e_f-s_f-pad_len_e].half(),)
+                    
+                    torch.cuda.empty_cache()
+                    
+                pred_flows_f = torch.cat(pred_flows_f, dim=1)
+                pred_flows_b = torch.cat(pred_flows_b, dim=1)
+                pred_flows_bi = (pred_flows_f, pred_flows_b)
+
+                pred_flows_bi_loss = torch.cat(pred_flows_bi_loss)
+                pred_edges_bi_loss = torch.cat(pred_edges_bi_loss)
+            else:
+                pred_flows_bi, pred_edges_bi = self.flow_completion_net.forward_bidirect_flow(gt_flows_bi, flow_masks)
+                _pred_flows_bi, _pred_edges_bi = pred_flows_bi, pred_edges_bi
+                all_hidden_states = tuple(tensor.half() for tensor in _pred_flows_bi) + tuple(tensor.half() for tensor in _pred_edges_bi)
+                pred_flows_bi_loss = pred_flows_bi
+
+                pred_flows_bi = self.flow_completion_net.combine_flow(gt_flows_bi, pred_flows_bi, flow_masks)
+
+                if output_hidden_states:
+                    all_hidden_states = all_hidden_states + tuple(tensor.half() for tensor in pred_flows_bi)
+
+                torch.cuda.empty_cache()
 
         return pred_flows_bi, pred_flows_bi_loss, pred_edges_bi, all_hidden_states
 
     def image_propagation(self,pixel_values,masks_dilated, pred_flows_bi,output_hidden_states: bool = False):
-        height, width = self.size
-        masked_frames = pixel_values * (1 - masks_dilated)
-        subvideo_length_img_prop = min(100, self.config.subvideo_length) # ensure a minimum of 100 frames for image propagation
-        if self.video_length > subvideo_length_img_prop:
-            all_hidden_states = () if output_hidden_states else None
-            updated_frames, updated_masks = [], []
-            pad_len = 10
-            for f in range(0, self.video_length, subvideo_length_img_prop):
-                s_f = max(0, f - pad_len)
-                e_f = min(self.video_length, f + subvideo_length_img_prop + pad_len)
-                pad_len_s = max(0, f) - s_f
-                pad_len_e = e_f - min(self.video_length, f + subvideo_length_img_prop)
-
-                batch_size, timesteps, _, _, _ = masks_dilated[:, s_f:e_f].size()
-                pred_flows_bi_sub = (pred_flows_bi[0][:, s_f:e_f-1], pred_flows_bi[1][:, s_f:e_f-1])
-                prop_imgs_sub, updated_local_masks_sub = self.inpaint_generator.img_propagation(masked_frames[:, s_f:e_f], 
-                                                                    pred_flows_bi_sub, 
-                                                                    masks_dilated[:, s_f:e_f], 
-                                                                    'nearest')
-                if output_hidden_states:
-                    all_hidden_states = all_hidden_states + (prop_imgs_sub,)
-                updated_frames_sub = pixel_values[:, s_f:e_f] * (1 - masks_dilated[:, s_f:e_f]) + \
-                                    prop_imgs_sub.view(batch_size, timesteps, 3, height, width) * masks_dilated[:, s_f:e_f]
-                updated_masks_sub = updated_local_masks_sub.view(batch_size, timesteps, 1, height, width)
-                
-                updated_frames.append(updated_frames_sub[:, pad_len_s:e_f-s_f-pad_len_e])
-                updated_masks.append(updated_masks_sub[:, pad_len_s:e_f-s_f-pad_len_e])
-                torch.cuda.empty_cache()
-                
-            updated_frames = torch.cat(updated_frames, dim=1)
-            updated_masks = torch.cat(updated_masks, dim=1)
-        else:
-            batch_size, timesteps, _, _, _ = masks_dilated.size()
-            prop_imgs, updated_local_masks = self.inpaint_generator.img_propagation(masked_frames, pred_flows_bi, masks_dilated, 'nearest')
+        if self.training:
+            batch_size, height, width = self.size[0],self.size[3], self.size[4]
+            gt_local_frames = pixel_values[:, :self.config.num_local_frames_propainter, ...]
+            local_masks = masks_dilated[:, :self.config.num_local_frames_propainter, ...].contiguous()
+            masked_frames = pixel_values * (1 - masks_dilated)
+            masked_local_frames = masked_frames[:, :self.config.num_local_frames_propainter, ...]
+            prop_imgs, updated_local_masks = self.inpaint_generator.img_propagation(masked_local_frames, pred_flows_bi, local_masks, interpolation=self.config.interp_mode)
             all_hidden_states = prop_imgs
             all_hidden_states = all_hidden_states.half()
-            updated_frames = pixel_values * (1 - masks_dilated) + prop_imgs.view(batch_size, timesteps, 3, height, width) * masks_dilated
-            updated_masks = updated_local_masks.view(batch_size, timesteps, 1, height, width)
-            torch.cuda.empty_cache()
+            updated_masks = masks_dilated.clone()
+            updated_masks[:, :self.config.num_local_frames_propainter, ...] = updated_local_masks.view(batch_size, self.config.num_local_frames_propainter, 1, height, width)
+            updated_frames = masked_frames.clone()
+            prop_local_frames = gt_local_frames * (1-local_masks) + prop_imgs.view(batch_size, self.config.num_local_frames_propainter, 3, height, width) * local_masks # merge
+            updated_frames[:, :self.config.num_local_frames_propainter, ...] = prop_local_frames
+
+        else:
+            height, width = self.size[3], self.size[4]
+            masked_frames = pixel_values * (1 - masks_dilated)
+            subvideo_length_img_prop = min(100, self.config.subvideo_length) # ensure a minimum of 100 frames for image propagation
+            if self.video_length > subvideo_length_img_prop:
+                all_hidden_states = () if output_hidden_states else None
+                updated_frames, updated_masks = [], []
+                pad_len = 10
+                for f in range(0, self.video_length, subvideo_length_img_prop):
+                    s_f = max(0, f - pad_len)
+                    e_f = min(self.video_length, f + subvideo_length_img_prop + pad_len)
+                    pad_len_s = max(0, f) - s_f
+                    pad_len_e = e_f - min(self.video_length, f + subvideo_length_img_prop)
+
+                    batch_size, timesteps, _, _, _ = masks_dilated[:, s_f:e_f].size()
+                    pred_flows_bi_sub = (pred_flows_bi[0][:, s_f:e_f-1], pred_flows_bi[1][:, s_f:e_f-1])
+                    prop_imgs_sub, updated_local_masks_sub = self.inpaint_generator.img_propagation(masked_frames[:, s_f:e_f], 
+                                                                        pred_flows_bi_sub, 
+                                                                        masks_dilated[:, s_f:e_f], 
+                                                                        'nearest')
+                    _prop_imgs_sub = prop_imgs_sub
+                    if output_hidden_states:
+                        all_hidden_states = all_hidden_states + (_prop_imgs_sub.half(),)
+                    updated_frames_sub = pixel_values[:, s_f:e_f] * (1 - masks_dilated[:, s_f:e_f]) + \
+                                        prop_imgs_sub.view(batch_size, timesteps, 3, height, width) * masks_dilated[:, s_f:e_f]
+                    updated_masks_sub = updated_local_masks_sub.view(batch_size, timesteps, 1, height, width)
+                    
+                    updated_frames.append(updated_frames_sub[:, pad_len_s:e_f-s_f-pad_len_e])
+                    updated_masks.append(updated_masks_sub[:, pad_len_s:e_f-s_f-pad_len_e])
+                    torch.cuda.empty_cache()
+                    
+                updated_frames = torch.cat(updated_frames, dim=1)
+                updated_masks = torch.cat(updated_masks, dim=1)
+            else:
+                batch_size, timesteps, _, _, _ = masks_dilated.size()
+                prop_imgs, updated_local_masks = self.inpaint_generator.img_propagation(masked_frames, pred_flows_bi, masks_dilated, 'nearest')
+                all_hidden_states = prop_imgs
+                all_hidden_states = all_hidden_states.half()
+                updated_frames = pixel_values * (1 - masks_dilated) + prop_imgs.view(batch_size, timesteps, 3, height, width) * masks_dilated
+                updated_masks = updated_local_masks.view(batch_size, timesteps, 1, height, width)
+                torch.cuda.empty_cache()
 
         return updated_frames,updated_masks, all_hidden_states
 
-    def feature_propagation(self,updated_frames,updated_masks,masks_dilated,pred_flows_bi,original_frames, output_attentions: bool = False,output_hidden_states: bool = False,return_dict: bool = True):
+    def feature_propagation(self,pixel_values, updated_frames,updated_masks,masks_dilated,pred_flows_bi,original_frames, output_attentions: bool = False,output_hidden_states: bool = False,return_dict: bool = True):
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
-        height, width = self.size
-        comp_frames = [None] * self.video_length
+        if self.training:
+            batch_size, _, num_channels, height, width = self.size
+            # ---- feature propagation + Transformer ----
+            inpaint_generator_outputs = self.inpaint_generator(updated_frames, pred_flows_bi, masks_dilated, updated_masks, self.config.num_local_frames_propainter)
+            pred_imgs  = inpaint_generator_outputs[0] if not return_dict else inpaint_generator_outputs.last_hidden_state
+            pred_imgs = pred_imgs.view(batch_size, -1, num_channels, height, width)
 
-        neighbor_stride = self.config.neighbor_length // 2
-        if self.video_length > self.config.subvideo_length:
-            ref_num = self.config.subvideo_length // self.config.ref_stride
+            _all_hidden_states = inpaint_generator_outputs[1:2] if not return_dict else inpaint_generator_outputs.hidden_states
+            _all_self_attentions = inpaint_generator_outputs[2:] if not return_dict else inpaint_generator_outputs.attentions
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (_all_hidden_states,)
+            if output_attentions:
+                all_self_attentions = all_self_attentions + (_all_self_attentions,)
+
+            pred_imgs_loss = pred_imgs
+            # get the local frames
+            comp_frames = pixel_values * (1. - masks_dilated) + pred_imgs * masks_dilated
+
         else:
-            ref_num = -1
+            height, width = self.size[3], self.size[4]
+            comp_frames = [None] * self.video_length
 
-        pred_imgs_loss = [None] * self.video_length
-        # ---- feature propagation + transformer ----
-        for f in range(0, self.video_length, neighbor_stride):
-            neighbor_ids = [
-                i for i in range(max(0, f - neighbor_stride),
-                                    min(self.video_length, f + neighbor_stride + 1))
-            ]
-            ref_ids = self._get_ref_index(f, neighbor_ids, self.video_length, self.config.ref_stride, ref_num)
-            selected_imgs = updated_frames[:, neighbor_ids + ref_ids, :, :, :]
-            selected_masks = masks_dilated[:, neighbor_ids + ref_ids, :, :, :]
-            selected_update_masks = updated_masks[:, neighbor_ids + ref_ids, :, :, :]
-            selected_pred_flows_bi = (pred_flows_bi[0][:, neighbor_ids[:-1], :, :, :], pred_flows_bi[1][:, neighbor_ids[:-1], :, :, :])
-            
-            with torch.no_grad():
+            neighbor_stride = self.config.neighbor_length // 2
+            if self.video_length > self.config.subvideo_length:
+                ref_num = self.config.subvideo_length // self.config.ref_stride
+            else:
+                ref_num = -1
+
+            pred_imgs_loss = [None] * self.video_length
+            # ---- feature propagation + transformer ----
+            for f in range(0, self.video_length, neighbor_stride):
+                neighbor_ids = [
+                    i for i in range(max(0, f - neighbor_stride),
+                                        min(self.video_length, f + neighbor_stride + 1))
+                ]
+                ref_ids = self._get_ref_index(f, neighbor_ids, self.video_length, self.config.ref_stride, ref_num)
+                selected_imgs = updated_frames[:, neighbor_ids + ref_ids, :, :, :]
+                selected_masks = masks_dilated[:, neighbor_ids + ref_ids, :, :, :]
+                selected_update_masks = updated_masks[:, neighbor_ids + ref_ids, :, :, :]
+                selected_pred_flows_bi = (pred_flows_bi[0][:, neighbor_ids[:-1], :, :, :], pred_flows_bi[1][:, neighbor_ids[:-1], :, :, :])
+                
                 # 1.0 indicates mask
                 l_t = len(neighbor_ids)
                 
@@ -3200,23 +3261,22 @@ class ProPainterModel(ProPainterPreTrainedModel):
         
         losses = ProPainterLosses(self.config)
 
-        self.size = size
-        
+        self.size = pixel_values.size()
         self.video_length = pixel_values.size(1)
-        with torch.no_grad():
-            gt_flows_bi, _all_hiddens_states = self.compute_flow(pixel_values, output_hidden_states = output_hidden_states)
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (_all_hiddens_states,)
-            
-            pred_flows_bi, pred_flows_bi_loss, pred_edges_bi, _all_hiddens_states = self.complete_flow(gt_flows_bi,flow_masks, output_hidden_states = output_hidden_states)
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (_all_hiddens_states,)
 
-            updated_frames,updated_masks, _all_hiddens_states = self.image_propagation(pixel_values,masks_dilated,pred_flows_bi, output_hidden_states = output_hidden_states)
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (_all_hiddens_states,)
+        gt_flows_bi, _all_hiddens_states = self.compute_flow(pixel_values, output_hidden_states = output_hidden_states)
+        if output_hidden_states:
+            all_hidden_states = all_hidden_states + (_all_hiddens_states,)
+        
+        pred_flows_bi, pred_flows_bi_loss, pred_edges_bi, _all_hiddens_states = self.complete_flow(gt_flows_bi,flow_masks, output_hidden_states = output_hidden_states)
+        if output_hidden_states:
+            all_hidden_states = all_hidden_states + (_all_hiddens_states,)
+
+        updated_frames,updated_masks, _all_hiddens_states = self.image_propagation(pixel_values,masks_dilated,pred_flows_bi, output_hidden_states = output_hidden_states)
+        if output_hidden_states:
+            all_hidden_states = all_hidden_states + (_all_hiddens_states,)
                 
-        comp_frames, pred_imgs_loss, _all_hiddens_states, _all_self_attentions = self.feature_propagation(updated_frames, updated_masks, masks_dilated, pred_flows_bi, pixel_values_inp, output_attentions = output_attentions, output_hidden_states = output_hidden_states, return_dict = return_dict)
+        comp_frames, pred_imgs_loss, _all_hiddens_states, _all_self_attentions = self.feature_propagation(pixel_values, updated_frames, updated_masks, masks_dilated, pred_flows_bi, pixel_values_inp, output_attentions = output_attentions, output_hidden_states = output_hidden_states, return_dict = return_dict)
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (_all_hiddens_states,)
@@ -3225,7 +3285,6 @@ class ProPainterModel(ProPainterPreTrainedModel):
 
         pred_imgs_loss = torch.tensor(np.array(pred_imgs_loss)).permute(0, 3, 1, 2).unsqueeze(0).to(masks_dilated.device)
         comp_frames_loss = torch.tensor(np.array(comp_frames)).permute(3,0,1,2).to(masks_dilated.device).to(torch.float32)
-        #ADD LOCAL FRAMES and training mode
         gen_loss, dis_loss, flow_complete_loss = losses.calculate_losses(pred_imgs_loss,masks_dilated, pixel_values, comp_frames_loss,self.discriminator,pred_flows_bi_loss,gt_flows_bi,flow_masks,pred_edges_bi)
 
         if not return_dict:
