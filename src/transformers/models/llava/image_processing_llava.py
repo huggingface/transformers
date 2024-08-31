@@ -17,14 +17,11 @@
 from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
-from PIL import Image
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import (
-    PaddingMode,
     convert_to_rgb,
     get_resize_output_image_size,
-    pad,
     resize,
     to_channel_dimension_format,
 )
@@ -157,25 +154,6 @@ class LlavaImageProcessor(BaseImageProcessor):
             # `shortest_edge` key.
             delattr(self, "use_square_size")
 
-    def pad_to_square_original(
-        self, image: Image.Image, background_color: Union[int, Tuple[int, int, int]] = 0
-    ) -> Image.Image:
-        """
-        Pads an image to make it square.
-        """
-        print("Image size:", image.size)
-        width, height = image.size
-        if width == height:
-            return image
-        elif width > height:
-            result = Image.new(image.mode, (width, width), background_color)
-            result.paste(image, (0, (width - height) // 2))
-            return result
-        else:
-            result = Image.new(image.mode, (height, height), background_color)
-            result.paste(image, ((height - width) // 2, 0))
-            return result
-
     def pad_to_square(
         self,
         image: np.array,
@@ -199,27 +177,42 @@ class LlavaImageProcessor(BaseImageProcessor):
         Returns:
             `np.ndarray`: The padded image.
         """
-        height, width = get_image_size(image, input_data_format)
+        h, w = get_image_size(image, input_data_format)
+        c = image.shape[0] if input_data_format == ChannelDimension.FIRST else image.shape[-1]
 
-        if height == width:
+        if h == w:
             return image
 
-        max_dim = max(height, width)
-        pad_height = max_dim - height
-        pad_width = max_dim - width
+        max_dim = max(h, w)
 
-        padding = (
-            (pad_height // 2, pad_height - pad_height // 2),
-            (pad_width // 2, pad_width - pad_width // 2),
-        )
+        # Ensure background_color is the correct shape
+        if isinstance(background_color, (int, float)):
+            background_color = [background_color] * c
+        elif len(background_color) != c:
+            raise ValueError(f"background_color must have {c} elements to match the number of channels")
 
-        return pad(
-            image=image,
-            padding=padding,
-            mode=PaddingMode.CONSTANT,
-            constant_values=background_color,
-            input_data_format=input_data_format,
-        )
+        if input_data_format == ChannelDimension.FIRST:
+            result = np.zeros((c, max_dim, max_dim), dtype=image.dtype)
+            for i, color in enumerate(background_color):
+                result[i, :, :] = color
+            if w > h:
+                start = (max_dim - h) // 2
+                result[:, start : start + h, :] = image
+            else:
+                start = (max_dim - w) // 2
+                result[:, :, start : start + w] = image
+        else:
+            result = np.zeros((max_dim, max_dim, c), dtype=image.dtype)
+            for i, color in enumerate(background_color):
+                result[:, :, i] = color
+            if w > h:
+                start = (max_dim - h) // 2
+                result[start : start + h, :, :] = image
+            else:
+                start = (max_dim - w) // 2
+                result[:, start : start + w, :] = image
+
+        return result
 
     def resize(
         self,
@@ -368,7 +361,6 @@ class LlavaImageProcessor(BaseImageProcessor):
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
         validate_preprocess_arguments(
-            do_pad=do_pad,
             do_rescale=do_rescale,
             rescale_factor=rescale_factor,
             do_normalize=do_normalize,
@@ -397,6 +389,10 @@ class LlavaImageProcessor(BaseImageProcessor):
             # We assume that all images have the same channel dimension format.
             input_data_format = infer_channel_dimension_format(images[0])
 
+        print("Input data format:", input_data_format)
+        for image in images:
+            print(image.shape)
+
         if do_pad:
             images = [
                 self.pad_to_square(
@@ -406,6 +402,10 @@ class LlavaImageProcessor(BaseImageProcessor):
                 )
                 for image in images
             ]
+
+        print("After padding:")
+        for image in images:
+            print(image.shape)
 
         if do_resize:
             images = [

@@ -15,6 +15,9 @@
 
 
 import unittest
+from typing import Tuple, Union
+
+import numpy as np
 
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_vision_available
@@ -23,6 +26,8 @@ from ...test_image_processing_common import ImageProcessingTestMixin, prepare_im
 
 
 if is_vision_available():
+    from PIL import Image
+
     from transformers import LlavaImageProcessor
 
 
@@ -128,3 +133,31 @@ class LlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         image_processor = self.image_processing_class.from_dict(self.image_processor_dict, size=42, crop_size=84)
         self.assertEqual(image_processor.size, {"shortest_edge": 42})
         self.assertEqual(image_processor.crop_size, {"height": 84, "width": 84})
+
+    # Ignore copy
+    def test_padding(self):
+        # taken from original implementation
+        def pad_to_square_original(
+            image: Image.Image, background_color: Union[int, Tuple[int, int, int]] = 0
+        ) -> Image.Image:
+            width, height = image.size
+            if width == height:
+                return image
+            elif width > height:
+                result = Image.new(image.mode, (width, width), background_color)
+                result.paste(image, (0, (width - height) // 2))
+                return result
+            else:
+                result = Image.new(image.mode, (height, height), background_color)
+                result.paste(image, ((height - width) // 2, 0))
+                return result
+
+        image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
+
+        # create random numpy tensors
+        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
+        for image in image_inputs:
+            padded_image = image_processor.pad_to_square(image)
+            padded_image_original = pad_to_square_original(image)
+
+            self.assertTrue(np.assert_array_equal(padded_image, padded_image_original))
