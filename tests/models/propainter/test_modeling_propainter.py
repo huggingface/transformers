@@ -86,8 +86,8 @@ class ProPainterModelTester:
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_frames, 3, self.image_size, self.image_size])
 
-        pixel_values_inp = pixel_values.cpu.numpy()
-        pixel_values_inp = [[pixel_values_inp[b, t].transpose(1, 2, 0) for t in range(pixel_values_inp.shape[1])] for b in range(pixel_values_inp.shape[0])]
+        pixel_values_inp = pixel_values.cpu.numpy().astype(np.uint8)[0]
+        pixel_values_inp = [pixel_values_inp[t].transpose(1, 2, 0) for t in range(pixel_values_inp.shape[0])]
 
         masks = ids_tensor([self.batch_size, self.num_frames, 1, self.image_size, self.image_size], vocab_size=2).float()
         flow_masks = masks_dilated = masks
