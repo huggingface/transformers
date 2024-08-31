@@ -14,7 +14,7 @@
 # limitations under the License.
 """TimesFM model configuration"""
 
-from typing import Mapping
+from typing import List, Mapping
 
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxSeq2SeqConfigWithPast
@@ -35,12 +35,24 @@ class TimesFMConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Arguments:
+        patch_len (`int`, *optional*, defaults to 32):
+            The length of each patch in the sequence.
+        horizon_len (`int`, *optional*, defaults to 128):
+            The length of the prediction horizon.
+        quantiles (`List[float]`, *optional*, defaults to `[0.1, 0.25, 0.5, 0.75, 0.9]`):
+            The quantiles to predict.
+        pad_val (`float`, *optional*, defaults to 1123581321.0):
+            The value used to pad the predictions.
+        tolerance (`float`, *optional*, defaults to 1e-6):
+            The tolerance for the quantile loss.
+        freq_size (`int`, *optional*, defaults to 3):
+            The number of frequency embeddings.
         d_model (`int`, *optional*, defaults to 512):
             Size of the encoder layers and the pooler layer.
         d_kv (`int`, *optional*, defaults to 64):
             Size of the key, query, value projections per attention head. The `inner_dim` of the projection layer will
             be defined as `num_heads * d_kv`.
-        d_ff (`int`, *optional*, defaults to 2048):
+        d_ff (`int`, *optional*, defaults to 1280):
             Size of the intermediate feed forward layer in each `TimesFMBlock`.
         num_layers (`int`, *optional*, defaults to 6):
             Number of hidden layers in the Transformer encoder.
@@ -74,6 +86,12 @@ class TimesFMConfig(PretrainedConfig):
 
     def __init__(
         self,
+        patch_len: int = 32,
+        horizon_len: int = 128,
+        quantiles: List[float] = [0.1, 0.25, 0.5, 0.75, 0.9],
+        pad_val: float = 1123581321.0,
+        tolerance: float = 1e-6,
+        freq_size=3,
         d_model=1280,
         d_kv=80,
         d_ff=1280,
@@ -93,6 +111,12 @@ class TimesFMConfig(PretrainedConfig):
         classifier_dropout=0.0,
         **kwargs,
     ):
+        self.patch_len = patch_len
+        self.horizon_len = horizon_len
+        self.quantiles = quantiles
+        self.pad_val = pad_val
+        self.tolerance = tolerance
+        self.freq_size = freq_size
         self.d_model = d_model
         self.d_kv = d_kv
         self.d_ff = d_ff

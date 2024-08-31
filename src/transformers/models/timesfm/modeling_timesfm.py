@@ -271,6 +271,24 @@ except Exception:
 ALL_LAYERNORM_LAYERS.append(TimesFMLayerNorm)
 
 
+class TimesFMResidualBlock(nn.Module):
+    def __init__(self, input_dims, hidden_dims, output_dims, dropout=0.1):
+        super().__init__()
+
+        self.hidden_layer = nn.Sequential(nn.Linear(input_dims, hidden_dims), nn.SiLU())
+        self.output_layer = nn.Linear(hidden_dims, output_dims)
+        self.residual_layer = nn.Linear(input_dims, output_dims)
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, inputs):
+        hidden = self.hidden_layer(inputs)
+        output = self.output_layer(hidden)
+        output = self.dropout(output)
+        residual = self.residual_layer(inputs)
+
+        return output + residual
+
+
 class TimesFMPositionalEmbedding(nn.Module):
     """Generates position embedding for a given 1-d sequence.
 
@@ -932,7 +950,6 @@ class TimesFMPreTrainedModel(PreTrainedModel):
         return shifted_input_ids
 
 
-# Copied from transformers.models.t5.modeling_t5.T5Stack with T5->TimesFM
 class TimesFMStack(TimesFMPreTrainedModel):
     def __init__(self, config, embed_tokens=None):
         super().__init__(config)
@@ -943,7 +960,6 @@ class TimesFMStack(TimesFMPreTrainedModel):
         self.block = nn.ModuleList(
             [TimesFMBlock(config, has_relative_attention_bias=bool(i == 0)) for i in range(config.num_layers)]
         )
-        self.final_layer_norm = TimesFMLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
         # Initialize weights and apply final processing
@@ -1182,7 +1198,6 @@ class TimesFMStack(TimesFMPreTrainedModel):
                     if i == v[-1] and "cuda:" + str(k) != self.last_device:
                         hidden_states = hidden_states.to("cuda:" + str(k + 1))
 
-        hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
         # Add last layer
@@ -1382,7 +1397,13 @@ class TimesFMModel(TimesFMPreTrainedModel):
 
     def __init__(self, config: TimesFMConfig):
         super().__init__(config)
-        self.shared = nn.Embedding(config.vocab_size, config.d_model)
+        self.freq_emb = nn.Embedding(config.freq_size, config.d_model)
+        self.horizon_ff_layer = TimesFMResidualBlock(
+            input_dims=config.hidden_size,
+            output_dims=config.horizon_len * (1 + len(config.quantiles)),
+            hidden_dims=config.d_ff,
+            dropout=config.dropout_rate,
+        )
 
         encoder_config = copy.deepcopy(config)
         encoder_config.is_decoder = False
@@ -1909,7 +1930,13 @@ class TimesFMEncoderModel(TimesFMPreTrainedModel):
 
     def __init__(self, config: TimesFMConfig):
         super().__init__(config)
-        self.shared = nn.Embedding(config.vocab_size, config.d_model)
+        self.freq_emb = nn.Embedding(config.freq_size, config.d_model)
+        self.horizon_ff_layer = TimesFMResidualBlock(
+            input_dims=config.d_model,
+            output_dims=config.horizon_len * (1 + len(config.quantiles)),
+            hidden_dims=config.d_ff,
+            dropout=config.dropout_rate,
+        )
 
         encoder_config = copy.deepcopy(config)
         encoder_config.use_cache = False
