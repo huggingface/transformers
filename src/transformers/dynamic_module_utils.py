@@ -194,13 +194,21 @@ def check_imports(filename: Union[str, os.PathLike]) -> List[str]:
     return get_relative_imports(filename)
 
 
-def get_class_in_module(class_name: str, module_path: Union[str, os.PathLike]) -> typing.Type:
+def get_class_in_module(
+    class_name: str,
+    module_path: Union[str, os.PathLike],
+    *,
+    force_reload: bool = False,
+) -> typing.Type:
     """
     Import a module on the cache directory for modules and extract a class from it.
 
     Args:
         class_name (`str`): The name of the class to import.
         module_path (`str` or `os.PathLike`): The path to the module to import.
+        force_reload (`bool`, *optional*, defaults to `False`):
+            Whether to reload the dynamic module from file if it already exists in `sys.modules`.
+            Otherwise, the module is only reloaded if the file has changed.
 
     Returns:
         `typing.Type`: The class looked for.
@@ -211,6 +219,9 @@ def get_class_in_module(class_name: str, module_path: Union[str, os.PathLike]) -
     name = name.replace(os.path.sep, ".")
     module_file = Path(HF_MODULES_CACHE) / module_path
     with _HF_REMOTE_CODE_LOCK:
+        if force_reload:
+            sys.modules.pop(name, None)
+            importlib.invalidate_caches()
         module = sys.modules.get(name)
         module_spec = importlib.util.spec_from_file_location(name, location=module_file)
 
@@ -218,12 +229,12 @@ def get_class_in_module(class_name: str, module_path: Union[str, os.PathLike]) -
         module_files = [module_file] + sorted(map(Path, get_relative_import_files(module_file)))
         module_hash = hashlib.sha256(b"".join(bytes(f) + f.read_bytes() for f in module_files)).hexdigest()
 
-        if module is None or force_reload:
+        if module is None:
             module = importlib.util.module_from_spec(module_spec)
             # insert it into sys.modules before any loading begins
             sys.modules[name] = module
-        # reload in both cases
-        if getattr(module, "__transformers_module_hash__", "") != module_hash or force_reload:
+        # reload in both cases, unless the module is already imported and hash hint
+        if getattr(module, "__transformers_module_hash__", "") != module_hash:
             module_spec.loader.exec_module(module)
             module.__transformers_module_hash__ = module_hash
         return getattr(module, class_name)
@@ -527,7 +538,7 @@ def get_class_from_dynamic_module(
         local_files_only=local_files_only,
         repo_type=repo_type,
     )
-    return get_class_in_module(class_name, final_module)
+    return get_class_in_module(class_name, final_module, force_reload=force_download)
 
 
 def custom_object_save(obj: Any, folder: Union[str, os.PathLike], config: Optional[Dict] = None) -> List[str]:
