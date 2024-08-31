@@ -162,7 +162,7 @@ class LlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
             np.testing.assert_allclose(padded_image, padded_image_original)
 
-    @unittest.skip(reason="LLaVa doesn't treat 4 channel PIL and numpy consistently yet")
+    @unittest.skip(reason="LLaVa does not support 4 channel images yet")
     # Ignore copy
     def test_call_numpy_4_channels(self):
         pass
