@@ -103,11 +103,11 @@ class ProPainterModelTester:
             num_attention_heads=self.num_attention_heads,
         )
 
-    def create_and_check_model(self, config, pixel_values_inp, pixel_values, flow_masks, masks_dilated, size):
+    def create_and_check_model(self, config, pixel_values_inp, pixel_values, flow_masks, masks_dilated):
         model = ProPainterModel(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(pixel_values_inp, pixel_values, flow_masks, masks_dilated, size)
+        result = model(pixel_values_inp, pixel_values, flow_masks, masks_dilated)
         self.parent.assertEqual(result.reconstruction.shape, (self.batch_size, self.num_frames, self.image_size, self.image_size, 3))
 
     def prepare_config_and_inputs_for_common(self):
@@ -118,9 +118,8 @@ class ProPainterModelTester:
             pixel_values,
             flow_masks,
             masks_dilated,
-            size,
         ) = config_and_inputs
-        inputs_dict = {"pixel_values_inp": pixel_values_inp, "pixel_values": pixel_values, "flow_masks": flow_masks, "masks_dilated": masks_dilated, "size": size}
+        inputs_dict = {"pixel_values_inp": pixel_values_inp, "pixel_values": pixel_values, "flow_masks": flow_masks, "masks_dilated": masks_dilated}
         return config, inputs_dict
 
 
