@@ -136,6 +136,10 @@ class GenerationConfigTest(unittest.TestCase):
             GenerationConfig(do_sample=False, temperature=0.5)
         self.assertEqual(len(captured_warnings), 1)
 
+        with warnings.catch_warnings(record=True) as captured_warnings:
+            GenerationConfig(return_dict_in_generate=False, output_scores=True)
+        self.assertEqual(len(captured_warnings), 1)
+
         # Expanding on the case above, we can update a bad configuration to get rid of the warning. Ideally,
         # that is done by unsetting the parameter (i.e. setting it to None)
         generation_config_bad_temperature = GenerationConfig(do_sample=False, temperature=0.5)
