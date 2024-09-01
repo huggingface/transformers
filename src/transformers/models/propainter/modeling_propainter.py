@@ -2949,6 +2949,14 @@ PROPAINTER_INPUTS_DOCSTRING = r"""
     PROPAINTER_START_DOCSTRING,
 )
 class ProPainterModel(ProPainterPreTrainedModel):
+    _tied_weights_keys = [
+    'optical_flow_model.context_network.resblocks.2.norm3', 
+    'optical_flow_model.context_network.resblocks.2.downsample',
+    'optical_flow_model.context_network.resblocks.4.norm3', 
+    'optical_flow_model.context_network.resblocks.4.downsample',
+]
+
+
     def __init__(self, config: ProPainterConfig):
         super().__init__(config)
         self.config = config

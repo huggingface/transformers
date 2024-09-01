@@ -86,18 +86,17 @@ class ProPainterModelTester:
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_frames, 3, self.image_size, self.image_size])
 
-        pixel_values_inp = pixel_values.cpu.numpy().astype(np.uint8)[0]
+        pixel_values_inp = pixel_values.cpu().numpy().astype(np.uint8)[0]
         pixel_values_inp = [pixel_values_inp[t].transpose(1, 2, 0) for t in range(pixel_values_inp.shape[0])]
 
         masks = ids_tensor([self.batch_size, self.num_frames, 1, self.image_size, self.image_size], vocab_size=2).float()
         flow_masks = masks_dilated = masks
         config = self.get_config()
 
-        return config, pixel_values_inp, pixel_values, flow_masks, masks_dilated, (self.image_size, self.image_size)
+        return config, pixel_values_inp, pixel_values, flow_masks, masks_dilated
 
     def get_config(self):
         return ProPainterConfig(
-            num_channels=self.num_channels,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
@@ -137,6 +136,7 @@ class ProPainterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         if is_torch_available()
         else ()
     )
+    pipeline_model_mapping = {"image-to-image": ProPainterModel} if is_torch_available() else {}
     fx_compatible = False
 
     test_pruning = False
