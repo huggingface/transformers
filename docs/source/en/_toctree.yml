@@ -94,6 +94,8 @@
       title: Text to speech
     - local: tasks/image_text_to_text
       title: Image-text-to-text
+    - local: tasks/video_text_to_text
+      title: Video-text-to-text
     title: Multimodal
   - isExpanded: false
     sections:
