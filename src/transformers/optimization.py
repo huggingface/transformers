@@ -396,15 +396,18 @@ def _get_cosine_with_min_lr_schedule_with_warmup_lr_rate_lambda(
     min_lr_rate: float = 0.0,
     warmup_lr_rate: float = None,
 ):
+    current_step = float(current_step)
+    num_warmup_steps = float(num_warmup_steps)
+    num_training_steps = float(num_training_steps)
+    
     if current_step < num_warmup_steps:
         if warmup_lr_rate is None:
-            return float(current_step + 1) / float(max(1, num_warmup_steps))
+            return (current_step + 1.) / max(1., num_warmup_steps)
         else:
-            return float(warmup_lr_rate) + float(1.0 - warmup_lr_rate) * float(current_step) / float(
-                max(1, num_warmup_steps - 1)
-            )
-    progress = float(current_step - num_warmup_steps + 1) / float(max(1, num_training_steps - num_warmup_steps))
-    factor = 0.5 * (1.0 + math.cos(math.pi * float(num_cycles) * 2.0 * progress))
+            warmup_lr_rate = float(warmup_lr_rate)
+            return warmup_lr_rate + (1.0 - warmup_lr_rate) * (current_step) / (max(1, num_warmup_steps - 1)
+    progress = (current_step - num_warmup_steps + 1.) / (max(1., num_training_steps - num_warmup_steps))
+    factor = 0.5 * (1.0 + math.cos(math.pi * num_cycles * 2.0 * progress))
     factor = factor * (1 - min_lr_rate) + min_lr_rate
     return max(0, factor)
 
