@@ -22,7 +22,7 @@ The abstract from the paper is the following:
 
 *We present ImageBind, an approach to learn a joint embedding across six different modalities - images, text, audio, depth, thermal, and IMU data. We show that all combinations of paired data are not necessary to train such a joint embedding, and only image-paired data is sufficient to bind the modalities together. ImageBind can leverage recent large scale vision-language models, and extends their zero-shot capabilities to new modalities just by using their natural pairing with images. It enables novel emergent applications 'out-of-the-box' including cross-modal retrieval, composing modalities with arithmetic, cross-modal detection and generation. The emergent capabilities improve with the strength of the image encoder and we set a new state-of-the-art on emergent zero-shot recognition tasks across modalities, outperforming specialist supervised models. Finally, we show strong few-shot recognition results outperforming prior work, and that ImageBind serves as a new way to evaluate vision models for visual and non-visual tasks.*
 
-This model was contributed by [EduardoPacheco](https://huggingface.co/EduardoPacheco) and [dg845](https://huggingface.co/dg845) and [shehan97](https://huggingface.co/shehan97).
+This model was contributed by [EduardoPacheco](https://huggingface.co/EduardoPacheco) and [ruffy369](https://huggingface.co/ruffy369) and [dg845](https://huggingface.co/dg845) and [shehan97](https://huggingface.co/shehan97).
 The original code can be found [here](https://github.com/facebookresearch/ImageBind).
 
 ## Usage tips
