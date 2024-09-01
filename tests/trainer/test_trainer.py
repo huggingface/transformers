@@ -62,7 +62,9 @@ from transformers.testing_utils import (
     require_bitsandbytes,
     require_deepspeed,
     require_galore_torch,
+    require_grokadamw,
     require_intel_extension_for_pytorch,
+    require_liger_kernel,
     require_lomo,
     require_optuna,
     require_peft,
@@ -98,6 +100,7 @@ from transformers.utils import (
     is_apex_available,
     is_bitsandbytes_available,
     is_safetensors_available,
+    is_torchao_available,
     is_torchdistx_available,
 )
 from transformers.utils.hp_naming import TrialShortNamer
@@ -1323,6 +1326,42 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertEqual(first_dataloader, first_dataloader_repeated)
         self.assertEqual(second_dataloader, second_dataloader_repeated)
 
+    @require_liger_kernel
+    def test_use_liger_kernel_patching(self):
+        # Test that the model code actually gets patched with Liger kernel
+        from liger_kernel.transformers.rms_norm import LigerRMSNorm
+
+        from transformers.models.llama import modeling_llama
+
+        config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
+        tiny_llama = LlamaForCausalLM(config)
+
+        args = TrainingArguments(
+            "./test",
+            use_liger_kernel=True,
+        )
+        Trainer(tiny_llama, args)
+
+        # Check that one of the Llama model layers has been correctly patched with Liger kernel
+        self.assertEqual(modeling_llama.LlamaRMSNorm, LigerRMSNorm)
+
+    @require_liger_kernel
+    @require_torch_gpu
+    def test_use_liger_kernel_trainer(self):
+        # Check that trainer still works with liger kernel applied
+        config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
+        tiny_llama = LlamaForCausalLM(config)
+
+        x = torch.randint(0, 100, (128,))
+        train_dataset = RepeatDataset(x)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            args = TrainingArguments(tmpdir, learning_rate=1e-2, logging_steps=5, max_steps=20, use_liger_kernel=True)
+            trainer = Trainer(tiny_llama, args, train_dataset=train_dataset)
+
+            # Check this works
+            _ = trainer.train()
+
     @require_lomo
     @require_torch_gpu
     def test_lomo(self):
@@ -1360,6 +1399,28 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 learning_rate=1e-9,
                 logging_steps=5,
                 optim="adalomo",
+            )
+            trainer = Trainer(tiny_llama, args, train_dataset=train_dataset)
+
+            # Check this works
+            _ = trainer.train()
+
+    @require_grokadamw
+    @require_torch_gpu
+    def test_grokadamw():
+        config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
+        tiny_llama = LlamaForCausalLM(config)
+        x = torch.randint(0, 100, (128,))
+        train_dataset = RepeatDataset(x)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Trainer without inf/nan filter
+            args = TrainingArguments(
+                tmpdir,
+                learning_rate=2e-5,
+                logging_steps=5,
+                optim="grokadamw",
+                max_steps=20,
             )
             trainer = Trainer(tiny_llama, args, train_dataset=train_dataset)
 
@@ -3739,21 +3800,24 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
 
     def test_push_to_hub_with_saves_each_epoch(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
-            trainer = get_regression_trainer(
-                output_dir=os.path.join(tmp_dir, "test-trainer-epoch"),
-                push_to_hub=True,
-                hub_token=self._token,
-                # To avoid any flakiness if the training goes faster than the uploads.
-                hub_always_push=True,
-                save_strategy="epoch",
-            )
-            trainer.train()
+            with self.assertLogs(level="WARNING") as logs:
+                trainer = get_regression_trainer(
+                    output_dir=os.path.join(tmp_dir, "test-trainer-epoch"),
+                    push_to_hub=True,
+                    hub_token=self._token,
+                    # To avoid any flakiness if the training goes faster than the uploads.
+                    hub_always_push=True,
+                    save_strategy="epoch",
+                )
+                trainer.train()
 
         commits = list_repo_commits(f"{USER}/test-trainer-epoch", token=self._token)
         commits = [c.title for c in commits]
         self.assertIn("initial commit", commits)
-        for i in range(1, 4):
-            self.assertIn(f"Training in progress, epoch {i}", commits)
+        self.assertIn("Training in progress, epoch 1", commits)
+        self.assertIn("Training in progress, epoch 2", commits)
+        # Epochs 3 and 4 are not guaranteed to be present (empty commits)
+        self.assertTrue(any("Skipping to prevent empty commit." in record.message for record in logs.records))
 
     def test_push_to_hub_with_saves_each_n_steps(self):
         num_gpus = max(1, backend_device_count(torch_device))
@@ -3761,25 +3825,35 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
             self.skipTest(reason="More than 2 GPUs available")
 
         with tempfile.TemporaryDirectory() as tmp_dir:
-            trainer = get_regression_trainer(
-                output_dir=os.path.join(tmp_dir, "test-trainer-step"),
-                push_to_hub=True,
-                hub_token=self._token,
-                # To avoid any flakiness if the training goes faster than the uploads.
-                hub_always_push=True,
-                save_strategy="steps",
-                save_steps=5,
-            )
-            trainer.train()
+            with self.assertLogs(level="WARNING") as logs:
+                trainer = get_regression_trainer(
+                    output_dir=os.path.join(tmp_dir, "test-trainer-step"),
+                    push_to_hub=True,
+                    hub_token=self._token,
+                    # To avoid any flakiness if the training goes faster than the uploads.
+                    hub_always_push=True,
+                    save_strategy="steps",
+                    save_steps=5,
+                )
+                trainer.train()
 
         commits = list_repo_commits(f"{USER}/test-trainer-step", token=self._token)
         commits = [c.title for c in commits]
         self.assertIn("initial commit", commits)
 
+        # Some commits are skipped if nothing has changed
+        # We expect 1 commit per 5 epochs + 1 commit at the end
+        nb_empty_commits = len(
+            [record for record in logs.records if "Skipping to prevent empty commit." in record.message]
+        )
+        nb_epoch_commits = len([commit for commit in commits if "Training in progress, step" in commit])
+
         # max_steps depend on the number of available GPUs
         max_steps = math.ceil(trainer.args.num_train_epochs * len(trainer.get_train_dataloader()))
-        for i in range(5, max_steps, 5):
-            self.assertIn(f"Training in progress, step {i}", commits)
+        nb_expected_commits = len(range(5, max_steps, 5))
+
+        # '>=' since final commit might be an empty commit as well (not deterministic)
+        self.assertGreaterEqual(nb_empty_commits + nb_epoch_commits, nb_expected_commits)
 
     @require_tensorboard
     def test_push_to_hub_with_tensorboard_logs(self):
@@ -4172,6 +4246,16 @@ if is_torch_available():
                 TrainingArguments(optim=OptimizerNames.ADAMW_ANYPRECISION, output_dir="None"),
                 torchdistx.optimizers.AnyPrecisionAdamW,
                 dict(default_adam_kwargs, **default_anyprecision_kwargs),
+            )
+        )
+    if is_torchao_available():
+        import torchao
+
+        optim_test_params.append(
+            (
+                TrainingArguments(optim=OptimizerNames.ADAMW_TORCH_4BIT, output_dir="None"),
+                torchao.prototype.low_bit_optim.AdamW4bit,
+                default_adam_kwargs,
             )
         )
 

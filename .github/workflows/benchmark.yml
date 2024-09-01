@@ -31,12 +31,12 @@ jobs:
         if: github.event_name == 'schedule'
         working-directory: /transformers
         run: |
-          python3 -m pip install optimum-benchmark>=0.2.0
+          python3 -m pip install optimum-benchmark>=0.3.0
           HF_TOKEN=${{ secrets.TRANSFORMERS_BENCHMARK_TOKEN }} python3 benchmark/benchmark.py --repo_id hf-internal-testing/benchmark_results --path_in_repo $(date +'%Y-%m-%d') --config-dir benchmark/config --config-name generation --commit=${{ github.sha }} backend.model=google/gemma-2b backend.cache_implementation=null,static backend.torch_compile=false,true --multirun
 
       - name: Benchmark (merged to main event)
         if: github.event_name == 'push' && github.ref_name == 'main'
         working-directory: /transformers
         run: |
-          python3 -m pip install optimum-benchmark>=0.2.0
+          python3 -m pip install optimum-benchmark>=0.3.0
           HF_TOKEN=${{ secrets.TRANSFORMERS_BENCHMARK_TOKEN }} python3 benchmark/benchmark.py --repo_id hf-internal-testing/benchmark_results_merge_event --path_in_repo $(date +'%Y-%m-%d') --config-dir benchmark/config --config-name generation --commit=${{ github.sha }} backend.model=google/gemma-2b backend.cache_implementation=null,static backend.torch_compile=false,true --multirun

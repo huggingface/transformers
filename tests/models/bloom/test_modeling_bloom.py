@@ -344,7 +344,7 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     fx_compatible = True
     test_missing_keys = False
     test_pruning = False
-    test_torchscript = True  # torch.autograd functions seems to be not supported
+    test_torchscript = True  # torch.autograd functions seems not to be supported
 
     def setUp(self):
         self.model_tester = BloomModelTester(self)

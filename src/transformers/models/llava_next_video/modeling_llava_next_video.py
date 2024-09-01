@@ -66,12 +66,12 @@ def get_anyres_image_grid_shape(image_size, grid_pinpoints, patch_size):
         tuple: The shape of the image patch grid in the format (width, height).
     """
     if not isinstance(grid_pinpoints, list):
-        raise ValueError("grid_pinpoints should be a list of tuples or lists")
+        raise TypeError("grid_pinpoints should be a list of tuples or lists")
 
     # ! VERY IMPORTANT if image_size is tensor, must convert to into tuple, otherwise it will cause wrong calculate
     if not isinstance(image_size, (list, tuple)):
         if not isinstance(image_size, (torch.Tensor, np.ndarray)):
-            raise ValueError(
+            raise TypeError(
                 f"image_size invalid type: {type(image_size)} not valid, should be either list, tuple, np.ndarray or tensor"
             )
         image_size = image_size.tolist()
@@ -85,7 +85,7 @@ def image_size_to_num_patches(image_size, grid_pinpoints, patch_size: int):
     Calculate the number of patches after the preprocessing for images of any resolution.
 
     Args:
-        image_size (`Union[torch.LongTensor, np.ndarray, Tuple[int, int]):
+        image_size (`torch.LongTensor` or `np.ndarray` or `Tuple[int, int]`):
             The size of the input image in the format (height, width). ?
         grid_pinpoints (`List`):
             A list containing possible resolutions. Each item in the list should be a tuple or list
@@ -97,12 +97,12 @@ def image_size_to_num_patches(image_size, grid_pinpoints, patch_size: int):
         int: the number of patches
     """
     if not isinstance(grid_pinpoints, list):
-        raise ValueError("grid_pinpoints should be a list of tuples or lists")
+        raise TypeError("grid_pinpoints should be a list of tuples or lists")
 
     # ! VERY IMPORTANT if image_size is tensor, must convert to into tuple, otherwise it will cause wrong calculate
     if not isinstance(image_size, (list, tuple)):
         if not isinstance(image_size, (torch.Tensor, np.ndarray)):
-            raise ValueError(f"image_size invalid type {type(image_size)} with value {image_size}")
+            raise TypeError(f"image_size invalid type {type(image_size)} with value {image_size}")
         image_size = image_size.tolist()
 
     best_resolution = select_best_resolution(image_size, grid_pinpoints)
@@ -272,6 +272,7 @@ class LlavaNextVideoPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["LlavaNextVideoVisionAttention"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
+    _supports_cache_class = True
 
     def _init_weights(self, module):
         # important: this ported version of LlavaNextVideo isn't meant for training from scratch - only
@@ -375,6 +376,10 @@ LLAVA_NEXT_VIDEO_INPUTS_DOCSTRING = r"""
             more detail.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+        cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
+            Indices depicting the position of the input sequence tokens in the sequence. Contrarily to `position_ids`,
+            this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
+            the complete sequence length.
 """
 
 
@@ -449,6 +454,7 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel):
         self.vocab_size = model_embeds.num_embeddings
         return model_embeds
 
+    # Copied from transformers.models.llava_next.modeling_llava_next.LlavaNextForConditionalGeneration._merge_input_ids_with_image_features
     def _merge_input_ids_with_image_features(
         self,
         image_features,
@@ -552,6 +558,19 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel):
         image_token_index = image_token_index if image_token_index is not None else self.config.image_token_index
         ignore_index = ignore_index if ignore_index is not None else self.config.ignore_index
 
+        if self.training and self.padding_side == "left":
+            logger.warning_once(
+                "Padding side is set to 'left' but the model is in training mode. For training "
+                "it is recommended to set `model.padding_side='right' and `processor.tokenizer.padding_side='right'`. "
+                "If that's intended, ignore this warning"
+            )
+        if not self.training and self.padding_side == "right":
+            logger.warning_once(
+                "Padding side is set to 'right' but the model is in inference mode. For correct "
+                "generation results, please set `model.padding_side='left'` and `processor.tokenizer.padding_side='left'`. "
+                "If that's intended, ignore this warning"
+            )
+
         with torch.no_grad():
             # ! in llava 1.6, number of patches is variable
             num_images = feature_lens.size(0)
@@ -562,18 +581,14 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel):
             _left_padding = torch.any(attention_mask[:, 0] == 0)
             _right_padding = torch.any(attention_mask[:, -1] == 0)
 
-            left_padding = True
+            left_padding = self.padding_side == "left"
             if batch_size > 1:
-                if _left_padding and not _right_padding:
-                    left_padding = True
-                elif not _left_padding and _right_padding:
-                    left_padding = False
-                elif not _left_padding and not _right_padding:
-                    # both side is 1, so cannot tell
-                    left_padding = self.padding_side == "left"
-                else:
-                    # invalid attention_mask
+                if _left_padding and _right_padding:
                     raise ValueError(f"both side of attention_mask has zero, invalid. {attention_mask}")
+                elif _right_padding and left_padding:
+                    left_padding = False
+                elif _left_padding and not left_padding:
+                    left_padding = True
 
             # Whether to turn off right padding
             # 1. Create a mask to know where special image tokens are
@@ -704,7 +719,7 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel):
                 height = width = self.config.vision_config.image_size // self.config.vision_config.patch_size
                 if height * width != base_image_feature.shape[0]:
                     raise ValueError("The number of patches is not consistent with the image size.")
-                num_patch_width, num_patch_height = get_anyres_image_grid_shape(
+                num_patch_height, num_patch_width = get_anyres_image_grid_shape(
                     image_sizes[image_idx],
                     self.config.image_grid_pinpoints,
                     self.config.vision_config.image_size,
@@ -794,7 +809,7 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel):
         ...             frames.append(frame)
         ...     return np.stack([x.to_ndarray(format="rgb24") for x in frames])
 
-        >>> model = LlavaNextVideoForConditionalGeneration.from_pretrained("llava-hf/LLaVA-NeXT-Video-7B-hf", device_map="auto)
+        >>> model = LlavaNextVideoForConditionalGeneration.from_pretrained("llava-hf/LLaVA-NeXT-Video-7B-hf", device_map="auto")
         >>> processor = AutoProcessor.from_pretrained("llava-hf/LLaVA-NeXT-Video-7B-hf")
 
         >>> prompt = "USER: <video>\nWhy is this video funny? ASSISTANT:"
@@ -848,90 +863,106 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel):
                 "You cannot specify both pixel_values and inputs_embeds at the same time, and must specify either one"
             )
 
+        legacy_processing = False
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        # Merge text and images in prefill stage
-        if past_key_values is None:
-            # First merge image tokens if there are any
-            if pixel_values is not None and pixel_values.size(0) > 0:
-                image_features = self._get_image_features(pixel_values, image_sizes)
-                image_features, feature_lens = self.pack_image_features(
-                    image_features,
-                    image_sizes,
-                    image_newline=self.image_newline,
-                )
-                inputs_embeds = inputs_embeds.to(image_features.dtype)
-                (
-                    inputs_embeds,
-                    attention_mask,
-                    position_ids,
-                    labels,
-                    input_ids,
-                ) = self._merge_input_ids_with_image_features(
-                    image_features,
-                    feature_lens,
-                    inputs_embeds,
-                    input_ids,
-                    attention_mask,
-                    position_ids,
-                    labels=labels,
-                    image_token_index=self.config.image_token_index,
-                )
-            # Then merge video tokens if there are any
-            if pixel_values_videos is not None and pixel_values_videos.size(0) > 0:
-                video_features = self._get_video_features(pixel_values_videos)
-                video_features = [feature.flatten(0, 1) for feature in video_features]
-                feature_lens = [feature.size(0) for feature in video_features]
-                video_features = torch.cat(video_features, dim=0)
-                feature_lens = torch.tensor(feature_lens, dtype=torch.long, device=video_features.device)
-                (
-                    inputs_embeds,
-                    attention_mask,
-                    position_ids,
-                    labels,
-                    input_ids,
-                ) = self._merge_input_ids_with_image_features(
-                    video_features,
-                    feature_lens,
-                    inputs_embeds,
-                    input_ids,
-                    attention_mask,
-                    position_ids,
-                    labels=labels,
-                    image_token_index=self.config.video_token_index,
-                )
-
-        # pixel_values is not None but is empty ---> text only cases
-        elif (pixel_values is not None and pixel_values.size(0) == 0) or (
-            pixel_values_videos is not None and pixel_values_videos.size(0) == 0
-        ):
-            pass
-
-        # generation with cache, decoding stage
-        elif past_key_values is not None and (pixel_values is not None or pixel_values_videos is not None):
-            # Retrieve the first layer to inspect the logits and mask out the hidden states that are set to 0
-            first_layer_past_key_value = past_key_values[0][0][:, :, :, 0]
-            # Sum all dimensions of head_dim (-2) to avoid random errors such as: https://github.com/huggingface/transformers/pull/28032#issuecomment-1863691941
-            batch_index, non_attended_tokens = torch.where(first_layer_past_key_value.float().sum(-2) == 0)
-            # Get the target length
-            target_length = input_ids.shape[1]
-            past_length = first_layer_past_key_value.shape[-1]
-            extended_attention_mask = torch.ones(
-                (attention_mask.shape[0], past_length),
-                dtype=attention_mask.dtype,
-                device=attention_mask.device,
+            # if the number of image/video tokens is more than image embeddings seq length, then prob we expanded it in processing
+            # not very reliable, but we don't expect one to actually pass 500+ images for one prompt
+            img_token_count = (input_ids == self.config.image_token_index).sum(1).max()
+            video_token_count = (input_ids == self.config.video_token_index).sum(1).max()
+            inputs_expanded = (
+                img_token_count < self.config.image_seq_length and video_token_count < self.config.video_seq_length
             )
-            # Filter out only the tokens that can be un-attended, this can happen
-            # if one uses Llava + Fused modules where the cache on the
-            # first iteration is already big enough, or if one passes custom cache
-            valid_indices = non_attended_tokens < extended_attention_mask.size(-1)
-            new_batch_index = batch_index[valid_indices]
-            new_non_attended_tokens = non_attended_tokens[valid_indices]
-            # Zero-out the places where we don't need to attend
-            extended_attention_mask[new_batch_index, new_non_attended_tokens] = 0
-            attention_mask = torch.cat((extended_attention_mask, attention_mask[:, -target_length:]), dim=1)
-            position_ids = torch.sum(attention_mask, dim=1).unsqueeze(-1) - 1
+            pixels_present = input_ids.shape[-1] == 1 and pixel_values is not None and pixel_values_videos is not None
+            legacy_processing = inputs_expanded or pixels_present
+
+        image_features = feature_lens = None
+        if pixel_values is not None and pixel_values.size(0) > 0:
+            image_features = self._get_image_features(pixel_values, image_sizes)
+            image_features, feature_lens = self.pack_image_features(
+                image_features,
+                image_sizes,
+                image_newline=self.image_newline,
+            )
+
+        video_features = video_feature_lens = None
+        if pixel_values_videos is not None and pixel_values_videos.size(0) > 0:
+            video_features = self._get_video_features(pixel_values_videos)
+            video_features = [feature.flatten(0, 1) for feature in video_features]
+            video_feature_lens = [feature.size(0) for feature in video_features]
+            video_features = torch.cat(video_features, dim=0)
+            video_feature_lens = torch.tensor(video_feature_lens, dtype=torch.long, device=video_features.device)
+
+            if legacy_processing:
+                logger.warning_once(
+                    "Expanding inputs for image.video tokens in LLaVa-NeXT-Video should be done in processing. "
+                    "Please add `patch_size` and `vision_feature_select_strategy` to the model's processing config or set directly "
+                    "with `processor.patch_size = {{patch_size}}` and processor.vision_feature_select_strategy = {{vision_feature_select_strategy}}`. "
+                    "Using processors without these attributes in the config is deprecated and will throw an error in v4.47."
+                )
+                if input_ids.shape[1] != 1:
+                    iterator = (
+                        (image_features, feature_lens, self.config.image_token_index),
+                        (video_features, video_feature_lens, self.config.video_token_index),
+                    )
+                    for features, lens, special_token in iterator:
+                        if features is not None:
+                            (
+                                inputs_embeds,
+                                attention_mask,
+                                position_ids,
+                                labels,
+                                input_ids,
+                            ) = self._merge_input_ids_with_image_features(
+                                features,
+                                lens,
+                                inputs_embeds,
+                                input_ids,
+                                attention_mask,
+                                position_ids,
+                                labels=labels,
+                                image_token_index=special_token,
+                            )
+                else:
+                    # Retrieve the first layer to inspect the logits and mask out the hidden states that are set to 0
+                    first_layer_past_key_value = past_key_values[0][0][:, :, :, 0]
+                    # Sum all dimensions of head_dim (-2) to avoid random errors such as: https://github.com/huggingface/transformers/pull/28032#issuecomment-1863691941
+                    batch_index, non_attended_tokens = torch.where(first_layer_past_key_value.float().sum(-2) == 0)
+                    # Get the target length
+                    target_length = input_ids.shape[1]
+                    past_length = first_layer_past_key_value.shape[-1]
+                    extended_attention_mask = torch.ones(
+                        (attention_mask.shape[0], past_length),
+                        dtype=attention_mask.dtype,
+                        device=attention_mask.device,
+                    )
+                    # Filter out only the tokens that can be un-attended, this can happen
+                    # if one uses Llava + Fused modules where the cache on the
+                    # first iteration is already big enough, or if one passes custom cache
+                    valid_indices = non_attended_tokens < extended_attention_mask.size(-1)
+                    new_batch_index = batch_index[valid_indices]
+                    new_non_attended_tokens = non_attended_tokens[valid_indices]
+                    # Zero-out the places where we don't need to attend
+                    extended_attention_mask[new_batch_index, new_non_attended_tokens] = 0
+                    attention_mask = torch.cat((extended_attention_mask, attention_mask[:, -target_length:]), dim=1)
+                    position_ids = torch.sum(attention_mask, dim=1).unsqueeze(-1) - 1
+
+            # TODO: @raushan retain only the new behavior after v4.47
+            else:
+                if image_features is not None:
+                    special_image_mask = (
+                        (input_ids == self.config.image_token_index).unsqueeze(-1).expand_as(inputs_embeds)
+                    )
+                    image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+                    inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
+
+                if video_features is not None:
+                    special_image_mask = (
+                        (input_ids == self.config.video_token_index).unsqueeze(-1).expand_as(inputs_embeds)
+                    )
+                    video_features = video_features.to(inputs_embeds.device, inputs_embeds.dtype)
+                    inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, video_features)
 
         outputs = self.language_model(
             attention_mask=attention_mask,
@@ -1038,10 +1069,6 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel):
             }
         )
         return model_inputs
-
-    # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration._reorder_cache
-    def _reorder_cache(self, *args, **kwargs):
-        return self.language_model._reorder_cache(*args, **kwargs)
 
     def _get_image_features(self, pixel_values, image_sizes):
         # ! infer image_num_patches from image_sizes

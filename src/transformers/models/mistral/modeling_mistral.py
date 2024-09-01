@@ -42,6 +42,7 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
     is_flash_attn_greater_or_equal_2_10,
+    is_torchdynamo_compiling,
     logging,
     replace_return_docstrings,
 )
@@ -73,6 +74,9 @@ class MistralRMSNorm(nn.Module):
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
         return self.weight * hidden_states.to(input_dtype)
 
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+
 
 class MistralRotaryEmbedding(nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
@@ -85,7 +89,8 @@ class MistralRotaryEmbedding(nn.Module):
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
     @torch.no_grad()
-    # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding.forward
+    # copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding.forward
+    # TODO(joao): add me back asap :)
     def forward(self, x, position_ids):
         # x: [bs, num_attention_heads, seq_len, head_size]
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
@@ -185,22 +190,17 @@ class MistralAttention(nn.Module):
         self.attention_dropout = config.attention_dropout
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
-        self.head_dim = self.hidden_size // self.num_heads
+        self.head_dim = config.head_dim
         self.num_key_value_heads = config.num_key_value_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.max_position_embeddings = config.max_position_embeddings
         self.rope_theta = config.rope_theta
         self.is_causal = True
 
-        if (self.head_dim * self.num_heads) != self.hidden_size:
-            raise ValueError(
-                f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.hidden_size}"
-                f" and `num_heads`: {self.num_heads})."
-            )
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=False)
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
-        self.o_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
+        self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
 
         self.rotary_emb = MistralRotaryEmbedding(
             self.head_dim,
@@ -386,13 +386,14 @@ class MistralFlashAttention2(MistralAttention):
             value_states,
             attention_mask,
             q_len,
+            position_ids=position_ids,
             dropout=dropout_rate,
             sliding_window=getattr(self.config, "sliding_window", None),
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
             is_causal=self.is_causal,
         )
 
-        attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
+        attn_output = attn_output.reshape(bsz, q_len, self.num_heads * self.head_dim).contiguous()
         attn_output = self.o_proj(attn_output)
 
         if not output_attentions:
@@ -401,7 +402,8 @@ class MistralFlashAttention2(MistralAttention):
         return attn_output, attn_weights, past_key_value
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaSdpaAttention with Llama->Mistral
+# copied from transformers.models.llama.modeling_llama.LlamaSdpaAttention with Llama->Mistral
+# TODO(joao): add me back asap :)
 class MistralSdpaAttention(MistralAttention):
     """
     Mistral attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
@@ -497,7 +499,8 @@ MISTRAL_ATTENTION_CLASSES = {
 }
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaDecoderLayer with Llama->Mistral, LLAMA->MISTRAL
+# copied from transformers.models.llama.modeling_llama.LlamaDecoderLayer with Llama->Mistral, LLAMA->MISTRAL
+# TODO(joao): add me back asap :)
 class MistralDecoderLayer(nn.Module):
     def __init__(self, config: MistralConfig, layer_idx: int):
         super().__init__()
@@ -759,12 +762,12 @@ class MistralModel(MistralPreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         return_legacy_cache = False
-        if use_cache and not isinstance(past_key_values, Cache):
+        if use_cache and not isinstance(past_key_values, Cache) and not self.training:
             past_key_values = DynamicCache.from_legacy_cache(past_key_values)
             return_legacy_cache = True
             logger.warning_once(
                 "We detected that you are passing `past_key_values` as a tuple and this is deprecated and will be removed in v4.43. "
-                "Please use an appropriate `Cache` class (https://huggingface.co/docs/transformers/v4.41.3/en/internal/generation_utils#transformers.Cache)"
+                "Please use an appropriate `Cache` class (https://huggingface.co/docs/transformers/internal/generation_utils#transformers.Cache)"
             )
 
         if cache_position is None:
@@ -849,11 +852,6 @@ class MistralModel(MistralPreTrainedModel):
         use_cache: bool,
         output_attentions: bool,
     ):
-        # TODO: As of torch==2.2.0, the `attention_mask` passed to the model in `generate` is 2D and of dynamic length even when the static
-        # KV cache is used. This is an issue for torch.compile which then recaptures cudagraphs at each decode steps due to the dynamic shapes.
-        # (`recording cudagraph tree for symint key 13`, etc.), which is VERY slow. A workaround is `@torch.compiler.disable`, but this prevents using
-        # `fullgraph=True`. See more context in https://github.com/huggingface/transformers/pull/29114
-
         if self._attn_implementation == "flash_attention_2":
             if attention_mask is not None and use_cache:
                 is_padding_right = attention_mask[:, -1].sum().item() != input_tensor.size()[0]
@@ -994,6 +992,7 @@ class MistralForCausalLM(MistralPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        num_logits_to_keep: int = 0,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
         Args:
@@ -1001,6 +1000,11 @@ class MistralForCausalLM(MistralPreTrainedModel):
                 Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
                 config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
                 (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+
+            num_logits_to_keep (`int`, *optional*):
+                Calculate logits for the last `num_logits_to_keep` tokens. If `0`, calculate logits for all
+                `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
+                token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
 
         Returns:
 
@@ -1042,11 +1046,18 @@ class MistralForCausalLM(MistralPreTrainedModel):
         )
 
         hidden_states = outputs[0]
-        logits = self.lm_head(hidden_states)
-        logits = logits.float()
+        if labels is None and not is_torchdynamo_compiling():
+            logger.warning_once(
+                "Starting from v4.46, the `logits` model output will have the same type as the model (except at train time, where it will always be FP32)"
+            )
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        # TODO: remove the float() operation in v4.46
+        logits = self.lm_head(hidden_states[:, -num_logits_to_keep:, :]).float()
 
         loss = None
         if labels is not None:
+            # Upcast to float if we need to compute the loss to avoid potential precision issues
+            logits = logits.float()
             # Shift so that tokens < n predict n
             shift_logits = logits[..., :-1, :].contiguous()
             shift_labels = labels[..., 1:].contiguous()
@@ -1070,7 +1081,6 @@ class MistralForCausalLM(MistralPreTrainedModel):
             attentions=outputs.attentions,
         )
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.prepare_inputs_for_generation
     def prepare_inputs_for_generation(
         self,
         input_ids,
@@ -1080,6 +1090,7 @@ class MistralForCausalLM(MistralPreTrainedModel):
         cache_position=None,
         position_ids=None,
         use_cache=True,
+        num_logits_to_keep=0,
         **kwargs,
     ):
         # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
@@ -1098,6 +1109,9 @@ class MistralForCausalLM(MistralPreTrainedModel):
             if past_key_values:
                 position_ids = position_ids[:, -input_ids.shape[1] :]
 
+                # This `clone` call is needed to avoid recapturing cuda graphs with `torch.compile`'s  `mode="reduce-overhead`, as otherwise the input `position_ids` would have various stride during the decoding. Here, simply using `.contiguous()` is not sufficient as in the batch size = 1 case, `position_ids` is already contiguous but with varying stride which retriggers a capture.
+                position_ids = position_ids.clone(memory_format=torch.contiguous_format)
+
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and cache_position[0] == 0:
             model_inputs = {"inputs_embeds": inputs_embeds}
@@ -1111,6 +1125,7 @@ class MistralForCausalLM(MistralPreTrainedModel):
                 "past_key_values": past_key_values,
                 "use_cache": use_cache,
                 "attention_mask": attention_mask,
+                "num_logits_to_keep": num_logits_to_keep,
             }
         )
         return model_inputs
@@ -1151,7 +1166,7 @@ class MistralForSequenceClassification(MistralPreTrainedModel):
     @add_start_docstrings_to_model_forward(MISTRAL_INPUTS_DOCSTRING)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,

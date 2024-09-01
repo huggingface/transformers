@@ -33,6 +33,7 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
     is_flash_attn_greater_or_equal_2_10,
+    is_torchdynamo_compiling,
     logging,
     replace_return_docstrings,
 )
@@ -301,7 +302,7 @@ class Idefics2VisionFlashAttention2(Idefics2VisionAttention):
         # Flash attention requires the input to have the shape
         # batch_size x seq_length x head_dim x hidden_dim
         # therefore we just need to keep the original shape
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim)
         key_states = key_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
 
@@ -311,7 +312,6 @@ class Idefics2VisionFlashAttention2(Idefics2VisionAttention):
 
         # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor the KV cache
         # to be able to avoid many of these transpose/reshape/view.
-        query_states = query_states.transpose(1, 2)
         key_states = key_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
 
@@ -435,7 +435,7 @@ class Idefics2MultiheadAttentionPoolingHead(nn.Module):
 
 
 class Idefics2EncoderLayer(nn.Module):
-    def __init__(self, config: Idefics2Config):
+    def __init__(self, config: Idefics2VisionConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
         self.self_attn = IDEFICS_VISION_ATTENTION_CLASSES[config._attn_implementation](config)
@@ -677,6 +677,9 @@ class Idefics2RMSNorm(nn.Module):
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
         return self.weight * hidden_states.to(input_dtype)
 
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+
 
 class Idefics2PerceiverAttention(nn.Module):
     def __init__(self, config, layer_idx: Optional[int] = None) -> None:
@@ -817,7 +820,7 @@ class Idefics2PerceiverFlashAttention2(Idefics2PerceiverAttention):
         key_states = self.k_proj(torch.cat([context, latents], dim=-2))
         value_states = self.v_proj(torch.cat([context, latents], dim=-2))
 
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim)
         key_states = key_states.view(bsz, kv_seq_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, kv_seq_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
@@ -882,7 +885,6 @@ class Idefics2PerceiverFlashAttention2(Idefics2PerceiverAttention):
             value_states = value_states.to(target_dtype)
 
         # Reashape to the expected shape for Flash Attention
-        query_states = query_states.transpose(1, 2)
         key_states = key_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
 
@@ -893,7 +895,7 @@ class Idefics2PerceiverFlashAttention2(Idefics2PerceiverAttention):
             attention_mask,
             q_len,
             dropout=dropout_rate,
-            sliding_window=False,
+            sliding_window=None,
             is_causal=self.is_causal,
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
         )
@@ -1519,6 +1521,7 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        num_logits_to_keep: int = 0,
     ) -> Union[Tuple, Idefics2CausalLMOutputWithPast]:
         r"""
         Args:
@@ -1527,6 +1530,12 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
                 config.vocab_size]` or `model.image_token_id` (where `model` is your instance of `Idefics2ForConditionalGeneration`).
                 Tokens with indices set to `model.image_token_id` are ignored (masked), the loss is only
                 computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+
+            num_logits_to_keep (`int`, *optional*):
+                Calculate logits for the last `num_logits_to_keep` tokens. If `0`, calculate logits for all
+                `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
+                token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
+
         Returns:
 
         Example:
@@ -1557,7 +1566,7 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
         ...   "In which city is that bridge located?<image>",
         ... ]
         >>> images = [[image1, image2], [image3]]
-        >>> inputs = processor(text=prompts, padding=True, return_tensors="pt").to("cuda")
+        >>> inputs = processor(text=prompts, images=images, padding=True, return_tensors="pt").to("cuda")
 
         >>> # Generate
         >>> generated_ids = model.generate(**inputs, bad_words_ids=BAD_WORDS_IDS, max_new_tokens=20)
@@ -1590,11 +1599,18 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
         )
 
         hidden_states = outputs[0]
-        logits = self.lm_head(hidden_states)
-        logits = logits.float()
+        if labels is None and not is_torchdynamo_compiling():
+            logger.warning_once(
+                "Starting from v4.46, the `logits` model output will have the same type as the model (except at train time, where it will always be FP32)"
+            )
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        # TODO: remove the float() operation in v4.46
+        logits = self.lm_head(hidden_states[:, -num_logits_to_keep:, :]).float()
 
         loss = None
         if labels is not None:
+            # Upcast to float if we need to compute the loss to avoid potential precision issues
+            logits = logits.float()
             labels = labels.to(logits.device)
             # Shift so that tokens < n predict n
             if attention_mask is not None:
@@ -1622,7 +1638,13 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
         )
 
     def prepare_inputs_for_generation(
-        self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
+        self,
+        input_ids,
+        past_key_values=None,
+        attention_mask=None,
+        inputs_embeds=None,
+        num_logits_to_keep=0,
+        **kwargs,
     ):
         past_length = 0
         # Omit tokens covered by past_key_values
@@ -1681,6 +1703,7 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
                 "pixel_values": pixel_values,
                 "pixel_attention_mask": pixel_attention_mask,
                 "image_hidden_states": image_hidden_states,
+                "num_logits_to_keep": num_logits_to_keep,
             }
         )
         return model_inputs

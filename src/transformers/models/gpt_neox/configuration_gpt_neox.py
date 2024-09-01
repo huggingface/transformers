@@ -154,7 +154,6 @@ class GPTNeoXConfig(PretrainedConfig):
                 "The hidden size is not divisble by the number of attention heads! Make sure to update them!"
             )
 
-    # Copied from transformers.models.llama.configuration_llama.LlamaConfig._rope_scaling_validation
     def _rope_scaling_validation(self):
         """
         Validate the `rope_scaling` configuration.

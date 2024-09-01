@@ -19,7 +19,7 @@ Processor class for LLaVa-NeXT-Video.
 from typing import TYPE_CHECKING, List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput, VideoInput
+from ...image_utils import ImageInput, VideoInput, get_image_size, to_numpy_array
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
 from ...utils import TensorType, logging
@@ -48,17 +48,41 @@ class LlavaNextVideoProcessor(ProcessorMixin):
             The tokenizer is a required input.
         chat_template (`str`, *optional*):
             Jinja chat template that will be used in tokenizer's `apply_chat_template`
+        patch_size (`int`, *optional*):
+            Patch size from the vision tower.
+        vision_feature_select_strategy (`str`, *optional*):
+            The feature selection strategy used to select the vision feature from the vision backbone.
+            Shoudl be same as in model's config
+        video_token (`str`, *optional*, defaults to `"<video>"`):
+            Special token used to denote video location.
+        image_token (`str`, *optional*, defaults to `"<image>"`):
+            Special token used to denote image location.
     """
 
     # video and image processor share same args, but have different processing logic
     # only image processor config is saved in the hub
     attributes = ["video_processor", "image_processor", "tokenizer"]
-    valid_kwargs = ["chat_template"]
+    valid_kwargs = ["chat_template", "patch_size", "vision_feature_select_strategy", "image_token", "video_token"]
     image_processor_class = "LlavaNextImageProcessor"
     video_processor_class = "LlavaNextVideoImageProcessor"
     tokenizer_class = ("LlamaTokenizer", "LlamaTokenizerFast")
 
-    def __init__(self, video_processor=None, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
+    def __init__(
+        self,
+        video_processor=None,
+        image_processor=None,
+        tokenizer=None,
+        chat_template=None,
+        patch_size=None,
+        vision_feature_select_strategy=None,
+        video_token="<video>",
+        image_token="<image>",
+        **kwargs,
+    ):
+        self.patch_size = patch_size
+        self.vision_feature_select_strategy = vision_feature_select_strategy
+        self.image_token = image_token
+        self.video_token = video_token
         super().__init__(video_processor, image_processor, tokenizer, chat_template=chat_template)
 
     def __call__(
@@ -131,9 +155,62 @@ class LlavaNextVideoProcessor(ProcessorMixin):
         else:
             videos_inputs = {}
 
+        if isinstance(text, str):
+            text = [text]
+        elif not isinstance(text, list) and not isinstance(text[0], str):
+            raise ValueError("Invalid input text. Please provide a string, or a list of strings")
+
+        print(self.patch_size, self.vision_feature_select_strategy, image_inputs, videos_inputs.keys())
+
+        if self.patch_size is None or self.vision_feature_select_strategy is None:
+            prompt_strings = text
+            logger.warning_once(
+                "Expanding inputs for image/video tokens in LLaVa-NeXT-Video should be done in processing. "
+                "Please add `patch_size` and `vision_feature_select_strategy` to the model's processing config or set directly "
+                "with `processor.patch_size = {{patch_size}}` and processor.vision_feature_select_strategy = {{vision_feature_select_strategy}}`. "
+                "Using processors without these attributes in the config is deprecated and will throw an error in v4.47."
+            )
+        # cannot infer image expansion length if no images/videos are found
+        elif not image_inputs and not videos_inputs:
+            prompt_strings = text
+        else:
+            # images expand taking into account num_of_patches in each image
+            if image_inputs:
+                image_sizes = image_inputs["image_sizes"]
+                height, width = get_image_size(to_numpy_array(image_inputs["pixel_values"][0][0]))
+                prompt_strings = []
+                for image_size, sample in zip(image_sizes, text):
+                    # Replace the image token with the expanded image token sequence
+                    orig_height, orig_width = image_size
+                    num_image_tokens = self._get_number_of_features(orig_height, orig_width, height, width)
+                    if self.vision_feature_select_strategy == "default":
+                        num_image_tokens -= 1
+
+                    sample = sample.replace(self.image_token, self.image_token * num_image_tokens)
+                    prompt_strings.append(sample)
+                text = prompt_strings
+
+            # videos are easier, simply get frames and multiply
+            if videos_inputs:
+                one_video = to_numpy_array(videos_inputs.get("pixel_values_videos")[0])
+                height, width = get_image_size(one_video[0])
+                num_frames = one_video.shape[0]  # frame dim is always after batch dim
+                num_image_tokens = (height // self.patch_size) * (width // self.patch_size)
+                num_video_tokens = num_image_tokens // 4 * num_frames  # divide by 4 needed for avg pooling layer
+
+                prompt_strings = []
+                for sample in text:
+                    sample = sample.replace(self.video_token, self.video_token * num_video_tokens)
+                    prompt_strings.append(sample)
+
         text_inputs = self.tokenizer(
-            text, return_tensors=return_tensors, padding=padding, truncation=truncation, max_length=max_length
+            prompt_strings,
+            return_tensors=return_tensors,
+            padding=padding,
+            truncation=truncation,
+            max_length=max_length,
         )
+        print(text_inputs.keys())
 
         return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs})
 
@@ -159,63 +236,3 @@ class LlavaNextVideoProcessor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
-
-    @property
-    def default_chat_template(self):
-        """
-        This default vicuna template formats inputs in the form of a chat history. For each message in the chat history:
-        * the template will output the role of the speaker followed by the content of the message.
-        * content is a list of strings and images.
-        * If the content element is an image, the template will output a sequence of <image> or <video> tokens
-
-        Example:
-
-        ```python
-        messages = [{
-            "role": "user",
-            "content": [
-                {"type": "text", "text": "What’s the content of this video?"},
-                {"type": "video"},
-                ],
-        },
-        {
-            "role": "assistant",
-            "content": [{"type": "text", "text": "This picture shows a red stop sign."},]
-        }]
-        ```
-
-        Will create outputs like:
-        ```
-        USER: <video>\nWhat is the content of this video?
-        ASSITANT: This picture shows a red stop sign
-        ```
-        """
-        # fmt: off
-        return (
-            "{% for message in messages %}"
-                "{% if message['role'] == 'system' %}"
-                    "{{ message['content'][0]['text'] }}"
-                "{% else %}"
-                    "{{ message['role'].upper() + ': '}}"
-                "{% endif %}"
-
-                "{# Render all images first #}"
-                "{% for content in message['content'] | selectattr('type', 'equalto', 'image') %}"
-                    "{{ '<image>\n' }}"
-                "{% endfor %}"
-
-                "{# Render all videos next #}"
-                "{% for content in message['content'] | selectattr('type', 'equalto', 'video') %}"
-                    "{{ '<video>\n' }}"
-                "{% endfor %}"
-
-                "{# Render all text finally #}"
-                "{% for content in message['content'] | selectattr('type', 'equalto', 'text') %}"
-                    "{{ content['text'] + ' '}}"
-                "{% endfor %}"
-            "{% endfor %}"
-            "{% if add_generation_prompt %}"
-                "{{ 'ASSISTANT:' }}"
-            "{% endif %}"
-        )
-        # fmt: on

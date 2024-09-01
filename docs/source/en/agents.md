@@ -119,17 +119,20 @@ def llm_engine(messages, stop_sequences=["Task"]) -> str:
 ```
 
 You could use any `llm_engine` method as long as:
-1. it follows the [messages format](./chat_templating.md) for its input (`List[Dict[str, str]]`) and returns a `str`
-2. it stops generating outputs at the sequences passed in the argument `stop`
+1. it follows the [messages format](./chat_templating.md) (`List[Dict[str, str]]`) for its input `messages`, and it returns a `str`.
+2. it stops generating outputs at the sequences passed in the argument `stop_sequences`
 
-You also need a `tools` argument which accepts a list of `Tools`. You can provide an empty list for `tools`, but use the default toolbox with the optional argument `add_base_tools=True`.
+Additionally, `llm_engine` can also take a `grammar` argument. In the case where you specify a `grammar` upon agent initialization, this argument will be passed to the calls to llm_engine, with the `grammar` that you defined upon initialization, to allow [constrained generation](https://huggingface.co/docs/text-generation-inference/conceptual/guidance) in order to force properly-formatted agent outputs.
 
-Now you can create an agent, like [`CodeAgent`], and run it. For convenience, we also provide the [`HfEngine`] class that uses `huggingface_hub.InferenceClient` under the hood.
+You will also need a `tools` argument which accepts a list of `Tools` - it can be an empty list. You can also add the default toolbox on top of your `tools` list by defining the optional argument `add_base_tools=True`.
+
+Now you can create an agent, like [`CodeAgent`], and run it. You can also create a [`TransformersEngine`] with a pre-initialized pipeline to run inference on your local machine using `transformers`.
+For convenience, since agentic behaviours generally require stronger models such as `Llama-3.1-70B-Instruct` that are harder to run locally for now, we also provide the [`HfApiEngine`] class that initializes a `huggingface_hub.InferenceClient` under the hood. 
 
 ```python
-from transformers import CodeAgent, HfEngine
+from transformers import CodeAgent, HfApiEngine
 
-llm_engine = HfEngine(model="meta-llama/Meta-Llama-3-70B-Instruct")
+llm_engine = HfApiEngine(model="meta-llama/Meta-Llama-3-70B-Instruct")
 agent = CodeAgent(tools=[], llm_engine=llm_engine, add_base_tools=True)
 
 agent.run(
@@ -139,7 +142,7 @@ agent.run(
 ```
 
 This will be handy in case of emergency baguette need!
-You can even leave the argument `llm_engine` undefined, and an [`HfEngine`] will be created by default.
+You can even leave the argument `llm_engine` undefined, and an [`HfApiEngine`] will be created by default.
 
 ```python
 from transformers import CodeAgent
@@ -508,4 +511,55 @@ search_tool = Tool.from_langchain(load_tools(["serpapi"])[0])
 agent = ReactCodeAgent(tools=[search_tool])
 
 agent.run("How many more blocks (also denoted as layers) in BERT base encoder than the encoder from the architecture proposed in Attention is All You Need?")
+```
+
+## Gradio interface
+
+You can leverage `gradio.Chatbot`to display your agent's thoughts using `stream_to_gradio`, here is an example:
+
+```py
+import gradio as gr
+from transformers import (
+    load_tool,
+    ReactCodeAgent,
+    HfApiEngine,
+    stream_to_gradio,
+)
+
+# Import tool from Hub
+image_generation_tool = load_tool("m-ric/text-to-image")
+
+llm_engine = HfApiEngine("meta-llama/Meta-Llama-3-70B-Instruct")
+
+# Initialize the agent with the image generation tool
+agent = ReactCodeAgent(tools=[image_generation_tool], llm_engine=llm_engine)
+
+
+def interact_with_agent(task):
+    messages = []
+    messages.append(gr.ChatMessage(role="user", content=task))
+    yield messages
+    for msg in stream_to_gradio(agent, task):
+        messages.append(msg)
+        yield messages + [
+            gr.ChatMessage(role="assistant", content="⏳ Task not finished yet!")
+        ]
+    yield messages
+
+
+with gr.Blocks() as demo:
+    text_input = gr.Textbox(lines=1, label="Chat Message", value="Make me a picture of the Statue of Liberty.")
+    submit = gr.Button("Run illustrator agent!")
+    chatbot = gr.Chatbot(
+        label="Agent",
+        type="messages",
+        avatar_images=(
+            None,
+            "https://em-content.zobj.net/source/twitter/53/robot-face_1f916.png",
+        ),
+    )
+    submit.click(interact_with_agent, [text_input], [chatbot])
+
+if __name__ == "__main__":
+    demo.launch()
 ```
