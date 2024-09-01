@@ -399,7 +399,7 @@ def _get_cosine_with_min_lr_schedule_with_warmup_lr_rate_lambda(
     current_step = float(current_step)
     num_warmup_steps = float(num_warmup_steps)
     num_training_steps = float(num_training_steps)
-    
+
     if current_step < num_warmup_steps:
         if warmup_lr_rate is None:
             return (current_step + 1.) / max(1., num_warmup_steps)
