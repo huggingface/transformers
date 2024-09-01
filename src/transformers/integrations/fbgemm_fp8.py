@@ -60,6 +60,7 @@ class FbgemmFp8Linear(torch.nn.Module):
         output = output + self.bias if self.bias is not None else output
         # Hacky for now, we have the output to the device of x
         output = output.to(x.device)
+        output = output.reshape((*x.shape[:-1], -1))
         del x_quantized, x_scale
         return output
 
