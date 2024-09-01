@@ -139,17 +139,25 @@ class SuperPointImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
         image_inputs = self.image_processor_tester.prepare_image_inputs()
         pre_processed_images = image_processor.preprocess(image_inputs, return_tensors="pt")
         outputs = self.image_processor_tester.prepare_keypoint_detection_output(**pre_processed_images)
-        image_sizes = torch.tensor([image.size for image in image_inputs]).flip(1)
-        post_processed_outputs = image_processor.post_process_keypoint_detection(outputs, image_sizes)
 
-        self.assertTrue(len(post_processed_outputs) == self.image_processor_tester.batch_size)
-        for post_processed_output, image_size in zip(post_processed_outputs, image_sizes):
-            self.assertTrue("keypoints" in post_processed_output)
-            self.assertTrue("descriptors" in post_processed_output)
-            self.assertTrue("scores" in post_processed_output)
-            keypoints = post_processed_output["keypoints"]
-            all_below_image_size = torch.all(keypoints[:, 0] <= image_size[1]) and torch.all(
-                keypoints[:, 1] <= image_size[0]
-            )
-            all_above_zero = torch.all(keypoints[:, 0] >= 0) and torch.all(keypoints[:, 1] >= 0)
-            self.assertTrue(all_below_image_size and all_above_zero)
+        def check_post_processed_output(post_processed_output, image_size):
+            for post_processed_output, image_size in zip(post_processed_output, image_size):
+                self.assertTrue("keypoints" in post_processed_output)
+                self.assertTrue("descriptors" in post_processed_output)
+                self.assertTrue("scores" in post_processed_output)
+                keypoints = post_processed_output["keypoints"]
+                all_below_image_size = torch.all(keypoints[:, 0] <= image_size[1]) and torch.all(
+                    keypoints[:, 1] <= image_size[0]
+                )
+                all_above_zero = torch.all(keypoints[:, 0] >= 0) and torch.all(keypoints[:, 1] >= 0)
+                self.assertTrue(all_below_image_size and all_above_zero)
+
+        tuple_image_sizes = [(image.size[0], image.size[1]) for image in image_inputs]
+        tuple_post_processed_outputs = image_processor.post_process_keypoint_detection(outputs, tuple_image_sizes)
+
+        check_post_processed_output(tuple_post_processed_outputs, tuple_image_sizes)
+
+        tensor_image_sizes = torch.tensor([image.size for image in image_inputs]).flip(1)
+        tensor_post_processed_outputs = image_processor.post_process_keypoint_detection(outputs, tensor_image_sizes)
+
+        check_post_processed_output(tensor_post_processed_outputs, tensor_image_sizes)
