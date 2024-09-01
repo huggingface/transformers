@@ -95,9 +95,10 @@ for output in outputs:
     descriptors = output["descriptors"]
 ```
 
-You can then print the keypoints on the image of your choice to visualize the result :
+You can then print the keypoints on the image of your choice to visualize the result:
 ```python
 import matplotlib.pyplot as plt
+
 plt.axis("off")
 plt.imshow(image)
 plt.scatter(
