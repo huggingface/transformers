@@ -268,3 +268,34 @@ class FbgemmFp8Test(unittest.TestCase):
 
             output = model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
             self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+
+
+@require_torch_gpu
+@require_accelerate
+@require_fbgemm_gpu
+class FbgemmFp8LinearTest(unittest.TestCase):
+    def test_linear_preserves_shape(self):
+        """
+        Test that FbgemmFp8Linear preserves shape when in_features == out_features.
+        """
+        from transformers.integrations import FbgemmFp8Linear
+
+        with init_empty_weights(include_buffers=True):
+            linear = FbgemmFp8Linear(1024, 1024, True)
+            x = torch.rand((17, 23, 1024))
+
+        x_ = linear(x)
+        self.assertEqual(x_.shape, x.shape)
+
+    def test_linear_with_diff_feature_size_preserves_shape(self):
+        """
+        Test that FbgemmFp8Linear generates the correct shape when in_features != out_features.
+        """
+        from transformers.integrations import FbgemmFp8Linear
+
+        with init_empty_weights(include_buffers=True):
+            linear = FbgemmFp8Linear(1024, 2048, True)
+            x = torch.rand((17, 23, 1024))
+
+        x_ = linear(x)
+        self.assertEqual(x_.shape, (17, 23, 2048))
