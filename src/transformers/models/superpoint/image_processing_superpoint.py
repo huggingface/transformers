@@ -30,14 +30,16 @@ from ...image_utils import (
     valid_images,
 )
 from ...utils import TensorType, logging, requires_backends
-from .modeling_superpoint import SuperPointKeypointDescriptionOutput
 
 
 if is_torch_available():
     import torch
 
+
 if is_vision_available():
     import PIL
+
+    from .modeling_superpoint import SuperPointKeypointDescriptionOutput
 
 logger = logging.get_logger(__name__)
 
