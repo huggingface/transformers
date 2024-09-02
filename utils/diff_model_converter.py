@@ -330,8 +330,8 @@ def replace_call_to_super(class_finder: ClassFinder, updated_node: cst.ClassDef,
                                                                             |     ```
     """
     original_node = class_finder.classes[class_name]
-    original_methods = {f.name.value if hasattr(f, "name") else f: f for f in original_node.body.body}
-    updated_methods = {f.name.value if hasattr(f, "name") else f: f for f in updated_node.body.body}
+    original_methods = {f.name.value if hasattr(f, "name") else class_finder.python_module.code_for_node(f): f for f in original_node.body.body}
+    updated_methods = {f.name.value if hasattr(f, "name") else class_finder.python_module.code_for_node(f): f for f in updated_node.body.body}
     end_meth = []
 
     # Iterate directly from node.body as there can be property/setters with same names which are overwritten when we use a dict
@@ -352,14 +352,37 @@ def replace_call_to_super(class_finder: ClassFinder, updated_node: cst.ClassDef,
 
     # Port new methods that are defined only in diff-file and append at the end
     for name, func in updated_methods.items():
+        if m.matches(func, m.SimpleStatementLine(body=[m.Expr(value=m.SimpleString())])):
+            # Extract the original docstring
+            original_docstring = end_meth[0].body[0].value.value
+            updated_docstring = func.body[0].value.value
+            if "    Args:\n        " not in updated_docstring:
+                logger.warning("We detected a docstring that will be appended to the super's doc")
+            # Split the docstring at the example section, assuming `"""` or `'''` is used to define the docstring
+                parts = original_docstring.split("```")
+
+                if len(parts) > 1:
+                    updated_docstring = "```".join([parts[0] + original_docstring, parts[1], parts[2] if len(parts) > 2 else ""])
+                else:
+                    updated_docstring =  end_meth[0].body[0].value.value + "\n" +  updated_docstring
+            else:
+                updated_docstring = func.body[0].value.value
+            # Update the docstring in the original function
+            end_meth[0] = end_meth[0].with_changes(
+                body=[cst.Expr(value=cst.SimpleString(value=updated_docstring))]
+            )
         if name not in original_methods and func is not None and isinstance(func, cst.FunctionDef):
             end_meth.append(func)
+        if m.matches(func, m.SimpleStatementLine(body=[m.Assign()])):
+            # we have an attribute
+            end_meth = end_meth[:1] +[func] + end_meth[1:]
 
     result_node = original_node.with_changes(body=cst.IndentedBlock(body=end_meth))
     temp_module = cst.Module(body=[result_node])
     new_module = MetadataWrapper(temp_module)
     new_replacement_class = new_module.visit(SuperTransformer(temp_module, original_methods, updated_methods))
     new_replacement_body = new_replacement_class.body[0].body  # get the indented block
+
     return original_node.with_changes(body=new_replacement_body)
 
 
@@ -381,6 +404,7 @@ class DiffConverterTransformer(CSTTransformer):
         self.new_body = {}                  # store the new body, all global scope nodes should be added here
         self.inserted_deps = []             # nodes inserted via super dependency
         self.all_imports = []               # just stores all of the imports
+        self.all_safe_imports = []          # stores the import under simple statements
         self.global_scope_index = 0
         # fmt: on
         self.config_body = []
@@ -419,15 +443,15 @@ class DiffConverterTransformer(CSTTransformer):
         parent_node = self.get_metadata(cst.metadata.ParentNodeProvider, original_node)
         if m.matches(parent_node, m.Module()):
             if m.matches(updated_node, m.SimpleStatementLine(body=[m.Import()])):
-                if parent_node not in self.all_imports:
-                    self.all_imports.append(updated_node)
+                if parent_node not in self.all_safe_imports:
+                    self.all_safe_imports.append(updated_node)
                 return updated_node
             elif m.matches(updated_node, m.SimpleStatementLine(body=[m.ImportFrom()])):
                 full_statement = self.python_module.code_for_node(updated_node.body[0].module)
                 if re.search(r"transformers\.models\..*\.(modeling|configuration)_.*", full_statement):
                     return cst.RemoveFromParent()
-                if parent_node not in self.all_imports:
-                    self.all_imports.append(updated_node)
+                if parent_node not in self.all_safe_imports:
+                    self.all_safe_imports.append(updated_node)
                 return updated_node
             self.global_scope_index += 100
             if m.matches(updated_node, m.SimpleStatementLine(body=[m.Assign()])):
@@ -503,6 +527,8 @@ class DiffConverterTransformer(CSTTransformer):
                     self.inserted_deps.append(dependency)
             if len(list_dependencies) > 0:
                 updated_node = replace_call_to_super(class_finder, updated_node, class_name)
+            else:
+                raise ValueError(f"Unable to find dependencies for {super_class} in {super_file_name}")
         if "Config" in class_name:
             self.config_body += [updated_node]
         else:
@@ -514,7 +540,7 @@ class DiffConverterTransformer(CSTTransformer):
         if m.matches(parent_node, m.Module()):
             full_statement = self.python_module.code_for_node(original_node.test)
             if re.search(r"[\s\S]*is_.*available", full_statement):
-                self.all_imports.append(node)
+                self.all_safe_imports.append(node)
             elif full_statement not in self.new_body:
                 self.new_body[node] = {"insert_idx": self.global_scope_index, "node": node}
         return node
@@ -541,6 +567,7 @@ class DiffConverterTransformer(CSTTransformer):
         if hasattr(self, "config_body"):
             self.config_body = list(imports.values()) + config_imports + self.config_body
         dependency_imports.update(imports)
+        dependency_imports.update({self.python_module.code_for_node(k): k for k in self.all_safe_imports})
         new_body = list(dependency_imports.values())
         if len(self.new_body.keys()) > 0:
             new_body += [k[1]["node"] for k in sorted(self.new_body.items(), key=lambda x: x[1]["insert_idx"])]
@@ -583,7 +610,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--files_to_parse",
-        default=["all"],
+        default=["src/transformers/models/gemma2/diff_gemma2.py"],
         nargs="+",
         help="A list of `diff_xxxx` files that should be converted to single model file",
     )
