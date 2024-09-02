@@ -253,14 +253,8 @@ class Dinov2WithRegistersEmbeddings(nn.Module):
         embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
 
         # add register tokens
-        embeddings = torch.cat(
-            (
-                embeddings[:, :1],
-                self.register_tokens.expand(embeddings.shape[0], -1, -1),
-                embeddings[:, 1:],
-            ),
-            dim=1,
-        )
+        embeddings = torch.cat((embeddings[:, :1], self.register_tokens.expand(embeddings.shape[0], -1, -1)), dim=1)
+        embeddings = torch.cat((embeddings, embeddings[:, 1:]), dim=1)
 
         embeddings = self.dropout(embeddings)
 
