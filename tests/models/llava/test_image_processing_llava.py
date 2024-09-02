@@ -158,7 +158,14 @@ class LlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
         for image in image_inputs:
             padded_image = image_processor.pad_to_square(image)
-            padded_image_original = np.array(pad_to_square_original(Image.fromarray(image)))
+            padded_image_original = pad_to_square_original(Image.fromarray(image))
+            padded_image_original = np.array(padded_image_original)
+
+            np.testing.assert_allclose(padded_image, padded_image_original)
+
+            # test it also works for channels-first format
+            padded_image = image_processor.pad_to_square(image.transpose(2, 0, 1), input_data_format="channels_first")
+            padded_image = padded_image.transpose(1, 2, 0)
 
             np.testing.assert_allclose(padded_image, padded_image_original)
 
