@@ -643,13 +643,14 @@ def launch_gradio_demo(tool_class: Tool):
     ).launch()
 
 
-TASK_MAPPING = {
-    "document-question-answering": "DocumentQuestionAnsweringTool",
-    "image-question-answering": "ImageQuestionAnsweringTool",
-    "speech-to-text": "SpeechToTextTool",
-    "text-to-speech": "TextToSpeechTool",
+TOOL_MAPPING = {
+    "document_question_answering": "DocumentQuestionAnsweringTool",
+    "image_question_answering": "ImageQuestionAnsweringTool",
+    "speech_to_text": "SpeechToTextTool",
+    "text_to_speech": "TextToSpeechTool",
     "translation": "TranslationTool",
     "python_interpreter": "PythonInterpreterTool",
+    "web_search": "DuckDuckGoSearchTool",
 }
 
 
@@ -670,10 +671,10 @@ def load_tool(task_or_repo_id, model_repo_id=None, token=None, **kwargs):
             The task for which to load the tool or a repo ID of a tool on the Hub. Tasks implemented in Transformers
             are:
 
-            - `"document-question-answering"`
-            - `"image-question-answering"`
-            - `"speech-to-text"`
-            - `"text-to-speech"`
+            - `"document_question_answering"`
+            - `"image_question_answering"`
+            - `"speech_to_text"`
+            - `"text_to_speech"`
             - `"translation"`
 
         model_repo_id (`str`, *optional*):
@@ -686,8 +687,8 @@ def load_tool(task_or_repo_id, model_repo_id=None, token=None, **kwargs):
             `cache_dir`, `revision`, `subfolder`) will be used when downloading the files for your tool, and the others
             will be passed along to its init.
     """
-    if task_or_repo_id in TASK_MAPPING:
-        tool_class_name = TASK_MAPPING[task_or_repo_id]
+    if task_or_repo_id in TOOL_MAPPING:
+        tool_class_name = TOOL_MAPPING[task_or_repo_id]
         main_module = importlib.import_module("transformers")
         tools_module = main_module.agents
         tool_class = getattr(tools_module, tool_class_name)
