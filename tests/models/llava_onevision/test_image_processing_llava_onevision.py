@@ -151,7 +151,6 @@ class LlavaOnevisionImageProcessingTest(ImageProcessingTestMixin, unittest.TestC
         self.assertTrue(hasattr(image_processing, "image_mean"))
         self.assertTrue(hasattr(image_processing, "image_std"))
         self.assertTrue(hasattr(image_processing, "do_convert_rgb"))
-        self.assertTrue(hasattr(image_processing, "image_grid_pinpoints"))
 
     def test_image_processor_from_dict_with_kwargs(self):
         image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
@@ -248,12 +247,12 @@ class LlavaOnevisionImageProcessingTest(ImageProcessingTestMixin, unittest.TestC
             self.assertIsInstance(video[0], Image.Image)
 
         encoded_videos = video_processing(video_inputs[0], return_tensors="pt").pixel_values_videos
-        expected_output_video_shape = (1, 8, 1522, 3, 20, 20)
+        expected_output_video_shape = (1, 8, 3, 20, 20)
         self.assertEqual(tuple(encoded_videos.shape), expected_output_video_shape)
 
         # Test batched
         encoded_videos = video_processing(video_inputs, return_tensors="pt").pixel_values_videos
-        expected_output_video_shape = (7, 8, 1522, 3, 20, 20)
+        expected_output_video_shape = (7, 8, 3, 20, 20)
         self.assertEqual(tuple(encoded_videos.shape), expected_output_video_shape)
 
     def test_call_numpy_video(self):
@@ -265,12 +264,12 @@ class LlavaOnevisionImageProcessingTest(ImageProcessingTestMixin, unittest.TestC
             self.assertIsInstance(video, np.ndarray)
 
         encoded_videos = video_processing(video_inputs[0], return_tensors="pt").pixel_values_videos
-        expected_output_video_shape = (1, 8, 1522, 3, 20, 20)
+        expected_output_video_shape = (1, 8, 3, 20, 20)
         self.assertEqual(tuple(encoded_videos.shape), expected_output_video_shape)
 
         # Test batched
         encoded_videos = video_processing(video_inputs, return_tensors="pt").pixel_values_videos
-        expected_output_video_shape = (7, 8, 1522, 3, 20, 20)
+        expected_output_video_shape = (7, 8, 3, 20, 20)
         self.assertEqual(tuple(encoded_videos.shape), expected_output_video_shape)
 
     def test_call_pytorch_video(self):
@@ -283,10 +282,10 @@ class LlavaOnevisionImageProcessingTest(ImageProcessingTestMixin, unittest.TestC
 
         # Test not batched input
         encoded_videos = video_processing(video_inputs[0], return_tensors="pt").pixel_values_videos
-        expected_output_video_shape = (1, 8, 1522, 3, 20, 20)
+        expected_output_video_shape = (1, 8, 3, 20, 20)
         self.assertEqual(tuple(encoded_videos.shape), expected_output_video_shape)
 
         # Test batched
         encoded_videos = video_processing(video_inputs, return_tensors="pt").pixel_values_videos
-        expected_output_video_shape = (7, 8, 1522, 3, 20, 20)
+        expected_output_video_shape = (7, 8, 3, 20, 20)
         self.assertEqual(tuple(encoded_videos.shape), expected_output_video_shape)
