@@ -31,6 +31,7 @@ if is_vision_available():
 
 from ...test_processing_common import ProcessorTesterMixin
 
+
 @require_vision
 @require_torchaudio
 class ImageBindProcessorTest(ProcessorTesterMixin, unittest.TestCase):
@@ -49,7 +50,7 @@ class ImageBindProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor_fast = ImageBindProcessor(image_processor, tokenizer_fast, feature_extractor)
 
         processor_slow.save_pretrained(self.tmpdirname)
-        processor_fast.save_pretrained(self.tmpdirname)        
+        processor_fast.save_pretrained(self.tmpdirname)
 
     def get_tokenizer(self, **kwargs):
         return CLIPTokenizer.from_pretrained(self.checkpoint, **kwargs)
@@ -252,7 +253,9 @@ class ImageBindProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         tokenizer = self.get_component("tokenizer", max_length=117)
         feature_extractor = self.get_component("feature_extractor")
 
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor, feature_extractor=feature_extractor)
+        processor = self.processor_class(
+            tokenizer=tokenizer, image_processor=image_processor, feature_extractor=feature_extractor
+        )
         self.skip_processor_without_typed_kwargs(processor)
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()
@@ -269,7 +272,9 @@ class ImageBindProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         tokenizer = self.get_component("tokenizer", max_length=117)
         feature_extractor = self.get_component("feature_extractor")
 
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor, feature_extractor=feature_extractor)
+        processor = self.processor_class(
+            tokenizer=tokenizer, image_processor=image_processor, feature_extractor=feature_extractor
+        )
         self.skip_processor_without_typed_kwargs(processor)
 
         input_str = "lower newer"
@@ -287,7 +292,9 @@ class ImageBindProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         tokenizer = self.get_component("tokenizer", max_length=117)
         feature_extractor = self.get_component("feature_extractor")
 
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor, feature_extractor=feature_extractor)
+        processor = self.processor_class(
+            tokenizer=tokenizer, image_processor=image_processor, feature_extractor=feature_extractor
+        )
         self.skip_processor_without_typed_kwargs(processor)
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()
@@ -304,7 +311,9 @@ class ImageBindProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         tokenizer = self.get_component("tokenizer", max_length=117)
         feature_extractor = self.get_component("feature_extractor")
 
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor, feature_extractor=feature_extractor)
+        processor = self.processor_class(
+            tokenizer=tokenizer, image_processor=image_processor, feature_extractor=feature_extractor
+        )
         self.skip_processor_without_typed_kwargs(processor)
 
         input_str = "lower newer"
@@ -322,7 +331,9 @@ class ImageBindProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         tokenizer = self.get_component("tokenizer")
         feature_extractor = self.get_component("feature_extractor")
 
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor, feature_extractor=feature_extractor)
+        processor = self.processor_class(
+            tokenizer=tokenizer, image_processor=image_processor, feature_extractor=feature_extractor
+        )
         self.skip_processor_without_typed_kwargs(processor)
 
         input_str = "lower newer"
@@ -348,7 +359,9 @@ class ImageBindProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         tokenizer = self.get_component("tokenizer")
         feature_extractor = self.get_component("feature_extractor")
 
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor, feature_extractor=feature_extractor)
+        processor = self.processor_class(
+            tokenizer=tokenizer, image_processor=image_processor, feature_extractor=feature_extractor
+        )
         self.skip_processor_without_typed_kwargs(processor)
 
         input_str = ["lower newer", "upper older longer string"]
@@ -375,7 +388,9 @@ class ImageBindProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         tokenizer = self.get_component("tokenizer")
         feature_extractor = self.get_component("feature_extractor")
 
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor, feature_extractor=feature_extractor)
+        processor = self.processor_class(
+            tokenizer=tokenizer, image_processor=image_processor, feature_extractor=feature_extractor
+        )
         self.skip_processor_without_typed_kwargs(processor)
 
         input_str = ["lower newer"]
@@ -397,7 +412,9 @@ class ImageBindProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         tokenizer = self.get_component("tokenizer")
         feature_extractor = self.get_component("feature_extractor")
 
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor, feature_extractor=feature_extractor)
+        processor = self.processor_class(
+            tokenizer=tokenizer, image_processor=image_processor, feature_extractor=feature_extractor
+        )
         self.skip_processor_without_typed_kwargs(processor)
 
         input_str = "lower newer"
@@ -427,7 +444,9 @@ class ImageBindProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         tokenizer = self.get_component("tokenizer")
         feature_extractor = self.get_component("feature_extractor")
 
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor, feature_extractor=feature_extractor)
+        processor = self.processor_class(
+            tokenizer=tokenizer, image_processor=image_processor, feature_extractor=feature_extractor
+        )
         self.skip_processor_without_typed_kwargs(processor)
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()

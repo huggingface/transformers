@@ -16,7 +16,6 @@
 import unittest
 
 import numpy as np
-from parameterized import parameterized
 
 from transformers.image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 from transformers.testing_utils import require_torch, require_vision
@@ -30,6 +29,7 @@ if is_torch_available():
 
 if is_vision_available():
     from PIL import Image
+
     from transformers import ImageBindImageProcessor
 
 

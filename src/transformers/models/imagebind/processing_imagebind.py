@@ -15,16 +15,17 @@
 Image/Text processor class for ImageBind
 """
 
-from typing import List, Optional, Union
+from typing import Optional
+
 
 try:
     from typing import Unpack
 except ImportError:
     from typing_extensions import Unpack
 
-from ...image_utils import ImageInput
 from ...processing_utils import AudioKwargs, ImagesKwargs, ProcessingKwargs, ProcessorMixin
-from ...tokenization_utils_base import AudioInput, BatchEncoding, PreTokenizedInput, TextInput
+from ...tokenization_utils_base import BatchEncoding
+
 
 class ImageBindProcessorImagesKwargs(ImagesKwargs, total=False):
     do_convert_rgb: bool = None
@@ -34,6 +35,7 @@ class ImageBindProcessorImagesKwargs(ImagesKwargs, total=False):
     num_frames_per_chunk: int = None
     fps: int = None
 
+
 class ImageBindProcessorAudioKwargs(AudioKwargs, total=False):
     do_normalize: Optional[bool] = None
     mean: Optional[float] = None
@@ -41,6 +43,7 @@ class ImageBindProcessorAudioKwargs(AudioKwargs, total=False):
     do_chunk: Optional[bool] = None
     chunk_duration: Optional[float] = None
     num_chunks: Optional[int] = None
+
 
 class ImageBindProcessorKwargs(ProcessingKwargs, total=False):
     # see processing_utils.ProcessingKwargs documentation for usage.
@@ -126,7 +129,7 @@ class ImageBindProcessor(ProcessorMixin):
         data = {}
 
         if text is not None:
-            encoding = self.tokenizer(text,  **output_kwargs["text_kwargs"])
+            encoding = self.tokenizer(text, **output_kwargs["text_kwargs"])
             data.update(encoding)
 
         if images is not None:
