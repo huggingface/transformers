@@ -330,8 +330,14 @@ def replace_call_to_super(class_finder: ClassFinder, updated_node: cst.ClassDef,
                                                                             |     ```
     """
     original_node = class_finder.classes[class_name]
-    original_methods = {f.name.value if hasattr(f, "name") else class_finder.python_module.code_for_node(f): f for f in original_node.body.body}
-    updated_methods = {f.name.value if hasattr(f, "name") else class_finder.python_module.code_for_node(f): f for f in updated_node.body.body}
+    original_methods = {
+        f.name.value if hasattr(f, "name") else class_finder.python_module.code_for_node(f): f
+        for f in original_node.body.body
+    }
+    updated_methods = {
+        f.name.value if hasattr(f, "name") else class_finder.python_module.code_for_node(f): f
+        for f in updated_node.body.body
+    }
     end_meth = []
 
     # Iterate directly from node.body as there can be property/setters with same names which are overwritten when we use a dict
@@ -358,24 +364,30 @@ def replace_call_to_super(class_finder: ClassFinder, updated_node: cst.ClassDef,
             updated_docstring = func.body[0].value.value
             if "    Args:\n        " not in updated_docstring:
                 logger.warning("We detected a docstring that will be appended to the super's doc")
-            # Split the docstring at the example section, assuming `"""` or `'''` is used to define the docstring
+                # Split the docstring at the example section, assuming `"""` or `'''` is used to define the docstring
                 parts = original_docstring.split("```")
 
                 if len(parts) > 1:
-                    updated_docstring = "".join([parts[0] + updated_docstring.replace("\"\"\"","").lstrip("\n"), "```", parts[1], "```", parts[2]])
+                    updated_docstring = "".join(
+                        [
+                            parts[0] + updated_docstring.replace('"""', "").lstrip("\n"),
+                            "```",
+                            parts[1],
+                            "```",
+                            parts[2],
+                        ]
+                    )
                 else:
-                    updated_docstring =  end_meth[0].body[0].value.value + "\n" +  updated_docstring
+                    updated_docstring = end_meth[0].body[0].value.value + "\n" + updated_docstring
             else:
                 updated_docstring = func.body[0].value.value
             # Update the docstring in the original function
-            end_meth[0] = end_meth[0].with_changes(
-                body=[cst.Expr(value=cst.SimpleString(value=updated_docstring))]
-            )
+            end_meth[0] = end_meth[0].with_changes(body=[cst.Expr(value=cst.SimpleString(value=updated_docstring))])
         if name not in original_methods and func is not None and isinstance(func, cst.FunctionDef):
             end_meth.append(func)
         if m.matches(func, m.SimpleStatementLine(body=[m.Assign()])):
             # we have an attribute
-            end_meth = end_meth[:1] +[func] + end_meth[1:]
+            end_meth = end_meth[:1] + [func] + end_meth[1:]
 
     result_node = original_node.with_changes(body=cst.IndentedBlock(body=end_meth))
     temp_module = cst.Module(body=[result_node])
@@ -577,7 +589,7 @@ class DiffConverterTransformer(CSTTransformer):
 
 
 def convert_file(diff_file, old_model_name=None, new_model_name=None, cst_transformers=None):
-    pattern =re.search(r"diff_(.*)(?=\.py$)", diff_file)
+    pattern = re.search(r"diff_(.*)(?=\.py$)", diff_file)
     if pattern is not None:
         model_name = pattern.groups()[0]
         # Parse the Python file

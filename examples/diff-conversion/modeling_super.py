@@ -12,8 +12,6 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 
-from transformers import Cache
-
 from ...activations import ACT2FN
 from ...cache_utils import Cache, StaticCache
 from ...modeling_attn_mask_utils import AttentionMaskConverter

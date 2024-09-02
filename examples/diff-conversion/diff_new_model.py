@@ -26,7 +26,7 @@ class NewModelConfig(GemmaConfig):
         rope_theta=10000.0,
         attention_bias=False,
         attention_dropout=0.0,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(self, **kwargs)
 
