@@ -279,7 +279,7 @@ class SuperPointImageProcessor(BaseImageProcessor):
         return BatchFeature(data=data, tensor_type=return_tensors)
 
     def post_process_keypoint_detection(
-        self, outputs: 'SuperPointKeypointDescriptionOutput', target_sizes: Union[TensorType, List[Tuple]]
+        self, outputs: "SuperPointKeypointDescriptionOutput", target_sizes: Union[TensorType, List[Tuple]]
     ):
         """
         Converts the raw output of [`SuperPointForKeypointDetection`] into lists of keypoints, scores and descriptors
