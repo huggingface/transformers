@@ -394,8 +394,9 @@ class LayerNorm(nn.LayerNorm):
 
 
 class ColumnParallelConv2dPatch(torch.nn.Module):
-    """Conv2D Patching layer with model parallelism.
-    Column parallel over unfolded input.
+    """Conv2D Patching layer implemented with as linear layer operation.
+    (can be later replaced with Conv2d with small logits mismatch)
+    
     Arguments:
         in_channels: Input channels.
         out_channels: Output channels.
@@ -425,48 +426,44 @@ class ColumnParallelConv2dPatch(torch.nn.Module):
         self.stride = stride
 
         self.unfold = torch.nn.Unfold(kernel_size=kernel_size, stride=stride)
-        # paramter equvalient to Conv2d, reshaped in forward ot perform in Linear layer
+
+        # param equvalient to Conv2d weight, it will reshaped in forward to fit Linear layer,
         # to be fully equvalent original implementation
         self.weight = torch.nn.Parameter(
             torch.randn(out_channels, in_channels, kernel_size[0], kernel_size[1]),
             requires_grad=True,
         )
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.unfold(x)
-        x = x.permute(0, 2, 1)
-        x = F.linear(x, self.weight.view(self.out_channels, -1))
-        return x
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
+        hidden_state = self.unfold(hidden_state)
+        hidden_state = hidden_state.permute(0, 2, 1)
+        hidden_state = F.linear(hidden_state, self.weight.view(self.out_channels, -1))
+        return hidden_state
 
-class ImageFeedForward(torch.nn.Module):
+
+class MllamaImageMLP(torch.nn.Module):
+    # originally ImageFeedForward
+
     def __init__(
         self,
-        dim: int,
-        hidden_dim: int,
-        dropout: float,
-        act_layer: Callable = nn.GELU,
+        hidden_size: int,
+        intermediate_size: int,
+        hidden_act: str = "gelu",
     ):
         super().__init__()
-        # layers
-        self.fc1 = nn.Linear(
-            dim,
-            hidden_dim,
-            bias=True,
-        )
-        self.fc2 = nn.Linear(
-            hidden_dim,
-            dim,
-            bias=True,
-        )
-        self.non_linearity = act_layer()
-        self.dropout = dropout
+        self.fc1 = nn.Linear(hidden_size, intermediate_size, bias=True)
+        self.fc2 = nn.Linear(intermediate_size, hidden_size, bias=True)
+        self.activation_fn = ACT2FN[hidden_act]
 
-    def forward(self, x):
-        hidden = F.linear(x, self.fc1.weight, self.fc1.bias)
-        hidden = self.non_linearity(hidden)
-        hidden = F.linear(hidden, self.fc2.weight)
-        hidden += self.fc2.bias
-        return hidden
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
+        hidden_state = self.fc1(hidden_state)
+        hidden_state = self.activation_fn(hidden_state)
+        
+        # surpisingly this is no equvalent to self.fc2(hidden_state)
+        # saving original implementation for logits full match
+        hidden_state = F.linear(hidden_state, self.fc2.weight) + self.fc2.bias
+    
+        return hidden_state
 
 
 class ImageAttention(nn.Module):
@@ -564,11 +561,9 @@ class ImageTransformerBlock(nn.Module):
             n_heads=self.n_heads,
         )
         self.layer_norm1 = LayerNorm(d_model)
-        self.mlp = ImageFeedForward(
-            dim=d_model, # 1280
-            hidden_dim=int(mlp_ratio * d_model), # 4 x 1280 = 5120
-            dropout=0.0,
-            act_layer=act_layer,
+        self.mlp = MllamaImageMLP(
+            hidden_size=d_model, # 1280
+            intermediate_size=int(mlp_ratio * d_model), # 4 x 1280 = 5120
         )
         self.layer_norm2 = LayerNorm(d_model)
         self.gated = gated
