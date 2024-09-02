@@ -91,7 +91,6 @@ def get_image_prompt_string(
 
 
 class Idefics3ImagesKwargs(ImagesKwargs, total=False):
-    image_seq_len: Optional[int]
     return_row_col_info: Optional[bool]
     max_image_size: Optional[Dict[str, int]]
 
@@ -150,6 +149,8 @@ class Idefics3Processor(ProcessorMixin):
         self.global_img_token = "<global-img>"
         self.image_seq_len = image_seq_len
 
+        # This regex matches one or more occurrences of <global-img> tags (optionally surrounded by newline characters)
+        # or <row_x_col_y> tags (where x and y are digits, also optionally surrounded by newline characters).
         self._regex_to_remove_extra_special_tokens = re.compile(r"(\n?<global-img>\n?|<row_\d+_col_\d+>\n?)+")
 
         tokens_to_add = {
@@ -181,6 +182,7 @@ class Idefics3Processor(ProcessorMixin):
         text: Union[TextInput, "PreTokenizedInput", List[TextInput], List["PreTokenizedInput"]] = None,
         audio=None,
         videos=None,
+        image_seq_len: Optional[int] = None,
         **kwargs: Unpack[Idefics3ProcessorKwargs],
     ) -> BatchEncoding:
         """
@@ -210,7 +212,7 @@ class Idefics3Processor(ProcessorMixin):
         >>> input_ids = outputs.input_ids
         >>> input_tokens = processor.tokenizer.batch_decode(input_ids)
         >>> print(input_tokens)
-        ['<s><fake_token_around_image><image><image><fake_token_around_image> In this image, we see', '<s> bla bla bla<fake_token_around_image><image><image><fake_token_around_image>']
+        ['<|begin_of_text|><fake_token_around_image><global-img>((<image>)*169)<fake_token_around_image> In this image, we see', '<|reserved_special_token_0|><|reserved_special_token_0|><|reserved_special_token_0|><|begin_of_text|>bla bla bla<fake_token_around_image><global-img>((<image>)*169)<fake_token_around_image>']
         ```
 
         Args:
@@ -255,7 +257,6 @@ class Idefics3Processor(ProcessorMixin):
         # Temporary fix for "padding_side" in init_kwargs
         output_kwargs["text_kwargs"].pop("padding_side", None)
 
-        image_seq_len = output_kwargs["images_kwargs"].pop("image_seq_len", None)
         image_seq_len = image_seq_len if image_seq_len is not None else self.image_seq_len
 
         n_images_in_text = []

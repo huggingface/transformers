@@ -315,7 +315,7 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         tokenizer = self.get_component("tokenizer", max_length=117, padding="max_length")
 
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
+        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor, image_seq_len=2)
         self.skip_processor_without_typed_kwargs(processor)
 
         input_str = "lower newer <image>"

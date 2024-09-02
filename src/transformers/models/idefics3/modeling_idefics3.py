@@ -129,6 +129,7 @@ class Idefics3CausalLMOutputWithPast(ModelOutput):
     image_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
+# Copied from transformers.models.idefics2.modeling_idefics2.Idefics2VisionEmbeddings with Idefics2->Idefics3
 class Idefics3VisionEmbeddings(nn.Module):
     """
     This is a modified version of `siglip.modelign_siglip.SiglipVisionEmbeddings` to enable images of variable
@@ -537,109 +538,6 @@ class Idefics3Encoder(nn.Module):
         )
 
 
-IDEFICS3_VISION_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`Idefics3VisionConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
-@add_start_docstrings(
-    "The Idefics3 Vision Transformer Model outputting raw image embedding.",
-    IDEFICS3_VISION_START_DOCSTRING,
-)
-class Idefics3VisionTransformer(PreTrainedModel):
-    config_class = Idefics3VisionConfig
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["Idefics3VisionAttention"]
-    _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn_2 = True
-    _supports_cache_class = True
-
-    def __init__(self, config: Idefics3VisionConfig):
-        super().__init__(config)
-        embed_dim = config.hidden_size
-
-        self.embeddings = Idefics3VisionEmbeddings(config)
-        self.encoder = Idefics3Encoder(config)
-        self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
-        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
-
-    def get_input_embeddings(self):
-        return self.embeddings
-
-    def set_input_embeddings(self, value):
-        self.embeddings = value
-
-    def forward(
-        self,
-        pixel_values,
-        patch_attention_mask: Optional[torch.BoolTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutput]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        batch_size = pixel_values.size(0)
-        if patch_attention_mask is None:
-            patch_size = self.config.patch_size
-            patch_attention_mask = torch.ones(
-                (
-                    batch_size,
-                    pixel_values.size(2) // patch_size,
-                    pixel_values.size(3) // patch_size,
-                )
-            )
-            patch_attention_mask = patch_attention_mask.to(dtype=torch.bool, device=pixel_values.device)
-
-        hidden_states = self.embeddings(pixel_values=pixel_values, patch_attention_mask=patch_attention_mask)
-
-        patch_attention_mask = patch_attention_mask.view(batch_size, -1)
-        # The call to `_upad_input` in `_flash_attention_forward` is expensive
-        # So when the `patch_attention_mask` is full of 1s (i.e. attending to the whole sequence),
-        # avoiding passing the attention_mask, which is equivalent to attending to the full sequence
-        if not torch.any(~patch_attention_mask):
-            patch_attention_mask = None
-        elif not self._use_flash_attention_2:
-            patch_attention_mask = _prepare_4d_attention_mask(patch_attention_mask, hidden_states.dtype)
-
-        encoder_outputs = self.encoder(
-            inputs_embeds=hidden_states,
-            attention_mask=patch_attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        last_hidden_state = encoder_outputs[0]
-        last_hidden_state = self.post_layernorm(last_hidden_state)
-
-        if not return_dict:
-            return (last_hidden_state,) + encoder_outputs[1:]
-
-        return BaseModelOutput(
-            last_hidden_state=last_hidden_state,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
-        )
-
-
 # Copied from transformers.models.llama.modeling_llama.repeat_kv
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
@@ -745,6 +643,109 @@ class Idefics3PreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+
+
+IDEFICS3_VISION_START_DOCSTRING = r"""
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Parameters:
+        config ([`Idefics3VisionConfig`]):
+            Model configuration class with all the parameters of the model. Initializing with a config file does not
+            load the weights associated with the model, only the configuration. Check out the
+            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+
+@add_start_docstrings(
+    "The Idefics3 Vision Transformer Model outputting raw image embedding.",
+    IDEFICS3_VISION_START_DOCSTRING,
+)
+class Idefics3VisionTransformer(Idefics3PreTrainedModel):
+    config_class = Idefics3VisionConfig
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["Idefics3VisionAttention"]
+    _skip_keys_device_placement = "past_key_values"
+    _supports_flash_attn_2 = True
+    _supports_cache_class = True
+
+    def __init__(self, config: Idefics3VisionConfig):
+        super().__init__(config)
+        embed_dim = config.hidden_size
+
+        self.embeddings = Idefics3VisionEmbeddings(config)
+        self.encoder = Idefics3Encoder(config)
+        self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
+        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
+
+    def get_input_embeddings(self):
+        return self.embeddings
+
+    def set_input_embeddings(self, value):
+        self.embeddings = value
+
+    def forward(
+        self,
+        pixel_values,
+        patch_attention_mask: Optional[torch.BoolTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, BaseModelOutput]:
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        batch_size = pixel_values.size(0)
+        if patch_attention_mask is None:
+            patch_size = self.config.patch_size
+            patch_attention_mask = torch.ones(
+                (
+                    batch_size,
+                    pixel_values.size(2) // patch_size,
+                    pixel_values.size(3) // patch_size,
+                )
+            )
+            patch_attention_mask = patch_attention_mask.to(dtype=torch.bool, device=pixel_values.device)
+
+        hidden_states = self.embeddings(pixel_values=pixel_values, patch_attention_mask=patch_attention_mask)
+
+        patch_attention_mask = patch_attention_mask.view(batch_size, -1)
+        # The call to `_upad_input` in `_flash_attention_forward` is expensive
+        # So when the `patch_attention_mask` is full of 1s (i.e. attending to the whole sequence),
+        # avoiding passing the attention_mask, which is equivalent to attending to the full sequence
+        if not torch.any(~patch_attention_mask):
+            patch_attention_mask = None
+        elif not self._use_flash_attention_2:
+            patch_attention_mask = _prepare_4d_attention_mask(patch_attention_mask, hidden_states.dtype)
+
+        encoder_outputs = self.encoder(
+            inputs_embeds=hidden_states,
+            attention_mask=patch_attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        last_hidden_state = encoder_outputs[0]
+        last_hidden_state = self.post_layernorm(last_hidden_state)
+
+        if not return_dict:
+            return (last_hidden_state,) + encoder_outputs[1:]
+
+        return BaseModelOutput(
+            last_hidden_state=last_hidden_state,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
+        )
 
 
 IDEFICS3_INPUTS_DOCSTRING = r"""
@@ -891,12 +892,11 @@ class Idefics3Model(Idefics3PreTrainedModel):
         """
         num_images, _, vision_hidden_size = image_hidden_states.shape
         special_image_token_mask = input_ids == self.image_token_id
-        new_inputs_embeds = inputs_embeds.clone()
         reshaped_image_hidden_states = image_hidden_states.view(-1, vision_hidden_size)
         # cast to the dtype of the input_embeds to support quantized models
         reshaped_image_hidden_states = reshaped_image_hidden_states.to(inputs_embeds.dtype)
-        new_inputs_embeds[special_image_token_mask] = reshaped_image_hidden_states
-        return new_inputs_embeds
+        inputs_embeds[special_image_token_mask] = reshaped_image_hidden_states
+        return inputs_embeds
 
     @add_start_docstrings_to_model_forward(
         """
