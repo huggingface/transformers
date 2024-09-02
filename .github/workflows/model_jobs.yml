@@ -147,6 +147,7 @@ jobs:
         working-directory: /transformers
         run: |
           chown -R root:root /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/
+          chown -R nobody:nogroup /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/
 
       - name: Check cache 11
         working-directory: /transformers
