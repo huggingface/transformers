@@ -106,8 +106,6 @@ class RTDetrConfig(PretrainedConfig):
             The number of input feature levels.
         decoder_n_points (`int`, *optional*, defaults to 4):
             The number of sampled keys in each feature level for each attention head in the decoder.
-        decoder_offset_scale (`float`, *optional*, defaults to 0.5):
-            The number of offset scale in the decoder.
         decoder_layers (`int`, *optional*, defaults to 6):
             Number of decoder layers.
         decoder_attention_heads (`int`, *optional*, defaults to 8):
@@ -134,8 +132,6 @@ class RTDetrConfig(PretrainedConfig):
             based on the predictions from the previous layer.
         is_encoder_decoder (`bool`, *optional*, defaults to `True`):
             Whether the architecture has an encoder decoder structure.
-        decoder_version (`str`, *optional*, defaults to `"v1"`):
-            Version of decoder. Currently only `"v1"`, and `"v2"` is supported.
         matcher_alpha (`float`, *optional*, defaults to 0.25):
             Parameter alpha used by the Hungarian Matcher.
         matcher_gamma (`float`, *optional*, defaults to 2.0):
@@ -221,7 +217,6 @@ class RTDetrConfig(PretrainedConfig):
         decoder_ffn_dim=1024,
         num_feature_levels=3,
         decoder_n_points=4,
-        decoder_offset_scale=0.5,
         decoder_layers=6,
         decoder_attention_heads=8,
         decoder_activation_function="relu",
@@ -234,7 +229,6 @@ class RTDetrConfig(PretrainedConfig):
         disable_custom_kernels=True,
         with_box_refine=True,
         is_encoder_decoder=True,
-        decoder_version="v1",
         # Loss
         matcher_alpha=0.25,
         matcher_gamma=2.0,
@@ -314,7 +308,6 @@ class RTDetrConfig(PretrainedConfig):
         self.decoder_in_channels = decoder_in_channels
         self.num_feature_levels = num_feature_levels
         self.decoder_n_points = decoder_n_points
-        self.decoder_offset_scale = decoder_offset_scale
         self.decoder_layers = decoder_layers
         self.decoder_attention_heads = decoder_attention_heads
         self.decoder_activation_function = decoder_activation_function
@@ -327,7 +320,6 @@ class RTDetrConfig(PretrainedConfig):
         self.auxiliary_loss = auxiliary_loss
         self.disable_custom_kernels = disable_custom_kernels
         self.with_box_refine = with_box_refine
-        self.decoder_version = decoder_version
         # Loss
         self.matcher_alpha = matcher_alpha
         self.matcher_gamma = matcher_gamma
