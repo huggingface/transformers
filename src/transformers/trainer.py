@@ -60,6 +60,7 @@ from .configuration_utils import PretrainedConfig
 from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
 from .debug_utils import DebugOption, DebugUnderflowOverflow
 from .feature_extraction_sequence_utils import SequenceFeatureExtractor
+from .generation.configuration_utils import GenerationConfig
 from .hyperparameter_search import ALL_HYPERPARAMETER_SEARCH_BACKENDS, default_hp_search_backend
 from .integrations.deepspeed import (
     deepspeed_init,
@@ -3810,20 +3811,24 @@ class Trainer:
 
         # Set generation-related kwargs
         if self.args.predict_with_generate:
-            if self.args.generation_config is not None:
-                gen_config = self.args.generation_config
-                self.gen_config = copy.deepcopy(gen_config)  # copy so we don't modify args.gen_config in-place
-                unused_kwargs = self.gen_config.update(**gen_kwargs)
-                if unused_kwargs:
-                    logger.warning_once(
-                        f"Following generation related kwargs were passed to `evaluate` but not used by `generate()`: "
-                        f"{' '.join(unused_kwargs.keys())} .",
-                        "Make sure there are no typos in the passed kwargs or do not pass unused kwargs.",
-                    )
-            else:
+            if self.args.generation_config is None:
                 # We assume the model can generate if predict-with-generate is True
                 # Therefore, generation_config should be available
                 self.gen_config = self.model.generation_config
+            elif isinstance(self.args.generation_config, GenerationConfig):
+                gen_config = self.args.generation_config
+                self.gen_config = copy.deepcopy(gen_config)  # copy so we don't modify args.gen_config in-place
+            else:
+                # That means `args.generation_config` is passed as a Dict
+                self.gen_config = self.model.generation_config
+                _ = self.gen_config.update(**self.args.generation_config)
+            unused_kwargs = self.gen_config.update(**gen_kwargs)
+            if unused_kwargs:
+                logger.warning_once(
+                    f"Following generation related kwargs were passed to `evaluate` but not used by `generate()`: "
+                    f"{' '.join(unused_kwargs.keys())} .",
+                    "Make sure there are no typos in the passed kwargs or do not pass unused kwargs.",
+                )
 
         # memory metrics - must set up as early as possible
         self._memory_tracker.start()
@@ -3914,20 +3919,24 @@ class Trainer:
         """
         # Set generation-related kwargs
         if self.args.predict_with_generate:
-            if self.args.generation_config is not None:
-                gen_config = self.args.generation_config
-                self.gen_config = copy.deepcopy(gen_config)  # copy so we don't modify args.gen_config in-place
-                unused_kwargs = self.gen_config.update(**gen_kwargs)
-                if unused_kwargs:
-                    logger.warning_once(
-                        f"Following generation related kwargs were passed to `evaluate` but not used by `generate()`: "
-                        f"{' '.join(unused_kwargs.keys())} .",
-                        "Make sure there are no typos in the passed kwargs or do not pass unused kwargs.",
-                    )
-            else:
+            if self.args.generation_config is None:
                 # We assume the model can generate if predict-with-generate is True
                 # Therefore, generation_config should be available
                 self.gen_config = self.model.generation_config
+            elif isinstance(self.args.generation_config, GenerationConfig):
+                gen_config = self.args.generation_config
+                self.gen_config = copy.deepcopy(gen_config)  # copy so we don't modify args.gen_config in-place
+            else:
+                # That means `args.generation_config` is passed as a Dict
+                self.gen_config = self.model.generation_config
+                _ = self.gen_config.update(**self.args.generation_config)
+            unused_kwargs = self.gen_config.update(**gen_kwargs)
+            if unused_kwargs:
+                logger.warning_once(
+                    f"Following generation related kwargs were passed to `evaluate` but not used by `generate()`: "
+                    f"{' '.join(unused_kwargs.keys())} .",
+                    "Make sure there are no typos in the passed kwargs or do not pass unused kwargs.",
+                )
 
         # memory metrics - must set up as early as possible
         self._memory_tracker.start()
