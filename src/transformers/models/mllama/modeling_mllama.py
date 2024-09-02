@@ -388,10 +388,54 @@ class LayerNorm(nn.LayerNorm):
     """Subclass torch's LayerNorm to handle fp16."""
 
     def forward(self, x: torch.Tensor):
-        x = F.layer_norm(x, self.normalized_shape, self.weight, self.bias, self.eps)
+        x = torch.nn.functional.layer_norm(x, self.normalized_shape, self.weight, self.bias, self.eps)
         return x
 
 
+class ColumnParallelConv2dPatch(torch.nn.Module):
+    """Conv2D Patching layer with model parallelism.
+    Column parallel over unfolded input.
+    Arguments:
+        in_channels: Input channels.
+        out_channels: Output channels.
+        kernel_size: Size of convolution kernel.
+        stride (default 1): Stride for convolution.
+        bias (default False): Use bias in Conv2d.
+    Input: (bsz, in_channels, width, height)
+    Output: (bsz, num_tokens, out_channels)
+    """
+
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: Union[int, Tuple[int, int]],
+        stride: Union[int, Tuple[int, int]],
+        bias: Optional[bool] = False,
+    ) -> None:
+        super().__init__()
+        
+        if isinstance(kernel_size, int):
+            kernel_size = (kernel_size, kernel_size)
+        
+        self.out_channels = out_channels
+        self.in_channels = in_channels
+        self.kernel_size = kernel_size
+        self.stride = stride
+
+        self.unfold = torch.nn.Unfold(kernel_size=kernel_size, stride=stride)
+        # paramter equvalient to Conv2d, reshaped in forward ot perform in Linear layer
+        # to be fully equvalent original implementation
+        self.weight = torch.nn.Parameter(
+            torch.randn(out_channels, in_channels, kernel_size[0], kernel_size[1]),
+            requires_grad=True,
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.unfold(x)
+        x = x.permute(0, 2, 1)
+        x = F.linear(x, self.weight.view(self.out_channels, -1))
+        return x
 
 class ImageFeedForward(torch.nn.Module):
     def __init__(
@@ -496,7 +540,6 @@ class ImageAttention(nn.Module):
         attn_output = attn_output.transpose(1, 2).contiguous().reshape(bs, slen, -1)
 
         out = F.linear(attn_output, self.o_proj.weight)
-        out = out / self.qkvo_replication
         out += self.o_proj.bias
         return out
 
@@ -539,8 +582,8 @@ class ImageTransformerBlock(nn.Module):
     ):
         _gate_attn = 1 if not self.gated else self.gate_attn.tanh()
         _gate_ffn = 1 if not self.gated else self.gate_ffn.tanh()
-        x = x + _gate_attn * self.self_attn(self.ln_1(x), mask=mask)
-        x = x + _gate_ffn * self.mlp(self.ln_2(x))
+        x = x + _gate_attn * self.self_attn(self.layer_norm1(x), mask=mask)
+        x = x + _gate_ffn * self.mlp(self.layer_norm2(x))
         return x
 
 
@@ -609,7 +652,7 @@ class VisionEncoder(nn.Module):
             self.image_size[0] // self.patch_size[0],
             self.image_size[1] // self.patch_size[1],
         )
-        self.patch_embedding = nn.Conv2d(
+        self.patch_embedding = ColumnParallelConv2dPatch(
             in_channels=in_channels,
             out_channels=width,
             kernel_size=patch_size,
@@ -689,27 +732,48 @@ class VisionEncoder(nn.Module):
         else:
             bsz, num_concurrent_media, num_chunks, nch, w, h = images.shape
 
+        images = torch.load("/home/ubuntu/projects/meta_mllama/logits-test-1/vision-images-input.pt").to(images.device)
+        ar = torch.load("/home/ubuntu/projects/meta_mllama/logits-test-1/vision-ar-input.pt").to(images.device)
+
         images = images.reshape(bsz * num_concurrent_media * num_chunks, nch, w, h)
         ar = ar.reshape(bsz * num_concurrent_media, 2)
 
         # patch embedding
         x = images.reshape(bsz * num_concurrent_media * num_chunks, nch, w, h)
         x = self.patch_embedding(x)  # shape = [*, width, grid ** 2]
-        _, ntok, dim = x.shape
         # equivalent to column parallel conv2d op
-        x = x.permute(0, 2, 3, 1).reshape(bsz * num_concurrent_media, num_chunks, -1, dim)
+        if not isinstance(self.patch_embedding, ColumnParallelConv2dPatch):
+            x = x.flatten(2).transpose(1, 2) # required for Conv2d path embed implementation
+        _, ntok, dim = x.shape
+        x = x.reshape(bsz * num_concurrent_media, num_chunks, -1, dim)
+
+        x_ = torch.load("/home/ubuntu/projects/meta_mllama/logits-test-1/patch-embedding.pt")
+        diff = (x - x_).abs().max().item()
+        print(f"patch embedding diff: {diff}")
 
         # tile embeddings
         x = self.pre_tile_pos_embed(x, ar)
         x = x.reshape(bsz * num_concurrent_media * num_chunks, ntok, dim)
 
+        x_ = torch.load("/home/ubuntu/projects/meta_mllama/logits-test-1/tile-embedding.pt")
+        diff = (x - x_).abs().max().item()
+        print(f"pre tile pos embed diff: {diff}")
+
         # apply cls token
         x = self.apply_class_embedding(x)
         ntok += 1
 
+        x_ = torch.load("/home/ubuntu/projects/meta_mllama/logits-test-1/cls-embedding.pt")
+        diff = (x - x_).abs().max().item()
+        print(f"cls embedding diff: {diff}")
+
         # apply position embeddings
         x = x.reshape(bsz * num_concurrent_media, num_chunks, ntok, dim)
         x = self.apply_positional_embedding(x, ar)
+
+        x_ = torch.load("/home/ubuntu/projects/meta_mllama/logits-test-1/position-embedding.pt")
+        diff = (x - x_).abs().max().item()
+        print(f"pos embedding diff: {diff}")
 
         x = self.ln_pre(x)
         npad, attn_mask = 0, None
@@ -720,6 +784,10 @@ class VisionEncoder(nn.Module):
         x, int_x = self.transformer(
             x, return_intermediate=self.return_intermediate, mask=attn_mask
         )
+
+        x_, int_x_ = torch.load("/home/ubuntu/projects/meta_mllama/logits-test-1/local-transformer-output.pt")
+        diff = (x - x_).abs().max().item()
+        print(f"local transformer diff: {diff}")
 
         x = self.ln_post(x)
         x = x.reshape(bsz * num_concurrent_media, num_chunks, ntok + npad, dim)
@@ -1350,6 +1418,9 @@ class MllamaCrossAttentionTextModel(PreTrainedModel):
         self.cache_is_setup = False
         self.max_seq_len = self.max_seq_len
 
+        # TODO: remove this
+        del self.embed_tokens
+
     def _init_fusion_schedule(
         self,
         num_layers: int,
@@ -1511,27 +1582,34 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
         )
         """
 
+        #TODO: Remove, only debug purposes
+        self.image_transform = VariableSizeImageTransform(size=self.vision_chunk_size)
+
     def setup_cache(self, max_batch_size: int, dtype: torch.dtype):
         self.model.language_model.setup_cache(max_batch_size, dtype)
 
     def compute_vision_tokens_masks(
         self,
-        model_inputs, # TODO type this
+        batch_vision_images: List[List["Image.Image"]], # batch_size, num_images
+        batch_vision_masks: List[List[List[int]]],  # batch_size, num_images, 2
         total_len: int,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         # TODO: make sure vision transformer with pure text also works
         skip_vision_encoder = False 
-        images = [m.vision.images for m in model_inputs if m.vision is not None]
+        
+        # Step 1.
         if (
-            len(images) == 0
-            or max(len(i) for i in images) == 0
+            len(batch_vision_images) == 0
+            or max(len(i) for i in batch_vision_images) == 0
         ):
             max_num_images = 0
-            num_chunks = [[self.max_num_chunks] for _ in model_inputs]
+            num_chunks = [[self.vision_max_num_chunks] for _ in batch_vision_images]
             skip_vision_encoder = True
+
+        # Step 2.
         else:
             images_and_aspect_ratios = [
-                [self.image_transform(im) for im in m.vision.images] for m in model_inputs
+                [self.image_transform(im, self.vision_max_num_chunks) for im in vision_images] for vision_images in batch_vision_images
             ]
             transformed_images = [[x[0] for x in row] for row in images_and_aspect_ratios]
             aspect_ratios = [
@@ -1547,21 +1625,23 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
         if skip_vision_encoder:
             vision_tokens = torch.zeros(
                 (
-                    len(model_inputs),  # batch size 
+                    len(batch_vision_images),  # batch size 
                     max_num_images,   # most likely 1 but take it from model_inputs
-                    int(self.max_num_chunks), 
+                    int(self.vision_max_num_chunks), 
                     int(
-                        (self.vision_model.image_res / self.vision_model.patch_size)
+                        (self.model.vision_model.image_res / self.model.vision_model.patch_size)
                         ** 2
                         + 1
                     ),
-                    int(self.model_dim),
+                    int(self.config.vision_config.projection_dim),
                 ),
             )
-        else: 
-            vision_tokens = self.vision_model(images, aspect_ratios)
+        else:
+            images = images.to(self.device)  # batch_size, num_concurrent_media, num_chunks, channels, height, width
+            aspect_ratios = aspect_ratios.to(self.device)  # batch_size, num_concurrent_media, 2
+            vision_tokens = self.model.vision_model(images, aspect_ratios)
 
-        vision_tokens = vision_tokens.to("cuda")
+        vision_tokens = vision_tokens.to(self.device)
             
         bsz, nimg, nchunk, ntok, image_token_dim = tuple(vision_tokens.shape)
         xattn_caches = torch.stack(
@@ -1573,16 +1653,16 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
             ]
         )
         padded_masks = _pad_masks(
-            [x.vision.mask for x in model_inputs],
+            [vision_mask for vision_mask in batch_vision_masks],
             num_chunks,
             total_len,
-            self.max_num_chunks,
+            self.vision_max_num_chunks,
         )
 
         cross_attention_masks, full_text_row_masked_out_mask = (
             self.model.language_model._get_xattn_mask(
                 num_tokens=total_len,
-                text_device="cuda",
+                text_device=self.device,
                 text_dtype=next(self.model.language_model.parameters()).dtype,
                 vision_tokens=vision_tokens,
                 cross_attention_masks=padded_masks,
@@ -1941,3 +2021,248 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
 
     def _reorder_cache(self, *args, **kwargs):
         return self.model.language_model._reorder_cache(*args, **kwargs)
+
+# ------------------------------------------
+
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+#
+# This source code is licensed under the terms described in the LICENSE file in
+# top-level folder for each specific model found within the models/ directory at
+# the top-level of this source tree.
+
+import math
+from functools import reduce
+from typing import Any, Tuple
+
+import numpy as np
+import torch
+import torchvision.transforms as tv
+from PIL import Image
+import torchvision.transforms.functional
+
+class VariableSizeImageTransform(object):
+    """
+    The variable size image transform will resize the image dynamically
+    based on the image aspect ratio and the number of image chunks we allow.
+    The algorithm will not upsample low-res images to fit a certain aspect
+    ratio, because that leads to a significant degradation in image quality.
+    For example, if an input image is of size 300x800, and we want to allow
+    a maximum of 16 image chunks, it will find the closest aspect ratio that
+    is allowed within 16 image chunks, i.e., 2:5 = 2 horizontal patches and
+    5 vertical patches, giving a total of 10 chunks.
+    The image will then be resized to products of the base size (default is
+    224px because MetaCLIP takes that), so in this case it will  be resized to
+    2*224:5*224 = 448:1120, where we maintain the original aspect ratio and
+    pad with the mean value for the rest. This approach minimizes the amount
+    of padding required for any arbitrary resolution.
+    The final output will therefore be of shape (11, 3, 224, 224), where 10
+    patches are coming from the resizing and chunking, and the first patch
+    is a downsampled version of the image that preserves aspect ratios.
+    """
+
+    def __init__(self, size: int) -> None:
+        self.size = size
+        self.to_tensor = tv.ToTensor()
+        self._mean = (0.48145466, 0.4578275, 0.40821073)
+        self._std = (0.26862954, 0.26130258, 0.27577711)
+        self.normalize = tv.Normalize(
+            mean=self._mean,
+            std=self._std,
+            inplace=True,
+        )
+
+    @staticmethod
+    def _factors(n: int):
+        """Return all factors of a number."""
+        return set(
+            reduce(
+                list.__add__,
+                ([i, n // i] for i in range(1, int(n**0.5) + 1) if n % i == 0),
+            )
+        )
+
+    def _find_supported_aspect_ratios(self, num_chunks: int):
+        """
+        This function computes all the allowed aspect ratios for a fixed
+        number of input chunks.
+        For example, with `num_chunks=5`, it will return:
+        {
+            0.2: [(1, 5)],
+            5.0: [(5, 1)],
+            0.25: [(1, 4)],
+            1.0: [(2, 2), (1, 1)],
+            4.0: [(4, 1)],
+            0.3333333333333333: [(1, 3)],
+            3.0: [(3, 1)],
+            0.5: [(1, 2)],
+            2.0: [(2, 1)]
+        }
+        """
+        asp_dict = {}
+        for chunk_size in range(num_chunks, 0, -1):
+            _factors = sorted(VariableSizeImageTransform._factors(chunk_size))
+            _asp_ratios = [(x, chunk_size // x) for x in _factors]
+            for ratio in _asp_ratios:
+                k = ratio[0] / ratio[1]
+                if k not in asp_dict:
+                    asp_dict[k] = [ratio]
+                else:
+                    asp_dict[k].append(ratio)
+        return asp_dict
+
+    def _find_closest_aspect_ratio(
+        self, num_chunks: int, img_width: int, img_height: int
+    ) -> Tuple:
+        """
+        Given an image width, height and target number of chunks
+        this function will find the closest supported aspect ratio.
+        """
+        tgt_ar = img_width / img_height
+        asp_dict = self._find_supported_aspect_ratios(num_chunks)
+        cl_d, cl_p = 1e23, None
+        if tgt_ar >= 1:
+            cl_p = min(
+                [k for k in asp_dict.keys() if k <= tgt_ar],
+                key=lambda x: abs(x - tgt_ar),
+            )
+            v = asp_dict[cl_p]
+            # select width
+            widths = [(idx, self.size * vv[0]) for idx, vv in enumerate(v)]
+            tgt_idx = max(widths, key=lambda x: x[1])[0]
+        else:
+            cl_p = min(
+                [k for k in asp_dict.keys() if k > tgt_ar],
+                key=lambda x: abs(1 / x - 1 / tgt_ar),
+            )
+            v = asp_dict[cl_p]
+            # select height
+            heights = [(idx, self.size * vv[1]) for idx, vv in enumerate(v)]
+            tgt_idx = max(heights, key=lambda x: x[1])[0]
+        out = v[tgt_idx]
+        return out
+
+    def _resize(
+        self, image: Image.Image, target_width: int, target_height: int
+    ) -> Image.Image:
+        # Resize longer edge to given size.
+        w, h = image.size
+        scale = w / h
+
+        if scale > 1.0:
+            # width > height
+            new_w = target_width
+            new_h = math.floor(new_w / scale)
+        else:
+            # height >= width
+            new_h = target_height
+            new_w = math.floor(new_h * scale)
+
+        image = torchvision.transforms.functional.resize(image, (new_h, new_w))
+        return image
+
+    def _resize_max_side_to_size(
+        self,
+        image: Image.Image,
+    ) -> Image.Image:
+        # Resize longer edge to given size.
+        w, h = image.size
+        scale = w / h
+
+        if scale > 1.0:
+            # width > height
+            new_w = max(self.size, w)
+            new_h = math.floor(new_w / scale)
+        else:
+            # height >= width
+            new_h = max(self.size, h)
+            new_w = math.floor(new_h * scale)
+
+        image = torchvision.transforms.functional.resize(image, (new_h, new_w))
+        return image
+
+    def _pad(self, image: Image.Image, new_width: int, new_height: int) -> Image.Image:
+        mean_per_channel = tuple(
+            np.clip(np.array(image).mean(axis=(0, 1)), 0, 255).astype(np.uint8)
+        )
+        new_im = Image.new(mode="RGB", size=(new_height, new_width), color=(0, 0, 0))  # type: ignore
+        new_im.paste(image)
+        return new_im
+
+    def _split(self, image: torch.Tensor, ncw: int, nch: int) -> torch.Tensor:
+        # Split image into number of required tiles (width x height)
+        num_channels, height, width = image.size()
+        image = image.view(num_channels, nch, height // nch, ncw, width // ncw)
+        # Permute dimensions to reorder the axes
+        image = image.permute(1, 3, 0, 2, 4).contiguous()
+        # Reshape into the desired output shape (batch_size * 4, num_channels, width/2, height/2)
+        image = image.view(ncw * nch, num_channels, height // nch, width // ncw)
+        return image
+
+    def _fit_image_to_canvas(
+        self, num_chunks: int, img_width: int, img_height: int
+    ) -> Any:
+        """
+        Given an image width, height and target number of chunks this function will see if the image
+        can be fit into any of the canvases that can be build from arranging the tiles in a grid.
+        If the image can be fit onto several canvases, it will return the canvas where the shorter edge
+        of the image will be largest.
+        """
+        # Initialize the optimal canvas to None. If no canvas is found where image fits, function returns None.
+        optimal_canvas = None
+        optimal_image_width_height = None
+
+        scale = img_width / img_height
+
+        # Gather all potential supported image resolutions and iterate through them to find best match
+        potential_arrangements = [
+            item
+            for sublist in self._find_supported_aspect_ratios(num_chunks).values()
+            for item in sublist
+        ]
+        current_gap = 1e23
+        for n_w, n_h in potential_arrangements:
+            # Compute the canvas size
+            canvas_width, canvas_height = n_w * self.size, n_h * self.size
+
+            # Check if image can fit into the canvas without downsampling
+            if canvas_width >= img_width and canvas_height >= img_height:
+                # If we did not find a good canvas yet, we will use the current one
+                if optimal_canvas is None:
+                    # Set optimal canvas and determine the actual image height and width in the canvas with aspect ratio preserving resampling
+                    optimal_canvas = (n_w, n_h)
+                    optimal_image_width_height = (n_w * self.size, n_h * self.size)
+                else:
+                    # Find closest fit based on gap
+                    image_width_height = (n_w * self.size, n_h * self.size)
+                    gap = abs(img_width - image_width_height[0]) + abs(
+                        img_height - image_width_height[1]
+                    )
+                    if gap < current_gap:
+                        # If the gap is smaller than the previous one, we will update our optimal canvas and image width height
+                        optimal_canvas = (n_w, n_h)
+                        optimal_image_width_height = image_width_height
+                        current_gap = gap
+        return optimal_canvas
+
+    def __call__(self, image: Image.Image, max_num_chunks: int) -> Tuple[Any, Any]:
+        assert max_num_chunks > 0
+        assert isinstance(image, Image.Image), type(image)
+        w, h = image.size
+        # Check if the image can be fit to the canvas without downsampling
+        ar = self._fit_image_to_canvas(
+            num_chunks=max_num_chunks, img_width=w, img_height=h
+        )
+        if ar is None:
+            # If we did not find a canvas, we have to find the closest aspect ratio and downsample the image
+            ar = self._find_closest_aspect_ratio(
+                num_chunks=max_num_chunks, img_width=w, img_height=h
+            )
+            image = self._resize(image, ar[0] * self.size, ar[1] * self.size)
+        else:
+            image = self._resize_max_side_to_size(image)
+        image = self._pad(image, ar[1] * self.size, ar[0] * self.size)
+        image = self.to_tensor(image)
+        image = self.normalize(image)
+        image = self._split(image, ar[0], ar[1])  # type: ignore
+        return image, ar
