@@ -724,6 +724,18 @@ class Kosmos2_5VisionLayer(nn.Module):
         self.pre_mlp_layer_norm = Kosmos2_5LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.pre_attention_layer_norm = Kosmos2_5LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
+    def _prepare_attention_mask(self, attention_mask, input_shape, inputs_embeds):
+        if self.config._attn_implementation == "flash_attention_2":
+            if attention_mask is not None and 0.0 in attention_mask:
+                return attention_mask
+            return None
+        if attention_mask is not None:
+            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+            expanded_attn_mask = _expand_mask(attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]).to(
+                inputs_embeds.device
+            )
+        return expanded_attn_mask
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -735,6 +747,8 @@ class Kosmos2_5VisionLayer(nn.Module):
 
         # in  Kosmos2_5Vision, layernorm is applied before self-attention
         hidden_states = self.pre_attention_layer_norm(hidden_states)
+
+        attention_mask = self._prepare_attention_mask(attention_mask, hidden_states.shape[:2], hidden_states)
 
         self_attention_outputs = self.attention(
             hidden_states,
