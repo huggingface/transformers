@@ -106,6 +106,7 @@ class RTDetrConfig(PretrainedConfig):
             The number of input feature levels.
         decoder_n_points (`int`, *optional*, defaults to 4):
             The number of sampled keys in each feature level for each attention head in the decoder.
+        decoder_offset_scale (`<fill_type>`, *optional*, defaults to 0.5): <fill_docstring>
         decoder_layers (`int`, *optional*, defaults to 6):
             Number of decoder layers.
         decoder_attention_heads (`int`, *optional*, defaults to 8):
@@ -132,6 +133,8 @@ class RTDetrConfig(PretrainedConfig):
             based on the predictions from the previous layer.
         is_encoder_decoder (`bool`, *optional*, defaults to `True`):
             Whether the architecture has an encoder decoder structure.
+        decoder_version (`str`, *optional*, defaults to `"v1"`):
+            Version of decoder. Currently only `"v1"`, and `"v2"` is supported.
         matcher_alpha (`float`, *optional*, defaults to 0.25):
             Parameter alpha used by the Hungarian Matcher.
         matcher_gamma (`float`, *optional*, defaults to 2.0):
