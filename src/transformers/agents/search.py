@@ -22,7 +22,7 @@ class DuckDuckGoSearchTool(Tool):
     description = """Perform a web search based on your query (think a Google search) then returns the top search results as a list of dict elements.
     Each result has keys 'title', 'href' and 'body'."""
     inputs = {"query": {"type": "text", "description": "The search query to perform."}}
-    output_type = "list"
+    output_type = "any"
 
     def forward(self, query: str) -> str:
         try:

@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 HuggingFace Inc.
+# Copyright 2024 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -22,15 +22,12 @@ from transformers import load_tool
 from .test_tools_common import ToolTesterMixin
 
 
-class SpeechToTextToolTester(unittest.TestCase, ToolTesterMixin):
+class DuckDuckGoSearchToolTester(unittest.TestCase, ToolTesterMixin):
     def setUp(self):
-        self.tool = load_tool("speech_to_text")
+        self.tool = load_tool("web_search")
         self.tool.setup()
 
     def test_exact_match_arg(self):
-        result = self.tool(np.ones(3000))
-        self.assertEqual(result, " Thank you.")
+        result = self.tool("Agents")
+        assert isinstance(result, list) and isinstance(result[0], dict)
 
-    def test_exact_match_kwarg(self):
-        result = self.tool(audio=np.ones(3000))
-        self.assertEqual(result, " Thank you.")
