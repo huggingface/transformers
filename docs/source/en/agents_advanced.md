@@ -19,7 +19,8 @@ rendered properly in your Markdown viewer.
 
 ### What is an agent?
 
-First checkout the main [agents documentation](./agents.)
+> [!TIP]
+> If you're new to `transformers.agents` sure to first read the main [agents documentation](./agents.)
 
 In this page we're going to highlight several advanced uses of `transformers.agents`.
 
@@ -31,6 +32,8 @@ It empirically yields better performance on most benchmarks. The reason for this
 
 You can easily build hierarchical multi-agent systems with `transformers.agents`.
 
+> [!TIP]
+> For a good example of an efficient multi-agent, see [how we pushed our multi-agent system to the top of the GAIA leaderboard](https://huggingface.co/blog/beating-gaia).
 
 ## Use tools from gradio or LangChain
 
