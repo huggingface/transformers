@@ -27,9 +27,10 @@ from ...test_image_processing_common import (
 if is_torch_available():
     import torch
 
+    from transformers.models.superpoint.modeling_superpoint import SuperPointKeypointDescriptionOutput
+
 if is_vision_available():
     from transformers import SuperPointImageProcessor
-    from transformers.models.superpoint.modeling_superpoint import SuperPointKeypointDescriptionOutput
 
 
 class SuperPointImageProcessingTester(unittest.TestCase):
