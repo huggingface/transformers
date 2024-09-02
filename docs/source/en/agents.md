@@ -48,6 +48,17 @@ We implement two versions of ReactJsonAgent:
 > [!TIP]
 > Read [Open-source LLMs as LangChain Agents](https://huggingface.co/blog/open-source-llms-as-agents) blog post to learn more the ReAct agent.
 
+<div class="flex justify-center">
+    <img
+        class="block dark:hidden"
+        src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/Agent_ManimCE.gif"
+    />
+    <img
+        class="hidden dark:block"
+        src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/Agent_ManimCE.gif"
+    />
+</div>
+
 ![Framework of a React Agent](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/blog/open-source-llms-as-agents/ReAct.png)
 
 For example, here is how a ReAct Code agent would work its way through the following question.
@@ -444,123 +455,3 @@ To speed up the start, tools are loaded only if called by the agent.
 This gets you this image:
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/rivers_and_lakes.png">
-
-
-### Use gradio-tools
-
-[gradio-tools](https://github.com/freddyaboulton/gradio-tools) is a powerful library that allows using Hugging
-Face Spaces as tools. It supports many existing Spaces as well as custom Spaces.
-
-Transformers supports `gradio_tools` with the [`Tool.from_gradio`] method. For example, let's use the [`StableDiffusionPromptGeneratorTool`](https://github.com/freddyaboulton/gradio-tools/blob/main/gradio_tools/tools/prompt_generator.py) from `gradio-tools` toolkit for improving prompts to generate better images.
-
-Import and instantiate the tool, then pass it to the `Tool.from_gradio` method:
-
-```python
-from gradio_tools import StableDiffusionPromptGeneratorTool
-from transformers import Tool, load_tool, CodeAgent
-
-gradio_prompt_generator_tool = StableDiffusionPromptGeneratorTool()
-prompt_generator_tool = Tool.from_gradio(gradio_prompt_generator_tool)
-```
-
-Now you can use it just like any other tool. For example, let's improve the prompt  `a rabbit wearing a space suit`.
-
-```python
-image_generation_tool = load_tool('huggingface-tools/text-to-image')
-agent = CodeAgent(tools=[prompt_generator_tool, image_generation_tool], llm_engine=llm_engine)
-
-agent.run(
-    "Improve this prompt, then generate an image of it.", prompt='A rabbit wearing a space suit'
-)
-```
-
-The model adequately leverages the tool:
-```text
-======== New task ========
-Improve this prompt, then generate an image of it.
-You have been provided with these initial arguments: {'prompt': 'A rabbit wearing a space suit'}.
-==== Agent is executing the code below:
-improved_prompt = StableDiffusionPromptGenerator(query=prompt)
-while improved_prompt == "QUEUE_FULL":
-    improved_prompt = StableDiffusionPromptGenerator(query=prompt)
-print(f"The improved prompt is {improved_prompt}.")
-image = image_generator(prompt=improved_prompt)
-====
-```
-
-Before finally generating the image:
-
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/rabbit.png">
-
-
-> [!WARNING]
-> gradio-tools require *textual* inputs and outputs even when working with different modalities like image and audio objects. Image and audio inputs and outputs are currently incompatible.
-
-### Use LangChain tools
-
-We love Langchain and think it has a very compelling suite of tools.
-To import a tool from LangChain, use the `from_langchain()` method.
-
-Here is how you can use it to recreate the intro's search result using a LangChain web search tool.
-
-```python
-from langchain.agents import load_tools
-from transformers import Tool, ReactCodeAgent
-
-search_tool = Tool.from_langchain(load_tools(["serpapi"])[0])
-
-agent = ReactCodeAgent(tools=[search_tool])
-
-agent.run("How many more blocks (also denoted as layers) in BERT base encoder than the encoder from the architecture proposed in Attention is All You Need?")
-```
-
-## Gradio interface
-
-You can leverage `gradio.Chatbot`to display your agent's thoughts using `stream_to_gradio`, here is an example:
-
-```py
-import gradio as gr
-from transformers import (
-    load_tool,
-    ReactCodeAgent,
-    HfApiEngine,
-    stream_to_gradio,
-)
-
-# Import tool from Hub
-image_generation_tool = load_tool("m-ric/text-to-image")
-
-llm_engine = HfApiEngine("meta-llama/Meta-Llama-3-70B-Instruct")
-
-# Initialize the agent with the image generation tool
-agent = ReactCodeAgent(tools=[image_generation_tool], llm_engine=llm_engine)
-
-
-def interact_with_agent(task):
-    messages = []
-    messages.append(gr.ChatMessage(role="user", content=task))
-    yield messages
-    for msg in stream_to_gradio(agent, task):
-        messages.append(msg)
-        yield messages + [
-            gr.ChatMessage(role="assistant", content="⏳ Task not finished yet!")
-        ]
-    yield messages
-
-
-with gr.Blocks() as demo:
-    text_input = gr.Textbox(lines=1, label="Chat Message", value="Make me a picture of the Statue of Liberty.")
-    submit = gr.Button("Run illustrator agent!")
-    chatbot = gr.Chatbot(
-        label="Agent",
-        type="messages",
-        avatar_images=(
-            None,
-            "https://em-content.zobj.net/source/twitter/53/robot-face_1f916.png",
-        ),
-    )
-    submit.click(interact_with_agent, [text_input], [chatbot])
-
-if __name__ == "__main__":
-    demo.launch()
-```
