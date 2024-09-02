@@ -517,41 +517,55 @@ class MllamaImageSdpaAttention(nn.Module):
         return output
 
 
-class ImageTransformerBlock(nn.Module):
+class MllamaImageTransformerLayer(nn.Module):
+    # originally ImageTransformerBlock
+
     def __init__(
         self,
-        d_model: int,
-        n_head: int,
+        hidden_size: int,
+        num_attention_heads: int,
         mlp_ratio: float = 4.0,
-        act_layer: Callable = nn.GELU,
         gated: bool = False,
     ):
         super().__init__()
-        assert d_model % n_head == 0
-        self.n_heads = n_head
-        self.head_dim = d_model // self.n_heads
-        self.self_attn = MllamaImageSdpaAttention(hidden_size=d_model, num_attention_heads=self.n_heads)
-        self.layer_norm1 = LayerNorm(d_model)
-        self.mlp = MllamaImageMLP(
-            hidden_size=d_model, # 1280
-            intermediate_size=int(mlp_ratio * d_model), # 4 x 1280 = 5120
-        )
-        self.layer_norm2 = LayerNorm(d_model)
-        self.gated = gated
-        if gated:
+        assert hidden_size % num_attention_heads == 0
+        
+        self.hidden_size = hidden_size
+        self.num_attention_heads = num_attention_heads
+        self.is_gated = gated
+        self.intermediate_size = int(mlp_ratio * hidden_size)
+
+        self.self_attn = MllamaImageSdpaAttention(self.hidden_size, self.num_attention_heads)
+        self.mlp = MllamaImageMLP(self.hidden_size, self.intermediate_size)
+
+        self.layer_norm1 = nn.LayerNorm(self.hidden_size)
+        self.layer_norm2 = nn.LayerNorm(self.hidden_size)
+
+        if self.is_gated:
             self.gate_attn = nn.Parameter(torch.zeros(1))
             self.gate_ffn = nn.Parameter(torch.zeros(1))
 
     def forward(
         self,
-        x: torch.Tensor,
-        mask: torch.Tensor = None,
+        hidden_state: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
     ):
-        _gate_attn = 1 if not self.gated else self.gate_attn.tanh()
-        _gate_ffn = 1 if not self.gated else self.gate_ffn.tanh()
-        x = x + _gate_attn * self.self_attn(self.layer_norm1(x), attention_mask=mask)
-        x = x + _gate_ffn * self.mlp(self.layer_norm2(x))
-        return x
+
+        # Self Attention
+        residual = hidden_state
+        hidden_state = self.layer_norm1(hidden_state)
+        hidden_state = self.self_attn(hidden_state, attention_mask=attention_mask)
+        gate_attn = 1 if not self.is_gated else self.gate_attn.tanh()
+        hidden_state = residual + gate_attn * hidden_state
+
+        # Feed forward
+        residual = hidden_state
+        hidden_state = self.layer_norm2(hidden_state)
+        hidden_state = self.mlp(hidden_state)
+        gate_ffn = 1 if not self.is_gated else self.gate_ffn.tanh()
+        hidden_state = residual + gate_ffn * hidden_state
+
+        return hidden_state
 
 
 class ImageTransformer(nn.Module):
@@ -561,7 +575,6 @@ class ImageTransformer(nn.Module):
         num_layers: int,
         heads: int,
         mlp_ratio: float = 4.0,
-        act_layer: Callable = nn.GELU,
         gated: bool = False,
     ):
         super().__init__()
@@ -569,11 +582,10 @@ class ImageTransformer(nn.Module):
         self.num_layers = num_layers
         self.layers = nn.ModuleList(
             [
-                ImageTransformerBlock(
-                    d_model=width,
-                    n_head=heads,
+                MllamaImageTransformerLayer(
+                    hidden_size=width,
+                    num_attention_heads=heads,
                     mlp_ratio=mlp_ratio,
-                    act_layer=act_layer,
                     gated=gated,
                 )
                 for _ in range(self.num_layers)
@@ -585,7 +597,7 @@ class ImageTransformer(nn.Module):
         for idx, r in enumerate(self.layers):
             if return_intermediate is not None and idx in return_intermediate:
                 out.append(x)
-            x = r(x, mask=mask)
+            x = r(x, attention_mask=mask)
         if return_intermediate is not None:
             return x, torch.stack(out, dim=-1)
         return x
@@ -631,14 +643,14 @@ class VisionEncoder(nn.Module):
         self.positional_embedding = nn.Parameter(
             scale * torch.randn(self.grid_size[0] * self.grid_size[1] + 1, width)
         )
-        self.ln_post = LayerNorm(width)
-        self.ln_pre = LayerNorm(width)
+        self.ln_post = nn.LayerNorm(width)
+        self.ln_pre = nn.LayerNorm(width)
         self.transformer = ImageTransformer(
-            width, num_layers, heads, mlp_ratio, act_layer=act_layer
+            width, num_layers, heads, mlp_ratio, gated=False
         )
         # pre and post tile position embedding
         self.global_transformer = ImageTransformer(
-            width, n_global_layers, heads, mlp_ratio, act_layer=act_layer, gated=True
+            width, n_global_layers, heads, mlp_ratio, gated=True
         )
         # pre and post tile position embedding
         self.pre_tile_pos_embed = TilePositionEmbedding(
