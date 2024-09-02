@@ -94,6 +94,8 @@
       title: Text to speech
     - local: tasks/image_text_to_text
       title: Image-text-to-text
+    - local: tasks/video_text_to_text
+      title: Video-text-to-text
     title: Multimodal
   - isExpanded: false
     sections:
@@ -120,7 +122,7 @@
   - local: custom_models
     title: Share a custom model
   - local: chat_templating
-    title: Templates for chat models
+    title: Chat templates
   - local: trainer
     title: Trainer
   - local: sagemaker
@@ -163,6 +165,8 @@
     title: FBGEMM_FP8
   - local: quantization/optimum
     title: Optimum
+  - local: quantization/torchao
+    title: TorchAO
   - local: quantization/contribute
     title: Contribute new quantization method
   title: Quantization Methods
@@ -370,6 +374,8 @@
         title: ESM
       - local: model_doc/falcon
         title: Falcon
+      - local: model_doc/falcon_mamba
+        title: FalconMamba
       - local: model_doc/fastspeech2_conformer
         title: FastSpeech2Conformer
       - local: model_doc/flan-t5
@@ -408,6 +414,8 @@
         title: GPTSAN Japanese
       - local: model_doc/gpt-sw3
         title: GPTSw3
+      - local: model_doc/granite
+        title: Granite
       - local: model_doc/herbert
         title: HerBERT
       - local: model_doc/ibert
@@ -510,6 +518,8 @@
         title: Qwen2Audio
       - local: model_doc/qwen2_moe
         title: Qwen2MoE
+      - local: model_doc/qwen2_vl
+        title: Qwen2VL
       - local: model_doc/rag
         title: RAG
       - local: model_doc/realm
@@ -692,6 +702,8 @@
         title: Bark
       - local: model_doc/clap
         title: CLAP
+      - local: model_doc/dac
+        title: dac
       - local: model_doc/encodec
         title: EnCodec
       - local: model_doc/hiera
@@ -818,7 +830,7 @@
         title: Llava
       - local: model_doc/llava_next
         title: LLaVA-NeXT
-      - local: model_doc/llava-next-video
+      - local: model_doc/llava_next_video
         title: LLaVa-NeXT-Video
       - local: model_doc/lxmert
         title: LXMERT

@@ -23,6 +23,7 @@ import threading
 import unittest
 import unittest.mock as mock
 import uuid
+import warnings
 from pathlib import Path
 
 import requests
@@ -105,6 +106,7 @@ if is_torch_available():
         dtype_byte_size,
         shard_checkpoint,
     )
+    from transformers.pytorch_utils import isin_mps_friendly
 
     # Fake pretrained models for tests
     class BaseModel(PreTrainedModel):
@@ -1599,14 +1601,30 @@ class ModelUtilsTest(TestCasePlus):
         for p1, p2 in zip(model.parameters(), new_model.parameters()):
             self.assertTrue(torch.equal(p1, p2))
 
-    def test_modifying_model_config_causes_warning_saving_generation_config(self):
+    def test_modifying_model_config_gets_moved_to_generation_config(self):
+        """
+        Calling `model.save_pretrained` should move the changes made to `generate` parameterization in the model config
+        to the generation config.
+        """
         model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
-        model.config.top_k = 1
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            with self.assertLogs("transformers.modeling_utils", level="WARNING") as logs:
+        # Initially, the repetition penalty has its default value in `model.config`. The `model.generation_config` will
+        # have the exact same default
+        self.assertTrue(model.config.repetition_penalty == 1.0)
+        self.assertTrue(model.generation_config.repetition_penalty == 1.0)
+        # If the user attempts to save a custom generation parameter:
+        model.config.repetition_penalty = 3.0
+        with warnings.catch_warnings(record=True) as warning_list:
+            with tempfile.TemporaryDirectory() as tmp_dir:
                 model.save_pretrained(tmp_dir)
-            self.assertEqual(len(logs.output), 1)
-            self.assertIn("Your generation config was originally created from the model config", logs.output[0])
+                # 1 - That parameter will be removed from `model.config`. We don't want to use `model.config` to store
+                # generative parameters, and the old default (1.0) would no longer relect the user's wishes.
+                self.assertTrue(model.config.repetition_penalty is None)
+                # 2 - That parameter will be set in `model.generation_config` instead.
+                self.assertTrue(model.generation_config.repetition_penalty == 3.0)
+        # 3 - The user will see a warning regarding the custom parameter that has been moved.
+        self.assertTrue(len(warning_list) == 1)
+        self.assertTrue("Moving the following attributes" in str(warning_list[0].message))
+        self.assertTrue("repetition_penalty" in str(warning_list[0].message))
 
     @require_safetensors
     def test_model_from_pretrained_from_mlx(self):
@@ -1640,17 +1658,18 @@ class ModelUtilsTest(TestCasePlus):
 
         logger = logging.get_logger("transformers.modeling_utils")
         config = PretrainedConfig()
-        warning_msg_gamma = "A parameter name that contains `gamma` will be renamed internally"
+        warning_msg_gamma = "`gamma_param` -> `weight_param`"
         model = TestModelGamma(config)
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             model.save_pretrained(tmp_dir)
-            with LoggingLevel(logging.WARNING):
+            with LoggingLevel(logging.INFO):
                 with CaptureLogger(logger) as cl1:
                     _, loading_info = TestModelGamma.from_pretrained(tmp_dir, config=config, output_loading_info=True)
 
         missing_keys = loading_info["missing_keys"]
         unexpected_keys = loading_info["unexpected_keys"]
+        self.assertIn("`TestModelGamma`", cl1.out)
         self.assertIn(warning_msg_gamma, cl1.out)
         self.assertIn("gamma_param", missing_keys)
         self.assertIn("weight_param", unexpected_keys)
@@ -1664,20 +1683,37 @@ class ModelUtilsTest(TestCasePlus):
             def forward(self):
                 return self.beta_param.sum()
 
-        warning_msg_beta = "A parameter name that contains `beta` will be renamed internally"
+        warning_msg_beta = "`beta_param` -> `bias_param`"
         model = TestModelBeta(config)
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             model.save_pretrained(tmp_dir)
-            with LoggingLevel(logging.WARNING):
+            with LoggingLevel(logging.INFO):
                 with CaptureLogger(logger) as cl2:
                     _, loading_info = TestModelBeta.from_pretrained(tmp_dir, config=config, output_loading_info=True)
 
         missing_keys = loading_info["missing_keys"]
         unexpected_keys = loading_info["unexpected_keys"]
+        self.assertIn("`TestModelBeta`", cl2.out)
         self.assertIn(warning_msg_beta, cl2.out)
         self.assertIn("beta_param", missing_keys)
         self.assertIn("bias_param", unexpected_keys)
+
+    def test_isin_mps_friendly(self):
+        """tests that our custom `isin_mps_friendly` matches `torch.isin`"""
+        random_ids = torch.randint(0, 100, (100,))
+        # We can match against an interger
+        random_test_integer = torch.randint(0, 100, (1,)).item()
+        self.assertTrue(
+            torch.equal(
+                torch.isin(random_ids, random_test_integer), isin_mps_friendly(random_ids, random_test_integer)
+            )
+        )
+        # We can match against an tensor of integers
+        random_test_tensor = torch.randint(0, 100, (10,))
+        self.assertTrue(
+            torch.equal(torch.isin(random_ids, random_test_tensor), isin_mps_friendly(random_ids, random_test_tensor))
+        )
 
 
 @slow
@@ -2427,7 +2463,6 @@ class TestAttentionImplementation(unittest.TestCase):
             _ = AutoModel.from_pretrained(
                 "hf-internal-testing/tiny-random-GPTBigCodeModel", attn_implementation="flash_attention_2"
             )
-
         self.assertTrue("the package flash_attn seems to be not installed" in str(cm.exception))
 
     def test_not_available_flash_with_config(self):
