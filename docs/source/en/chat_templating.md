@@ -197,6 +197,43 @@ Not all models require generation prompts. Some models, like BlenderBot and LLaM
 special tokens before bot responses. In these cases, the `add_generation_prompt` argument will have no effect. The exact
 effect that `add_generation_prompt` has will depend on the template being used.
 
+## What does "continue_last_message" do?
+
+When passing a list of messages to `apply_chat_template` or `TextGenerationPipeline`, you can choose
+to format the chat so the model will continue the final message in the chat instead of starting a new one. This is done
+by removing any end-of-sequence tokens that indicate the end of the final message, so that the model will simply
+extend the final message when it begins to generate text. This is useful for "prefilling" the model's response. 
+
+Here's an example:
+
+```python
+chat = [
+    {"role": "user", "content": "Can you format the answer in JSON?"},
+    {"role": "assistant", "content": '{"name": "'},
+]
+
+formatted_chat = tokenizer.apply_chat_template(chat, tokenize=True, return_dict=True, continue_last_message=True)
+model.generate(**formatted_chat)
+```
+
+The model will generate text that continues the JSON string, rather than starting a new message. This approach
+can be very useful for improving the accuracy of the model's instruction-following when you know how you want
+it to start its replies.
+
+Because `add_generation_prompt` adds the tokens that start a new message, and `continue_last_message` removes any
+end-of-message tokens from the final message, it does not make sense to use them together. As a result, you'll
+get an error if you try!
+
+<Tip>
+
+The default behaviour of `TextGenerationPipeline` is to set `add_generation_prompt=True` so that it starts a new
+message. However, if the final message in the input chat has the "assistant" role, it will assume that this message is 
+a prefill and switch to `continue_final_message=True` instead, because most models do not support multiple 
+consecutive assistant messages. You can override this behaviour by explicitly passing the `continue_last_message` 
+argument when calling the pipeline.
+
+</Tip>
+
 ## Can I use chat templates in training?
 
 Yes! This is a good way to ensure that the chat template matches the tokens the model sees during training.

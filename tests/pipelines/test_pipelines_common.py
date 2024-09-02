@@ -877,8 +877,8 @@ class CustomPipelineTest(unittest.TestCase):
         # See https://github.com/huggingface/transformers/issues/31669
         text_generator = pipeline(
             "text-generation",
-            model="Rocketknight1/fake-custom-model-test",
-            tokenizer="Rocketknight1/fake-custom-model-test",
+            model="hf-internal-testing/tiny-random-custom-architecture",
+            tokenizer="hf-internal-testing/tiny-random-custom-architecture",
             trust_remote_code=True,
         )
 
@@ -888,8 +888,8 @@ class CustomPipelineTest(unittest.TestCase):
     def test_custom_code_with_string_feature_extractor(self):
         speech_recognizer = pipeline(
             "automatic-speech-recognition",
-            model="Rocketknight1/fake-custom-wav2vec2",
-            feature_extractor="Rocketknight1/fake-custom-wav2vec2",
+            model="hf-internal-testing/fake-custom-wav2vec2",
+            feature_extractor="hf-internal-testing/fake-custom-wav2vec2",
             trust_remote_code=True,
         )
 
@@ -899,8 +899,8 @@ class CustomPipelineTest(unittest.TestCase):
     def test_custom_code_with_string_preprocessor(self):
         mask_generator = pipeline(
             "mask-generation",
-            model="Rocketknight1/fake-custom-sam",
-            processor="Rocketknight1/fake-custom-sam",
+            model="hf-internal-testing/fake-custom-sam",
+            processor="hf-internal-testing/fake-custom-sam",
             trust_remote_code=True,
         )
 
