@@ -721,7 +721,7 @@ class BatchEncoding(UserDict):
 
             def as_tensor(value, dtype=None):
                 if isinstance(value, list) and isinstance(value[0], np.ndarray):
-                    return torch.tensor(np.array(value))
+                    return torch.from_numpy(np.array(value))
                 return torch.tensor(value)
 
         elif tensor_type == TensorType.JAX:

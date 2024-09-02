@@ -146,7 +146,10 @@ class BatchFeature(UserDict):
                         and isinstance(value[0][0], np.ndarray)
                     ):
                         value = np.array(value)
-                return torch.tensor(value)
+                if isinstance(value, np.ndarray):
+                    return torch.from_numpy(value)
+                else:
+                    return torch.tensor(value)
 
             is_tensor = torch.is_tensor
         elif tensor_type == TensorType.JAX:
