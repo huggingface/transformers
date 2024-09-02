@@ -56,7 +56,9 @@ class LlavaImageProcessor(BaseImageProcessor):
 
     Args:
         do_pad (`bool`, *optional*, defaults to `False`):
-            Whether to pad the image to a square. Can be overridden by `do_pad` in the `preprocess` method.
+            Whether to pad the image to a square based on the longest edge.
+            The padding value is determined by the `image_mean` parameter.
+            Can be overridden by `do_pad` in the `preprocess` method.
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden by
             `do_resize` in the `preprocess` method.
@@ -150,16 +152,22 @@ class LlavaImageProcessor(BaseImageProcessor):
         self,
         image: np.array,
         background_color: Union[int, Tuple[int, int, int]] = 0,
+        data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> np.array:
         """
-        Pads an image to a square.
+        Pads an image to a square based on the longest edge.
 
         Args:
             image (`np.ndarray`):
                 The image to pad.
             background_color (`int` or `Tuple[int, int, int]`, *optional*, defaults to 0):
                 The color to use for the padding. Can be an integer or a tuple of integers representing the RGB values.
+            data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format for the output image. Can be one of:
+                    - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                    - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                If unset, will use same as the input image.
             input_data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format for the input image. Can be one of:
                     - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
@@ -173,12 +181,17 @@ class LlavaImageProcessor(BaseImageProcessor):
         num_channels = image.shape[0] if input_data_format == ChannelDimension.FIRST else image.shape[-1]
 
         if height == width:
+            image = (
+                to_channel_dimension_format(image, data_format, input_data_format)
+                if data_format is not None
+                else image
+            )
             return image
 
         max_dim = max(height, width)
 
         # Ensure background_color is the correct shape
-        if isinstance(background_color, (int, float)):
+        if isinstance(background_color, int):
             background_color = [background_color] * num_channels
         elif len(background_color) != num_channels:
             raise ValueError(f"background_color must have {num_channels} elements to match the number of channels")
@@ -204,7 +217,10 @@ class LlavaImageProcessor(BaseImageProcessor):
                 start = (max_dim - width) // 2
                 result[:, start : start + width, :] = image
 
-        return result
+        image = (
+            to_channel_dimension_format(result, data_format, input_data_format) if data_format is not None else result
+        )
+        return image
 
     # Copied from transformers.models.clip.image_processing_clip.CLIPImageProcessor.resize
     def resize(
@@ -284,7 +300,8 @@ class LlavaImageProcessor(BaseImageProcessor):
                 Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
                 passing in images with pixel values between 0 and 1, set `do_rescale=False`.
             do_pad (`bool`, *optional*, defaults to `self.do_pad`):
-                Whether to pad the image to a square.
+                Whether to pad the image to a square based on the longest edge.
+                The padding value is determined by the `image_mean` parameter.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
             size (`Dict[str, int]`, *optional*, defaults to `self.size`):
