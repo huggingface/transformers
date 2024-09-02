@@ -517,23 +517,23 @@ class MllamaImageSdpaAttention(nn.Module):
         return output
 
 
-class MllamaImageTransformerLayer(nn.Module):
+class MllamaImageEncoderLayer(nn.Module):
     # originally ImageTransformerBlock
 
     def __init__(
         self,
         hidden_size: int,
         num_attention_heads: int,
-        mlp_ratio: float = 4.0,
-        gated: bool = False,
+        intermediate_size: int,
+        is_gated: bool = False,
     ):
         super().__init__()
         assert hidden_size % num_attention_heads == 0
         
         self.hidden_size = hidden_size
         self.num_attention_heads = num_attention_heads
-        self.is_gated = gated
-        self.intermediate_size = int(mlp_ratio * hidden_size)
+        self.is_gated = is_gated
+        self.intermediate_size = intermediate_size
 
         self.self_attn = MllamaImageSdpaAttention(self.hidden_size, self.num_attention_heads)
         self.mlp = MllamaImageMLP(self.hidden_size, self.intermediate_size)
@@ -568,39 +568,55 @@ class MllamaImageTransformerLayer(nn.Module):
         return hidden_state
 
 
-class ImageTransformer(nn.Module):
+class MllamaImageEncoder(nn.Module):
+    # originally ImageTransformer
+
     def __init__(
         self,
-        width: int,
-        num_layers: int,
-        heads: int,
-        mlp_ratio: float = 4.0,
-        gated: bool = False,
+        hidden_size: int,
+        num_hidden_layers: int,
+        num_attention_heads: int,
+        is_gated: bool = False,
     ):
         super().__init__()
-        self.width = width
-        self.num_layers = num_layers
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.is_gated = is_gated
+        self.intermediate_size = 4 * hidden_size
+
         self.layers = nn.ModuleList(
             [
-                MllamaImageTransformerLayer(
-                    hidden_size=width,
-                    num_attention_heads=heads,
-                    mlp_ratio=mlp_ratio,
-                    gated=gated,
+                MllamaImageEncoderLayer(
+                    hidden_size=self.hidden_size,
+                    num_attention_heads=self.num_attention_heads,
+                    intermediate_size=self.intermediate_size,
+                    is_gated=is_gated,
                 )
-                for _ in range(self.num_layers)
+                for _ in range(self.num_hidden_layers)
             ]
         )
 
-    def forward(self, x: torch.Tensor, return_intermediate=None, mask=None):
-        out = []
-        for idx, r in enumerate(self.layers):
+    def forward(
+        self,
+        hidden_state: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        return_intermediate: Optional[List[int]] = None,
+    ):
+        intermediate = []
+
+        for idx, layer in enumerate(self.layers):
+
             if return_intermediate is not None and idx in return_intermediate:
-                out.append(x)
-            x = r(x, attention_mask=mask)
+                intermediate.append(hidden_state)
+            
+            hidden_state = layer(hidden_state, attention_mask=attention_mask)
+
         if return_intermediate is not None:
-            return x, torch.stack(out, dim=-1)
-        return x
+            intermediate = torch.stack(intermediate, dim=-1)
+            return hidden_state, intermediate
+        
+        return hidden_state
 
 
 class VisionEncoder(nn.Module):
@@ -645,12 +661,12 @@ class VisionEncoder(nn.Module):
         )
         self.ln_post = nn.LayerNorm(width)
         self.ln_pre = nn.LayerNorm(width)
-        self.transformer = ImageTransformer(
-            width, num_layers, heads, mlp_ratio, gated=False
+        self.transformer = MllamaImageEncoder(
+            width, num_layers, heads, is_gated=False
         )
         # pre and post tile position embedding
-        self.global_transformer = ImageTransformer(
-            width, n_global_layers, heads, mlp_ratio, gated=True
+        self.global_transformer = MllamaImageEncoder(
+            width, n_global_layers, heads, is_gated=True
         )
         # pre and post tile position embedding
         self.pre_tile_pos_embed = TilePositionEmbedding(
@@ -761,7 +777,7 @@ class VisionEncoder(nn.Module):
         print(attn_mask)
         x = x.view(bsz * num_concurrent_media, -1, dim)
         x, int_x = self.transformer(
-            x, return_intermediate=self.return_intermediate, mask=attn_mask
+            x, return_intermediate=self.return_intermediate, attention_mask=attn_mask
         )
 
         x_, int_x_ = torch.load("/home/ubuntu/projects/meta_mllama/logits-test-1/local-transformer-output.pt")
@@ -772,7 +788,7 @@ class VisionEncoder(nn.Module):
         x = x.reshape(bsz * num_concurrent_media, num_chunks, ntok + npad, dim)
         x = self.post_tile_pos_embed(x, ar)
         x = x.reshape(bsz * num_concurrent_media, num_chunks * (ntok + npad), dim)
-        x = self.global_transformer(x, mask=attn_mask)
+        x = self.global_transformer(x, attention_mask=attn_mask)
         x = x.reshape(bsz * num_concurrent_media, num_chunks, ntok + npad, dim)
         x = contract_num_tokens_from_mult8(x, npad)
 
