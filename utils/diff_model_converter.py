@@ -362,7 +362,7 @@ def replace_call_to_super(class_finder: ClassFinder, updated_node: cst.ClassDef,
                 parts = original_docstring.split("```")
 
                 if len(parts) > 1:
-                    updated_docstring = "```".join([parts[0] + original_docstring, parts[1], parts[2] if len(parts) > 2 else ""])
+                    updated_docstring = "".join([parts[0] + updated_docstring.replace("\"\"\"","").lstrip("\n"), "```", parts[1], "```", parts[2]])
                 else:
                     updated_docstring =  end_meth[0].body[0].value.value + "\n" +  updated_docstring
             else:
