@@ -50,7 +50,7 @@ jobs:
     name: Setup
     strategy:
       matrix:
-        machine_type: [aws-g4dn-2xlarge-cache, aws-g4dn-12xlarge-cache]
+        machine_type: [aws-g4dn-2xlarge-cache-test, aws-g4dn-12xlarge-cache-test]
     runs-on: 
       group: '${{ matrix.machine_type }}'
     container:
@@ -103,7 +103,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        machine_type: [aws-g4dn-2xlarge-cache, aws-g4dn-12xlarge-cache]
+        machine_type: [aws-g4dn-2xlarge-cache-test, aws-g4dn-12xlarge-cache-test]
         slice_id: ${{ fromJSON(needs.setup.outputs.slice_ids) }}
     uses: ./.github/workflows/model_jobs.yml
     with:
@@ -120,7 +120,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        machine_type: [aws-g4dn-2xlarge-cache, aws-g4dn-12xlarge-cache]
+        machine_type: [aws-g4dn-2xlarge-cache-test, aws-g4dn-12xlarge-cache-test]
     runs-on: 
       group: '${{ matrix.machine_type }}'
     container:
@@ -171,7 +171,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        machine_type: [aws-g4dn-2xlarge-cache, aws-g4dn-12xlarge-cache]
+        machine_type: [aws-g4dn-2xlarge-cache-test, aws-g4dn-12xlarge-cache-test]
     runs-on: 
       group: '${{ matrix.machine_type }}'
     container:
@@ -223,7 +223,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        machine_type: [aws-g4dn-2xlarge-cache, aws-g4dn-12xlarge-cache]
+        machine_type: [aws-g4dn-2xlarge-cache-test, aws-g4dn-12xlarge-cache-test]
     runs-on: 
       group: '${{ matrix.machine_type }}'
     container:
@@ -275,7 +275,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        machine_type: [aws-g4dn-2xlarge-cache, aws-g4dn-12xlarge-cache]
+        machine_type: [aws-g4dn-2xlarge-cache-test, aws-g4dn-12xlarge-cache-test]
     runs-on: 
       group: '${{ matrix.machine_type }}'
     container:
@@ -357,7 +357,7 @@ jobs:
       fail-fast: false
       matrix:
         folders: ${{ fromJson(needs.setup.outputs.quantization_matrix) }}
-        machine_type: [aws-g4dn-2xlarge-cache, aws-g4dn-12xlarge-cache]
+        machine_type: [aws-g4dn-2xlarge-cache-test, aws-g4dn-12xlarge-cache-test]
     runs-on: 
       group: '${{ matrix.machine_type }}'
     container:
