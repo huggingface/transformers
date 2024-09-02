@@ -234,6 +234,7 @@ class SuperTransformer(cst.CSTTransformer):
         self.python_module = python_module
         self.original_methods = original_methods
         self.updated_methods = updated_methods
+        self.all_assign_target = {}
 
     def update_body(self, existing_body, new_statements):
         """
@@ -243,10 +244,17 @@ class SuperTransformer(cst.CSTTransformer):
         existing_nodes = set()
         for node in new_statements:
             code = self.python_module.code_for_node(node)
+            if m.matches(node.body[0], m.Assign()):
+                target = self.python_module.code_for_node(node.body[0].targets[0])
+                self.all_assign_target[target] = node
             comment_less_code = re.sub(r"#.*", "", code).strip()
             comment_less_code = re.sub(r"\ *\n", "\n", comment_less_code).strip()
             existing_nodes.add(comment_less_code)
         for stmt in existing_body:
+            if m.matches(stmt, m.SimpleStatementLine(body=[m.Assign()])):
+                target = self.python_module.code_for_node(stmt.body[0].targets[0])
+                if target in self.all_assign_target:
+                    stmt = self.all_assign_target[target]
             comment_less_code = re.sub(r"#.*", "", self.python_module.code_for_node(stmt)).strip()
             comment_less_code = re.sub(r"\ *\n", "\n", comment_less_code).strip()
             if comment_less_code not in existing_nodes:
@@ -255,7 +263,7 @@ class SuperTransformer(cst.CSTTransformer):
                 deduplicated_new_body.append(stmt)
                 existing_nodes.add(stmt)
             else:
-                logger.info(f"\nFound duplicate {self.python_module.code_for_node(stmt)}")
+                logger.warning(f"\nFound duplicate {self.python_module.code_for_node(stmt)}")
         return deduplicated_new_body
 
     def replace_super_calls(self, node: cst.IndentedBlock, func_name: str) -> cst.CSTNode:
