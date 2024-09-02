@@ -95,8 +95,13 @@ class Kosmos2_5Processor(ProcessorMixin):
             image_encoding.pop("cols")
             encoding.update(image_encoding)
 
+        prompt = "<s><image>" + "<s>" * num_image_tokens + "</image>"
+
         if text is not None:
-            # use updates or pop
+            if isinstance(text, str):
+                text = [prompt + text]
+            else:
+                text = [prompt + t for t in text]
             input = self.tokenizer(
                 text,
                 padding=padding,
@@ -109,24 +114,15 @@ class Kosmos2_5Processor(ProcessorMixin):
             )
 
             batch_size, seq_len = input.input_ids.shape
-
-            additional_tokens = [self.bos, self.boi] + [self.bos] * num_image_tokens + [self.eoi]
-            additional_tokens_tensor = torch.tensor(additional_tokens).unsqueeze(0).repeat(batch_size, 1)
-            input_ids = torch.cat([additional_tokens_tensor, input.input_ids], dim=1)
-
-            # 1 is image
             image_embeds_position_mask = [0, -1] + [1] * num_image_tokens + [-1] + [0] * seq_len
             image_embeds_position_mask = (
                 torch.LongTensor(image_embeds_position_mask).unsqueeze(0).repeat(batch_size, 1)
             )
 
-            added_attention_mask = [1, 1] + [1] * num_image_tokens + [1]
-            added_attention_mask_tensor = torch.tensor(added_attention_mask).unsqueeze(0).repeat(batch_size, 1)
-            attention_mask = torch.cat([added_attention_mask_tensor, input.attention_mask], dim=1)
             encoding.update(
                 {
-                    "input_ids": input_ids,
-                    "attention_mask": attention_mask,
+                    "input_ids": input.input_ids,
+                    "attention_mask": input.attention_mask,
                     "image_embeds_position_mask": image_embeds_position_mask,
                 }
             )
