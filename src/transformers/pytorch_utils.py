@@ -24,7 +24,7 @@ from torch import nn
 from .utils import is_torch_xla_available, logging
 
 
-ALL_LAYERNORM_LAYERS = [nn.LayerNorm, nn.RMSNorm]
+ALL_LAYERNORM_LAYERS = [nn.LayerNorm]
 
 logger = logging.get_logger(__name__)
 
