@@ -202,6 +202,7 @@ jobs:
         working-directory: /transformers
         run: |
           ls -l /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/.no_exist/42ce72ae70f7d34c14dbc3a856379a5d5b72de47/config.json
+          sleep 10
           rm -rf /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/.no_exist/42ce72ae70f7d34c14dbc3a856379a5d5b72de47
 
       - name: Check cache 9
@@ -214,6 +215,7 @@ jobs:
         working-directory: /transformers
         run: |
           ls -l /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/.no_exist/42ce72ae70f7d34c14dbc3a856379a5d5b72de47/config.json
+          sleep 10
           rm -rf /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/.no_exist/42ce72ae70f7d34c14dbc3a856379a5d5b72de47/config.json
 
       - name: Check cache 9
@@ -254,6 +256,7 @@ jobs:
       - name: Check cache 9
         working-directory: /transformers
         run: |
+          sleep 10
           tail -10 /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/.no_exist/42ce72ae70f7d34c14dbc3a856379a5d5b72de47/config.json
 
       - name: Check cache 9.5
