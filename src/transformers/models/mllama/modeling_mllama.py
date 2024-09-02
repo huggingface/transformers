@@ -298,6 +298,7 @@ class RMSNorm(torch.nn.Module):
     def forward(self, x):
         output = self._norm(x.float()).type_as(x)
         return output * self.weight
+
 def apply_scaling(freqs: torch.Tensor):
     # Values obtained from grid search
     scale_factor = 8
@@ -1258,14 +1259,41 @@ class CrossAttentionTransformerBlock(torch.nn.Module):
         full_text_row_masked_out_mask: Tuple[torch.Tensor, torch.Tensor],
         xattn_cache: torch.Tensor,
     ) -> torch.Tensor:
+        # x_ = torch.load("/home/ubuntu/projects/meta_mllama/logits-test-1/text-xattn-0-x.pt", weights_only=True)
+        # xattn_mask_ = torch.load("/home/ubuntu/projects/meta_mllama/logits-test-1/text-xattn-0-mask.pt", weights_only=True)
+        # full_text_row_masked_out_mask_ = torch.load("/home/ubuntu/projects/meta_mllama/logits-test-1/text-xattn-0-mask2.pt", weights_only=True)
+        # xattn_cache_ = torch.load("/home/ubuntu/projects/meta_mllama/logits-test-1/text-xattn-0-cache.pt", weights_only=True)
+
+        # diff = (x - x_).abs().max().item()
+        # print(f"diff x: {diff}")
+
+        # diff = (xattn_mask.float() - xattn_mask_.float()).abs().max().item()
+        # print(f"diff xattn_mask: {diff}")
+
+        # diff = (full_text_row_masked_out_mask - full_text_row_masked_out_mask_).abs().max().item()
+        # print(f"diff full_text_row_masked_out_mask: {diff}")
+
+        # diff = (xattn_cache - xattn_cache_).abs().max().item()
+        # print(f"diff xattn_cache: {diff}")
+
         _attn_out = self.self_attn(
             x=self.input_layernorm(x),
             xattn_mask=xattn_mask,
             xattn_cache=xattn_cache,
             full_text_row_masked_out_mask=full_text_row_masked_out_mask,
         )
+
+        # _attn_out_ = torch.load("/home/ubuntu/projects/meta_mllama/logits-test-1/text-xattn-0-attn-out.pt", weights_only=True)
+        # diff = (_attn_out - _attn_out_).abs().max().item()
+        # print(f"diff attn_out: {diff}")
+
         h = x + self.gate_attn.tanh() * _attn_out
-        _ffn = self.mlp(self.ffn_norm(h))
+
+        # h_ = torch.load("/home/ubuntu/projects/meta_mllama/logits-test-1/text-xattn-0-h.pt", weights_only=True)
+        # diff = (h - h_).abs().max().item()
+        # print(f"diff h: {diff}")
+
+        _ffn = self.mlp(self.post_attention_layernorm(h))
         _ffn = full_text_row_masked_out_mask[:, 0] * _ffn  # type: ignore
         h = h + self.ffn_gate.tanh() * _ffn * float(not self.no_ffn)
         return h
@@ -1408,18 +1436,16 @@ class MllamaCrossAttentionTextModel(PreTrainedModel):
                     xattn_layer_idx,
                 )
             )
-        self.freqs_cis = precompute_freqs_cis(
+        freqs_cis = precompute_freqs_cis(
             self.dim // self.n_heads,
             self.max_seq_len * 2,
             self.rope_theta,
             self.use_scaled_rope,
         )
+        self.register_buffer("freqs_cis", freqs_cis, persistent=False)
 
         self.cache_is_setup = False
         self.max_seq_len = self.max_seq_len
-
-        # TODO: remove this
-        del self.embed_tokens
 
     def _init_fusion_schedule(
         self,
@@ -1460,6 +1486,18 @@ class MllamaCrossAttentionTextModel(PreTrainedModel):
         mask = self.mask_cache.index_select(2, position_ids)
         freqs_cis = self.freqs_cis.index_select(0, position_ids)
 
+        mask_ = torch.load("/home/ubuntu/projects/meta_mllama/logits-test-1/text-mask.pt", weights_only=True)
+        diff = (mask.float() - mask_.float()).abs().max().item()
+        print(f"mask diff: {diff}")
+
+        freqs_cis_ = torch.load("/home/ubuntu/projects/meta_mllama/logits-test-1/text-freqs_cis.pt", weights_only=True)
+        diff = (freqs_cis - freqs_cis_).abs().max().item()
+        print(f"freqs cis diff: {diff}")
+        
+        freqs_cis = freqs_cis_
+
+        del mask_, freqs_cis_
+
         for idx, (
             layer,
             xattn_layer,
@@ -1471,12 +1509,23 @@ class MllamaCrossAttentionTextModel(PreTrainedModel):
                 xattn_cache=xattn_caches[xattn_layer_idx],
                 full_text_row_masked_out_mask=full_text_row_masked_out_mask,
             )
+
+            h_ = torch.load(f"/home/ubuntu/projects/meta_mllama/logits-test-1/text-xattn-{idx}.pt", weights_only=True)
+            diff = (h - h_).abs().max().item()
+            print(f"xattn {idx} diff: {diff}")
+            del h_
+
             h = layer(
                 x=h,
                 mask=mask,
                 freqs_cis=freqs_cis,
                 position_ids=position_ids,
             )
+
+            h_ = torch.load(f"/home/ubuntu/projects/meta_mllama/logits-test-1/text-hidden-{idx}.pt", weights_only=True)
+            diff = (h - h_).abs().max().item()
+            print(f"hidden {idx} diff: {diff}")
+            del h_
 
         h = self.norm(h)
 
@@ -1680,6 +1729,11 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
         xattn_caches: torch.Tensor,
     ) -> torch.Tensor:
         h = self.model.language_model.get_partially_trainable_embedding(tokens[:, position_ids])
+
+        h_ = torch.load("/home/ubuntu/projects/meta_mllama/logits-test-1/partially_trainable_embedding.pt", weights_only=True)
+        diff = torch.abs(h - h_).max()
+        print(f"Max partially_trainable_embedding diff: {diff}")
+
         logits = self.model.language_model.forward(
             position_ids=position_ids,
             h=h,
@@ -1690,7 +1744,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
             xattn_caches=xattn_caches,
         )
 
-        output = F.linear(h, self.lm_head.weight)
+        output = F.linear(logits, self.lm_head.weight)
         logits = output.float()
         return logits
 
