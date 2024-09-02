@@ -816,4 +816,3 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     convert_rt_detr_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub, args.repo_id)
-                                                                                                                                
