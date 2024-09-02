@@ -531,7 +531,7 @@ class AutoModelTest(unittest.TestCase):
         _MODEL_MAPPING_NAMES = OrderedDict([("bert", "GPT2Model")])
         _MODEL_MAPPING = _LazyAutoMapping(_CONFIG_MAPPING_NAMES, _MODEL_MAPPING_NAMES)
         self.assertEqual(_MODEL_MAPPING[BertConfig], GPT2Model)
-        
+
     def test_dynamic_saving_from_local_repo(self):
         with tempfile.TemporaryDirectory() as tmp_dir, tempfile.TemporaryDirectory() as tmp_dir_out:
             _ = Repository(local_dir=tmp_dir, clone_from="hf-internal-testing/tiny-random-custom-architecture")
