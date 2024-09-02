@@ -150,6 +150,11 @@ class MaskFormerSwinModelTester:
         self.parent.assertEqual(len(model.channels), len(config.out_indices))
         self.parent.assertListEqual(model.channels, [16, 32, 64])
 
+        # verify ValueError
+        with self.parent.assertRaises(ValueError):
+            config.out_indices = [0]
+            model = MaskFormerSwinBackbone(config=config)
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values, labels = config_and_inputs
