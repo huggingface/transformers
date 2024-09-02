@@ -991,7 +991,7 @@ class Trainer:
             if eval_dataset is not None
             else self.eval_dataset
         )
-        data_collator = self.eval_data_collator if self.eval_data_collator is not None else self.data_collator
+        data_collator = self.eval_data_collator
 
         if is_datasets_available() and isinstance(eval_dataset, datasets.Dataset):
             eval_dataset = self._remove_unused_columns(eval_dataset, description="evaluation")
