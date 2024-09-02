@@ -377,7 +377,7 @@ def replace_call_to_super(class_finder: ClassFinder, updated_node: cst.ClassDef,
                             parts[2],
                         ]
                     )
-                else:
+                elif updated_docstring not in end_meth[0].body[0].value.value:
                     updated_docstring = end_meth[0].body[0].value.value + "\n" + updated_docstring
             else:
                 updated_docstring = func.body[0].value.value
