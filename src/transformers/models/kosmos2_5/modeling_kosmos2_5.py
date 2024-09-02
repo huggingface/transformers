@@ -1263,19 +1263,6 @@ class Kosmos2_5TextBlock(nn.Module):
         )
         self.dropout = config.dropout
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
-
-        if config.add_cross_attention:
-            self.encoder_attn = KOSMOS2_5_TEXT_ATTENTION_CLASSES[config._attn_implementation](
-                config,
-                embed_dim=self.embed_dim,
-                num_heads=config.attention_heads,
-                dropout=config.attention_dropout,
-                is_decoder=True,
-                add_inner_attn_layernorm=False,
-                is_causal=True,
-            )
-            self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
-
         self.ffn = Kosmos2_5TextFFN(config)
         self.final_layer_norm = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
 
