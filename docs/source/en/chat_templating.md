@@ -26,26 +26,7 @@ Much like tokenization, different models expect very different input formats for
 **chat templates** as a feature. Chat templates are part of the tokenizer. They specify how to convert conversations, 
 represented as lists of messages, into a single tokenizable string in the format that the model expects. 
 
-Let's make this concrete with a quick example using the `BlenderBot` model. BlenderBot has an extremely simple default 
-template, which mostly just adds whitespace between rounds of dialogue:
-
-```python
->>> from transformers import AutoTokenizer
->>> tokenizer = AutoTokenizer.from_pretrained("facebook/blenderbot-400M-distill")
-
->>> chat = [
-...    {"role": "user", "content": "Hello, how are you?"},
-...    {"role": "assistant", "content": "I'm doing great. How can I help you today?"},
-...    {"role": "user", "content": "I'd like to show off how chat templating works!"},
-... ]
-
->>> tokenizer.apply_chat_template(chat, tokenize=False)
-" Hello, how are you?  I'm doing great. How can I help you today?   I'd like to show off how chat templating works!</s>"
-```
-
-Notice how the entire chat is condensed into a single string. If we use `tokenize=True`, which is the default setting,
-that string will also be tokenized for us. To see a more complex template in action, though, let's use the 
-`mistralai/Mistral-7B-Instruct-v0.1` model.
+Let's make this concrete with a quick example using the `mistralai/Mistral-7B-Instruct-v0.1` model:
 
 ```python
 >>> from transformers import AutoTokenizer
@@ -61,8 +42,26 @@ that string will also be tokenized for us. To see a more complex template in act
 "<s>[INST] Hello, how are you? [/INST]I'm doing great. How can I help you today?</s> [INST] I'd like to show off how chat templating works! [/INST]"
 ```
 
-Note that this time, the tokenizer has added the control tokens [INST] and [/INST] to indicate the start and end of 
-user messages (but not assistant messages!). Mistral-instruct was trained with these tokens, but BlenderBot was not.
+Notice how the tokenizer has added the control tokens [INST] and [/INST] to indicate the start and end of 
+user messages (but not assistant messages!), and the entire chat is condensed into a single string. 
+If we use `tokenize=True`, which is the default setting, that string will also be tokenized for us.
+
+Now, try the same code, but swap in the `HuggingFaceH4/zephyr-7b-beta` model instead, and you should get:
+
+```text
+<|user|>
+Hello, how are you?</s>
+<|assistant|>
+I'm doing great. How can I help you today?</s>
+<|user|>
+I'd like to show off how chat templating works!</s>
+```
+
+Both Zephyr and Mistral-Instruct were fine-tuned from the same base model, `Mistral-7B-v0.1`. However, they were trained
+with totally different chat formats. Without chat templates, you would have to write manual formatting code for each
+model, and it's very easy to make minor errors that hurt performance! Chat templates handle the details of formatting 
+for you, allowing you to write universal code that works for any model.
+
 
 ## How do I use chat templates?
 
@@ -71,7 +70,7 @@ and `content` keys, and then pass it to the [`~PreTrainedTokenizer.apply_chat_te
 you'll get output that's ready to go! When using chat templates as input for model generation, it's also a good idea
 to use `add_generation_prompt=True` to add a [generation prompt](#what-are-generation-prompts). 
 
-Here's an example of preparing input for `model.generate()`, using the `Zephyr` assistant model:
+Here's an example of preparing input for `model.generate()`, using `Zephyr` again:
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -160,7 +159,7 @@ messages = [
 ]
 ```
 
-Here's what this will look like without a generation prompt, using the ChatML template we saw in the Zephyr example:
+Here's what this will look like without a generation prompt, for a model that uses standard "ChatML" formatting:
 
 ```python
 tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=False)
