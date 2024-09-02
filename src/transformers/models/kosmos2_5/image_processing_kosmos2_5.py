@@ -311,11 +311,11 @@ class Kosmos2_5ImageProcessor(BaseImageProcessor):
         flattened_patches, width, height, rows, cols = [], [], [], [], []
         for image in images:
             f, w, h, r, c = self.extract_flattened_patches(
-                    image=image,
-                    max_patches=max_patches,
-                    patch_size=patch_size,
-                    input_data_format=input_data_format,
-                )
+                image=image,
+                max_patches=max_patches,
+                patch_size=patch_size,
+                input_data_format=input_data_format,
+            )
             flattened_patches.append(f)
             width.append(w)
             height.append(h)
@@ -323,7 +323,9 @@ class Kosmos2_5ImageProcessor(BaseImageProcessor):
             cols.append(c)
 
         # create attention mask in numpy
-        attention_masks = [(flattened_patch.sum(axis=-1) != 0).astype(np.float32) for flattened_patch in flattened_patches]
+        attention_masks = [
+            (flattened_patch.sum(axis=-1) != 0).astype(np.float32) for flattened_patch in flattened_patches
+        ]
 
         encoded_outputs = BatchFeature(
             data={
