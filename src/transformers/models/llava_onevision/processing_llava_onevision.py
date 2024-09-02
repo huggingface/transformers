@@ -139,7 +139,6 @@ class LlavaOnevisionProcessor(ProcessorMixin):
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
             - **pixel_values_videos** -- Pixel values of a video input to be fed to a model. Returned when `videos` is not `None`.
             - **image_sizes** -- Size of each image that will be used to unpad an image. Returned when `images` is not `None`.
-            - **image_sizes_videos** -- Size of each video frame that will be used to unpad a video. Returned when `videos` is not `None`.
         """
 
         output_kwargs = self._merge_kwargs(
@@ -168,13 +167,12 @@ class LlavaOnevisionProcessor(ProcessorMixin):
         if videos is not None:
             video_inputs = self.video_processor(videos, **output_kwargs["videos_kwargs"])
 
-            image_sizes = iter(video_inputs["image_sizes_videos"])
             one_video = to_numpy_array(video_inputs["pixel_values_videos"][0])
             height, width = get_image_size(one_video[0], channel_dim=output_kwargs["images_kwargs"].get("data_format"))
             num_frames = one_video.shape[0]  # frame dim is always after batch dim
             patches_height_width = int(math.sqrt(self.num_image_tokens))
             pooled_height_width = math.ceil(patches_height_width / 2)
-            num_video_tokens = num_frames * pooled_height_width * pooled_height_width
+            num_video_tokens = (num_frames * pooled_height_width * pooled_height_width) + 1  # +1 for newline token
             text = [sample.replace(self.video_token, self.video_token * num_video_tokens) for sample in text]
 
         # Padding side can be in TextKwargs but is not accepted by the tokenizer

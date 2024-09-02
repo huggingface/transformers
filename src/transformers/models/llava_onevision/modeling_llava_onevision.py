@@ -574,45 +574,28 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        for pixels, sizes, special_token in [
-            (pixel_values, image_sizes, self.config.image_token_index),
-            (pixel_values_videos, image_sizes_videos, self.config.video_token_index),
-        ]:
-            if pixels is None:
-                continue
-
-            if sizes is None:
-                raise ValueError(
-                    "Make sure to pass `image_sizes/image_sizes_videos` if you passed `pixel_values/pixel_values_videos`"
-                )
-
-            if pixels.dim() not in [4, 5] and special_token == self.config.image_token_index:
-                raise ValueError(f"pixel_values of shape {pixels.shape}, expect to be of 4 or 5 dimensions")
-            elif pixels.dim() not in [5, 6] and special_token == self.config.video_token_index:
-                raise ValueError(f"pixel_values_videos of shape {pixels.shape}, expect to be of 5 or 6 dimensions")
-
-            # if videos are being processed, we can flatten frame dim and treat it as a huge batch of images
-            if pixels.dim() == 6:
-                sizes = [imsize for size_list in sizes for imsize in size_list]
-                batch_size, frames, num_patches, channels, height, width = pixels.shape
-                pixels = pixels.view(batch_size * frames, num_patches, channels, height, width)
-
+        # Images are processed with Anyres
+        if pixel_values is not None:
             image_num_patches = [
                 image_size_to_num_patches(
                     image_size=imsize,
                     grid_pinpoints=self.config.image_grid_pinpoints,
                     patch_size=self.config.vision_config.image_size,
                 )
-                for imsize in sizes
+                for imsize in image_sizes
             ]
 
             # unpad extra patches and concatenate them
-            if pixels.dim() == 5:
-                _pixel_values_list = [pix_val[:num_patch] for pix_val, num_patch in zip(pixels, image_num_patches)]
+            if pixel_values.dim() == 5:
+                _pixel_values_list = [
+                    pix_val[:num_patch] for pix_val, num_patch in zip(pixel_values, image_num_patches)
+                ]
                 # [batch_size*frames*num_patches, num_channels, height, width] where frames=1 for images
-                pixels = torch.cat(_pixel_values_list, dim=0)
+                pixel_values = torch.cat(_pixel_values_list, dim=0)
+            elif pixel_values.dim() != 4:
+                raise ValueError(f"pixel_values of shape {pixel_values.shape}, expect to be of 4 or 5 dimensions")
 
-            image_features = self.vision_tower(pixels, output_hidden_states=True)
+            image_features = self.vision_tower(pixel_values, output_hidden_states=True)
             selected_image_feature = image_features.hidden_states[vision_feature_layer]
 
             if vision_feature_select_strategy == "default":
@@ -621,27 +604,50 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel):
                 selected_image_feature = selected_image_feature
             image_features = self.multi_modal_projector(selected_image_feature)
 
-            # apply pooling if we are working with videos, otherwise unpad and pack image features
-            if special_token == self.config.video_token_index:
-                image_features = self.apply_pooling(image_features)
-                image_features = image_features.flatten(0, 1)
-                image_features = torch.cat(
-                    (image_features, self.image_newline[None, :].to(image_features.device)), dim=0
-                )
-            else:
-                image_features = torch.split(image_features, image_num_patches, dim=0)
-                image_features, feature_lens = self.pack_image_features(
-                    image_features,
-                    sizes,
-                    image_newline=self.image_newline,
-                    vision_aspect_ratio=vision_aspect_ratio,
-                )
+            image_features = torch.split(image_features, image_num_patches, dim=0)
+            image_features, feature_lens = self.pack_image_features(
+                image_features,
+                image_sizes,
+                image_newline=self.image_newline,
+                vision_aspect_ratio=vision_aspect_ratio,
+            )
 
             special_image_mask = (
-                (input_ids == special_token).unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+                (input_ids == self.config.image_token_index)
+                .unsqueeze(-1)
+                .expand_as(inputs_embeds)
+                .to(inputs_embeds.device)
             )
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
+
+        # Video are simply embedded and further pooled to decrease seq len
+        if pixel_values_videos is not None:
+            batch_size, frames, channels, height, width = pixel_values_videos.shape
+            pixel_values_videos = pixel_values_videos.view(batch_size * frames, channels, height, width)
+            video_features = self.vision_tower(pixel_values_videos, output_hidden_states=True)
+            selected_video_feature = video_features.hidden_states[vision_feature_layer]
+
+            if vision_feature_select_strategy == "default":
+                selected_video_feature = selected_video_feature[:, 1:]
+            elif vision_feature_select_strategy == "full":
+                selected_video_feature = selected_video_feature
+            video_features = self.multi_modal_projector(selected_video_feature)
+
+            video_features = self.apply_pooling(video_features)
+            video_features = video_features.reshape(batch_size, frames * video_features.shape[1], -1)
+            image_newline = self.image_newline[None, None, :].repeat(batch_size, 1, 1).to(video_features.device)
+            video_features = torch.cat((video_features, image_newline), dim=1)
+            video_features = video_features.flatten(0, 1)
+
+            special_video_mask = (
+                (input_ids == self.config.video_token_index)
+                .unsqueeze(-1)
+                .expand_as(inputs_embeds)
+                .to(inputs_embeds.device)
+            )
+            video_features = video_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            inputs_embeds = inputs_embeds.masked_scatter(special_video_mask, video_features)
 
         outputs = self.language_model(
             attention_mask=attention_mask,
