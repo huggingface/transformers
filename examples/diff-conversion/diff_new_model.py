@@ -28,3 +28,7 @@ class NewModelConfig(GemmaConfig):
         attention_dropout=0.0,
     ):
         super().__init__(self)
+
+    @property
+    def num_heads(self):
+        return self.num_attention_heads
