@@ -57,6 +57,7 @@ def get_rt_detr_config(model_name: str) -> RTDetrConfig:
         config.encoder_in_channels = [128, 256, 512]
         config.hidden_expansion = 0.5
         config.decoder_layers = 3
+        config.decoder_version = "v2"
     elif model_name == "rtdetr_r34vd":
         config.backbone_config.hidden_sizes = [64, 128, 256, 512]
         config.backbone_config.depths = [3, 4, 6, 3]
@@ -243,6 +244,10 @@ def create_rename_keys(config):
         rename_keys.append((f"encoder.input_proj.{j}.0.weight", f"model.encoder_input_proj.{j}.0.weight"))
         for last in last_key:
             rename_keys.append((f"encoder.input_proj.{j}.1.{last}", f"model.encoder_input_proj.{j}.1.{last}"))
+        # This layer is optional for the config.decoder_layer = "v2"
+        rename_keys.append((f"encoder.input_proj.{j}.conv.weight", f"model.encoder_input_proj.{j}.0.weight"))
+        for last in last_key:
+            rename_keys.append((f"encoder.input_proj.{j}.norm.{last}", f"model.encoder_input_proj.{j}.1.{last}"))
 
     block_levels = 3 if config.backbone_config.layer_type != "basic" else 4
 
@@ -392,6 +397,13 @@ def create_rename_keys(config):
         rename_keys.append(
             (f"decoder.decoder.layers.{i}.norm2.bias", f"model.decoder.layers.{i}.encoder_attn_layer_norm.bias")
         )
+        # This layer is optional for the config.decoder_layer = "v2"
+        rename_keys.append(
+            (
+                f"decoder.decoder.layers.{i}.cross_attn.num_points_scale",
+                f"model.decoder.layers.{i}.encoder_attn.n_points_scale",
+            )
+        )
         rename_keys.append((f"decoder.decoder.layers.{i}.linear1.weight", f"model.decoder.layers.{i}.fc1.weight"))
         rename_keys.append((f"decoder.decoder.layers.{i}.linear1.bias", f"model.decoder.layers.{i}.fc1.bias"))
         rename_keys.append((f"decoder.decoder.layers.{i}.linear2.weight", f"model.decoder.layers.{i}.fc2.weight"))
@@ -482,6 +494,11 @@ def create_rename_keys(config):
             ("decoder.enc_output.0.bias", "model.enc_output.0.bias"),
             ("decoder.enc_output.1.weight", "model.enc_output.1.weight"),
             ("decoder.enc_output.1.bias", "model.enc_output.1.bias"),
+            # This layer is optional for the config.decoder_layer = "v2"
+            ("decoder.enc_output.proj.weight", "model.enc_output.0.weight"),
+            ("decoder.enc_output.proj.bias", "model.enc_output.0.bias"),
+            ("decoder.enc_output.norm.weight", "model.enc_output.1.weight"),
+            ("decoder.enc_output.norm.bias", "model.enc_output.1.bias"),
             ("decoder.enc_score_head.weight", "model.enc_score_head.weight"),
             ("decoder.enc_score_head.bias", "model.enc_score_head.bias"),
             ("decoder.enc_bbox_head.layers.0.weight", "model.enc_bbox_head.layers.0.weight"),
@@ -589,6 +606,10 @@ def convert_rt_detr_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
         if "bbox_embed" in key or ("class_embed" in key and "denoising_" not in key):
             state_dict[key.split("model.decoder.")[-1]] = state_dict[key]
 
+    # This layer is not required since it is static layer
+    del state_dict["decoder.anchors"]
+    del state_dict["decoder.valid_mask"]
+
     # finally, create HuggingFace model and load state dict
     model = RTDetrForObjectDetection(config)
     model.load_state_dict(state_dict)
@@ -638,7 +659,7 @@ def convert_rt_detr_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
         )
     elif model_name == "rtdetr_v2_r18vd":
         expected_slice_logits = torch.tensor(
-            [[-3.7047, -5.1914, -6.1787], [-4.0108, -9.3449, -5.2047], [-4.1287, -4.7461, -5.8633]]
+            [[-3.7045, -5.1913, -6.1787], [-4.0106, -9.3450, -5.2043], [-4.1287, -4.7463, -5.8634]]
         )
         expected_slice_boxes = torch.tensor(
             [[0.2582, 0.5497, 0.4764], [0.1684, 0.1985, 0.2120], [0.7665, 0.4146, 0.4669]]
@@ -795,3 +816,4 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     convert_rt_detr_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub, args.repo_id)
+                                                                                                                                

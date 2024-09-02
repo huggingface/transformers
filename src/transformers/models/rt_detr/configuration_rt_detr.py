@@ -217,6 +217,7 @@ class RTDetrConfig(PretrainedConfig):
         decoder_ffn_dim=1024,
         num_feature_levels=3,
         decoder_n_points=4,
+        decoder_offset_scale=0.5,
         decoder_layers=6,
         decoder_attention_heads=8,
         decoder_activation_function="relu",
@@ -309,6 +310,7 @@ class RTDetrConfig(PretrainedConfig):
         self.decoder_in_channels = decoder_in_channels
         self.num_feature_levels = num_feature_levels
         self.decoder_n_points = decoder_n_points
+        self.decoder_offset_scale = decoder_offset_scale
         self.decoder_layers = decoder_layers
         self.decoder_attention_heads = decoder_attention_heads
         self.decoder_activation_function = decoder_activation_function

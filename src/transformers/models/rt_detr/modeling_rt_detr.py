@@ -780,11 +780,11 @@ def multi_scale_deformable_attention_v2(
     method="default",
 ) -> Tensor:
     batch_size, _, num_heads, hidden_dim = value.shape
-    _, num_queries, num_heads, num_levels, num_points, _ = sampling_locations.shape
+    _, num_queries, num_heads, num_levels, num_points = sampling_locations.shape
     value_list = (
         value.permute(0, 2, 3, 1)
         .flatten(0, 1)
-        .split([height.item() * width.item() for height, width in value_spatial_shapes], dim=1)
+        .split([height.item() * width.item() for height, width in value_spatial_shapes], dim=-1)
     )
     # sampling_offsets [8, 480, 8, 12, 2]
     if method == "default":
@@ -830,11 +830,11 @@ def multi_scale_deformable_attention_v2(
     # (batch_size, num_queries, num_heads, num_levels, num_points)
     # -> (batch_size, num_heads, num_queries, num_levels, num_points)
     # -> (batch_size, num_heads, 1, num_queries, num_levels*num_points)
-    attention_weights = attention_weights.transpose(1, 2).reshape(
-        batch_size * num_heads, 1, num_queries, num_levels * num_points
+    attention_weights = attention_weights.permute(0, 2, 1, 3).reshape(
+        batch_size * num_heads, 1, num_queries, sum(num_points_list)
     )
     output = (
-        (torch.stack(sampling_value_list, dim=-2).flatten(-2) * attention_weights)
+        (torch.concat(sampling_value_list, dim=-1) * attention_weights)
         .sum(-1)
         .view(batch_size, num_heads * hidden_dim, num_queries)
     )
@@ -990,7 +990,7 @@ class RTDetrV2MultiscaleDeformableAttention(nn.Module):
     Multiscale deformable attention as proposed in RTDETRV2.
     """
 
-    def __init__(self, config: RTDetrConfig, num_heads: int, n_points: int):
+    def __init__(self, config: RTDetrConfig, num_heads: int, n_points: int, offset_scale: float):
         super().__init__()
 
         kernel_loaded = MultiScaleDeformableAttention is not None
@@ -1018,9 +1018,10 @@ class RTDetrV2MultiscaleDeformableAttention(nn.Module):
         self.d_model = config.d_model
         self.n_levels = config.num_feature_levels
         self.n_heads = num_heads
+        self.offset_scale = offset_scale
         self.n_points = n_points
 
-        n_points_list = [n_points for _ in range(num_heads)]
+        n_points_list = [n_points for _ in range(self.n_levels)]
         self.n_points_list = n_points_list
         n_points_scale = [1 / n for n in n_points_list for _ in range(n)]
         self.register_buffer("n_points_scale", torch.tensor(n_points_scale, dtype=torch.float32))
@@ -1087,13 +1088,13 @@ class RTDetrV2MultiscaleDeformableAttention(nn.Module):
             value = value.masked_fill(~attention_mask[..., None], float(0))
         value = value.view(batch_size, sequence_length, self.n_heads, self.d_model // self.n_heads)
         sampling_offsets = self.sampling_offsets(hidden_states).view(
-            batch_size, num_queries, self.n_heads, self.n_levels, self.n_points, 2
+            batch_size, num_queries, self.n_heads, self.n_levels * self.n_points, 2
         )
         attention_weights = self.attention_weights(hidden_states).view(
             batch_size, num_queries, self.n_heads, self.n_levels * self.n_points
         )
         attention_weights = F.softmax(attention_weights, -1).view(
-            batch_size, num_queries, self.n_heads, self.n_levels, self.n_points
+            batch_size, num_queries, self.n_heads, self.n_levels * self.n_points
         )
         # batch_size, num_queries, n_heads, n_levels, n_points, 2
         num_coordinates = reference_points.shape[-1]
@@ -1104,17 +1105,16 @@ class RTDetrV2MultiscaleDeformableAttention(nn.Module):
                 + sampling_offsets / offset_normalizer[None, None, None, :, None, :]
             )
         elif num_coordinates == 4:
-            sampling_locations = (
-                reference_points[:, :, None, :, None, :2]
-                + sampling_offsets / self.n_points * reference_points[:, :, None, :, None, 2:] * 0.5
-            )
+            n_points_scale = self.n_points_scale.to(dtype=hidden_states.dtype).unsqueeze(-1)
+            offset = sampling_offsets * n_points_scale * reference_points[:, :, None, :, 2:] * self.offset_scale
+            sampling_locations = reference_points[:, :, None, :, :2] + offset
         else:
             raise ValueError(f"Last dim of reference_points must be 2 or 4, but got {reference_points.shape[-1]}")
 
         if self.disable_custom_kernels:
             # PyTorch implementation
             output = multi_scale_deformable_attention_v2(
-                value, spatial_shapes, sampling_locations, attention_weights, self.num_points_list
+                value, spatial_shapes, sampling_locations, attention_weights, self.n_points_list
             )
         else:
             try:
@@ -1130,7 +1130,7 @@ class RTDetrV2MultiscaleDeformableAttention(nn.Module):
             except Exception:
                 # PyTorch implementation
                 output = multi_scale_deformable_attention_v2(
-                    value, spatial_shapes, sampling_locations, attention_weights, self.num_points_list
+                    value, spatial_shapes, sampling_locations, attention_weights, self.n_points_list
                 )
         output = self.output_proj(output)
 
@@ -1280,6 +1280,7 @@ class RTDetrDecoderLayer(nn.Module):
                 config,
                 num_heads=config.decoder_attention_heads,
                 n_points=config.decoder_n_points,
+                offset_scale=config.decoder_offset_scale,
             )
         else:
             assert config.decoder_version in ["v1", "v2"]
