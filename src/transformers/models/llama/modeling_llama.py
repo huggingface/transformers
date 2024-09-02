@@ -1253,6 +1253,8 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
         if past_key_values is not None:
             if inputs_embeds is not None:  # Exception 1
                 input_ids = input_ids[:, -cache_position.shape[0] :]
+            elif cache_position[-1] > input_ids.shape[1]:
+                input_ids = input_ids[:, -cache_position.shape[0] :]
             elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
                 input_ids = input_ids[:, cache_position]
 
