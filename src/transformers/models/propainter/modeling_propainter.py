@@ -37,7 +37,6 @@ from torchvision import models as tv
 
 from ...modeling_outputs import (
     BaseModelOutput,
-    BaseModelOutputWithNoAttention,
     MaskedImageModelingOutput,
 )
 from ...modeling_utils import PreTrainedModel,TORCH_INIT_FUNCTIONS
@@ -321,11 +320,9 @@ class ProPainterCorrBlock:
             dx = torch.linspace(-radius, radius, 2*radius+1)
             dy = torch.linspace(-radius, radius, 2*radius+1)
             delta = torch.stack(torch.meshgrid(dy, dx), axis=-1).to(coords.device)
-
             centroid_lvl = coords.reshape(batch_size*height1*width1, 1, 1, 2) / 2**i
             delta_lvl = delta.view(1, 2*radius+1, 2*radius+1, 2)
             coords_lvl = centroid_lvl + delta_lvl
-
             corr = sample_point(corr, coords_lvl)
             corr = corr.view(batch_size, height1, width1, -1)
             out_pyramid.append(corr)
@@ -338,7 +335,6 @@ class ProPainterCorrBlock:
         batch_size, dimension, height, width = fmap1.shape
         fmap1 = fmap1.view(batch_size, dimension, height*width)
         fmap2 = fmap2.view(batch_size, dimension, height*width)
-
         corr = torch.matmul(fmap1.transpose(1,2), fmap2)
         corr = corr.view(batch_size, height, width, 1, height, width)
         return corr  / torch.sqrt(torch.tensor(dimension).float())
@@ -396,7 +392,6 @@ class ProPainterRaftOpticalFlow(nn.Module):
         fmap1 = fmap1.float()
         fmap2 = fmap2.float()
         
-        
         corr_fn = ProPainterCorrBlock(fmap1, fmap2, radius=self.config.corr_radius)
 
         # run the context network
@@ -436,7 +431,6 @@ class ProPainterRaftOpticalFlow(nn.Module):
 
         gt_local_frames_1 = gt_local_frames[:, :-1, :, :, :].reshape(-1, num_channels, height, width)
         gt_local_frames_2 = gt_local_frames[:, 1:, :, :, :].reshape(-1, num_channels, height, width)
-
         _, gt_flows_forward = self._forward(gt_local_frames_1, gt_local_frames_2, iters)
         _, gt_flows_backward = self._forward(gt_local_frames_2, gt_local_frames_1, iters)
 
@@ -1369,7 +1363,7 @@ class ProPainterTemporalSparseTransformer(nn.Module):
         self.transformer = nn.Sequential(*blocks)
         self.num_hidden_layers = num_hidden_layers
 
-    def forward(self, image_tokens, fold_x_size, local_mask=None, t_dilation=2, output_attentions: bool = False,output_hidden_states: bool = False,return_dict: bool = True):
+    def forward(self, image_tokens, fold_x_size, local_mask=None, t_dilation=2, output_attentions: bool = False):
         """
         Args:
             image_tokens: shape [batch_size, timesteps, height, width, num_channels]
@@ -1388,7 +1382,6 @@ class ProPainterTemporalSparseTransformer(nn.Module):
             image_tokens, _all_self_attentions = self.transformer[i](image_tokens, fold_x_size, local_mask, token_indices[i], output_attentions = output_attentions)
             if output_attentions:
                 all_self_attentions = all_self_attentions + (_all_self_attentions,)
-
         return image_tokens,all_self_attentions
 
 class ProPainterInpaintGenerator(nn.Module):
@@ -1475,12 +1468,12 @@ class ProPainterInpaintGenerator(nn.Module):
 
         trans_feat = self.soft_split(encoder_hidden_states.view(-1, num_channels, height, width), batch_size, fold_feat_size)
         mask_pool_l = mask_pool_l.permute(0,1,3,4,2).contiguous()
-        trans_feat, _all_self_attentions = self.transformers(trans_feat, fold_feat_size, mask_pool_l, t_dilation=t_dilation, output_attentions = output_attentions, output_hidden_states = output_hidden_states, return_dict = return_dict)
+        trans_feat, _all_self_attentions = self.transformers(trans_feat, fold_feat_size, mask_pool_l, t_dilation=t_dilation, output_attentions = output_attentions)
         _trans_feat = trans_feat
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (_trans_feat.half(),)
         if output_attentions:
-                all_self_attentions = all_self_attentions + (_all_self_attentions,)
+            all_self_attentions = _all_self_attentions
         trans_feat = self.soft_comp(trans_feat, timestep, fold_feat_size)
         trans_feat = trans_feat.view(batch_size, timestep, -1, height, width)
 
@@ -3008,8 +3001,8 @@ class ProPainterModel(ProPainterPreTrainedModel):
             gt_local_frames = pixel_values[:, :self.config.num_local_frames_propainter, ...] #batch_size, temporal_length, num_channels, height, width (before slicing)
             # get gt optical flow
             gt_flows_bi = self.optical_flow_model(gt_local_frames, iters=self.config.raft_iter)
-            all_hidden_states = gt_flows_bi
-            all_hidden_states = all_hidden_states.half()
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (gt_flows_bi[0].half(),gt_flows_bi[1].half(),)
         else:
             short_clip_len = self._get_short_clip_len(pixel_values.size(-1))
             if pixel_values.size(1) > short_clip_len:
@@ -3032,8 +3025,8 @@ class ProPainterModel(ProPainterPreTrainedModel):
                 gt_flows_bi = (gt_flows_f, gt_flows_b)
             else:
                 gt_flows_bi = self.optical_flow_model(pixel_values, iters=self.config.raft_iter)
-                all_hidden_states = gt_flows_bi
-                all_hidden_states = all_hidden_states.half()
+                if output_hidden_states:
+                    all_hidden_states = all_hidden_states + (gt_flows_bi[0].half(),gt_flows_bi[1].half(),)
                 torch.cuda.empty_cache()
         return gt_flows_bi, all_hidden_states
     
@@ -3104,6 +3097,7 @@ class ProPainterModel(ProPainterPreTrainedModel):
         return pred_flows_bi, pred_flows_bi_loss, pred_edges_bi, all_hidden_states
 
     def image_propagation(self,pixel_values,masks_dilated, pred_flows_bi,output_hidden_states: bool = False):
+        all_hidden_states = () if output_hidden_states else None
         if self.training:
             batch_size, height, width = self.size[0],self.size[3], self.size[4]
             gt_local_frames = pixel_values[:, :self.config.num_local_frames_propainter, ...]
@@ -3111,8 +3105,9 @@ class ProPainterModel(ProPainterPreTrainedModel):
             masked_frames = pixel_values * (1 - masks_dilated)
             masked_local_frames = masked_frames[:, :self.config.num_local_frames_propainter, ...]
             prop_imgs, updated_local_masks = self.inpaint_generator.img_propagation(masked_local_frames, pred_flows_bi, local_masks, interpolation=self.config.interp_mode)
-            all_hidden_states = prop_imgs
-            all_hidden_states = all_hidden_states.half()
+            if output_hidden_states:
+                all_hidden_states = prop_imgs
+                all_hidden_states = all_hidden_states.half()
             updated_masks = masks_dilated.clone()
             updated_masks[:, :self.config.num_local_frames_propainter, ...] = updated_local_masks.view(batch_size, self.config.num_local_frames_propainter, 1, height, width)
             updated_frames = masked_frames.clone()
@@ -3124,7 +3119,6 @@ class ProPainterModel(ProPainterPreTrainedModel):
             masked_frames = pixel_values * (1 - masks_dilated)
             subvideo_length_img_prop = min(100, self.config.subvideo_length) # ensure a minimum of 100 frames for image propagation
             if self.video_length > subvideo_length_img_prop:
-                all_hidden_states = () if output_hidden_states else None
                 updated_frames, updated_masks = [], []
                 pad_len = 10
                 for f in range(0, self.video_length, subvideo_length_img_prop):
@@ -3155,8 +3149,9 @@ class ProPainterModel(ProPainterPreTrainedModel):
             else:
                 batch_size, timesteps, _, _, _ = masks_dilated.size()
                 prop_imgs, updated_local_masks = self.inpaint_generator.img_propagation(masked_frames, pred_flows_bi, masks_dilated, 'nearest')
-                all_hidden_states = prop_imgs
-                all_hidden_states = all_hidden_states.half()
+                if output_hidden_states:
+                    all_hidden_states = prop_imgs
+                    all_hidden_states = all_hidden_states.half()
                 updated_frames = pixel_values * (1 - masks_dilated) + prop_imgs.view(batch_size, timesteps, 3, height, width) * masks_dilated
                 updated_masks = updated_local_masks.view(batch_size, timesteps, 1, height, width)
                 torch.cuda.empty_cache()
@@ -3184,7 +3179,7 @@ class ProPainterModel(ProPainterPreTrainedModel):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (_all_hidden_states,)
             if output_attentions:
-                all_self_attentions = all_self_attentions + (_all_self_attentions,)
+                all_self_attentions = _all_self_attentions
 
             pred_imgs_loss = pred_imgs
             # get the local frames
@@ -3224,13 +3219,13 @@ class ProPainterModel(ProPainterPreTrainedModel):
                 if output_hidden_states:
                     all_hidden_states = all_hidden_states + (_all_hidden_states,)
                 if output_attentions:
-                    all_self_attentions = all_self_attentions + (_all_self_attentions,)
+                    all_self_attentions = _all_self_attentions
                 
                 pred_img = pred_img.view(-1, 3, height, width)
 
                 
                 pred_img = (pred_img + 1) / 2
-                pred_img = pred_img.cpu().permute(0, 2, 3, 1).numpy() * 255
+                pred_img = pred_img.cpu().permute(0, 2, 3, 1).detach().numpy() * 255
                 binary_masks = masks_dilated[0, neighbor_ids, :, :, :].cpu().permute(
                     0, 2, 3, 1).numpy().astype(np.uint8)
                 
@@ -3294,9 +3289,10 @@ class ProPainterModel(ProPainterPreTrainedModel):
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (_all_hiddens_states,)
         if output_attentions:
-                all_self_attentions = all_self_attentions + (_all_self_attentions,)
+                all_self_attentions = _all_self_attentions
 
-        pred_imgs_loss = torch.tensor(np.array(pred_imgs_loss)).permute(0, 3, 1, 2).unsqueeze(0).to(masks_dilated.device)
+        if type(pred_imgs_loss) is list:
+            pred_imgs_loss = torch.tensor(np.array(pred_imgs_loss)).permute(0, 3, 1, 2).unsqueeze(0).to(masks_dilated.device)
         comp_frames_loss = torch.tensor(np.array(comp_frames)).permute(3,0,1,2).to(masks_dilated.device).to(torch.float32)
         gen_loss, dis_loss, flow_complete_loss = losses.calculate_losses(pred_imgs_loss,masks_dilated, pixel_values, comp_frames_loss,self.discriminator,pred_flows_bi_loss,gt_flows_bi,flow_masks,pred_edges_bi)
 
