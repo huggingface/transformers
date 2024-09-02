@@ -979,6 +979,7 @@ def create_module_to_test_map(
                 or "/".join(Path(t).parts[1:3]) in module
             ):
                 filtered_tests += [t]
+        return filtered_tests
 
     return {
         module: (filter_tests(tests, module=module) if has_many_models(tests) else tests)
