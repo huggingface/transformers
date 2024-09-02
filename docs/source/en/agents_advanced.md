@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-# Agents - Advanced mode
+# Agents, supercharged - Multi-agents, External tools and more
 
 [[open-in-colab]]
 

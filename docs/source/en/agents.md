@@ -28,8 +28,8 @@ An agent is a system that uses an LLM as its engine, and it has access to functi
 These *tools* are functions for performing a task, and they contain all necessary description for the agent to properly use them.
 
 The agent can be programmed to:
-- devise a series of actions/tools and run them all at once like the [`CodeAgent`] for example
-- plan and execute actions/tools one by one and wait for the outcome of each action before launching the next one like the [`ReactJsonAgent`] for example
+- devise a series of actions/tools and run them all at once,  like the [`CodeAgent`]
+- plan and execute actions/tools one by one and wait for the outcome of each action before launching the next one, like the [`ReactJsonAgent`]
 
 ### Types of agents
 
