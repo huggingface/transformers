@@ -192,7 +192,7 @@ message. Remember, chat models are still just language models - they're trained 
 special kind of text to them! You need to guide them with appropriate control tokens, so they know what they're 
 supposed to be doing.
 
-Not all models require generation prompts. Some models, like BlenderBot and LLaMA, don't have any
+Not all models require generation prompts. Some models, like LLaMA, don't have any
 special tokens before bot responses. In these cases, the `add_generation_prompt` argument will have no effect. The exact
 effect that `add_generation_prompt` has will depend on the template being used.
 
@@ -629,32 +629,17 @@ model_input = tokenizer.apply_chat_template(
 ## Advanced: How do chat templates work?
 
 The chat template for a model is stored on the `tokenizer.chat_template` attribute. If no chat template is set, the
-default template for that model class is used instead. Let's take a look at the template for `BlenderBot`:
-
-```python
-
->>> from transformers import AutoTokenizer
->>> tokenizer = AutoTokenizer.from_pretrained("facebook/blenderbot-400M-distill")
-
->>> tokenizer.chat_template
-"{% for message in messages %}{% if message['role'] == 'user' %}{{ ' ' }}{% endif %}{{ message['content'] }}{% if not loop.last %}{{ '  ' }}{% endif %}{% endfor %}{{ eos_token }}"
-```
-
-That's kind of intimidating. Let's clean it up a little to make it more readable. In the process, though, we also make
-sure that the newlines and indentation we add don't end up being included in the template output - see the tip on
-[trimming whitespace](#trimming-whitespace) below!
+default template for that model class is used instead. Let's take a look at a `Zephyr` chat template, though note this
+one is a little simplified from the actual one!
 
 ```
 {%- for message in messages %}
-    {%- if message['role'] == 'user' %}
-        {{- ' ' }}
-    {%- endif %}
-    {{- message['content'] }}
-    {%- if not loop.last %}
-        {{- '  ' }}
-    {%- endif %}
+    {{- '<|' + message['role'] + |>\n' }}
+    {{- message['content'] + eos_token }}
 {%- endfor %}
-{{- eos_token }}
+{%- if add_generation_prompt %}
+    {{- '<|assistant|>\n' }}
+{%- endif %}
 ```
 
 If you've never seen one of these before, this is a [Jinja template](https://jinja.palletsprojects.com/en/3.1.x/templates/).
@@ -662,25 +647,23 @@ Jinja is a templating language that allows you to write simple code that generat
 syntax resembles Python. In pure Python, this template would look something like this:
 
 ```python
-for idx, message in enumerate(messages):
-    if message['role'] == 'user':
-        print(' ')
-    print(message['content'])
-    if not idx == len(messages) - 1:  # Check for the last message in the conversation
-        print('  ')
-print(eos_token)
+for message in messages:
+    print(f'<|{message["role"]}|>')
+    print(message['content'] + eos_token)
+if add_generation_prompt:
+    print('<|assistant|>')
 ```
 
 Effectively, the template does three things:
-1. For each message, if the message is a user message, add a blank space before it, otherwise print nothing.
-2. Add the message content
-3. If the message is not the last message, add two spaces after it. After the final message, print the EOS token.
+1. For each message, print the role enclosed in `<|` and `|>`, like `<|user|>` or `<|assistant|>`.
+2. Next, print the content of the message, followed by the end-of-sequence token.
+3. Finally, if `add_generation_prompt` is set, print the assistant token, so that the model knows to start generating
+   an assistant response.
 
-This is a pretty simple template - it doesn't add any control tokens, and it doesn't support "system" messages, which 
-are a common way to give the model directives about how it should behave in the subsequent conversation.
-But Jinja gives you a lot of flexibility to do those things! Let's see a Jinja template that can format inputs
-similarly to the way LLaMA formats them (note that the real LLaMA template includes handling for default system
-messages and slightly different system message handling in general - don't use this one in your actual code!)
+This is a pretty simple template but Jinja gives you a lot of flexibility to do more complex things! Let's see a Jinja
+template that can format inputs similarly to the way LLaMA formats them (note that the real LLaMA template includes 
+handling for default system messages and slightly different system message handling in general - don't use this one 
+in your actual code!)
 
 ```
 {%- for message in messages %}
@@ -694,8 +677,8 @@ messages and slightly different system message handling in general - don't use t
 {%- endfor %}
 ```
 
-Hopefully if you stare at this for a little bit you can see what this template is doing - it adds specific tokens based
-on the "role" of each message, which represents who sent it. User, assistant and system messages are clearly
+Hopefully if you stare at this for a little bit you can see what this template is doing - it adds specific tokens like
+`[INST]` and `[/INST]` based on the role of each message. User, assistant and system messages are clearly
 distinguishable to the model because of the tokens they're wrapped in.
 
 ## Advanced: Adding and editing chat templates
