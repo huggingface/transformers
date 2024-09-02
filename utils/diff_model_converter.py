@@ -383,6 +383,7 @@ class DiffConverterTransformer(CSTTransformer):
         self.all_imports = []               # just stores all of the imports
         self.global_scope_index = 0
         # fmt: on
+        self.config_body = []
 
     def visit_ImportFrom(self, node: cst.ImportFrom) -> None:
         """When visiting imports from `transformers.models.xxx` we need to:
@@ -549,28 +550,31 @@ class DiffConverterTransformer(CSTTransformer):
 
 
 def convert_file(diff_file, old_model_name=None, new_model_name=None, cst_transformers=None):
-    model_name = re.search(r"diff_(.*)(?=\.py$)", diff_file).groups()[0]
-    # Parse the Python file
-    with open(diff_file, "r") as file:
-        code = file.read()
-    module = cst.parse_module(code)
-    wrapper = MetadataWrapper(module)
-    if cst_transformers is None:
-        cst_transformers = DiffConverterTransformer(module, model_name, old_model_name, new_model_name)
-    new_mod = wrapper.visit(cst_transformers)
-    ruffed_code = run_ruff(new_mod.code, True)
-    formatted_code = run_ruff(ruffed_code, False)
-    if len(formatted_code.strip()) > 0:
-        with open(diff_file.replace("diff_", "modeling_"), "w") as f:
-            f.write(AUTO_GENERATED_MESSAGE + formatted_code)
+    pattern =re.search(r"diff_(.*)(?=\.py$)", diff_file)
+    if pattern is not None:
+        model_name = pattern.groups()[0]
+        # Parse the Python file
+        with open(diff_file, "r") as file:
+            code = file.read()
+        module = cst.parse_module(code)
+        wrapper = MetadataWrapper(module)
+        if cst_transformers is None:
+            cst_transformers = DiffConverterTransformer(module, model_name, old_model_name, new_model_name)
+        new_mod = wrapper.visit(cst_transformers)
+        ruffed_code = run_ruff(new_mod.code, True)
+        formatted_code = run_ruff(ruffed_code, False)
+        if len(formatted_code.strip()) > 0:
+            with open(diff_file.replace("diff_", "modeling_"), "w") as f:
+                f.write(AUTO_GENERATED_MESSAGE + formatted_code)
 
-    if hasattr(cst_transformers, "config_body"):
-        config_module = cst.Module(body=[*cst_transformers.config_body], header=new_mod.header)
-        with open(diff_file.replace("diff_", "configuration_"), "w") as f:
-            ruffed_code = run_ruff(config_module.code, True)
-            formatted_code = run_ruff(ruffed_code, False)
-            f.write(AUTO_GENERATED_MESSAGE + formatted_code)
-
+        if hasattr(cst_transformers, "config_body"):
+            config_module = cst.Module(body=[*cst_transformers.config_body], header=new_mod.header)
+            with open(diff_file.replace("diff_", "configuration_"), "w") as f:
+                ruffed_code = run_ruff(config_module.code, True)
+                formatted_code = run_ruff(ruffed_code, False)
+                f.write(AUTO_GENERATED_MESSAGE + formatted_code)
+    else:
+        print(f"Diff pattern not found in {diff_file}, exiting")
     # TODO optimize by re-using the class_finder
     return cst_transformers
 
