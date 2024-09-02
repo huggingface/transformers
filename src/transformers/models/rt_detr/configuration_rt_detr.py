@@ -106,7 +106,8 @@ class RTDetrConfig(PretrainedConfig):
             The number of input feature levels.
         decoder_n_points (`int`, *optional*, defaults to 4):
             The number of sampled keys in each feature level for each attention head in the decoder.
-        decoder_offset_scale (`<fill_type>`, *optional*, defaults to 0.5): <fill_docstring>
+        decoder_offset_scale (`float`, *optional*, defaults to 0.5):
+            The number of offset scale in the decoder.
         decoder_layers (`int`, *optional*, defaults to 6):
             Number of decoder layers.
         decoder_attention_heads (`int`, *optional*, defaults to 8):
