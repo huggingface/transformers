@@ -60,7 +60,7 @@ class LlavaOnevisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def test_chat_template(self):
         processor = AutoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-7b-ov-hf")
-        expected_prompt = "<|im_start|>user\n<image>\nWhat is shown in this image?<|im_end|>\n<|im_start|>assistant\n"
+        expected_prompt = "<|im_start|>user <image>\nWhat is shown in this image?<|im_end|><|im_start|>assistant\n"
 
         messages = [
             {
