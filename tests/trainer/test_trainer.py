@@ -4427,7 +4427,7 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
         args = TrainingArguments(optim=OptimizerNames.ADAMW_BNB, output_dir="None")
 
         # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
-        # bnb will fail even if bnb is installed.
+        # bnb will fail even if `bitsandbytes` is installed.
         with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
             with self.assertRaises(ValueError):
                 Trainer.get_optimizer_cls_and_kwargs(args)
@@ -4436,7 +4436,7 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
         args = TrainingArguments(optim=OptimizerNames.PAGED_ADAMW, output_dir="None")
 
         # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
-        # bnb will fail even if bnb is installed.
+        # bnb will fail even if `bitsandbytes` is installed.
         with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
             with self.assertRaises(ValueError):
                 Trainer.get_optimizer_cls_and_kwargs(args)
@@ -4445,7 +4445,7 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
         args = TrainingArguments(optim=OptimizerNames.PAGED_ADAMW_8BIT, output_dir="None")
 
         # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
-        # bnb will fail even if bnb is installed.
+        # bnb will fail even if `bitsandbytes` is installed.
         with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
             with self.assertRaises(ValueError):
                 Trainer.get_optimizer_cls_and_kwargs(args)
@@ -4454,7 +4454,7 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
         args = TrainingArguments(optim=OptimizerNames.PAGED_LION, output_dir="None")
 
         # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
-        # bnb will fail even if bnb is installed.
+        # bnb will fail even if `bitsandbytes` is installed.
         with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
             with self.assertRaises(ValueError):
                 Trainer.get_optimizer_cls_and_kwargs(args)
@@ -4463,7 +4463,7 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
         args = TrainingArguments(optim=OptimizerNames.PAGED_LION_8BIT, output_dir="None")
 
         # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
-        # bnb will fail even if bnb is installed.
+        # bnb will fail even if `bitsandbytes` is installed.
         with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
             with self.assertRaises(ValueError):
                 Trainer.get_optimizer_cls_and_kwargs(args)
