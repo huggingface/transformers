@@ -142,12 +142,16 @@ jobs:
         working-directory: /transformers
         run: |
           whoami
-          echo "$USER"
 
-      - name: delete 1 cache
+      - name: check who I am
         working-directory: /transformers
         run: |
-          rm -rf /mnt/cache/hub/models--hf-internal-testing--config-no-model
+          echo "$USER"
+
+#      - name: delete 1 cache
+#        working-directory: /transformers
+#        run: |
+#          rm -rf /mnt/cache/hub/models--hf-internal-testing--config-no-model
 
       - name: Run all tests on GPU
         working-directory: /transformers
