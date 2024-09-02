@@ -191,11 +191,7 @@ class Dinov2WithRegistersEmbeddings(nn.Module):
 
         self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
         self.mask_token = nn.Parameter(torch.zeros(1, config.hidden_size))
-        self.register_tokens = (
-            nn.Parameter(torch.zeros(1, config.num_register_tokens, config.hidden_size))
-            if config.num_register_tokens
-            else None
-        )
+        self.register_tokens = nn.Parameter(torch.zeros(1, config.num_register_tokens, config.hidden_size))
         self.patch_embeddings = Dinov2WithRegistersPatchEmbeddings(config)
         num_patches = self.patch_embeddings.num_patches
         self.position_embeddings = nn.Parameter(torch.randn(1, num_patches + 1, config.hidden_size))
@@ -232,7 +228,8 @@ class Dinov2WithRegistersEmbeddings(nn.Module):
             mode="bicubic",
             align_corners=False,
             antialias=self.config.interpolate_antialias,
-        ).to(dtype=target_dtype)
+        )
+        patch_pos_embed = patch_pos_embed.to(dtype=target_dtype)
         if int(height) != patch_pos_embed.shape[-2] or int(width) != patch_pos_embed.shape[-1]:
             raise ValueError("Width or height does not match with the interpolated position embeddings")
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
@@ -255,15 +252,15 @@ class Dinov2WithRegistersEmbeddings(nn.Module):
         # add positional encoding to each token
         embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
 
-        if self.register_tokens is not None:
-            embeddings = torch.cat(
-                (
-                    embeddings[:, :1],
-                    self.register_tokens.expand(embeddings.shape[0], -1, -1),
-                    embeddings[:, 1:],
-                ),
-                dim=1,
-            )
+        # add register tokens
+        embeddings = torch.cat(
+            (
+                embeddings[:, :1],
+                self.register_tokens.expand(embeddings.shape[0], -1, -1),
+                embeddings[:, 1:],
+            ),
+            dim=1,
+        )
 
         embeddings = self.dropout(embeddings)
 
