@@ -1101,12 +1101,12 @@ class ReactCodeAgent(ReactAgent):
         except Exception as e:
             raise AgentGenerationError(f"Error in generating llm output: {e}.")
 
-        self.logger.debug("===== Output message of the LLM: =====")
+        self.logger.debug("=== Output message of the LLM:")
         self.logger.debug(llm_output)
         current_step_logs["llm_output"] = llm_output
 
         # Parse
-        self.logger.debug("===== Extracting action =====")
+        self.logger.debug("=== Extracting action ===")
         try:
             rationale, raw_code_action = self.extract_action(llm_output=llm_output, split_token="Code:")
         except Exception as e:
@@ -1145,7 +1145,7 @@ class ReactCodeAgent(ReactAgent):
                 self.logger.log(32, str(result))
             observation = "Print outputs:\n" + self.state["print_outputs"]
             if result is not None:
-                observation += "Last output from code snippet:\n" + str(result)[:200000]
+                observation += "Last output from code snippet:\n" + str(result)[:100000]
             current_step_logs["observation"] = observation
         except Exception as e:
             error_msg = f"Code execution failed due to the following error:\n{str(e)}"
