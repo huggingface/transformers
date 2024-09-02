@@ -19,7 +19,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+
 from transformers import PretrainedConfig
+
+from ...utils import (
+    logging,
+)
+
+
+logger = logging.get_logger(__name__)
 
 
 class Gemma2Config(PretrainedConfig):
@@ -52,8 +61,11 @@ class Gemma2Config(PretrainedConfig):
             `num_attention_heads`.
         head_dim (`int`, *optional*, defaults to 256):
             The attention head dimension.
-        hidden_activation (`str` or `function`, *optional*, defaults to `"gelu_pytorch_tanh"`):
-            The non-linear activation function (function or string) in the decoder.
+        hidden_act (`str` or `function`, *optional*, defaults to `"gelu_pytorch_tanh"`):
+            The legacy activation function. It is overwritten by the `hidden_activation`.
+        hidden_activation (`str` or `function`, *optional*):
+            The non-linear activation function (function or string) in the decoder. Will default to `"gelu_pytorch_tanh"`
+            if not specified. `"gelu_pytorch_tanh"` uses an approximation of the `"gelu"` activation function.
         max_position_embeddings (`int`, *optional*, defaults to 8192):
             The maximum sequence length that this model might ever be used with.
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -77,20 +89,22 @@ class Gemma2Config(PretrainedConfig):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        final_logit_softcapping (`float`, *optional*, defaults to 30.0): scaling factor when applying tanh softcapping on the logits.
+            final_logit_softcapping (`float`, *optional*, defaults to 30.0): scaling factor when applying tanh softcapping on the logits.
         attn_logit_softcapping (`float`, *optional*, defaults to 50.0): scaling factor when applying tanh softcapping on the attention scores.
         query_pre_attn_scalar (`float`, *optional*, defaults to 224): scaling factor used on the attention scores
         sliding_window (`int`, *optional*, defaults to 4096): in Gemma2, every other layer uses sliding window attention. This is the
             size of the sliding window.
     ```python
     >>> from transformers import Gemma2Model, Gemma2Config
-    >>> # Initializing a Gemma2 gemma2-9b style configuration
+    >>> # Initializing a Gemma2 gemma2-7b style configuration
     >>> configuration = Gemma2Config()
-    >>> # Initializing a model from the gemma2-9b style configuration
+    >>> # Initializing a model from the gemma2-7b style configuration
     >>> model = Gemma2Model(configuration)
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
+    cache_implementation = "hybrid"  # TODO this is not properly ported, but cls attr is better
 
     model_type = "gemma2"
     keys_to_ignore_at_inference = ["past_key_values"]
@@ -104,7 +118,8 @@ class Gemma2Config(PretrainedConfig):
         num_attention_heads=16,
         num_key_value_heads=16,
         head_dim=256,
-        hidden_activation="gelu_pytorch_tanh",
+        hidden_act="gelu_pytorch_tanh",
+        hidden_activation=None,
         max_position_embeddings=8192,
         initializer_range=0.02,
         rms_norm_eps=1e-6,
@@ -116,10 +131,10 @@ class Gemma2Config(PretrainedConfig):
         rope_theta=10000.0,
         attention_bias=False,
         attention_dropout=0.0,
-        final_logit_softcapping=30.0,
-        attn_logit_softcapping=50.0,
         query_pre_attn_scalar=224,
         sliding_window=4096,
+        final_logit_softcapping=30.0,
+        attn_logit_softcapping=50.0,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -130,6 +145,7 @@ class Gemma2Config(PretrainedConfig):
         self.num_attention_heads = num_attention_heads
         self.head_dim = head_dim
         self.num_key_value_heads = num_key_value_heads
+        self.hidden_act = hidden_act
         self.hidden_activation = hidden_activation
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
@@ -137,7 +153,6 @@ class Gemma2Config(PretrainedConfig):
         self.rope_theta = rope_theta
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
-        self.attn_logit_softcapping = attn_logit_softcapping
 
         super().__init__(
             pad_token_id=pad_token_id,
@@ -146,7 +161,7 @@ class Gemma2Config(PretrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
-        self.final_logit_softcapping = final_logit_softcapping
         self.query_pre_attn_scalar = query_pre_attn_scalar
         self.sliding_window = sliding_window
-        self.cache_implementation = "hybrid"
+        self.final_logit_softcapping = final_logit_softcapping
+        self.attn_logit_softcapping = attn_logit_softcapping
