@@ -138,25 +138,34 @@ jobs:
         run: |
           ls -l /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/.no_exist/42ce72ae70f7d34c14dbc3a856379a5d5b72de47/config.json
 
-      - name: Check cache 8.5
+      - name: Check cache 9
         working-directory: /transformers
         run: |
-          echo "Hello" > config.json
-          echo "Hello 2" > config2.json
-          ls -l config.json
-          ls -l config2.json
-          mv config2.json /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/.no_exist/42ce72ae70f7d34c14dbc3a856379a5d5b72de47/config2.json
-          mv config.json /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/.no_exist/42ce72ae70f7d34c14dbc3a856379a5d5b72de47/config.json
+          lsof -t /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/.no_exist/42ce72ae70f7d34c14dbc3a856379a5d5b72de47/config.json
 
-      - name: Check cache 7
-        working-directory: /transformers
-        run: |
-          lsattr /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/.no_exist/42ce72ae70f7d34c14dbc3a856379a5d5b72de47
 
-      - name: Check cache 8
-        working-directory: /transformers
-        run: |
-          lsattr /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/.no_exist/42ce72ae70f7d34c14dbc3a856379a5d5b72de47/config.json
+#      - name: Check cache 8.5
+#        working-directory: /transformers
+#        run: |
+#          echo "Hello" > config.json
+#          echo "Hello 2" > config2.json
+#          ls -l config.json
+#          ls -l config2.json
+#          mv config2.json /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/.no_exist/42ce72ae70f7d34c14dbc3a856379a5d5b72de47/config2.json
+#          mv config.json /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/.no_exist/42ce72ae70f7d34c14dbc3a856379a5d5b72de47/config.json
+#
+#      - name: Check cache 7
+#        working-directory: /transformers
+#        run: |
+#          lsattr /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/.no_exist/42ce72ae70f7d34c14dbc3a856379a5d5b72de47
+#
+#      - name: Check cache 8
+#        working-directory: /transformers
+#        run: |
+#          lsattr /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/.no_exist/42ce72ae70f7d34c14dbc3a856379a5d5b72de47/config.json
+
+
+
 
       - name: Check cache 9
         working-directory: /transformers
