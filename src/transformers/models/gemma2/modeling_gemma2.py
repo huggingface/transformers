@@ -627,7 +627,6 @@ GEMMA2_START_DOCSTRING = r"""
 )
 class Gemma2PreTrainedModel(PreTrainedModel):
     config_class = Gemma2Config
-    _supports_quantized_cache = False
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Gemma2DecoderLayer"]
@@ -635,7 +634,7 @@ class Gemma2PreTrainedModel(PreTrainedModel):
     _supports_flash_attn_2 = True
     _supports_sdpa = True
     _supports_cache_class = True
-    _supports_quantized_cache = True
+    _supports_quantized_cache = False
     _supports_static_cache = True
 
     def _init_weights(self, module):

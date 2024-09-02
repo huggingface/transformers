@@ -348,6 +348,7 @@ def replace_call_to_super(class_finder: ClassFinder, updated_node: cst.ClassDef,
     }
     end_meth = []
 
+    assing_targets = {}
     # Iterate directly from node.body as there can be property/setters with same names which are overwritten when we use a dict
     for func in original_node.body.body:
         name = func.name.value if hasattr(func, "name") else func
@@ -362,7 +363,12 @@ def replace_call_to_super(class_finder: ClassFinder, updated_node: cst.ClassDef,
                     params=list(parent_params.values()), star_kwarg=func.params.star_kwarg
                 )
             func = func.with_changes(body=updated_methods[name].body, params=new_params)
-        end_meth.append(func)
+        if m.matches(func, m.SimpleStatementLine(body=[m.Assign()])):
+            target = class_finder.python_module.code_for_node(func.body[0].targets[0])
+            assing_targets[target] = func
+            print(f"found target: {target}")
+        else:
+            end_meth.append(func)
 
     # Port new methods that are defined only in diff-file and append at the end
     for name, func in updated_methods.items():
@@ -394,8 +400,10 @@ def replace_call_to_super(class_finder: ClassFinder, updated_node: cst.ClassDef,
         if name not in original_methods and func is not None and isinstance(func, cst.FunctionDef):
             end_meth.append(func)
         if m.matches(func, m.SimpleStatementLine(body=[m.Assign()])):
-            # we have an attribute
-            end_meth = end_meth[:1] + [func] + end_meth[1:]
+            target = class_finder.python_module.code_for_node(func.body[0].targets[0])
+            if target in assing_targets:
+                assing_targets[target] = func
+    end_meth = list(assing_targets.values()) + end_meth
 
     result_node = original_node.with_changes(body=cst.IndentedBlock(body=end_meth))
     temp_module = cst.Module(body=[result_node])

@@ -32,6 +32,8 @@ logger = logging.get_logger(__name__)
 
 
 class Gemma2Config(PretrainedConfig):
+    model_type = "gemma2"
+    keys_to_ignore_at_inference = ["past_key_values"]
     r"""
     This is the configuration class to store the configuration of a [`Gemma2Model`]. It is used to instantiate an Gemma2
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -103,11 +105,6 @@ class Gemma2Config(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
-
-    cache_implementation = "hybrid"  # TODO this is not properly ported, but cls attr is better
-
-    model_type = "gemma2"
-    keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
         self,
