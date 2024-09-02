@@ -17,7 +17,6 @@
 import math
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple, Union
-from ...cache_utils import Cache, DynamicCache, StaticCache
 
 import torch
 import torch.utils.checkpoint
