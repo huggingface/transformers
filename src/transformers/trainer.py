@@ -1274,7 +1274,7 @@ class Trainer:
                 optimizer_kwargs.update(additional_optim_kwargs)
                 optimizer_kwargs.update(bnb_kwargs)
             except ImportError:
-                raise ValueError("Trainer tried to instantiate bnb optimizer but bnb is not installed!")
+                raise ValueError("Trainer tried to instantiate bnb optimizer but `bitsandbytes` is not installed!")
             if is_bitsandbytes_available() and version.parse(
                 importlib.metadata.version("bitsandbytes")
             ) < version.parse("0.41.1"):
@@ -1479,10 +1479,10 @@ class Trainer:
                     "You need to have `torchao>=0.4.0` in order to use torch 4-bit optimizers."
                     "Install it with `pip install torchao` or follow the instructions here: https://github.com/pytorch/ao"
                 )
-            if version.parse(importlib.metadata.version("torch")) < version.parse("2.3"):
+            if version.parse(importlib.metadata.version("torch")) <= version.parse("2.4"):
                 raise ImportError(
-                    "You need to have `torch>=2.3` in order to use torch 4-bit optimizers. "
-                    "Install it with `pip install --upgrade torch`"
+                    "You need to have `torch>2.4` in order to use torch 4-bit optimizers. "
+                    "Install it with `pip install --upgrade torch` it is available on pipy. Otherwise, you need to install torch nightly."
                 )
             from torchao.prototype.low_bit_optim import AdamW4bit
 
@@ -2118,12 +2118,7 @@ class Trainer:
 
         # Activate gradient checkpointing if needed
         if args.gradient_checkpointing:
-            if args.gradient_checkpointing_kwargs is None:
-                gradient_checkpointing_kwargs = {}
-            else:
-                gradient_checkpointing_kwargs = args.gradient_checkpointing_kwargs
-
-            self.model.gradient_checkpointing_enable(gradient_checkpointing_kwargs=gradient_checkpointing_kwargs)
+            self.model.gradient_checkpointing_enable(gradient_checkpointing_kwargs=args.gradient_checkpointing_kwargs)
 
         model = self._wrap_model(self.model_wrapped)
 
@@ -2979,8 +2974,16 @@ class Trainer:
 
         # Save the Trainer state
         if self.args.should_save:
-            # Update the `TrainerControl` state to where we are currently
-            self.state.stateful_callbacks["TrainerControl"] = self.control.state()
+            # Update `ExportableState` callbacks and `TrainerControl` state to where we are currently
+            for cb in [
+                cb for cb in self.callback_handler.callbacks + [self.control] if isinstance(cb, ExportableState)
+            ]:
+                cb_name = cb.__class__.__name__
+                cb_state = cb.state()
+                if isinstance(self.state.stateful_callbacks[cb_name], list):
+                    self.state.stateful_callbacks[cb_name].append(cb_state)
+                else:
+                    self.state.stateful_callbacks[cb_name] = cb_state
             self.state.save_to_json(os.path.join(output_dir, TRAINER_STATE_NAME))
 
         if self.args.push_to_hub:
