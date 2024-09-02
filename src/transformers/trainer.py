@@ -551,7 +551,7 @@ class Trainer:
             else default_data_collator
         )
         self.data_collator = data_collator if data_collator is not None else default_collator
-        self.eval_data_collator = eval_data_collator if eval_data_collator is not None else data_collator
+        self.eval_data_collator = eval_data_collator if eval_data_collator is not None else self.data_collator
         self.train_dataset = train_dataset
         self.eval_dataset = eval_dataset
         self.tokenizer = tokenizer
