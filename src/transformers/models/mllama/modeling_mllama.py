@@ -459,87 +459,62 @@ class MllamaImageMLP(torch.nn.Module):
         hidden_state = self.fc1(hidden_state)
         hidden_state = self.activation_fn(hidden_state)
         
-        # surpisingly this is no equvalent to self.fc2(hidden_state)
+        # surpisingly this is not equvalent to self.fc2(hidden_state) for this model (??)
         # saving original implementation for logits full match
         hidden_state = F.linear(hidden_state, self.fc2.weight) + self.fc2.bias
     
         return hidden_state
 
 
-class ImageAttention(nn.Module):
+class MllamaImageSdpaAttention(nn.Module):
+    # originally ImageAttention
+
     def __init__(
         self,
-        dim,
-        head_dim,
-        n_heads,
+        hidden_size: int,
+        num_attention_heads: int,
     ):
         super().__init__()
 
-        self.n_kv_heads = n_heads
-        self.n_local_heads = n_heads 
-        self.n_local_kv_heads = (
-            self.n_kv_heads
-        )
-        self.n_rep = self.n_local_heads // self.n_local_kv_heads
-        self.head_dim = dim // n_heads
+        self.embed_dim = hidden_size
+        self.num_heads = num_attention_heads
+        self.num_kv_heads = num_attention_heads
+        self.head_dim = hidden_size // num_attention_heads
 
-        self.q_proj = nn.Linear(
-            dim,
-            n_heads * self.head_dim,
-            bias=True,
-        )
-        self.k_proj = nn.Linear(
-            dim,
-            self.n_kv_heads * self.head_dim,
-            bias=True,
-        )
-        self.v_proj = nn.Linear(
-            dim,
-            self.n_kv_heads * self.head_dim,
-            bias=True,
-        )
-        self.o_proj = nn.Linear(
-            n_heads * self.head_dim,
-            dim,
-            bias=True,
-
-        )
+        self.q_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim, bias=True)
+        self.k_proj = nn.Linear(self.embed_dim, self.num_kv_heads * self.head_dim, bias=True)
+        self.v_proj = nn.Linear(self.embed_dim, self.num_kv_heads * self.head_dim, bias=True)
+        self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.embed_dim, bias=True)
 
     def forward(
         self,
-        x: torch.Tensor,
-        mask: torch.Tensor = None,
-    ):
+        hidden_state: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
 
-        xq, xk, xv = [
-            F.linear(x, w, b)
-            for (w, b) in [
-                (self.q_proj.weight, self.q_proj.bias),
-                (self.k_proj.weight, self.k_proj.bias),
-                (self.v_proj.weight, self.v_proj.bias),
-            ]
-        ]
+        query = self.q_proj(hidden_state)
+        key = self.k_proj(hidden_state)
+        value = self.v_proj(hidden_state)
 
-        bs, slen, _ = xq.shape
+        batch_size, q_seq_len, _ = query.shape
+        _, kv_seq_len, _ = key.shape
 
-        xq = xq.view(bs, slen, self.n_local_heads, self.head_dim)
-        xk = xk.view(bs, xk.shape[1], self.n_local_kv_heads, self.head_dim)
-        xv = xv.view(bs, xv.shape[1], self.n_local_kv_heads, self.head_dim)
+        query = query.view(batch_size, q_seq_len, self.num_heads, self.head_dim)
+        key = key.view(batch_size, kv_seq_len, self.num_kv_heads, self.head_dim)
+        value = value.view(batch_size, kv_seq_len, self.num_kv_heads, self.head_dim)
 
-        xq, xk, xv = [tensor.transpose(1, 2) for tensor in (xq, xk, xv)]
+        query = query.transpose(1, 2)
+        key = key.transpose(1, 2)
+        value = value.transpose(1, 2)
 
-        xk = xk.repeat_interleave(self.n_rep, dim=1)
-        xv = xv.repeat_interleave(self.n_rep, dim=1)
+        attn_output = F.scaled_dot_product_attention(query, key, value, attn_mask=attention_mask)
 
-        attn_output = F.scaled_dot_product_attention(
-            xq, xk, xv, attn_mask=mask, dropout_p=0.0
-        )
+        attn_output = attn_output.transpose(1, 2).contiguous()
+        attn_output = attn_output.reshape(batch_size, q_seq_len, -1)
 
-        attn_output = attn_output.transpose(1, 2).contiguous().reshape(bs, slen, -1)
+        output = self.o_proj(attn_output)
 
-        out = F.linear(attn_output, self.o_proj.weight)
-        out += self.o_proj.bias
-        return out
+        return output
 
 
 class ImageTransformerBlock(nn.Module):
@@ -555,11 +530,7 @@ class ImageTransformerBlock(nn.Module):
         assert d_model % n_head == 0
         self.n_heads = n_head
         self.head_dim = d_model // self.n_heads
-        self.self_attn = ImageAttention(
-            dim=d_model,
-            head_dim=self.head_dim,
-            n_heads=self.n_heads,
-        )
+        self.self_attn = MllamaImageSdpaAttention(hidden_size=d_model, num_attention_heads=self.n_heads)
         self.layer_norm1 = LayerNorm(d_model)
         self.mlp = MllamaImageMLP(
             hidden_size=d_model, # 1280
@@ -578,7 +549,7 @@ class ImageTransformerBlock(nn.Module):
     ):
         _gate_attn = 1 if not self.gated else self.gate_attn.tanh()
         _gate_ffn = 1 if not self.gated else self.gate_ffn.tanh()
-        x = x + _gate_attn * self.self_attn(self.layer_norm1(x), mask=mask)
+        x = x + _gate_attn * self.self_attn(self.layer_norm1(x), attention_mask=mask)
         x = x + _gate_ffn * self.mlp(self.layer_norm2(x))
         return x
 
