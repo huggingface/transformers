@@ -488,6 +488,26 @@ class Swinv2ModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
 
     @slow
+    def test_inference_fp16(self):
+        model = Swinv2ForImageClassification.from_pretrained(
+            "microsoft/swinv2-tiny-patch4-window8-256", torch_dtype=torch.float16
+        ).to(torch_device)
+        image_processor = self.default_image_processor
+
+        image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+        inputs = image_processor(images=image, return_tensors="pt").to(model.dtype).to(torch_device)
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(**inputs)
+
+        # verify the logits
+        expected_shape = torch.Size((1, 1000))
+        self.assertEqual(outputs.logits.shape, expected_shape)
+        expected_slice = torch.tensor([-0.3938, -0.4290, 0.0020], dtype=model.dtype).to(torch_device)
+        self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
+
+    @slow
     def test_inference_interpolate_pos_encoding(self):
         # Swinv2 models have an `interpolate_pos_encoding` argument in their forward method,
         # allowing to interpolate the pre-trained position embeddings in order to use

@@ -137,7 +137,7 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
                 "properties": {
                     "x": {
                         "type": "array",
-                        "items": {"type": "array", "items": {"type": ["string", "integer"]}},
+                        "items": {"type": "array", "items": {"type": ["integer", "string"]}},
                         "description": "The input",
                     }
                 },
@@ -455,13 +455,13 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
                     },
                     "y": {
                         "type": "array",
-                        "items": {"type": ["string", "integer"]},
+                        "items": {"type": ["integer", "string"]},
                         "nullable": True,
                         "description": "The second input. It's a big list with a single-line description.",
                     },
                     "z": {
                         "type": "array",
-                        "prefixItems": [{"type": ["string", "integer"]}, {"type": "string"}],
+                        "prefixItems": [{"type": ["integer", "string"]}, {"type": "string"}],
                         "description": "The third input. It's some kind of tuple with a default arg.",
                     },
                 },

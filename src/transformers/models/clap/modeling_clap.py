@@ -37,6 +37,7 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     logging,
     replace_return_docstrings,
+    torch_int,
 )
 from .configuration_clap import ClapAudioConfig, ClapConfig, ClapTextConfig
 
@@ -194,19 +195,19 @@ class ClapOutput(ModelOutput):
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
             Contrastive loss for audio-text similarity.
-        logits_per_audio:(`torch.FloatTensor` of shape `(audio_batch_size, text_batch_size)`):
+        logits_per_audio (`torch.FloatTensor` of shape `(audio_batch_size, text_batch_size)`):
             The scaled dot product scores between `audio_embeds` and `text_embeds`. This represents the audio-text
             similarity scores.
-        logits_per_text:(`torch.FloatTensor` of shape `(text_batch_size, audio_batch_size)`):
+        logits_per_text (`torch.FloatTensor` of shape `(text_batch_size, audio_batch_size)`):
             The scaled dot product scores between `text_embeds` and `audio_embeds`. This represents the text-audio
             similarity scores.
-        text_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
+        text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
             The text embeddings obtained by applying the projection layer to the pooled output of [`ClapTextModel`].
-        audio_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
+        audio_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
             The audio embeddings obtained by applying the projection layer to the pooled output of [`ClapAudioModel`].
-        text_model_output(`BaseModelOutputWithPooling`):
+        text_model_output (`BaseModelOutputWithPooling`):
             The output of the [`ClapTextModel`].
-        audio_model_output(`BaseModelOutputWithPooling`):
+        audio_model_output (`BaseModelOutputWithPooling`):
             The output of the [`ClapAudioModel`].
     """
 
@@ -590,8 +591,10 @@ class ClapAudioLayer(nn.Module):
     def set_shift_and_window_size(self, input_resolution):
         if min(input_resolution) <= self.window_size:
             # if window size is larger than input resolution, we don't partition windows
-            self.shift_size = 0
-            self.window_size = min(input_resolution)
+            self.shift_size = torch_int(0)
+            self.window_size = (
+                torch.min(torch.tensor(input_resolution)) if torch.jit.is_tracing() else min(input_resolution)
+            )
 
     def get_attn_mask(self, height, width, dtype, device):
         if self.shift_size > 0:
@@ -1925,13 +1928,13 @@ class ClapModel(ClapPreTrainedModel):
         super().__init__(config)
 
         if not isinstance(config.text_config, ClapTextConfig):
-            raise ValueError(
+            raise TypeError(
                 "config.text_config is expected to be of type ClapTextConfig but is of type"
                 f" {type(config.text_config)}."
             )
 
         if not isinstance(config.audio_config, ClapAudioConfig):
-            raise ValueError(
+            raise TypeError(
                 "config.audio_config is expected to be of type ClapAudioConfig but is of type"
                 f" {type(config.audio_config)}."
             )

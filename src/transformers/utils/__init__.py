@@ -60,6 +60,8 @@ from .generic import (
     tensor_size,
     to_numpy,
     to_py_obj,
+    torch_float,
+    torch_int,
     transpose,
     working_or_temp_dir,
 )
@@ -125,7 +127,9 @@ from .import_utils import (
     is_eetq_available,
     is_essentia_available,
     is_faiss_available,
+    is_fbgemm_gpu_available,
     is_flash_attn_2_available,
+    is_flash_attn_greater_or_equal,
     is_flash_attn_greater_or_equal_2_10,
     is_flax_available,
     is_fsdp_available,
@@ -133,6 +137,7 @@ from .import_utils import (
     is_g2p_en_available,
     is_galore_torch_available,
     is_gguf_available,
+    is_grokadamw_available,
     is_hqq_available,
     is_in_notebook,
     is_ipex_available,
@@ -143,6 +148,7 @@ from .import_utils import (
     is_keras_nlp_available,
     is_levenshtein_available,
     is_librosa_available,
+    is_liger_kernel_available,
     is_lomo_available,
     is_mlx_available,
     is_natten_available,
@@ -196,6 +202,7 @@ from .import_utils import (
     is_torch_fx_proxy,
     is_torch_mlu_available,
     is_torch_mps_available,
+    is_torch_musa_available,
     is_torch_neuroncore_available,
     is_torch_npu_available,
     is_torch_sdpa_available,
@@ -204,12 +211,14 @@ from .import_utils import (
     is_torch_tpu_available,
     is_torch_xla_available,
     is_torch_xpu_available,
+    is_torchao_available,
     is_torchaudio_available,
     is_torchdistx_available,
     is_torchdynamo_available,
     is_torchdynamo_compiling,
     is_torchvision_available,
     is_training_run_on_sagemaker,
+    is_uroman_available,
     is_vision_available,
     requires_backends,
     torch_only_method,
@@ -236,6 +245,7 @@ CONFIG_NAME = "config.json"
 FEATURE_EXTRACTOR_NAME = "preprocessor_config.json"
 IMAGE_PROCESSOR_NAME = FEATURE_EXTRACTOR_NAME
 PROCESSOR_NAME = "processor_config.json"
+CHAT_TEMPLATE_NAME = "chat_template.json"
 GENERATION_CONFIG_NAME = "generation_config.json"
 MODEL_CARD_NAME = "modelcard.json"
 

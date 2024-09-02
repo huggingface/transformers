@@ -60,7 +60,7 @@ def output_type(output):
     elif isinstance(output, (torch.Tensor, AgentAudio)):
         return "audio"
     else:
-        raise ValueError(f"Invalid output: {output}")
+        raise TypeError(f"Invalid output: {output}")
 
 
 @is_agent_test
@@ -90,8 +90,9 @@ class ToolTesterMixin:
     def test_agent_type_output(self):
         inputs = create_inputs(self.tool.inputs)
         output = self.tool(**inputs)
-        agent_type = AGENT_TYPE_MAPPING[self.tool.output_type]
-        self.assertTrue(isinstance(output, agent_type))
+        if self.tool.output_type != "any":
+            agent_type = AGENT_TYPE_MAPPING[self.tool.output_type]
+            self.assertTrue(isinstance(output, agent_type))
 
     def test_agent_types_inputs(self):
         inputs = create_inputs(self.tool.inputs)
@@ -99,9 +100,3 @@ class ToolTesterMixin:
         for _input, expected_input in zip(inputs, self.tool.inputs.values()):
             input_type = expected_input["type"]
             _inputs.append(AGENT_TYPE_MAPPING[input_type](_input))
-
-        output_type = AGENT_TYPE_MAPPING[self.tool.output_type]
-
-        # Should not raise an error
-        output = self.tool(**inputs)
-        self.assertTrue(isinstance(output, output_type))

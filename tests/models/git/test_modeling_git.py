@@ -167,9 +167,11 @@ class GitVisionModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    @unittest.skip
     def test_training(self):
         pass
 
+    @unittest.skip
     def test_training_gradient_checkpointing(self):
         pass
 
@@ -367,6 +369,7 @@ class GitModelTester:
             attention_mask=None,
             pixel_values=pixel_values,
             do_sample=False,
+            min_length=20,
             max_length=20,
             num_beams=2,
             num_return_sequences=2,

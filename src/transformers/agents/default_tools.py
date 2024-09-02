@@ -25,7 +25,7 @@ from huggingface_hub import hf_hub_download, list_spaces
 
 from ..utils import is_offline_mode
 from .python_interpreter import LIST_SAFE_MODULES, evaluate_python_code
-from .tools import TASK_MAPPING, TOOL_CONFIG_FILE, Tool
+from .tools import TOOL_CONFIG_FILE, TOOL_MAPPING, Tool
 
 
 def custom_print(*args):
@@ -133,7 +133,7 @@ def setup_default_tools(logger):
     main_module = importlib.import_module("transformers")
     tools_module = main_module.agents
 
-    for task_name, tool_class_name in TASK_MAPPING.items():
+    for task_name, tool_class_name in TOOL_MAPPING.items():
         tool_class = getattr(tools_module, tool_class_name)
         tool_instance = tool_class()
         default_tools[tool_class.name] = PreTool(
@@ -173,14 +173,14 @@ class PythonInterpreterTool(Tool):
 
     def forward(self, code):
         output = str(
-            evaluate_python_code(code, tools=self.available_tools, authorized_imports=self.authorized_imports)
+            evaluate_python_code(code, static_tools=self.available_tools, authorized_imports=self.authorized_imports)
         )
         return output
 
 
 class FinalAnswerTool(Tool):
     name = "final_answer"
-    description = "Provides a final answer to the given problem"
+    description = "Provides a final answer to the given problem."
     inputs = {"answer": {"type": "text", "description": "The final answer to the problem"}}
     output_type = "any"
 

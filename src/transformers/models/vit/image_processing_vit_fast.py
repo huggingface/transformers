@@ -114,7 +114,6 @@ class ViTImageProcessorFast(BaseImageProcessorFast):
         self.rescale_factor = rescale_factor
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
-        self._transform_settings = {}
 
     def _build_transforms(
         self,
@@ -285,5 +284,5 @@ class ViTImageProcessorFast(BaseImageProcessorFast):
         )
         transformed_images = [transforms(image) for image in images]
 
-        data = {"pixel_values": torch.vstack(transformed_images)}
+        data = {"pixel_values": torch.stack(transformed_images, dim=0)}
         return BatchFeature(data, tensor_type=return_tensors)
