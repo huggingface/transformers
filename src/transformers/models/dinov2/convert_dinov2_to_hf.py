@@ -58,6 +58,11 @@ def get_dinov2_config(model_name, image_classifier=False):
     else:
         raise ValueError("Model not supported")
 
+    if "_reg" in model_name:
+        config.num_register_tokens = 4
+        config.interpolate_antialias = True
+        config.interpolate_offset = 0
+
     if image_classifier:
         repo_id = "huggingface/label-files"
         filename = "imagenet-1k-id2label.json"
@@ -74,6 +79,7 @@ def create_rename_keys(config):
 
     # patch embedding layer
     rename_keys.append(("cls_token", "embeddings.cls_token"))
+    rename_keys.append(("register_tokens", "embeddings.register_tokens"))
     rename_keys.append(("mask_token", "embeddings.mask_token"))
     rename_keys.append(("pos_embed", "embeddings.position_embeddings"))
     rename_keys.append(("patch_embed.proj.weight", "embeddings.patch_embeddings.projection.weight"))
@@ -153,7 +159,9 @@ def convert_dinov2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=
     config = get_dinov2_config(model_name, image_classifier=image_classifier)
 
     # load original model from torch hub
-    original_model = torch.hub.load("facebookresearch/dinov2", model_name.replace("_1layer", ""))
+    original_model = torch.hub.load(
+        "facebookresearch/dinov2", model_name.replace("_1layer", "").replace("_reg4", "_reg")
+    )
     original_model.eval()
 
     # load state_dict of original model, remove and rename some keys
@@ -180,6 +188,10 @@ def convert_dinov2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=
             "dinov2_vitb14_1layer": "https://dl.fbaipublicfiles.com/dinov2/dinov2_vitb14/dinov2_vitb14_linear_head.pth",
             "dinov2_vitl14_1layer": "https://dl.fbaipublicfiles.com/dinov2/dinov2_vitl14/dinov2_vitl14_linear_head.pth",
             "dinov2_vitg14_1layer": "https://dl.fbaipublicfiles.com/dinov2/dinov2_vitg14/dinov2_vitg14_linear_head.pth",
+            "dinov2_vits14_1layer_reg4": "https://dl.fbaipublicfiles.com/dinov2/dinov2_vits14/dinov2_vits14_reg4_linear_head.pth",
+            "dinov2_vitb14_1layer_reg4": "https://dl.fbaipublicfiles.com/dinov2/dinov2_vitb14/dinov2_vitb14_reg4_linear_head.pth",
+            "dinov2_vitl14_1layer_reg4": "https://dl.fbaipublicfiles.com/dinov2/dinov2_vitl14/dinov2_vitl14_reg4_linear_head.pth",
+            "dinov2_vitg14_1layer_reg4": "https://dl.fbaipublicfiles.com/dinov2/dinov2_vitg14/dinov2_vitg14_reg4_linear_head.pth",
         }
         url = model_name_to_classifier_dict_url[model_name]
         classifier_state_dict = torch.hub.load_state_dict_from_url(url, map_location="cpu")
@@ -248,6 +260,14 @@ def convert_dinov2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=
             "dinov2_vitb14_1layer": "dinov2-base-imagenet1k-1-layer",
             "dinov2_vitl14_1layer": "dinov2-large-imagenet1k-1-layer",
             "dinov2_vitg14_1layer": "dinov2-giant-imagenet1k-1-layer",
+            "dinov2_vits14_reg": "dinov2-small-reg",
+            "dinov2_vitb14_reg": "dinov2-base-reg",
+            "dinov2_vitl14_reg": "dinov2-large-reg",
+            "dinov2_vitg14_reg": "dinov2-giant-reg",
+            "dinov2_vits14_1layer_reg4": "dinov2-small-imagenet1k-1-layer-reg",
+            "dinov2_vitb14_1layer_reg4": "dinov2-base-imagenet1k-1-layer-reg",
+            "dinov2_vitl14_1layer_reg4": "dinov2-large-imagenet1k-1-layer-reg",
+            "dinov2_vitg14_1layer_reg4": "dinov2-giant-imagenet1k-1-layer-reg",
         }
 
         name = model_name_to_hf_name[model_name]
@@ -271,6 +291,14 @@ if __name__ == "__main__":
             "dinov2_vitb14_1layer",
             "dinov2_vitl14_1layer",
             "dinov2_vitg14_1layer",
+            "dinov2_vits14_reg",
+            "dinov2_vitb14_reg",
+            "dinov2_vitl14_reg",
+            "dinov2_vitg14_reg",
+            "dinov2_vits14_1layer_reg4",
+            "dinov2_vitb14_1layer_reg4",
+            "dinov2_vitl14_1layer_reg4",
+            "dinov2_vitg14_1layer_reg4",
         ],
         help="Name of the model you'd like to convert.",
     )

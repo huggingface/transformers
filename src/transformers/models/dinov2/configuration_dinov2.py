@@ -88,6 +88,12 @@ class Dinov2Config(BackboneConfigMixin, PretrainedConfig):
             Whether to reshape the feature maps to 4D tensors of shape `(batch_size, hidden_size, height, width)` in
             case the model is used as backbone. If `False`, the feature maps will be 3D tensors of shape `(batch_size,
             seq_len, hidden_size)`.
+        interpolate_antialias (`bool`, *optional*, defaults to `False`):
+            Whether to use antialiasing when interpolating the image patches.
+        interpolate_offset (`float`, *optional*, defaults to 0.1):
+            Offset to use when interpolating the image patches.
+        num_register_tokens (`int`, *optional*, defaults to 0):
+            Number of register tokens to use.
 
     Example:
 
@@ -128,6 +134,9 @@ class Dinov2Config(BackboneConfigMixin, PretrainedConfig):
         out_indices=None,
         apply_layernorm=True,
         reshape_hidden_states=True,
+        interpolate_antialias=False,
+        interpolate_offset=0.1,
+        num_register_tokens=0,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -154,6 +163,9 @@ class Dinov2Config(BackboneConfigMixin, PretrainedConfig):
         )
         self.apply_layernorm = apply_layernorm
         self.reshape_hidden_states = reshape_hidden_states
+        self.interpolate_antialias = interpolate_antialias
+        self.interpolate_offset = interpolate_offset
+        self.num_register_tokens = num_register_tokens
 
 
 class Dinov2OnnxConfig(OnnxConfig):
