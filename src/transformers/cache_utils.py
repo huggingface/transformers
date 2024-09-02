@@ -323,6 +323,12 @@ class DynamicCache(Cache):
         self.value_cache: List[torch.Tensor] = []
         self._seen_tokens = 0  # Used in `generate` to keep tally of how many tokens the cache has seen
 
+    def __deepcopy__(self, memo) -> "DynamicCache":
+        new_cache = self.__class__()
+        new_cache.key_cache = [key.clone() for key in self.key_cache]
+        new_cache.value_cache = [value.clone() for value in self.value_cache]
+        return new_cache
+
     def __getitem__(self, layer_idx: int) -> List[Tuple[torch.Tensor]]:
         """
         Support for backwards-compatible `past_key_value` indexing, e.g. `past_key_value[0][0].shape[2]` to get the
@@ -487,6 +493,11 @@ class OffloadedCache(DynamicCache):
         self.prefetch_stream = torch.cuda.Stream()
         self.beam_idx = None  # used to delay beam search operations
 
+    def __deepcopy__(self, memo) -> "OffloadedCache":
+        new_cache = super().__deepcopy__(memo)
+        new_cache.original_device = copy.deepcopy(self.original_device)
+        return new_cache
+
     def prefetch_layer(self, layer_idx: int):
         "Starts prefetching the next layer cache"
         if layer_idx < len(self):
@@ -597,6 +608,7 @@ class QuantizedCache(DynamicCache):
         self._quantized_key_cache: List[torch.Tensor] = []
         self._quantized_value_cache: List[torch.Tensor] = []
 
+        self.cache_config = cache_config
         self.nbits = cache_config.nbits
         self.residual_length = cache_config.residual_length
         self.q_group_size = cache_config.q_group_size
@@ -605,7 +617,11 @@ class QuantizedCache(DynamicCache):
         self.compute_dtype = cache_config.compute_dtype
         self.device = cache_config.device
 
-        super().__init__()
+    def __deepcopy__(self, memo) -> "QuantizedCache":
+        new_cache = self.__class__(copy.deepcopy(self.cache_config))
+        new_cache.key_cache = [key.clone() for key in self.key_cache]
+        new_cache.value_cache = [value.clone() for value in self.value_cache]
+        return new_cache
 
     def update(
         self,
@@ -1185,7 +1201,6 @@ class SlidingWindowCache(StaticCache):
         dtype: torch.dtype = torch.float32,
         max_batch_size: Optional[int] = None,
     ) -> None:
-        super().__init__()
         if not hasattr(config, "sliding_window") or config.sliding_window is None:
             raise ValueError(
                 "Setting `cache_implementation` to 'sliding_window' requires the model config supporting "
@@ -1719,7 +1734,7 @@ class OffloadedStaticCache(StaticCache):
         config (`PretrainedConfig):
             The configuration file defining the shape-related attributes required to initialize
             the static cache.
-        max_batch_size (`int`):
+        batch_size (`int`):
             The maximum batch size with which the model will be used.
         max_cache_len (`int`):
             The maximum sequence length with which the model will be used.
@@ -1738,7 +1753,7 @@ class OffloadedStaticCache(StaticCache):
         value_cache (`List[torch.Tensor]`):
             Off-loaded value cache tensors. First one will be on device, where-as the others are
             off-loaded.
-        max_batch_size (`int`):
+        batch_size (`int`):
             The maximum batch size with which this cache can be used.
         max_cache_len (`int`):
             The maximum sequence length with which this cache can be used.
@@ -1762,7 +1777,7 @@ class OffloadedStaticCache(StaticCache):
         >>> # Prepare a cache class and pass it to model's forward
         >>> # Leave empty space for 10 new tokens, which can be used when calling forward iteratively 10 times to generate
         >>> max_generated_length = inputs.input_ids.shape[1] + 10
-        >>> past_key_values = OffloadedStaticCache(config=model.config, max_batch_size=1, max_cache_len=max_generated_length, device=model.device, dtype=model.dtype)
+        >>> past_key_values = OffloadedStaticCache(config=model.config, batch_size=1, max_cache_len=max_generated_length, device=model.device, dtype=model.dtype)
         >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
         >>> past_kv_length = outputs.past_key_values # access cache filled with key/values from generation
         ```
@@ -1771,13 +1786,15 @@ class OffloadedStaticCache(StaticCache):
     def __init__(
         self,
         config: PretrainedConfig,
-        max_batch_size: int,
+        batch_size: int,
         max_cache_len: Optional[int],
         device: Union[str, torch.device],
         dtype: Optional[torch.dtype] = None,
         offload_device: Union[str, torch.device] = torch.device("cpu"),
     ) -> None:
-        self.max_batch_size = max_batch_size
+        super(torch.nn.Module, self).__init__()
+        self.config = config
+        self.batch_size = batch_size
         self.max_cache_len = config.max_position_embeddings if max_cache_len is None else max_cache_len
         self.device = torch.device(device)
         self.offload_device = torch.device(offload_device)
@@ -1790,7 +1807,7 @@ class OffloadedStaticCache(StaticCache):
             config.num_attention_heads if config.num_key_value_heads is None else config.num_key_value_heads
         )
 
-        cache_shape = (max_batch_size, num_key_value_heads, self.max_cache_len, head_dim)
+        cache_shape = (batch_size, num_key_value_heads, self.max_cache_len, head_dim)
 
         # Create offloaded CPU tensors.
         self.key_cache: List[torch.Tensor] = []
@@ -1821,6 +1838,20 @@ class OffloadedStaticCache(StaticCache):
 
         # Create new CUDA stream for parallel prefetching.
         self._prefetch_stream = torch.cuda.Stream() if self.device.type == "cuda" else None
+
+    def __deepcopy__(self, memo) -> "OffloadedStaticCache":
+        # Contrarily to `StaticCache`, we need a custom `__deepcopy__`: we can't copy `self._prefetch_stream`
+        new_cache = OffloadedStaticCache(
+            config=self.config,
+            batch_size=self.batch_size,
+            max_cache_len=self.max_cache_len,
+            device=self.device,
+            dtype=self.dtype,
+            offload_device=self.offload_device,
+        )
+        new_cache.key_cache = [key.clone() for key in self.key_cache]
+        new_cache.value_cache = [value.clone() for value in self.value_cache]
+        return new_cache
 
     def update(
         self,
