@@ -37,9 +37,81 @@ except ImportError as e:
 
 NUM_SHARDS = {
     "90B": 8,
+    "11B": 1,
 }
 
+def split_wqkv_to_query_key_value(wqkv, n_heads, n_kv_heads):
 
+    total_n_heads = n_heads + n_kv_heads * 2
+    head_dim = wqkv.shape[0] // total_n_heads
+    dim1 = head_dim * n_heads
+    dim2 = dim1 + head_dim * n_kv_heads
+    dim3 = dim1 + head_dim * n_kv_heads * 2
+
+    query = wqkv[:dim1]
+    key = wqkv[dim1:dim2]
+    value = wqkv[dim2:dim3]
+
+    return query, key, value
+
+
+def apply_load_hooks_(state_dict):
+
+    keys = list(state_dict.keys())
+    
+    for param_name in keys:
+
+        # text model cross attention layers
+        if "text_model.cross_attention_layers." in param_name:
+            
+            # CrossAttention load_hook
+            if "inner_attention.q_norm.weight" in param_name:
+                q_weight = state_dict.pop(param_name)
+                new_param_name = param_name.replace("inner_attention.q_norm.weight", "q_norm.weight")
+                state_dict[new_param_name] = q_weight
+            if "inner_attention.k_norm.weight" in param_name:
+                k_weight = state_dict.pop(param_name)
+                new_param_name = param_name.replace("inner_attention.k_norm.weight", "k_norm.weight")
+                state_dict[new_param_name] = k_weight
+            if "wkv.weight" in param_name:
+                wk, wv = state_dict.pop(param_name).chunk(2)
+                new_param_name = param_name.replace("wkv.weight", "wk.weight")
+                state_dict[new_param_name] = wk
+                new_param_name = param_name.replace("wkv.weight", "wv.weight")
+                state_dict[new_param_name] = wv
+
+            # CrossAttentionTransformerBlock load_hook
+            if "gate_attn" in param_name:
+                attn_gate = state_dict.pop(param_name)
+                new_param_name = param_name.replace("gate_attn", "gate_attn")
+                if attn_gate.dim() == 1:
+                    attn_gate = attn_gate[0].view(1)
+                if attn_gate.dim() == 3:
+                    attn_gate = attn_gate.view(1)
+                state_dict[new_param_name] = attn_gate
+            if "gate_ffwd" in param_name:
+                ffn_gate = state_dict.pop(param_name)
+                new_param_name = param_name.replace("gate_ffwd", "gate_ffwd")
+                if ffn_gate.dim() == 1:
+                    ffn_gate = ffn_gate[0].view(1)
+                if ffn_gate.dim() == 3:
+                    ffn_gate = ffn_gate.view(1)
+                state_dict[new_param_name] = ffn_gate
+            if "feed_forward.mlp.layer_norm_weight" in param_name:
+                new_param_name = param_name.replace("feed_forward.mlp.layer_norm_weight", "ffn_norm.weight")
+                state_dict[new_param_name] = state_dict.pop(param_name)
+            if "attention.wq.layer_norm_weight" in param_name:
+                new_param_name = param_name.replace("attention.wq.layer_norm_weight", "attention_norm.weight")
+                state_dict[new_param_name] = state_dict.pop(param_name)
+
+            # FeedForward load_hook
+            if "mlp.fc1_weight" in param_name:
+                fc1_weight, fc3_weight = state_dict.pop(param_name).chunk(2)
+                state_dict[param_name.replace("mlp.fc1_weight", "w1.weight")] = fc1_weight
+                state_dict[param_name.replace("mlp.fc1_weight", "w3.weight")] = fc3_weight
+            if "mlp.fc2_weight" in param_name:
+                fc2_weight = state_dict.pop(param_name)
+                state_dict[param_name.replace("mlp.fc2_weight", "w2.weight")] = fc2_weight
 
 
 def read_json(path):
@@ -73,8 +145,8 @@ def write_model(
 
     # language parameters
     n_layers = params["n_layers"] # language model self-attention layers
-    n_layers_cross_attention = 20 # language model cross-attention layers
-    n_heads = params["n_heads"] # 64 for 90b (70b llama)
+    n_layers_cross_attention = params["vision_num_cross_attention_layers"]  # language model cross-attention layers; 90B - 20, 11B - 8
+    n_heads = params["n_heads"] # 64 for 90b (70b llama), 32 for 11b mllama
     n_heads_per_shard = n_heads // num_shards
     dim = params["dim"]
     dims_per_head = dim // n_heads
@@ -124,7 +196,9 @@ def write_model(
     if num_shards == 1:
         # Not sharded
         # (The sharded implementation would also work, but this is simpler.)
-        loaded = torch.load(os.path.join(input_base_path, "consolidated.00.pth"), map_location="cpu")
+        loaded = torch.load(os.path.join(input_base_path, "consolidated.pth"), map_location="cpu", weights_only=True)
+        apply_load_hooks_(loaded)
+        loaded = [loaded]
     else:
         # Sharded
         loaded = [
@@ -149,61 +223,88 @@ def write_model(
         # the same storage object, saving attention_norm and ffn_norm will save other weights too, which is
         # redundant as other weights will be stitched from multiple shards. To avoid that, they are cloned.
 
-        state_dict = {
-            f"model.language_model.layers.{layer_i}.input_layernorm.weight": loaded[0].pop(
+        state_dict = {}
+        if model_size == "11B":
+            state_dict[f"model.language_model.layers.{layer_i}.input_layernorm.weight"] = loaded[0].pop(
+                f"text_model.layers.{layer_i}.attention.wqkv.layer_norm_weight"
+            ).clone()
+            state_dict[f"model.language_model.layers.{layer_i}.post_attention_layernorm.weight"] = loaded[0].pop(
+                f"text_model.layers.{layer_i}.feed_forward.mlp.layer_norm_weight"
+            ).clone()
+        else:
+            state_dict[f"model.language_model.layers.{layer_i}.input_layernorm.weight"] = loaded[0].pop(
                 f"text_model.layers.{layer_i}.attention_norm.weight"
-            ).clone(),
-            f"model.language_model.layers.{layer_i}.post_attention_layernorm.weight": loaded[0].pop(
+            ).clone()
+            state_dict[f"model.language_model.layers.{layer_i}.post_attention_layernorm.weight"] = loaded[0].pop(
                 f"text_model.layers.{layer_i}.ffn_norm.weight"
-            ).clone(),
-        }
-        state_dict[f"model.language_model.layers.{layer_i}.self_attn.q_proj.weight"] = permute(
-            torch.cat(
+            ).clone()
+
+
+        if model_size == "11B":
+            wqkv = loaded[0].pop(f"text_model.layers.{layer_i}.attention.wqkv.weight")
+            query, key, value = split_wqkv_to_query_key_value(wqkv, n_heads, num_key_value_heads)
+            state_dict[f"model.language_model.layers.{layer_i}.self_attn.q_proj.weight"] = query
+            state_dict[f"model.language_model.layers.{layer_i}.self_attn.k_proj.weight"] = key
+            state_dict[f"model.language_model.layers.{layer_i}.self_attn.v_proj.weight"] = value
+        else:
+            state_dict[f"model.language_model.layers.{layer_i}.self_attn.q_proj.weight"] = permute(
+                torch.cat(
+                    [
+                        loaded[i].pop(f"text_model.layers.{layer_i}.attention.wq.weight").view(n_heads_per_shard, dims_per_head, dim)
+                        for i in range(num_shards)
+                    ],
+                    dim=0,
+                ).reshape(dim, dim),
+                n_heads=n_heads,
+            )
+            state_dict[f"model.language_model.layers.{layer_i}.self_attn.k_proj.weight"] = permute(
+                torch.cat(
+                    [
+                        loaded[i].pop(f"text_model.layers.{layer_i}.attention.wk.weight").view(
+                            num_local_key_value_heads, dims_per_head, dim
+                        )
+                        for i in range(num_shards)
+                    ],
+                    dim=0,
+                ).reshape(key_value_dim, dim),
+                num_key_value_heads,
+                key_value_dim,
+                dim,
+            )
+            state_dict[f"model.language_model.layers.{layer_i}.self_attn.v_proj.weight"] = torch.cat(
                 [
-                    loaded[i].pop(f"text_model.layers.{layer_i}.attention.wq.weight").view(n_heads_per_shard, dims_per_head, dim)
-                    for i in range(num_shards)
-                ],
-                dim=0,
-            ).reshape(dim, dim),
-            n_heads=n_heads,
-        )
-        state_dict[f"model.language_model.layers.{layer_i}.self_attn.k_proj.weight"] = permute(
-            torch.cat(
-                [
-                    loaded[i].pop(f"text_model.layers.{layer_i}.attention.wk.weight").view(
+                    loaded[i].pop(f"text_model.layers.{layer_i}.attention.wv.weight").view(
                         num_local_key_value_heads, dims_per_head, dim
                     )
                     for i in range(num_shards)
                 ],
                 dim=0,
-            ).reshape(key_value_dim, dim),
-            num_key_value_heads,
-            key_value_dim,
-            dim,
-        )
-        state_dict[f"model.language_model.layers.{layer_i}.self_attn.v_proj.weight"] = torch.cat(
-            [
-                loaded[i].pop(f"text_model.layers.{layer_i}.attention.wv.weight").view(
-                    num_local_key_value_heads, dims_per_head, dim
-                )
-                for i in range(num_shards)
-            ],
-            dim=0,
-        ).reshape(key_value_dim, dim)
+            ).reshape(key_value_dim, dim)
 
         state_dict[f"model.language_model.layers.{layer_i}.self_attn.o_proj.weight"] = torch.cat(
             [loaded[i].pop(f"text_model.layers.{layer_i}.attention.wo.weight") for i in range(num_shards)], dim=1
         )
-        state_dict[f"model.language_model.layers.{layer_i}.mlp.gate_proj.weight"] = torch.cat(
-            [loaded[i].pop(f"text_model.layers.{layer_i}.feed_forward.w1.weight") for i in range(num_shards)], dim=0
-        )
-        state_dict[f"model.language_model.layers.{layer_i}.mlp.down_proj.weight"] = torch.cat(
-            [loaded[i].pop(f"text_model.layers.{layer_i}.feed_forward.w2.weight") for i in range(num_shards)], dim=1
-        )
-        state_dict[f"model.language_model.layers.{layer_i}.mlp.up_proj.weight"] = torch.cat(
-            [loaded[i].pop(f"text_model.layers.{layer_i}.feed_forward.w3.weight") for i in range(num_shards)], dim=0
-        )
 
+        if model_size == "11B":
+            state_dict[f"model.language_model.layers.{layer_i}.mlp.down_proj.weight"] = loaded[0].pop(
+                f"text_model.layers.{layer_i}.feed_forward.mlp.fc2_weight"
+            )
+            w1w3 = loaded[0].pop(f"text_model.layers.{layer_i}.feed_forward.mlp.fc1_weight")
+            w1, w3 = w1w3.chunk(2)
+            state_dict[f"model.language_model.layers.{layer_i}.mlp.gate_proj.weight"] = w1
+            state_dict[f"model.language_model.layers.{layer_i}.mlp.up_proj.weight"] = w3
+        else:
+            state_dict[f"model.language_model.layers.{layer_i}.mlp.gate_proj.weight"] = torch.cat(
+                [loaded[i].pop(f"text_model.layers.{layer_i}.feed_forward.w1.weight") for i in range(num_shards)], dim=0
+            )
+            state_dict[f"model.language_model.layers.{layer_i}.mlp.down_proj.weight"] = torch.cat(
+                [loaded[i].pop(f"text_model.layers.{layer_i}.feed_forward.w2.weight") for i in range(num_shards)], dim=1
+            )
+            state_dict[f"model.language_model.layers.{layer_i}.mlp.up_proj.weight"] = torch.cat(
+                [loaded[i].pop(f"text_model.layers.{layer_i}.feed_forward.w3.weight") for i in range(num_shards)], dim=0
+            )
+
+        #! no inv_freqs in modeling code?
         state_dict[f"model.language_model.layers.{layer_i}.self_attn.rotary_emb.inv_freq"] = inv_freq
         for k, v in state_dict.items():
             index_dict["weight_map"][k] = filename
@@ -263,32 +364,42 @@ def write_model(
         )
 
         # attention weights
-
-        state_dict[f"model.language_model.cross_attention_layers.{xattn_layer_i}.self_attn.q_proj.weight"] = torch.cat(
+        if model_size == "11B":
+            state_dict[f"model.language_model.cross_attention_layers.{xattn_layer_i}.self_attn.q_proj.weight"] = loaded[0].pop(
+                f"text_model.cross_attention_layers.{xattn_layer_i}.attention.wq.weight"
+            ).clone()
+            state_dict[f"model.language_model.cross_attention_layers.{xattn_layer_i}.self_attn.k_proj.weight"] = loaded[0].pop(
+                f"text_model.cross_attention_layers.{xattn_layer_i}.attention.wk.weight"
+            ).clone()
+            state_dict[f"model.language_model.cross_attention_layers.{xattn_layer_i}.self_attn.v_proj.weight"] = loaded[0].pop(
+                f"text_model.cross_attention_layers.{xattn_layer_i}.attention.wv.weight"
+            ).clone()
+        else:
+            state_dict[f"model.language_model.cross_attention_layers.{xattn_layer_i}.self_attn.q_proj.weight"] = torch.cat(
+                    [
+                        loaded[i].pop(f"text_model.cross_attention_layers.{xattn_layer_i}.attention.wq.weight").view(n_heads_per_shard, dims_per_head, dim)
+                        for i in range(num_shards)
+                    ],
+                    dim=0,
+                ).reshape(dim, dim)
+            state_dict[f"model.language_model.cross_attention_layers.{xattn_layer_i}.self_attn.k_proj.weight"] = torch.cat(
+                    [
+                        loaded[i].pop(f"text_model.cross_attention_layers.{xattn_layer_i}.attention.wk.weight").view(
+                            num_local_key_value_heads, dims_per_head, dim
+                        )
+                        for i in range(num_shards)
+                    ],
+                    dim=0,
+                ).reshape(key_value_dim, dim)
+            state_dict[f"model.language_model.cross_attention_layers.{xattn_layer_i}.self_attn.v_proj.weight"] = torch.cat(
                 [
-                    loaded[i].pop(f"text_model.cross_attention_layers.{xattn_layer_i}.attention.wq.weight").view(n_heads_per_shard, dims_per_head, dim)
-                    for i in range(num_shards)
-                ],
-                dim=0,
-            ).reshape(dim, dim)
-        state_dict[f"model.language_model.cross_attention_layers.{xattn_layer_i}.self_attn.k_proj.weight"] = torch.cat(
-                [
-                    loaded[i].pop(f"text_model.cross_attention_layers.{xattn_layer_i}.attention.wk.weight").view(
+                    loaded[i].pop(f"text_model.cross_attention_layers.{xattn_layer_i}.attention.wv.weight").view(
                         num_local_key_value_heads, dims_per_head, dim
                     )
                     for i in range(num_shards)
                 ],
                 dim=0,
             ).reshape(key_value_dim, dim)
-        state_dict[f"model.language_model.cross_attention_layers.{xattn_layer_i}.self_attn.v_proj.weight"] = torch.cat(
-            [
-                loaded[i].pop(f"text_model.cross_attention_layers.{xattn_layer_i}.attention.wv.weight").view(
-                    num_local_key_value_heads, dims_per_head, dim
-                )
-                for i in range(num_shards)
-            ],
-            dim=0,
-        ).reshape(key_value_dim, dim)
 
         state_dict[f"model.language_model.cross_attention_layers.{xattn_layer_i}.self_attn.o_proj.weight"] = torch.cat(
             [loaded[i].pop(f"text_model.cross_attention_layers.{xattn_layer_i}.attention.wo.weight") for i in range(num_shards)], dim=1
@@ -312,10 +423,14 @@ def write_model(
 
         state_dict[f"model.language_model.cross_attention_layers.{xattn_layer_i}.ffn_gate"] = ffn_gate.clone()
 
-        # q and k normalization weights (for cross-attention stability in training) are not sharded
+        if model_size == "11B":
+            q_weight = loaded[0].pop(f"text_model.cross_attention_layers.{xattn_layer_i}.attention.q_norm.weight")
+            k_weight = loaded[0].pop(f"text_model.cross_attention_layers.{xattn_layer_i}.attention.k_norm.weight")            
+        else:
+            # q and k normalization weights (for cross-attention stability in training) are not sharded
+            q_weight = loaded[0].pop(f"text_model.cross_attention_layers.{xattn_layer_i}.attention.inner_attention.q_norm.weight")
+            k_weight = loaded[0].pop(f"text_model.cross_attention_layers.{xattn_layer_i}.attention.inner_attention.k_norm.weight")
 
-        q_weight = loaded[0].pop(f"text_model.cross_attention_layers.{xattn_layer_i}.attention.inner_attention.q_norm.weight")
-        k_weight = loaded[0].pop(f"text_model.cross_attention_layers.{xattn_layer_i}.attention.inner_attention.k_norm.weight")
         state_dict[f"model.language_model.cross_attention_layers.{xattn_layer_i}.self_attn.q_norm.weight"] = q_weight.contiguous()
         state_dict[f"model.language_model.cross_attention_layers.{xattn_layer_i}.self_attn.k_norm.weight"] = k_weight.contiguous()
 
@@ -359,47 +474,59 @@ def write_model(
         state_dict[f'model.vision_model.vision_encoder.global_transformer.layers.{global_vision_layer_i}.gate_ffn'] = loaded[0].pop(f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.gate_ffn')
 
 
-        # attention weights and biases are sharded
-        state_dict[f"model.vision_model.vision_encoder.global_transformer.layers.{global_vision_layer_i}.self_attn.q_proj.weight"] = permute(
-            torch.cat(
-                [
-                    loaded[i].pop(f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.attn.wq.weight').view(n_vision_heads_per_shard, vision_dims_per_head, vision_hidden_dim)
-                    for i in range(num_shards)
-                ],
-                dim=0,
-            ).reshape(vision_hidden_dim, vision_hidden_dim),
-            n_heads=n_heads_vision,
-            dim1=vision_hidden_dim,
-            dim2=vision_hidden_dim
-        )
+        if model_size == "11B":
+            state_dict[f"model.vision_model.vision_encoder.global_transformer.layers.{global_vision_layer_i}.self_attn.q_proj.weight"] = loaded[0].pop(
+                f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.attn.wq.weight'
+            ).clone()
+            state_dict[f"model.vision_model.vision_encoder.global_transformer.layers.{global_vision_layer_i}.self_attn.k_proj.weight"] = loaded[0].pop(
+                f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.attn.wk.weight'
+            ).clone()
+            state_dict[f"model.vision_model.vision_encoder.global_transformer.layers.{global_vision_layer_i}.self_attn.v_proj.weight"] = loaded[0].pop(
+                f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.attn.wv.weight'
+            ).clone()
+        
+        else:
+            # attention weights and biases are sharded
+            state_dict[f"model.vision_model.vision_encoder.global_transformer.layers.{global_vision_layer_i}.self_attn.q_proj.weight"] = permute(
+                torch.cat(
+                    [
+                        loaded[i].pop(f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.attn.wq.weight').view(n_vision_heads_per_shard, vision_dims_per_head, vision_hidden_dim)
+                        for i in range(num_shards)
+                    ],
+                    dim=0,
+                ).reshape(vision_hidden_dim, vision_hidden_dim),
+                n_heads=n_heads_vision,
+                dim1=vision_hidden_dim,
+                dim2=vision_hidden_dim
+            )
 
-        # for vision n_kv_heads = n_heads and local_kv heads = n_vision_heads per shard!
-        #  same for normal and global image transformer
+            # for vision n_kv_heads = n_heads and local_kv heads = n_vision_heads per shard!
+            #  same for normal and global image transformer
 
-        state_dict[f"model.vision_model.vision_encoder.global_transformer.layers.{global_vision_layer_i}.self_attn.k_proj.weight"] = permute(
-            torch.cat(
+            state_dict[f"model.vision_model.vision_encoder.global_transformer.layers.{global_vision_layer_i}.self_attn.k_proj.weight"] = permute(
+                torch.cat(
+                    [
+                        loaded[i].pop(f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.attn.wk.weight').view(
+                            n_vision_heads_per_shard, vision_dims_per_head, vision_hidden_dim
+                        )
+                        for i in range(num_shards)
+                    ],
+                    dim=0,
+                ).reshape(vision_hidden_dim, vision_hidden_dim),
+                n_heads=n_heads_vision,
+                dim1=vision_hidden_dim,
+                dim2=vision_hidden_dim,
+            )
+
+            state_dict[f"model.vision_model.vision_encoder.global_transformer.layers.{global_vision_layer_i}.self_attn.v_proj.weight"] = torch.cat(
                 [
-                    loaded[i].pop(f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.attn.wk.weight').view(
+                    loaded[i].pop(f"vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.attn.wv.weight").view(
                         n_vision_heads_per_shard, vision_dims_per_head, vision_hidden_dim
                     )
                     for i in range(num_shards)
                 ],
                 dim=0,
-            ).reshape(vision_hidden_dim, vision_hidden_dim),
-            n_heads=n_heads_vision,
-            dim1=vision_hidden_dim,
-            dim2=vision_hidden_dim,
-        )
-
-        state_dict[f"model.vision_model.vision_encoder.global_transformer.layers.{global_vision_layer_i}.self_attn.v_proj.weight"] = torch.cat(
-            [
-                loaded[i].pop(f"vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.attn.wv.weight").view(
-                    n_vision_heads_per_shard, vision_dims_per_head, vision_hidden_dim
-                )
-                for i in range(num_shards)
-            ],
-            dim=0,
-        ).reshape(vision_hidden_dim, vision_hidden_dim)
+            ).reshape(vision_hidden_dim, vision_hidden_dim)
 
 
         # simple concatenation for sharded o_proj
@@ -496,46 +623,58 @@ def write_model(
         encoder_layer_parameters_filename = f"pytorch_vision_transformer-{vision_layer_i}-of-{n_layers_vision_transformer + 1}.bin"
 
         # attention weights and biases are sharded
-        state_dict[f"model.vision_model.vision_encoder.transformer.layers.{vision_layer_i}.self_attn.q_proj.weight"] = permute(
-            torch.cat(
-                [
-                    loaded[i].pop(f'vision_model.vision_encoder.transformer.resblocks.{vision_layer_i}.attn.wq.weight').view(n_vision_heads_per_shard, vision_dims_per_head, vision_hidden_dim)
-                    for i in range(num_shards)
-                ],
-                dim=0,
-            ).reshape(vision_hidden_dim, vision_hidden_dim),
-            n_heads=n_heads_vision,
-            dim1=vision_hidden_dim,
-            dim2=vision_hidden_dim
-        )
+        if model_size == "11B":
+            state_dict[f"model.vision_model.vision_encoder.transformer.layers.{vision_layer_i}.self_attn.q_proj.weight"] = loaded[0].pop(
+                f'vision_model.vision_encoder.transformer.resblocks.{vision_layer_i}.attn.wq.weight'
+            ).clone()
+            state_dict[f"model.vision_model.vision_encoder.transformer.layers.{vision_layer_i}.self_attn.k_proj.weight"] = loaded[0].pop(
+                f'vision_model.vision_encoder.transformer.resblocks.{vision_layer_i}.attn.wk.weight'
+            ).clone()
+            state_dict[f"model.vision_model.vision_encoder.transformer.layers.{vision_layer_i}.self_attn.v_proj.weight"] = loaded[0].pop(
+                f'vision_model.vision_encoder.transformer.resblocks.{vision_layer_i}.attn.wv.weight'
+            ).clone()
 
-        # for vision n_kv_heads = n_heads and local_kv heads = n_vision_heads per shard!
-        #  same for normal and global image transformer
+        else:
+            state_dict[f"model.vision_model.vision_encoder.transformer.layers.{vision_layer_i}.self_attn.q_proj.weight"] = permute(
+                torch.cat(
+                    [
+                        loaded[i].pop(f'vision_model.vision_encoder.transformer.resblocks.{vision_layer_i}.attn.wq.weight').view(n_vision_heads_per_shard, vision_dims_per_head, vision_hidden_dim)
+                        for i in range(num_shards)
+                    ],
+                    dim=0,
+                ).reshape(vision_hidden_dim, vision_hidden_dim),
+                n_heads=n_heads_vision,
+                dim1=vision_hidden_dim,
+                dim2=vision_hidden_dim
+            )
 
-        state_dict[f"model.vision_model.vision_encoder.transformer.layers.{vision_layer_i}.self_attn.k_proj.weight"] = permute(
-            torch.cat(
+            # for vision n_kv_heads = n_heads and local_kv heads = n_vision_heads per shard!
+            #  same for normal and global image transformer
+
+            state_dict[f"model.vision_model.vision_encoder.transformer.layers.{vision_layer_i}.self_attn.k_proj.weight"] = permute(
+                torch.cat(
+                    [
+                        loaded[i].pop(f'vision_model.vision_encoder.transformer.resblocks.{vision_layer_i}.attn.wk.weight').view(
+                            n_vision_heads_per_shard, vision_dims_per_head, vision_hidden_dim
+                        )
+                        for i in range(num_shards)
+                    ],
+                    dim=0,
+                ).reshape(vision_hidden_dim, vision_hidden_dim),
+                n_heads=n_heads_vision,
+                dim1=vision_hidden_dim,
+                dim2=vision_hidden_dim,
+            )
+
+            state_dict[f"model.vision_model.vision_encoder.transformer.layers.{vision_layer_i}.self_attn.v_proj.weight"] = torch.cat(
                 [
-                    loaded[i].pop(f'vision_model.vision_encoder.transformer.resblocks.{vision_layer_i}.attn.wk.weight').view(
+                    loaded[i].pop(f"vision_model.vision_encoder.transformer.resblocks.{vision_layer_i}.attn.wv.weight").view(
                         n_vision_heads_per_shard, vision_dims_per_head, vision_hidden_dim
                     )
                     for i in range(num_shards)
                 ],
                 dim=0,
-            ).reshape(vision_hidden_dim, vision_hidden_dim),
-            n_heads=n_heads_vision,
-            dim1=vision_hidden_dim,
-            dim2=vision_hidden_dim,
-        )
-
-        state_dict[f"model.vision_model.vision_encoder.transformer.layers.{vision_layer_i}.self_attn.v_proj.weight"] = torch.cat(
-            [
-                loaded[i].pop(f"vision_model.vision_encoder.transformer.resblocks.{vision_layer_i}.attn.wv.weight").view(
-                    n_vision_heads_per_shard, vision_dims_per_head, vision_hidden_dim
-                )
-                for i in range(num_shards)
-            ],
-            dim=0,
-        ).reshape(vision_hidden_dim, vision_hidden_dim)
+            ).reshape(vision_hidden_dim, vision_hidden_dim)
 
 
         # simple concatenation for sharded o_proj
@@ -585,7 +724,36 @@ def write_model(
     # Write configs
     index_dict["metadata"] = {"total_size": param_count * 2}
     write_json(index_dict, os.path.join(tmp_model_path, "pytorch_model.bin.index.json"))
-    config = MllamaConfig()
+    vision_config = {
+        "n_heads": params["n_heads"],
+        "vision_chunk_size": params["vision_chunk_size"],
+        "vision_max_num_chunks": params["vision_max_num_chunks"],
+        "patch_size": patch_size,
+        "projection_dim": params["dim"],  # need to figure out
+        "vision_input_dim": 1280, # constant, "self.vision_input_dim = 1280" for CrossAttentionTransformerVision in original code
+        "return_intermediate": "3,7,15,23,30",
+        "global_vision_layers": 8,  # constant "n_global_layers=8" for VisionEncoder in original code
+        "max_num_tiles": 4,  # not used in the modeling code yet, "max_num_tiles=4" for VisionEncoder in original code
+        "norm_eps": params["norm_eps"],
+        "ffn_dim_multiplier": params["ffn_dim_multiplier"],
+        "multiple_of": params["multiple_of"],
+    }
+    text_config = {
+        "vocab_size": params["vocab_size"],
+        "n_layers": params["n_layers"],
+        "dim": params["dim"],
+        "n_heads": params["n_heads"],
+        "n_kv_heads": params["n_kv_heads"],
+        "max_seq_len": 512,  # in examples
+        "ffn_dim_multiplier": params["ffn_dim_multiplier"],
+        "norm_eps": params["norm_eps"],
+        "rope_theta": params["rope_theta"],
+        "use_scaled_rope": params["use_scaled_rope"],
+        "vision_num_cross_attention_layers": params["vision_num_cross_attention_layers"],  # should be in vision config?
+        "multiple_of": params["multiple_of"],
+        "vision_input_dim": 1280, # constant, see "vision_input_dim" in vision config
+    }
+    config = MllamaConfig(vision_config=vision_config, text_config=text_config)
     config.save_pretrained(tmp_model_path)
 
     # Make space so we can load the model properly now.
@@ -683,20 +851,20 @@ def write_image_processor(config_path: str, save_dir: str):
 
 
 write_model(
-    model_path="/home/pablo/mllama_hf/test",
-    input_base_path="/home/pablo/weights/Meta-Llama-3.1-87B-Vision-Dummy-20240624190000",
+    model_path="/home/ubuntu/projects/new-model-addition-mllama/mllama-11b",
+    input_base_path="/home/ubuntu/projects/meta_mllama/weights-11b-biases",
     safe_serialization=True,
-    model_size="90B",
+    model_size="11B",
     llama_version=3,
     vocab_size=128256,
 )
 
-write_tokenizer(
-    "../llama-87b-vision-dummy/weights/Meta-Llama-3.1-87B-Vision-Dummy-20240624190000/tokenizer.model",
-    "mllama",
-)
+# write_tokenizer(
+#     "../llama-87b-vision-dummy/weights/Meta-Llama-3.1-87B-Vision-Dummy-20240624190000/tokenizer.model",
+#     "mllama",
+# )
 
-write_image_processor(
-    "../llama-87b-vision-dummy/weights/Meta-Llama-3.1-87B-Vision-Dummy-20240624190000/params.json",
-    "mllama",
-)
+# write_image_processor(
+#     "../llama-87b-vision-dummy/weights/Meta-Llama-3.1-87B-Vision-Dummy-20240624190000/params.json",
+#     "mllama",
+# )
