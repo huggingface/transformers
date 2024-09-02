@@ -141,7 +141,7 @@ jobs:
       - name: Check cache 8
         working-directory: /transformers
         run: |
-          rm -rf /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/.no_exist/42ce72ae70f7d34c14dbc3a856379a5d5b72de47/config.json
+          rm -rf /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo
 
 #      - name: Check cache 8.5
 #        working-directory: /transformers
@@ -151,23 +151,23 @@ jobs:
 
 #          rm -rf /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/.no_exist/42ce72ae70f7d34c14dbc3a856379a5d5b72de47/config.json
 
-      - name: Check cache 8.6
-        working-directory: /transformers
-        run: |
-          python3 -c 'p = "/mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/.no_exist/42ce72ae70f7d34c14dbc3a856379a5d5b72de47/config.json"; fp = open(p, "w"); fp.close()'
-          ls -l /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/.no_exist/42ce72ae70f7d34c14dbc3a856379a5d5b72de47/config.json
+#      - name: Check cache 8.6
+#        working-directory: /transformers
+#        run: |
+#          python3 -c 'p = "/mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/.no_exist/42ce72ae70f7d34c14dbc3a856379a5d5b72de47/config.json"; fp = open(p, "w"); fp.close()'
+#          ls -l /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/.no_exist/42ce72ae70f7d34c14dbc3a856379a5d5b72de47/config.json
+#
+#      - name: Check cache 8
+#        working-directory: /transformers
+#        run: |
+#          rm -rf /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo
 
-      - name: Check cache 8
-        working-directory: /transformers
-        run: |
-          rm -rf /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/.no_exist/42ce72ae70f7d34c14dbc3a856379a5d5b72de47/config.json
 
-
-      - name: Check cache 8.6
-        working-directory: /transformers
-        run: |
-          python3 -c 'p = "/mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/.no_exist/42ce72ae70f7d34c14dbc3a856379a5d5b72de47/config.json"; fp = open(p, "w"); fp.close()'
-          ls -l /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/.no_exist/42ce72ae70f7d34c14dbc3a856379a5d5b72de47/config.json
+#      - name: Check cache 8.6
+#        working-directory: /transformers
+#        run: |
+#          python3 -c 'p = "/mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/.no_exist/42ce72ae70f7d34c14dbc3a856379a5d5b72de47/config.json"; fp = open(p, "w"); fp.close()'
+#          ls -l /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/.no_exist/42ce72ae70f7d34c14dbc3a856379a5d5b72de47/config.json
 
 
       - name: Check cache 9
