@@ -86,7 +86,7 @@ model = SuperPointForKeypointDetection.from_pretrained("magic-leap-community/sup
 
 inputs = processor(images, return_tensors="pt")
 outputs = model(**inputs)
-image_sizes = [(image[1], image[0]) for image in images]
+image_sizes = [(image.size[1], image.size[0]) for image in images]
 outputs = processor.post_process_keypoint_detection(outputs, image_sizes)
 
 for output in outputs:
