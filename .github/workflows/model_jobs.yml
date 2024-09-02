@@ -138,15 +138,15 @@ jobs:
         run: |
           ls -l /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/.no_exist/42ce72ae70f7d34c14dbc3a856379a5d5b72de47/config.json
 
-      - name: check who I am
+      - name: Check cache 9
         working-directory: /transformers
         run: |
-          whoami
+          tail -10 /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/.no_exist/42ce72ae70f7d34c14dbc3a856379a5d5b72de47/config.json
 
       - name: check who I am
         working-directory: /transformers
         run: |
-          echo "$USER"
+          whoami
 
 #      - name: delete 1 cache
 #        working-directory: /transformers
