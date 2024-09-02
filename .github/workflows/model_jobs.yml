@@ -143,10 +143,20 @@ jobs:
         run: |
           tail -10 /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/.no_exist/42ce72ae70f7d34c14dbc3a856379a5d5b72de47/config.json
 
+      - name: Check cache 9.5
+        working-directory: /transformers
+        run: |
+          apt-get install -y sudo
+
+      - name: Check cache 9.5 2
+        working-directory: /transformers
+        run: |
+          apt-get install sudo
+
       - name: Check cache 10
         working-directory: /transformers
         run: |
-          chown -R nobody:nogroup /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/
+          sudo chown -R nobody:nogroup /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/
 
       - name: Check cache 11
         working-directory: /transformers
