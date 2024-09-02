@@ -119,6 +119,8 @@ To enable quantization of the key-value cache, one needs to indicate `cache_impl
 Quantization related arguments should be passed to the `generation_config` either as a `dict` or an instance of a [`~QuantizedCacheConfig`] class.
 One has to indicate which quantization backend to use in the [`~QuantizedCacheConfig`], the default is `quanto`.
 
+It is recommended to set `axis-key/axis-value` parameters in the cache config to `0` if you're using the `quanto` backend and to `1` if you're using the `HQQ` backend. For other config values, please use the defaults unless you're running out of memory. In that case, you may consider decreasing the residual length. 
+
 <Tip warning={true}>
 
 Cache quantization can be detrimental in terms of latency if the context length is short and there is enough GPU VRAM available to run without cache quantization. It is recommended to seek balance between memory efficiency and latency.
@@ -142,7 +144,7 @@ I like rock music because it's loud and energetic. It's a great way to express m
 I like rock music because it's loud and energetic. I like to listen to it when I'm feeling
 ```
 
-## OffloadedCache
+### OffloadedCache
 
 Similarly to KV cache quantization, [`~OffloadedCache`] strategy aims to reduce GPU VRAM usage.
 It does so by moving the KV cache for most layers to the CPU.
