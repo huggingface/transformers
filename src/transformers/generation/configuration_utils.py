@@ -325,7 +325,9 @@ class GenerationConfig(PushToHubMixin):
             - `"heuristic_transient"`: Same as `"heuristic"` but `num_assistant_tokens` is reset to its initial value after each generation call.
             - `"constant"`: `num_assistant_tokens` stays unchanged during generation
         assistant_confidence_threshold (`float`, *optional*, defaults to 0):
-            The confidence threshold for the assistant model. If the assistant model's confidence in its prediction for the current token is lower than this threshold, the assistant model stops generating tokens, even if the number of speculative tokens has not been reached.
+            The confidence threshold for the assistant model. If the assistant model's confidence in its prediction for the current token is lower
+            than this threshold, the assistant model stops the current token generation iteration, even if the number of _speculative tokens_
+            (defined by `num_assistant_tokens`) is not yet reached.
         prompt_lookup_num_tokens (`int`, *optional*, default to `None`):
             The number of tokens to be output as candidate tokens.
         max_matching_ngram_size (`int`, *optional*, default to `None`):
