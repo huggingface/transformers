@@ -197,15 +197,15 @@ jobs:
 
 
 
-      - name: Check cache 8
-        working-directory: /transformers
-        run: |
-          rm -rf /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/.no_exist/42ce72ae70f7d34c14dbc3a856379a5d5b72de47
-
-      - name: Check cache 9
-        working-directory: /transformers
-        run: |
-          python3 -c 'from pathlib import Path; p = "/mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/.no_exist/42ce72ae70f7d34c14dbc3a856379a5d5b72de47/config.json"; p2 = Path(p); p2.touch()'
+#      - name: Check cache 8
+#        working-directory: /transformers
+#        run: |
+#          rm -rf /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/.no_exist/42ce72ae70f7d34c14dbc3a856379a5d5b72de47
+#
+#      - name: Check cache 9
+#        working-directory: /transformers
+#        run: |
+#          python3 -c 'from pathlib import Path; p = "/mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/.no_exist/42ce72ae70f7d34c14dbc3a856379a5d5b72de47/config.json"; p2 = Path(p); p2.touch()'
 
 
 
