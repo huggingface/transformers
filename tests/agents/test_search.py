@@ -15,8 +15,6 @@
 
 import unittest
 
-import numpy as np
-
 from transformers import load_tool
 
 from .test_tools_common import ToolTesterMixin
@@ -30,4 +28,3 @@ class DuckDuckGoSearchToolTester(unittest.TestCase, ToolTesterMixin):
     def test_exact_match_arg(self):
         result = self.tool("Agents")
         assert isinstance(result, list) and isinstance(result[0], dict)
-
