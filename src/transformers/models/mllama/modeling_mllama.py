@@ -619,23 +619,21 @@ class MllamaImageEncoder(nn.Module):
         return hidden_state
 
 
-class VisionEncoder(nn.Module):
+class MllamaImageTransformer(nn.Module):
+    # originally VisionEncoder
+
     def __init__(
         self,
         max_num_tiles: int,
-        ckpt_path: str = None,
-        image_size: int = 224,
-        patch_size: int = 14,
+        image_size: Tuple[int, int] = (224, 224),
+        patch_size: Tuple[int, int] = (14, 14),
         width: int = 1280,
         num_layers: int = 32,
         heads: int = 16,
-        mlp_ratio: float = 4.0,
-        act_layer: Callable = nn.GELU,
         in_channels: int = 3,
-        load_ckpt: bool = False,
         n_global_layers: int = 2,
         global_model: bool = False,
-        return_intermediate=None,
+        return_intermediate: Optional[List[int]] = None,
     ):
         super().__init__()
         self.global_model = global_model
@@ -647,6 +645,9 @@ class VisionEncoder(nn.Module):
             self.image_size[0] // self.patch_size[0],
             self.image_size[1] // self.patch_size[1],
         )
+        self.scale = width ** -0.5
+
+        # patch and class embedding
         self.patch_embedding = ColumnParallelConv2dPatch(
             in_channels=in_channels,
             out_channels=width,
@@ -654,20 +655,23 @@ class VisionEncoder(nn.Module):
             stride=patch_size,
             bias=False,
         )
-        scale = width**-0.5
-        self.class_embedding = nn.Parameter(scale * torch.randn(width))
+        self.class_embedding = nn.Parameter(self.scale * torch.randn(width))
+
+        # positinal embeddings and gate
         self.positional_embedding = nn.Parameter(
-            scale * torch.randn(self.grid_size[0] * self.grid_size[1] + 1, width)
+            self.scale * torch.randn(self.grid_size[0] * self.grid_size[1] + 1, width)
         )
-        self.ln_post = nn.LayerNorm(width)
-        self.ln_pre = nn.LayerNorm(width)
-        self.transformer = MllamaImageEncoder(
-            width, num_layers, heads, is_gated=False
+        self.gated_positional_embedding = nn.Parameter(
+            self.scale
+            * torch.randn(
+                max_num_tiles,
+                max_num_tiles,
+                self.grid_size[0] * self.grid_size[1] + 1,
+                width,
+            )
         )
-        # pre and post tile position embedding
-        self.global_transformer = MllamaImageEncoder(
-            width, n_global_layers, heads, is_gated=True
-        )
+        self.gated_positional_embedding_gate = nn.Parameter(torch.zeros(1))
+
         # pre and post tile position embedding
         self.pre_tile_pos_embed = TilePositionEmbedding(
             num_tiles=max_num_tiles,
@@ -679,46 +683,43 @@ class VisionEncoder(nn.Module):
             width=width,
             gated=True,
         )
-        self.gated_positional_embedding = nn.Parameter(
-            scale
-            * torch.randn(
-                max_num_tiles,
-                max_num_tiles,
-                self.grid_size[0] * self.grid_size[1] + 1,
-                width,
-            )
-        )
-        self.gated_positional_embedding_gate = nn.Parameter(torch.zeros(1))
 
-    def apply_positional_embedding(self, x, ar):
-        out = []
-        # apply regular position embedding
-        bsz, num_chunks, num_tokens, dim = x.shape
-        x = x.view(bsz * num_chunks, num_tokens, dim)
-        x = x + self.positional_embedding * (
-            1 - self.gated_positional_embedding_gate.tanh()
-        )
-        x = x.view(bsz, num_chunks, num_tokens, dim)
-        for idx, arx in enumerate(ar):
-            _pos_embed = self.gated_positional_embedding[: arx[0], : arx[1]]
-            _pos_embed = _pos_embed.reshape(arx[0] * arx[1], *_pos_embed.shape[2:])
-            x[idx, : arx[0] * arx[1]] += (
-                _pos_embed * self.gated_positional_embedding_gate.tanh()
-            )
-        return x
+        # layer norms
+        self.ln_post = nn.LayerNorm(width)
+        self.ln_pre = nn.LayerNorm(width)
 
-    def apply_class_embedding(self, x):
-        x = torch.cat(
-            [
-                self.class_embedding.to(x.dtype)
-                + torch.zeros(
-                    x.shape[0], 1, x.shape[-1], dtype=x.dtype, device=x.device
-                ),
-                x,
-            ],
-            dim=1,
-        )  # shape = [*, grid ** 2 + 1, width]
-        return x
+        # encoders
+        self.transformer = MllamaImageEncoder(width, num_layers, heads, is_gated=False)
+        self.global_transformer = MllamaImageEncoder(width, n_global_layers, heads, is_gated=True)
+
+    def apply_positional_embedding(self, hidden_state: torch.Tensor, aspect_ratios: torch.Tensor) -> torch.Tensor:
+        
+        bsz, num_chunks, num_tokens, dim = hidden_state.shape
+        hidden_state = hidden_state.view(bsz * num_chunks, num_tokens, dim)
+
+        # apply regular positional embedding with gate
+        gate = 1 - self.gated_positional_embedding_gate.tanh()
+        hidden_state = hidden_state + gate * self.positional_embedding
+
+        hidden_state = hidden_state.view(bsz, num_chunks, num_tokens, dim)
+        
+        # apply gated positional embedding with gate
+        for idx, (aspect_ratio_h, aspect_ratio_w) in enumerate(aspect_ratios):
+            num_tiles = aspect_ratio_h * aspect_ratio_w
+            gated_positional_embedding = self.gated_positional_embedding[:aspect_ratio_h, :aspect_ratio_w]
+            embedding_height, embedding_width = gated_positional_embedding.shape[2:]
+            gated_positional_embedding = gated_positional_embedding.reshape(num_tiles, embedding_height, embedding_width)
+            gate = self.gated_positional_embedding_gate.tanh()
+            gated_positional_embedding_with_gate = gate * gated_positional_embedding
+            hidden_state[idx, :num_tiles] += gated_positional_embedding_with_gate
+
+        return hidden_state
+
+    def apply_class_embedding(self, hidden_state: torch.Tensor) -> torch.Tensor:
+        batch_size, _, hidden_size = hidden_state.shape
+        class_embedding = self.class_embedding.expand(batch_size, 1, hidden_size)
+        hidden_state = torch.cat([class_embedding, hidden_state], dim=1)
+        return hidden_state
 
     def forward(self, images: torch.Tensor, ar: torch.Tensor) -> torch.Tensor:
         if images.ndim == 5:
@@ -1330,7 +1331,7 @@ class MllamaCrossAttentionVisionModel(torch.nn.Module):
                 len(return_intermediate) + 1
             ) * self.vision_input_dim
         self.patch_size = config.patch_size
-        self.vision_encoder = VisionEncoder(
+        self.vision_encoder = MllamaImageTransformer(
             max_num_tiles=config.max_num_tiles,
             image_size=self.image_res,
             patch_size=self.patch_size,
