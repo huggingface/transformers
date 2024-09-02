@@ -146,14 +146,6 @@ class LlavaImageProcessor(BaseImageProcessor):
             "input_data_format",
         ]
 
-        # for backwards compatibility of KOSMOS-2
-        if "use_square_size" in kwargs and kwargs["use_square_size"]:
-            self.size = {"height": size["shortest_edge"], "width": size["shortest_edge"]}
-            # Let's remove `use_square_size` (as it is removed from #27690), so the future Kosmos-2 image processors
-            # won't have this attr. being saved. (otherwise, it will enter this if branch while there is no more
-            # `shortest_edge` key.
-            delattr(self, "use_square_size")
-
     def pad_to_square(
         self,
         image: np.array,
@@ -361,6 +353,7 @@ class LlavaImageProcessor(BaseImageProcessor):
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
+        # we don't pass `do_pad` here since LLaVa uses a custom padding to a square
         validate_preprocess_arguments(
             do_rescale=do_rescale,
             rescale_factor=rescale_factor,
