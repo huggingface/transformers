@@ -29,7 +29,7 @@ from .tools import TASK_MAPPING, TOOL_CONFIG_FILE, Tool
 
 
 def custom_print(*args):
-    return " ".join(map(str, args))
+    return None
 
 
 BASE_PYTHON_TOOLS = {
