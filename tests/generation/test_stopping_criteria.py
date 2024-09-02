@@ -108,8 +108,8 @@ class StoppingCriteriaTestCase(unittest.TestCase):
         length = 5
 
         input_ids = ids_tensor((1, length), vocab_size)
-        scores = (torch.randn((1,vocab_size)),)
-        
+        scores = (torch.randn((1, vocab_size)),)
+
         # Simulate high confidence by setting the probability of the last token to be high
         scores[0][0, input_ids[0, -1]] = 10.0  # Logits before softmax
         self.assertFalse(criteria(input_ids, scores))
