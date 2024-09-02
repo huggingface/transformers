@@ -98,9 +98,6 @@ jobs:
         working-directory: /transformers
         run: pip freeze
 
-      - name: debug
-        run : sleep 1h
-
       - name: Run all tests on GPU
         working-directory: /transformers
         run: python3 -m pytest -rsfE -v --make-reports=${{ inputs.machine_type }}_run_models_gpu_${{ matrix.folders }}_test_reports tests/${{ matrix.folders }}
