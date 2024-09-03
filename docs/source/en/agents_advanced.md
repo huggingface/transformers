@@ -33,11 +33,30 @@ It empirically yields better performance on most benchmarks. The reason for this
 You can easily build hierarchical multi-agent systems with `transformers.agents`.
 
 > [!TIP]
-<<<<<<< Updated upstream
-> For a good example of an efficient multi-agent, see [how we pushed our multi-agent system to the top of the GAIA leaderboard](https://huggingface.co/blog/beating-gaia).
-=======
 > For an in-depth example of an efficient multi-agent, see [how we pushed our multi-agent system to the top of the GAIA leaderboard](https://huggingface.co/blog/beating-gaia).
->>>>>>> Stashed changes
+
+```py
+from transformers import ReactCodeAgent
+from transformers.agents.llm_engine import HfApiEngine
+from transformers.agents.search import DuckDuckGoSearchTool
+from transformers.agents.agents import ManagedAgent
+
+llm_engine = HfApiEngine()
+
+web_agent = ReactCodeAgent(tools=[DuckDuckGoSearchTool()], llm_engine=llm_engine)
+
+managed_web_agent = ManagedAgent(
+    agent=web_agent,
+    name="web_agent",
+    description="Runs web searches for you. Give it your query as an argument."
+)
+
+manager_agent = ReactCodeAgent(
+    tools=[], llm_engine=llm_engine, managed_agents=[managed_web_agent]
+)
+
+manager_agent.run("Who is the CEO of Hugging Face?")
+```
 
 ## Use tools from gradio or LangChain
 
