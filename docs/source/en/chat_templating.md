@@ -26,26 +26,7 @@ Much like tokenization, different models expect very different input formats for
 **chat templates** as a feature. Chat templates are part of the tokenizer. They specify how to convert conversations, 
 represented as lists of messages, into a single tokenizable string in the format that the model expects. 
 
-Let's make this concrete with a quick example using the `BlenderBot` model. BlenderBot has an extremely simple default 
-template, which mostly just adds whitespace between rounds of dialogue:
-
-```python
->>> from transformers import AutoTokenizer
->>> tokenizer = AutoTokenizer.from_pretrained("facebook/blenderbot-400M-distill")
-
->>> chat = [
-...    {"role": "user", "content": "Hello, how are you?"},
-...    {"role": "assistant", "content": "I'm doing great. How can I help you today?"},
-...    {"role": "user", "content": "I'd like to show off how chat templating works!"},
-... ]
-
->>> tokenizer.apply_chat_template(chat, tokenize=False)
-" Hello, how are you?  I'm doing great. How can I help you today?   I'd like to show off how chat templating works!</s>"
-```
-
-Notice how the entire chat is condensed into a single string. If we use `tokenize=True`, which is the default setting,
-that string will also be tokenized for us. To see a more complex template in action, though, let's use the 
-`mistralai/Mistral-7B-Instruct-v0.1` model.
+Let's make this concrete with a quick example using the `mistralai/Mistral-7B-Instruct-v0.1` model:
 
 ```python
 >>> from transformers import AutoTokenizer
@@ -61,8 +42,26 @@ that string will also be tokenized for us. To see a more complex template in act
 "<s>[INST] Hello, how are you? [/INST]I'm doing great. How can I help you today?</s> [INST] I'd like to show off how chat templating works! [/INST]"
 ```
 
-Note that this time, the tokenizer has added the control tokens [INST] and [/INST] to indicate the start and end of 
-user messages (but not assistant messages!). Mistral-instruct was trained with these tokens, but BlenderBot was not.
+Notice how the tokenizer has added the control tokens [INST] and [/INST] to indicate the start and end of 
+user messages (but not assistant messages!), and the entire chat is condensed into a single string. 
+If we use `tokenize=True`, which is the default setting, that string will also be tokenized for us.
+
+Now, try the same code, but swap in the `HuggingFaceH4/zephyr-7b-beta` model instead, and you should get:
+
+```text
+<|user|>
+Hello, how are you?</s>
+<|assistant|>
+I'm doing great. How can I help you today?</s>
+<|user|>
+I'd like to show off how chat templating works!</s>
+```
+
+Both Zephyr and Mistral-Instruct were fine-tuned from the same base model, `Mistral-7B-v0.1`. However, they were trained
+with totally different chat formats. Without chat templates, you would have to write manual formatting code for each
+model, and it's very easy to make minor errors that hurt performance! Chat templates handle the details of formatting 
+for you, allowing you to write universal code that works for any model.
+
 
 ## How do I use chat templates?
 
@@ -71,7 +70,7 @@ and `content` keys, and then pass it to the [`~PreTrainedTokenizer.apply_chat_te
 you'll get output that's ready to go! When using chat templates as input for model generation, it's also a good idea
 to use `add_generation_prompt=True` to add a [generation prompt](#what-are-generation-prompts). 
 
-Here's an example of preparing input for `model.generate()`, using the `Zephyr` assistant model:
+Here's an example of preparing input for `model.generate()`, using `Zephyr` again:
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -160,7 +159,7 @@ messages = [
 ]
 ```
 
-Here's what this will look like without a generation prompt, using the ChatML template we saw in the Zephyr example:
+Here's what this will look like without a generation prompt, for a model that uses standard "ChatML" formatting:
 
 ```python
 tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=False)
@@ -193,9 +192,46 @@ message. Remember, chat models are still just language models - they're trained 
 special kind of text to them! You need to guide them with appropriate control tokens, so they know what they're 
 supposed to be doing.
 
-Not all models require generation prompts. Some models, like BlenderBot and LLaMA, don't have any
+Not all models require generation prompts. Some models, like LLaMA, don't have any
 special tokens before bot responses. In these cases, the `add_generation_prompt` argument will have no effect. The exact
 effect that `add_generation_prompt` has will depend on the template being used.
+
+## What does "continue_last_message" do?
+
+When passing a list of messages to `apply_chat_template` or `TextGenerationPipeline`, you can choose
+to format the chat so the model will continue the final message in the chat instead of starting a new one. This is done
+by removing any end-of-sequence tokens that indicate the end of the final message, so that the model will simply
+extend the final message when it begins to generate text. This is useful for "prefilling" the model's response. 
+
+Here's an example:
+
+```python
+chat = [
+    {"role": "user", "content": "Can you format the answer in JSON?"},
+    {"role": "assistant", "content": '{"name": "'},
+]
+
+formatted_chat = tokenizer.apply_chat_template(chat, tokenize=True, return_dict=True, continue_last_message=True)
+model.generate(**formatted_chat)
+```
+
+The model will generate text that continues the JSON string, rather than starting a new message. This approach
+can be very useful for improving the accuracy of the model's instruction-following when you know how you want
+it to start its replies.
+
+Because `add_generation_prompt` adds the tokens that start a new message, and `continue_last_message` removes any
+end-of-message tokens from the final message, it does not make sense to use them together. As a result, you'll
+get an error if you try!
+
+<Tip>
+
+The default behaviour of `TextGenerationPipeline` is to set `add_generation_prompt=True` so that it starts a new
+message. However, if the final message in the input chat has the "assistant" role, it will assume that this message is 
+a prefill and switch to `continue_final_message=True` instead, because most models do not support multiple 
+consecutive assistant messages. You can override this behaviour by explicitly passing the `continue_last_message` 
+argument when calling the pipeline.
+
+</Tip>
 
 ## Can I use chat templates in training?
 
@@ -593,32 +629,17 @@ model_input = tokenizer.apply_chat_template(
 ## Advanced: How do chat templates work?
 
 The chat template for a model is stored on the `tokenizer.chat_template` attribute. If no chat template is set, the
-default template for that model class is used instead. Let's take a look at the template for `BlenderBot`:
-
-```python
-
->>> from transformers import AutoTokenizer
->>> tokenizer = AutoTokenizer.from_pretrained("facebook/blenderbot-400M-distill")
-
->>> tokenizer.chat_template
-"{% for message in messages %}{% if message['role'] == 'user' %}{{ ' ' }}{% endif %}{{ message['content'] }}{% if not loop.last %}{{ '  ' }}{% endif %}{% endfor %}{{ eos_token }}"
-```
-
-That's kind of intimidating. Let's clean it up a little to make it more readable. In the process, though, we also make
-sure that the newlines and indentation we add don't end up being included in the template output - see the tip on
-[trimming whitespace](#trimming-whitespace) below!
+default template for that model class is used instead. Let's take a look at a `Zephyr` chat template, though note this
+one is a little simplified from the actual one!
 
 ```
 {%- for message in messages %}
-    {%- if message['role'] == 'user' %}
-        {{- ' ' }}
-    {%- endif %}
-    {{- message['content'] }}
-    {%- if not loop.last %}
-        {{- '  ' }}
-    {%- endif %}
+    {{- '<|' + message['role'] + |>\n' }}
+    {{- message['content'] + eos_token }}
 {%- endfor %}
-{{- eos_token }}
+{%- if add_generation_prompt %}
+    {{- '<|assistant|>\n' }}
+{%- endif %}
 ```
 
 If you've never seen one of these before, this is a [Jinja template](https://jinja.palletsprojects.com/en/3.1.x/templates/).
@@ -626,25 +647,23 @@ Jinja is a templating language that allows you to write simple code that generat
 syntax resembles Python. In pure Python, this template would look something like this:
 
 ```python
-for idx, message in enumerate(messages):
-    if message['role'] == 'user':
-        print(' ')
-    print(message['content'])
-    if not idx == len(messages) - 1:  # Check for the last message in the conversation
-        print('  ')
-print(eos_token)
+for message in messages:
+    print(f'<|{message["role"]}|>')
+    print(message['content'] + eos_token)
+if add_generation_prompt:
+    print('<|assistant|>')
 ```
 
 Effectively, the template does three things:
-1. For each message, if the message is a user message, add a blank space before it, otherwise print nothing.
-2. Add the message content
-3. If the message is not the last message, add two spaces after it. After the final message, print the EOS token.
+1. For each message, print the role enclosed in `<|` and `|>`, like `<|user|>` or `<|assistant|>`.
+2. Next, print the content of the message, followed by the end-of-sequence token.
+3. Finally, if `add_generation_prompt` is set, print the assistant token, so that the model knows to start generating
+   an assistant response.
 
-This is a pretty simple template - it doesn't add any control tokens, and it doesn't support "system" messages, which 
-are a common way to give the model directives about how it should behave in the subsequent conversation.
-But Jinja gives you a lot of flexibility to do those things! Let's see a Jinja template that can format inputs
-similarly to the way LLaMA formats them (note that the real LLaMA template includes handling for default system
-messages and slightly different system message handling in general - don't use this one in your actual code!)
+This is a pretty simple template but Jinja gives you a lot of flexibility to do more complex things! Let's see a Jinja
+template that can format inputs similarly to the way LLaMA formats them (note that the real LLaMA template includes 
+handling for default system messages and slightly different system message handling in general - don't use this one 
+in your actual code!)
 
 ```
 {%- for message in messages %}
@@ -658,8 +677,8 @@ messages and slightly different system message handling in general - don't use t
 {%- endfor %}
 ```
 
-Hopefully if you stare at this for a little bit you can see what this template is doing - it adds specific tokens based
-on the "role" of each message, which represents who sent it. User, assistant and system messages are clearly
+Hopefully if you stare at this for a little bit you can see what this template is doing - it adds specific tokens like
+`[INST]` and `[/INST]` based on the role of each message. User, assistant and system messages are clearly
 distinguishable to the model because of the tokens they're wrapped in.
 
 ## Advanced: Adding and editing chat templates
