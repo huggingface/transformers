@@ -6590,6 +6590,27 @@ class OlmoPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class OlmoeForCausalLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class OlmoeModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class OlmoePreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class OneFormerForUniversalSegmentation(metaclass=DummyObject):
     _backends = ["torch"]
 
