@@ -151,19 +151,19 @@ def flip_back(output_flipped, flip_pairs, target_type="GaussianHeatmap"):
 
     if output_flipped.ndim != 4:
         raise ValueError("output_flipped should be [batch_size, num_keypoints, height, width]")
-    original_shape = output_flipped.shape
+    batch_size, num_keypoints, height, width = output_flipped.shape
     channels = 1
     if target_type.lower() == "CombinedTarget".lower():
         channels = 3
         output_flipped[:, 1::3, ...] = -output_flipped[:, 1::3, ...]
-    output_flipped = output_flipped.reshape(original_shape[0], -1, channels, original_shape[2], original_shape[3])
+    output_flipped = output_flipped.reshape(batch_size, -1, channels, height, width)
     output_flipped_back = output_flipped.clone()
 
     # Swap left-right parts
     for left, right in flip_pairs.tolist():
         output_flipped_back[:, left, ...] = output_flipped[:, right, ...]
         output_flipped_back[:, right, ...] = output_flipped[:, left, ...]
-    output_flipped_back = output_flipped_back.reshape(original_shape)
+    output_flipped_back = output_flipped_back.reshape((batch_size, num_keypoints, height, width))
     # Flip horizontally
     output_flipped_back = output_flipped_back.flip(-1)
     return output_flipped_back
