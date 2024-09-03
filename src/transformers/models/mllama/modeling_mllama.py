@@ -707,7 +707,7 @@ class MllamaVisionTransformer(nn.Module):
         return hidden_state
 
 
-class Attention(nn.Module):
+class MllamaAttention(nn.Module):
     """Multi-head attention module."""
 
     def __init__(self, config: MllamaCrossAttentionTextConfig, layer_idx: Optional[int] = None):
@@ -772,15 +772,16 @@ class Attention(nn.Module):
 
     def forward(
         self,
-        x: torch.Tensor,
-        mask: torch.Tensor,
+        hidden_state: torch.Tensor,
+        attention_mask: torch.Tensor,
         freqs_cis: torch.Tensor,
         position_ids: torch.LongTensor,
     ):
 
-        xq, xk, xv = [
-            F.linear(x, w) for w in [self.q_proj.weight, self.k_proj.weight, self.v_proj.weight]
-        ]
+        query = self.q_proj(hidden_state)
+        key = self.k_proj(hidden_state)
+        value = self.v_proj(hidden_state)
+        xq, xk, xv = query, key, value
 
         bs, slen, _ = xq.shape
 
@@ -803,7 +804,7 @@ class Attention(nn.Module):
         xv = xv.repeat_interleave(self.n_rep, dim=1)
 
         attn_output = F.scaled_dot_product_attention(
-            xq, xk, xv, attn_mask=mask, dropout_p=0.0
+            xq, xk, xv, attn_mask=attention_mask, dropout_p=0.0
         )
 
         attn_output = attn_output.transpose(1, 2).contiguous().reshape(bs, slen, -1)
@@ -903,7 +904,7 @@ class TransformerBlock(nn.Module):
         self.n_heads = config.n_heads
         self.dim = config.dim
         self.head_dim = config.dim // config.n_heads
-        self.self_attn = Attention(config)
+        self.self_attn = MllamaAttention(config)
         self.mlp = FeedForward(
             dim=self.dim,
             hidden_dim=4 * self.dim,
@@ -919,9 +920,9 @@ class TransformerBlock(nn.Module):
 
     def forward(
         self,
-        x: torch.Tensor,
+        hidden_state: torch.Tensor,
         freqs_cis: torch.Tensor,
-        mask: torch.Tensor,
+        attention_mask: torch.Tensor,
         position_ids: torch.LongTensor,
     ) -> torch.Tensor:
         """
@@ -934,15 +935,25 @@ class TransformerBlock(nn.Module):
         Returns:
             torch.Tensor: Output tensor after applying attention and feedforward layers.
         """
-        h = self.self_attn.forward(
-            x=self.input_layernorm(x),
+        
+        # Attention
+        residual = hidden_state
+        hidden_state = self.input_layernorm(hidden_state)
+        hidden_state = self.self_attn(
+            hidden_state=hidden_state,
             freqs_cis=freqs_cis,
-            mask=mask,
+            attention_mask=attention_mask,
             position_ids=position_ids,
         )
-        h = h + x
-        out = h + self.mlp.forward(self.post_attention_layernorm(h))
-        return out
+        hidden_state = residual + hidden_state
+
+        # Feed forward
+        residual = hidden_state
+        hidden_state = self.post_attention_layernorm(hidden_state)
+        hidden_state = self.mlp(hidden_state)
+        hidden_state = residual + hidden_state
+
+        return hidden_state
 
 
 class CrossAttention(torch.nn.Module):
@@ -1225,6 +1236,7 @@ class MllamaCrossAttentionTextModel(PreTrainedModel):
         # transformer blocks
         self.layers = torch.nn.ModuleList()
         self.cross_attention_layers = torch.nn.ModuleList()
+
         for i in range(self.n_layers):
             layer_id = i
             block = TransformerBlock(config=config, layer_id=layer_id)
@@ -1335,8 +1347,8 @@ class MllamaCrossAttentionTextModel(PreTrainedModel):
             del h_
 
             h = layer(
-                x=h,
-                mask=mask,
+                hidden_state=h,
+                attention_mask=mask,
                 freqs_cis=freqs_cis,
                 position_ids=position_ids,
             )
