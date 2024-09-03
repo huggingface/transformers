@@ -79,10 +79,10 @@ jobs:
         run: |
           python3 -m pip install -U datasets
 
-      - name: Update huggingface_hub
-        working-directory: /transformers
-        run: |
-          python3 -m pip install -U git+https://github.com/huggingface/huggingface_hub.git@do-not-fail-on-touch-if-fails
+#      - name: Update huggingface_hub
+#        working-directory: /transformers
+#        run: |
+#          python3 -m pip install -U git+https://github.com/huggingface/huggingface_hub.git@do-not-fail-on-touch-if-fails
 
       - name: Update / Install some packages (for Past CI)
         if: ${{ contains(inputs.docker, '-past-') && contains(inputs.docker, '-pytorch-') }}
