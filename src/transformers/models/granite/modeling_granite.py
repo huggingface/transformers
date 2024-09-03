@@ -1,10 +1,6 @@
 # coding=utf-8
-# Copyright 2024 EleutherAI and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 IBM and the HuggingFace Inc. team. All rights reserved.
 #
-# This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
-# and OPT implementations in this library. It has been modified from its
-# original forms to accommodate minor architectural differences compared
-# to GPT-NeoX and OPT used by the Meta AI team that trained the model.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -34,6 +30,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -101,6 +98,30 @@ def _prepare_4d_causal_attention_mask_with_cache_position(
             )
 
     return causal_mask
+
+
+# Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->Granite
+class GraniteRMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps=1e-6):
+        """
+        GraniteRMSNorm is equivalent to T5LayerNorm
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states):
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+
+
+ALL_LAYERNORM_LAYERS.append(GraniteRMSNorm)
 
 
 class GraniteRotaryEmbedding(nn.Module):
@@ -538,8 +559,8 @@ class GraniteDecoderLayer(nn.Module):
         self.self_attn = GRANITE_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
 
         self.mlp = GraniteMLP(config)
-        self.input_layernorm = nn.RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = nn.RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.input_layernorm = GraniteRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = GraniteRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.residual_multiplier = config.residual_multiplier
 
@@ -753,7 +774,7 @@ class GraniteModel(GranitePreTrainedModel):
         self.layers = nn.ModuleList(
             [GraniteDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.norm = nn.RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.norm = GraniteRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.gradient_checkpointing = False
 
         self.embedding_multiplier = config.embedding_multiplier
@@ -1041,8 +1062,8 @@ class GraniteForCausalLM(GranitePreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, GraniteForCausalLM
 
-        >>> model = GraniteForCausalLM.from_pretrained("meta-granite/Granite-2-7b-hf")
-        >>> tokenizer = AutoTokenizer.from_pretrained("meta-granite/Granite-2-7b-hf")
+        >>> model = GraniteForCausalLM.from_pretrained("ibm/PowerLM-3b")
+        >>> tokenizer = AutoTokenizer.from_pretrained("ibm/PowerLM-3b")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")

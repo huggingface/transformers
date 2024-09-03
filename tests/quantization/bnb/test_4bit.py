@@ -262,6 +262,22 @@ class Bnb4BitTest(Base4bitTest):
 
         self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
 
+    def test_device_assignment(self):
+        if version.parse(importlib.metadata.version("bitsandbytes")) < version.parse("0.43.2"):
+            self.skipTest(reason="This test requires bitsandbytes >= 0.43.2")
+
+        mem_before = self.model_4bit.get_memory_footprint()
+
+        # Move to CPU
+        self.model_4bit.to("cpu")
+        self.assertEqual(self.model_4bit.device.type, "cpu")
+        self.assertAlmostEqual(self.model_4bit.get_memory_footprint(), mem_before)
+
+        # Move back to CUDA device
+        self.model_4bit.to(0)
+        self.assertEqual(self.model_4bit.device, torch.device(0))
+        self.assertAlmostEqual(self.model_4bit.get_memory_footprint(), mem_before)
+
     def test_device_and_dtype_assignment(self):
         r"""
         Test whether attempting to change the device or cast the dtype of a model
@@ -269,12 +285,23 @@ class Bnb4BitTest(Base4bitTest):
         The test ensures that such operations are prohibited on 4-bit models
         to prevent invalid conversions.
         """
-        with self.assertRaises(ValueError):
-            # Tries with `str`
-            self.model_4bit.to("cpu")
+
+        # Moving with `to` or `cuda` is not supported with versions < 0.43.2.
+        if version.parse(importlib.metadata.version("bitsandbytes")) < version.parse("0.43.2"):
+            with self.assertRaises(ValueError):
+                # Tries with `str`
+                self.model_4bit.to("cpu")
+
+            with self.assertRaises(ValueError):
+                # Tries with a `device`
+                self.model_4bit.to(torch.device("cuda:0"))
+
+            with self.assertRaises(ValueError):
+                # Tries with `cuda`
+                self.model_4bit.cuda()
 
         with self.assertRaises(ValueError):
-            # Tries with a `dtype``
+            # Tries with a `dtype`
             self.model_4bit.to(torch.float16)
 
         with self.assertRaises(ValueError):
@@ -294,6 +321,9 @@ class Bnb4BitTest(Base4bitTest):
 
         self.model_fp16 = self.model_fp16.to(torch.float32)
         _ = self.model_fp16.generate(input_ids=encoded_input["input_ids"].to(torch_device), max_new_tokens=10)
+
+        # Check that this does not throw an error
+        _ = self.model_fp16.cuda()
 
         # Check this does not throw an error
         _ = self.model_fp16.to("cpu")
