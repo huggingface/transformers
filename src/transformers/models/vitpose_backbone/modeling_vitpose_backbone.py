@@ -91,7 +91,6 @@ class ViTPoseBackboneEmbeddings(nn.Module):
         num_patches = self.patch_embeddings.num_patches
         self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches + 1, config.hidden_size))
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.config = config
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         embeddings = self.patch_embeddings(pixel_values)
