@@ -359,7 +359,7 @@ class MllamaTilePositionEmbedding(nn.Module):
 
 
 class MllamaVisionMLP(nn.Module):
-    # originally ImageFeedForward
+    # originally ImageMllamaTextMLP
 
     def __init__(
         self,
@@ -376,7 +376,7 @@ class MllamaVisionMLP(nn.Module):
         hidden_state = self.fc1(hidden_state)
         hidden_state = self.activation_fn(hidden_state)
         
-        # surpisingly this is not equvalent to self.fc2(hidden_state) for this model (??)
+        # surprisingly this is not equivalent to self.fc2(hidden_state) for this model (??)
         # saving original implementation for logits full match
         hidden_state = F.linear(hidden_state, self.fc2.weight) + self.fc2.bias
     
@@ -781,51 +781,55 @@ class MllamaAttention(nn.Module):
         query = self.q_proj(hidden_state)
         key = self.k_proj(hidden_state)
         value = self.v_proj(hidden_state)
-        xq, xk, xv = query, key, value
 
-        bs, slen, _ = xq.shape
+        batch_size, seq_length, _ = query.shape
 
-        xq = xq.view(bs, slen, self.n_local_heads, self.head_dim)
-        xk = xk.view(bs, xk.shape[1], self.n_local_kv_heads, self.head_dim)
-        xv = xv.view(bs, xv.shape[1], self.n_local_kv_heads, self.head_dim)
+        query = query.view(batch_size, seq_length, self.n_local_heads, self.head_dim)
+        key = key.view(batch_size, key.shape[1], self.n_local_kv_heads, self.head_dim)
+        value = value.view(batch_size, value.shape[1], self.n_local_kv_heads, self.head_dim)
 
-        xq, xk = apply_rotary_emb(xq, xk, freqs_cis)
+        query, key = apply_rotary_emb(query, key, freqs_cis)
 
-        self.key_cache[:bs, position_ids, ...] = xk
-        self.value_cache[:bs, position_ids, ...] = xv
+        self.key_cache[:batch_size, position_ids, ...] = key
+        self.value_cache[:batch_size, position_ids, ...] = value
 
         # TODO: we can avoid slicing on first dimension by always padding to max_batch_size()
-        xk = self.key_cache[:bs, ...]
-        xv = self.value_cache[:bs, ...]
+        key = self.key_cache[:batch_size, ...]
+        value = self.value_cache[:batch_size, ...]
 
-        xq, xk, xv = [tensor.transpose(1, 2) for tensor in (xq, xk, xv)]
+        query = query.transpose(1, 2)
+        key = key.transpose(1, 2)
+        value = value.transpose(1, 2)
 
-        xk = xk.repeat_interleave(self.n_rep, dim=1)
-        xv = xv.repeat_interleave(self.n_rep, dim=1)
+        key = key.repeat_interleave(self.n_rep, dim=1)
+        value = value.repeat_interleave(self.n_rep, dim=1)
 
         attn_output = F.scaled_dot_product_attention(
-            xq, xk, xv, attn_mask=attention_mask, dropout_p=0.0
+            query, key, value, attn_mask=attention_mask, dropout_p=0.0
         )
 
-        attn_output = attn_output.transpose(1, 2).contiguous().reshape(bs, slen, -1)
+        attn_output = attn_output.transpose(1, 2).contiguous().reshape(batch_size, seq_length, -1)
+        out = self.o_proj(attn_output)
 
-        out = F.linear(attn_output, self.o_proj.weight)
         return out
 
 
-class FeedForward(nn.Module):
+class MllamaTextMLP(nn.Module):
+    # originally FeedForward
+
     def __init__(
         self,
-        dim: int,
-        hidden_dim: int,
+        hidden_size: int,
+        intermediate_size: int,
         multiple_of: int,
         ffn_dim_multiplier: Optional[float],
+        activation = "silu",
     ):
         """
-        Initialize the FeedForward module.
+        Initialize the MllamaTextMLP module.
         Args:
-            dim (int): Input dimension.
-            hidden_dim (int): Hidden dimension of the feedforward layer.
+            hidden_size (int): Input dimension.
+            intermediate_size (int): Hidden dimension of the feedforward layer.
             multiple_of (int): Value to ensure hidden dimension is a multiple of this value.
             ffn_dim_multiplier (float, optional): Custom multiplier for hidden dimension. Defaults to None.
         Attributes:
@@ -834,53 +838,26 @@ class FeedForward(nn.Module):
             up_proj (Linear): Linear transformation for the third layer.
         """
         super().__init__()
-        hidden_dim = int(2 * hidden_dim / 3)
+
         # custom dim factor multiplier
+        intermediate_size = int(2 / 3 * intermediate_size)
         if ffn_dim_multiplier is not None:
-            hidden_dim = int(ffn_dim_multiplier * hidden_dim)
-        hidden_dim = multiple_of * ((hidden_dim + multiple_of - 1) // multiple_of)
+            intermediate_size = int(ffn_dim_multiplier * intermediate_size)
+        intermediate_size = multiple_of * ((intermediate_size + multiple_of - 1) // multiple_of)
 
-        self.gate_proj = nn.Linear(
-            dim, hidden_dim, bias=False
-        )
-        self.down_proj = nn.Linear(
-            hidden_dim, dim, bias=False
-        )
-        self.up_proj = nn.Linear(
-            dim, hidden_dim, bias=False
-        )
+        self.gate_proj = nn.Linear(hidden_size, intermediate_size, bias=False)
+        self.down_proj = nn.Linear(intermediate_size, hidden_size, bias=False)
+        self.up_proj = nn.Linear(hidden_size, intermediate_size, bias=False)
+        self.activation_fn = ACT2FN[activation]
 
-    def forward(self, x):
-        """
-        if self.config.pretraining_tp > 1:
-            slice = self.intermediate_size // self.config.pretraining_tp
-            gate_proj_slices = self.gate_proj.weight.split(slice, dim=0)
-            up_proj_slices = self.up_proj.weight.split(slice, dim=0)
-            down_proj_slices = self.down_proj.weight.split(slice, dim=1)
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
+        
+        hidden_state_gate = self.gate_proj(hidden_state)
+        hidden_state_up = self.up_proj(hidden_state)
+        hidden_state = self.activation_fn(hidden_state_gate) * hidden_state_up
+        hidden_state = self.down_proj(hidden_state)
 
-            gate_proj = torch.cat(
-                [F.linear(x, gate_proj_slices[i]) for i in range(self.config.pretraining_tp)], dim=-1
-            )
-            up_proj = torch.cat([F.linear(x, up_proj_slices[i]) for i in range(self.config.pretraining_tp)], dim=-1)
-
-            intermediate_states = (self.act_fn(gate_proj) * up_proj).split(slice, dim=2)
-            down_proj = [
-                F.linear(intermediate_states[i], down_proj_slices[i]) for i in range(self.config.pretraining_tp)
-            ]
-            down_proj = sum(down_proj)
-        else:
-        """
-        # FIXME here, there was a shape issue before - this fixes it
-        down_proj = self.down_proj(F.silu(self.gate_proj(x)) * self.up_proj(x))
-
-        return down_proj
-    """
-    def forward(self, x):
-        x1, x3 = [F.linear(x, w) for w in [self.gate_proj.weight, self.up_proj.weight]]
-        x1 = F.silu(x1)
-        x_in = x1 * x3
-        out = F.linear(x_in, self.down_proj.weight)
-        return out"""
+        return hidden_state
 
 
 class TransformerBlock(nn.Module):
@@ -895,7 +872,7 @@ class TransformerBlock(nn.Module):
             dim (int): Dimension size of the model.
             head_dim (int): Dimension size of each attention head.
             attention (Attention): Attention module.
-            mlp (FeedForward): FeedForward module.
+            mlp (MllamaTextMLP): MllamaTextMLP module.
             layer_id (int): Identifier for the layer.
             input_layernorm (RMSNorm): Layer normalization for attention output.
             post_attention_layernorm (RMSNorm): Layer normalization for feedforward output.
@@ -905,9 +882,9 @@ class TransformerBlock(nn.Module):
         self.dim = config.dim
         self.head_dim = config.dim // config.n_heads
         self.self_attn = MllamaAttention(config)
-        self.mlp = FeedForward(
-            dim=self.dim,
-            hidden_dim=4 * self.dim,
+        self.mlp = MllamaTextMLP(
+            hidden_size=self.dim,
+            intermediate_size=4 * self.dim,
             multiple_of=config.multiple_of,
             ffn_dim_multiplier=config.ffn_dim_multiplier,
         )
@@ -1090,9 +1067,9 @@ class CrossAttentionTransformerBlock(torch.nn.Module):
         )
         self.gate_attn = torch.nn.Parameter(torch.zeros(1))
 
-        self.mlp = FeedForward(
-            dim=self.dim,
-            hidden_dim=4 * self.dim,
+        self.mlp = MllamaTextMLP(
+            hidden_size=self.dim,
+            intermediate_size=4 * self.dim,
             ffn_dim_multiplier=self.ffn_dim_multiplier,
             multiple_of=self.multiple_of,
         )
@@ -1115,7 +1092,7 @@ class CrossAttentionTransformerBlock(torch.nn.Module):
         full_text_row_masked_out_mask: Tuple[torch.Tensor, torch.Tensor],
         xattn_cache: torch.Tensor,
     ) -> torch.Tensor:
- 
+
         residual = hidden_state
         hidden_state = self.input_layernorm(hidden_state)
         hidden_state = self.self_attn(
