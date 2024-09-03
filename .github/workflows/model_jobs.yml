@@ -98,11 +98,6 @@ jobs:
         working-directory: /transformers
         run: pip freeze
 
-#      - name: Check cache 1
-#        working-directory: /transformers
-#        run: |
-#          ls -l /mnt/cache/.cache/huggingface
-
       - name: Check cache 2
         working-directory: /transformers
         run: |
@@ -117,64 +112,6 @@ jobs:
         working-directory: /transformers
         run: |
           ls -l /mnt/cache/hub
-
-#      - name: Check cache 5
-#        working-directory: /transformers
-#        run: |
-#          ls -l /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo
-#
-#      - name: Check cache 6
-#        working-directory: /transformers
-#        run: |
-#          ls -l /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/.no_exist
-#
-#      - name: Check cache 7
-#        working-directory: /transformers
-#        run: |
-#          ls -l /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/.no_exist/42ce72ae70f7d34c14dbc3a856379a5d5b72de47
-#
-#      - name: Check cache 8
-#        working-directory: /transformers
-#        run: |
-#          ls -l /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/.no_exist/42ce72ae70f7d34c14dbc3a856379a5d5b72de47/config.json
-#
-#      - name: Check cache 8
-#        working-directory: /transformers
-#        run: |
-#          rm -rf /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo
-
-#      - name: Check cache 8.5
-#        working-directory: /transformers
-#        run: |
-#          apt-get install lsof
-#          lsof -t /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/.no_exist/42ce72ae70f7d34c14dbc3a856379a5d5b72de47/config.json
-
-#          rm -rf /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/.no_exist/42ce72ae70f7d34c14dbc3a856379a5d5b72de47/config.json
-
-#      - name: Check cache 8.6
-#        working-directory: /transformers
-#        run: |
-#          python3 -c 'p = "/mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/.no_exist/42ce72ae70f7d34c14dbc3a856379a5d5b72de47/config.json"; fp = open(p, "w"); fp.close()'
-#          ls -l /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/.no_exist/42ce72ae70f7d34c14dbc3a856379a5d5b72de47/config.json
-#
-#      - name: Check cache 8
-#        working-directory: /transformers
-#        run: |
-#          rm -rf /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo
-
-
-#      - name: Check cache 8.6
-#        working-directory: /transformers
-#        run: |
-#          python3 -c 'p = "/mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/.no_exist/42ce72ae70f7d34c14dbc3a856379a5d5b72de47/config.json"; fp = open(p, "w"); fp.close()'
-#          ls -l /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/.no_exist/42ce72ae70f7d34c14dbc3a856379a5d5b72de47/config.json
-
-
-#      - name: Check cache 9
-#        working-directory: /transformers
-#        run: |
-#          python3 -c 'import os; p = "/mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/.no_exist/42ce72ae70f7d34c14dbc3a856379a5d5b72de47"; os.makedirs(p, exist_ok=True)'
-#          python3 -c 'from pathlib import Path; p = "/mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/.no_exist/42ce72ae70f7d34c14dbc3a856379a5d5b72de47/config.json"; p2 = Path(p); p2.touch()'
 
       - name: Check cache 8
         working-directory: /transformers
@@ -191,7 +128,6 @@ jobs:
         working-directory: /transformers
         run: |
           ls -l /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/.no_exist/42ce72ae70f7d34c14dbc3a856379a5d5b72de47/config.json
-          sleep 10
           rm -rf /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/.no_exist
 
       - name: Check cache 9
@@ -205,7 +141,6 @@ jobs:
         working-directory: /transformers
         run: |
           ls -l /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/.no_exist/42ce72ae70f7d34c14dbc3a856379a5d5b72de47/config.json
-          sleep 10
           rm -rf /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/.no_exist/42ce72ae70f7d34c14dbc3a856379a5d5b72de47
 
       - name: Check cache 9
@@ -218,120 +153,9 @@ jobs:
         working-directory: /transformers
         run: |
           ls -l /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/.no_exist/42ce72ae70f7d34c14dbc3a856379a5d5b72de47/config.json
-          sleep 10
           rm -rf /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/.no_exist/42ce72ae70f7d34c14dbc3a856379a5d5b72de47/config.json
 
       - name: Check cache 9
         working-directory: /transformers
         run: |
           python3 -c 'p = "/mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/.no_exist/42ce72ae70f7d34c14dbc3a856379a5d5b72de47/config.json"; fp = open(p, "w"); fp.close()'
-
-
-#      - name: Check cache 9
-#        working-directory: /transformers
-#        run: |
-#          lsof -t /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/.no_exist/42ce72ae70f7d34c14dbc3a856379a5d5b72de47/config.json
-
-
-#      - name: Check cache 8.5
-#        working-directory: /transformers
-#        run: |
-#          echo "Hello" > config.json
-#          echo "Hello 2" > config2.json
-#          ls -l config.json
-#          ls -l config2.json
-#          mv config2.json /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/.no_exist/42ce72ae70f7d34c14dbc3a856379a5d5b72de47/config2.json
-#          mv config.json /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/.no_exist/42ce72ae70f7d34c14dbc3a856379a5d5b72de47/config.json
-#
-#      - name: Check cache 7
-#        working-directory: /transformers
-#        run: |
-#          lsattr /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/.no_exist/42ce72ae70f7d34c14dbc3a856379a5d5b72de47
-#
-#      - name: Check cache 8
-#        working-directory: /transformers
-#        run: |
-#          lsattr /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/.no_exist/42ce72ae70f7d34c14dbc3a856379a5d5b72de47/config.json
-
-
-
-
-      - name: Check cache 9
-        working-directory: /transformers
-        run: |
-          sleep 10
-          tail -10 /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/.no_exist/42ce72ae70f7d34c14dbc3a856379a5d5b72de47/config.json
-
-      - name: Check cache 9.5
-        working-directory: /transformers
-        run: |
-          apt-get install -y sudo
-
-      - name: Check cache 9.5 2
-        working-directory: /transformers
-        run: |
-          apt-get install sudo
-
-      - name: Check cache 10
-        working-directory: /transformers
-        run: |
-          sudo chown -R nobody:nogroup /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/
-
-      - name: Check cache 11
-        working-directory: /transformers
-        run: |
-          ls -l /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/
-
-      - name: Check cache 12
-        working-directory: /transformers
-        run: |
-          ls -l /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/.no_exist
-
-      - name: Check cache 13
-        working-directory: /transformers
-        run: |
-          ls -l /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/.no_exist/42ce72ae70f7d34c14dbc3a856379a5d5b72de47
-
-      - name: Check cache 14
-        working-directory: /transformers
-        run: |
-          ls -l /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/.no_exist/42ce72ae70f7d34c14dbc3a856379a5d5b72de47/config.json
-
-      - name: check who I am
-        working-directory: /transformers
-        run: |
-          whoami
-
-#      - name: delete 1 cache
-#        working-directory: /transformers
-#        run: |
-#          rm -rf /mnt/cache/hub/models--hf-internal-testing--config-no-model
-
-      - name: Run all tests on GPU
-        working-directory: /transformers
-        run: python3 -m pytest -rsfE -v --make-reports=${{ inputs.machine_type }}_run_models_gpu_${{ matrix.folders }}_test_reports tests/${{ matrix.folders }}
-
-      - name: Failure short reports
-        if: ${{ failure() }}
-        continue-on-error: true
-        run: cat /transformers/reports/${{ inputs.machine_type }}_run_models_gpu_${{ matrix.folders }}_test_reports/failures_short.txt
-
-      - name: Run test
-        shell: bash
-        run: |
-          mkdir -p /transformers/reports/${{ inputs.machine_type }}_run_models_gpu_${{ matrix.folders }}_test_reports
-          echo "hello" > /transformers/reports/${{ inputs.machine_type }}_run_models_gpu_${{ matrix.folders }}_test_reports/hello.txt
-          echo "${{ inputs.machine_type }}_run_models_gpu_${{ matrix.folders }}_test_reports"
-
-      - name: Check cache 9
-        working-directory: /transformers
-        run: |
-          ls -l /mnt/cache/hub/models--BAAI--AltCLIP/snapshots/b989a7bc9f73809acc4df8265e63174c74791ba6/pytorch_model.bin
-
-      - name: "Test suite reports artifacts: ${{ inputs.machine_type }}_run_models_gpu_${{ env.matrix_folders }}_test_reports"
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ inputs.machine_type }}_run_models_gpu_${{ env.matrix_folders }}_test_reports
-          path: /transformers/reports/${{ inputs.machine_type }}_run_models_gpu_${{ matrix.folders }}_test_reports
-
