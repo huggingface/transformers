@@ -512,7 +512,7 @@ class ViTPoseImageProcessor(BaseImageProcessor):
                 Center of the bounding box (x, y).
             scale (np.ndarray[N, 2]):
                 Scale of the bounding box wrt height/width.
-            kernel (int):
+            kernel (int, *optional*, defaults to 11):
                 Gaussian kernel size (K) for modulation, which should match the heatmap gaussian sigma when training.
                 K=17 for sigma=3 and k=11 for sigma=2.
 
