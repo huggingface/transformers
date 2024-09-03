@@ -351,9 +351,13 @@ class SEWDPositionalConvEmbedding(nn.Module):
 
         if is_deepspeed_zero3_enabled():
             import deepspeed
+            
+            weight_norm = nn.utils.weight_norm
+            if hasattr(nn.utils.parametrizations, "weight_norm"):
+                weight_norm = nn.utils.parametrizations.weight_norm
 
             with deepspeed.zero.GatheredParameters(self.conv.weight, modifier_rank=0):
-                self.conv = nn.utils.weight_norm(self.conv, name="weight", dim=2)
+                self.conv = weight_norm(self.conv, name="weight", dim=2)
             if hasattr(self.conv, "parametrizations"):
                 weight_g = self.conv.parametrizations.weight.original0
                 weight_v = self.conv.parametrizations.weight.original1
@@ -363,7 +367,7 @@ class SEWDPositionalConvEmbedding(nn.Module):
             deepspeed.zero.register_external_parameter(self, weight_v)
             deepspeed.zero.register_external_parameter(self, weight_g)
         else:
-            self.conv = nn.utils.weight_norm(self.conv, name="weight", dim=2)
+            self.conv = weight_norm(self.conv, name="weight", dim=2)
 
         self.padding = SEWDSamePadLayer(config.num_conv_pos_embeddings)
         self.activation = ACT2FN[config.feat_extract_activation]
