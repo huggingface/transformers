@@ -1233,6 +1233,9 @@ class AcceleratorConfig:
             training results are fully reproducable using a different sampling technique. While seed-to-seed results
             may differ, on average the differences are neglible when using multiple different seeds to compare. Should
             also be ran with [`~utils.set_seed`] for the best results.
+        use_stateful_dataloader (`bool`, *optional*, defaults to `False`):
+            If set to `True`, the dataloader prepared by the Accelerator will be backed by [torchdata.StatefulDataLoader](https://github.com/pytorch/data/tree/main/torchdata/stateful_dataloader).
+            Doing so makes resuming from a checkpoint faster as the `DataLoader` is configured with a resumable state. Requires `torchdata>=0.8.0` and `accelerate>=0.24.0`.
         gradient_accumulation_kwargs (`dict`, *optional*):
             Additional kwargs to configure gradient accumulation, see [`accelerate.utils.GradientAccumulationPlugin`].
             Any of the following (optional) keys are acceptable:
@@ -1286,6 +1289,15 @@ class AcceleratorConfig:
             "Ensures training results are fully reproducable using a different sampling technique. "
             "While seed-to-seed results may differ, on average the differences are neglible when using"
             "multiple different seeds to compare. Should also be ran with [`~utils.set_seed`] for the best results."
+        },
+    )
+    use_stateful_dataloader: bool = field(
+        default=False,
+        metadata={
+            "help": "If set to `True`, the dataloader prepared by the Accelerator will be backed by "
+            "[torchdata.StatefulDataLoader](https://github.com/pytorch/data/tree/main/torchdata/stateful_dataloader). "
+            "Doing so makes resuming from a checkpoint faster as the `DataLoader` is configured with a resumable state. "
+            "Requires `torchdata>=0.8.0` and `accelerate>=0.24.0`."
         },
     )
 

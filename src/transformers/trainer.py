@@ -4768,6 +4768,13 @@ class Trainer:
                     "`non_blocking` is enabled but `dataloader_pin_memory` is not. For the best performance, it's recommended to enable both."
                 )
             dataloader_config.non_blocking = non_blocking
+        use_stateful_dataloader = accelerator_config.pop("use_stateful_dataloader")
+        if use_stateful_dataloader:
+            if not is_accelerate_available("0.34.0"):
+                raise ImportError(
+                    "`use_stateful_dataloader` is only supported in accelerate v0.34.0 and above. Please upgrade accelerate to use this feature."
+                )
+            dataloader_config.use_stateful_dataloader = use_stateful_dataloader
         # this would have been updated above, no need for it anymore
         accelerator_config.pop("gradient_accumulation_kwargs")
 
