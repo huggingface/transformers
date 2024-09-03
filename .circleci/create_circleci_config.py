@@ -152,7 +152,7 @@ class CircleCIJob:
             {"store_artifacts": {"path": "installed.txt"}},
         ]
         if self.parallelism:
-            job["parallelism"] = f""" << pipeline.parameters.{self.job_name}_parallelism >> """
+            job["parallelism"] = f' << pipeline.parameters.{self.job_name}_parallelism >> '
         job["steps"] = steps
         return job
 
