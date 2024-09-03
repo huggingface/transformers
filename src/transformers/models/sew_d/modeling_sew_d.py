@@ -351,7 +351,7 @@ class SEWDPositionalConvEmbedding(nn.Module):
 
         if is_deepspeed_zero3_enabled():
             import deepspeed
-            
+
             weight_norm = nn.utils.weight_norm
             if hasattr(nn.utils.parametrizations, "weight_norm"):
                 weight_norm = nn.utils.parametrizations.weight_norm

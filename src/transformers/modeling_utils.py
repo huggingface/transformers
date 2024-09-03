@@ -865,7 +865,7 @@ def _load_state_dict_into_meta_model(
             # We add only the first key as an example
             new_key = key.replace("beta", "bias")
             renamed_beta[key] = new_key if not renamed_beta else renamed_beta
-            
+
         # To reproduce `_load_state_dict_into_model` behaviour, we need to manually rename parametrized weigth norm, if necessary.
         if hasattr(nn.utils.parametrizations, "weight_norm"):
             if "weight_g" in key:
@@ -874,9 +874,9 @@ def _load_state_dict_into_meta_model(
                 new_key = key.replace("weight_v", "parametrizations.weight.original1")
         else:
             if "parametrizations.weight.original0" in key:
-                new_key = key.replace("parametrizations.weight.original0","weight_g")
+                new_key = key.replace("parametrizations.weight.original0", "weight_g")
             if "parametrizations.weight.original1" in key:
-                new_key = key.replace("parametrizations.weight.original1","weight_v")
+                new_key = key.replace("parametrizations.weight.original1", "weight_v")
         if new_key:
             old_keys.append(key)
             new_keys.append(new_key)
@@ -4133,7 +4133,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 return key.replace("beta", "bias")
             if "gamma" in key:
                 return key.replace("gamma", "weight")
-            
+
             # to avoid logging parametrized weight norm renaming
             if hasattr(nn.utils.parametrizations, "weight_norm"):
                 if "weight_g" in key:
@@ -4142,9 +4142,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     return key.replace("weight_v", "parametrizations.weight.original1")
             else:
                 if "parametrizations.weight.original0" in key:
-                    return key.replace("parametrizations.weight.original0","weight_g")
+                    return key.replace("parametrizations.weight.original0", "weight_g")
                 if "parametrizations.weight.original1" in key:
-                    return key.replace("parametrizations.weight.original1","weight_v")
+                    return key.replace("parametrizations.weight.original1", "weight_v")
             return key
 
         original_loaded_keys = loaded_keys
