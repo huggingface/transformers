@@ -542,5 +542,5 @@ class ProPainterImageProcessor(BaseImageProcessor):
 
         videos = torch.stack([to_tensors(video) * 2 - 1 for video in videos], dim=0)
 
-        data = {"pixel_values_inp": videos_inp, "pixel_values": videos, "flow_masks": flow_masks, "masks_dilated": masks_dilated}
+        data = {"pixel_values": videos, "pixel_values_inp": videos_inp, "flow_masks": flow_masks, "masks_dilated": masks_dilated}
         return BatchFeature(data=data, tensor_type=return_tensors)

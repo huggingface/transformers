@@ -22,7 +22,7 @@ import numpy as np
 import requests
 
 from datasets import load_dataset
-from transformers import ProPainterConfig
+from transformers import PretrainedConfig, ProPainterConfig
 from transformers.models.auto import get_values
 from transformers.models.auto.modeling_auto import MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES, MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES
 from transformers.testing_utils import (
@@ -35,6 +35,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 from transformers.utils import cached_property, is_torch_available, is_vision_available
+from typing import Dict, List, Tuple
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -51,6 +52,15 @@ if is_vision_available():
     from PIL import Image
     from transformers import ProPainterImageProcessor
 
+def _config_zero_init(config):
+    configs_no_init = copy.deepcopy(config)
+    for key in configs_no_init.__dict__.keys():
+        if "_range" in key or "_std" in key or "initializer_factor" in key or "layer_scale" in key:
+            setattr(configs_no_init, key, 1e-10)
+        if isinstance(getattr(configs_no_init, key, None), PretrainedConfig):
+            no_init_subconfig = _config_zero_init(getattr(configs_no_init, key))
+            setattr(configs_no_init, key, no_init_subconfig)
+    return configs_no_init
 
 class ProPainterModelTester:
     def __init__(
@@ -84,13 +94,15 @@ class ProPainterModelTester:
         flow_masks = masks_dilated = masks
         config = self.get_config()
 
-        return config, pixel_values_inp, pixel_values, flow_masks, masks_dilated
+        return config, pixel_values, pixel_values_inp, flow_masks, masks_dilated
 
     def get_config(self):
         return ProPainterConfig(
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
+            num_local_frames_flow_complete_net = self.num_frames,
+            num_local_frames_propainter = self.num_frames,
         )
 
     @property
@@ -98,23 +110,23 @@ class ProPainterModelTester:
         window_size = self.get_config().window_size
         return window_size[0]*window_size[1]
 
-    def create_and_check_model(self, config, pixel_values_inp, pixel_values, flow_masks, masks_dilated):
+    def create_and_check_model(self, config, pixel_values, pixel_values_inp, flow_masks, masks_dilated):
         model = ProPainterModel(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(pixel_values_inp, pixel_values, flow_masks, masks_dilated)
-        self.parent.assertEqual(result.reconstruction.shape, (self.batch_size, self.num_frames, self.image_size, self.image_size, 3))
+        result = model(pixel_values, pixel_values_inp, flow_masks, masks_dilated)
+        self.parent.assertEqual(torch.tensor(result.reconstruction).shape, (self.num_frames, self.image_size, self.image_size, 3))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
             config,
-            pixel_values_inp,
             pixel_values,
+            pixel_values_inp,
             flow_masks,
             masks_dilated,
         ) = config_and_inputs
-        inputs_dict = {"pixel_values_inp": pixel_values_inp, "pixel_values": pixel_values, "flow_masks": flow_masks, "masks_dilated": masks_dilated}
+        inputs_dict = {"pixel_values": pixel_values, "pixel_values_inp": pixel_values_inp, "flow_masks": flow_masks, "masks_dilated": masks_dilated}
         return config, inputs_dict
 
 
@@ -325,8 +337,234 @@ class ProPainterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             for hs_no_chunk, hs_with_chunk in zip(hidden_states_no_chunk, hidden_states_with_chunk):
                 self.assertTrue(torch.allclose(hs_no_chunk, hs_with_chunk, atol=1e-3))
 
+    @unittest.skip(reason="We cannot configure to output a smaller model.")
+    def test_model_is_small(self):
+        pass
 
-# We will verify our results on an image of cute cats
+    def test_initialization(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        configs_no_init = _config_zero_init(config)
+        for model_class in self.all_model_classes:
+            model = model_class(config=configs_no_init)
+            for name, param in model.named_parameters():
+                if param.requires_grad:
+                    #Because these are initialised by kaiming_normal_ method and due to weight init model's output is not deterministic
+                    mean_value = (param.data.mean() * 1e9).round() / 1e9
+                    if abs(mean_value.item()) < 1e-3:
+                        self.assertAlmostEqual(
+                            mean_value.item(),
+                            0.0,
+                            places=3,
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                        )
+                    # Check if mean_value is exactly 0.0, or 1.0
+                    else:
+                        self.assertIn(
+                            mean_value.item(),
+                            [0.0, 1.0],
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                        )
+
+    def test_hidden_states_output(self):
+        def check_hidden_states_output(inputs_dict, config, model_class):
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
+
+            expected_num_layers = getattr(
+                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
+            )
+            self.assertEqual(len(hidden_states), expected_num_layers)
+
+            seq_length = [6,8] #Timesteps of tokens
+            self.assertIn(
+                list(hidden_states[0].shape[-2:]),
+                [[seq_length[0], self.model_tester.hidden_size], [seq_length[1], self.model_tester.hidden_size]],
+                msg=f"Unexpected hidden state shape: {hidden_states[0].shape[-2:]}",
+            )
+
+            if config.is_encoder_decoder:
+                hidden_states = outputs.decoder_hidden_states
+
+                self.assertIsInstance(hidden_states, (list, tuple))
+                self.assertEqual(len(hidden_states), expected_num_layers)
+                seq_len = getattr(self.model_tester, "seq_length", None)
+                decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
+
+                self.assertListEqual(
+                    list(hidden_states[0].shape[-2:]),
+                    [decoder_seq_length, self.model_tester.hidden_size],
+                )
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_hidden_states"] = True
+            check_hidden_states_output(inputs_dict, config, model_class)
+
+            # check that output_hidden_states also work using config
+            del inputs_dict["output_hidden_states"]
+            config.output_hidden_states = True
+
+            check_hidden_states_output(inputs_dict, config, model_class)
+
+    def test_model_outputs_equivalence(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        def set_nan_tensor_to_zero(t):
+            t[t != t] = 0
+            return t
+
+        def check_equivalence(model, tuple_inputs, dict_inputs, additional_kwargs={}):
+            with torch.no_grad():
+                tuple_output = model(**tuple_inputs, return_dict=False, **additional_kwargs)
+                dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs).to_tuple()
+
+                def recursive_check(tuple_object, dict_object):
+                    if isinstance(tuple_object, (List, Tuple)):
+                        for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
+                            recursive_check(tuple_iterable_value, dict_iterable_value)
+                    elif isinstance(tuple_object, Dict):
+                        for tuple_iterable_value, dict_iterable_value in zip(
+                            tuple_object.values(), dict_object.values()
+                        ):
+                            recursive_check(tuple_iterable_value, dict_iterable_value)
+                    elif tuple_object is None:
+                        return
+                    else:
+                        if type(tuple_object) is np.ndarray:
+                            tuple_object = torch.tensor(tuple_object)
+                        if type(dict_object) is np.ndarray:
+                            dict_object = torch.tensor(dict_object)
+
+                        # skip hidden states & attentions as the model is not deterministic due to weights init
+                        is_hidden_state_tensor = False
+                        if len(tuple_object.shape)>0:
+                            is_hidden_state_tensor = ((tuple_object.shape[-1] == self.model_tester.hidden_size) or (tuple_object.shape[-2] == self.model_tester.encoder_seq_length) or (tuple_object.shape[-2] == 360))
+                        if not is_hidden_state_tensor:
+                            self.assertTrue(
+                                torch.allclose(
+                                    set_nan_tensor_to_zero(tuple_object), set_nan_tensor_to_zero(dict_object), atol=1e-4
+                                ),
+                                msg=(
+                                    "Tuple and dict output are not equal. Difference:"
+                                    f" {torch.max(torch.abs(tuple_object - dict_object))}. Tuple has `nan`:"
+                                    f" {torch.isnan(tuple_object).any()} and `inf`: {torch.isinf(tuple_object)}. Dict has"
+                                    f" `nan`: {torch.isnan(dict_object).any()} and `inf`: {torch.isinf(dict_object)}."
+                                ),
+                            )
+
+                recursive_check(tuple_output, dict_output)
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
+            dict_inputs = self._prepare_for_class(inputs_dict, model_class)
+            check_equivalence(model, tuple_inputs, dict_inputs)
+
+            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            check_equivalence(model, tuple_inputs, dict_inputs)
+
+            tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
+            dict_inputs = self._prepare_for_class(inputs_dict, model_class)
+            check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
+
+            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
+
+            if self.has_attentions:
+                tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
+                dict_inputs = self._prepare_for_class(inputs_dict, model_class)
+                check_equivalence(model, tuple_inputs, dict_inputs, {"output_attentions": True})
+
+                tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+                dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+                check_equivalence(model, tuple_inputs, dict_inputs, {"output_attentions": True})
+
+                tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+                dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+                check_equivalence(
+                    model, tuple_inputs, dict_inputs, {"output_hidden_states": True, "output_attentions": True}
+                )
+
+    def test_retain_grad_hidden_states_attentions(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.output_hidden_states = True
+        config.output_attentions = self.has_attentions
+
+        # no need to test all models as different heads yield the same functionality
+        model_class = self.all_model_classes[0]
+        model = model_class(config)
+        model.to(torch_device)
+
+        inputs = self._prepare_for_class(inputs_dict, model_class)
+
+        outputs = model(**inputs)
+
+        output = outputs[0]
+
+        if config.is_encoder_decoder:
+            # Seq2Seq models
+            encoder_hidden_states = outputs.encoder_hidden_states[0]
+            encoder_hidden_states.retain_grad()
+
+            decoder_hidden_states = outputs.decoder_hidden_states[0]
+            decoder_hidden_states.retain_grad()
+
+            if self.has_attentions:
+                encoder_attentions = outputs.encoder_attentions[0]
+                encoder_attentions.retain_grad()
+
+                decoder_attentions = outputs.decoder_attentions[0]
+                decoder_attentions.retain_grad()
+
+                cross_attentions = outputs.cross_attentions[0]
+                cross_attentions.retain_grad()
+
+            output.flatten()[0].backward(retain_graph=True)
+
+            self.assertIsNotNone(encoder_hidden_states.grad)
+            self.assertIsNotNone(decoder_hidden_states.grad)
+
+            if self.has_attentions:
+                self.assertIsNotNone(encoder_attentions.grad)
+                self.assertIsNotNone(decoder_attentions.grad)
+                self.assertIsNotNone(cross_attentions.grad)
+        else:
+            # Encoder-/Decoder-only models
+            hidden_states = outputs.hidden_states[0]
+            hidden_states.retain_grad()
+
+            if self.has_attentions:
+                #each element has both spatial and temporal attention
+                attentions_t = outputs.attentions[0]
+                attentions_t[0].retain_grad()
+                attentions_s = outputs.attentions[1]
+                attentions_s[0].retain_grad()
+
+            #output variable consists of three losses
+            output[0].flatten()[0].backward(retain_graph=True)
+            output[1].flatten()[0].backward(retain_graph=True)
+            output[2].flatten()[0].backward(retain_graph=True)
+
+            self.assertIsNotNone(hidden_states.grad)
+
+            if self.has_attentions:
+                self.assertIsNotNone(attentions_t[0].grad)
+                self.assertIsNotNone(attentions_s[0].grad)
+
+# We will verify our results on a video of a boy riding a bicycle
 def prepare_video():
     ds = load_dataset("ruffy369/propainter-object-removal")
     ds_images = ds['train']["image"]

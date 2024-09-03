@@ -149,16 +149,7 @@ class ProPainterBasicEncoder(nn.Module):
         self.dropout = None
         if dropout > 0:
             self.dropout = nn.Dropout2d(p=dropout)
-
-        #TODO: CHECKKK FOR THIS WEIGHT INITTTTTTTTTTTTTTTTT
-        for m in self.modules():
-            if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
-            elif isinstance(m, (nn.BatchNorm2d, nn.InstanceNorm2d, nn.GroupNorm)):
-                if m.weight is not None:
-                    nn.init.constant_(m.weight, 1)
-                if m.bias is not None:
-                    nn.init.constant_(m.bias, 0)
+            
 
     def forward(self, image):
         # if input is list, combine batch dimension
@@ -1262,7 +1253,7 @@ class ProPainterSparseWindowAttention(nn.Module):
         _att_t = att_t
         _att_s = att_s
         if output_attentions:
-            all_self_attentions = all_self_attentions + (_att_t.half(),) + (_att_s.half(),)
+            all_self_attentions = all_self_attentions + (att_t,) + (att_s,)
         # re-assemble all head outputs side by side
         output = output.view(batch_size, n_window_height, n_window_width, self.num_attention_heads, timesteps, window_height, window_width, channel_head)
         output = output.permute(0, 4, 1, 5, 2, 6, 3, 7).contiguous().view(batch_size, timesteps, new_height, new_width, num_channels)
@@ -1363,7 +1354,7 @@ class ProPainterTemporalSparseTransformer(nn.Module):
         self.transformer = nn.Sequential(*blocks)
         self.num_hidden_layers = num_hidden_layers
 
-    def forward(self, image_tokens, fold_x_size, local_mask=None, t_dilation=2, output_attentions: bool = False):
+    def forward(self, image_tokens, fold_x_size, local_mask=None, t_dilation=2, output_attentions: bool = False, output_hidden_states: bool = False):
         """
         Args:
             image_tokens: shape [batch_size, timesteps, height, width, num_channels]
@@ -1373,16 +1364,22 @@ class ProPainterTemporalSparseTransformer(nn.Module):
             out_tokens: shape [batch_size, timesteps, height, width, num_channels]
         """
         all_self_attentions = () if output_attentions else None
+        all_hidden_states = () if output_hidden_states else None
 
         assert self.num_hidden_layers % t_dilation == 0, 'wrong t_dilation input.'
         timesteps = image_tokens.size(1)
         token_indices = [torch.arange(i, timesteps, t_dilation) for i in range(t_dilation)] * (self.num_hidden_layers // t_dilation)
 
+        if output_hidden_states:
+            all_hidden_states = all_hidden_states + (image_tokens,)
+
         for i in range(0, self.num_hidden_layers):
             image_tokens, _all_self_attentions = self.transformer[i](image_tokens, fold_x_size, local_mask, token_indices[i], output_attentions = output_attentions)
             if output_attentions:
                 all_self_attentions = all_self_attentions + (_all_self_attentions,)
-        return image_tokens,all_self_attentions
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (image_tokens,)
+        return image_tokens,all_hidden_states, all_self_attentions
 
 class ProPainterInpaintGenerator(nn.Module):
     def __init__(self,config):
@@ -1468,12 +1465,8 @@ class ProPainterInpaintGenerator(nn.Module):
 
         trans_feat = self.soft_split(encoder_hidden_states.view(-1, num_channels, height, width), batch_size, fold_feat_size)
         mask_pool_l = mask_pool_l.permute(0,1,3,4,2).contiguous()
-        trans_feat, _all_self_attentions = self.transformers(trans_feat, fold_feat_size, mask_pool_l, t_dilation=t_dilation, output_attentions = output_attentions)
-        _trans_feat = trans_feat
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (_trans_feat.half(),)
-        if output_attentions:
-            all_self_attentions = _all_self_attentions
+        trans_feat, all_hidden_states, all_self_attentions = self.transformers(trans_feat, fold_feat_size, mask_pool_l, t_dilation=t_dilation, output_attentions = output_attentions, output_hidden_states = output_hidden_states)
+
         trans_feat = self.soft_comp(trans_feat, timestep, fold_feat_size)
         trans_feat = trans_feat.view(batch_size, timestep, -1, height, width)
 
@@ -1485,10 +1478,6 @@ class ProPainterInpaintGenerator(nn.Module):
         else:
             output = self.decoder(encoder_hidden_states[:, :local_timestep].view(-1, num_channels, height, width))
             output = torch.tanh(output).view(batch_size, local_timestep, 3, original_height, original_width)
-
-        _output = output
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (_output.half(),)
 
         if not return_dict:
             return tuple(v for v in [output, all_hidden_states, all_self_attentions] if v is not None)
@@ -2869,9 +2858,9 @@ class ProPainterPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
 
-    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
+    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.Conv3d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
+        if isinstance(module, (nn.Linear, nn.Conv2d, nn.Conv3d)):
             # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
             # `trunc_normal_cpu` not implemented in `half` issues
             module.weight.data = nn.init.trunc_normal_(
@@ -2904,6 +2893,15 @@ class ProPainterPreTrainedModel(PreTrainedModel):
                     nn.init.normal_(child.weight.data, 0.0, 0.02)
                     if hasattr(child, 'bias') and child.bias is not None:
                         nn.init.constant_(child.bias.data, 0.0)
+        elif isinstance(module, ProPainterBasicEncoder):
+            for child in module.children():
+                if isinstance(child, nn.Conv2d):
+                    nn.init.kaiming_normal_(child.weight, mode='fan_out', nonlinearity='relu')
+                elif isinstance(child, (nn.BatchNorm2d, nn.InstanceNorm2d, nn.GroupNorm)):
+                    if child.weight is not None:
+                        nn.init.constant_(child.weight, 1)
+                    if child.bias is not None:
+                        nn.init.constant_(child.bias, 0)
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
@@ -2957,6 +2955,8 @@ class ProPainterModel(ProPainterPreTrainedModel):
         self.flow_completion_net = ProPainterRecurrentFlowCompleteNet()
         self.inpaint_generator = ProPainterInpaintGenerator(config)
         self.discriminator = ProPainterDiscriminator(use_sigmoid=self.config.GAN_LOSS != 'hinge')
+
+        self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -2995,14 +2995,16 @@ class ProPainterModel(ProPainterPreTrainedModel):
         expected_output=_EXPECTED_OUTPUT_SHAPE,
     )
 
-    def compute_flow(self,pixel_values,output_hidden_states: bool = False):
-        all_hidden_states = () if output_hidden_states else None
+    def compute_flow(self,pixel_values):
         if self.training:
             gt_local_frames = pixel_values[:, :self.config.num_local_frames_propainter, ...] #batch_size, temporal_length, num_channels, height, width (before slicing)
             # get gt optical flow
-            gt_flows_bi = self.optical_flow_model(gt_local_frames, iters=self.config.raft_iter)
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (gt_flows_bi[0].half(),gt_flows_bi[1].half(),)
+            if self.gradient_checkpointing:
+                gt_flows_bi = self._gradient_checkpointing_func(
+                    self.optical_flow_model.__call__, gt_local_frames, self.config.raft_iter
+                )
+            else:
+                gt_flows_bi = self.optical_flow_model(gt_local_frames, iters=self.config.raft_iter)
         else:
             short_clip_len = self._get_short_clip_len(pixel_values.size(-1))
             if pixel_values.size(1) > short_clip_len:
@@ -3013,9 +3015,6 @@ class ProPainterModel(ProPainterPreTrainedModel):
                         flows_f, flows_b = self.optical_flow_model(pixel_values[:,f:end_f], iters=self.config.raft_iter)
                     else:
                         flows_f, flows_b = self.optical_flow_model(pixel_values[:,f-1:end_f], iters=self.config.raft_iter)
-                    _flows_f, _flows_b = flows_f, flows_b
-                    if output_hidden_states:
-                        all_hidden_states = all_hidden_states + (_flows_f.half(),_flows_b.half(),)
                     gt_flows_f_list.append(flows_f)
                     gt_flows_b_list.append(flows_b)
                     torch.cuda.empty_cache()
@@ -3025,24 +3024,20 @@ class ProPainterModel(ProPainterPreTrainedModel):
                 gt_flows_bi = (gt_flows_f, gt_flows_b)
             else:
                 gt_flows_bi = self.optical_flow_model(pixel_values, iters=self.config.raft_iter)
-                if output_hidden_states:
-                    all_hidden_states = all_hidden_states + (gt_flows_bi[0].half(),gt_flows_bi[1].half(),)
                 torch.cuda.empty_cache()
-        return gt_flows_bi, all_hidden_states
+        return gt_flows_bi
     
-    def complete_flow(self,gt_flows_bi, flow_masks, output_hidden_states: bool = False):
-        all_hidden_states = () if output_hidden_states else None
-
+    def complete_flow(self,gt_flows_bi, flow_masks):
         if self.training:
             local_masks = flow_masks[:, :self.config.num_local_frames_propainter, ...].contiguous()
-            pred_flows_bi, pred_edges_bi = self.flow_completion_net.forward_bidirect_flow(gt_flows_bi, local_masks)
-            _pred_flows_bi, _pred_edges_bi = pred_flows_bi, pred_edges_bi
-            all_hidden_states = tuple(tensor.half() for tensor in _pred_flows_bi) + tuple(tensor.half() for tensor in _pred_edges_bi)
+            if self.gradient_checkpointing:
+                pred_flows_bi, pred_edges_bi = self._gradient_checkpointing_func(
+                    self.flow_completion_net.forward_bidirect_flow.__call__, gt_flows_bi, local_masks
+                )
+            else:
+                pred_flows_bi, pred_edges_bi = self.flow_completion_net.forward_bidirect_flow(gt_flows_bi, local_masks)
             pred_flows_bi_loss = pred_flows_bi
             pred_flows_bi = self.flow_completion_net.combine_flow(gt_flows_bi, pred_flows_bi, local_masks)
-
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + tuple(tensor.half() for tensor in pred_flows_bi)
         else:
             flow_length = gt_flows_bi[0].size(1)
             if flow_length > self.config.subvideo_length:
@@ -3056,10 +3051,6 @@ class ProPainterModel(ProPainterPreTrainedModel):
                     pred_flows_bi_sub, pred_edges_bi = self.flow_completion_net.forward_bidirect_flow(
                         (gt_flows_bi[0][:, s_f:e_f], gt_flows_bi[1][:, s_f:e_f]), 
                         flow_masks[:, s_f:e_f+1])
-                    _pred_flows_bi_sub, _pred_edges_bi = pred_flows_bi_sub, pred_edges_bi
-                    if output_hidden_states:
-                        all_hidden_states = all_hidden_states + tuple(tensor.half() for tensor in _pred_flows_bi_sub) + tuple(tensor.half() for tensor in _pred_edges_bi)
-
                     pred_flows_bi_loss.append(pred_flows_bi_sub)
                     pred_edges_bi_loss.append(pred_edges_bi)
                     pred_flows_bi_sub = self.flow_completion_net.combine_flow(
@@ -3069,10 +3060,7 @@ class ProPainterModel(ProPainterPreTrainedModel):
 
                     pred_flows_f.append(pred_flows_bi_sub[0][:, pad_len_s:e_f-s_f-pad_len_e])
                     pred_flows_b.append(pred_flows_bi_sub[1][:, pad_len_s:e_f-s_f-pad_len_e])
-
-                    if output_hidden_states:
-                        all_hidden_states = all_hidden_states + (pred_flows_bi_sub[0][:, pad_len_s:e_f-s_f-pad_len_e].half(),pred_flows_bi_sub[1][:, pad_len_s:e_f-s_f-pad_len_e].half(),)
-                    
+ 
                     torch.cuda.empty_cache()
                     
                 pred_flows_f = torch.cat(pred_flows_f, dim=1)
@@ -3083,31 +3071,29 @@ class ProPainterModel(ProPainterPreTrainedModel):
                 pred_edges_bi_loss = torch.cat(pred_edges_bi_loss)
             else:
                 pred_flows_bi, pred_edges_bi = self.flow_completion_net.forward_bidirect_flow(gt_flows_bi, flow_masks)
-                _pred_flows_bi, _pred_edges_bi = pred_flows_bi, pred_edges_bi
-                all_hidden_states = tuple(tensor.half() for tensor in _pred_flows_bi) + tuple(tensor.half() for tensor in _pred_edges_bi)
                 pred_flows_bi_loss = pred_flows_bi
 
                 pred_flows_bi = self.flow_completion_net.combine_flow(gt_flows_bi, pred_flows_bi, flow_masks)
 
-                if output_hidden_states:
-                    all_hidden_states = all_hidden_states + tuple(tensor.half() for tensor in pred_flows_bi)
-
                 torch.cuda.empty_cache()
 
-        return pred_flows_bi, pred_flows_bi_loss, pred_edges_bi, all_hidden_states
+        return pred_flows_bi, pred_flows_bi_loss, pred_edges_bi
 
-    def image_propagation(self,pixel_values,masks_dilated, pred_flows_bi,output_hidden_states: bool = False):
-        all_hidden_states = () if output_hidden_states else None
+    def image_propagation(self,pixel_values,masks_dilated, pred_flows_bi):
         if self.training:
             batch_size, height, width = self.size[0],self.size[3], self.size[4]
             gt_local_frames = pixel_values[:, :self.config.num_local_frames_propainter, ...]
             local_masks = masks_dilated[:, :self.config.num_local_frames_propainter, ...].contiguous()
             masked_frames = pixel_values * (1 - masks_dilated)
             masked_local_frames = masked_frames[:, :self.config.num_local_frames_propainter, ...]
-            prop_imgs, updated_local_masks = self.inpaint_generator.img_propagation(masked_local_frames, pred_flows_bi, local_masks, interpolation=self.config.interp_mode)
-            if output_hidden_states:
-                all_hidden_states = prop_imgs
-                all_hidden_states = all_hidden_states.half()
+
+            if self.gradient_checkpointing:
+                prop_imgs, updated_local_masks = self._gradient_checkpointing_func(
+                    self.inpaint_generator.img_propagation.__call__, masked_local_frames, pred_flows_bi, local_masks, self.config.interp_mode
+                )
+            else:
+                prop_imgs, updated_local_masks = self.inpaint_generator.img_propagation(masked_local_frames, pred_flows_bi, local_masks, interpolation=self.config.interp_mode)
+
             updated_masks = masks_dilated.clone()
             updated_masks[:, :self.config.num_local_frames_propainter, ...] = updated_local_masks.view(batch_size, self.config.num_local_frames_propainter, 1, height, width)
             updated_frames = masked_frames.clone()
@@ -3133,9 +3119,6 @@ class ProPainterModel(ProPainterPreTrainedModel):
                                                                         pred_flows_bi_sub, 
                                                                         masks_dilated[:, s_f:e_f], 
                                                                         'nearest')
-                    _prop_imgs_sub = prop_imgs_sub
-                    if output_hidden_states:
-                        all_hidden_states = all_hidden_states + (_prop_imgs_sub.half(),)
                     updated_frames_sub = pixel_values[:, s_f:e_f] * (1 - masks_dilated[:, s_f:e_f]) + \
                                         prop_imgs_sub.view(batch_size, timesteps, 3, height, width) * masks_dilated[:, s_f:e_f]
                     updated_masks_sub = updated_local_masks_sub.view(batch_size, timesteps, 1, height, width)
@@ -3149,14 +3132,11 @@ class ProPainterModel(ProPainterPreTrainedModel):
             else:
                 batch_size, timesteps, _, _, _ = masks_dilated.size()
                 prop_imgs, updated_local_masks = self.inpaint_generator.img_propagation(masked_frames, pred_flows_bi, masks_dilated, 'nearest')
-                if output_hidden_states:
-                    all_hidden_states = prop_imgs
-                    all_hidden_states = all_hidden_states.half()
                 updated_frames = pixel_values * (1 - masks_dilated) + prop_imgs.view(batch_size, timesteps, 3, height, width) * masks_dilated
                 updated_masks = updated_local_masks.view(batch_size, timesteps, 1, height, width)
                 torch.cuda.empty_cache()
 
-        return updated_frames,updated_masks, all_hidden_states
+        return updated_frames,updated_masks
 
     def feature_propagation(self,pixel_values, updated_frames,updated_masks,masks_dilated,pred_flows_bi,original_frames, output_attentions: bool = False,output_hidden_states: bool = False,return_dict: bool = True):
         all_hidden_states = () if output_hidden_states else None
@@ -3170,16 +3150,18 @@ class ProPainterModel(ProPainterPreTrainedModel):
         if self.training:
             batch_size, _, num_channels, height, width = self.size
             # ---- feature propagation + Transformer ----
-            inpaint_generator_outputs = self.inpaint_generator(updated_frames, pred_flows_bi, masks_dilated, updated_masks, self.config.num_local_frames_propainter)
+            if self.gradient_checkpointing:
+                inpaint_generator_outputs = self._gradient_checkpointing_func(
+                    self.inpaint_generator.__call__, updated_frames, pred_flows_bi, masks_dilated, updated_masks, self.config.num_local_frames_propainter, output_attentions, output_hidden_states, return_dict
+                )
+            else:
+                inpaint_generator_outputs = self.inpaint_generator(updated_frames, pred_flows_bi, masks_dilated, updated_masks, self.config.num_local_frames_propainter, output_attentions = output_attentions, output_hidden_states = output_hidden_states, return_dict = return_dict)
+
             pred_imgs  = inpaint_generator_outputs[0] if not return_dict else inpaint_generator_outputs.last_hidden_state
             pred_imgs = pred_imgs.view(batch_size, -1, num_channels, height, width)
 
-            _all_hidden_states = inpaint_generator_outputs[1:2] if not return_dict else inpaint_generator_outputs.hidden_states
-            _all_self_attentions = inpaint_generator_outputs[2:] if not return_dict else inpaint_generator_outputs.attentions
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (_all_hidden_states,)
-            if output_attentions:
-                all_self_attentions = _all_self_attentions
+            all_hidden_states = inpaint_generator_outputs[1:2] if not return_dict else inpaint_generator_outputs.hidden_states
+            all_self_attentions = inpaint_generator_outputs[2:] if not return_dict else inpaint_generator_outputs.attentions
 
             pred_imgs_loss = pred_imgs
             # get the local frames
@@ -3214,12 +3196,8 @@ class ProPainterModel(ProPainterPreTrainedModel):
                 # pred_img = selected_imgs # results of image propagation
                 inpaint_generator_outputs = self.inpaint_generator(selected_imgs, selected_pred_flows_bi, selected_masks, selected_update_masks, l_t, output_attentions = output_attentions, output_hidden_states = output_hidden_states, return_dict = return_dict)
                 pred_img  = inpaint_generator_outputs[0] if not return_dict else inpaint_generator_outputs.last_hidden_state
-                _all_hidden_states = inpaint_generator_outputs[1:2] if not return_dict else inpaint_generator_outputs.hidden_states
-                _all_self_attentions = inpaint_generator_outputs[2:] if not return_dict else inpaint_generator_outputs.attentions
-                if output_hidden_states:
-                    all_hidden_states = all_hidden_states + (_all_hidden_states,)
-                if output_attentions:
-                    all_self_attentions = _all_self_attentions
+                all_hidden_states = inpaint_generator_outputs[1:2] if not return_dict else inpaint_generator_outputs.hidden_states
+                all_self_attentions = inpaint_generator_outputs[2:] if not return_dict else inpaint_generator_outputs.attentions
                 
                 pred_img = pred_img.view(-1, 3, height, width)
 
@@ -3244,8 +3222,8 @@ class ProPainterModel(ProPainterPreTrainedModel):
  
     def forward(
         self,
-        pixel_values_inp: Optional[List[np.ndarray]] = None,
         pixel_values: Optional[torch.Tensor] = None,
+        pixel_values_inp: Optional[List[np.ndarray]] = None,
         flow_masks: Optional[torch.BoolTensor] = None,
         masks_dilated: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
@@ -3256,9 +3234,7 @@ class ProPainterModel(ProPainterPreTrainedModel):
 
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         all_hidden_states = () if output_hidden_states else None
@@ -3272,28 +3248,19 @@ class ProPainterModel(ProPainterPreTrainedModel):
         self.size = pixel_values.size()
         self.video_length = pixel_values.size(1)
 
-        gt_flows_bi, _all_hiddens_states = self.compute_flow(pixel_values, output_hidden_states = output_hidden_states)
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (_all_hiddens_states,)
-        
-        pred_flows_bi, pred_flows_bi_loss, pred_edges_bi, _all_hiddens_states = self.complete_flow(gt_flows_bi,flow_masks, output_hidden_states = output_hidden_states)
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (_all_hiddens_states,)
+        gt_flows_bi = self.compute_flow(pixel_values)
 
-        updated_frames,updated_masks, _all_hiddens_states = self.image_propagation(pixel_values,masks_dilated,pred_flows_bi, output_hidden_states = output_hidden_states)
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (_all_hiddens_states,)
+        pred_flows_bi, pred_flows_bi_loss, pred_edges_bi = self.complete_flow(gt_flows_bi,flow_masks)
+
+        updated_frames,updated_masks = self.image_propagation(pixel_values,masks_dilated,pred_flows_bi)
                 
-        comp_frames, pred_imgs_loss, _all_hiddens_states, _all_self_attentions = self.feature_propagation(pixel_values, updated_frames, updated_masks, masks_dilated, pred_flows_bi, pixel_values_inp, output_attentions = output_attentions, output_hidden_states = output_hidden_states, return_dict = return_dict)
-
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (_all_hiddens_states,)
-        if output_attentions:
-                all_self_attentions = _all_self_attentions
+        comp_frames, pred_imgs_loss, all_hidden_states, all_self_attentions = self.feature_propagation(pixel_values, updated_frames, updated_masks, masks_dilated, pred_flows_bi, pixel_values_inp, output_attentions = output_attentions, output_hidden_states = output_hidden_states, return_dict = return_dict)
 
         if type(pred_imgs_loss) is list:
             pred_imgs_loss = torch.tensor(np.array(pred_imgs_loss)).permute(0, 3, 1, 2).unsqueeze(0).to(masks_dilated.device)
-        comp_frames_loss = torch.tensor(np.array(comp_frames)).permute(3,0,1,2).to(masks_dilated.device).to(torch.float32)
+            comp_frames_loss = torch.tensor(np.array(comp_frames)).permute(3,0,1,2).to(masks_dilated.device).to(torch.float32)
+        else:
+            comp_frames_loss = comp_frames
         gen_loss, dis_loss, flow_complete_loss = losses.calculate_losses(pred_imgs_loss,masks_dilated, pixel_values, comp_frames_loss,self.discriminator,pred_flows_bi_loss,gt_flows_bi,flow_masks,pred_edges_bi)
 
         if not return_dict:
