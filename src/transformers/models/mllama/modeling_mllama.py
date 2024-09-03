@@ -1040,7 +1040,7 @@ class MllamaSdpaCrossAttention(nn.Module):
         return attn_output
 
 
-class CrossAttentionTransformerBlock(torch.nn.Module):
+class MllamaCrossAttentionLayer(torch.nn.Module):
     """Cross-attention transformer block with tanh-gated attention and feedforward."""
     # originally CrossAttentionTransformerBlock
 
@@ -1088,8 +1088,8 @@ class CrossAttentionTransformerBlock(torch.nn.Module):
 
         self.no_ffn = no_ffn
 
-    def compute_xattn_kv_cache(self, xattn_tokens: torch.Tensor) -> torch.Tensor:
-        return self.self_attn.compute_xattn_kv_cache(xattn_tokens)
+    def compute_cross_attention_key_value(self, xattn_tokens: torch.Tensor) -> torch.Tensor:
+        return self.self_attn.compute_cross_attention_key_value(xattn_tokens)
 
     def forward(
         self,
@@ -1178,30 +1178,27 @@ class MllamaCrossAttentionTextModel(PreTrainedModel):
         self.pos_embeddings = None
         self.n_llama_layers = self.n_layers
         self.model_dim = self.dim
-        
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.dim)
-        # final norm layer (not necessary for post-norm)
-        self.norm = RMSNorm(config.dim, eps=config.norm_eps)
-
-        # BLOCKS
-
         self.fusion_schedule = self._init_fusion_schedule(
             self.vision_num_cross_attention_layers
         )
-        self.learnable_embedding = nn.Embedding(8, self.dim,)
+        
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.dim)
+        self.norm = RMSNorm(config.dim, eps=config.norm_eps)
+
+        self.learnable_embedding = nn.Embedding(8, self.dim)
         self.num_frozen_embeddings = self.embed_tokens.num_embeddings
         self._thresh = self.num_frozen_embeddings - 1
 
-        # self attention layers
+        # self-attention layers
         self.layers = torch.nn.ModuleList()
         for i in range(self.n_layers):
             layer = MllamaTextEncoderLayer(config=config, layer_id=i)
             self.layers.append(layer)
 
-        # cross attention layers
+        # cross-attention layers
         self.cross_attention_layers = torch.nn.ModuleList()
         for i in range(self.vision_num_cross_attention_layers):
-            cross_attention_layer = CrossAttentionTransformerBlock(config, layer_id=i + self.n_layers)
+            cross_attention_layer = MllamaCrossAttentionLayer(config, layer_id=i + self.n_layers)
             self.cross_attention_layers.append(cross_attention_layer)
 
         freqs_cis = precompute_freqs_cis(
@@ -1247,13 +1244,15 @@ class MllamaCrossAttentionTextModel(PreTrainedModel):
         self,
         position_ids: torch.LongTensor,
         hidden_state: torch.Tensor,
-        xattn_mask: torch.Tensor,
+        cross_attention_key_value: torch.Tensor,
+        cross_attention_mask: torch.Tensor,
         full_text_row_masked_out_mask: torch.Tensor,
-        xattn_caches: torch.Tensor,
     ):
-        assert self.cache_is_setup, "Please set up cache before calling forward"
-        mask = self.mask_cache.index_select(2, position_ids)
-        freqs_cis = self.freqs_cis.index_select(0, position_ids)
+        if not self.cache_is_setup:
+            raise RuntimeError("Please set up cache before calling forward")
+
+        mask = self.mask_cache[:, :, position_ids]
+        freqs_cis = self.freqs_cis[position_ids]
 
         mask_ = torch.load("/home/ubuntu/projects/meta_mllama/logits-test-1/text-mask.pt", weights_only=True)
         diff = (mask.float() - mask_.float()).abs().max().item()
@@ -1273,10 +1272,11 @@ class MllamaCrossAttentionTextModel(PreTrainedModel):
             if idx in self.fusion_schedule:
                 cross_attention_layer_idx = self.fusion_schedule.index(idx)
                 cross_attention_layer = self.cross_attention_layers[cross_attention_layer_idx]
+                layer_cross_attention_key_value = cross_attention_key_value[cross_attention_layer_idx]
                 hidden_state = cross_attention_layer(
                     hidden_state=hidden_state,
-                    cross_attention_key_value=xattn_caches[cross_attention_layer_idx],
-                    cross_attention_mask=xattn_mask,
+                    cross_attention_key_value=layer_cross_attention_key_value,
+                    cross_attention_mask=cross_attention_mask,
                     full_text_row_masked_out_mask=full_text_row_masked_out_mask,
                 )
 
@@ -1302,24 +1302,17 @@ class MllamaCrossAttentionTextModel(PreTrainedModel):
         return hidden_state
 
     def setup_cache(self, max_batch_size: int, dtype=torch.bfloat16):
-        # Set up the text kv caches
-        device = next(self.parameters()).device
         ones = torch.ones(
             (self.max_seq_len, self.max_seq_len),
             dtype=torch.bool,
-            device=device,
+            device=self.device,
         )
-        self.register_buffer(
-            "mask_cache",
-            torch.tril(
-                ones,
-            )
-            .unsqueeze(0)
-            .unsqueeze(0),
-            persistent=False,
-        )
+        mask = torch.tril(ones).unsqueeze(0).unsqueeze(0)
+        self.register_buffer("mask_cache", mask, persistent=False)
+
         for layer in self.layers:
             layer.setup_cache(max_batch_size, dtype=dtype)
+
         self.cache_is_setup = True
 
     def _get_xattn_mask(
@@ -1466,7 +1459,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
 
         cross_attentions = []
         for layer in self.model.language_model.cross_attention_layers:
-            layer_cross_attentions = layer.compute_xattn_kv_cache(
+            layer_cross_attentions = layer.compute_cross_attention_key_value(
                 vision_tokens.view(batch_size, -1, dim)
             )
             cross_attentions.append(layer_cross_attentions)
@@ -1508,11 +1501,9 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
         logits = self.model.language_model.forward(
             position_ids=position_ids,
             hidden_state=hidden_state,
-            xattn_mask=cross_attention_masks[:, :, position_ids],
-            full_text_row_masked_out_mask=full_text_row_masked_out_mask[
-                :, :, position_ids
-            ],
-            xattn_caches=xattn_caches,
+            cross_attention_key_value=xattn_caches,
+            cross_attention_mask=cross_attention_masks[:, :, position_ids],
+            full_text_row_masked_out_mask=full_text_row_masked_out_mask[:, :, position_ids],
         )
 
         logits = self.lm_head(logits)
