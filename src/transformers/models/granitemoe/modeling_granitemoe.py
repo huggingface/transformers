@@ -405,7 +405,7 @@ class GraniteMoeMoE(nn.Module):
 
         self.input_size = config.hidden_size
         self.hidden_size = config.intermediate_size
-        self.activation = ACT2FN[config.activation_function]
+        self.activation = ACT2FN[config.hidden_act]
         self.input_linear = GraniteMoeParallelExperts(config.num_local_experts, self.input_size, self.hidden_size * 2)
         self.output_linear = GraniteMoeParallelExperts(config.num_local_experts, self.hidden_size, self.input_size)
 
