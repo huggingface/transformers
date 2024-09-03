@@ -17,6 +17,7 @@
 This helper computes the "ideal" number of nodes to use in circle CI.
 For each job, we compute this parameter and pass it to the `generated_config.yaml`.
 """
+
 import json
 import math
 import os
