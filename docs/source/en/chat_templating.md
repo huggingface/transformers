@@ -441,6 +441,12 @@ tool_call = {"name": "get_current_temperature", "arguments": {"location": "Paris
 messages.append({"role": "assistant", "tool_calls": [{"type": "function", "function": tool_call}]})
 ```
 
+<Tip warning={true}>
+
+If you're familiar with the OpenAI API, you should pay attention to an important difference here - the **tool_call** is
+actually a dict, but in the OpenAI API it's a JSON string. Passing a string may cause errors or strange model behaviour!
+
+</Tip>
 
 Now that we've added the tool call to the conversation, we can call the function and append the result to the
 conversation. Since we're just using a dummy function for this example that always returns 22.0, we can just append 
