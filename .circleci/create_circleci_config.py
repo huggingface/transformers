@@ -366,7 +366,7 @@ def create_circleci_config(folder=None):
         "workflows": {"version": 2, "run_tests": {"jobs": [j.job_name for j in jobs]}}
     }
     with open(os.path.join(folder, "generated_config.yml"), "w") as f:
-        f.write(yaml.dump(config, indent=2, width=1000000, sort_keys=False, default_flow_style=False))
+        f.write(yaml.dump(config, sort_keys=False, default_flow_style=False))
 
 
 if __name__ == "__main__":
