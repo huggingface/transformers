@@ -37,10 +37,15 @@ model = SuperPointForKeypointDetection.from_pretrained("magic-leap-community/sup
 
 Get the images. They look like following. 
 
-<div class="image-container">
-    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg" alt="Bee">
-    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/cats.png" alt="Cats">
+<div style="display: flex; align-items: center;">
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg" 
+         alt="Bee" 
+         style="height: 200px; object-fit: contain; margin-right: 10px;">
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/cats.png" 
+         alt="Cats" 
+         style="height: 200px; object-fit: contain;">
 </div>
+
 
 ```python
 import torch
@@ -140,7 +145,12 @@ for i in range(len(images)):
 
 Below you can see the outputs.
 
-<div class="image-container">
-    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee_keypoint.png" alt="Bee Keypoints">
-    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/cats_keypoint.png" alt="Cat Keypoints">
+<div style="display: flex; align-items: center;">
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee_keypoint.png" 
+         alt="Bee" 
+         style="height: 200px; object-fit: contain; margin-right: 10px;">
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/cats_keypoint.png" 
+         alt="Cats" 
+         style="height: 200px; object-fit: contain;">
 </div>
+
