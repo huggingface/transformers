@@ -1116,7 +1116,7 @@ class Wav2Vec2ConformerPreTrainedModel(PreTrainedModel):
                 std=2 * math.sqrt(1 / (module.conv.kernel_size[0] * module.conv.in_channels)),
             )
             nn.init.constant_(module.conv.bias, 0)
-        elif isinstance(module, Wav2Vec2ConformerFeatureProjection):
+        elif isinstance(module, Wav2Vec2ConformerFeatureProjection) and module.projection is not None:
             k = math.sqrt(1 / module.projection.in_features)
             nn.init.uniform_(module.projection.weight, a=-k, b=k)
             nn.init.uniform_(module.projection.bias, a=-k, b=k)
