@@ -21,7 +21,6 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
-from transformers import PretrainedConfig
 from transformers.models.llava_next.modeling_llava_next import (
     LlavaNextCausalLMOutputWithPast,
     LlavaNextForConditionalGeneration,
@@ -29,6 +28,7 @@ from transformers.models.llava_next.modeling_llava_next import (
     image_size_to_num_patches,
 )
 
+from ...configuration_utils import PretrainedConfig
 from ...cache_utils import Cache
 from ...utils import (
     logging,

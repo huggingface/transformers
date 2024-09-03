@@ -51,14 +51,6 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class InstructBlipVideoVisionConfig(InstructBlipVisionConfig):
-    pass
-
-
-class InstructBlipVideoQFormerConfig(InstructBlipQFormerConfig):
-    pass
-
-
 class InstructBlipVideoConfig(InstructBlipConfig):
     pass
 
@@ -67,65 +59,6 @@ class InstructBlipVideoConfig(InstructBlipConfig):
 class InstructBlipVideoForConditionalGenerationModelOutput(InstructBlipForConditionalGenerationModelOutput):
     pass
 
-
-class InstructBlipVideoVisionEmbeddings(InstructBlipVisionEmbeddings):
-    pass
-
-
-class InstructBlipVideoAttention(InstructBlipAttention):
-    pass
-
-
-class InstructBlipVideoMLP(InstructBlipMLP):
-    pass
-
-
-class InstructBlipVideoEncoderLayer(InstructBlipEncoderLayer):
-    pass
-
-
-class InstructBlipVideoPreTrainedModel(InstructBlipPreTrainedModel):
-    pass
-
-
-class InstructBlipVideoEncoder(InstructBlipEncoder):
-    pass
-
-
-class InstructBlipVideoVisionModel(InstructBlipVisionModel):
-    pass
-
-
-class InstructBlipVideoQFormerSelfOutput(InstructBlipQFormerSelfOutput):
-    pass
-
-
-class InstructBlipVideoQFormerAttention(InstructBlipQFormerAttention):
-    pass
-
-
-class InstructBlipVideoQFormerIntermediate(InstructBlipQFormerIntermediate):
-    pass
-
-
-class InstructBlipVideoQFormerOutput(InstructBlipQFormerOutput):
-    pass
-
-
-class InstructBlipVideoQFormerLayer(InstructBlipQFormerLayer):
-    pass
-
-
-class InstructBlipVideoQFormerEncoder(InstructBlipQFormerEncoder):
-    pass
-
-
-class InstructBlipVideoQFormerEmbeddings(InstructBlipQFormerEmbeddings):
-    pass
-
-
-class InstructBlipVideoQFormerModel(InstructBlipQFormerModel):
-    pass
 
 
 class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGeneration):

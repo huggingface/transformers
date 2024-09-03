@@ -472,10 +472,6 @@ class DiffConverterTransformer(CSTTransformer):
                         self.transformers_imports[import_statement] = tree
                     imported_class = self.python_module.code_for_node(imported_.name)
                     self.imported_mapping[imported_class] = import_statement
-                if "transformers" == import_statement:
-                    raise ValueError(
-                        f"You are importing {self.python_module.code_for_node(imported_)} using global imports. Import from the correct local path"
-                    )
         if m.matches(node.module, m.Name()):
             if "transformers" == import_statement:
                 raise ValueError(
