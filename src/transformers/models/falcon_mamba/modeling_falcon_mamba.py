@@ -694,6 +694,81 @@ class FalconMambaModel(FalconMambaPreTrainedModel):
         )
 
 
+import torch.nn.functional as F
+
+class _LM_head(torch.autograd.Function):
+
+    @classmethod
+    def forward(cls, ctx, hidden_states, indices, weights):
+        logits = F.linear(hidden_states.to(weights.dtype), weights).float()
+        loss_fct = torch.nn.CrossEntropyLoss(reduction="sum")
+        loss_i = loss_fct(logits, indices)
+
+        ctx.save_for_backward(hidden_states, indices, weights)
+        
+        return loss_i
+
+    @classmethod
+    def backward(cls, ctx, dneg_logprobs):
+        """We know d(-log(p[i])/dlogit[k] = -id_mat[i,k] + p[k]
+        so we initialize the gradient as neg_logprobs, so we can just exponentiate
+        to get p[k], which is most of what we need...  neg_logprobs will be
+        modified in place to become the gradient we want
+        """
+        # load saved tensors
+        hidden_states, indices, weights = ctx.saved_tensors
+
+        cur_hidden_states = hidden_states.to(weights.dtype)
+        logits = F.linear(cur_hidden_states, weights).float()
+
+        ignore_index = -100
+        mask = indices != ignore_index
+        reverse_mask = indices == ignore_index
+        
+        batch_size = torch.sum(indices != ignore_index)
+
+        grad_input = F.softmax(logits, dim=-1)
+        grad_input[mask, indices[mask]] -= 1
+        # grad_input[mask] /= batch_size
+        grad_input[reverse_mask] = 0
+        grad_input = grad_input.to(weights.dtype)
+        if hasattr(weights, 'grad') and weights.grad != None:
+            torch.addmm(
+                    weights.grad,
+                    grad_input.T,
+                    cur_hidden_states,
+                    out=weights.grad,
+                )
+        else:
+            weights.grad = grad_input.T @ cur_hidden_states
+            
+        grad_input = grad_input @ weights
+        
+        # grad_input = grad_input.to(hidden_states.dtype)
+
+        weights.grad *= dneg_logprobs
+        grad_input *= dneg_logprobs
+        
+        return grad_input, None, None
+
+
+class LMheadWarpper(nn.Module):
+    def __init__(
+        self,
+        original_weight = None
+    ):
+        super().__init__()
+        if original_weight is None:
+            self.LM_head_weight = nn.Parameter(torch.empty(hidden_size, vocab_size))
+        else:
+            self.LM_head_weight = original_weight
+        self.LM_head = _LM_head.apply
+
+    def forward(self, hidden_states, labels):
+        ignore_index = -100
+        loss = self.LM_head(hidden_states, labels, self.LM_head_weight)
+        return loss
+
 @add_start_docstrings(
     """
     The FALCONMAMBA Model transformer with a language modeling head on top (linear layer with weights tied to the input
@@ -743,6 +818,44 @@ class FalconMambaForCausalLM(FalconMambaPreTrainedModel):
 
         return model_kwargs
 
+    def minis_processing(self, hidden_states, labels):
+        bsz, q_len, hidden_size = hidden_states.size()
+        tmp = q_len // self.mini_s
+
+        if labels is None:
+            hidden_states = hidden_states[..., -1:, :]
+            logits = self.lm_head(hidden_states)
+            logits = logits.float()
+            return logits, None
+
+        hidden_states = hidden_states[..., :-1, :]
+
+        labels = labels[..., 1:].contiguous()
+        labels = labels.to(hidden_states.device)
+
+        LMhead = LMheadWarpper(self.lm_head.weight)
+        
+        loss = None
+        for i in range(self.mini_s):
+
+
+            shift_hidden_states = hidden_states[..., i * tmp : (i+1)*tmp, :].contiguous()
+            shift_hidden_states = shift_hidden_states.view(-1, hidden_size)
+            shift_labels = labels[..., i * tmp : (i+1)*tmp ].contiguous()
+            shift_labels = shift_labels.view(-1)
+
+            loss_i = LMhead(shift_hidden_states, shift_labels)
+
+            if not torch.isnan(loss_i):
+                if loss is None:
+                    loss = loss_i
+                else:
+                    loss = loss + loss_i
+            # print(i, loss_i, loss)
+
+        loss = loss / torch.sum(torch.ne(labels, -100))
+        return None, loss
+        
     def prepare_inputs_for_generation(
         self,
         input_ids,
@@ -828,18 +941,21 @@ class FalconMambaForCausalLM(FalconMambaPreTrainedModel):
         )
         hidden_states = falcon_mamba_outputs[0]
 
-        logits = self.lm_head(hidden_states.to(self.lm_head.weight.dtype)).float()
+        # logits = self.lm_head(hidden_states.to(self.lm_head.weight.dtype)).float()
 
-        loss = None
-        if labels is not None:
-            # move labels to correct device to enable model parallelism
-            labels = labels.to(logits.device)
-            # Shift so that tokens < n predict n
-            shift_logits = logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
-            # Flatten the tokens
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+        # loss = None
+        # if labels is not None:
+        #     # move labels to correct device to enable model parallelism
+        #     labels = labels.to(logits.device)
+        #     # Shift so that tokens < n predict n
+        #     shift_logits = logits[..., :-1, :].contiguous()
+        #     shift_labels = labels[..., 1:].contiguous()
+        #     # Flatten the tokens
+        #     loss_fct = CrossEntropyLoss()
+        #     loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+
+        self.mini_s = 32
+        logits, loss = self.minis_processing(hidden_states, labels)
 
         if not return_dict:
             output = (logits,) + falcon_mamba_outputs[1:]
