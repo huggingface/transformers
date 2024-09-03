@@ -405,8 +405,8 @@ def replace_call_to_super(class_finder: ClassFinder, updated_node: cst.ClassDef,
             end_meth.append(func)
         if m.matches(func, m.SimpleStatementLine(body=[m.Assign()])):
             target = class_finder.python_module.code_for_node(func.body[0].targets[0])
-            if target in assing_targets:
-                assing_targets[target] = func
+            assing_targets[target] = func
+            print(f"found target: {target}")
     end_meth = docstring_node + list(assing_targets.values()) + end_meth
 
     result_node = original_node.with_changes(body=cst.IndentedBlock(body=end_meth))
