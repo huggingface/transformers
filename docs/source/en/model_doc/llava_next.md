@@ -233,7 +233,7 @@ processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokeniza
 
 ### Quantization using Bitsandbytes
 
-The model can be loaded in 8 or 4 bits, greatly reducing the memory requirements while maintaining the performance of the original model. First make sure to install bitsandbytes, `pip install bitsandbytes`. Simply change the snippet above with:
+The model can be loaded in 8 or 4 bits, greatly reducing the memory requirements while maintaining the performance of the original model. First make sure to install bitsandbytes, `pip install bitsandbytes`. If you want to run bitsandbytes on CPU or other devices, please follow the [instruction](https://huggingface.co/docs/bitsandbytes/main/en/installation). Simply change the snippet above with:
 
 ```python
 from transformers import LlavaNextForConditionalGeneration, BitsAndBytesConfig
