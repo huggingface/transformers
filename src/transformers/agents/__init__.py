@@ -24,13 +24,8 @@ from ..utils import (
 
 
 _import_structure = {
-<<<<<<< HEAD
     "agents": ["Agent", "CodeAgent", "ManagedAgent", "ReactAgent", "ReactCodeAgent", "ReactJsonAgent", "Toolbox"],
-    "llm_engine": ["HfEngine"],
-=======
-    "agents": ["Agent", "CodeAgent", "ReactAgent", "ReactCodeAgent", "ReactJsonAgent", "Toolbox"],
     "llm_engine": ["HfApiEngine", "TransformersEngine"],
->>>>>>> main
     "monitoring": ["stream_to_gradio"],
     "tools": ["PipelineTool", "Tool", "ToolCollection", "launch_gradio_demo", "load_tool"],
 }

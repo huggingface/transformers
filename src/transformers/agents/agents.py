@@ -335,6 +335,7 @@ Here is a list of the team members that you can call:"""
         managed_agents_descriptions += f"\n- {agent.name}: {agent.description}"
     return managed_agents_descriptions
 
+
 def format_prompt_with_managed_agents_descriptions(prompt_template, managed_agents=None) -> str:
     if managed_agents is not None:
         return prompt_template.replace("<<managed_agents_descriptions>>", show_agents_descriptions(managed_agents))
@@ -536,7 +537,9 @@ class Agent:
                         arguments[key] = self.state[value]
                 observation = available_tools[tool_name](**arguments)
             else:
-                raise AgentExecutionError(f"Arguments passed to tool should be a dict or string: got a {type(argument)}.")
+                raise AgentExecutionError(
+                    f"Arguments passed to tool should be a dict or string: got a {type(arguments)}."
+                )
             return observation
         except Exception as e:
             if tool_name in self.toolbox.tools:
@@ -856,7 +859,9 @@ Now begin!""",
                 "content": PROMPTS_FOR_INITIAL_PLAN[self.plan_type]["user"].format(
                     task=task,
                     tool_descriptions=self._toolbox.show_tool_descriptions(self.tool_description_template),
-                    managed_agents_descriptions=(show_agents_descriptions(self.managed_agents) if self.managed_agents is not None else ""),
+                    managed_agents_descriptions=(
+                        show_agents_descriptions(self.managed_agents) if self.managed_agents is not None else ""
+                    ),
                     answer_facts=answer_facts,
                 ),
             }
@@ -901,7 +906,9 @@ Now begin!""",
                 "content": PROMPTS_FOR_PLAN_UPDATE[self.plan_type]["user"].format(
                     task=task,
                     tool_descriptions=self._toolbox.show_tool_descriptions(self.tool_description_template),
-                    managed_agents_descriptions=(show_agents_descriptions(self.managed_agents) if self.managed_agents is not None else ""),
+                    managed_agents_descriptions=(
+                        show_agents_descriptions(self.managed_agents) if self.managed_agents is not None else ""
+                    ),
                     facts_update=facts_update,
                     remaining_steps=(self.max_iterations - iteration),
                 ),
