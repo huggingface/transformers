@@ -1185,6 +1185,7 @@ if __name__ == "__main__":
 
     target_workflow = "huggingface/transformers/.github/workflows/self-scheduled-caller.yml@refs/heads/main"
     is_scheduled_ci_run = os.environ.get("CI_WORKFLOW_REF") == target_workflow
+    is_scheduled_ci_run = True
 
     # Only the model testing job is concerned: this condition is to avoid other jobs to upload the empty list as
     # results.
@@ -1225,7 +1226,7 @@ if __name__ == "__main__":
             )
 
     prev_ci_artifacts = None
-    if is_scheduled_ci_run:
+    if True or is_scheduled_ci_run:
         if job_name == "run_models_gpu":
             # Get the last previously completed CI's failure tables
             artifact_names = [f"ci_results_{job_name}"]
