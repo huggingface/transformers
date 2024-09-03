@@ -26,7 +26,7 @@ The original code can be found [here](https://github.com/ViTAE-Transformer/ViTPo
 
 ## Usage Tips
 
-- To enable MoE(Mixture or Expert) function in backbone, user have to give appropriate input indices into the backbone model. 
+- To enable MoE (Mixture of Experts) function in the backbone, the user has to give appropriate input indices to the backbone model. 
   However, it is not used in default parameters.
 - The current model utilizes a 2-step inference pipeline. The first step involves placing a bounding box around the region corresponding to the person.
   After that, the second step uses ViTPose to predict the keypoints.
