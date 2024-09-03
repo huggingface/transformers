@@ -27,6 +27,7 @@ import threading
 import typing
 import warnings
 from pathlib import Path
+from types import ModuleType
 from typing import Any, Dict, List, Optional, Union
 
 from huggingface_hub import try_to_load_from_cache
@@ -61,7 +62,7 @@ def init_hf_modules():
         importlib.invalidate_caches()
 
 
-def create_dynamic_module(name: Union[str, os.PathLike]):
+def create_dynamic_module(name: Union[str, os.PathLike]) -> None:
     """
     Creates a dynamic module in the cache directory for modules.
 
@@ -217,22 +218,25 @@ def get_class_in_module(
     if name.endswith(".py"):
         name = name[:-3]
     name = name.replace(os.path.sep, ".")
-    module_file = Path(HF_MODULES_CACHE) / module_path
+    module_file: Path = Path(HF_MODULES_CACHE) / module_path
     with _HF_REMOTE_CODE_LOCK:
         if force_reload:
             sys.modules.pop(name, None)
             importlib.invalidate_caches()
-        module = sys.modules.get(name)
+        cached_module: Optional[ModuleType] = sys.modules.get(name)
         module_spec = importlib.util.spec_from_file_location(name, location=module_file)
 
         # Hash the module file and all its relative imports to check if we need to reload it
-        module_files = [module_file] + sorted(map(Path, get_relative_import_files(module_file)))
-        module_hash = hashlib.sha256(b"".join(bytes(f) + f.read_bytes() for f in module_files)).hexdigest()
+        module_files: List[Path] = [module_file] + sorted(map(Path, get_relative_import_files(module_file)))
+        module_hash: str = hashlib.sha256(b"".join(bytes(f) + f.read_bytes() for f in module_files)).hexdigest()
 
-        if module is None:
+        module: ModuleType
+        if cached_module is None:
             module = importlib.util.module_from_spec(module_spec)
             # insert it into sys.modules before any loading begins
             sys.modules[name] = module
+        else:
+            module = cached_module
         # reload in both cases, unless the module is already imported and hash hint
         if getattr(module, "__transformers_module_hash__", "") != module_hash:
             module_spec.loader.exec_module(module)
