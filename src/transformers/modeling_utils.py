@@ -4002,7 +4002,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 pass
 
         # Dispatch model with hooks on all devices if necessary
-        if device_map is not None:
+        if device_map is not None and device_map != {'': torch.device(type='cpu')}:
             device_map_kwargs = {
                 "device_map": device_map,
                 "offload_dir": offload_folder,
