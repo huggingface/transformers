@@ -114,7 +114,8 @@ class Kosmos2_5Processor(ProcessorMixin):
             )
 
             batch_size, seq_len = input.input_ids.shape
-            image_embeds_position_mask = [0, -1] + [1] * num_image_tokens + [-1] + [0] * seq_len
+            image_embeds_position_mask = [0, -1] + [1] * num_image_tokens + [-1]
+            image_embeds_position_mask += [0] * (seq_len - len(image_embeds_position_mask))
             image_embeds_position_mask = (
                 torch.LongTensor(image_embeds_position_mask).unsqueeze(0).repeat(batch_size, 1)
             )
