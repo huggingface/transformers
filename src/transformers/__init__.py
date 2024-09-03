@@ -775,8 +775,8 @@ _import_structure = {
     "models.vit_msn": ["ViTMSNConfig"],
     "models.vitdet": ["VitDetConfig"],
     "models.vitmatte": ["VitMatteConfig"],
-    "models.vitpose": ["ViTPoseConfig"],
-    "models.vitpose_backbone": ["ViTPoseBackboneConfig"],
+    "models.vitpose": ["VitPoseConfig"],
+    "models.vitpose_backbone": ["VitPoseBackboneConfig"],
     "models.vits": [
         "VitsConfig",
         "VitsTokenizer",
