@@ -373,28 +373,30 @@ Sometimes you would want to first fill-in cache object with key/values for certa
 ```python
 >>> import copy
 >>> import torch
->>> from transformers import AutoModelForCausalLM, AutoTokenizer, DynamicCache
+>>> from transformers import AutoModelForCausalLM, AutoTokenizer, DynamicCache, StaticCache
 
 >>> model_id = "meta-llama/Llama-2-7b-chat-hf"
 >>> model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, device_map="cuda")
 >>> tokenizer = AutoTokenizer.from_pretrained(model_id)
 
->>> # init StaticCache with big enough max-length (1024 tokens for the below example) 
+>>> # Init StaticCache with big enough max-length (1024 tokens for the below example) 
+>>> # You can also init a DynamicCache, if that suits you better
 >>> prompt_cache = StaticCache(config=model.config, max_batch_size=1, max_cache_len=1024, device="cuda", dtype=torch.bfloat16)
+
 >>> INITIAL_PROMPT = "You are a helpful assistant. "
 >>> inputs_initial_prompt = tokenizer(INITIAL_PROMPT, return_tensors="pt").to("cuda")
 >>> # This is the common prompt cached, we need to run forward without grad to be abel to copy
->>> with torch.no.grad():
+>>> with torch.no_grad():
 ...      prompt_cache = model(**inputs_initial_prompt, past_key_values = prompt_cache).past_key_values
 
 >>> prompts = ["Help me to write a blogpost about travelling.", "What is the capital of France?"]
 >>> responses = []
 >>> for prompt in prompts:
-...   new_inputs = tokenizer(INITIAL_PROMPT + prompt, return_tensors="pt").to("cuda")
-...   past_key_values = copy.deepcopy(prompt_cache)
-...   outputs = model.generate(**new_inputs, past_key_values=past_key_values,max_new_tokens=20) 
-...   response = tokenizer.batch_decode(outputs)[0]
-...   responses.append(response)
+...     new_inputs = tokenizer(INITIAL_PROMPT + prompt, return_tensors="pt").to("cuda")
+...     past_key_values = copy.deepcopy(prompt_cache)
+...     outputs = model.generate(**new_inputs, past_key_values=past_key_values,max_new_tokens=20) 
+...     response = tokenizer.batch_decode(outputs)[0]
+...     responses.append(response)
 
 >>> print(responses)
 ['<s> You are a helpful assistant. Help me to write a blogpost about travelling.\n\nTitle: The Ultimate Guide to Travelling: Tips, Tricks, and', '<s> You are a helpful assistant. What is the capital of France?\n\nYes, the capital of France is Paris.</s>']
