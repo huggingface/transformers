@@ -374,7 +374,7 @@ class OlmoeIntegrationTest(unittest.TestCase):
     @slow
     def test_model_7b_logits(self):
         input_ids = [[1, 306, 4658, 278, 6593, 310, 2834, 338]]
-        model = OlmoeForCausalLM.from_pretrained("allenai/OLMoE-1B-7B-0824", device_map="auto")
+        model = OlmoeForCausalLM.from_pretrained("allenai/OLMoE-1B-7B-0924", device_map="auto")
         out = model(torch.tensor(input_ids)).logits
         # Expected mean on dim = -1
         EXPECTED_MEAN = torch.tensor([[0.0271, 0.0249, -0.0578, -0.0870, 0.0167, 0.0710, 0.1002, 0.0677]])
@@ -387,9 +387,9 @@ class OlmoeIntegrationTest(unittest.TestCase):
     def test_model_7b_greedy_generation(self):
         EXPECTED_TEXT_COMPLETION = """Simply put, the theory of relativity states that \nthe speed of light is the same for all observers.\n\nThe theory of relativity is a theory of physics that describes the \nmovement of objects in space and time.\n\nThe theory of relativity is a theory of physics that describes the \nmovement of objects in space and time.\n\n"""
         prompt = "Simply put, the theory of relativity states that "
-        tokenizer = AutoTokenizer.from_pretrained("allenai/OLMoE-1B-7B-0824", device_map="auto")
+        tokenizer = AutoTokenizer.from_pretrained("allenai/OLMoE-1B-7B-0924", device_map="auto")
         input_ids = tokenizer.encode(prompt, return_tensors="pt")
-        model = OlmoeForCausalLM.from_pretrained("allenai/OLMoE-1B-7B-0824", device_map="auto")
+        model = OlmoeForCausalLM.from_pretrained("allenai/OLMoE-1B-7B-0924", device_map="auto")
 
         # greedy generation outputs
         generated_ids = model.generate(input_ids, max_new_tokens=64, top_p=None, temperature=1, do_sample=False)
@@ -398,7 +398,7 @@ class OlmoeIntegrationTest(unittest.TestCase):
 
     @require_tokenizers
     def test_fast_special_tokens(self):
-        fast_tokenizer = GPTNeoXTokenizerFast.from_pretrained("allenai/OLMoE-1B-7B-0824")
+        fast_tokenizer = GPTNeoXTokenizerFast.from_pretrained("allenai/OLMoE-1B-7B-0924")
 
         original_add_eos_token = fast_tokenizer.add_eos_token
 
@@ -414,7 +414,7 @@ class OlmoeIntegrationTest(unittest.TestCase):
 
     @require_tokenizers
     def test_simple_encode_decode(self):
-        rust_tokenizer = GPTNeoXTokenizerFast.from_pretrained("allenai/OLMoE-1B-7B-0824")
+        rust_tokenizer = GPTNeoXTokenizerFast.from_pretrained("allenai/OLMoE-1B-7B-0924")
 
         self.assertEqual(rust_tokenizer.encode("This is a test"), [1552, 310, 247, 1071])
         self.assertEqual(rust_tokenizer.decode([1552, 310, 247, 1071], skip_special_tokens=True), "This is a test")

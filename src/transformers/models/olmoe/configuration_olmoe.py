@@ -88,7 +88,7 @@ class OlmoeConfig(PretrainedConfig):
         output_router_logits (`bool`, *optional*, defaults to `False`):
             Whether or not the router logits should be returned by the model. Enabeling this will also
             allow the model to output the auxiliary loss, including load balancing loss and router z-loss.
-        router_aux_loss_coef (`float`, *optional*, defaults to 0.001):
+        router_aux_loss_coef (`float`, *optional*, defaults to 0.01):
             The aux loss factor for the total loss.
         norm_topk_prob (`bool`, *optional*, defaults to `False`):
             Whether to normalize the topk probabilities.
