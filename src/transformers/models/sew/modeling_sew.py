@@ -274,12 +274,12 @@ class SEWPositionalConvEmbedding(nn.Module):
             stride=config.squeeze_factor,
         )
 
+        weight_norm = nn.utils.weight_norm
+        if hasattr(nn.utils.parametrizations, "weight_norm"):
+            weight_norm = nn.utils.parametrizations.weight_norm
+
         if is_deepspeed_zero3_enabled():
             import deepspeed
-
-            weight_norm = nn.utils.weight_norm
-            if hasattr(nn.utils.parametrizations, "weight_norm"):
-                weight_norm = nn.utils.parametrizations.weight_norm
 
             with deepspeed.zero.GatheredParameters(self.conv.weight, modifier_rank=0):
                 self.conv = weight_norm(self.conv, name="weight", dim=2)
