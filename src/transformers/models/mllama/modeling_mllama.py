@@ -57,6 +57,21 @@ def to_tuple(x) -> Tuple[int, int]:
     return (x, x)
 
 
+def get_full_row_masked_out_mask(
+    attn_bias,
+    negative_inf_value,
+):
+    """
+    attn_bias should be a 4D tensor of shape [B, H, S1, S2]
+    where B is the batch size, H is the number of heads,
+    and S1/S2 are the sequence lengths. This returns
+    a 4D tensor of shape [B, H, S1, 1] which stores boolean
+    values which are 0 if the a full row in the last dimension
+    contains negative infinity values, otherwise it's 1.
+    """
+    return (attn_bias != negative_inf_value).any(dim=-1).type_as(attn_bias)[..., None]
+
+
 def convert_sparse_cross_attention_mask_to_dense(
     cross_attention_token_mask: List[List[List[int]]],
     num_tiles: List[List[int]],
@@ -110,7 +125,7 @@ def prepare_cross_attention_mask(
     cross_attention_masks = cross_attention_masks.unsqueeze(1)
 
     inf_value = get_negative_inf_value(cross_attention_masks.dtype)
-    full_text_row_masked_out_mask = _get_full_row_masked_out_mask(cross_attention_masks, inf_value)
+    full_text_row_masked_out_mask = get_full_row_masked_out_mask(cross_attention_masks, inf_value)
     
     cross_attention_masks *= full_text_row_masked_out_mask
 
@@ -238,21 +253,6 @@ def apply_rotary_emb(
     xq_out = torch.view_as_real(xq_ * freqs_cis).flatten(3)
     xk_out = torch.view_as_real(xk_ * freqs_cis).flatten(3)
     return xq_out.type_as(xq), xk_out.type_as(xk)
-
-
-def _get_full_row_masked_out_mask(
-    attn_bias,
-    negative_inf_value,
-):
-    """
-    attn_bias should be a 4D tensor of shape [B, H, S1, S2]
-    where B is the batch size, H is the number of heads,
-    and S1/S2 are the sequence lengths. This returns
-    a 4D tensor of shape [B, H, S1, 1] which stores boolean
-    values which are 0 if the a full row in the last dimension
-    contains negative infinity values, otherwise it's 1.
-    """
-    return (attn_bias != negative_inf_value).any(dim=-1).type_as(attn_bias)[..., None]
 
 
 class MllamaPatchEmbedding(nn.Module):
@@ -1313,7 +1313,7 @@ class MllamaCrossAttentionTextModel(PreTrainedModel):
 class MllamaPreTrainedModel(PreTrainedModel):
     config_class = MllamaConfig
     base_model_prefix = "model"
-    _no_split_modules = [""]
+    _no_split_modules = []
 
 
 class MllamaModel(MllamaPreTrainedModel):
