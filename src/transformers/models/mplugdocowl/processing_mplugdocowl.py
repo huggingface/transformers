@@ -37,14 +37,29 @@ class MPLUGDocOwlProcessor(ProcessorMixin):
             The image processor is a required input.
         tokenizer ([`AutoTokenizer`], *optional*):
             The tokenizer is a required input.
+        num_image_tokens (`int`, *optional*, defaults to 257):
+            The sequence length of image embeddings after the HReducer module.
+        image_token (`str`, *optional*, defaults to "<image>"):
+            The string form of the token corresponding to the special `image` token used as a placeholder.
     """
 
     attributes = ["image_processor", "tokenizer"]
+    valid_kwargs = ["chat_template", "num_image_tokens", "image_token"]
     image_processor_class = "MPLUGDocOwlImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
-    def __init__(self, image_processor=None, tokenizer=None, **kwargs):
-        super().__init__(image_processor, tokenizer)
+    def __init__(
+        self,
+        image_processor=None,
+        tokenizer=None,
+        chat_template=None,
+        num_image_tokens=257,
+        image_token="<image>",
+        **kwargs,
+    ):
+        self.num_image_tokens = num_image_tokens
+        self.image_token = image_token
+        super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     def generate_text_with_placeholders(
         self, text, patch_positions, anchor_max, num_patches, add_textual_crop_indicator
@@ -90,8 +105,8 @@ class MPLUGDocOwlProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
         images: ImageInput = None,
+        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
         add_textual_crop_indicator: bool = True,
         padding: Union[bool, str, PaddingStrategy] = True,
         truncation: Union[bool, str, TruncationStrategy] = None,
@@ -116,12 +131,12 @@ class MPLUGDocOwlProcessor(ProcessorMixin):
         of the above two methods for more information.
 
         Args:
-            text (Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]], optional):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string).
             images (ImageInput, optional):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array, or PyTorch
                 tensor. Both channels-first and channels-last formats are supported.
+            text (Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]], optional):
+                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
+                (pretokenized string).
             add_textual_crop_indicator (bool, optional):
                 Whether to add a textual crop indicator to the images. Defaults to True.
             padding (Union[bool, str, PaddingStrategy], optional):
@@ -203,8 +218,17 @@ class MPLUGDocOwlProcessor(ProcessorMixin):
             for txt, patch_pos, anch_max, n_patches in zip(text, patch_positions, anchor_max, num_patches)
         ]
 
+        prompt_strings = []
+        for sample in texts:
+            sample = sample.replace(self.image_token, self.image_token * self.num_image_tokens)
+            prompt_strings.append(sample)
+
         text_inputs = self.tokenizer(
-            texts, return_tensors=return_tensors, padding=padding, truncation=truncation, max_length=max_length
+            prompt_strings,
+            return_tensors=return_tensors,
+            padding=padding,
+            truncation=truncation,
+            max_length=max_length,
         )
 
         return BatchFeature(
