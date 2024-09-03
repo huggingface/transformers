@@ -57,65 +57,64 @@ def to_tuple(x) -> Tuple[int, int]:
     return (x, x)
 
 
-def _stack_images(
-    images, # TODO type as List[List[PIL.Image]]
-    max_num_chunks: int,
-    image_res: int,
-) -> Tuple[torch.Tensor, List[int]]:
-    """
-    Takes a list of list of images and stacks them into a tensor.
-    This function is needed since images can be of completely
-    different resolutions and aspect ratios.
-    """
-    max_num_images = max(max(len(xx) for xx in images), 1)
-
-    out_images, out_num_chunks = [], []
-    for imgs_sample in images:
-        out_images_i = torch.zeros(
-            max_num_images,
-            max_num_chunks,
-            3,
-            image_res,
-            image_res,
-        )
-        _num_chunks = []
-        for j, chunks_image in enumerate(imgs_sample):
-            out_images_i[j, : chunks_image.shape[0]] = chunks_image
-            _num_chunks.append(chunks_image.shape[0])
-        out_images.append(out_images_i)
-        out_num_chunks.append(_num_chunks)
-    return torch.stack(out_images), out_num_chunks
-
-
-def _pad_masks(
-    all_masks: List[List[List[int]]],
-    all_num_chunks: List[List[int]],
+def convert_sparse_cross_attention_mask_to_dense(
+    cross_attention_token_mask: List[List[List[int]]],
+    num_tiles: List[List[int]],
+    max_num_tiles: int,
     total_len: int,
-    max_num_chunks: int,
+    device: torch.device,
+    dtype: torch.dtype,
 ) -> torch.Tensor:
-    dtype = torch.bfloat16
+    
     inf_value = get_negative_inf_value(dtype)
 
-    bsz = len(all_masks)
-    max_num_media = max([len(m) for m in all_masks])
+    batch_size = len(cross_attention_token_mask)
+    max_num_images = max([len(masks) for masks in cross_attention_token_mask])
 
     out_masks = torch.full(
-        (bsz, total_len, max_num_media, max_num_chunks),
-        inf_value,
+        size=(batch_size, total_len, max_num_images, max_num_tiles),
+        fill_value=inf_value,
         dtype=dtype,
+        device=device,
     )
 
-    for idx, (mask, num_chunks) in enumerate(zip(all_masks, all_num_chunks)):
-        for mask_idx, (mask_elem, mask_num_chunks) in enumerate(zip(mask, num_chunks)):
-            if len(mask_elem) == 2:
-                mask_elem[1] = min(mask_elem[1], total_len)
-                if mask_elem[1] == -1:
-                    mask_elem[1] = total_len
-                out_masks[
-                    idx, mask_elem[0] : mask_elem[1], mask_idx, :mask_num_chunks
-                ].fill_(0.0)
+    for idx, (mask_i, num_tiles_i) in enumerate(zip(cross_attention_token_mask, num_tiles)):
+        for mask_idx, (token_locations, mask_num_chunks) in enumerate(zip(mask_i, num_tiles_i)):
+            if len(token_locations) == 2:
+                start, end = token_locations
+                end = min(end, total_len)
+                if end == -1:
+                    end = total_len
+                out_masks[idx, start:end, mask_idx, :mask_num_chunks].fill_(0.0)
 
     return out_masks
+
+
+def prepare_cross_attention_mask(
+    cross_attention_masks: torch.Tensor,
+    vision_tokens: torch.Tensor,
+) -> Tuple[Tensor, Tensor]:
+    
+    if vision_tokens is None:
+        raise ValueError("Vision tokens must be provided")
+    if vision_tokens.shape[1] != cross_attention_masks.shape[2]:
+        raise ValueError(f"Mismatch in number of images given and number of masks given {vision_tokens.shape} {cross_attention_masks.shape}")
+    if vision_tokens.shape[2] != cross_attention_masks.shape[3]:
+        raise ValueError(f"Vision tokens shape {vision_tokens.shape} mismatch with xattn shape {cross_attention_masks.shape}")
+
+    seq_length = vision_tokens.shape[3]
+    batch_size, text_total_length, _, _ = cross_attention_masks.shape
+
+    cross_attention_masks = cross_attention_masks.repeat_interleave(seq_length, dim=2)
+    cross_attention_masks = cross_attention_masks.view(batch_size, text_total_length, -1)
+    cross_attention_masks = cross_attention_masks.unsqueeze(1)
+
+    inf_value = get_negative_inf_value(cross_attention_masks.dtype)
+    full_text_row_masked_out_mask = _get_full_row_masked_out_mask(cross_attention_masks, inf_value)
+    
+    cross_attention_masks *= full_text_row_masked_out_mask
+
+    return cross_attention_masks, full_text_row_masked_out_mask
 
 
 
@@ -635,9 +634,6 @@ class MllamaVisionTransformer(nn.Module):
     def forward(self, pixel_values: torch.Tensor, aspect_ratios: torch.Tensor) -> torch.Tensor:
 
         batch_size, num_concurrent_media, num_tiles, num_channels, height, width = pixel_values.shape
-
-        pixel_values = torch.load("/home/ubuntu/projects/meta_mllama/logits-test-1/vision-images-input.pt").to(pixel_values.device)
-        aspect_ratios = torch.load("/home/ubuntu/projects/meta_mllama/logits-test-1/vision-ar-input.pt").to(pixel_values.device)
 
         pixel_values = pixel_values.reshape(batch_size * num_concurrent_media * num_tiles, num_channels, height, width)
         aspect_ratios = aspect_ratios.reshape(batch_size * num_concurrent_media, 2)
@@ -1222,6 +1218,19 @@ class MllamaCrossAttentionTextModel(PreTrainedModel):
         k = math.ceil(len(llama_layers) / num_layers)
         return llama_layers[::-1][::k][:num_layers][::-1]
 
+    def setup_cache(self, max_batch_size: int, dtype=torch.bfloat16):
+        ones = torch.ones(
+            (self.max_seq_len, self.max_seq_len),
+            dtype=torch.bool,
+            device=self.device,
+        )
+        mask = torch.tril(ones).unsqueeze(0).unsqueeze(0)
+        self.register_buffer("mask_cache", mask, persistent=False)
+
+        for layer in self.layers:
+            layer.setup_cache(max_batch_size, dtype=dtype)
+
+        self.cache_is_setup = True
 
     def get_partially_trainable_embedding(self, x):
         xz = torch.zeros_like(x, device=x.device)
@@ -1238,7 +1247,6 @@ class MllamaCrossAttentionTextModel(PreTrainedModel):
         x_orig = self.embed_tokens(x_orig)
         x_new = self.learnable_embedding(x_new).type_as(x_orig)
         return x_orig * mask_orig.type_as(x_orig) + x_new * mask_new.type_as(x_new)
-
 
     def forward(
         self,
@@ -1301,57 +1309,6 @@ class MllamaCrossAttentionTextModel(PreTrainedModel):
 
         return hidden_state
 
-    def setup_cache(self, max_batch_size: int, dtype=torch.bfloat16):
-        ones = torch.ones(
-            (self.max_seq_len, self.max_seq_len),
-            dtype=torch.bool,
-            device=self.device,
-        )
-        mask = torch.tril(ones).unsqueeze(0).unsqueeze(0)
-        self.register_buffer("mask_cache", mask, persistent=False)
-
-        for layer in self.layers:
-            layer.setup_cache(max_batch_size, dtype=dtype)
-
-        self.cache_is_setup = True
-
-    def _get_xattn_mask(
-        self,
-        num_tokens,
-        text_device,
-        text_dtype,
-        vision_tokens,
-        cross_attention_masks,
-    ) -> Tuple[Tensor, Tensor]:
-        assert vision_tokens is not None, "Vision tokens must be provided"
-        vision_seqlen = vision_tokens.shape[3]
-        assert (
-            vision_tokens.shape[1] == cross_attention_masks.shape[2]
-        ), f"Mismatch in number of images given and number of masks given {vision_tokens.shape} {cross_attention_masks.shape}"
-        assert (
-            vision_tokens.shape[2] == cross_attention_masks.shape[3]
-        ), f"Vision tokens shape {vision_tokens.shape} mismatch with xattn shape {cross_attention_masks.shape}"
-        assert (
-            num_tokens == cross_attention_masks.shape[1]
-        ), f"Mismatch in text sequence length and cross attention mask sequence length {num_tokens} {cross_attention_masks.shape}"
-        _, _, _, num_image_tokens, image_token_dim = tuple(vision_tokens.shape)
-        bsz, ntext, nimg, nchunks = cross_attention_masks.shape
-        cross_attention_masks = (
-            cross_attention_masks.repeat_interleave(vision_seqlen, dim=2)
-            .view(bsz, ntext, -1)
-            .unsqueeze(1)
-        )
-        full_text_row_masked_out_mask = _get_full_row_masked_out_mask(
-            cross_attention_masks,
-            get_negative_inf_value(cross_attention_masks.dtype),
-        )
-        cross_attention_masks *= full_text_row_masked_out_mask
-
-        return (
-            cross_attention_masks.to(device=text_device, dtype=text_dtype),
-            full_text_row_masked_out_mask,
-        )
-
 
 class MllamaPreTrainedModel(PreTrainedModel):
     config_class = MllamaConfig
@@ -1386,103 +1343,64 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
         self.vision_chunk_size = config.vision_config.vision_chunk_size 
 
         self.post_init()
-        # TODO - decide if we want to derive from config params.max_seq_len in the processor...
-        """
-        self.image_transform = partial(
-            VariableSizeImageTransform(size=args.vision_chunk_size),
-            max_num_chunks=args.vision_max_num_chunks,
-        )
-        """
-
-        #TODO: Remove, only debug purposes
-        self.image_transform = VariableSizeImageTransform(size=self.vision_chunk_size)
 
     def setup_cache(self, max_batch_size: int, dtype: torch.dtype):
         self.model.language_model.setup_cache(max_batch_size, dtype)
 
-    def compute_vision_tokens_masks(
+    def compute_vision_cross_attention_key_value_and_masks(
         self,
-        pixel_values: List[List["Image.Image"]], # batch_size, num_images, num_tiles, channels, height, width
-        batch_vision_masks: List[List[List[int]]],  # batch_size, num_images, 2 - (start token, end token)
+        pixel_values: torch.Tensor,  # shape: [batch_size, num_images, num_tiles, channels, height, width]
+        aspect_ratios: torch.Tensor, # shape: [batch_size, num_images, 2]
+        num_tiles: List[List[int]],  # shape: [batch_size, num_images]; num tiles per image
+        cross_attention_token_mask: List[List[List[int]]],  # shape: [batch_size, num_images, 2]; start token, end token
         total_len: int,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        # TODO: make sure vision transformer with pure text also works
-        skip_vision_encoder = False 
         
-        # Step 1.
-        if (
-            len(pixel_values) == 0
-            or max(len(i) for i in pixel_values) == 0
-        ):
+        # TODO: make sure vision transformer with pure text also works
+        # Skip for now
+        skip_vision_encoder = False
+        if skip_vision_encoder:  # create dummy vision tokens
             max_num_images = 0
-            num_chunks = [[self.vision_max_num_chunks] for _ in pixel_values]
-            skip_vision_encoder = True
-
-        # Step 2.
-        else:
-            images_and_aspect_ratios = [
-                [self.image_transform(im, self.vision_max_num_chunks) for im in vision_images] for vision_images in pixel_values
-            ]
-            transformed_images = [[x[0] for x in row] for row in images_and_aspect_ratios]
-            aspect_ratios = [
-                [torch.tensor(x[1]) for x in row] for row in images_and_aspect_ratios
-            ]
-            images, num_chunks = _stack_images(
-                transformed_images,
-                max_num_chunks=self.vision_max_num_chunks,
-                image_res=self.vision_chunk_size,
-            )
-            aspect_ratios = torch.stack([torch.stack(x) for x in aspect_ratios])
-
-        if skip_vision_encoder:
+            num_tiles = [[self.vision_max_num_chunks] for _ in pixel_values]
             vision_tokens = torch.zeros(
                 (
                     len(pixel_values),  # batch size 
                     max_num_images,   # most likely 1 but take it from model_inputs
-                    int(self.vision_max_num_chunks), 
-                    int(
-                        (self.model.vision_model.image_res / self.model.vision_model.patch_size)
-                        ** 2
-                        + 1
-                    ),
-                    int(self.config.vision_config.projection_dim),
+                    self.vision_max_num_chunks,
+                    self.model.vision_model.vision_encoder.num_patches,
+                    self.config.vision_config.projection_dim,
                 ),
+                device=self.device,
             )
-        else:
-            images = images.to(self.device)  # batch_size, num_concurrent_media, num_chunks, channels, height, width
-            aspect_ratios = aspect_ratios.to(self.device)  # batch_size, num_concurrent_media, 2
-            vision_tokens = self.model.vision_model(images, aspect_ratios)
 
-        vision_tokens = vision_tokens.to(self.device)
-            
-        batch_size, _, _, _, dim = vision_tokens.shape
+        # get vision tokens from vision model
+        vision_tokens = self.model.vision_model(pixel_values, aspect_ratios)
 
-        cross_attentions = []
+        # compute key value pairs for cross-attention with vision tokens
+        cross_attention_key_value = []
+        batch_size, *_, dim = vision_tokens.shape
+        vision_tokens_flattened = vision_tokens.view(batch_size, -1, dim)
         for layer in self.model.language_model.cross_attention_layers:
-            layer_cross_attentions = layer.compute_cross_attention_key_value(
-                vision_tokens.view(batch_size, -1, dim)
-            )
-            cross_attentions.append(layer_cross_attentions)
-        cross_attentions = torch.stack(cross_attentions)
+            layer_cross_attention_key_value = layer.compute_cross_attention_key_value(vision_tokens_flattened)
+            cross_attention_key_value.append(layer_cross_attention_key_value)
+        cross_attention_key_value = torch.stack(cross_attention_key_value)
 
-        padded_masks = _pad_masks(
-            [vision_mask for vision_mask in batch_vision_masks],
-            num_chunks,
-            total_len,
-            self.vision_max_num_chunks,
+        # create masks for cross-attention based on image token locations
+        cross_attention_masks = convert_sparse_cross_attention_mask_to_dense(
+            cross_attention_token_mask=cross_attention_token_mask,
+            num_tiles=num_tiles,
+            total_len=total_len,
+            max_num_tiles=self.vision_max_num_chunks,
+            device=self.device,
+            dtype=self.dtype,
         )
 
-        cross_attention_masks, full_text_row_masked_out_mask = (
-            self.model.language_model._get_xattn_mask(
-                num_tokens=total_len,
-                text_device=self.device,
-                text_dtype=next(self.model.language_model.parameters()).dtype,
-                vision_tokens=vision_tokens,
-                cross_attention_masks=padded_masks,
-            )
+        cross_attention_masks, full_text_row_masked_out_mask = prepare_cross_attention_mask(
+            cross_attention_masks=cross_attention_masks,
+            vision_tokens=vision_tokens,
         )
 
-        return (cross_attentions, cross_attention_masks, full_text_row_masked_out_mask)
+        return cross_attention_key_value, cross_attention_masks, full_text_row_masked_out_mask
 
     def forward(
         self,
@@ -1837,248 +1755,3 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
 
     def _reorder_cache(self, *args, **kwargs):
         return self.model.language_model._reorder_cache(*args, **kwargs)
-
-# ------------------------------------------
-
-# Copyright (c) Meta Platforms, Inc. and affiliates.
-# All rights reserved.
-#
-# This source code is licensed under the terms described in the LICENSE file in
-# top-level folder for each specific model found within the models/ directory at
-# the top-level of this source tree.
-
-import math
-from functools import reduce
-from typing import Any, Tuple
-
-import numpy as np
-import torch
-import torchvision.transforms as tv
-from PIL import Image
-import torchvision.transforms.functional
-
-class VariableSizeImageTransform(object):
-    """
-    The variable size image transform will resize the image dynamically
-    based on the image aspect ratio and the number of image chunks we allow.
-    The algorithm will not upsample low-res images to fit a certain aspect
-    ratio, because that leads to a significant degradation in image quality.
-    For example, if an input image is of size 300x800, and we want to allow
-    a maximum of 16 image chunks, it will find the closest aspect ratio that
-    is allowed within 16 image chunks, i.e., 2:5 = 2 horizontal patches and
-    5 vertical patches, giving a total of 10 chunks.
-    The image will then be resized to products of the base size (default is
-    224px because MetaCLIP takes that), so in this case it will  be resized to
-    2*224:5*224 = 448:1120, where we maintain the original aspect ratio and
-    pad with the mean value for the rest. This approach minimizes the amount
-    of padding required for any arbitrary resolution.
-    The final output will therefore be of shape (11, 3, 224, 224), where 10
-    patches are coming from the resizing and chunking, and the first patch
-    is a downsampled version of the image that preserves aspect ratios.
-    """
-
-    def __init__(self, size: int) -> None:
-        self.size = size
-        self.to_tensor = tv.ToTensor()
-        self._mean = (0.48145466, 0.4578275, 0.40821073)
-        self._std = (0.26862954, 0.26130258, 0.27577711)
-        self.normalize = tv.Normalize(
-            mean=self._mean,
-            std=self._std,
-            inplace=True,
-        )
-
-    @staticmethod
-    def _factors(n: int):
-        """Return all factors of a number."""
-        return set(
-            reduce(
-                list.__add__,
-                ([i, n // i] for i in range(1, int(n**0.5) + 1) if n % i == 0),
-            )
-        )
-
-    def _find_supported_aspect_ratios(self, num_chunks: int):
-        """
-        This function computes all the allowed aspect ratios for a fixed
-        number of input chunks.
-        For example, with `num_chunks=5`, it will return:
-        {
-            0.2: [(1, 5)],
-            5.0: [(5, 1)],
-            0.25: [(1, 4)],
-            1.0: [(2, 2), (1, 1)],
-            4.0: [(4, 1)],
-            0.3333333333333333: [(1, 3)],
-            3.0: [(3, 1)],
-            0.5: [(1, 2)],
-            2.0: [(2, 1)]
-        }
-        """
-        asp_dict = {}
-        for chunk_size in range(num_chunks, 0, -1):
-            _factors = sorted(VariableSizeImageTransform._factors(chunk_size))
-            _asp_ratios = [(x, chunk_size // x) for x in _factors]
-            for ratio in _asp_ratios:
-                k = ratio[0] / ratio[1]
-                if k not in asp_dict:
-                    asp_dict[k] = [ratio]
-                else:
-                    asp_dict[k].append(ratio)
-        return asp_dict
-
-    def _find_closest_aspect_ratio(
-        self, num_chunks: int, img_width: int, img_height: int
-    ) -> Tuple:
-        """
-        Given an image width, height and target number of chunks
-        this function will find the closest supported aspect ratio.
-        """
-        tgt_ar = img_width / img_height
-        asp_dict = self._find_supported_aspect_ratios(num_chunks)
-        cl_d, cl_p = 1e23, None
-        if tgt_ar >= 1:
-            cl_p = min(
-                [k for k in asp_dict.keys() if k <= tgt_ar],
-                key=lambda x: abs(x - tgt_ar),
-            )
-            v = asp_dict[cl_p]
-            # select width
-            widths = [(idx, self.size * vv[0]) for idx, vv in enumerate(v)]
-            tgt_idx = max(widths, key=lambda x: x[1])[0]
-        else:
-            cl_p = min(
-                [k for k in asp_dict.keys() if k > tgt_ar],
-                key=lambda x: abs(1 / x - 1 / tgt_ar),
-            )
-            v = asp_dict[cl_p]
-            # select height
-            heights = [(idx, self.size * vv[1]) for idx, vv in enumerate(v)]
-            tgt_idx = max(heights, key=lambda x: x[1])[0]
-        out = v[tgt_idx]
-        return out
-
-    def _resize(
-        self, image: Image.Image, target_width: int, target_height: int
-    ) -> Image.Image:
-        # Resize longer edge to given size.
-        w, h = image.size
-        scale = w / h
-
-        if scale > 1.0:
-            # width > height
-            new_w = target_width
-            new_h = math.floor(new_w / scale)
-        else:
-            # height >= width
-            new_h = target_height
-            new_w = math.floor(new_h * scale)
-
-        image = torchvision.transforms.functional.resize(image, (new_h, new_w))
-        return image
-
-    def _resize_max_side_to_size(
-        self,
-        image: Image.Image,
-    ) -> Image.Image:
-        # Resize longer edge to given size.
-        w, h = image.size
-        scale = w / h
-
-        if scale > 1.0:
-            # width > height
-            new_w = max(self.size, w)
-            new_h = math.floor(new_w / scale)
-        else:
-            # height >= width
-            new_h = max(self.size, h)
-            new_w = math.floor(new_h * scale)
-
-        image = torchvision.transforms.functional.resize(image, (new_h, new_w))
-        return image
-
-    def _pad(self, image: Image.Image, new_width: int, new_height: int) -> Image.Image:
-        mean_per_channel = tuple(
-            np.clip(np.array(image).mean(axis=(0, 1)), 0, 255).astype(np.uint8)
-        )
-        new_im = Image.new(mode="RGB", size=(new_height, new_width), color=(0, 0, 0))  # type: ignore
-        new_im.paste(image)
-        return new_im
-
-    def _split(self, image: torch.Tensor, ncw: int, nch: int) -> torch.Tensor:
-        # Split image into number of required tiles (width x height)
-        num_channels, height, width = image.size()
-        image = image.view(num_channels, nch, height // nch, ncw, width // ncw)
-        # Permute dimensions to reorder the axes
-        image = image.permute(1, 3, 0, 2, 4).contiguous()
-        # Reshape into the desired output shape (batch_size * 4, num_channels, width/2, height/2)
-        image = image.view(ncw * nch, num_channels, height // nch, width // ncw)
-        return image
-
-    def _fit_image_to_canvas(
-        self, num_chunks: int, img_width: int, img_height: int
-    ) -> Any:
-        """
-        Given an image width, height and target number of chunks this function will see if the image
-        can be fit into any of the canvases that can be build from arranging the tiles in a grid.
-        If the image can be fit onto several canvases, it will return the canvas where the shorter edge
-        of the image will be largest.
-        """
-        # Initialize the optimal canvas to None. If no canvas is found where image fits, function returns None.
-        optimal_canvas = None
-        optimal_image_width_height = None
-
-        scale = img_width / img_height
-
-        # Gather all potential supported image resolutions and iterate through them to find best match
-        potential_arrangements = [
-            item
-            for sublist in self._find_supported_aspect_ratios(num_chunks).values()
-            for item in sublist
-        ]
-        current_gap = 1e23
-        for n_w, n_h in potential_arrangements:
-            # Compute the canvas size
-            canvas_width, canvas_height = n_w * self.size, n_h * self.size
-
-            # Check if image can fit into the canvas without downsampling
-            if canvas_width >= img_width and canvas_height >= img_height:
-                # If we did not find a good canvas yet, we will use the current one
-                if optimal_canvas is None:
-                    # Set optimal canvas and determine the actual image height and width in the canvas with aspect ratio preserving resampling
-                    optimal_canvas = (n_w, n_h)
-                    optimal_image_width_height = (n_w * self.size, n_h * self.size)
-                else:
-                    # Find closest fit based on gap
-                    image_width_height = (n_w * self.size, n_h * self.size)
-                    gap = abs(img_width - image_width_height[0]) + abs(
-                        img_height - image_width_height[1]
-                    )
-                    if gap < current_gap:
-                        # If the gap is smaller than the previous one, we will update our optimal canvas and image width height
-                        optimal_canvas = (n_w, n_h)
-                        optimal_image_width_height = image_width_height
-                        current_gap = gap
-        return optimal_canvas
-
-    def __call__(self, image: Image.Image, max_num_chunks: int) -> Tuple[Any, Any]:
-        assert max_num_chunks > 0
-        assert isinstance(image, Image.Image), type(image)
-        w, h = image.size
-        # Check if the image can be fit to the canvas without downsampling
-        ar = self._fit_image_to_canvas(
-            num_chunks=max_num_chunks, img_width=w, img_height=h
-        )
-        if ar is None:
-            # If we did not find a canvas, we have to find the closest aspect ratio and downsample the image
-            ar = self._find_closest_aspect_ratio(
-                num_chunks=max_num_chunks, img_width=w, img_height=h
-            )
-            image = self._resize(image, ar[0] * self.size, ar[1] * self.size)
-        else:
-            image = self._resize_max_side_to_size(image)
-        image = self._pad(image, ar[1] * self.size, ar[0] * self.size)
-        image = self.to_tensor(image)
-        image = self.normalize(image)
-        image = self._split(image, ar[0], ar[1])  # type: ignore
-        return image, ar
