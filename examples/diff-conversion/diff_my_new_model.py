@@ -5,8 +5,8 @@ from transformers.models.llama.configuration_llama import LlamaConfig
 # here there is no `ARG` so we are gonna take parent doc
 class MyNewModelConfig(LlamaConfig):
     r"""
-        new_param (`int`, *optional*, defaults to `False`):
-            A fun new parameter
+    new_param (`int`, *optional*, defaults to `False`):
+        A fun new parameter
     """
 
     def __init__(self, mlp_bias=True, new_param=0, **super_kwargs):

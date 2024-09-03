@@ -3,9 +3,10 @@ from typing import List, Optional, Tuple, Union
 
 import torch
 
-from transformers import Cache
 from transformers.modeling_outputs import CausalLMOutputWithPast
 from transformers.models.llama.modeling_llama import LlamaModel
+
+from ...cache_utils import Cache
 
 
 def _pre_process_input(input_ids):
