@@ -113,6 +113,7 @@ class CircleCIJob:
         timeout_cmd = f"timeout {self.command_timeout} " if self.command_timeout else ""
         marker_cmd = f"-m '{self.marker}'" if self.marker is not None else ""
         additional_flags = f" -p no:warning -o junit_family=xunit1 --junitxml=test-results/junit.xml"
+        parallel = f' << pipeline.parameters.{self.job_name}_parallelism >> '
         steps = [
             "checkout",
             {"attach_workspace": {"at": "test_preparation"}},
@@ -152,7 +153,7 @@ class CircleCIJob:
             {"store_artifacts": {"path": "installed.txt"}},
         ]
         if self.parallelism:
-            job["parallelism"] = f' << pipeline.parameters.{self.job_name}_parallelism >> '
+            job["parallelism"] = parallel
         job["steps"] = steps
         return job
 
