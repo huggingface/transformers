@@ -34,7 +34,6 @@ from typing import (
     Dict,
     List,
     Literal,
-    Mapping,
     NamedTuple,
     Optional,
     Sequence,
