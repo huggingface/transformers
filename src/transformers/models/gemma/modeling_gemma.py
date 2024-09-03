@@ -680,6 +680,8 @@ class GemmaPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+            else:
+                print("hahahah")
 
 
 _CONFIG_FOR_DOC = "GemmaConfig"
