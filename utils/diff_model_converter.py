@@ -349,8 +349,10 @@ def replace_call_to_super(class_finder: ClassFinder, updated_node: cst.ClassDef,
     end_meth = []
 
     assing_targets = {}
+    docstring_node = []
     # Iterate directly from node.body as there can be property/setters with same names which are overwritten when we use a dict
     for func in original_node.body.body:
+
         name = func.name.value if hasattr(func, "name") else func
         if name in updated_methods and updated_methods[name] is not None:
             new_params = updated_methods[name].params
@@ -367,14 +369,16 @@ def replace_call_to_super(class_finder: ClassFinder, updated_node: cst.ClassDef,
             target = class_finder.python_module.code_for_node(func.body[0].targets[0])
             assing_targets[target] = func
             print(f"found target: {target}")
+        elif m.matches(func, DOCSTRING_NODE):
+            docstring_node = [func]
         else:
             end_meth.append(func)
 
     # Port new methods that are defined only in diff-file and append at the end
     for name, func in updated_methods.items():
-        if m.matches(func, m.SimpleStatementLine(body=[m.Expr(value=m.SimpleString())])):
+        if m.matches(func, DOCSTRING_NODE):
             # Extract the original docstring
-            original_docstring = end_meth[0].body[0].value.value
+            original_docstring = docstring_node[0].body[0].value.value
             updated_docstring = func.body[0].value.value
             if "    Args:\n        " not in updated_docstring:
                 logger.warning("We detected a docstring that will be appended to the super's doc")
@@ -391,19 +395,19 @@ def replace_call_to_super(class_finder: ClassFinder, updated_node: cst.ClassDef,
                             parts[2],
                         ]
                     )
-                elif updated_docstring not in end_meth[0].body[0].value.value:
-                    updated_docstring = end_meth[0].body[0].value.value + "\n" + updated_docstring
+                elif updated_docstring not in docstring_node[0].body[0].value.value:
+                    updated_docstring = docstring_node[0].body[0].value.value + "\n" + updated_docstring
             else:
                 updated_docstring = func.body[0].value.value
             # Update the docstring in the original function
-            end_meth[0] = end_meth[0].with_changes(body=[cst.Expr(value=cst.SimpleString(value=updated_docstring))])
+            docstring_node = [docstring_node[0].with_changes(body=[cst.Expr(value=cst.SimpleString(value=updated_docstring))])]
         if name not in original_methods and func is not None and isinstance(func, cst.FunctionDef):
             end_meth.append(func)
         if m.matches(func, m.SimpleStatementLine(body=[m.Assign()])):
             target = class_finder.python_module.code_for_node(func.body[0].targets[0])
             if target in assing_targets:
                 assing_targets[target] = func
-    end_meth = list(assing_targets.values()) + end_meth
+    end_meth = docstring_node + list(assing_targets.values()) + end_meth
 
     result_node = original_node.with_changes(body=cst.IndentedBlock(body=end_meth))
     temp_module = cst.Module(body=[result_node])
