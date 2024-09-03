@@ -573,7 +573,7 @@ class DiffConverterTransformer(CSTTransformer):
             if len(list_dependencies) > 0:
                 updated_node = replace_call_to_super(class_finder, updated_node, class_name)
             else:
-                raise ValueError(f"Unable to find dependencies for {super_class} in {super_file_name}")
+                raise ValueError(f"Unable to find dependencies for {super_class} in {super_file_name}. Here are the dependencies found: {class_finder.class_dependency_mapping}. (The automatic renaming might have gone wrong!)")
         if "Config" in class_name:
             self.config_body += [updated_node]
         else:
