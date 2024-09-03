@@ -21,7 +21,6 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
-from transformers import PretrainedConfig
 from transformers.models.llama.modeling_llama import (
     LlamaFlashAttention2,
     LlamaForCausalLM,
@@ -32,6 +31,7 @@ from transformers.models.llama.modeling_llama import (
     repeat_kv,
 )
 
+from ...configuration_utils import PretrainedConfig
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...modeling_flash_attention_utils import _flash_attention_forward

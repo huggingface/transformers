@@ -248,7 +248,7 @@ class SuperTransformer(cst.CSTTransformer):
         existing_nodes = set()
         for node in new_statements:
             code = self.python_module.code_for_node(node)
-            if m.matches(node.body[0], m.Assign()):
+            if m.matches(node,m.SimpleStatementLine(body=[m.Assign()])):
                 target = self.python_module.code_for_node(node.body[0].targets[0])
                 self.all_assign_target[target] = node
             comment_less_code = re.sub(r"#.*", "", code).strip()
@@ -293,8 +293,8 @@ class SuperTransformer(cst.CSTTransformer):
                 if parent_has_docstring:  # actually here we ought to de-duplicate?
                     new_node = self.update_body(self.original_methods[func_name].body.body, node.body)
                 else:
-                    new_node = expr
-                new_body.append(new_node)
+                    new_node = [expr]
+                new_body.extend(new_node)
             else:
                 new_body.append(expr)
         if not self.has_docstring and parent_has_docstring:
@@ -472,6 +472,15 @@ class DiffConverterTransformer(CSTTransformer):
                         self.transformers_imports[import_statement] = tree
                     imported_class = self.python_module.code_for_node(imported_.name)
                     self.imported_mapping[imported_class] = import_statement
+                if "transformers" == import_statement:
+                    raise ValueError(
+                        f"You are importing {self.python_module.code_for_node(imported_)} using global imports. Import from the correct local path"
+                    )
+        if m.matches(node.module, m.Name()):
+            if "transformers" == import_statement:
+                raise ValueError(
+                    f"You are importing from {import_statement} directly using global imports. Import from the correct local path"
+                )
 
     def leave_FunctionDef(self, original_node, node):
         parent_node = self.get_metadata(cst.metadata.ParentNodeProvider, original_node)
@@ -504,7 +513,6 @@ class DiffConverterTransformer(CSTTransformer):
                 "insert_idx": self.global_scope_index,
                 "node": updated_node,
             }
-            self.config_body = [updated_node]
         return updated_node
 
     def leave_ClassDef(self, original_node, updated_node):
@@ -641,7 +649,7 @@ def convert_file(diff_file, old_model_name=None, new_model_name=None, cst_transf
             non_comment_lines = len(
                 [line for line in formatted_code.strip().split("\n") if not line.strip().startswith("#")]
             )
-            if len(ruffed_code.strip()) > 0 and non_comment_lines>0:
+            if len(ruffed_code.strip()) > 0 and non_comment_lines > 0:
                 logger.warning("The modeling code contains erros, it's written without formatting")
                 with open(diff_file.replace("diff_", "modeling_"), "w") as f:
                     f.write(AUTO_GENERATED_MESSAGE + ruffed_code)
