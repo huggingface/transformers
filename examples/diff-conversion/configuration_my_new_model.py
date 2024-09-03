@@ -112,7 +112,8 @@ class MyNewModelConfig(PretrainedConfig):
             The attention head dimension. If None, it will default to hidden_size // num_heads
 
     r
-    mlp_bias (`bool`, *optional*, defaults to `False`)
+        new_param (`int`, *optional*, defaults to `False`):
+            A fun new parameter
     ```python
     >>> from transformers import MyNewModelModel, MyNewModelConfig
 

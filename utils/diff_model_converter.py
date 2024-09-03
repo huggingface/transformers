@@ -635,16 +635,23 @@ def convert_file(diff_file, old_model_name=None, new_model_name=None, cst_transf
             with open(diff_file.replace("diff_", "modeling_"), "w") as f:
                 f.write(AUTO_GENERATED_MESSAGE + formatted_code)
         else:
-            logger.warning("The modeling code contains erros, it's written without formatting")
-            with open(diff_file.replace("diff_", "modeling_"), "w") as f:
-                f.write(AUTO_GENERATED_MESSAGE + ruffed_code)
+            if len(ruffed_code)>0:
+                logger.warning("The modeling code contains erros, it's written without formatting")
+                with open(diff_file.replace("diff_", "modeling_"), "w") as f:
+                    f.write(AUTO_GENERATED_MESSAGE + ruffed_code)
 
         if hasattr(cst_transformers, "config_body"):
             config_module = cst.Module(body=[*cst_transformers.config_body], header=new_mod.header)
             with open(diff_file.replace("diff_", "configuration_"), "w") as f:
                 ruffed_code = run_ruff(config_module.code, True)
                 formatted_code = run_ruff(ruffed_code, False)
-                f.write(AUTO_GENERATED_MESSAGE + formatted_code)
+
+                if len(formatted_code.strip()) > 0:
+                    f.write(AUTO_GENERATED_MESSAGE + formatted_code)
+                else:
+                    if len(ruffed_code)>0:
+                        logger.warning("The configuration code contains erros, it's written without formatting")
+                        f.write(AUTO_GENERATED_MESSAGE + ruffed_code)
     else:
         print(f"Diff pattern not found in {diff_file}, exiting")
     # TODO optimize by re-using the class_finder
@@ -655,7 +662,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--files_to_parse",
-        default=["src/transformers/models/gemma2/diff_gemma2.py"],
+        default=["examples/diff-conversion/diff_my_new_model.py"],
         nargs="+",
         help="A list of `diff_xxxx` files that should be converted to single model file",
     )
