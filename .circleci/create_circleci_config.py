@@ -152,7 +152,7 @@ class CircleCIJob:
             {"store_artifacts": {"path": "installed.txt"}},
         ]
         if self.parallelism:
-            job["parallelism"] = self.parallelism
+            job["parallelism"] = f"""$(if [ $(wc -w < \"{self.job_name}_test_list.txt\") -lt 30 ]; then echo 1; else echo 30; fi)"""
         job["steps"] = steps
         return job
 
