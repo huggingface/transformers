@@ -707,7 +707,7 @@ class MllamaVisionTransformer(nn.Module):
         return hidden_state
 
 
-class MllamaAttention(nn.Module):
+class MllamaTextSdpaAttention(nn.Module):
     """Multi-head attention module."""
 
     def __init__(self, config: MllamaCrossAttentionTextConfig, layer_idx: Optional[int] = None):
@@ -860,10 +860,12 @@ class MllamaTextMLP(nn.Module):
         return hidden_state
 
 
-class TransformerBlock(nn.Module):
+class MllamaTextEncoderLayer(nn.Module):
+    # originally TransformerBlock
+
     def __init__(self, config: PretrainedConfig, layer_id: int):
         """
-        Initialize a TransformerBlock.
+        Initialize a MllamaTextEncoderLayer.
         Args:
             config (PretrainedConfig): configuration object for the layer.
             layer_id (int): Identifier for the layer.
@@ -881,7 +883,7 @@ class TransformerBlock(nn.Module):
         self.n_heads = config.n_heads
         self.dim = config.dim
         self.head_dim = config.dim // config.n_heads
-        self.self_attn = MllamaAttention(config)
+        self.self_attn = MllamaTextSdpaAttention(config)
         self.mlp = MllamaTextMLP(
             hidden_size=self.dim,
             intermediate_size=4 * self.dim,
@@ -898,12 +900,12 @@ class TransformerBlock(nn.Module):
     def forward(
         self,
         hidden_state: torch.Tensor,
-        freqs_cis: torch.Tensor,
         attention_mask: torch.Tensor,
+        freqs_cis: torch.Tensor,
         position_ids: torch.LongTensor,
     ) -> torch.Tensor:
         """
-        Perform a forward pass through the TransformerBlock.
+        Perform a forward pass through the MllamaTextEncoderLayer.
         Args:
             x (torch.Tensor): Input tensor.
             start_pos (int): Starting position for attention caching.
@@ -1216,7 +1218,7 @@ class MllamaCrossAttentionTextModel(PreTrainedModel):
 
         for i in range(self.n_layers):
             layer_id = i
-            block = TransformerBlock(config=config, layer_id=layer_id)
+            block = MllamaTextEncoderLayer(config=config, layer_id=layer_id)
             self.layers.append(block)
             if layer_id in self.fusion_schedule:
                 xa_layer_id = self.fusion_schedule.index(layer_id) + self.n_layers
