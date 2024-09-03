@@ -1520,7 +1520,7 @@ class TrainingArguments:
     predict_with_generate: bool = field(
         default=False, metadata={"help": "Whether to use generate to calculate generative metrics (ROUGE, BLEU)."}
     )
-    generation_config: Optional[GenerationConfig] = field(
+    generation_config: Optional[Union[Dict, GenerationConfig]] = field(
         default=None,
         metadata={
             "help": (
