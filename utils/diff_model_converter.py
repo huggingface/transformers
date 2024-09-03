@@ -226,6 +226,8 @@ DOCSTRING_NODE = m.SimpleStatementLine(
     ]
 )
 
+def SUPER_CALL_NODE(func_name):
+    return m.Call(func=m.Attribute(value=m.Call(func=m.Name("super")), attr=m.Name(func_name)))
 
 class SuperTransformer(cst.CSTTransformer):
     METADATA_DEPENDENCIES = (ParentNodeProvider,)
@@ -258,7 +260,7 @@ class SuperTransformer(cst.CSTTransformer):
             comment_less_code = re.sub(r"#.*", "", self.python_module.code_for_node(stmt)).strip()
             comment_less_code = re.sub(r"\ *\n", "\n", comment_less_code).strip()
             if comment_less_code not in existing_nodes:
-                if m.matches(stmt, DOCSTRING_NODE) and self.has_docstring:
+                if m.matches(stmt, DOCSTRING_NODE):
                     continue
                 deduplicated_new_body.append(stmt)
                 existing_nodes.add(stmt)
@@ -271,26 +273,31 @@ class SuperTransformer(cst.CSTTransformer):
         to super().func_name() with the source code of the parent class' `func_name`.
         It keeps everything that is defined before `super().func_name()`.
         """
-        new_body = []
         self.has_docstring = False
+        parent_has_docstring = False
+        if func_name in self.original_methods:
+            parent_has_docstring = m.matches(self.original_methods[func_name].body.body[0], DOCSTRING_NODE)
+        new_body = []
         for expr in node.body:
-            self.has_docstring = m.matches(node.body[0], DOCSTRING_NODE)
             if m.matches(
                 expr,
                 m.SimpleStatementLine(
-                    body=[
-                        m.Return(
-                            value=m.Call(func=m.Attribute(value=m.Call(func=m.Name("super")), attr=m.Name(func_name)))
-                        )
-                        | m.Expr(
-                            value=m.Call(func=m.Attribute(value=m.Call(func=m.Name("super")), attr=m.Name(func_name)))
-                        )
-                    ]
+                    body=[m.Return(SUPER_CALL_NODE(func_name)) | m.Expr(SUPER_CALL_NODE(func_name))]
                 ),
             ):
                 new_body.extend(self.update_body(self.original_methods[func_name].body.body, node.body))
+            elif m.matches(expr, DOCSTRING_NODE):
+                self.has_docstring = True
+                if parent_has_docstring: # actually here we ought to de-duplicate? 
+                    new_node = self.update_body(self.original_methods[func_name].body.body, node.body)
+                else:
+                    new_node = expr
+                new_body.append(new_node)
             else:
                 new_body.append(expr)
+        if not self.has_docstring and parent_has_docstring:
+            # TODO maybe call supdate body here? 
+            new_body = [self.original_methods[func_name].body.body[0]] + new_body
         return node.with_changes(body=new_body)
 
     def leave_FunctionDef(self, original_node: cst.Call, updated_node: cst.Call) -> cst.CSTNode:
@@ -351,10 +358,8 @@ def replace_call_to_super(class_finder: ClassFinder, updated_node: cst.ClassDef,
     assing_targets = {}
     docstring_node = []
     # Iterate directly from node.body as there can be property/setters with same names which are overwritten when we use a dict
-    for func in original_node.body.body:
-
-        name = func.name.value if hasattr(func, "name") else func
-        if name in updated_methods and updated_methods[name] is not None:
+    for name, func in original_methods.items():
+        if m.matches(func, m.FunctionDef()) and name in updated_methods and updated_methods[name] is not None:
             new_params = updated_methods[name].params
             # Replace the method in the replacement class, preserving decorators
             kwarg_name = getattr(updated_methods[name].params, "star_kwarg", None)
@@ -368,7 +373,6 @@ def replace_call_to_super(class_finder: ClassFinder, updated_node: cst.ClassDef,
         if m.matches(func, m.SimpleStatementLine(body=[m.Assign()])):
             target = class_finder.python_module.code_for_node(func.body[0].targets[0])
             assing_targets[target] = func
-            print(f"found target: {target}")
         elif m.matches(func, DOCSTRING_NODE):
             docstring_node = [func]
         else:
@@ -378,9 +382,11 @@ def replace_call_to_super(class_finder: ClassFinder, updated_node: cst.ClassDef,
     for name, func in updated_methods.items():
         if m.matches(func, DOCSTRING_NODE):
             # Extract the original docstring
-            original_docstring = docstring_node[0].body[0].value.value
             updated_docstring = func.body[0].value.value
             if "    Args:\n        " not in updated_docstring:
+                if docstring_node[0] is None:
+                    raise ValueError(f"Docstring of {name} is missing Args")
+                original_docstring = docstring_node[0].body[0].value.value
                 logger.warning("We detected a docstring that will be appended to the super's doc")
                 # Split the docstring at the example section, assuming `"""` or `'''` is used to define the docstring
                 parts = original_docstring.split("```")
@@ -406,7 +412,6 @@ def replace_call_to_super(class_finder: ClassFinder, updated_node: cst.ClassDef,
         if m.matches(func, m.SimpleStatementLine(body=[m.Assign()])):
             target = class_finder.python_module.code_for_node(func.body[0].targets[0])
             assing_targets[target] = func
-            print(f"found target: {target}")
     end_meth = docstring_node + list(assing_targets.values()) + end_meth
 
     result_node = original_node.with_changes(body=cst.IndentedBlock(body=end_meth))
