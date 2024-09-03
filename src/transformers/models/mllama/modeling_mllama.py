@@ -119,124 +119,7 @@ def _pad_masks(
 
 
 # vision encoder utils 
-# -------------------
-def resize_local_position_embedding(orig_pos_embed, grid_size):
-    """
-    Resize position embedding for vision encoder.
-    Original position embedding is [n_tiles * n_tiles + 1, dim]
-    New position embedding will be [grid_size[0] * grid_size[1] + 1, dim]
-    """
-    new_grid_size = to_tuple(grid_size)
-    orig_grid_size = to_tuple(int(math.sqrt(len(orig_pos_embed) - 1)))
-    new_seq_len = new_grid_size[0] * new_grid_size[1] + 1
-
-    new_pos_emb_tok, new_pos_emb_img = (
-        orig_pos_embed[:1],
-        orig_pos_embed[1:],
-    )
-    logger.info(
-        f"resizing position embedding grid-size from {orig_grid_size} to {new_grid_size}"
-    )
-
-    new_pos_emb_img = new_pos_emb_img.reshape(
-        1, orig_grid_size[0], orig_grid_size[1], -1
-    ).permute(0, 3, 1, 2)
-
-    new_pos_emb_img = F.interpolate(
-        new_pos_emb_img,
-        size=new_grid_size,
-        mode="bilinear",
-        align_corners=True,
-    )
-    new_pos_emb_img = new_pos_emb_img.permute(0, 2, 3, 1).reshape(
-        1, new_grid_size[0] * new_grid_size[1], -1
-    )[0]
-    new_pos_embed = torch.cat([new_pos_emb_tok, new_pos_emb_img], dim=0)
-    return new_pos_embed
-
-def initialize_global_position_embedding_from_local(pos_and_cls_embed, grid_size, x_scale, y_scale):
-    """
-    Takes a local position embedding for vision encoder and uses it
-    to initialize the global position embedding.
-    Input: local position embedding of shape [grid_size[0] * grid_size[1] + 1, dim]
-    Returns: global position embedding of shape [x_scale, y_scale, grid_size[0] * grid_size[1] + 1, dim]
-    Here x_scale and y_scale are the number of tiles along x-axis and y-axis respectively.
-    """
-    pos_embed = pos_and_cls_embed[1:]
-    cls_embed = pos_and_cls_embed[0].view(1, 1, 1, -1)
-    grid_size = to_tuple(grid_size)
-    new_pos_emb_img = pos_embed.reshape(
-        1, grid_size[0], grid_size[1], -1
-    ).permute(0, 3, 1, 2)
-    new_grid_size = (x_scale * grid_size[0], y_scale * grid_size[1])
-    new_pos_emb_img = F.interpolate(
-        new_pos_emb_img,
-        size=new_grid_size,
-        mode="bilinear",
-        align_corners=True,
-    )
-    new_pos_emb_img = new_pos_emb_img.permute(0, 2, 3, 1)
-    new_pos_emb_img = new_pos_emb_img.view(
-        x_scale, grid_size[0], y_scale, grid_size[1], -1
-    )
-    new_pos_emb_img = new_pos_emb_img.permute(0, 2, 1, 3, 4).contiguous()
-    new_pos_emb_img = new_pos_emb_img.reshape(
-        x_scale, y_scale, grid_size[0] * grid_size[1], -1
-    )
-    cls_embed = cls_embed.expand(x_scale, y_scale, -1, -1)
-    pos_and_cls_embed = torch.cat([cls_embed, new_pos_emb_img], dim=2)
-    return pos_and_cls_embed
-
-
-def resize_global_position_embedding(pos_and_cls_embed, grid_size, x_scale, y_scale):
-    """
-    Takes a global position embedding for vision encoder and resizes it to new size.
-    Input: global position embedding of shape [x_old, y_old, old_grid_size[0] * old_grid_size[1] + 1, dim]
-    Returns: global position embedding of shape [x_scale, y_scale, grid_size[0] * grid_size[1] + 1, dim]
-    Here x_scale and y_scale are the number of tiles along x-axis and y-axis respectively.
-    """
-    # first remove cls token
-    pos_embed = pos_and_cls_embed[:, :, 1:]
-    cls_embed = pos_and_cls_embed[:, :, 0].unsqueeze(2)
-
-    xs_old, ys_old, ntok, dim = pos_embed.shape
-    old_grid_size = int(math.sqrt(ntok))
-
-    # move to correct form for interpolation
-    pos_embed = pos_embed.view(xs_old, ys_old, old_grid_size, old_grid_size, dim)
-    pos_embed = pos_embed.permute(0, 2, 1, 3, 4).contiguous()
-    pos_embed = pos_embed.view(xs_old * old_grid_size, ys_old * old_grid_size, dim)
-    pos_embed = pos_embed.unsqueeze(0)
-
-    # interpolate
-    new_size = (grid_size[0] * x_scale, grid_size[1] * y_scale)
-    pos_embed = pos_embed.permute(0, 3, 1, 2)
-    pos_embed_resized = F.interpolate(
-        pos_embed,
-        size=new_size,
-        mode="bilinear",
-        align_corners=True,
-    )
-    pos_embed = pos_embed_resized.permute(0, 2, 3, 1)[0]
-
-    # move it back in place
-    pos_embed = pos_embed.view(x_scale, grid_size[0], y_scale, grid_size[1], dim)
-    pos_embed = pos_embed.permute(0, 2, 1, 3, 4).contiguous()
-    pos_embed = pos_embed.view(x_scale, y_scale, grid_size[0] * grid_size[1], dim)
-
-    # interpolate cls token
-    cls_embed = cls_embed.permute(2, 3, 0, 1)
-    cls_embed_resized = F.interpolate(
-        cls_embed,
-        size=(x_scale, y_scale),
-        mode="bilinear",
-        align_corners=True,
-    )
-    cls_embed = cls_embed_resized.permute(2, 3, 0, 1)
-    # add cls token back in
-    pos_and_cls_embed = torch.cat([cls_embed, pos_embed], dim=2)
-
-    return pos_and_cls_embed
+# --------------------
 
 def build_encoder_attention_mask(
     x: torch.Tensor,
@@ -386,7 +269,7 @@ def _get_full_row_masked_out_mask(
 
 class MllamaPatchEmbedding(nn.Module):
     """Conv2D Patching layer implemented as linear layer operation.
-    (can be later replaced with Conv2d (bias=False) with small logits mismatch)
+    (can be later replaced with Conv2d(bias=False) + .flatten(2).transpose(1, 2) with small logits mismatch)
     
     Arguments:
         in_channels: Input channels.
@@ -692,26 +575,23 @@ class MllamaImageTransformer(nn.Module):
         self.num_patches = self.num_patches_height * self.num_patches_width + 1
         self.scale = hidden_size ** -0.5
 
-        # patch and class embedding
+        # patch embedding
         self.patch_embedding = MllamaPatchEmbedding(
             in_channels=self.in_channels,
             out_channels=self.hidden_size,
             kernel_size=self.patch_size,
             stride=self.patch_size,
         )
+
+        # class embedding
         self.class_embedding = nn.Parameter(self.scale * torch.randn(self.hidden_size))
 
-        # positinal embeddings and gate
-        self.positional_embedding = nn.Parameter(self.scale * torch.randn(self.num_patches, self.hidden_size))
-        self.gated_positional_embedding = nn.Parameter(
-            self.scale
-            * torch.randn(
-                max_num_tiles,
-                max_num_tiles,
-                self.num_patches,
-                self.hidden_size,
-            )
-        )
+        # positional embeddings and gate
+        positional_embedding = torch.randn(self.num_patches, self.hidden_size)
+        self.positional_embedding = nn.Parameter(self.scale * positional_embedding)
+
+        gated_positional_embedding = torch.randn(self.max_num_tiles, self.max_num_tiles, self.num_patches, self.hidden_size)
+        self.gated_positional_embedding = nn.Parameter(self.scale * gated_positional_embedding)
         self.gated_positional_embedding_gate = nn.Parameter(torch.zeros(1))
 
         # pre and post tile position embedding
@@ -763,85 +643,80 @@ class MllamaImageTransformer(nn.Module):
         hidden_state = torch.cat([class_embedding, hidden_state], dim=1)
         return hidden_state
 
-    def forward(self, images: torch.Tensor, ar: torch.Tensor) -> torch.Tensor:
-        if images.ndim == 5:
-            num_concurrent_media = 1
-            bsz, num_chunks, nch, w, h = images.shape
-        else:
-            bsz, num_concurrent_media, num_chunks, nch, w, h = images.shape
+    def forward(self, pixel_values: torch.Tensor, aspect_ratios: torch.Tensor) -> torch.Tensor:
 
-        images = torch.load("/home/ubuntu/projects/meta_mllama/logits-test-1/vision-images-input.pt").to(images.device)
-        ar = torch.load("/home/ubuntu/projects/meta_mllama/logits-test-1/vision-ar-input.pt").to(images.device)
+        batch_size, num_concurrent_media, num_tiles, num_channels, height, width = pixel_values.shape
 
-        images = images.reshape(bsz * num_concurrent_media * num_chunks, nch, w, h)
-        ar = ar.reshape(bsz * num_concurrent_media, 2)
+        pixel_values = torch.load("/home/ubuntu/projects/meta_mllama/logits-test-1/vision-images-input.pt").to(pixel_values.device)
+        aspect_ratios = torch.load("/home/ubuntu/projects/meta_mllama/logits-test-1/vision-ar-input.pt").to(pixel_values.device)
+
+        pixel_values = pixel_values.reshape(batch_size * num_concurrent_media * num_tiles, num_channels, height, width)
+        aspect_ratios = aspect_ratios.reshape(batch_size * num_concurrent_media, 2)
 
         # patch embedding
-        x = images.reshape(bsz * num_concurrent_media * num_chunks, nch, w, h)
-        x = self.patch_embedding(x)  # shape = [*, width, grid ** 2]
-        # equivalent to column parallel conv2d op
-        if not isinstance(self.patch_embedding, MllamaPatchEmbedding):
-            x = x.flatten(2).transpose(1, 2) # required for Conv2d path embed implementation
-        _, ntok, dim = x.shape
-        x = x.reshape(bsz * num_concurrent_media, num_chunks, -1, dim)
+        hidden_state = pixel_values.reshape(batch_size * num_concurrent_media * num_tiles, num_channels, height, width)
+        hidden_state = self.patch_embedding(hidden_state)
+        _, num_tokens, dim = hidden_state.shape
+        hidden_state = hidden_state.reshape(batch_size * num_concurrent_media, num_tiles, -1, dim)
 
         x_ = torch.load("/home/ubuntu/projects/meta_mllama/logits-test-1/patch-embedding.pt")
-        diff = (x - x_).abs().max().item()
+        diff = (hidden_state - x_).abs().max().item()
         print(f"patch embedding diff: {diff}")
 
         # tile embeddings
-        x = self.pre_tile_pos_embed(x, ar)
-        x = x.reshape(bsz * num_concurrent_media * num_chunks, ntok, dim)
+        hidden_state = self.pre_tile_pos_embed(hidden_state, aspect_ratios)
+        hidden_state = hidden_state.reshape(batch_size * num_concurrent_media * num_tiles, num_tokens, dim)
 
         x_ = torch.load("/home/ubuntu/projects/meta_mllama/logits-test-1/tile-embedding.pt")
-        diff = (x - x_).abs().max().item()
+        diff = (hidden_state - x_).abs().max().item()
         print(f"pre tile pos embed diff: {diff}")
 
         # apply cls token
-        x = self.apply_class_embedding(x)
-        ntok += 1
+        hidden_state = self.apply_class_embedding(hidden_state)
+        num_tokens += 1
 
         x_ = torch.load("/home/ubuntu/projects/meta_mllama/logits-test-1/cls-embedding.pt")
-        diff = (x - x_).abs().max().item()
+        diff = (hidden_state - x_).abs().max().item()
         print(f"cls embedding diff: {diff}")
 
         # apply position embeddings
-        x = x.reshape(bsz * num_concurrent_media, num_chunks, ntok, dim)
-        x = self.apply_positional_embedding(x, ar)
+        hidden_state = hidden_state.reshape(batch_size * num_concurrent_media, num_tiles, num_tokens, dim)
+        hidden_state = self.apply_positional_embedding(hidden_state, aspect_ratios)
 
         x_ = torch.load("/home/ubuntu/projects/meta_mllama/logits-test-1/position-embedding.pt")
-        diff = (x - x_).abs().max().item()
+        diff = (hidden_state - x_).abs().max().item()
         print(f"pos embedding diff: {diff}")
 
-        x = self.ln_pre(x)
-        npad, attn_mask = 0, None
-        x, npad = expand_num_tokens_to_mult8(x)
-        attn_mask = build_encoder_attention_mask(x, ar, ntok, num_chunks, 1)
-        print(attn_mask)
-        x = x.view(bsz * num_concurrent_media, -1, dim)
-        x, int_x = self.transformer(
-            x, return_intermediate=self.return_intermediate, attention_mask=attn_mask
+        # apply encoder
+        hidden_state = self.ln_pre(hidden_state)
+        hidden_state, num_pad_tokens = expand_num_tokens_to_mult8(hidden_state)
+        attention_mask = build_encoder_attention_mask(hidden_state, aspect_ratios, num_tokens, num_tiles, 1)
+        hidden_state = hidden_state.view(batch_size * num_concurrent_media, -1, dim)
+        hidden_state, int_hidden_state = self.transformer(
+            hidden_state, return_intermediate=self.return_intermediate, attention_mask=attention_mask
         )
 
         x_, int_x_ = torch.load("/home/ubuntu/projects/meta_mllama/logits-test-1/local-transformer-output.pt")
-        diff = (x - x_).abs().max().item()
+        diff = (hidden_state - x_).abs().max().item()
         print(f"local transformer diff: {diff}")
 
-        x = self.ln_post(x)
-        x = x.reshape(bsz * num_concurrent_media, num_chunks, ntok + npad, dim)
-        x = self.post_tile_pos_embed(x, ar)
-        x = x.reshape(bsz * num_concurrent_media, num_chunks * (ntok + npad), dim)
-        x = self.global_transformer(x, attention_mask=attn_mask)
-        x = x.reshape(bsz * num_concurrent_media, num_chunks, ntok + npad, dim)
-        x = contract_num_tokens_from_mult8(x, npad)
+        # apply global encoder
+        hidden_state = self.ln_post(hidden_state)
+        hidden_state = hidden_state.reshape(batch_size * num_concurrent_media, num_tiles, num_tokens + num_pad_tokens, dim)
+        hidden_state = self.post_tile_pos_embed(hidden_state, aspect_ratios)
+        hidden_state = hidden_state.reshape(batch_size * num_concurrent_media, num_tiles * (num_tokens + num_pad_tokens), dim)
+        hidden_state = self.global_transformer(hidden_state, attention_mask=attention_mask)
+        hidden_state = hidden_state.reshape(batch_size * num_concurrent_media, num_tiles, num_tokens + num_pad_tokens, dim)
+        hidden_state = contract_num_tokens_from_mult8(hidden_state, num_pad_tokens)
 
-        # adding back intermediate layer outputs
-        x = x.reshape(bsz, num_concurrent_media, num_chunks, ntok, dim)
-        int_x = int_x.reshape(bsz * num_concurrent_media, num_chunks, ntok + npad, -1)
-        int_x = contract_num_tokens_from_mult8(int_x, npad)
-        int_x = int_x.reshape(bsz, num_concurrent_media, num_chunks, ntok, -1)
-        x = torch.cat([x, int_x], dim=-1)
-        return x
+        # adding intermediate layer outputs
+        hidden_state = hidden_state.reshape(batch_size, num_concurrent_media, num_tiles, num_tokens, dim)
+        int_hidden_state = int_hidden_state.reshape(batch_size * num_concurrent_media, num_tiles, num_tokens + num_pad_tokens, -1)
+        int_hidden_state = contract_num_tokens_from_mult8(int_hidden_state, num_pad_tokens)
+        int_hidden_state = int_hidden_state.reshape(batch_size, num_concurrent_media, num_tiles, num_tokens, -1)
+        hidden_state = torch.cat([hidden_state, int_hidden_state], dim=-1)
+
+        return hidden_state
 
 
 class Attention(nn.Module):
