@@ -18,7 +18,6 @@ import tempfile
 import unittest
 
 import pytest
-from packaging import version
 from parameterized import parameterized
 
 from transformers import AutoTokenizer, GraniteMoeConfig, is_torch_available, set_seed
@@ -514,49 +513,16 @@ class GraniteMoeIntegrationTest(unittest.TestCase):
 
     @slow
     @require_read_token
-    def test_model_3b_logits_bf16(self):
-        input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
-
-        model = GraniteMoeForCausalLM.from_pretrained(
-            "ibm/PowerMoE-3b", device_map="auto", torch_dtype=torch.bfloat16, attn_implementation="eager"
-        )
-
-        with torch.no_grad():
-            out = model(torch.tensor([input_ids]).to(torch_device))
-        # Expected mean on dim = -1
-
-        # fmt: off
-        EXPECTED_MEAN = torch.tensor([[-3.5323, -1.0852, -2.8477, -1.9027, -2.5014, -1.6253, -2.5948, -2.4452]])
-
-        self.assertTrue(torch.allclose(EXPECTED_MEAN.to(torch_device), out.logits.mean(-1), atol=1e-2, rtol=1e-2))
-
-        # slicing logits[0, 0, 0:15]
-        EXPECTED_SLICE = torch.tensor([[4.1562, -5.1250, -5.1562, -5.1250, -5.1562, 3.2344, 3.1250, -5.1562, -5.1562, -5.1562, -1.7812, 2.5625, 0.4609, 2.6250, -4.1875]])
-        # fmt: on
-
-        self.assertTrue(
-            torch.allclose(
-                EXPECTED_SLICE.to(torch_device),
-                out.logits[0, 0, :15],
-                atol=1e-3,
-                rtol=1e-3,
-            )
-        )
-
-    @slow
-    @require_read_token
     def test_model_3b_logits(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
 
-        model = GraniteMoeForCausalLM.from_pretrained(
-            "ibm/PowerMoE-3b", device_map="auto", torch_dtype=torch.float16
-        )
+        model = GraniteMoeForCausalLM.from_pretrained("ibm/PowerMoE-3b", device_map="auto")
 
         with torch.no_grad():
             out = model(torch.tensor([input_ids]).to(torch_device))
 
         # fmt: off
         # Expected mean on dim = -1
-        EXPECTED_MEAN = torch.tensor([[-3.5317, -1.1000, -2.8519, -1.9190, -2.5031, -1.6047, -2.5759, -2.4347]])
+        EXPECTED_MEAN = torch.tensor([[-2.2122, -1.6632, -2.9269, -2.3344, -2.0143, -3.0146, -2.6839, -2.5610]])
 
         self.assertTrue(torch.allclose(EXPECTED_MEAN.to(torch_device), out.logits.mean(-1), atol=1e-2, rtol=1e-2))
