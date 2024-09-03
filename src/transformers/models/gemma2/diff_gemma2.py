@@ -30,9 +30,9 @@ from transformers.models.gemma.modeling_gemma import (
     GemmaModel,
     GemmaPreTrainedModel,
     GemmaRMSNorm,
-    _prepare_4d_causal_attention_mask_with_cache_position,
     apply_rotary_pos_emb,
     repeat_kv,
+    _prepare_4d_causal_attention_mask_with_cache_position
 )
 
 from ...activations import ACT2FN
@@ -65,7 +65,7 @@ class Gemma2Config(GemmaConfig):
         size of the sliding window.
     """
 
-    cache_implementation = "hybrid"  # TODO this is not properly ported, but cls attr is better
+    cache_implementation = "hybrid"
 
     def __init__(
         self,
@@ -455,7 +455,6 @@ class Gemma2PreTrainedModel(GemmaPreTrainedModel):
             config._attn_implementation = "eager"
 
         return config
-
 
 class Gemma2Model(GemmaModel):
     def forward(

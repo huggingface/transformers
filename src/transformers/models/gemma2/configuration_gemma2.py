@@ -107,7 +107,7 @@ class Gemma2Config(PretrainedConfig):
     model_type = "gemma2"
     keys_to_ignore_at_inference = ["past_key_values"]
 
-    cache_implementation = "hybrid"  # TODO this is not properly ported, but cls attr is better
+    cache_implementation = "hybrid"
 
     def __init__(
         self,
