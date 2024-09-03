@@ -173,6 +173,27 @@ class Wav2Vec2BertModelTester:
             result.last_hidden_state.shape, (self.batch_size, self.output_seq_length, self.hidden_size)
         )
 
+    def create_and_check_model_with_feature_projection(self, config, input_features, attention_mask):
+        config.hidden_size = 32
+        assert config.conv_dim[-1] == config.hidden_size
+        model = Wav2Vec2BertModel(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_features, attention_mask=attention_mask)
+        self.parent.assertEqual(
+            result.last_hidden_state.shape, (self.batch_size, self.output_seq_length, config.hidden_size)
+        )
+
+    def create_and_check_model_with_no_post_layer_norm(self, config, input_features, attention_mask):
+        config.post_layer_norm = False
+        model = Wav2Vec2BertModel(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_features, attention_mask=attention_mask)
+        self.parent.assertEqual(
+            result.last_hidden_state.shape, (self.batch_size, self.output_seq_length, self.hidden_size)
+        )
+
     def create_and_check_model_with_adapter(self, config, input_features, attention_mask):
         config.add_adapter = True
         model = Wav2Vec2BertModel(config=config)
@@ -192,30 +213,6 @@ class Wav2Vec2BertModelTester:
         result = model(input_features, attention_mask=attention_mask)
         self.parent.assertEqual(
             result.logits.shape, (self.batch_size, self.adapter_output_seq_length, self.vocab_size)
-        )
-
-    # Ignore copy
-    def create_and_check_model_with_intermediate_ffn_before_adapter(self, config, input_features, attention_mask):
-        config.add_adapter = True
-        config.use_intermediate_ffn_before_adapter = True
-        model = Wav2Vec2BertModel(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_features, attention_mask=attention_mask)
-        self.parent.assertEqual(
-            result.last_hidden_state.shape,
-            (self.batch_size, self.adapter_output_seq_length, config.output_hidden_size),
-        )
-
-        # also try with different adapter proj dim
-        config.output_hidden_size = 8
-        model = Wav2Vec2BertModel(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_features, attention_mask=attention_mask)
-        self.parent.assertEqual(
-            result.last_hidden_state.shape,
-            (self.batch_size, self.adapter_output_seq_length, config.output_hidden_size),
         )
 
     def create_and_check_model_with_adapter_proj_dim(self, config, input_features, attention_mask):
@@ -421,6 +418,30 @@ class Wav2Vec2BertModelTester:
         inputs_dict = {"input_features": input_features, "attention_mask": attention_mask}
         return config, inputs_dict
 
+    # Ignore copy
+    def create_and_check_model_with_intermediate_ffn_before_adapter(self, config, input_features, attention_mask):
+        config.add_adapter = True
+        config.use_intermediate_ffn_before_adapter = True
+        model = Wav2Vec2BertModel(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_features, attention_mask=attention_mask)
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.adapter_output_seq_length, config.output_hidden_size),
+        )
+
+        # also try with different adapter proj dim
+        config.output_hidden_size = 8
+        model = Wav2Vec2BertModel(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_features, attention_mask=attention_mask)
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.adapter_output_seq_length, config.output_hidden_size),
+        )
+
 
 @require_torch
 # Copied from tests.models.wav2vec2_conformer.test_modeling_wav2vec2_conformer.Wav2Vec2ConformerModelTest with Conformer->Bert, input_values->input_features
@@ -467,11 +488,6 @@ class Wav2Vec2BertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         config_and_inputs = self.model_tester.prepare_config_and_inputs(position_embeddings_type="relative")
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    # Ignore copy
-    def test_model_with_relative_key(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs(position_embeddings_type="relative_key")
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
     def test_model_with_rotary(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs(position_embeddings_type="rotary")
         self.model_tester.create_and_check_model(*config_and_inputs)
@@ -479,6 +495,14 @@ class Wav2Vec2BertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     def test_model_with_no_rel_pos(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs(position_embeddings_type=None)
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_model_with_projection(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model_with_feature_projection(*config_and_inputs)
+
+    def test_model_with_no_post_layer_norm(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model_with_no_post_layer_norm(*config_and_inputs)
 
     def test_model_with_adapter(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -488,11 +512,6 @@ class Wav2Vec2BertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_with_adapter_for_ctc(*config_and_inputs)
 
-    # Ignore copy
-    def test_model_with_intermediate_ffn_before_adapter(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model_with_intermediate_ffn_before_adapter(*config_and_inputs)
-
     def test_model_with_adapter_proj_dim(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_with_adapter_proj_dim(*config_and_inputs)
@@ -501,13 +520,6 @@ class Wav2Vec2BertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     @require_torch_fp16
     def test_model_float16_with_relative(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs(position_embeddings_type="relative")
-        self.model_tester.create_and_check_model_float16(*config_and_inputs)
-
-    # Ignore copy
-    @require_torch_accelerator
-    @require_torch_fp16
-    def test_model_float16_with_relative_key(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs(position_embeddings_type="relative_key")
         self.model_tester.create_and_check_model_float16(*config_and_inputs)
 
     @require_torch_accelerator
@@ -688,6 +700,23 @@ class Wav2Vec2BertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         # Ignore copy
         model = Wav2Vec2BertModel.from_pretrained("facebook/w2v-bert-2.0")
         self.assertIsNotNone(model)
+
+    # Ignore copy
+    def test_model_with_relative_key(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(position_embeddings_type="relative_key")
+        self.model_tester.create_and_check_model(*config_and_inputs)
+
+    # Ignore copy
+    def test_model_with_intermediate_ffn_before_adapter(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model_with_intermediate_ffn_before_adapter(*config_and_inputs)
+
+    # Ignore copy
+    @require_torch_accelerator
+    @require_torch_fp16
+    def test_model_float16_with_relative_key(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(position_embeddings_type="relative_key")
+        self.model_tester.create_and_check_model_float16(*config_and_inputs)
 
 
 @require_torch

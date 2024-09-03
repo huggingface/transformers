@@ -231,7 +231,9 @@ class Wav2Vec2ConformerModelTester:
         model.to(torch_device)
         model.eval()
         result = model(input_values, attention_mask=attention_mask)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.adapter_output_seq_length, self.vocab_size))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.adapter_output_seq_length, self.vocab_size)
+        )
 
     def create_and_check_model_with_adapter_proj_dim(self, config, input_values, attention_mask):
         config.add_adapter = True
