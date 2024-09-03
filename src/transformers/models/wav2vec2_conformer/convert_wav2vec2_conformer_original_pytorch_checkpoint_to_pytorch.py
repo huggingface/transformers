@@ -17,11 +17,9 @@
 import argparse
 import json
 import os
-from collections import namedtuple
 
 import fairseq
 import torch
-from fairseq import utils
 from fairseq.data import Dictionary
 
 from transformers import (
@@ -218,12 +216,6 @@ def load_conv_layer(full_name, value, feature_extractor, unused_weights, use_gro
         unused_weights.append(full_name)
 
 
-def import_user_module(user_dir: str):
-    arg = namedtuple("Arg", ["user_dir"])
-    arg = arg(user_dir.__str__())
-    utils.import_user_module(arg)
-
-
 @torch.no_grad()
 def convert_wav2vec2_conformer_checkpoint(
     checkpoint_path,
@@ -232,14 +224,10 @@ def convert_wav2vec2_conformer_checkpoint(
     config_path=None,
     dict_path=None,
     is_finetuned=True,
-    extension_path=None,
 ):
     """
     Copy/paste/tweak model's weights to transformers design.
     """
-    if extension_path is not None:
-        import_user_module(user_dir=extension_path)
-
     if config_path is not None:
         config = Wav2Vec2ConformerConfig.from_pretrained(config_path, hidden_act="swish")
     else:
@@ -321,7 +309,6 @@ if __name__ == "__main__":
     parser.add_argument(
         "--not_finetuned", action="store_true", help="Whether the model to convert is a fine-tuned model or not"
     )
-    parser.add_argument("--extension_path", default=None, type=str, help="Extension path to override the task")
     args = parser.parse_args()
     convert_wav2vec2_conformer_checkpoint(
         args.checkpoint_path,
@@ -330,5 +317,4 @@ if __name__ == "__main__":
         args.config_path,
         args.dict_path,
         not args.not_finetuned,
-        args.extension_path,
     )
