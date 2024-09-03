@@ -24,7 +24,7 @@ from huggingface_hub import hf_hub_download
 from PIL import Image
 from torchvision import transforms
 
-from transformers import RTDetrV2Config, RTDetrForObjectDetection, RTDetrImageProcessor
+from transformers import RTDetrV2Config, RTDetrV2ForObjectDetection, RTDetrImageProcessor
 from transformers.utils import logging
 
 
@@ -219,10 +219,6 @@ def create_rename_keys(config):
         )
 
     for j in range(0, 3):
-        rename_keys.append((f"encoder.input_proj.{j}.0.weight", f"model.encoder_input_proj.{j}.0.weight"))
-        for last in last_key:
-            rename_keys.append((f"encoder.input_proj.{j}.1.{last}", f"model.encoder_input_proj.{j}.1.{last}"))
-        # This layer is optional for the config.decoder_layer = "v2"
         rename_keys.append((f"encoder.input_proj.{j}.conv.weight", f"model.encoder_input_proj.{j}.0.weight"))
         for last in last_key:
             rename_keys.append((f"encoder.input_proj.{j}.norm.{last}", f"model.encoder_input_proj.{j}.1.{last}"))
@@ -375,7 +371,6 @@ def create_rename_keys(config):
         rename_keys.append(
             (f"decoder.decoder.layers.{i}.norm2.bias", f"model.decoder.layers.{i}.encoder_attn_layer_norm.bias")
         )
-        # This layer is optional for the config.decoder_layer = "v2"
         rename_keys.append(
             (
                 f"decoder.decoder.layers.{i}.cross_attn.num_points_scale",
@@ -468,11 +463,6 @@ def create_rename_keys(config):
             ("decoder.query_pos_head.layers.0.bias", "model.decoder.query_pos_head.layers.0.bias"),
             ("decoder.query_pos_head.layers.1.weight", "model.decoder.query_pos_head.layers.1.weight"),
             ("decoder.query_pos_head.layers.1.bias", "model.decoder.query_pos_head.layers.1.bias"),
-            ("decoder.enc_output.0.weight", "model.enc_output.0.weight"),
-            ("decoder.enc_output.0.bias", "model.enc_output.0.bias"),
-            ("decoder.enc_output.1.weight", "model.enc_output.1.weight"),
-            ("decoder.enc_output.1.bias", "model.enc_output.1.bias"),
-            # This layer is optional for the config.decoder_layer = "v2"
             ("decoder.enc_output.proj.weight", "model.enc_output.0.weight"),
             ("decoder.enc_output.proj.bias", "model.enc_output.0.bias"),
             ("decoder.enc_output.norm.weight", "model.enc_output.1.weight"),
@@ -585,7 +575,7 @@ def convert_rt_detr_v2_checkpoint(model_name, pytorch_dump_folder_path, push_to_
     del state_dict["decoder.valid_mask"]
 
     # finally, create HuggingFace model and load state dict
-    model = RTDetrForObjectDetection(config)
+    model = RTDetrV2ForObjectDetection(config)
     model.load_state_dict(state_dict)
     model.eval()
 
@@ -624,13 +614,49 @@ def convert_rt_detr_v2_checkpoint(model_name, pytorch_dump_folder_path, push_to_
             [[0.2582, 0.5497, 0.4764], [0.1684, 0.1985, 0.2120], [0.7665, 0.4146, 0.4669]]
         )
     elif model_name == "rtdetr_v2_r34vd":
-        # TO DO
+        expected_slice_logits = torch.tensor(
+            [[-4.6110, -5.9455, -3.8502], 
+            [-3.8702, -6.1135, -5.5675], 
+            [-3.7788, -6.4537, -5.9451]]
+        )
+        expected_slice_boxes = torch.tensor(
+            [[0.1691, 0.1984, 0.2118],
+            [0.2594, 0.5506, 0.4736],
+            [0.7669, 0.4136, 0.4654]]
+        )
     elif model_name == "rtdetr_v2_r50vd_m":
-        # TO DO
+        expected_slice_logits = torch.tensor(
+            [[-2.7453, -5.4595, -7.3702],
+            [-3.1858, -5.3803, -7.9838],
+            [-5.0293, -7.0083, -4.2888]]
+        )
+        expected_slice_boxes = torch.tensor(
+            [[0.7711, 0.4135, 0.4577],
+            [0.2570, 0.5480, 0.4755],
+            [0.1694, 0.1992, 0.2127]]
+        )
     elif model_name == "rtdetr_v2_r50vd":
-        # TO DO
+        expected_slice_logits = torch.tensor(
+            [[-4.7881, -4.6754, -6.1624],
+            [-5.4441, -6.6486, -4.3840],
+            [-3.5455, -4.9318, -6.3544]]
+        )
+        expected_slice_boxes = torch.tensor(
+            [[0.2588, 0.5487, 0.4747],
+            [0.5497, 0.2760, 0.0573],
+            [0.7688, 0.4133, 0.4634]]
+        )
     elif model_name == "rtdetr_v2_r101vd":
-        # TO DO
+        expected_slice_logits = torch.tensor(
+            [[-4.6162, -4.9189, -4.6656],
+          [-4.4701, -4.4997, -4.9659],
+          [-5.6641, -7.9000, -5.0725]]
+        )
+        expected_slice_boxes = torch.tensor(
+            [[0.7707, 0.4124, 0.4585],
+          [0.2589, 0.5492, 0.4735],
+          [0.1688, 0.1993, 0.2108]]
+        )
     else:
         raise ValueError(f"Unknown rt_detr_v2_name: {model_name}")
 
@@ -663,7 +689,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--model_name",
-        default="rtdetr_r50vd",
+        default="rtdetr_v2_r50vd",
         type=str,
         help="model_name of the checkpoint you'd like to convert.",
     )

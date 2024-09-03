@@ -1079,8 +1079,7 @@ class RTDetrMultiheadAttention(nn.Module):
         return attn_output, attn_weights_reshaped
 
 
-# Copied from transformers.models.rt_detr.modeling_rt_detr.RTDetrDecoderLayer with R->R,RTDetrConfig->RTDetrV2Config
-class RTDetrDecoderLayer(nn.Module):
+class RTDetrV2DecoderLayer(nn.Module):
     def __init__(self, config: RTDetrV2Config):
         super().__init__()
         # self-attention
@@ -1200,7 +1199,7 @@ class RTDetrPreTrainedModel(PreTrainedModel):
         """Initalize the weights"""
 
         """initialize linear layer bias value according to a given probability value."""
-        if isinstance(module, (RTDetrForObjectDetection, RTDetrDecoder)):
+        if isinstance(module, (RTDetrV2ForObjectDetection, RTDetrV2Decoder)):
             if module.class_embed is not None:
                 for layer in module.class_embed:
                     prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
@@ -1470,13 +1469,12 @@ class RTDetrHybridEncoder(nn.Module):
         return BaseModelOutput(last_hidden_state=fpn_states, hidden_states=encoder_states, attentions=all_attentions)
 
 
-# Copied from transformers.models.rt_detr.modeling_rt_detr.RTDetrDecoder with R->R,RTDetrConfig->RTDetrV2Config
-class RTDetrDecoder(RTDetrPreTrainedModel):
+class RTDetrV2Decoder(RTDetrPreTrainedModel):
     def __init__(self, config: RTDetrV2Config):
         super().__init__(config)
 
         self.dropout = config.dropout
-        self.layers = nn.ModuleList([RTDetrDecoderLayer(config) for _ in range(config.decoder_layers)])
+        self.layers = nn.ModuleList([RTDetrV2DecoderLayer(config) for _ in range(config.decoder_layers)])
         self.query_pos_head = RTDetrMLPPredictionHead(config, 4, 2 * config.d_model, config.d_model, num_layers=2)
 
         # hack implementation for iterative bounding box refinement and two-stage Deformable DETR
@@ -1634,8 +1632,7 @@ class RTDetrDecoder(RTDetrPreTrainedModel):
     """,
     RTDETR_START_DOCSTRING,
 )
-# Copied from transformers.models.rt_detr.modeling_rt_detr.RTDetrModel with R->R,RTDetrConfig->RTDetrV2Config,PekingU/rtdetr_r50vd->
-class RTDetrModel(RTDetrPreTrainedModel):
+class RTDetrV2Model(RTDetrPreTrainedModel):
     def __init__(self, config: RTDetrV2Config):
         super().__init__(config)
 
@@ -1705,7 +1702,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
         self.decoder_input_proj = nn.ModuleList(decoder_input_proj_list)
 
         # decoder
-        self.decoder = RTDetrDecoder(config)
+        self.decoder = RTDetrV2Decoder(config)
 
         self.post_init()
 
@@ -2556,8 +2553,7 @@ def nested_tensor_from_tensor_list(tensor_list: List[Tensor]):
     """,
     RTDETR_START_DOCSTRING,
 )
-# Copied from transformers.models.rt_detr.modeling_rt_detr.RTDetrForObjectDetection with R->R,RTDetrConfig->RTDetrV2Config,PekingU/rtdetr_r50vd->
-class RTDetrForObjectDetection(RTDetrPreTrainedModel):
+class RTDetrV2ForObjectDetection(RTDetrPreTrainedModel):
     # When using clones, all layers > 0 will be clones, but layer 0 *is* required
     _tied_weights_keys = ["bbox_embed", "class_embed"]
     # We can't initialize the model on meta device as some weights are modified during the initialization
@@ -2567,7 +2563,7 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
         super().__init__(config)
 
         # RTDETR encoder-decoder model
-        self.model = RTDetrModel(config)
+        self.model = RTDetrV2Model(config)
 
         # Detection heads on top
         self.class_embed = partial(nn.Linear, config.d_model, config.num_labels)
@@ -2622,7 +2618,7 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import RTDetrImageProcessor, RTDetrForObjectDetection
+        >>> from transformers import RTDetrImageProcessor, RTDetrV2ForObjectDetection
         >>> from PIL import Image
         >>> import requests
         >>> import torch
@@ -2631,7 +2627,7 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> image_processor = RTDetrImageProcessor.from_pretrained("")
-        >>> model = RTDetrForObjectDetection.from_pretrained("")
+        >>> model = RTDetrV2ForObjectDetection.from_pretrained("")
 
         >>> # prepare image for the model
         >>> inputs = image_processor(images=image, return_tensors="pt")

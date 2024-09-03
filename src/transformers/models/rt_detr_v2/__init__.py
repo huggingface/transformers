@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING
 from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
 
 
-_import_structure = {"configuration_rt_detr_v2": ["RTDetrV2Config"], "configuration_rt_detr_v2_resnet": ["RTDetrResNetConfig"]}
+_import_structure = {"configuration_rt_detr_v2": ["RTDetrV2Config"], "configuration_rt_detr_v2_resnet": ["RTDetrResNetV2Config"]}
 
 try:
     if not is_torch_available():
@@ -26,19 +26,19 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_rt_detr_v2"] = [
-        "RTDetrForObjectDetection",
-        "RTDetrModel",
-        "RTDetrPreTrainedModel",
+        "RTDetrV2ForObjectDetection",
+        "RTDetrV2Model",
+        "RTDetrV2PreTrainedModel",
     ]
     _import_structure["modeling_rt_detr_v2_resnet"] = [
-        "RTDetrResNetBackbone",
-        "RTDetrResNetPreTrainedModel",
+        "RTDetrV2ResNetBackbone",
+        "RTDetrV2ResNetPreTrainedModel",
     ]
 
 
 if TYPE_CHECKING:
     from .configuration_rt_detr_v2 import RTDetrV2Config
-    from .configuration_rt_detr_v2_resnet import RTDetrResNetConfig
+    from .configuration_rt_detr_v2_resnet import RTDetrV2ResNetConfig
 
     try:
         if not is_torch_available():
@@ -47,13 +47,13 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_rt_detr_v2 import (
-            RTDetrForObjectDetection,
-            RTDetrModel,
-            RTDetrPreTrainedModel,
+            RTDetrV2ForObjectDetection,
+            RTDetrV2Model,
+            RTDetrV2PreTrainedModel,
         )
         from .modeling_rt_detr_v2_resnet import (
-            RTDetrResNetBackbone,
-            RTDetrResNetPreTrainedModel,
+            RTDetrV2ResNetBackbone,
+            RTDetrV2ResNetPreTrainedModel,
         )
 
 else:

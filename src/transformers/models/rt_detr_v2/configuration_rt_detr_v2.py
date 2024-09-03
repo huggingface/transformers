@@ -18,7 +18,7 @@ from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ...utils.backbone_utils import verify_backbone_config_arguments
 from ..auto import CONFIG_MAPPING
-from .configuration_rt_detr_v2_resnet import RTDetrResNetConfig
+from .configuration_rt_detr_v2_resnet import RTDetrV2ResNetConfig
 
 
 logger = logging.get_logger(__name__)
@@ -26,7 +26,7 @@ logger = logging.get_logger(__name__)
 
 class RTDetrV2Config(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`RTDetrModel`]. It is used to instantiate a
+    This is the configuration class to store the configuration of a [`RTDetrV2Model`]. It is used to instantiate a
     RT-DETR model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the RT-DETR
     [checkpoing/todo](https://huggingface.co/checkpoing/todo) architecture.
@@ -164,13 +164,13 @@ class RTDetrV2Config(PretrainedConfig):
     Examples:
 
     ```python
-    >>> from transformers import RTDetrV2Config, RTDetrModel
+    >>> from transformers import RTDetrV2Config, RTDetrV2Model
 
     >>> # Initializing a RT-DETR configuration
     >>> configuration = RTDetrV2Config()
 
     >>> # Initializing a model (with random weights) from the configuration
-    >>> model = RTDetrModel(configuration)
+    >>> model = RTDetrV2Model(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -255,9 +255,9 @@ class RTDetrV2Config(PretrainedConfig):
         # backbone
         if backbone_config is None and backbone is None:
             logger.info(
-                "`backbone_config` and `backbone` are `None`. Initializing the config with the default `RTDetr-ResNet` backbone."
+                "`backbone_config` and `backbone` are `None`. Initializing the config with the default `RTDetrV2-ResNet` backbone."
             )
-            backbone_config = RTDetrResNetConfig(
+            backbone_config = RTDetrV2ResNetConfig(
                 num_channels=3,
                 embedding_size=64,
                 hidden_sizes=[256, 512, 1024, 2048],

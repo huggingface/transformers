@@ -22,9 +22,9 @@ from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_feat
 logger = logging.get_logger(__name__)
 
 
-class RTDetrResNetConfig(BackboneConfigMixin, PretrainedConfig):
+class RTDetrV2ResNetConfig(BackboneConfigMixin, PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`RTDetrResnetBackbone`]. It is used to instantiate an
+    This is the configuration class to store the configuration of a [`RTDetrV2ResnetBackbone`]. It is used to instantiate an
     ResNet model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the ResNet
     [microsoft/resnet-50](https://huggingface.co/microsoft/resnet-50) architecture.
@@ -64,10 +64,10 @@ class RTDetrResNetConfig(BackboneConfigMixin, PretrainedConfig):
 
     Example:
     ```python
-    >>> from transformers import RTDetrResNetConfig, RTDetrResnetBackbone
+    >>> from transformers import RTDetrV2ResNetConfig, RTDetrResnetBackbone
 
     >>> # Initializing a ResNet resnet-50 style configuration
-    >>> configuration = RTDetrResNetConfig()
+    >>> configuration = RTDetrV2ResNetConfig()
 
     >>> # Initializing a model (with random weights) from the resnet-50 style configuration
     >>> model = RTDetrResnetBackbone(configuration)
