@@ -55,9 +55,9 @@ jobs:
                     url="https://circleci.com/api/v2/project/${project_slug}/${job_number}/artifacts"
                     curl -o  test_preparation/artifacts.json ${url}
             - run:
-                name: "Show Artifacts"
+                name: "Prepare pipeline parameters"
                 command: |
-                    cat test_preparation/artifacts.json | jq '.items | map({(.path | split("/")[-1][:-4]): .url}) | add | del(.["generated_config"])' > test_preparation/transformed_artifacts.json
+                    python utils/process_test_artifacts.py 
             
             # To avoid too long generated_config.yaml on the continuation orb, we pass the links to the artifacts as parameters.
             # Otherwise the list of tests was just too big. Explicit is good but for that it was a limitation.
@@ -68,6 +68,8 @@ jobs:
                 
             - store_artifacts:
                 path: test_preparation/transformed_artifacts.json
+            - store_artifacts:
+                path: test_preparation/artifacts.json
             - continuation/continue:
                 parameters:  test_preparation/transformed_artifacts.json
                 configuration_path: test_preparation/generated_config.yml
