@@ -50,7 +50,7 @@ def get_negative_inf_value(dtype):
     return torch.finfo(dtype).min
 
 
-def to_2tuple(x):
+def to_tuple(x) -> Tuple[int, int]:
     if isinstance(x, collections.abc.Iterable):
         return x
     return (x, x)
@@ -126,8 +126,8 @@ def resize_local_position_embedding(orig_pos_embed, grid_size):
     Original position embedding is [n_tiles * n_tiles + 1, dim]
     New position embedding will be [grid_size[0] * grid_size[1] + 1, dim]
     """
-    new_grid_size = to_2tuple(grid_size)
-    orig_grid_size = to_2tuple(int(math.sqrt(len(orig_pos_embed) - 1)))
+    new_grid_size = to_tuple(grid_size)
+    orig_grid_size = to_tuple(int(math.sqrt(len(orig_pos_embed) - 1)))
     new_seq_len = new_grid_size[0] * new_grid_size[1] + 1
 
     new_pos_emb_tok, new_pos_emb_img = (
@@ -164,7 +164,7 @@ def initialize_global_position_embedding_from_local(pos_and_cls_embed, grid_size
     """
     pos_embed = pos_and_cls_embed[1:]
     cls_embed = pos_and_cls_embed[0].view(1, 1, 1, -1)
-    grid_size = to_2tuple(grid_size)
+    grid_size = to_tuple(grid_size)
     new_pos_emb_img = pos_embed.reshape(
         1, grid_size[0], grid_size[1], -1
     ).permute(0, 3, 1, 2)
@@ -384,25 +384,15 @@ def _get_full_row_masked_out_mask(
     return (attn_bias != negative_inf_value).any(dim=-1).type_as(attn_bias)[..., None]
 
 
-# Image encoder for inference
-class LayerNorm(nn.LayerNorm):
-    """Subclass torch's LayerNorm to handle fp16."""
-
-    def forward(self, x: torch.Tensor):
-        x = torch.nn.functional.layer_norm(x, self.normalized_shape, self.weight, self.bias, self.eps)
-        return x
-
-
-class ColumnParallelConv2dPatch(torch.nn.Module):
-    """Conv2D Patching layer implemented with as linear layer operation.
-    (can be later replaced with Conv2d with small logits mismatch)
+class MllamaPatchEmbedding(nn.Module):
+    """Conv2D Patching layer implemented as linear layer operation.
+    (can be later replaced with Conv2d (bias=False) with small logits mismatch)
     
     Arguments:
         in_channels: Input channels.
         out_channels: Output channels.
         kernel_size: Size of convolution kernel.
         stride (default 1): Stride for convolution.
-        bias (default False): Use bias in Conv2d.
     Input: (bsz, in_channels, width, height)
     Output: (bsz, num_tokens, out_channels)
     """
@@ -413,7 +403,6 @@ class ColumnParallelConv2dPatch(torch.nn.Module):
         out_channels: int,
         kernel_size: Union[int, Tuple[int, int]],
         stride: Union[int, Tuple[int, int]],
-        bias: Optional[bool] = False,
     ) -> None:
         super().__init__()
         
@@ -427,7 +416,7 @@ class ColumnParallelConv2dPatch(torch.nn.Module):
 
         self.unfold = torch.nn.Unfold(kernel_size=kernel_size, stride=stride)
 
-        # param equvalient to Conv2d weight, it will reshaped in forward to fit Linear layer,
+        # param equvalient to Conv2d weight, it will be reshaped in forward to fit Linear layer,
         # to be fully equvalent original implementation
         self.weight = torch.nn.Parameter(
             torch.randn(out_channels, in_channels, kernel_size[0], kernel_size[1]),
@@ -441,7 +430,64 @@ class ColumnParallelConv2dPatch(torch.nn.Module):
         return hidden_state
 
 
-class MllamaImageMLP(torch.nn.Module):
+class MllamaTilePositionEmbedding(nn.Module):
+    # originally TilePositionEmbedding
+    def __init__(
+        self,
+        max_num_tiles: int,
+        hidden_size: int,
+        is_gated: bool = False,
+    ):
+        super().__init__()
+        self.max_num_tiles = max_num_tiles
+        self.hidden_size = hidden_size
+        self.is_gated = is_gated
+
+        scale = hidden_size ** -0.5
+        self.embedding = nn.Parameter(torch.randn(self.max_num_tiles, self.max_num_tiles, 1, self.hidden_size) / scale)
+        if is_gated:
+            self.gate = nn.Parameter(torch.zeros(1))
+
+
+    @staticmethod
+    def _dynamic_resize(embedding: torch.Tensor, num_tiles: int):
+        embedding = embedding.permute(2, 3, 0, 1)
+
+        embedding_new = F.interpolate(
+            embedding,
+            size=(num_tiles, num_tiles),
+            mode="bilinear",
+            align_corners=True,
+        )
+        # reshape the weights to the correct shape
+        embedding_new = embedding_new.permute(2, 3, 0, 1)
+        return embedding_new
+
+
+    def forward(self, hidden_state: torch.Tensor, aspect_ratios: torch.Tensor, num_tiles: Optional[int] = None) -> torch.Tensor:
+        
+        if num_tiles is None:
+            num_tiles = self.max_num_tiles
+        elif num_tiles > self.max_num_tiles:
+            self.embedding = self._dynamic_resize(self.embedding, num_tiles)
+
+        batch_size = hidden_state.shape[0]
+        out_tile_embedding = torch.zeros(
+            batch_size, num_tiles, 1, self.hidden_size, device=hidden_state.device, dtype=hidden_state.dtype
+        )
+        for idx, aspect_ratio_i in enumerate(aspect_ratios):
+            height, width = aspect_ratio_i
+            tile_embedding_i = self.embedding[:height, :width]
+            out_tile_embedding[idx, :height * width] = tile_embedding_i.reshape(height * width, 1, self.hidden_size)
+        
+        if self.is_gated:
+            out_tile_embedding = out_tile_embedding * self.gate.tanh()
+
+        hidden_state = hidden_state + out_tile_embedding
+        return hidden_state
+
+
+class MllamaImageMLP(nn.Module):
     # originally ImageFeedForward
 
     def __init__(
@@ -627,70 +673,66 @@ class MllamaImageTransformer(nn.Module):
         max_num_tiles: int,
         image_size: Tuple[int, int] = (224, 224),
         patch_size: Tuple[int, int] = (14, 14),
-        width: int = 1280,
+        hidden_size: int = 1280,
         num_layers: int = 32,
         heads: int = 16,
         in_channels: int = 3,
         n_global_layers: int = 2,
-        global_model: bool = False,
         return_intermediate: Optional[List[int]] = None,
     ):
         super().__init__()
-        self.global_model = global_model
-        self.return_intermediate = return_intermediate
         self.max_num_tiles = max_num_tiles
-        self.image_size = to_2tuple(image_size)
-        self.patch_size = to_2tuple(patch_size)
-        self.grid_size = (
-            self.image_size[0] // self.patch_size[0],
-            self.image_size[1] // self.patch_size[1],
-        )
-        self.scale = width ** -0.5
+        self.hidden_size = hidden_size
+        self.in_channels = in_channels
+        self.return_intermediate = return_intermediate
+        self.image_size = to_tuple(image_size)
+        self.patch_size = to_tuple(patch_size)
+        self.num_patches_height = self.image_size[0] // self.patch_size[0]
+        self.num_patches_width = self.image_size[1] // self.patch_size[1]
+        self.num_patches = self.num_patches_height * self.num_patches_width + 1
+        self.scale = hidden_size ** -0.5
 
         # patch and class embedding
-        self.patch_embedding = ColumnParallelConv2dPatch(
-            in_channels=in_channels,
-            out_channels=width,
-            kernel_size=patch_size,
-            stride=patch_size,
-            bias=False,
+        self.patch_embedding = MllamaPatchEmbedding(
+            in_channels=self.in_channels,
+            out_channels=self.hidden_size,
+            kernel_size=self.patch_size,
+            stride=self.patch_size,
         )
-        self.class_embedding = nn.Parameter(self.scale * torch.randn(width))
+        self.class_embedding = nn.Parameter(self.scale * torch.randn(self.hidden_size))
 
         # positinal embeddings and gate
-        self.positional_embedding = nn.Parameter(
-            self.scale * torch.randn(self.grid_size[0] * self.grid_size[1] + 1, width)
-        )
+        self.positional_embedding = nn.Parameter(self.scale * torch.randn(self.num_patches, self.hidden_size))
         self.gated_positional_embedding = nn.Parameter(
             self.scale
             * torch.randn(
                 max_num_tiles,
                 max_num_tiles,
-                self.grid_size[0] * self.grid_size[1] + 1,
-                width,
+                self.num_patches,
+                self.hidden_size,
             )
         )
         self.gated_positional_embedding_gate = nn.Parameter(torch.zeros(1))
 
         # pre and post tile position embedding
-        self.pre_tile_pos_embed = TilePositionEmbedding(
-            num_tiles=max_num_tiles,
-            width=width,
-            gated=True,
+        self.pre_tile_pos_embed = MllamaTilePositionEmbedding(
+            max_num_tiles=max_num_tiles,
+            hidden_size=self.hidden_size,
+            is_gated=True,
         )
-        self.post_tile_pos_embed = TilePositionEmbedding(
-            num_tiles=max_num_tiles,
-            width=width,
-            gated=True,
+        self.post_tile_pos_embed = MllamaTilePositionEmbedding(
+            max_num_tiles=max_num_tiles,
+            hidden_size=self.hidden_size,
+            is_gated=True,
         )
 
         # layer norms
-        self.ln_post = nn.LayerNorm(width)
-        self.ln_pre = nn.LayerNorm(width)
+        self.ln_post = nn.LayerNorm(self.hidden_size)
+        self.ln_pre = nn.LayerNorm(self.hidden_size)
 
         # encoders
-        self.transformer = MllamaImageEncoder(width, num_layers, heads, is_gated=False)
-        self.global_transformer = MllamaImageEncoder(width, n_global_layers, heads, is_gated=True)
+        self.transformer = MllamaImageEncoder(self.hidden_size, num_layers, heads, is_gated=False)
+        self.global_transformer = MllamaImageEncoder(self.hidden_size, n_global_layers, heads, is_gated=True)
 
     def apply_positional_embedding(self, hidden_state: torch.Tensor, aspect_ratios: torch.Tensor) -> torch.Tensor:
         
@@ -738,7 +780,7 @@ class MllamaImageTransformer(nn.Module):
         x = images.reshape(bsz * num_concurrent_media * num_chunks, nch, w, h)
         x = self.patch_embedding(x)  # shape = [*, width, grid ** 2]
         # equivalent to column parallel conv2d op
-        if not isinstance(self.patch_embedding, ColumnParallelConv2dPatch):
+        if not isinstance(self.patch_embedding, MllamaPatchEmbedding):
             x = x.flatten(2).transpose(1, 2) # required for Conv2d path embed implementation
         _, ntok, dim = x.shape
         x = x.reshape(bsz * num_concurrent_media, num_chunks, -1, dim)
@@ -1039,58 +1081,6 @@ class TransformerBlock(nn.Module):
         out = h + self.mlp.forward(self.post_attention_layernorm(h))
         return out
 
-
-class TilePositionEmbedding(nn.Module):
-    def __init__(
-        self,
-        num_tiles: int,
-        width: int,
-        gated: bool = False,
-    ):
-        super().__init__()
-        self.num_tiles = num_tiles
-        self.width = width
-        self.embedding = nn.Parameter(
-            torch.randn(num_tiles, num_tiles, 1, width) / math.sqrt(width)
-        )
-        self.gated = gated
-        if gated:
-            self.gate = nn.Parameter(torch.zeros(1))
-
-
-    @staticmethod
-    def _dynamic_resize(embed: torch.Tensor, num_tiles: int):
-        nt_old, nt_old, _, w = embed.shape
-        embed = embed.permute(2, 3, 0, 1)
-
-        embed_new = F.interpolate(
-            embed,
-            size=(num_tiles, num_tiles),
-            mode="bilinear",
-            align_corners=True,
-        )
-        # reshape the weights to the correct shape
-        embed_new = embed_new.permute(2, 3, 0, 1)
-        return embed_new
-
-    def forward(self, x: torch.Tensor, ar: torch.Tensor, num_tiles: int = None):
-        embed = self.embedding
-        if num_tiles is None:
-            num_tiles = self.num_tiles
-        elif num_tiles > self.num_tiles:
-            embed = TilePositionEmbedding._dynamic_resize(self.embedding, num_tiles)
-        out_pos_embed = torch.zeros(
-            x.shape[0], num_tiles, 1, self.width, device=x.device, dtype=x.dtype
-        )
-        for idx, arx in enumerate(ar):
-            w, h = arx
-            out_pos_embed[idx, : w * h] = embed[:w, :h].reshape(w * h, 1, self.width)
-        if self.gated:
-            out_pos_embed = out_pos_embed * self.gate.tanh()
-        x = x + out_pos_embed
-        return x
-
-
 def _noinit(x):
     return x
 
@@ -1336,7 +1326,6 @@ class MllamaCrossAttentionVisionModel(torch.nn.Module):
             image_size=self.image_res,
             patch_size=self.patch_size,
             n_global_layers=config.global_vision_layers,
-            global_model=True,
             return_intermediate=return_intermediate,
         )
         # vision token projection
