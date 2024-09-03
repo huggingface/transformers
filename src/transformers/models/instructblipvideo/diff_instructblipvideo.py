@@ -22,27 +22,10 @@ from torch.nn import CrossEntropyLoss
 
 from transformers.models.instructblip.configuration_instructblip import (
     InstructBlipConfig,
-    InstructBlipQFormerConfig,
-    InstructBlipVisionConfig,
 )
 from transformers.models.instructblip.modeling_instructblip import (
-    InstructBlipAttention,
-    InstructBlipEncoder,
-    InstructBlipEncoderLayer,
     InstructBlipForConditionalGeneration,
     InstructBlipForConditionalGenerationModelOutput,
-    InstructBlipMLP,
-    InstructBlipPreTrainedModel,
-    InstructBlipQFormerAttention,
-    InstructBlipQFormerEmbeddings,
-    InstructBlipQFormerEncoder,
-    InstructBlipQFormerIntermediate,
-    InstructBlipQFormerLayer,
-    InstructBlipQFormerModel,
-    InstructBlipQFormerOutput,
-    InstructBlipQFormerSelfOutput,
-    InstructBlipVisionEmbeddings,
-    InstructBlipVisionModel,
 )
 
 from ...utils import logging
@@ -58,7 +41,6 @@ class InstructBlipVideoConfig(InstructBlipConfig):
 @dataclass
 class InstructBlipVideoForConditionalGenerationModelOutput(InstructBlipForConditionalGenerationModelOutput):
     pass
-
 
 
 class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGeneration):

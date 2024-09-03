@@ -31,9 +31,9 @@ from transformers.models.llama.modeling_llama import (
     repeat_kv,
 )
 
-from ...configuration_utils import PretrainedConfig
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
+from ...configuration_utils import PretrainedConfig
 from ...modeling_flash_attention_utils import _flash_attention_forward
 from ...modeling_outputs import CausalLMOutputWithPast
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS

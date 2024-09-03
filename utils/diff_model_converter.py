@@ -248,7 +248,7 @@ class SuperTransformer(cst.CSTTransformer):
         existing_nodes = set()
         for node in new_statements:
             code = self.python_module.code_for_node(node)
-            if m.matches(node,m.SimpleStatementLine(body=[m.Assign()])):
+            if m.matches(node, m.SimpleStatementLine(body=[m.Assign()])):
                 target = self.python_module.code_for_node(node.body[0].targets[0])
                 self.all_assign_target[target] = node
             comment_less_code = re.sub(r"#.*", "", code).strip()
@@ -573,7 +573,9 @@ class DiffConverterTransformer(CSTTransformer):
             if len(list_dependencies) > 0:
                 updated_node = replace_call_to_super(class_finder, updated_node, class_name)
             else:
-                raise ValueError(f"Unable to find dependencies for {super_class} in {super_file_name}. Here are the dependencies found: {class_finder.class_dependency_mapping}. (The automatic renaming might have gone wrong!)")
+                raise ValueError(
+                    f"Unable to find dependencies for {super_class} in {super_file_name}. Here are the dependencies found: {class_finder.class_dependency_mapping}. (The automatic renaming might have gone wrong!)"
+                )
         if "Config" in class_name:
             self.config_body += [updated_node]
         else:

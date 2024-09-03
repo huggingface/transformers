@@ -28,8 +28,8 @@ from transformers.models.llava_next.modeling_llava_next import (
     image_size_to_num_patches,
 )
 
-from ...configuration_utils import PretrainedConfig
 from ...cache_utils import Cache
+from ...configuration_utils import PretrainedConfig
 from ...utils import (
     logging,
     replace_return_docstrings,
