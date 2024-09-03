@@ -520,19 +520,25 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_generation_siglip_backbone(self):
         model_id = "llava-hf/llava-interleave-qwen-0.5b-hf"
-        model = LlavaForConditionalGeneration.from_pretrained(model_id, torch_dtype="float16")
+        model = LlavaForConditionalGeneration.from_pretrained(model_id, torch_dtype="float16", device_map=torch_device)
         processor = AutoProcessor.from_pretrained(model_id)
+
+        # check processing with expansion of inputs (w/o expansion should work with any backbone)
+        processor.vision_feature_select_strategy = "default"
+        processor.patch_size = 14
 
         image_file = "http://images.cocodataset.org/val2017/000000039769.jpg"
         raw_image = Image.open(requests.get(image_file, stream=True).raw)
-        inputs = processor("<image>\nUSER: Describe the image.\nASSISTANT:", raw_image, return_tensors="pt").to(
-            torch_device, torch.float16
-        )
+        inputs = processor(
+            text="<|im_start|>user\n<image>\nWhat are these?<|im_end|>\n<|im_start|>assistant",
+            images=raw_image,
+            return_tensors="pt",
+        ).to(torch_device, torch.float16)
 
         # Make sure that `generate` works
         output = model.generate(**inputs, max_new_tokens=30)
 
-        EXPECTED_DECODED_TEXT = ""
+        EXPECTED_DECODED_TEXT = "user\n\nWhat are these?\nassistant The image shows two cats, one on the left and one on the right. They appear to be resting or sleeping on a pink blanket. The cat"
         self.assertTrue(processor.batch_decode(output, skip_special_tokens=True)[0] == EXPECTED_DECODED_TEXT)
 
     @slow

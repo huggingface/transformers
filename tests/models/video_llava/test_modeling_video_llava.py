@@ -446,10 +446,9 @@ class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         output = model.generate(**inputs, max_new_tokens=900, do_sample=False)
         EXPECTED_DECODED_TEXT = "USER: \nDescribe the video in details. ASSISTANT: The video features a young child sitting on a bed, holding a book and reading it. " \
-                "The child appears to be enjoying the book, as they are fully engaged in the activity. The bed is located in a bedroom, and there is a chair nearby. " \
-                "The child is wearing a blue shirt and glasses, which suggests that they might have a visual impairment. The room is well-lit, and there is a clock on " \
-                "the wall, indicating the time. The child's focus on the book indicates that they are interested in the content and are actively participating in the " \
-                "reading process. Overall, the video captures a heartwarming moment of a child engaging in a simple yet essential activity, which is reading."  # fmt: skip
+            "The child appears to be enjoying the book, as they are fully engaged in the activity. The room is well-lit, and the child is wearing a comfortable outfit. " \
+            "The bed is positioned in the center of the room, and there is a chair nearby. The child's focus on the book suggests that they are learning and developing " \
+            "their reading skills. The video captures a heartwarming moment of a child's love for reading and the joy it brings."  # fmt: skip
 
         self.assertEqual(
             processor.decode(output[0], skip_special_tokens=True),
@@ -598,13 +597,13 @@ class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # check processing with expansion of inputs
         processor.vision_feature_select_strategy = "default"
-        processor.num_image_tokens = 257
+        processor.patch_size = 14
         inputs_expanded = processor(prompt, images=image, return_tensors="pt").to(torch_device, torch.float16)
         self.assertTrue(inputs_expanded.input_ids.shape[-1] == 274)
 
         # check processing without expansion of inputs (legacy behavior)
         processor.vision_feature_select_strategy = None
-        processor.num_image_tokens = None
+        processor.patch_size = None
         inputs = processor(prompt, images=image, return_tensors="pt").to(torch_device, torch.float16)
         self.assertTrue(inputs.input_ids.shape[-1] == 19)
 

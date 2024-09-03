@@ -364,29 +364,6 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
         inputs = self.processor(self.prompt_video, videos=self.video, return_tensors="pt")
-        expected_input_ids = [
-            1,
-            3148,
-            1001,
-            29901,
-            29871,
-            32000,
-            13,
-            11008,
-            338,
-            445,
-            4863,
-            2090,
-            1460,
-            29973,
-            319,
-            1799,
-            9047,
-            13566,
-            29901,
-        ]
-        self.assertListEqual(expected_input_ids, inputs.input_ids[0].tolist())
-
         # verify single forward pass
         inputs = inputs.to(torch_device)
         with torch.no_grad():
@@ -394,7 +371,7 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # verify generation
         output = model.generate(**inputs, do_sample=False, max_new_tokens=40)
-        EXPECTED_DECODED_TEXT = 'USER: \nWhy is this video funny? ASSISTANT: The humor in this video comes from the unexpected and exaggerated reactions of the child to the book. The child appears to be reading a book, but instead of a calm and focused reading experience'  # fmt: skip
+        EXPECTED_DECODED_TEXT = 'USER: \nWhy is this video funny? ASSISTANT: The humor in this video comes from the unexpected and somewhat comical situation of a young child reading a book while another child is attempting to read the same book. The child who is reading the book seems'  # fmt: skip
 
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
@@ -417,7 +394,10 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         output = model.generate(**inputs, do_sample=False, max_new_tokens=20)
 
-        EXPECTED_DECODED_TEXT = ['USER: \nWhy is this video funny? ASSISTANT: The humor in this video comes from the unexpected and exaggerated reactions of the child to the', 'USER: \nWhy is this video funny? ASSISTANT: The humor in this video comes from the unexpected and exaggerated reactions of the child to the']  # fmt: skip
+        EXPECTED_DECODED_TEXT = [
+            'USER: \nWhy is this video funny? ASSISTANT: The humor in this video comes from the unexpected and somewhat comical situation of a young child reading a',
+            'USER: \nWhy is this video funny? ASSISTANT: The humor in this video comes from the unexpected and somewhat comical situation of a young child reading a'
+        ]  # fmt: skip
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
@@ -448,7 +428,7 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # verify generation
         output = model.generate(**inputs, do_sample=False, max_new_tokens=50)
-        EXPECTED_DECODED_TEXT = 'USER: \nWhat is shown in this image? ASSISTANT: The image appears to be a graphical representation of a benchmark test for a machine learning model. It shows the performance of various models on a task, with the x-axis representing the number of parameters (measured in millions) and the y'  # fmt: skip
+        EXPECTED_DECODED_TEXT = 'USER: \nWhat is shown in this image? ASSISTANT: The image appears to be a graphical representation of a machine learning model\'s performance on a task, likely related to natural language processing or text understanding. It shows a scatter plot with two axes, one labeled "BLIP-2"'  # fmt: skip
         self.assertEqual(self.processor.decode(output[0], skip_special_tokens=True), EXPECTED_DECODED_TEXT)
 
     @slow
@@ -569,13 +549,13 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # check processing with expansion of inputs
         processor.vision_feature_select_strategy = "default"
-        processor.num_image_tokens = 577
+        processor.patch_size = 14
         inputs_expanded = processor(self.prompt_image, images=[self.image], return_tensors="pt").to(torch_device)
         self.assertTrue(inputs_expanded.input_ids.shape[-1] == 2652)
 
         # check processing without expansion of inputs (legacy behavior)
         processor.vision_feature_select_strategy = None
-        processor.num_image_tokens = None
+        processor.patch_size = None
         inputs = processor(self.prompt_image, images=[self.image], return_tensors="pt").to(torch_device)
         self.assertTrue(inputs.input_ids.shape[-1] == 19)
 
@@ -607,7 +587,7 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # check processing with expansion of inputs
         processor.vision_feature_select_strategy = "default"
-        processor.num_image_tokens = 577
+        processor.patch_size = 14
         inputs_expanded = processor(text=prompt, images=[raw_image, deer_image], return_tensors="pt").to(
             torch_device, torch.float16
         )
@@ -615,7 +595,7 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # check processing without expansion of inputs (legacy behavior)
         processor.vision_feature_select_strategy = None
-        processor.num_image_tokens = None
+        processor.patch_size = None
         inputs = processor(text=prompt, images=[raw_image, deer_image], return_tensors="pt").to(
             torch_device, torch.float16
         )

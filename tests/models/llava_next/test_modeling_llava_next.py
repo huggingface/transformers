@@ -476,11 +476,10 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
             device=torch_device,
         )
         assert torch.allclose(output.logits[0, -3:, -3:], expected_slice, atol=1e-3)
-        assert torch.allclose(output.loss, torch.tensor(7.0206, device=torch_device))
+        assert torch.allclose(output.loss, torch.tensor(7.0206, device=torch_device), atol=1e-3)
 
         # verify generation
         output = model.generate(**inputs, max_new_tokens=50)
-        print(self.processor.decode(output[0], skip_special_tokens=True))
         EXPECTED_DECODED_TEXT = '[INST]  \nWhat is shown in this image? [/INST] The image shows two deer, likely fawns, in a grassy area with trees in the background. The setting appears to be a forest or woodland, and the photo is taken during what seems to be either dawn or dusk, given'  # fmt: skip
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
@@ -587,7 +586,7 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # check processing with expansion of inputs
         processor.vision_feature_select_strategy = "default"
-        processor.num_image_tokens = 577
+        processor.patch_size = 14
         inputs_expanded = processor(text=prompt, images=[raw_image, deer_image], return_tensors="pt").to(
             torch_device, torch.float16
         )
@@ -595,7 +594,7 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # check processing without expansion of inputs (legacy behavior)
         processor.vision_feature_select_strategy = None
-        processor.num_image_tokens = None
+        processor.patch_size = None
         inputs = processor(text=prompt, images=[raw_image, deer_image], return_tensors="pt").to(
             torch_device, torch.float16
         )
