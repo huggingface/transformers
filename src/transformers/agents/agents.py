@@ -24,7 +24,7 @@ from ..utils import logging as transformers_logging
 from ..utils.import_utils import is_pygments_available
 from .agent_types import AgentAudio, AgentImage, AgentText
 from .default_tools import BASE_PYTHON_TOOLS, FinalAnswerTool, setup_default_tools
-from .llm_engine import HfEngine, MessageRole
+from .llm_engine import HfApiEngine, MessageRole
 from .prompts import (
     DEFAULT_CODE_SYSTEM_PROMPT,
     DEFAULT_REACT_CODE_SYSTEM_PROMPT,
@@ -352,7 +352,7 @@ class Agent:
     def __init__(
         self,
         tools: Union[List[Tool], Toolbox],
-        llm_engine: Callable = HfEngine(),
+        llm_engine: Callable = HfApiEngine(),
         system_prompt=DEFAULT_REACT_CODE_SYSTEM_PROMPT,
         tool_description_template=None,
         additional_args={},
@@ -575,7 +575,7 @@ class CodeAgent(Agent):
     def __init__(
         self,
         tools: List[Tool],
-        llm_engine: Callable = HfEngine(),
+        llm_engine: Callable = HfApiEngine(),
         system_prompt: str = DEFAULT_CODE_SYSTEM_PROMPT,
         tool_description_template: str = DEFAULT_TOOL_DESCRIPTION_TEMPLATE,
         grammar: Dict[str, str] = None,
@@ -698,7 +698,7 @@ class ReactAgent(Agent):
     def __init__(
         self,
         tools: List[Tool],
-        llm_engine: Callable = HfEngine(),
+        llm_engine: Callable = HfApiEngine(),
         system_prompt: str = DEFAULT_REACT_CODE_SYSTEM_PROMPT,
         tool_description_template: str = DEFAULT_TOOL_DESCRIPTION_TEMPLATE,
         grammar: Dict[str, str] = None,
@@ -931,7 +931,7 @@ class ReactJsonAgent(ReactAgent):
     def __init__(
         self,
         tools: List[Tool],
-        llm_engine: Callable = HfEngine(),
+        llm_engine: Callable = HfApiEngine(),
         system_prompt: str = DEFAULT_REACT_JSON_SYSTEM_PROMPT,
         tool_description_template: str = DEFAULT_TOOL_DESCRIPTION_TEMPLATE,
         grammar: Dict[str, str] = None,
@@ -1041,7 +1041,7 @@ class ReactCodeAgent(ReactAgent):
     def __init__(
         self,
         tools: List[Tool],
-        llm_engine: Callable = HfEngine(),
+        llm_engine: Callable = HfApiEngine(),
         system_prompt: str = DEFAULT_REACT_CODE_SYSTEM_PROMPT,
         tool_description_template: str = DEFAULT_TOOL_DESCRIPTION_TEMPLATE,
         grammar: Dict[str, str] = None,
