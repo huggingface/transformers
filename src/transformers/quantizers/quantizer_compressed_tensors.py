@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import List
 
 from ..utils import is_compressed_tensors_available, is_torch_available, logging
 from ..utils.quantization_config import QuantizationConfigMixin
@@ -59,14 +58,6 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
                 "We suggest you to set `torch_dtype=torch.float16` for better efficiency with compressed_tensors."
             )
         return torch_dtype
-
-    def update_unexpected_keys(self, model, unexpected_keys: List[str], prefix: str) -> List[str]:
-        def _is_compressed_key(key: str) -> bool:
-            # key names in compressed state dict that will not be present in
-            # a decompressed state dict
-            return key.endswith("weight_shape") or key.endswith("weight_packed")
-
-        return [key for key in unexpected_keys if not _is_compressed_key(key)]
 
     def _process_model_before_weight_loading(self, model, **kwargs):
         from compressed_tensors.quantization import apply_quantization_config
