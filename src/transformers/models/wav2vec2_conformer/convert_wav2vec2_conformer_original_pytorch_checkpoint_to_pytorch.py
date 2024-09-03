@@ -38,7 +38,6 @@ from transformers import (
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
-SAMPLE_RATE = 8000  # 8000, 16000
 MAPPING = {
     "post_extract_proj": "feature_projection.projection",
     "encoder.pos_conv.0": "encoder.pos_conv_embed.conv",
@@ -227,12 +226,19 @@ def import_user_module(user_dir: str):
 
 @torch.no_grad()
 def convert_wav2vec2_conformer_checkpoint(
-    checkpoint_path, pytorch_dump_folder_path, config_path=None, dict_path=None, is_finetuned=True, extension_path=None
+    checkpoint_path,
+    pytorch_dump_folder_path,
+    sample_rate=16000,
+    config_path=None,
+    dict_path=None,
+    is_finetuned=True,
+    extension_path=None,
 ):
     """
     Copy/paste/tweak model's weights to transformers design.
     """
-    import_user_module(user_dir=extension_path)
+    if extension_path is not None:
+        import_user_module(user_dir=extension_path)
 
     if config_path is not None:
         config = Wav2Vec2ConformerConfig.from_pretrained(config_path, hidden_act="swish")
@@ -276,7 +282,7 @@ def convert_wav2vec2_conformer_checkpoint(
             return_attention_mask = True if config.feat_extract_norm == "layer" else False
             feature_extractor = Wav2Vec2FeatureExtractor(
                 feature_size=1,
-                sampling_rate=SAMPLE_RATE,
+                sampling_rate=sample_rate,
                 padding_value=0,
                 do_normalize=True,
                 return_attention_mask=return_attention_mask,
@@ -309,6 +315,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
     parser.add_argument("--checkpoint_path", default=None, type=str, help="Path to fairseq checkpoint")
+    parser.add_argument("--sample_rate", default=16000, type=int, help="Sample rate of the model")
     parser.add_argument("--dict_path", default=None, type=str, help="Path to dict of fine-tuned model")
     parser.add_argument("--config_path", default=None, type=str, help="Path to hf config.json of model to convert")
     parser.add_argument(
@@ -319,6 +326,7 @@ if __name__ == "__main__":
     convert_wav2vec2_conformer_checkpoint(
         args.checkpoint_path,
         args.pytorch_dump_folder_path,
+        args.sample_rate,
         args.config_path,
         args.dict_path,
         not args.not_finetuned,
