@@ -133,11 +133,7 @@ class CircleCIJob:
             },
             {"run": {"name": "Create `test-results` directory", "command": "mkdir test-results"}},
             {"run": {"name": "Get files to test", "command":f'curl -L -o {self.job_name}_test_list.txt <<pipeline.parameters.{self.job_name}_test_list>>' if self.name != "pr_documentation_tests" else 'echo "Skipped"'}},
-            {"run": {
-                "name": "Compute pipeline parallelism",
-                "command": f"WORD_COUNT=$(wc -w < \"{self.job_name}_test_list.txt\")\nif [ \"$WORD_COUNT\" -lt {5 * self.parallelism} ]; then\n  echo \"export PARALLELISM=1\" >> $BASH_ENV\nelse\n  echo \"export PARALLELISM=30\" >> $BASH_ENV\nfi\nsource $BASH_ENV"
-            }},
-            {"run": {"name": "Split tests across parallel nodes: show current parallel tests",
+                        {"run": {"name": "Split tests across parallel nodes: show current parallel tests",
                     "command": f"TESTS=$(circleci tests split  --split-by=timings {self.job_name}_test_list.txt) && echo $TESTS > splitted_tests.txt && echo $TESTS | tr ' ' '\n'" if self.parallelism else f"awk '{{printf \"%s \", $0}}' {self.job_name}_test_list.txt > splitted_tests.txt"
                     }
             },
@@ -156,7 +152,7 @@ class CircleCIJob:
             {"store_artifacts": {"path": "installed.txt"}},
         ]
         if self.parallelism:
-            job["parallelism"] = " ${PARALLELISM} "
+            job["parallelism"] = "<<pipeline.parameters.{self.job_name}_parallelism>> "
         job["steps"] = steps
         return job
 
@@ -363,6 +359,7 @@ def create_circleci_config(folder=None):
             "nightly": {"type": "boolean", "default": False},
             "tests_to_run": {"type": "string", "default": ''},
             **{j.job_name + "_test_list":{"type":"string", "default":''} for j in jobs},
+            **{j.job_name + "_parallelism":{"type":"string", "default":''} for j in jobs},
         },
         "jobs" : {j.job_name: j.to_dict() for j in jobs},
         "workflows": {"version": 2, "run_tests": {"jobs": [j.job_name for j in jobs]}}
