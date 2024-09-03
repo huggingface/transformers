@@ -489,15 +489,15 @@ class DiffConverterTransformer(CSTTransformer):
         parent_node = self.get_metadata(cst.metadata.ParentNodeProvider, original_node)
         if m.matches(parent_node, m.Module()):
             if m.matches(updated_node, m.SimpleStatementLine(body=[m.Import()])):
-                if parent_node not in self.all_safe_imports:
-                    self.all_safe_imports.append(updated_node)
+                if updated_node not in self.all_safe_imports:
+                    self.all_imports.append(updated_node)
                 return updated_node
             elif m.matches(updated_node, m.SimpleStatementLine(body=[m.ImportFrom()])):
                 full_statement = self.python_module.code_for_node(updated_node.body[0].module)
                 if re.search(r"transformers\.models\..*\.(modeling|configuration)_.*", full_statement):
                     return cst.RemoveFromParent()
-                if parent_node not in self.all_safe_imports:
-                    self.all_safe_imports.append(updated_node)
+                if updated_node not in self.all_safe_imports:
+                    self.all_imports.append(updated_node)
                 return updated_node
             self.global_scope_index += 100
             if m.matches(updated_node, m.SimpleStatementLine(body=[m.Assign()])):
