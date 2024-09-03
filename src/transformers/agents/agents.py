@@ -360,7 +360,6 @@ class Agent:
         tool_parser=parse_json_tool_call,
         add_base_tools: bool = False,
         verbose: int = 0,
-        memory_verbose: bool = False,
         grammar: Dict[str, str] = None,
         managed_agents: List = None,
     ):
@@ -398,7 +397,6 @@ class Agent:
         self.prompt = None
         self.logs = []
         self.task = None
-        self.memory_verbose = memory_verbose
 
         if verbose == 0:
             logger.setLevel(logging.WARNING)
@@ -476,12 +474,12 @@ class Agent:
             if "error" in step_log or "observation" in step_log:
                 if "error" in step_log:
                     message_content = (
-                        f"[OUTPUT OF STEP {i}] Error: "
+                        f"[OUTPUT OF STEP {i}] -> Error:\n"
                         + str(step_log["error"])
                         + "\nNow let's retry: take care not to repeat previous errors! If you have retried several times, try a completely different approach.\n"
                     )
                 elif "observation" in step_log:
-                    message_content = f"[OUTPUT OF STEP {i}] Observation:\n{step_log['observation']}"
+                    message_content = f"[OUTPUT OF STEP {i}] -> Observation:\n{step_log['observation']}"
                 tool_response_message = {"role": MessageRole.TOOL_RESPONSE, "content": message_content}
                 memory.append(tool_response_message)
 
@@ -1195,28 +1193,16 @@ And even if your task resolution is not successful, please return as much contex
         full_task = self.write_full_task(request)
         output = self.agent.run(full_task, **kwargs)
         if self.provide_run_summary:
-            answer = f"Here is the report from the work of your managed agent '{self.name}':\n"
+            answer = f"Here is the final answer from your managed agent '{self.name}':\n"
+            answer += str(output)
+            answer += f"\n\nFor more detail, find below a summary of this agent's work:\nSUMMARY OF WORK FROM AGENT '{self.name}':\n"
             for message in self.agent.write_inner_memory_from_logs(summary_mode=True):
                 content = message["content"]
-                if "tool_arguments" in str(content):
-                    if len(str(content)) < 1000 or "[FACTS LIST]" in str(content):
-                        answer += "" + str(content) + "\n"
-                    else:
-                        try:
-                            answer += f"{json.loads(content)['tool_name']}\n"
-                        except Exception:
-                            answer += f"{content[:1000]}(...)\n"
+                if len(str(content)) < 1000 or "[FACTS LIST]" in str(content):
+                    answer += "\n" + str(content) + "\n---"
                 else:
-                    if len(str(content)) > 2000:
-                        answer += (
-                            ">>> Tool output too long to show, showing only the beginning:\n"
-                            + str(content)[:500]
-                            + "\n(...)\n\n"
-                        )
-                    else:
-                        answer += ">>> " + str(content) + "\n\n"
-            answer += "\nNow here is the managed agent's final answer deducted from the above steps:\n"
-            answer += str(output)
+                    answer += "\n" + str(content)[:1000] + "\n(...Step was truncated because too long)...\n---"
+            answer += f"\nEND OF SUMMARY OF WORK FROM AGENT '{self.name}'."
             return answer
         else:
             return output
