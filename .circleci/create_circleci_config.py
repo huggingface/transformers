@@ -364,8 +364,16 @@ def create_circleci_config(folder=None):
         "jobs" : {j.job_name: j.to_dict() for j in jobs},
         "workflows": {"version": 2, "run_tests": {"jobs": [j.job_name for j in jobs]}}
     }
+
+    class CustomDumper(yaml.Dumper):
+        def increase_indent(self, flow=False, indentless=False):
+            return super(CustomDumper, self).increase_indent(flow, False)
+
+    def custom_yaml_dump(data, stream=None):
+        return yaml.dump(data, stream=stream, Dumper=CustomDumper, indent=2, width=1000000, sort_keys=False, allow_unicode=True)
+
     with open(os.path.join(folder, "generated_config.yml"), "w") as f:
-        f.write(yaml.dump(config, indent=2, width=1000000, sort_keys=False))
+        f.write(custom_yaml_dump(config))
 
 
 if __name__ == "__main__":
