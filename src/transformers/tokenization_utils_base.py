@@ -28,7 +28,20 @@ from collections.abc import Mapping, Sized
 from contextlib import contextmanager
 from dataclasses import dataclass
 from inspect import isfunction
-from typing import TYPE_CHECKING, Any, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Dict,
+    List,
+    Literal,
+    Mapping,
+    NamedTuple,
+    Optional,
+    Sequence,
+    Tuple,
+    Union,
+    overload,
+)
 
 import numpy as np
 from packaging import version
@@ -1697,11 +1710,49 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         """
         raise NotImplementedError()
 
+    @overload
     def apply_chat_template(
         self,
-        conversation: Union[List[Dict[str, str]], List[List[Dict[str, str]]]],
-        tools: Optional[List[Dict]] = None,
-        documents: Optional[List[Dict[str, str]]] = None,
+        conversation: List[Mapping[str, str]],
+        tools: Optional[List[Mapping[Any, Any]]] = None,
+        documents: Optional[List[Mapping[str, str]]] = None,
+        chat_template: Optional[str] = None,
+        add_generation_prompt: bool = False,
+        continue_final_message: bool = False,
+        tokenize: Literal[True] = True,
+        padding: bool = False,
+        truncation: bool = False,
+        max_length: Optional[int] = None,
+        return_tensors: Literal[None] = None,
+        return_dict: Literal[False] = False,
+        return_assistant_tokens_mask: bool = False,
+        tokenizer_kwargs: Optional[Mapping[str, Any]] = None,
+        **kwargs: Any,
+    ) -> List[int]: ...
+    @overload
+    def apply_chat_template(
+        self,
+        conversation: List[List[Mapping[str, str]]],
+        tools: Optional[List[Mapping[Any, Any]]] = None,
+        documents: Optional[List[Mapping[str, str]]] = None,
+        chat_template: Optional[str] = None,
+        add_generation_prompt: bool = False,
+        continue_final_message: bool = False,
+        tokenize: Literal[True] = True,
+        padding: bool = False,
+        truncation: bool = False,
+        max_length: Optional[int] = None,
+        return_tensors: Literal[None] = None,
+        return_dict: Literal[False] = False,
+        return_assistant_tokens_mask: bool = False,
+        tokenizer_kwargs: Optional[Mapping[str, Any]] = None,
+        **kwargs: Any,
+    ) -> List[List[int]]: ...
+    def apply_chat_template(
+        self,
+        conversation: Union[List[Mapping[str, str]], List[List[Mapping[str, str]]]],
+        tools: Optional[List[Mapping[Any, Any]]] = None,
+        documents: Optional[List[Mapping[str, str]]] = None,
         chat_template: Optional[str] = None,
         add_generation_prompt: bool = False,
         continue_final_message: bool = False,
@@ -1712,8 +1763,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_dict: bool = False,
         return_assistant_tokens_mask: bool = False,
-        tokenizer_kwargs: Optional[Dict[str, Any]] = None,
-        **kwargs,
+        tokenizer_kwargs: Optional[Mapping[str, Any]] = None,
+        **kwargs: Any,
     ) -> Union[str, List[int], List[str], List[List[int]], BatchEncoding]:
         """
         Converts a list of dictionaries with `"role"` and `"content"` keys to a list of token
