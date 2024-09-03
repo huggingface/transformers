@@ -50,7 +50,7 @@ jobs:
     name: Setup
     strategy:
       matrix:
-        machine_type: [single-gpu, multi-gpu]
+        machine_type: [single-gpu]
     runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, '${{ inputs.runner }}']
     container:
       image: huggingface/transformers-all-latest-gpu
@@ -102,7 +102,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        machine_type: [single-gpu, multi-gpu]
+        machine_type: [single-gpu]
         slice_id: ${{ fromJSON(needs.setup.outputs.slice_ids) }}
     uses: ./.github/workflows/model_jobs.yml
     with:
