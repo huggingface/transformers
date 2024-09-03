@@ -27,7 +27,6 @@ from collections import UserDict
 from collections.abc import Mapping, Sized
 from contextlib import contextmanager
 from dataclasses import dataclass
-from functools import lru_cache
 from inspect import isfunction
 from typing import TYPE_CHECKING, Any, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union
 
@@ -65,6 +64,7 @@ from .utils import (
     requires_backends,
     to_py_obj,
 )
+from .utils.chat_template_utils import _compile_jinja_template, _render_with_assistant_indices
 
 
 if TYPE_CHECKING:
@@ -198,7 +198,8 @@ class BatchEncoding(UserDict):
             You can give a tensor_type here to convert the lists of integers in PyTorch/TensorFlow/Numpy Tensors at
             initialization.
         prepend_batch_axis (`bool`, *optional*, defaults to `False`):
-            Whether or not to add a batch axis when converting to tensors (see `tensor_type` above).
+            Whether or not to add a batch axis when converting to tensors (see `tensor_type` above). Note that this
+            parameter has an effect if the parameter `tensor_type` is set, *otherwise has no effect*.
         n_sequences (`Optional[int]`, *optional*):
             You can give a tensor_type here to convert the lists of integers in PyTorch/TensorFlow/Numpy Tensors at
             initialization.
@@ -720,7 +721,7 @@ class BatchEncoding(UserDict):
 
             def as_tensor(value, dtype=None):
                 if isinstance(value, list) and isinstance(value[0], np.ndarray):
-                    return torch.tensor(np.array(value))
+                    return torch.from_numpy(np.array(value))
                 return torch.tensor(value)
 
         elif tensor_type == TensorType.JAX:
@@ -1569,6 +1570,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
     def __init__(self, **kwargs):
         # inputs and kwargs for saving and re-loading (see ``from_pretrained`` and ``save_pretrained``)
         self.init_inputs = ()
+        for key in kwargs:
+            if hasattr(self, key) and callable(getattr(self, key)):
+                raise AttributeError(f"{key} conflicts with the method {key} in {self.__class__.__name__}")
+
         self.init_kwargs = copy.deepcopy(kwargs)
         self.name_or_path = kwargs.pop("name_or_path", "")
         self._processor_class = kwargs.pop("processor_class", None)
@@ -1592,6 +1597,14 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             )
 
         self.model_input_names = kwargs.pop("model_input_names", self.model_input_names)
+
+        if "clean_up_tokenization_spaces" not in kwargs:
+            warnings.warn(
+                "`clean_up_tokenization_spaces` was not set. It will be set to `True` by default. This "
+                "behavior will be deprecated in transformers v4.45, and will be then set to `False` by default. "
+                "For more details check this issue: https://github.com/huggingface/transformers/issues/31884",
+                FutureWarning,
+            )
 
         # By default, cleaning tokenization spaces for both fast and slow tokenizers
         self.clean_up_tokenization_spaces = kwargs.pop("clean_up_tokenization_spaces", True)
@@ -1691,6 +1704,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         documents: Optional[List[Dict[str, str]]] = None,
         chat_template: Optional[str] = None,
         add_generation_prompt: bool = False,
+        continue_final_message: bool = False,
         tokenize: bool = True,
         padding: bool = False,
         truncation: bool = False,
@@ -1724,10 +1738,16 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             chat_template (`str`, *optional*):
                 A Jinja template to use for this conversion. It is usually not necessary to pass anything to this
                 argument, as the model's template will be used by default.
-            add_generation_prompt (bool, *optional*): Whether to end the prompt with the token(s) that indicate
-                the start of an assistant message. This is useful when you want to generate a response from the model.
+            add_generation_prompt (bool, *optional*):
+                If this is set, a prompt with the token(s) that indicate
+                the start of an assistant message will be appended to the formatted output. This is useful when you want to generate a response from the model.
                 Note that this argument will be passed to the chat template, and so it must be supported in the
                 template for this argument to have any effect.
+            continue_final_message (bool, *optional*):
+                If this is set, the chat will be formatted so that the final
+                message in the chat is open-ended, without any EOS tokens. The model will continue this message
+                rather than starting a new one. This allows you to "prefill" part of
+                the model's response for it. Cannot be used at the same time as `add_generation_prompt`.
             tokenize (`bool`, defaults to `True`):
                 Whether to tokenize the output. If `False`, the output will be a string.
             padding (`bool`, defaults to `False`):
@@ -1779,7 +1799,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             )
 
         # Compilation function uses a cache to avoid recompiling the same template
-        compiled_template = self._compile_jinja_template(chat_template)
+        compiled_template = _compile_jinja_template(chat_template)
 
         if isinstance(conversation, (list, tuple)) and (
             isinstance(conversation[0], (list, tuple)) or hasattr(conversation[0], "messages")
@@ -1789,6 +1809,14 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         else:
             conversations = [conversation]
             is_batched = False
+
+        if continue_final_message:
+            if add_generation_prompt:
+                raise ValueError(
+                    "continue_final_message and add_generation_prompt are not compatible. Use continue_final_message when you want the model to continue the final message, and add_generation_prompt when you want to add a header that will prompt it to start a new assistant message instead."
+                )
+            if return_assistant_tokens_mask:
+                raise ValueError("continue_final_message is not compatible with return_assistant_tokens_mask.")
 
         # We accept either JSON schemas or functions for tools. If we get functions, we convert them to schemas
         if tools is not None:
@@ -1819,7 +1847,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 # Indicates it's a Conversation object
                 chat = chat.messages
             if return_assistant_tokens_mask:
-                rendered_chat, generation_indices = self._render_with_assistant_indices(
+                rendered_chat, generation_indices = _render_with_assistant_indices(
                     compiled_template=compiled_template,
                     messages=chat,
                     tools=tool_schemas,
@@ -1836,6 +1864,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     add_generation_prompt=add_generation_prompt,
                     **template_kwargs,
                 )
+            if continue_final_message:
+                final_message = chat[-1]["content"]
+                rendered_chat = rendered_chat[: rendered_chat.rindex(final_message) + len(final_message)].rstrip()
             rendered.append(rendered_chat)
 
         if not is_batched:
@@ -1875,94 +1906,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 return out["input_ids"]
         else:
             return rendered
-
-    def _render_with_assistant_indices(
-        self, compiled_template, messages, tools, documents, add_generation_prompt, **template_kwargs
-    ):
-        rendered_blocks = []
-        generation_indices = []
-        with compiled_template.environment.activate_tracker(rendered_blocks, generation_indices):
-            for block in compiled_template.generate(
-                messages=messages,
-                tools=tools,
-                documents=documents,
-                add_generation_prompt=add_generation_prompt,
-                **template_kwargs,
-            ):
-                rendered_blocks.append(block)
-            rendered_chat = "".join(rendered_blocks)
-        return rendered_chat, generation_indices
-
-    @lru_cache
-    def _compile_jinja_template(self, chat_template):
-        try:
-            import jinja2
-            from jinja2 import nodes
-            from jinja2.exceptions import TemplateError
-            from jinja2.ext import Extension
-            from jinja2.sandbox import ImmutableSandboxedEnvironment
-        except ImportError:
-            raise ImportError("apply_chat_template requires jinja2 to be installed.")
-
-        if version.parse(jinja2.__version__) < version.parse("3.1.0"):
-            raise ImportError(
-                "apply_chat_template requires jinja2>=3.1.0 to be installed. Your version is " f"{jinja2.__version__}."
-            )
-
-        def raise_exception(message):
-            raise TemplateError(message)
-
-        def tojson(x, ensure_ascii=False, indent=None, separators=None, sort_keys=False):
-            # We override the built-in tojson filter because Jinja's default filter escapes HTML characters
-            # We also expose some options like custom indents and separators
-            return json.dumps(x, ensure_ascii=ensure_ascii, indent=indent, separators=separators, sort_keys=sort_keys)
-
-        class AssistantTracker(Extension):
-            # This extension is used to track the indices of assistant-generated tokens in the rendered chat
-            tags = {"generation"}
-
-            def __init__(self, environment: ImmutableSandboxedEnvironment):
-                # The class is only initiated by jinja.
-                super().__init__(environment)
-                environment.extend(activate_tracker=self.activate_tracker)
-                self._rendered_blocks = None
-                self._generation_indices = None
-
-            def parse(self, parser: jinja2.parser.Parser) -> jinja2.nodes.CallBlock:
-                lineno = next(parser.stream).lineno
-                body = parser.parse_statements(["name:endgeneration"], drop_needle=True)
-                return nodes.CallBlock(self.call_method("_generation_support"), [], [], body).set_lineno(lineno)
-
-            @jinja2.pass_eval_context
-            def _generation_support(self, context: jinja2.nodes.EvalContext, caller: jinja2.runtime.Macro) -> str:
-                rv = caller()
-                if self.is_active():
-                    # Only track generation indices if the tracker is active
-                    start_index = len("".join(self._rendered_blocks))
-                    end_index = start_index + len(rv)
-                    self._generation_indices.append((start_index, end_index))
-                return rv
-
-            def is_active(self) -> bool:
-                return self._rendered_blocks or self._generation_indices
-
-            @contextmanager
-            def activate_tracker(self, rendered_blocks: List[int], generation_indices: List[int]):
-                try:
-                    if self.is_active():
-                        raise ValueError("AssistantTracker should not be reused before closed")
-                    self._rendered_blocks = rendered_blocks
-                    self._generation_indices = generation_indices
-
-                    yield
-                finally:
-                    self._rendered_blocks = None
-                    self._generation_indices = None
-
-        jinja_env = ImmutableSandboxedEnvironment(trim_blocks=True, lstrip_blocks=True, extensions=[AssistantTracker])
-        jinja_env.filters["tojson"] = tojson
-        jinja_env.globals["raise_exception"] = raise_exception
-        return jinja_env.from_string(chat_template)
 
     def get_chat_template(self, chat_template: Optional[str] = None, tools: Optional[List[Dict]] = None) -> str:
         """
@@ -2663,6 +2606,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             tokenizer_config.pop("name_or_path")
             tokenizer_config.pop("special_tokens_map_file", None)
             tokenizer_config.pop("tokenizer_file", None)
+        if "device_map" in tokenizer_config:
+            tokenizer_config.pop("device_map")
 
         with open(tokenizer_config_file, "w", encoding="utf-8") as f:
             out_str = json.dumps(tokenizer_config, indent=2, sort_keys=True, ensure_ascii=False) + "\n"

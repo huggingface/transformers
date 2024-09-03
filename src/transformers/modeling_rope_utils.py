@@ -58,7 +58,8 @@ def _compute_default_rope_parameters(
     elif config is not None:
         base = config.rope_theta
         partial_rotary_factor = config.partial_rotary_factor if hasattr(config, "partial_rotary_factor") else 1.0
-        dim = int((config.hidden_size // config.num_attention_heads) * partial_rotary_factor)
+        head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        dim = int(head_dim * partial_rotary_factor)
 
     attention_factor = 1.0  # Unused in this type of RoPE
 
@@ -143,14 +144,15 @@ def _compute_dynamic_ntk_parameters(
     elif config is not None:
         base = config.rope_theta
         partial_rotary_factor = config.partial_rotary_factor if hasattr(config, "partial_rotary_factor") else 1.0
-        dim = int((config.hidden_size // config.num_attention_heads) * partial_rotary_factor)
+        head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        dim = int(head_dim * partial_rotary_factor)
         max_position_embeddings = config.max_position_embeddings
         factor = config.rope_scaling["factor"]
 
     attention_factor = 1.0  # Unused in this type of RoPE
 
     # seq_len: default to max_position_embeddings, e.g. at init time
-    seq_len = seq_len if seq_len is not None else max_position_embeddings
+    seq_len = seq_len if seq_len is not None and seq_len > max_position_embeddings else max_position_embeddings
 
     # Compute the inverse frequencies
     base = base * ((factor * seq_len / max_position_embeddings) - (factor - 1)) ** (dim / (dim - 2))
@@ -185,7 +187,8 @@ def _compute_yarn_parameters(
 
     base = config.rope_theta
     partial_rotary_factor = config.partial_rotary_factor if hasattr(config, "partial_rotary_factor") else 1.0
-    dim = int((config.hidden_size // config.num_attention_heads) * partial_rotary_factor)
+    head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+    dim = int(head_dim * partial_rotary_factor)
     max_position_embeddings = config.max_position_embeddings
     factor = config.rope_scaling["factor"]
 
@@ -210,7 +213,7 @@ def _compute_yarn_parameters(
         high = math.ceil(find_correction_dim(high_rot, dim, base, max_position_embeddings))
         return max(low, 0), min(high, dim - 1)
 
-    def linear_ramp_mask(min, max, dim):
+    def linear_ramp_factor(min, max, dim):
         if min == max:
             max += 0.001  # Prevent singularity
 
@@ -218,6 +221,8 @@ def _compute_yarn_parameters(
         ramp_func = torch.clamp(linear_func, 0, 1)
         return ramp_func
 
+    # Note on variable naming: "interpolation" comes from the original technique, where we interpolate the position IDs
+    # to expand the possible context length. In other words, interpolation = apply scaling factor.
     pos_freqs = base ** (torch.arange(0, dim, 2).float().to(device) / dim)
     inv_freq_extrapolation = 1.0 / pos_freqs
     inv_freq_interpolation = 1.0 / (factor * pos_freqs)
@@ -225,8 +230,11 @@ def _compute_yarn_parameters(
     low, high = find_correction_range(beta_fast, beta_slow, dim, base, max_position_embeddings)
 
     # Get n-dimensional rotational scaling corrected for extrapolation
-    inv_freq_mask = 1 - linear_ramp_mask(low, high, dim // 2).float().to(device)
-    inv_freq = inv_freq_interpolation * (1 - inv_freq_mask) + inv_freq_extrapolation * inv_freq_mask
+    inv_freq_extrapolation_factor = 1 - linear_ramp_factor(low, high, dim // 2).float().to(device)
+    inv_freq = (
+        inv_freq_interpolation * (1 - inv_freq_extrapolation_factor)
+        + inv_freq_extrapolation * inv_freq_extrapolation_factor
+    )
 
     return inv_freq, attention_factor
 
@@ -260,7 +268,8 @@ def _compute_longrope_parameters(
 
     base = config.rope_theta
     partial_rotary_factor = config.partial_rotary_factor if hasattr(config, "partial_rotary_factor") else 1.0
-    dim = int((config.hidden_size // config.num_attention_heads) * partial_rotary_factor)
+    head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+    dim = int(head_dim * partial_rotary_factor)
     long_factor = config.rope_scaling["long_factor"]
     short_factor = config.rope_scaling["short_factor"]
     factor = config.rope_scaling.get("factor")
@@ -445,7 +454,8 @@ def _validate_longrope_parameters(config: PretrainedConfig):
     _check_received_keys(rope_type, received_keys, required_keys, optional_keys)
 
     partial_rotary_factor = config.partial_rotary_factor if hasattr(config, "partial_rotary_factor") else 1.0
-    dim = int((config.hidden_size // config.num_attention_heads) * partial_rotary_factor)
+    head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+    dim = int(head_dim * partial_rotary_factor)
 
     short_factor = rope_scaling.get("short_factor")
     if not isinstance(short_factor, list) and all(isinstance(x, (int, float)) for x in short_factor):

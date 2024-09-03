@@ -130,9 +130,29 @@ class GenerationConfig(PushToHubMixin):
             [this paper](https://arxiv.org/pdf/1610.02424.pdf) for more details.
         penalty_alpha (`float`, *optional*):
             The values balance the model confidence and the degeneration penalty in contrastive search decoding.
+        dola_layers (`str` or `List[int]`, *optional*):
+            The layers to use for DoLa decoding. If `None`, DoLa decoding is not used. If a string, it must
+            be one of "low" or "high", which means using the lower part or higher part of the model layers, respectively.
+            "low" means the first half of the layers up to the first 20 layers, and "high" means the last half of the
+            layers up to the last 20 layers.
+            If a list of integers, it must contain the indices of the layers to use for candidate premature layers in DoLa.
+            The 0-th layer is the word embedding layer of the model. Set to `'low'` to improve long-answer reasoning tasks,
+            `'high'` to improve short-answer tasks. Check the [documentation](https://github.com/huggingface/transformers/blob/main/docs/source/en/generation_strategies.md)
+            or [the paper](https://arxiv.org/abs/2309.03883) for more details.
+
+        > Parameters that control the cache
+
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should use the past last key/values attentions (if applicable to the model) to
             speed up decoding.
+        cache_implementation (`str`, *optional*, default to `None`):
+            Cache class that should be used when generating.
+        cache_config (`CacheConfig` or `dict`, *optional*, default to `None`):
+            Arguments used in the key-value cache class can be passed in `cache_config`. Can be passed as a `Dict` and
+            it will be converted to its repsective `CacheConfig` internally.
+            Otherwise can be passed as a `CacheConfig` class matching the indicated `cache_implementation`.
+        return_legacy_cache (`bool`, *optional*, default to `True`):
+            Whether to return the legacy or new format of the cache when `DynamicCache` is used by default.
 
         > Parameters for manipulation of the model output logits
 
@@ -190,9 +210,9 @@ class GenerationConfig(PushToHubMixin):
             triggers a [disjunctive constraint](https://github.com/huggingface/transformers/issues/14081), where one
             can allow different forms of each word.
         renormalize_logits (`bool`, *optional*, defaults to `False`):
-            Whether to renormalize the logits after applying all the logits processors or warpers (including the custom
+            Whether to renormalize the logits after applying all the logits processors (including the custom
             ones). It's highly recommended to set this flag to `True` as the search algorithms suppose the score logits
-            are normalized but some logit processors or warpers break the normalization.
+            are normalized but some logit processors break the normalization.
         constraints (`List[Constraint]`, *optional*):
             Custom constraints that can be added to the generation to ensure that the output will contain the use of
             certain tokens as defined by `Constraint` objects, in the most sensible way possible.
@@ -268,7 +288,9 @@ class GenerationConfig(PushToHubMixin):
             Whether or not to return the unprocessed prediction logit scores. See `logits` under returned tensors for
             more details.
         return_dict_in_generate (`bool`, *optional*, defaults to `False`):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~utils.ModelOutput`], as opposed to returning exclusively the generated
+            sequence. This flag must be set to `True` to return the generation cache (when `use_cache` is `True`)
+            or optional outputs (see flags starting with `output_`)
 
         > Special tokens that can be used at generation time
 
@@ -307,35 +329,14 @@ class GenerationConfig(PushToHubMixin):
         max_matching_ngram_size (`int`, *optional*, default to `None`):
             The maximum ngram size to be considered for matching in the prompt. Default to 2 if not provided.
 
-        > Generation parameters exclusive to [DoLa decoding](https://arxiv.org/abs/2309.03883)
-
-        dola_layers (`str` or `List[int]`, *optional*):
-            The layers to use for DoLa decoding. If `None`, DoLa decoding is not used. If a string, it must
-            be one of "low" or "high", which means using the lower part or higher part of the model layers, respectively.
-            "low" means the first half of the layers up to the first 20 layers, and "high" means the last half of the
-            layers up to the last 20 layers.
-            If a list of integers, it must contain the indices of the layers to use for candidate premature layers in DoLa.
-            The 0-th layer is the word embedding layer of the model. Set to `'low'` to improve long-answer reasoning tasks,
-            `'high'` to improve short-answer tasks. Check the [documentation](https://github.com/huggingface/transformers/blob/main/docs/source/en/generation_strategies.md)
-            or [the paper](https://arxiv.org/abs/2309.03883) for more details.
-
-        > Parameters specific to the caching mechanism:
-
-        cache_implementation (`str`, *optional*, default to `None`):
-            Cache class that should be used when generating.
-        cache_config (`CacheConfig` or `dict`, *optional*, default to `None`):
-            Arguments used in the key-value cache class can be passed in `cache_config`. Can be passed as a `Dict` and
-            it will be converted to its repsective `CacheConfig` internally.
-            Otherwise can be passed as a `CacheConfig` class matching the indicated `cache_implementation`.
-        return_legacy_cache (`bool`, *optional*, default to `True`):
-            Whether to return the legacy or new format of the cache when `DynamicCache` is used by default.
-
         > Wild card
 
         generation_kwargs:
             Additional generation kwargs will be forwarded to the `generate` function of the model. Kwargs that are not
             present in `generate`'s signature will be used in the model forward pass.
     """
+
+    extra_output_flags = ("output_attentions", "output_hidden_states", "output_scores", "output_logits")
 
     def __init__(self, **kwargs):
         # Parameters that control the length of the output
@@ -352,7 +353,19 @@ class GenerationConfig(PushToHubMixin):
         self.num_beams = kwargs.pop("num_beams", 1)
         self.num_beam_groups = kwargs.pop("num_beam_groups", 1)
         self.penalty_alpha = kwargs.pop("penalty_alpha", None)
+        self.dola_layers = kwargs.pop("dola_layers", None)
+
+        # Parameters that control the cache
         self.use_cache = kwargs.pop("use_cache", True)
+        self.cache_implementation = kwargs.pop("cache_implementation", None)
+        self.cache_config = kwargs.pop("cache_config", None)
+        if self.cache_implementation is not None and self.cache_implementation in NEEDS_CACHE_CONFIG:
+            cache_config_class = NEEDS_CACHE_CONFIG[self.cache_implementation]
+            if self.cache_config is None:
+                self.cache_config = cache_config_class()
+            elif isinstance(self.cache_config, dict):
+                self.cache_config = cache_config_class.from_dict(self.cache_config)
+        self.return_legacy_cache = kwargs.pop("return_legacy_cache", None)
 
         # Parameters for manipulation of the model output logits
         self.temperature = kwargs.pop("temperature", 1.0)
@@ -410,20 +423,6 @@ class GenerationConfig(PushToHubMixin):
         # Assistant generation
         self.num_assistant_tokens = kwargs.pop("num_assistant_tokens", 5)
         self.num_assistant_tokens_schedule = kwargs.pop("num_assistant_tokens_schedule", "heuristic")
-
-        # DoLa generation
-        self.dola_layers = kwargs.pop("dola_layers", None)
-
-        # Cache implementation
-        self.cache_implementation = kwargs.pop("cache_implementation", None)
-        self.cache_config = kwargs.pop("cache_config", None)
-        if self.cache_implementation is not None and self.cache_implementation in NEEDS_CACHE_CONFIG:
-            cache_config_class = NEEDS_CACHE_CONFIG[self.cache_implementation]
-            if self.cache_config is None:
-                self.cache_config = cache_config_class()
-            elif isinstance(self.cache_config, dict):
-                self.cache_config = cache_config_class.from_dict(self.cache_config)
-        self.return_legacy_cache = kwargs.pop("return_legacy_cache", True)
 
         # Prompt lookup decoding
         self.prompt_lookup_num_tokens = kwargs.pop("prompt_lookup_num_tokens", None)
@@ -544,8 +543,9 @@ class GenerationConfig(PushToHubMixin):
             raise ValueError(f"`max_new_tokens` must be greater than 0, but is {self.max_new_tokens}.")
         if self.pad_token_id is not None and self.pad_token_id < 0:
             warnings.warn(
-                f"`pad_token_id` should be positive but got {self.pad_token_id}. This will cause errors when batch generating, if there is padding. "
-                "Please set `pad_token_id` explicitly by `model.generation_config.pad_token_id=PAD_TOKEN_ID` to avoid errors in generation, and ensure your `input_ids` input does not have negative values."
+                f"`pad_token_id` should be positive but got {self.pad_token_id}. This will cause errors when batch "
+                "generating, if there is padding. Please set `pad_token_id` explicitly as "
+                "`model.generation_config.pad_token_id=PAD_TOKEN_ID` to avoid errors in generation"
             )
 
         # Validation of attribute relations:
@@ -675,6 +675,14 @@ class GenerationConfig(PushToHubMixin):
                         group_error_prefix
                         + "`diversity_penalty` should be greater than `0.0`, otherwise your groups will be identical."
                     )
+            # DoLa generation
+            if self.dola_layers is not None and (self.repetition_penalty is None or self.repetition_penalty < 1.2):
+                warnings.warn(
+                    "`dola_layers` is set to trigger DoLa decoding, but `repetition_penalty` is set to a value of "
+                    f"{self.repetition_penalty}, which could induce unwanted repetition. The recommended value for "
+                    "DoLa decoding is `repetition_penalty>=1.2`.",
+                    UserWarning,
+                )
 
         # 4. check `num_return_sequences`
         if self.num_return_sequences != 1:
@@ -690,7 +698,7 @@ class GenerationConfig(PushToHubMixin):
                     f"({self.num_beams})."
                 )
 
-        # 5. check `cache_config`
+        # 5. check cache-related arguments
         if self.cache_config is not None:
             cache_class = NEEDS_CACHE_CONFIG.get(self.cache_implementation)
             if cache_class is None:
@@ -702,6 +710,20 @@ class GenerationConfig(PushToHubMixin):
             if not isinstance(self.cache_config, cache_class):
                 self.cache_config = cache_class.from_dict(self.cache_config)
             self.cache_config.validate()
+        if self.use_cache is False:
+            # In this case, all cache-related arguments should be unset. However, since `use_cache=False` is often used
+            # passed to `generate` directly to hot-fix cache issues, let's raise a warning instead of an error
+            # (otherwise a user might need to overwrite several parameters).
+            no_cache_warning = (
+                "You have set `use_cache` to `False`, but {cache_arg} is set to {cache_arg_value}. {cache_arg} will "
+                "have no effect."
+            )
+            for arg_name in ("cache_implementation", "cache_config", "return_legacy_cache"):
+                if getattr(self, arg_name) is not None:
+                    logger.warning_once(
+                        no_cache_warning.format(cache_arg=arg_name, cache_arg_value=getattr(self, arg_name)),
+                        UserWarning,
+                    )
 
         # 6.  check watermarking arguments
         if self.watermarking_config is not None:
@@ -709,7 +731,17 @@ class GenerationConfig(PushToHubMixin):
                 self.watermarking_config = WatermarkingConfig.from_dict(self.watermarking_config)
             self.watermarking_config.validate()
 
-        # 7. check common issue: passing `generate` arguments inside the generation config
+        # 7. other incorrect combinations
+        if self.return_dict_in_generate is not True:
+            for extra_output_flag in self.extra_output_flags:
+                if getattr(self, extra_output_flag) is True:
+                    warnings.warn(
+                        f"`return_dict_in_generate` is NOT set to `True`, but `{extra_output_flag}` is. When "
+                        f"`return_dict_in_generate` is not `True`, `{extra_output_flag}` is ignored.",
+                        UserWarning,
+                    )
+
+        # 8. check common issue: passing `generate` arguments inside the generation config
         generate_arguments = (
             "logits_processor",
             "stopping_criteria",
@@ -726,17 +758,6 @@ class GenerationConfig(PushToHubMixin):
                     f"Argument `{arg}` is not a valid argument of `GenerationConfig`. It should be passed to "
                     "`generate()` (or a pipeline) directly."
                 )
-
-        # 6. if dola_layers is set, check if repetition_penalty is set to >= 1.2
-        if self.dola_layers is not None and (self.repetition_penalty is None or self.repetition_penalty < 1.2):
-            dola_decoding_wrong_parameter_msg = (
-                "`dola_layers` is set to trigger DoLa decoding, but `repetition_penalty` is set to a value of {repetition_penalty}, "
-                "which could induce unwanted repetition. The recommended value for DoLa decoding is `repetition_penalty>=1.2`."
-            )
-            warnings.warn(
-                dola_decoding_wrong_parameter_msg.format(repetition_penalty=self.repetition_penalty),
-                UserWarning,
-            )
 
     def save_pretrained(
         self,
@@ -779,7 +800,8 @@ class GenerationConfig(PushToHubMixin):
 
         if use_auth_token is not None:
             warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
+                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. "
+                "Please use `token` instead.",
                 FutureWarning,
             )
             if kwargs.get("token", None) is not None:
@@ -1181,6 +1203,11 @@ class GenerationConfig(PushToHubMixin):
                 for attr in config.to_dict().keys():
                     if attr in decoder_config and getattr(config, attr) == getattr(default_generation_config, attr):
                         setattr(config, attr, decoder_config[attr])
+
+        # If any `output_...` flag is set to `True`, we ensure `return_dict_in_generate` is set to `True`.
+        if config.return_dict_in_generate is False:
+            if any(getattr(config, extra_output_flag, False) for extra_output_flag in config.extra_output_flags):
+                config.return_dict_in_generate = True
 
         config._original_object_hash = hash(config)  # Hash to detect whether the instance was modified
         return config

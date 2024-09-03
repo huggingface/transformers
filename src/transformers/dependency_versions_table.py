@@ -3,7 +3,7 @@
 # 2. run `make deps_table_update``
 deps = {
     "Pillow": "Pillow>=10.0.1,<=15.0",
-    "accelerate": "accelerate>=0.21.0",
+    "accelerate": "accelerate>=0.26.0",
     "av": "av==9.2.0",
     "beautifulsoup4": "beautifulsoup4",
     "codecarbon": "codecarbon==1.2.0",
@@ -43,7 +43,7 @@ deps = {
     "onnxruntime-tools": "onnxruntime-tools>=1.4.2",
     "onnxruntime": "onnxruntime>=1.4.0",
     "opencv-python": "opencv-python",
-    "optimum-benchmark": "optimum-benchmark>=0.2.0",
+    "optimum-benchmark": "optimum-benchmark>=0.3.0",
     "optuna": "optuna",
     "optax": "optax>=0.0.8,<=0.1.4",
     "packaging": "packaging>=20.0",
