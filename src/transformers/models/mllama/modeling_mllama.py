@@ -935,44 +935,44 @@ class MllamaTextEncoderLayer(nn.Module):
         return hidden_state
 
 
-class CrossAttention(torch.nn.Module):
-    """Cross attention layer."""
+class MllamaSdpaCrossAttention(nn.Module):
+    # originally CrossAttention
 
     def __init__(
         self,
-        dim: int,
+        hidden_size: int,
         head_dim: int,
-        n_heads: int,
-        n_kv_heads: int,
+        num_heads: int,
+        num_kv_heads: int,
         norm_eps: float,
     ):
         super().__init__()
 
         self.q_proj = nn.Linear(
-            dim,
-            n_heads * head_dim,
+            hidden_size,
+            num_heads * head_dim,
             bias=False,
         )
 
         self.k_proj = nn.Linear(
-            dim,
-            n_kv_heads * head_dim,
+            hidden_size,
+            num_kv_heads * head_dim,
             bias=False,
         )
         self.v_proj = nn.Linear(
-            dim,
-            n_kv_heads * head_dim,
+            hidden_size,
+            num_kv_heads * head_dim,
             bias=False,
         )
         self.o_proj = nn.Linear(
-            n_heads * head_dim,
-            dim,
+            num_heads * head_dim,
+            hidden_size,
             bias=False,
         )
 
-        self.n_heads = n_heads
+        self.num_heads = num_heads
         self.head_dim = head_dim
-        self.n_kv_heads = n_kv_heads
+        self.num_kv_heads = num_kv_heads
 
         self.q_norm = RMSNorm(
             self.head_dim,
@@ -984,56 +984,60 @@ class CrossAttention(torch.nn.Module):
         )
 
         # local heads
-        self.n_local_heads = self.n_heads
-        self.n_local_kv_heads = self.n_kv_heads
+        self.n_local_heads = self.num_heads
+        self.n_local_kv_heads = self.num_kv_heads
         self.n_rep = self.n_local_heads // self.n_local_kv_heads
 
-    def _compute_xattn_kv_cache(self, xattn_tokens: torch.Tensor) -> torch.Tensor:
-        bsz = xattn_tokens.shape[0]
-        xk = self.k_proj(xattn_tokens)
-        xv = self.v_proj(xattn_tokens)
+    def _compute_cross_attention_keys_values(self, hidden_state: torch.Tensor) -> torch.Tensor:
+        
+        batch_size = hidden_state.shape[0]
+        key = self.k_proj(hidden_state)
+        value = self.v_proj(hidden_state)
 
-        _, seqlen_y, _ = xk.shape
+        seq_length = key.shape[1]
+        key = key.view(batch_size, seq_length, self.n_local_kv_heads, self.head_dim)
+        value = value.view(batch_size, seq_length, self.n_local_kv_heads, self.head_dim)
 
-        xk = xk.view(bsz, seqlen_y, self.n_local_kv_heads, self.head_dim)
-        xv = xv.view(bsz, seqlen_y, self.n_local_kv_heads, self.head_dim)
-
-        xk, xv = [tensor.transpose(1, 2) for tensor in (xk, xv)]
+        key = key.transpose(1, 2)
+        value = value.transpose(1, 2)
 
         # repeat k/v heads if n_kv_heads < n_heads
-        xk = xk.repeat_interleave(self.n_rep, dim=1)
-        xv = xv.repeat_interleave(self.n_rep, dim=1)
+        key = key.repeat_interleave(self.n_rep, dim=1)
+        value = value.repeat_interleave(self.n_rep, dim=1)
 
-        xk = self.k_norm(xk)
+        key = self.k_norm(key)
 
-        return torch.stack([xk, xv])
+        return torch.stack([key, value])
 
     def compute_xattn_kv_cache(self, xattn_tokens: torch.Tensor) -> torch.Tensor:
-        return self._compute_xattn_kv_cache(xattn_tokens)
+        return self._compute_cross_attention_keys_values(xattn_tokens)
 
     def forward(
         self,
-        x: torch.Tensor,
-        xattn_mask: torch.Tensor,
+        hidden_state: torch.Tensor,
+        cross_attention_mask: torch.Tensor,
         full_text_row_masked_out_mask: torch.Tensor,
-        xattn_cache: torch.Tensor,
+        cross_attention_cache: torch.Tensor,
     ) -> torch.Tensor:
-        xq = F.linear(x, self.q_proj.weight)
-        bsz, seqlen, _ = x.shape
+        
+        bsz, seq_length, _ = hidden_state.shape
 
-        xq = xq.view(bsz, seqlen, self.n_local_heads, self.head_dim)
-        xq = self.q_norm(xq)
-        xq = xq.transpose(1, 2)
+        query = self.q_proj(hidden_state)
+        query = query.view(bsz, seq_length, self.n_local_heads, self.head_dim)
+        query = self.q_norm(query)
+        query = query.transpose(1, 2)
 
-        xk, xv = xattn_cache
-        # FIXME shape issue here
-        output = F.scaled_dot_product_attention(
-            xq, xk, xv, attn_mask=xattn_mask, dropout_p=0.0
+        key, value = cross_attention_cache
+        # FIXME shape issue here (?)
+        attn_output = F.scaled_dot_product_attention(
+            query, key, value, attn_mask=cross_attention_mask, dropout_p=0.0
         )
-        output = output * full_text_row_masked_out_mask
-        output = output.transpose(1, 2).contiguous().reshape(bsz, seqlen, -1)
-        out = F.linear(output, self.o_proj.weight)
-        return out
+        attn_output = attn_output * full_text_row_masked_out_mask
+        attn_output = attn_output.transpose(1, 2).contiguous().reshape(bsz, seq_length, -1)
+
+        attn_output = self.o_proj(attn_output)
+
+        return attn_output
 
 
 class CrossAttentionTransformerBlock(torch.nn.Module):
@@ -1055,11 +1059,11 @@ class CrossAttentionTransformerBlock(torch.nn.Module):
         self.ffn_dim_multiplier = config.ffn_dim_multiplier
         self.multiple_of = config.multiple_of
 
-        self.self_attn = CrossAttention(
-            dim=self.dim,
+        self.self_attn = MllamaSdpaCrossAttention(
+            hidden_size=self.dim,
             head_dim=self.head_dim,
-            n_heads=self.n_heads,
-            n_kv_heads=self.n_kv_heads,
+            num_heads=self.n_heads,
+            num_kv_heads=self.n_kv_heads,
             norm_eps=self.norm_eps,
         )
 
@@ -1083,7 +1087,6 @@ class CrossAttentionTransformerBlock(torch.nn.Module):
 
         self.no_ffn = no_ffn
 
-
     def compute_xattn_kv_cache(self, xattn_tokens: torch.Tensor) -> torch.Tensor:
         return self.self_attn.compute_xattn_kv_cache(xattn_tokens)
 
@@ -1098,9 +1101,9 @@ class CrossAttentionTransformerBlock(torch.nn.Module):
         residual = hidden_state
         hidden_state = self.input_layernorm(hidden_state)
         hidden_state = self.self_attn(
-            x=hidden_state,
-            xattn_mask=xattn_mask,
-            xattn_cache=xattn_cache,
+            hidden_state=hidden_state,
+            cross_attention_mask=xattn_mask,
+            cross_attention_cache=xattn_cache,
             full_text_row_masked_out_mask=full_text_row_masked_out_mask,
         )
 
