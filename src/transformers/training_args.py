@@ -796,7 +796,7 @@ class TrainingArguments:
             Whether to run recursively gather object in a nested list/tuple/dictionary of objects from all devices. This should only be enabled if users are not just returning tensors, and this is actively discouraged by PyTorch.
         predict_with_generate (`bool`, *optional*, defaults to `False`):
             Whether to use generate to calculate generative metrics (ROUGE, BLEU).
-        generation_config ([`~generation.GenerationConfig`], *optional*):
+        generation_config (Union[`~generation.GenerationConfig`, `Dict`], *optional*):
             The [`~generation.GenerationConfig`] object that will be used during generation if `predict_with_generate` is set to `True`.
             Arguments passed in GenerationConfig will have higher priority than model's generation config. Anything not set by this config
             will fallback to `model.generation_config` by default.
@@ -1520,7 +1520,7 @@ class TrainingArguments:
     predict_with_generate: bool = field(
         default=False, metadata={"help": "Whether to use generate to calculate generative metrics (ROUGE, BLEU)."}
     )
-    generation_config: Optional[Union[Dict, GenerationConfig]] = field(
+    generation_config: Union[Dict, GenerationConfig] = field(
         default=None,
         metadata={
             "help": (
