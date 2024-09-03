@@ -21,14 +21,7 @@
 # limitations under the License.
 
 
-from transformers import PretrainedConfig
-
-from ...utils import (
-    logging,
-)
-
-
-logger = logging.get_logger(__name__)
+from ...configuration_utils import PretrainedConfig
 
 
 class Gemma2Config(PretrainedConfig):
