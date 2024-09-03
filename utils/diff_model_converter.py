@@ -635,7 +635,7 @@ def convert_file(diff_file, old_model_name=None, new_model_name=None, cst_transf
             with open(diff_file.replace("diff_", "modeling_"), "w") as f:
                 f.write(AUTO_GENERATED_MESSAGE + formatted_code)
         else:
-            if len(ruffed_code)>0:
+            if len(ruffed_code.strip())>0:
                 logger.warning("The modeling code contains erros, it's written without formatting")
                 with open(diff_file.replace("diff_", "modeling_"), "w") as f:
                     f.write(AUTO_GENERATED_MESSAGE + ruffed_code)
@@ -649,7 +649,7 @@ def convert_file(diff_file, old_model_name=None, new_model_name=None, cst_transf
                 if len(formatted_code.strip()) > 0:
                     f.write(AUTO_GENERATED_MESSAGE + formatted_code)
                 else:
-                    if len(ruffed_code)>0:
+                    if len(ruffed_code.strip()) > 0:
                         logger.warning("The configuration code contains erros, it's written without formatting")
                         f.write(AUTO_GENERATED_MESSAGE + ruffed_code)
     else:
