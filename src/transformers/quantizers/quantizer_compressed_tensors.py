@@ -68,14 +68,6 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
 
         return [key for key in unexpected_keys if not _is_compressed_key(key)]
 
-    def update_missing_keys(self, model, missing_keys: List[str], prefix: str) -> List[str]:
-        def _is_decompressed_key(key: str) -> bool:
-            # key names in decompressed state dict that will not be present in
-            # a compressed state dict
-            return key.endswith("weight") or "scale" in key or "zero_point" in key
-
-        return [key for key in missing_keys if not _is_decompressed_key(key)]
-
     def _process_model_before_weight_loading(self, model, **kwargs):
         from compressed_tensors.quantization import apply_quantization_config
 
