@@ -46,6 +46,7 @@ import collections
 import torch
 import math
 
+
 def get_negative_inf_value(dtype):
     return torch.finfo(dtype).min
 
@@ -1042,7 +1043,8 @@ class MllamaSdpaCrossAttention(nn.Module):
 
 class CrossAttentionTransformerBlock(torch.nn.Module):
     """Cross-attention transformer block with tanh-gated attention and feedforward."""
-
+    # originally CrossAttentionTransformerBlock
+    
     def __init__(
         self,
         config: MllamaCrossAttentionTextConfig,
@@ -1127,18 +1129,6 @@ class DummyCrossAttentionTransformerBlock:
         **kwargs,
     ) -> torch.Tensor:
         return hidden_state
-
-
-class DummySelfAttentionTransformerBlock:
-    """Dummy self-attention transformer block"""
-
-    def __call__(
-        self,
-        x: torch.Tensor,
-        *args,
-        **kwargs,
-    ) -> torch.Tensor:
-        return x
 
 
 class MllamaCrossAttentionVisionModel(torch.nn.Module):
