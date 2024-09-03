@@ -206,9 +206,7 @@ def _compute_mask_indices(
     spec_aug_mask_idxs = np.array(spec_aug_mask_idxs)
 
     # expand masked indices to masked spans
-    spec_aug_mask_idxs = np.broadcast_to(
-        spec_aug_mask_idxs[:, :, None], (batch_size, max_num_masked_span, mask_length)
-    )
+    spec_aug_mask_idxs = np.broadcast_to(spec_aug_mask_idxs[:, :, None], (batch_size, max_num_masked_span, mask_length))
     spec_aug_mask_idxs = spec_aug_mask_idxs.reshape(batch_size, max_num_masked_span * mask_length)
 
     # add offset to the starting indexes so that indexes now create a span
@@ -229,9 +227,7 @@ def _compute_mask_indices(
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2._sample_negative_indices
-def _sample_negative_indices(
-    features_shape: Tuple, num_negatives: int, mask_time_indices: Optional[np.ndarray] = None
-):
+def _sample_negative_indices(features_shape: Tuple, num_negatives: int, mask_time_indices: Optional[np.ndarray] = None):
     """
     Sample `num_negatives` vectors from feature vectors.
     """
@@ -543,10 +539,11 @@ class Wav2Vec2ConformerFeatureProjection(nn.Module):
     def forward(self, hidden_states):
         # non-projected hidden states are needed for quantization
         norm_hidden_states = self.layer_norm(hidden_states)
-        hidden_states = norm_hidden_states.clone()
 
         if self.projection is not None:
-            hidden_states = self.projection(hidden_states)
+            hidden_states = self.projection(norm_hidden_states)
+        else:
+            hidden_states = norm_hidden_states.clone()
 
         hidden_states = self.dropout(hidden_states)
         return hidden_states, norm_hidden_states
@@ -865,7 +862,7 @@ class Wav2Vec2ConformerEncoder(nn.Module):
             self.embed_positions = None
 
         self.pos_conv_embed = Wav2Vec2ConformerPositionalConvEmbedding(config)
-        self.layer_norm_first = config.layer_norm_first
+        self.post_layer_norm = config.post_layer_norm
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout)
         self.layers = nn.ModuleList([Wav2Vec2ConformerEncoderLayer(config) for _ in range(config.num_hidden_layers)])
@@ -893,7 +890,7 @@ class Wav2Vec2ConformerEncoder(nn.Module):
                 attention_mask.shape[0], 1, attention_mask.shape[-1], attention_mask.shape[-1]
             )
 
-        if not self.layer_norm_first:
+        if not self.post_layer_norm:
             hidden_states = self.layer_norm(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
@@ -937,7 +934,7 @@ class Wav2Vec2ConformerEncoder(nn.Module):
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
 
-        if self.layer_norm_first:
+        if self.post_layer_norm:
             hidden_states = self.layer_norm(hidden_states)
 
         if output_hidden_states:
@@ -1116,10 +1113,11 @@ class Wav2Vec2ConformerPreTrainedModel(PreTrainedModel):
                 std=2 * math.sqrt(1 / (module.conv.kernel_size[0] * module.conv.in_channels)),
             )
             nn.init.constant_(module.conv.bias, 0)
-        elif isinstance(module, Wav2Vec2ConformerFeatureProjection) and module.projection is not None:
-            k = math.sqrt(1 / module.projection.in_features)
-            nn.init.uniform_(module.projection.weight, a=-k, b=k)
-            nn.init.uniform_(module.projection.bias, a=-k, b=k)
+        elif isinstance(module, Wav2Vec2ConformerFeatureProjection):
+            if module.projection is not None:
+                k = math.sqrt(1 / module.projection.in_features)
+                nn.init.uniform_(module.projection.weight, a=-k, b=k)
+                nn.init.uniform_(module.projection.bias, a=-k, b=k)
         elif isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
 
