@@ -288,8 +288,8 @@ class MllamaPatchEmbedding(nn.Module):
 
         self.unfold = torch.nn.Unfold(kernel_size=kernel_size, stride=stride)
 
-        # param equvalient to Conv2d weight, it will be reshaped in forward to fit Linear layer,
-        # to be fully equvalent original implementation
+        # param equivalent to Conv2d weight, it will be reshaped in forward to fit Linear layer,
+        # to be fully equivalent original implementation
         self.weight = torch.nn.Parameter(
             torch.randn(out_channels, in_channels, kernel_size[0], kernel_size[1]),
             requires_grad=True,
@@ -1455,7 +1455,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
 
         vision_tokens = vision_tokens.to(self.device)
             
-        batch_size, _, _, _, dim = tuple(vision_tokens.shape)
+        batch_size, _, _, _, dim = vision_tokens.shape
 
         cross_attentions = []
         for layer in self.model.language_model.cross_attention_layers:
