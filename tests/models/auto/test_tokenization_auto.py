@@ -347,6 +347,11 @@ class AutoTokenizerTest(unittest.TestCase):
             self.assertEqual(tokenizer.__class__.__name__, "NewTokenizer")
             self.assertEqual(reloaded_tokenizer.__class__.__name__, "NewTokenizer")
 
+        # The tokenizer file is cached in the snapshot directory. So the module file is not changed after dumping
+        # to a temp dir. Because the revision of the module file is not changed.
+        # Test the dynamic module is loaded only once if the module file is not changed.
+        self.assertIs(tokenizer.__class__, reloaded_tokenizer.__class__)
+
         # Test the dynamic module is reloaded if we force it.
         reloaded_tokenizer = AutoTokenizer.from_pretrained(
             "hf-internal-testing/test_dynamic_tokenizer", trust_remote_code=True, force_download=True

@@ -133,7 +133,7 @@ class AutoConfigTest(unittest.TestCase):
         self.assertEqual(reloaded_config.__class__.__name__, "NewModelConfig")
 
         # The configuration file is cached in the snapshot directory. So the module file is not changed after dumping
-        # to a temp dir. Becasue the revision of the configuration file is not changed.
+        # to a temp dir. Because the revision of the configuration file is not changed.
         # Test the dynamic module is loaded only once if the configuration file is not changed.
         self.assertIs(config.__class__, reloaded_config.__class__)
 

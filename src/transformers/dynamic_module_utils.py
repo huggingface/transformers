@@ -237,7 +237,7 @@ def get_class_in_module(
             sys.modules[name] = module
         else:
             module = cached_module
-        # reload in both cases, unless the module is already imported and hash hint
+        # reload in both cases, unless the module is already imported and the hash hits
         if getattr(module, "__transformers_module_hash__", "") != module_hash:
             module_spec.loader.exec_module(module)
             module.__transformers_module_hash__ = module_hash
