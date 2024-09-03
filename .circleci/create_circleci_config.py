@@ -133,6 +133,10 @@ class CircleCIJob:
             },
             {"run": {"name": "Create `test-results` directory", "command": "mkdir test-results"}},
             {"run": {"name": "Get files to test", "command":f'curl -L -o {self.job_name}_test_list.txt <<pipeline.parameters.{self.job_name}_test_list>>' if self.name != "pr_documentation_tests" else 'echo "Skipped"'}},
+            {"run": {
+                "name": "Compute pipeline parallelism",
+                "command": f"WORD_COUNT=$(wc -w < \"{self.job_name}_test_list.txt\")\nif [ \"$WORD_COUNT\" -lt {5 * self.parallelism} ]; then\n  echo \"export PARALLELISM=1\" >> $BASH_ENV\nelse\n  echo \"export PARALLELISM=30\" >> $BASH_ENV\nfi\nsource $BASH_ENV"
+            }},
             {"run": {"name": "Split tests across parallel nodes: show current parallel tests",
                     "command": f"TESTS=$(circleci tests split  --split-by=timings {self.job_name}_test_list.txt) && echo $TESTS > splitted_tests.txt && echo $TESTS | tr ' ' '\n'" if self.parallelism else f"awk '{{printf \"%s \", $0}}' {self.job_name}_test_list.txt > splitted_tests.txt"
                     }
@@ -152,7 +156,7 @@ class CircleCIJob:
             {"store_artifacts": {"path": "installed.txt"}},
         ]
         if self.parallelism:
-            job["parallelism"] = f"""$(if [ $(wc -w < \"{self.job_name}_test_list.txt\") -lt 30 ]; then echo 1; else echo 30; fi)"""
+            job["parallelism"] = " ${PARALLELISM} "
         job["steps"] = steps
         return job
 
