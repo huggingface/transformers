@@ -34,7 +34,7 @@ class ViTPoseConfig(PretrainedConfig):
 
     Args:
         backbone_config (`PretrainedConfig` or `dict`, *optional*, defaults to `VitPoseBackboneConfig()`):
-            The configuration of the backbone model. Currently backbone_config with `vitpose_backbone` model_type is only supported.
+            The configuration of the backbone model. Currently, only `backbone_config` with `vitpose_backbone` as `model_type` is supported.
         backbone (`str`, *optional*):
             Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
             will load the corresponding pretrained weights from the timm or transformers library. If `use_pretrained_backbone`
