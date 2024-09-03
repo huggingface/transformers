@@ -24,7 +24,9 @@
   - local: model_sharing
     title: Share your model
   - local: agents
-    title: Agents
+    title: Agents 101
+  - local: agents_advanced
+    title: Agents, supercharged - Multi-agents, External tools and more
   - local: llm_tutorial
     title: Generation with LLMs
   - local: conversations
