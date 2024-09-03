@@ -443,7 +443,7 @@ messages.append({"role": "assistant", "tool_calls": [{"type": "function", "funct
 
 <Tip warning={true}>
 
-If you're familiar with the OpenAI API, you should pay attention to an important difference here - the **tool_call** is
+If you're familiar with the OpenAI API, you should pay attention to an important difference here - the `tool_call` is
 actually a dict, but in the OpenAI API it's a JSON string. Passing a string may cause errors or strange model behaviour!
 
 </Tip>
