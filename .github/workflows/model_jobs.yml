@@ -79,6 +79,11 @@ jobs:
         run: |
           python3 -m pip install -U datasets
 
+      - name: Update huggingface_hub
+        working-directory: /transformers
+        run: |
+          python3 -m pip install -U git+https://github.com/huggingface/huggingface_hub.git@do-not-fail-on-touch-if-fails
+
       - name: Update / Install some packages (for Past CI)
         if: ${{ contains(inputs.docker, '-past-') && contains(inputs.docker, '-pytorch-') }}
         working-directory: /transformers
@@ -138,10 +143,10 @@ jobs:
         run: |
           ls -l /mnt/cache/hub/models--hf-internal-testing--no-config-test-repo/.no_exist/42ce72ae70f7d34c14dbc3a856379a5d5b72de47/config.json
 
-      - name: delete 1 cache
-        working-directory: /transformers
-        run: |
-          rm -rf /mnt/cache/hub/models--hf-internal-testing--config-no-model
+#      - name: delete 1 cache
+#        working-directory: /transformers
+#        run: |
+#          rm -rf /mnt/cache/hub/models--hf-internal-testing--config-no-model
 
       - name: Run all tests on GPU
         working-directory: /transformers
@@ -159,15 +164,9 @@ jobs:
           echo "hello" > /transformers/reports/${{ inputs.machine_type }}_run_models_gpu_${{ matrix.folders }}_test_reports/hello.txt
           echo "${{ inputs.machine_type }}_run_models_gpu_${{ matrix.folders }}_test_reports"
 
-      - name: Check cache 9
-        working-directory: /transformers
-        run: |
-          ls -l /mnt/cache/hub/models--BAAI--AltCLIP/snapshots/b989a7bc9f73809acc4df8265e63174c74791ba6/pytorch_model.bin
-
       - name: "Test suite reports artifacts: ${{ inputs.machine_type }}_run_models_gpu_${{ env.matrix_folders }}_test_reports"
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
           name: ${{ inputs.machine_type }}_run_models_gpu_${{ env.matrix_folders }}_test_reports
           path: /transformers/reports/${{ inputs.machine_type }}_run_models_gpu_${{ matrix.folders }}_test_reports
-
