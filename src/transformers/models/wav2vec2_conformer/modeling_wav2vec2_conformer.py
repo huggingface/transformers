@@ -547,7 +547,7 @@ class Wav2Vec2ConformerFeatureProjection(nn.Module):
 
         if self.projection is not None:
             hidden_states = self.projection(hidden_states)
-            
+
         hidden_states = self.dropout(hidden_states)
         return hidden_states, norm_hidden_states
 
@@ -865,6 +865,7 @@ class Wav2Vec2ConformerEncoder(nn.Module):
             self.embed_positions = None
 
         self.pos_conv_embed = Wav2Vec2ConformerPositionalConvEmbedding(config)
+        self.layer_norm_first = config.layer_norm_first
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout)
         self.layers = nn.ModuleList([Wav2Vec2ConformerEncoderLayer(config) for _ in range(config.num_hidden_layers)])
@@ -892,6 +893,8 @@ class Wav2Vec2ConformerEncoder(nn.Module):
                 attention_mask.shape[0], 1, attention_mask.shape[-1], attention_mask.shape[-1]
             )
 
+        if not self.layer_norm_first:
+            hidden_states = self.layer_norm(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
         if self.embed_positions is not None:
@@ -934,7 +937,9 @@ class Wav2Vec2ConformerEncoder(nn.Module):
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
 
-        hidden_states = self.layer_norm(hidden_states)
+        if self.layer_norm_first:
+            hidden_states = self.layer_norm(hidden_states)
+
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
