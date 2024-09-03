@@ -33,6 +33,7 @@ from ..cache_utils import (
     HybridCache,
     MambaCache,
     OffloadedCache,
+    OffloadedStaticCache,
     QuantizedCacheConfig,
     QuantoQuantizedCache,
     SlidingWindowCache,
@@ -119,6 +120,7 @@ if is_accelerate_available():
 
 NEED_SETUP_CACHE_CLASSES_MAPPING = {
     "static": StaticCache,
+    "offloaded_static": OffloadedStaticCache,
     "sliding_window": SlidingWindowCache,
     "hybrid": HybridCache,
     "mamba": MambaCache,
@@ -3962,6 +3964,7 @@ class GenerationMixin:
 
             #  1. Fetch candidate sequences from a `CandidateGenerator`
             candidate_input_ids, candidate_logits = candidate_generator.get_candidates(input_ids)
+            candidate_input_ids = candidate_input_ids.to(self.device)
             if candidate_logits is not None:
                 candidate_logits = candidate_logits.to(self.device)
 
