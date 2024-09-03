@@ -631,7 +631,8 @@ def convert_file(diff_file, old_model_name=None, new_model_name=None, cst_transf
         new_mod = wrapper.visit(cst_transformers)
         ruffed_code = run_ruff(new_mod.code, True)
         formatted_code = run_ruff(ruffed_code, False)
-        if len(formatted_code.strip()) > 0:
+        non_comment_lines = len([line for line in formatted_code.strip().split("\n") if not line.strip().startswith('#')])
+        if len(formatted_code.strip()) > 0 and non_comment_lines>0 :
             with open(diff_file.replace("diff_", "modeling_"), "w") as f:
                 f.write(AUTO_GENERATED_MESSAGE + formatted_code)
         else:
@@ -662,7 +663,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--files_to_parse",
-        default=["examples/diff-conversion/diff_my_new_model.py"],
+        default=["examples/diff-conversion/diff_new_model.py"],
         nargs="+",
         help="A list of `diff_xxxx` files that should be converted to single model file",
     )
