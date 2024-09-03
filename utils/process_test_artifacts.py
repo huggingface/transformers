@@ -35,7 +35,7 @@ def process_artifacts(input_file, output_file):
         if "test_list" in item["path"]:
             key = os.path.splitext(os.path.basename(item["path"]))[0]
             transformed_data[key] = item["url"]
-            parallel_key = key.split("_test")[0]
+            parallel_key = key.split("_test")[0] + "_parallelism"
             file_path = os.path.join("test_preparation", f"{key}.txt")
             line_count = count_lines(file_path)
             transformed_data[parallel_key] = compute_parallel_nodes(line_count)
