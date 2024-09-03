@@ -358,7 +358,7 @@ def create_circleci_config(folder=None):
             # Only used to accept the parameters from the trigger
             "nightly": {"type": "boolean", "default": False},
             "tests_to_run": {"type": "string", "default": ''},
-            **{j.job_name + "_test_list":{"type":"integer", "default":1} for j in jobs},
+            **{j.job_name + "_test_list":{"type":"string", "default":''} for j in jobs},
             **{j.job_name + "_parallelism":{"type":"integer", "default":1} for j in jobs},
         },
         "jobs" : {j.job_name: j.to_dict() for j in jobs},
