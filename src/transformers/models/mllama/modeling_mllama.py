@@ -989,7 +989,7 @@ class MllamaSdpaCrossAttention(nn.Module):
         self.n_local_kv_heads = self.num_kv_heads
         self.n_rep = self.n_local_heads // self.n_local_kv_heads
 
-    def _compute_cross_attention_keys_values(self, hidden_state: torch.Tensor) -> torch.Tensor:
+    def compute_cross_attention_key_value(self, hidden_state: torch.Tensor) -> torch.Tensor:
         
         batch_size = hidden_state.shape[0]
         key = self.k_proj(hidden_state)
@@ -1010,25 +1010,24 @@ class MllamaSdpaCrossAttention(nn.Module):
 
         return torch.stack([key, value])
 
-    def compute_xattn_kv_cache(self, xattn_tokens: torch.Tensor) -> torch.Tensor:
-        return self._compute_cross_attention_keys_values(xattn_tokens)
 
     def forward(
         self,
         hidden_state: torch.Tensor,
+        cross_attention_key_value: torch.Tensor,
         cross_attention_mask: torch.Tensor,
         full_text_row_masked_out_mask: torch.Tensor,
-        cross_attention_cache: torch.Tensor,
     ) -> torch.Tensor:
         
         bsz, seq_length, _ = hidden_state.shape
+        key, value = cross_attention_key_value
 
         query = self.q_proj(hidden_state)
         query = query.view(bsz, seq_length, self.n_local_heads, self.head_dim)
+
         query = self.q_norm(query)
         query = query.transpose(1, 2)
 
-        key, value = cross_attention_cache
         # FIXME shape issue here (?)
         attn_output = F.scaled_dot_product_attention(
             query, key, value, attn_mask=cross_attention_mask, dropout_p=0.0
@@ -1044,7 +1043,7 @@ class MllamaSdpaCrossAttention(nn.Module):
 class CrossAttentionTransformerBlock(torch.nn.Module):
     """Cross-attention transformer block with tanh-gated attention and feedforward."""
     # originally CrossAttentionTransformerBlock
-    
+
     def __init__(
         self,
         config: MllamaCrossAttentionTextConfig,
@@ -1095,17 +1094,17 @@ class CrossAttentionTransformerBlock(torch.nn.Module):
     def forward(
         self,
         hidden_state: torch.Tensor,
-        xattn_mask: torch.Tensor,
+        cross_attention_key_value: torch.Tensor,
+        cross_attention_mask: torch.Tensor,
         full_text_row_masked_out_mask: Tuple[torch.Tensor, torch.Tensor],
-        xattn_cache: torch.Tensor,
     ) -> torch.Tensor:
 
         residual = hidden_state
         hidden_state = self.input_layernorm(hidden_state)
         hidden_state = self.self_attn(
             hidden_state=hidden_state,
-            cross_attention_mask=xattn_mask,
-            cross_attention_cache=xattn_cache,
+            cross_attention_mask=cross_attention_mask,
+            cross_attention_key_value=cross_attention_key_value,
             full_text_row_masked_out_mask=full_text_row_masked_out_mask,
         )
 
@@ -1116,18 +1115,6 @@ class CrossAttentionTransformerBlock(torch.nn.Module):
         hidden_state = self.mlp(hidden_state)
         hidden_state = full_text_row_masked_out_mask[:, 0] * hidden_state  # type: ignore
         hidden_state = residual + self.ffn_gate.tanh() * hidden_state * float(not self.no_ffn)
-        return hidden_state
-
-
-class DummyCrossAttentionTransformerBlock:
-    """Dummy cross-attention transformer block with tanh-gated attention and feedforward."""
-
-    def __call__(
-        self,
-        hidden_state: torch.Tensor,
-        *args,
-        **kwargs,
-    ) -> torch.Tensor:
         return hidden_state
 
 
@@ -1205,40 +1192,18 @@ class MllamaCrossAttentionTextModel(PreTrainedModel):
         self.num_frozen_embeddings = self.embed_tokens.num_embeddings
         self._thresh = self.num_frozen_embeddings - 1
 
-        # transformer blocks
+        # self attention layers
         self.layers = torch.nn.ModuleList()
-        self.cross_attention_layers = torch.nn.ModuleList()
-
         for i in range(self.n_layers):
-            layer_id = i
-            block = MllamaTextEncoderLayer(config=config, layer_id=layer_id)
-            self.layers.append(block)
-            if layer_id in self.fusion_schedule:
-                xa_layer_id = self.fusion_schedule.index(layer_id) + self.n_layers
-                block = CrossAttentionTransformerBlock(
-                    config,
-                    layer_id=xa_layer_id,
-                )
-                self.cross_attention_layers.append(block)
+            layer = MllamaTextEncoderLayer(config=config, layer_id=i)
+            self.layers.append(layer)
 
-        # add xattn and dummy layers to avoid conditionals in forward()
-        self.text_and_xattn_layers = []
+        # cross attention layers
+        self.cross_attention_layers = torch.nn.ModuleList()
+        for i in range(self.vision_num_cross_attention_layers):
+            cross_attention_layer = CrossAttentionTransformerBlock(config, layer_id=i + self.n_layers)
+            self.cross_attention_layers.append(cross_attention_layer)
 
-        for idx, layer in enumerate(self.layers):
-            if idx in self.fusion_schedule:
-                xattn_layer_idx = self.fusion_schedule.index(idx)
-                xattn_layer = self.cross_attention_layers[xattn_layer_idx]
-            else:
-                xattn_layer_idx = 0
-                xattn_layer = DummyCrossAttentionTransformerBlock()
-
-            self.text_and_xattn_layers.append(
-                (
-                    layer,
-                    xattn_layer,
-                    xattn_layer_idx,
-                )
-            )
         freqs_cis = precompute_freqs_cis(
             self.dim // self.n_heads,
             self.max_seq_len * 2,
@@ -1260,6 +1225,7 @@ class MllamaCrossAttentionTextModel(PreTrainedModel):
         k = math.ceil(len(llama_layers) / num_layers)
         return llama_layers[::-1][::k][:num_layers][::-1]
 
+
     def get_partially_trainable_embedding(self, x):
         xz = torch.zeros_like(x, device=x.device)
         oz = torch.ones_like(x, device=x.device)
@@ -1280,7 +1246,7 @@ class MllamaCrossAttentionTextModel(PreTrainedModel):
     def forward(
         self,
         position_ids: torch.LongTensor,
-        h: torch.Tensor,
+        hidden_state: torch.Tensor,
         xattn_mask: torch.Tensor,
         full_text_row_masked_out_mask: torch.Tensor,
         xattn_caches: torch.Tensor,
@@ -1297,42 +1263,43 @@ class MllamaCrossAttentionTextModel(PreTrainedModel):
         diff = (freqs_cis - freqs_cis_).abs().max().item()
         print(f"freqs cis diff: {diff}")
         
+        #TODO: Remove, only debug purposes, check freqs cis diff 1e-7 -> 0.1 diff in logits
         freqs_cis = freqs_cis_
 
         del mask_, freqs_cis_
 
-        for idx, (
-            layer,
-            xattn_layer,
-            xattn_layer_idx,
-        ) in enumerate(self.text_and_xattn_layers):
-            h = xattn_layer(
-                hidden_state=h,
-                xattn_mask=xattn_mask,
-                xattn_cache=xattn_caches[xattn_layer_idx],
-                full_text_row_masked_out_mask=full_text_row_masked_out_mask,
-            )
+        for idx, layer in enumerate(self.layers):
 
-            h_ = torch.load(f"/home/ubuntu/projects/meta_mllama/logits-test-1/text-xattn-{idx}.pt", weights_only=True)
-            diff = (h - h_).abs().max().item()
-            print(f"xattn {idx} diff: {diff}")
-            del h_
+            if idx in self.fusion_schedule:
+                cross_attention_layer_idx = self.fusion_schedule.index(idx)
+                cross_attention_layer = self.cross_attention_layers[cross_attention_layer_idx]
+                hidden_state = cross_attention_layer(
+                    hidden_state=hidden_state,
+                    cross_attention_key_value=xattn_caches[cross_attention_layer_idx],
+                    cross_attention_mask=xattn_mask,
+                    full_text_row_masked_out_mask=full_text_row_masked_out_mask,
+                )
 
-            h = layer(
-                hidden_state=h,
+                h_ = torch.load(f"/home/ubuntu/projects/meta_mllama/logits-test-1/text-xattn-{idx}.pt", weights_only=True)
+                diff = (hidden_state - h_).abs().max().item()
+                print(f"xattn {idx} diff: {diff}")
+                del h_
+
+            hidden_state = layer(
+                hidden_state=hidden_state,
                 attention_mask=mask,
                 freqs_cis=freqs_cis,
                 position_ids=position_ids,
             )
 
             h_ = torch.load(f"/home/ubuntu/projects/meta_mllama/logits-test-1/text-hidden-{idx}.pt", weights_only=True)
-            diff = (h - h_).abs().max().item()
+            diff = (hidden_state - h_).abs().max().item()
             print(f"hidden {idx} diff: {diff}")
             del h_
 
-        h = self.norm(h)
+        hidden_state = self.norm(hidden_state)
 
-        return h
+        return hidden_state
 
     def setup_cache(self, max_batch_size: int, dtype=torch.bfloat16):
         # Set up the text kv caches
@@ -1532,15 +1499,15 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
         full_text_row_masked_out_mask: torch.Tensor,
         xattn_caches: torch.Tensor,
     ) -> torch.Tensor:
-        h = self.model.language_model.get_partially_trainable_embedding(tokens[:, position_ids])
+        hidden_state = self.model.language_model.get_partially_trainable_embedding(tokens[:, position_ids])
 
         h_ = torch.load("/home/ubuntu/projects/meta_mllama/logits-test-1/partially_trainable_embedding.pt", weights_only=True)
-        diff = torch.abs(h - h_).max()
+        diff = torch.abs(hidden_state - h_).max()
         print(f"Max partially_trainable_embedding diff: {diff}")
 
         logits = self.model.language_model.forward(
             position_ids=position_ids,
-            h=h,
+            hidden_state=hidden_state,
             xattn_mask=cross_attention_masks[:, :, position_ids],
             full_text_row_masked_out_mask=full_text_row_masked_out_mask[
                 :, :, position_ids
@@ -1548,8 +1515,8 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
             xattn_caches=xattn_caches,
         )
 
-        output = F.linear(logits, self.lm_head.weight)
-        logits = output.float()
+        logits = self.lm_head(logits)
+
         return logits
 
 
