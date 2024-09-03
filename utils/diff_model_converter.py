@@ -638,7 +638,10 @@ def convert_file(diff_file, old_model_name=None, new_model_name=None, cst_transf
             with open(diff_file.replace("diff_", "modeling_"), "w") as f:
                 f.write(AUTO_GENERATED_MESSAGE + formatted_code)
         else:
-            if len(ruffed_code.strip()) > 0:
+            non_comment_lines = len(
+                [line for line in formatted_code.strip().split("\n") if not line.strip().startswith("#")]
+            )
+            if len(ruffed_code.strip()) > 0 and non_comment_lines>0:
                 logger.warning("The modeling code contains erros, it's written without formatting")
                 with open(diff_file.replace("diff_", "modeling_"), "w") as f:
                     f.write(AUTO_GENERATED_MESSAGE + ruffed_code)
