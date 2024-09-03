@@ -4,7 +4,7 @@ name: Self-hosted runner (scheduled)
 on:
   push:
     branches:
-      - run_scheduled_ci_now_2
+      - run_scheduled_ci_now_6
 
 jobs:
   model-ci:
