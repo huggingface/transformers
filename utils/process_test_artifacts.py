@@ -8,7 +8,7 @@ def count_lines(filepath):
     """Count the number of lines in a file."""
     try:
         with open(filepath, 'r') as f:
-            return len(f.read().split(" "))
+            return len(f.read().split("\n"))
     except FileNotFoundError:
         return 0
 
