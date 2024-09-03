@@ -46,7 +46,7 @@ jobs:
     container:
       image: ${{ inputs.docker }}
 #      options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
-      options: --gpus all --shm-size "16gb" --ipc host -v
+      options: --gpus all --shm-size "16gb" --ipc host
     steps:
       - name: Echo input and matrix info
         shell: bash
