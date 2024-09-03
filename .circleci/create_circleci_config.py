@@ -367,7 +367,7 @@ def create_circleci_config(folder=None):
     }
     print(config)
     with open(os.path.join(folder, "generated_config.yml"), "w") as f:
-        f.write(yaml.dump(config, sort_keys=False, default_flow_style=False))
+        f.write(yaml.dump(config, sort_keys=False, default_flow_style=False).replace("' << pipeline", " <<").replace(">> '", " >>"))
 
 
 if __name__ == "__main__":
