@@ -1675,26 +1675,43 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                     past_key_values=past_key_values,
                 )
 
-    def test_labels_sequence_max_length(self):
+    def test_labels_sequence_max_length_correct(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_generative_model_classes:
+            model = model_class(config)
+            input_features = input_dict["input_features"]
+            
+            labels_length = 448
+            assert labels_length <= config.max_target_positions
+            labels = torch.ones(1, labels_length, dtype=torch.int64)
+
+            model(input_features=input_features, labels=labels)
+
+    def test_labels_sequence_max_length_error(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_generative_model_classes:
             model = model_class(config)
             input_features = input_dict["input_features"]
 
-            correct_labels_length = 448
-            assert correct_labels_length <= config.max_target_positions
-            labels = torch.ones(1, config.max_target_positions, dtype=torch.int64)
-
-            # The following model should run without any problem
-            model(input_features=input_features, labels=labels)
-
-            error_labels_length = 449
-            assert error_labels_length > config.max_target_positions
-            labels = torch.ones(1, config.max_target_positions, dtype=torch.int64)
+            labels_length = 449
+            assert labels_length > config.max_target_positions
+            labels = torch.ones(1, labels_length, dtype=torch.int64)
 
             with self.assertRaises(ValueError):
                 model(input_features=input_features, labels=labels)
+
+    def test_labels_sequence_max_length_error_after_changing_config(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_generative_model_classes:
+            model = model_class(config)
+            input_features = input_dict["input_features"]
+
+            labels_length = 449
+            assert labels_length > config.max_target_positions
+            labels = torch.ones(1, labels_length, dtype=torch.int64)
 
             new_max_length = 500
             assert new_max_length > config.max_target_positions
