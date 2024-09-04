@@ -252,7 +252,7 @@ pip install datasets
 
 2. يقبل النموذج [`pixel_values`](model_doc/vision-encoder-decoder#transformers.VisionEncoderDecoderModel.forward.pixel_values)
 كإدخال له. يمكن لـ `ImageProcessor` التعامل مع تطبيع الصور، وتوليد التنسورات المناسبة.
-قم بإنشاء دالة تجمع بين زيادة الصور ومعالجة الصور المسبقة لمجموعة من الصور وتوليد `pixel_values`:
+قم بإنشاء دالة تجمع بين تضخيم بيانات الصور ومعالجة الصور المسبقة لمجموعة من الصور وتوليد `pixel_values`:
 
 ```py
 >>> def transforms(examples):
