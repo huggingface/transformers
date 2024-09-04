@@ -131,9 +131,10 @@ def post_dark_udp(coords, batch_heatmaps, kernel=3):
     if not (batch_size == 1 or batch_size == num_coords):
         raise ValueError("The batch size of heatmaps should be 1 or equal to the batch size of coordinates.")
     radius = int((kernel - 1) // 2)
-    for heatmaps in batch_heatmaps:
-        for heatmap in heatmaps:
-            gaussian_filter(heatmap, sigma=0.8, output=heatmap, radius=(radius, radius), axes=(0, 1))
+    batch_heatmaps = np.array([
+        [gaussian_filter(heatmap, sigma=0.8, radius=(radius, radius), axes=(0, 1)) for heatmap in heatmaps]
+        for heatmap in batch_heatmaps
+    ])
     np.clip(batch_heatmaps, 0.001, 50, batch_heatmaps)
     np.log(batch_heatmaps, batch_heatmaps)
 
