@@ -228,10 +228,25 @@ def convert_wav2vec2_conformer_checkpoint(
     """
     Copy/paste/tweak model's weights to transformers design.
     """
+
     if config_path is not None:
         config = Wav2Vec2ConformerConfig.from_pretrained(config_path, hidden_act="swish")
     else:
         config = Wav2Vec2ConformerConfig()
+
+    if is_finetuned:
+        model, _, _ = fairseq.checkpoint_utils.load_model_ensemble_and_task(
+            [checkpoint_path], arg_overrides={"data": "/".join(dict_path.split("/")[:-1])}
+        )
+    else:
+        task_arg = argparse.Namespace(task="audio_pretraining")
+        task = fairseq.tasks.setup_task(task_arg)
+
+        model, _, _ = fairseq.checkpoint_utils.load_model_ensemble_and_task([checkpoint_path], task=task)
+
+    model = model[0].eval()
+
+    config.post_layer_norm = model.w2v_encoder.w2v_model.encoder.layer_norm_first
 
     if "rope" in checkpoint_path:
         config.position_embeddings_type = "rotary"
@@ -281,18 +296,6 @@ def convert_wav2vec2_conformer_checkpoint(
         hf_wav2vec = Wav2Vec2ConformerForCTC(config)
     else:
         hf_wav2vec = Wav2Vec2ConformerForPreTraining(config)
-
-    if is_finetuned:
-        model, _, _ = fairseq.checkpoint_utils.load_model_ensemble_and_task(
-            [checkpoint_path], arg_overrides={"data": "/".join(dict_path.split("/")[:-1])}
-        )
-    else:
-        task_arg = argparse.Namespace(task="audio_pretraining")
-        task = fairseq.tasks.setup_task(task_arg)
-
-        model, _, _ = fairseq.checkpoint_utils.load_model_ensemble_and_task([checkpoint_path], task=task)
-
-    model = model[0].eval()
 
     recursively_load_weights(model, hf_wav2vec, not is_finetuned)
 
