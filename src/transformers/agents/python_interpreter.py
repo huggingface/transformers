@@ -434,7 +434,7 @@ def evaluate_call(call, state, static_tools, custom_tools):
                 global PRINT_OUTPUTS
                 PRINT_OUTPUTS += output + "\n"
                 # cap the number of lines
-                return output
+                return None
             else:  # Assume it's a callable object
                 output = func(*args, **kwargs)
                 return output
