@@ -172,8 +172,8 @@ class MllamaProcessor(ProcessorMixin):
             data.update(encoding)
 
             # create mask for vision tokens
-            vision_mask = self.create_vision_mask(encoding["input_ids"])
-            not_tensor_data["vision_mask"] = vision_mask
+            cross_attention_token_mask = self.cross_attention_token_mask(encoding["input_ids"])
+            not_tensor_data["cross_attention_token_mask"] = cross_attention_token_mask
 
         if images is not None:
 
@@ -218,24 +218,27 @@ class MllamaProcessor(ProcessorMixin):
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
-        return list(tokenizer_input_names + image_processor_input_names + ["vision_mask"])
+        return list(tokenizer_input_names + image_processor_input_names + ["cross_attention_token_mask"])
 
-    def create_vision_mask(
-        self, tokens: Union[List[int], List[List[int]]]
+    def cross_attention_token_mask(
+        self, input_ids: Union[List[int], List[List[int]]]
     ) -> Union[List[List[int]], List[List[List[int]]]]:
-        if tokens and isinstance(tokens[0], list):
-            return [self.create_vision_mask(t) for t in tokens]
+        if input_ids and isinstance(input_ids[0], list):
+            return [self.cross_attention_token_mask(t) for t in input_ids]
 
-        image_token_locations = [i for i, token in enumerate(tokens) if token == self.image_token_id]
+        image_token_locations = [i for i, token in enumerate(input_ids) if token == self.image_token_id]
+        
         if len(image_token_locations) == 0:
             return []
-
-        last_not_pad_token_id = max([i for i, token in enumerate(tokens) if token != self.tokenizer.pad_token_id])
+        
+        # only one image present, unmask until end of sequence
+        if len(image_token_locations) == 1:
+            return [[image_token_locations[0], -1]]
 
         vision_masks = [[loc1, loc2] for loc1, loc2 in zip(image_token_locations[:-1], image_token_locations[1:])]
 
         # last image will attend to all subsequent text
-        vision_masks.append([image_token_locations[-1], last_not_pad_token_id + 1])
+        vision_masks.append([image_token_locations[-1], len(input_ids)])
 
         # if there are two or more consecutive vision tokens,
         # they should all attend to all subsequent

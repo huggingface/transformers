@@ -1381,6 +1381,9 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
 
         return logits
 
+    # -----------------------------------------------------------
+    # Methods from LLAVA model
+    # -----------------------------------------------------------
 
     def get_input_embeddings(self):
         return self.model.language_model.get_input_embeddings()
