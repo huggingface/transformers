@@ -219,7 +219,7 @@ class WhisperModelTester:
         suppress_tokens=None,
     ):
         config = self.get_config()
-        
+
         self.parent = parent
         self.batch_size = batch_size
         self.seq_length = seq_length
