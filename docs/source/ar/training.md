@@ -109,7 +109,7 @@
 >>> def compute_metrics(eval_pred):
 ...     logits، labels = eval_pred
 ...     predictions = np.argmax(logits, axis=-1)
-...     return metric.compute (التنبؤات = التوقعات، المراجع = العلامات)
+...     return metric.compute(predictions=predictions, references=labels)
 ```
 
 إذا كنت ترغب في مراقبة مقاييس التقييم الخاصة بك أثناء الضبط الدقيق، فحدد معلمة `eval_strategy` في حجج التدريب الخاصة بك للإبلاغ عن المقياس في نهاية كل حقبة:
