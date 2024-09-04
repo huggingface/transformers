@@ -49,6 +49,7 @@ class LlavaProcessorTest(unittest.TestCase):
         # Important to check with non square image
         image = torch.randint(0, 2, (3, 500, 316))
         expected_image_tokens = 1526
+        image_token_index = 32000
 
         messages = [
             {
@@ -64,5 +65,5 @@ class LlavaProcessorTest(unittest.TestCase):
             images=[image],
             return_tensors="pt",
         )
-        image_tokens = (inputs["input_ids"] == 32000).sum().item()
+        image_tokens = (inputs["input_ids"] == image_token_index).sum().item()
         self.assertEqual(expected_image_tokens, image_tokens)
