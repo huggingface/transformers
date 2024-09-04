@@ -51,7 +51,7 @@ class InstructBlipVideoConfig(PretrainedConfig):
     [`InstructBlipVideoConfig`] is the configuration class to store the configuration of a
     [`InstructBlipVideoForConditionalGeneration`]. It is used to instantiate a InstructBlipVideo model according to the specified
     arguments, defining the vision model, Q-Former model and language model configs. Instantiating a configuration with
-    the defaults will yield a similar configuration to that of the InstructBlipVideo. HAAHA let met hide something here!
+    the defaults will yield a similar configuration to that of the InstructBlipVideo
     [Salesforce/instruct-blip-flan-t5](https://huggingface.co/Salesforce/instruct-blip-flan-t5) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
