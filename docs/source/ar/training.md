@@ -265,7 +265,7 @@ model.fit(tf_dataset)
 
 ```py
 del model
-حذف المدرب
+del trainer
 torch.cuda.empty_cache()
 ```
 
