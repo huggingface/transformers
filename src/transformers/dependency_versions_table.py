@@ -94,4 +94,6 @@ deps = {
     "urllib3": "urllib3<2.0.0",
     "uvicorn": "uvicorn",
     "pytest-rich": "pytest-rich",
+    "libcst": "libcst",
+    "rich": "rich",
 }

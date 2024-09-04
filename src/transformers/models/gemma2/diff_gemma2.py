@@ -44,6 +44,7 @@ from ...modeling_outputs import (
 from ...utils import (
     is_flash_attn_2_available,
     is_flash_attn_greater_or_equal,
+    is_flash_attn_greater_or_equal_2_10,
     is_torchdynamo_compiling,
     logging,
 )
@@ -183,6 +184,14 @@ class Gemma2FlashAttention2(Gemma2Attention):
     untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
     flash attention and deal with padding tokens in case the input contains any of them.
     """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # TODO: Should be removed once Flash Attention for RoCm is bumped to 2.1.
+        # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
+        # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
+        self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
 
     def forward(
         self,
@@ -632,7 +641,7 @@ class Gemma2ForCausalLM(GemmaForCausalLM):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        num_logits_to_keep: int = 0,
+        num_logits_to_keep: int = None,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         if self.training and self.config._attn_implementation != "eager":
             logger.warning_once(
@@ -708,7 +717,7 @@ class Gemma2ForCausalLM(GemmaForCausalLM):
         cache_position=None,
         position_ids=None,
         use_cache=True,
-        num_logits_to_keep=0,
+        num_logits_to_keep=None,
         **kwargs,
     ):
         # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
@@ -762,6 +771,11 @@ class Gemma2ForCausalLM(GemmaForCausalLM):
                 cache_position=cache_position,
                 batch_size=batch_size,
             )
+        
+        if num_logits_to_keep is not None:
+            model_inputs["num_logits_to_keep"] = num_logits_to_keep
+
+
         model_inputs.update(
             {
                 "position_ids": position_ids,
