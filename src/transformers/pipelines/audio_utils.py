@@ -51,7 +51,7 @@ def ffmpeg_microphone(
     chunk_length_s: float,
     format_for_conversion: str = "f32le",
     ffmpeg_input_device: Optional[str] = None,
-    background_arg: Optional[str] = None,
+    run_in_background: Optional[str] = None,
 ):
     """
     Helper function to read audio from a microphone using ffmpeg. The default input device will be used unless another
@@ -71,7 +71,7 @@ def ffmpeg_microphone(
             The indentifier of the input device to be used by ffmpeg (i.e. ffmpeg's '-i' argument). If unset,
             the default input device will be used. See `https://www.ffmpeg.org/ffmpeg-devices.html#Input-Devices`
             for how to specify and list input devices.
-        background_arg (`str`, *optional*):
+        run_in_background (`str`, *optional*):
             The argument passed to ffmpeg that determines whether or not the process is run in the background
             or not. Default is the empty string and the only other option is -nostdin
 
@@ -118,7 +118,7 @@ def ffmpeg_microphone(
         "-loglevel",
         "quiet",
         "pipe:1",
-        background_arg,
+        run_in_background,
     ]
     chunk_len = int(round(sampling_rate * chunk_length_s)) * size_of_sample
     iterator = _ffmpeg_stream(ffmpeg_command, chunk_len)
@@ -178,14 +178,13 @@ def ffmpeg_microphone_live(
     else:
         chunk_s = chunk_length_s
 
-    if run_in_background:
-        microphone = ffmpeg_microphone(
-            sampling_rate,
-            chunk_s,
-            format_for_conversion=format_for_conversion,
-            ffmpeg_input_device=ffmpeg_input_device,
-            run_in_background="-nostdin" if not run_in_background else "",
-        )
+    microphone = ffmpeg_microphone(
+        sampling_rate,
+        chunk_s,
+        format_for_conversion=format_for_conversion,
+        ffmpeg_input_device=ffmpeg_input_device,
+        run_in_background="-nostdin" if not run_in_background else "",
+    )
 
     if format_for_conversion == "s16le":
         dtype = np.int16
