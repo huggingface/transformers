@@ -32,13 +32,13 @@ from ...modeling_outputs import (
     ModelOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...modeling_vision_utils import interpolate_pos_encoding as _interpolate_pos_encoding
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
     replace_return_docstrings,
+    torch_int,
 )
 from ...utils.backbone_utils import BackboneMixin
 from .configuration_hiera import HieraConfig
@@ -317,10 +317,43 @@ class HieraEmbeddings(nn.Module):
 
         self.position_embeddings = nn.Parameter(torch.zeros(1, self.num_tokens, config.embed_dim))
 
-    def interpolate_pos_encoding(
-        self, embeddings: torch.Tensor, pos_embeds: torch.Tensor, height: int, width: int
-    ) -> torch.Tensor:
-        return _interpolate_pos_encoding(embeddings, pos_embeds, height, width, self.patch_stride, num_class_embeds=0)
+    def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
+        """
+        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher resolution
+        images. This method is also adapted to support torch.jit tracing, no class embeddings, and different patch strides.
+
+        Adapted from:
+        - https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174-L194, and
+        - https://github.com/facebookresearch/dinov2/blob/e1277af2ba9496fbadf7aec6eba56e8d882d1e35/dinov2/models/vision_transformer.py#L179-L211
+        """
+
+        num_patches = embeddings.shape[1]
+        num_positions = self.position_embeddings.shape[1]
+
+        # always interpolate when tracing to ensure the exported model works for dynamic input shapes
+        if not torch.jit.is_tracing() and num_patches == num_positions and height == width:
+            return self.position_embeddings
+
+        patch_pos_embed = self.position_embeddings
+
+        dim = embeddings.shape[-1]
+
+        new_height = height // self.patch_stride[0]
+        new_width = width // self.patch_stride[1]
+
+        sqrt_num_positions = torch_int(num_positions**0.5)
+        patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
+        patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
+
+        patch_pos_embed = nn.functional.interpolate(
+            patch_pos_embed,
+            size=(new_height, new_width),
+            mode="bicubic",
+            align_corners=False,
+        )
+
+        patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
+        return patch_pos_embed
 
     def get_position_embedding(
         self, embeddings: torch.Tensor, height: int, width: int, interpolate_pos_encoding: bool
