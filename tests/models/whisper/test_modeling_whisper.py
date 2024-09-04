@@ -1680,7 +1680,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
         for model_class in self.all_generative_model_classes:
             model = model_class(config)
-            dummy_input_features = torch.ones(1, config.num_mel_bins, 3000, dtype=torch.float32)
+            dummy_input_features = torch.ones(1, config.num_mel_bins, config.seq_length, dtype=torch.float32)
 
             correct_labels_length = 448
             assert correct_labels_length <= config.max_target_positions
