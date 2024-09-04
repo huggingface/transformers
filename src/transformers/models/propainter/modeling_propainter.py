@@ -1113,7 +1113,6 @@ class ProPainterSoftComp(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.swin.modeling_swin.window_partition
 def window_partition(input_feature, window_size, num_attention_heads):
     """
     Args:

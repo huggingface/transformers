@@ -85,7 +85,6 @@ class ProPainterImageProcessingTester(unittest.TestCase):
             "do_convert_rgb": self.do_convert_rgb,
         }
 
-    # Copied from tests.models.video_llava.test_image_processing_video_llava.VideoLlavaImageProcessingTester.expected_output_image_shape
     def expected_output_image_shape(self, images):
         return self.num_frames, self.num_channels, self.crop_size["height"], self.crop_size["width"]
 

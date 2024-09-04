@@ -70,7 +70,6 @@ def make_batched(videos) -> List[List[VideoInput]]:
     raise ValueError(f"Could not make batched video from {videos}")
 
 
-# Copied from transformers.models.superpoint.image_processing_superpoint.convert_to_grayscale
 def convert_to_grayscale_and_dilation(
     image: ImageInput,
     input_data_format: Optional[Union[str, ChannelDimension]] = None,
