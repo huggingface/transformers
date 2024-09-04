@@ -1010,7 +1010,8 @@ def _validate_images_text_input_order(images, text):
             if len(t) == 0:
                 # ... not empty
                 return False
-            return _is_valid_text_input_for_processor(t[0])
+            for t_s in t:
+                return _is_valid_text_input_for_processor(t_s)
         return False
 
     def _is_valid(input, validator):
