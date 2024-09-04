@@ -223,7 +223,7 @@ class ViTPoseBackboneAttention(nn.Module):
         return outputs
 
 
-class ViTPoseBackboneMoEMLP(nn.Module):
+class ViTPoseBackboneMoeMLP(nn.Module):
     def __init__(self, config: ViTPoseBackboneConfig) -> None:
         super().__init__()
 
