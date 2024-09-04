@@ -15,7 +15,7 @@ logging.getLogger().setLevel(logging.ERROR)
 console = Console()
 
 
-def compare_files(diff_file_path):
+def compare_files(diff_file_path, fix_and_overwrite=False):
     # Generate the expected modeling content
     generated_modeling_content = convert_diff_file(diff_file_path)
     modeling_file_path = diff_file_path.replace("diff_", "modeling_")
@@ -45,10 +45,15 @@ def compare_files(diff_file_path):
 
     # Check for differences
     if diff_list:
-        console.print(f"\n[bold red]Differences found between the generated modeling code and {modeling_file_path}:[/bold red]\n")
-        diff_text = '\n'.join(diff_list)
-        syntax = Syntax(diff_text, "diff", theme="ansi_dark", line_numbers=True)
-        console.print(syntax)
+        if fix_and_overwrite:
+            with open(modeling_file_path, 'w') as modeling_file:
+                modeling_file.write(generated_modeling_content)
+            console.print(f"[bold blue]Overwritten {modeling_file_path} with the generated content.[/bold blue]")
+        else:
+            console.print(f"\n[bold red]Differences found between the generated modeling code and {modeling_file_path}:[/bold red]\n")
+            diff_text = '\n'.join(diff_list)
+            syntax = Syntax(diff_text, "diff", theme="ansi_dark", line_numbers=True)
+            console.print(syntax)
         return 1
     else:
         console.print(f"\n[bold green]No differences found for {modeling_file_path}.[/bold green]")
@@ -64,12 +69,17 @@ if __name__ == "__main__":
         nargs="+",
         help="List of diff_xxx.py files to compare."
     )
+    parser.add_argument(
+        "--fix_and_overwrite",
+        action="store_true",
+        help="Overwrite the modeling_xxx.py file if differences are found."
+    )
     args = parser.parse_args()
     if args.files == ["all"]:
         args.files = glob.glob("src/transformers/models/**/diff_*.py", recursive=True)
     non_matching_files = 0
     for diff_file_path in args.files:
-        non_matching_files+=compare_files(diff_file_path)
+        non_matching_files+=compare_files(diff_file_path, args.fix_and_overwrite)
 
-    if non_matching_files:
+    if non_matching_files and not args.fix_and_overwrite:
         raise ValueError("Some diff and their modeling code did not match.")
