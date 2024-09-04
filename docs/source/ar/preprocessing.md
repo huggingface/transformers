@@ -54,7 +54,7 @@ pip install datasets
 يعيد المُجزّئ اللغوي قاموسًا يحتوي على ثلاثة عناصر مهمة:
 
 * [input_ids](glossary#input-ids) هي الفهارس المقابلة لكل رمز في الجملة.
-* [attention_mask](glossary#attention-mask) يشير إلى ما إذا كان يجب الاهتمام بالرمز أم لا.
+* [attention_mask](glossary#attention-mask) يشير إلى ما إذا كان يجب الانتباه بالرمز أم لا.
 * [token_type_ids](glossary#token-type-ids) يحدد التسلسل الذي ينتمي إليه الرمز عندما يكون هناك أكثر من تسلسل واحد.
 
 أعد إدخالك عن طريق فك ترميز `input_ids`:
