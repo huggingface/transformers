@@ -179,7 +179,7 @@ class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
         self.new_name = new_name
         self.default_name = "".join(x.title() for x in new_name.split("_"))
         if self.new_name in CONFIG_MAPPING_NAMES:
-            self.default_name = CONFIG_MAPPING_NAMES[self.new_name]
+            self.default_name = CONFIG_MAPPING_NAMES[self.new_name].replace("Config","") # the best source of truth for class names. Could also just use the ones de
         self.patterns = {
             old_name: new_name,
             old_name.upper(): new_name.upper(),
