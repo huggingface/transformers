@@ -169,6 +169,17 @@ class LlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
             np.testing.assert_allclose(padded_image, padded_image_original)
 
+        # test background color
+        background_color = (122, 116, 104)
+        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
+
+        for image in image_inputs:
+            padded_image = image_processor.pad_to_square(image, background_color=background_color)
+            padded_image_original = pad_to_square_original(Image.fromarray(image), background_color=background_color)
+            padded_image_original = np.array(padded_image_original)
+
+            np.testing.assert_allclose(padded_image, padded_image_original)
+
     @unittest.skip(reason="LLaVa does not support 4 channel images yet")
     # Ignore copy
     def test_call_numpy_4_channels(self):
