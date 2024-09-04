@@ -1754,7 +1754,7 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
         if labels is not None:
             if labels.shape[1] > 448:
                 raise ValueError(
-                    f"Sequence length {labels.shape[1]} exceeds the maximum allowed length of 448 tokens."
+                    f"Labels' sequence length {labels.shape[1]} cannot exceed the maximum allowed length of {config.max_target_positions} tokens."
                 )
             if decoder_input_ids is None and decoder_inputs_embeds is None:
                 decoder_input_ids = shift_tokens_right(
