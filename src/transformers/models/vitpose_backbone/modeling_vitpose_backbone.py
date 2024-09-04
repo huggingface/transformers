@@ -285,7 +285,7 @@ class ViTPoseBackboneLayer(nn.Module):
     def __init__(self, config: ViTPoseBackboneConfig) -> None:
         super().__init__()
         self.attention = ViTPoseBackboneAttention(config)
-        self.mlp = ViTPoseBackboneMLP(config) if config.num_experts == 1 else ViTPoseBackboneMoEMLP(config)
+        self.mlp = ViTPoseBackboneMLP(config) if config.num_experts == 1 else ViTPoseBackboneMoeMLP(config)
         self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
