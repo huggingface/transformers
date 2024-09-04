@@ -117,7 +117,7 @@ GGUF_TENSOR_MAPPING = {
         "output.weight": "lm_head.weight",
         "output_norm": "model.norm",
     },
-    "qwen2_moe": {
+    "qwen2moe": {
         "token_embd": "model.embed_tokens",
         "blk": "model.layers",
         "ffn_up": "mlp.up_proj",
@@ -176,7 +176,7 @@ GGUF_CONFIG_MAPPING = {
         "attention.layer_norm_rms_epsilon": "rms_norm_eps",
         "vocab_size": "vocab_size",
     },
-    "qwen2_moe": {
+    "qwen2moe": {
         "context_length": "max_position_embeddings",
         "block_count": "num_hidden_layers",
         "feed_forward_length": "intermediate_size",
@@ -717,9 +717,15 @@ class GGUFQwen2Converter(Qwen2Converter):
         return tokenizer
 
 
+class GGUFQwen2MoeConverter(GGUFQwen2Converter):
+    def __init__(self, tokenizer_dict):
+        super().__init__(tokenizer_dict)
+
+
 GGUF_TO_FAST_CONVERTERS = {
     "llama": GGUFLlamaConverter,
     "qwen2": GGUFQwen2Converter,
+    "qwen2_moe": GGUFQwen2MoeConverter
 }
 
 
