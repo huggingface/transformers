@@ -63,7 +63,6 @@ class InstructBlipProcessor(ProcessorMixin):
     qformer_tokenizer_class = "AutoTokenizer"
 
     def __init__(self, image_processor, tokenizer, qformer_tokenizer, num_query_tokens=None, **kwargs):
-        # add QFormer tokenizer
         self.image_token = AddedToken("<image>", normalized=False, special=True)
         tokenizer.add_tokens([self.image_token], special_tokens=True)
         self.num_query_tokens = num_query_tokens
