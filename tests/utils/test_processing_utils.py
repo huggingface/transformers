@@ -68,10 +68,9 @@ class ProcessingUtilTester(unittest.TestCase):
         self.assertEqual(valid_images, images)
         self.assertEqual(valid_text, text)
 
-        # pretokenized text and list of numpy images inputs
+        # list of strings and list of numpy images inputs
         images = [np.random.rand(224, 224, 3), np.random.rand(224, 224, 3)]
-        text = list(range(10))
-        print(type(text))
+        text = ["text1", "text2"]
         # test correct text and images order
         valid_images, valid_text = _validate_images_text_input_order(images=images, text=text)
         self.assertTrue(np.array_equal(valid_images[0], images[0]))
@@ -81,9 +80,9 @@ class ProcessingUtilTester(unittest.TestCase):
         self.assertTrue(np.array_equal(valid_images[0], images[0]))
         self.assertEqual(valid_text, text)
 
-        # list of pretokenized text and nested list of numpy images inputs
+        # list of strings and nested list of numpy images inputs
         images = [[np.random.rand(224, 224, 3), np.random.rand(224, 224, 3)], [np.random.rand(224, 224, 3)]]
-        text = [list(range(10)), list(range(5))]
+        text = ["text1", "text2"]
         # test correct text and images order
         valid_images, valid_text = _validate_images_text_input_order(images=images, text=text)
         self.assertTrue(np.array_equal(valid_images[0][0], images[0][0]))
@@ -93,12 +92,12 @@ class ProcessingUtilTester(unittest.TestCase):
         self.assertTrue(np.array_equal(valid_images[0][0], images[0][0]))
         self.assertEqual(valid_text, text)
 
-        # nested list of pretokenized text and nested list of PIL images inputs
+        # nested list of strings and nested list of PIL images inputs
         images = [
             [PIL.Image.new("RGB", (224, 224)), PIL.Image.new("RGB", (224, 224))],
             [PIL.Image.new("RGB", (224, 224))],
         ]
-        text = [[list(range(10)), list(range(5))], [list(range(10))]]
+        text = [["text1", "text2, text3"], ["text3", "text4"]]
         # test correct text and images order
         valid_images, valid_text = _validate_images_text_input_order(images=images, text=text)
         self.assertEqual(valid_images, images)
