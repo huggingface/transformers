@@ -122,10 +122,6 @@ def post_dark_udp(coords, batch_heatmaps, kernel=3):
         `np.ndarray` of shape `(num_persons, num_keypoints, 2)` ):
             Refined coordinates.
     """
-    if not isinstance(coords, np.ndarray):
-        coords = coords.cpu().numpy()
-    if not isinstance(batch_heatmaps, np.ndarray):
-        batch_heatmaps = batch_heatmaps.cpu().numpy()
     batch_size, num_keypoints, height, width = batch_heatmaps.shape
     num_coords = coords.shape[0]
     if not (batch_size == 1 or batch_size == num_coords):
