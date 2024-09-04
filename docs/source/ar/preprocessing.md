@@ -234,7 +234,7 @@ pip install datasets
 أولاً، دعنا نضيف بعض الزيادات إلى الصور. يمكنك استخدام أي مكتبة تفضلها، ولكن في هذا الدليل، سنستخدم وحدة [`transforms`](https://pytorch.org/vision/stable/transforms.html) من torchvision. إذا كنت مهتمًا باستخدام مكتبة زيادة بيانات أخرى، فتعرف على كيفية القيام بذلك في [دفاتر Albumentations](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification_albumentations.ipynb) أو [دفاتر Kornia](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification_kornia.ipynb).
 
 1. هنا نستخدم [`Compose`](https://pytorch.org/vision/master/generated/torchvision.transforms.Compose.html) لربط بعض التحولات معًا - [`RandomResizedCrop`](https://pytorch.org/vision/main/generated/torchvision.transforms.RandomResizedCrop.html) و [`ColorJitter`](https://pytorch.org/vision/main/generated/torchvision.transforms.ColorJitter.html).
-لاحظ أنه بالنسبة لتغيير الحجم، يمكننا الحصول على متطلبات حجم الصورة من `image_processor`. بالنسبة لبعض النماذج، يُتوقع ارتفاع وعرض محددان بالضبط، بينما بالنسبة للنماذج الأخرى، يتم تحديد `shortest_edge` فقط.
+لاحظ بالنسبة لتغيير الحجم، يمكننا الحصول على متطلبات حجم الصورة من `image_processor`. بالنسبة لبعض النماذج، يُتوقع ارتفاع وعرض دقيقين، بينما بالنسبة للنماذج الأخرى، يتم تحديد  الحافة الأقصر`shortest_edge` فقط.
 
 ```py
 >>> from torchvision.transforms import RandomResizedCrop, ColorJitter, Compose
