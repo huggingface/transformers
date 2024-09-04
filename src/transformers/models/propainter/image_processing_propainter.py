@@ -34,6 +34,7 @@ from ...image_utils import (
     IMAGENET_STANDARD_STD,
     ChannelDimension,
     ImageInput,
+    VideoInput,
     PILImageResampling,
     get_image_size,
     infer_channel_dimension_format,
@@ -56,7 +57,7 @@ logger = logging.get_logger(__name__)
 #Adapted from original code at https://github.com/sczhou/ProPainter
 
 
-def make_batched(videos) -> List[List[ImageInput]]:
+def make_batched(videos) -> List[List[VideoInput]]:
     if isinstance(videos, (list, tuple)) and isinstance(videos[0], (list, tuple)) and is_valid_image(videos[0][0]):
         return videos
 
@@ -89,7 +90,6 @@ def convert_to_grayscale_and_dilation(
             The channel dimension format for the input image.
     """
     requires_backends(convert_to_grayscale_and_dilation, ["vision"])
-
     if isinstance(image, np.ndarray):
         if input_data_format == ChannelDimension.FIRST:
             gray_image = image[0, ...] * 0.2989 + image[1, ...] * 0.5870 + image[2, ...] * 0.1140
@@ -358,7 +358,8 @@ class ProPainterImageProcessor(BaseImageProcessor):
         if do_rescale:
             image = self.rescale(image=image, scale=rescale_factor, dtype =np.uint8, input_data_format=input_data_format)
 
-        if do_normalize:
+        # If the mask frames even consisted of 0s and 255s, they are already rescaled and normally masks are not normalised as well
+        if do_normalize and not(is_mask_frame):
             image = self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
 
         image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
@@ -367,7 +368,7 @@ class ProPainterImageProcessor(BaseImageProcessor):
     @filter_out_non_signature_kwargs()
     def preprocess(
         self,
-        images: ImageInput,
+        images: VideoInput,
         masks: ImageInput,
         do_resize: bool = None,
         size: Dict[str, int] = None,
@@ -469,7 +470,7 @@ class ProPainterImageProcessor(BaseImageProcessor):
         videos = make_batched(videos)
         masks = make_batched(masks)
 
-        video_size = get_image_size(videos[0][0])
+        video_size = get_image_size(to_numpy_array(videos[0][0]), input_data_format)
         video_size = (video_size[0]-video_size[0]%8, video_size[1]-video_size[1]%8)
 
         videos = [
@@ -538,7 +539,7 @@ class ProPainterImageProcessor(BaseImageProcessor):
         if len(videos)==1:
             videos_inp = [[np.array(frame).transpose(1,2,0).astype(np.uint8) for frame in video] for video in videos][0]
         else:
-            videos_inp = None
+            videos_inp = torch.empty(0)
 
         videos = torch.stack([to_tensors(video) * 2 - 1 for video in videos], dim=0)
 
