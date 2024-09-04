@@ -32,9 +32,9 @@ It empirically yields better performance on most benchmarks. The reason for this
 
 You can easily build hierarchical multi-agent systems with `transformers.agents`.
 
-> [!TIP]
-> For an in-depth example of an efficient multi-agent, see [how we pushed our multi-agent system to the top of the GAIA leaderboard](https://huggingface.co/blog/beating-gaia).
+To do so, encapsulate the agent in a [`ManagedAgent`] object, that needs arguments `agent`, `name`, and a `description` that will be embedded in its manager agent's system prompt to know how to call this managed agent.
 
+Here's an example:
 ```py
 from transformers import ReactCodeAgent
 from transformers.agents.llm_engine import HfApiEngine
@@ -57,6 +57,10 @@ manager_agent = ReactCodeAgent(
 
 manager_agent.run("Who is the CEO of Hugging Face?")
 ```
+
+> [!TIP]
+> For an in-depth example of an efficient multi-agent implementation, see [how we pushed our multi-agent system to the top of the GAIA leaderboard](https://huggingface.co/blog/beating-gaia).
+
 
 ## Use tools from gradio or LangChain
 
