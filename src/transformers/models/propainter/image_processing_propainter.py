@@ -291,6 +291,7 @@ class ProPainterImageProcessor(BaseImageProcessor):
         self.scale_hw = scale_hw
         self.mask_dilation = mask_dilation
 
+    # Copied from transformers.models.vit.image_processing_vit.ViTImageProcessor.resize
     def resize(
         self,
         image: np.ndarray,

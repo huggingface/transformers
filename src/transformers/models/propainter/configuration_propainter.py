@@ -108,7 +108,7 @@ class ProPainterConfig(PretrainedConfig):
         valid_weight=1,
         flow_weight_propainter=1,
         adversarial_weight=0.01,
-        GAN_LOSS="hinge",
+        gan_loss="hinge",
         perceptual_weight=0,
         interp_mode="nearest",
         beta1_propainter=0,
@@ -139,7 +139,6 @@ class ProPainterConfig(PretrainedConfig):
         window_size=[5, 9],
         pool_size=[4, 4],
         no_dis=0,
-        flow_weight=0.25,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -168,7 +167,7 @@ class ProPainterConfig(PretrainedConfig):
         self.valid_weight = valid_weight
         self.flow_weight_propainter = flow_weight_propainter
         self.adversarial_weight = adversarial_weight
-        self.GAN_LOSS = GAN_LOSS
+        self.gan_loss = gan_loss
         self.perceptual_weight = perceptual_weight
         self.interp_mode = interp_mode
         self.beta1_propainter = beta1_propainter
@@ -199,4 +198,3 @@ class ProPainterConfig(PretrainedConfig):
         self.window_size = window_size
         self.pool_size = pool_size
         self.no_dis = no_dis
-        self.flow_weight = flow_weight

@@ -26,20 +26,23 @@ The abstract from the paper is the following:
 
 ## Usage tips:
 
-- The model is used for both video inpainting and video outpainting. To switch between modes, you need to give a value in form of `tuple(h,w)` to `scale_hw` kwarg to the `ProPainterImageProcessor`. In the usage example, we have provided both ways to give video frames and masks whether their data is in form of .mp4 or .jpg or any other image/video extensions.
+- The model is used for both video inpainting and video outpainting. To switch between modes, you need to provide a value of a `tuple(h,w)` to the `scale_hw` keyword argument in the `ProPainterImageProcessor`. In the usage example, we have demonstrated both ways of providing video frames and their corresponding masks regardless of whether the data is in `.mp4`, `.jpg`, or any other image/video format.
 
 This model was contributed by [ruffy369](https://huggingface.co/ruffy369). The original code can be found [here](https://github.com/sczhou/ProPainter).
 
 ## Usage example
 
-The model can accept videos frames and its corresponding masks frame(s) as input. Here's an example code for inference:
+The model can accept videos frames and their corresponding masks frame(s) as input. Here's an example code for inference:
 
 ```python
 import av
-import numpy as np
 import cv2
-from PIL import Image
+import numpy as np
+
+from datasets import load_dataset
 from huggingface_hub import hf_hub_download
+from PIL import Image
+from transformers import ProPainterImageProcessor, ProPainterModel
 
 np.random.seed(0)
 
@@ -81,7 +84,9 @@ def sample_frame_indices(clip_len, frame_sample_rate, seg_len):
     indices = np.clip(indices, start_idx, end_idx - 1).astype(np.int64)
     return indices
 
-##########################IF YOU HAVE THE MASK AND FRAMES IN THE FORM OF MP4(comment the below part if you want to use this)###########################
+
+# Using .mp4 files for data:
+
 # video clip consists of 80 frames(both masks and original video) (3 seconds at 24 FPS)
 video_file_path = hf_hub_download(
     repo_id="ruffy369/propainter-object-removal", filename="object_removal_bmx/bmx.mp4", repo_type="dataset"
@@ -101,10 +106,20 @@ masks = read_video_pyav(container=container_masks, indices=indices)
 video = list(video)
 masks = list(masks)
 
+# Forward pass:
 
-##########################IF YOU HAVE FOLDER WITH JPG IMAGES OF FRAMES AND MASKS(comment the above part if you want to use this########################
-from datasets import load_dataset
-import numpy as np
+device = "cuda"
+image_processor = ProPainterImageProcessor()
+inputs = image_processor(images = video, masks = masks)to(device)
+
+model = transformers.ProPainterModel.from_pretrained("ruffy369/ProPainter").to(device)
+
+# The first input in this always has a value for inference as its not utilised during training
+with torch.no_grad():
+    outputs = model(**inputs)
+
+# Using .jpg files for data:
+
 ds = load_dataset("ruffy369/propainter-object-removal")
 ds_images = ds['train']["image"]
 num_frames = 80
@@ -112,21 +127,13 @@ video = [np.array(ds_images[i]) for i in range(num_frames)]
 #stack to convert H,W mask frame to compatible H,W,C frame
 masks = [np.stack([np.array(ds_images[i])] * 3, axis=-1) for i in range(num_frames, 2*num_frames)]
 
-####################################################START OF THE IMAGE PROCESSOR AND MODEL FORWARD PASS################################################
-import transformers
-from transformers import ProPainterImageProcessor
-image_processor = ProPainterImageProcessor()
-inputs = image_processor(images = video, masks = masks)
+# Forward pass:
 
-device = "cuda"
+inputs = image_processor(images = video, masks = masks)to(device)
 
-model = transformers.ProPainterModel.from_pretrained("ruffy369/ProPainter").to(device)
-
-#(You can also directly give **inputs to the model after inputs.to(device): (model(**inputs). The below line is just to demonstrate that the first inputs is a list of numpy arrays whose type is followed with the original code)
-# The first input is always provided for inference as its not utilised during training
+# The first input in this always has a value for inference as its not utilised during training
 with torch.no_grad():
-    outputs = model(inputs["pixel_values_inp"],inputs["pixel_values"].to(device),inputs["flow_masks"].to(device),inputs["masks_dilated"].to(device))
-#for training or calculating a simple backward pass
+    outputs = model(**inputs)
 
 ```
 
@@ -139,6 +146,3 @@ with torch.no_grad():
 
 [[autodoc]] ProPainterModel
     - forward
-
-</pt>
-<tf>

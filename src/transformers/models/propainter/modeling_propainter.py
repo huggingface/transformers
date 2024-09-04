@@ -26,7 +26,6 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 import torchvision
 from torch import nn
-from torch.cuda.amp import autocast
 from torch.nn import L1Loss
 from torch.nn.functional import normalize
 from torch.nn.modules.utils import _pair, _single
@@ -55,12 +54,13 @@ _CONFIG_FOR_DOC = "ProPainterConfig"
 _CHECKPOINT_FOR_DOC = "ruffy369/propainter"
 _EXPECTED_OUTPUT_SHAPE = ["batch_size", 80, 240, 432, 3]
 
+
 # Adapted from original code at https://github.com/sczhou/ProPainter
 
 
 class ProPainterResidualBlock(nn.Module):
     def __init__(self, config, in_channels, channels, norm_fn="group", stride=1):
-        super(ProPainterResidualBlock, self).__init__()
+        super().__init__()
 
         self.config = config
 
@@ -121,7 +121,7 @@ class ProPainterResidualBlock(nn.Module):
 
 class ProPainterBasicEncoder(nn.Module):
     def __init__(self, config, output_dim=128, norm_fn="batch"):
-        super(ProPainterBasicEncoder, self).__init__()
+        super().__init__()
 
         self.config = config
 
@@ -136,6 +136,9 @@ class ProPainterBasicEncoder(nn.Module):
 
         elif norm_fn == "none":
             self.norm1 = nn.Sequential()
+
+        else:
+            raise ValueError(f"Unsupported normalization function: {norm_fn}")
 
         self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3)
         self.relu1 = nn.ReLU(inplace=True)
@@ -165,8 +168,8 @@ class ProPainterBasicEncoder(nn.Module):
 
     def forward(self, image):
         # if input is list, combine batch dimension
-        is_list = isinstance(image, tuple) or isinstance(image, list)
-        if is_list:
+        is_iterable = isinstance(image, (tuple, list))
+        if is_iterable:
             batch_dim = image[0].shape[0]
             image = torch.cat(image, dim=0)
 
@@ -182,7 +185,7 @@ class ProPainterBasicEncoder(nn.Module):
         if self.training and self.dropout is not None:
             hidden_states = self.dropout(hidden_states)
 
-        if is_list:
+        if is_iterable:
             hidden_states = torch.split(hidden_states, [batch_dim, batch_dim], dim=0)
 
         return hidden_states
@@ -190,7 +193,7 @@ class ProPainterBasicEncoder(nn.Module):
 
 class ProPainterBasicMotionEncoder(nn.Module):
     def __init__(self, config):
-        super(ProPainterBasicMotionEncoder, self).__init__()
+        super().__init__()
         self.config = config
 
         corr_planes = config.corr_levels * (2 * config.corr_radius + 1) ** 2
@@ -215,7 +218,7 @@ class ProPainterBasicMotionEncoder(nn.Module):
 
 class ProPainterSepConvGRU(nn.Module):
     def __init__(self, config, hidden_dim=128, input_dim=192 + 128):
-        super(ProPainterSepConvGRU, self).__init__()
+        super().__init__()
         self.config = config
 
         self.convz1 = nn.Conv2d(
@@ -265,7 +268,7 @@ class ProPainterSepConvGRU(nn.Module):
 
 class ProPainterFlowHead(nn.Module):
     def __init__(self, config, input_dim=128, hidden_dim=256):
-        super(ProPainterFlowHead, self).__init__()
+        super().__init__()
         self.config = config
 
         self.conv1 = nn.Conv2d(input_dim, hidden_dim, 3, padding=1)
@@ -281,7 +284,7 @@ class ProPainterFlowHead(nn.Module):
 
 class ProPainterBasicUpdateBlock(nn.Module):
     def __init__(self, config, hidden_dim=128, input_dim=128):
-        super(ProPainterBasicUpdateBlock, self).__init__()
+        super().__init__()
         self.config = config
         self.encoder = ProPainterBasicMotionEncoder(config)
         self.gru = ProPainterSepConvGRU(
@@ -375,7 +378,7 @@ class ProPainterCorrBlock:
 
 class ProPainterRaftOpticalFlow(nn.Module):
     def __init__(self, config):
-        super(ProPainterRaftOpticalFlow, self).__init__()
+        super().__init__()
         self.config = config
         self.hidden_dim = config.num_channels
         self.context_dim = config.num_channels
@@ -391,11 +394,6 @@ class ProPainterRaftOpticalFlow(nn.Module):
         self.update_block = ProPainterBasicUpdateBlock(
             config, hidden_dim=self.hidden_dim
         )
-
-    def freeze_bn(self):
-        for m in self.modules():
-            if isinstance(m, nn.BatchNorm2d):
-                m.eval()
 
     def initialize_flow(self, image):
         """Flow is represented as difference between two coordinate grids flow = coords1 - coords0"""
@@ -426,8 +424,7 @@ class ProPainterRaftOpticalFlow(nn.Module):
         image2 = image2.contiguous()
 
         # run the feature network
-        with autocast(enabled=False):
-            fmap1, fmap2 = self.feature_network([image1, image2])
+        fmap1, fmap2 = self.feature_network([image1, image2])
 
         fmap1 = fmap1.float()
         fmap2 = fmap2.float()
@@ -435,13 +432,12 @@ class ProPainterRaftOpticalFlow(nn.Module):
         corr_fn = ProPainterCorrBlock(fmap1, fmap2, radius=self.config.corr_radius)
 
         # run the context network
-        with autocast(enabled=False):
-            context_network_out = self.context_network(image1)
-            net, inp = torch.split(
-                context_network_out, [self.hidden_dim, self.context_dim], dim=1
-            )
-            net = torch.tanh(net)
-            inp = torch.relu(inp)
+        context_network_out = self.context_network(image1)
+        net, inp = torch.split(
+            context_network_out, [self.hidden_dim, self.context_dim], dim=1
+        )
+        net = torch.tanh(net)
+        inp = torch.relu(inp)
 
         coords0, coords1 = self.initialize_flow(image1)
 
@@ -453,8 +449,7 @@ class ProPainterRaftOpticalFlow(nn.Module):
             corr = corr_fn(coords1)  # index correlation volume
 
             flow = coords1 - coords0
-            with autocast(enabled=False):
-                net, up_mask, delta_flow = self.update_block(net, inp, corr, flow)
+            net, up_mask, delta_flow = self.update_block(net, inp, corr, flow)
 
             # F(t+1) = F(t) + \Delta(t)
             coords1 = coords1 + delta_flow
@@ -584,7 +579,7 @@ class ProPainterEdgeDetection(nn.Module):
 
 class ProPainterBidirectionalPropagationFlowComplete(nn.Module):
     def __init__(self, config):
-        super(ProPainterBidirectionalPropagationFlowComplete, self).__init__()
+        super().__init__()
         self.config = config
 
         modules = ["backward_", "forward_"]
@@ -728,7 +723,7 @@ def flow_warp(
     return output
 
 
-def fbConsistencyCheck(flow_forward, flow_backward, alpha1=0.01, alpha2=0.5):
+def fb_consistency_check(flow_forward, flow_backward, alpha1=0.01, alpha2=0.5):
     flow_backward_warped = flow_warp(flow_backward, flow_forward.permute(0, 2, 3, 1))
     flow_diff_forward = flow_forward + flow_backward_warped
 
@@ -747,7 +742,7 @@ def fbConsistencyCheck(flow_forward, flow_backward, alpha1=0.01, alpha2=0.5):
 
 class ProPainterBidirectionalPropagationInPaint(nn.Module):
     def __init__(self, config, num_channels, learnable=True):
-        super(ProPainterBidirectionalPropagationInPaint, self).__init__()
+        super().__init__()
         self.config = config
         self.deform_align = nn.ModuleDict()
         self.backbone = nn.ModuleDict()
@@ -772,9 +767,6 @@ class ProPainterBidirectionalPropagationInPaint(nn.Module):
                 nn.LeakyReLU(negative_slope=0.2, inplace=True),
                 nn.Conv2d(num_channels, num_channels, 3, 1, 1),
             )
-
-    def binary_mask(self, mask, th=0.1):
-        return torch.where(mask > th, 1, 0).to(mask)
 
     def forward(
         self,
@@ -824,7 +816,7 @@ class ProPainterBidirectionalPropagationInPaint(nn.Module):
                 else:
                     flow_prop = flows_for_prop[:, flow_idx[i], :, :, :]
                     flow_check = flows_for_check[:, flow_idx[i], :, :, :]
-                    flow_vaild_mask = fbConsistencyCheck(flow_prop, flow_check)
+                    flow_vaild_mask = fb_consistency_check(flow_prop, flow_check)
                     feat_warped = flow_warp(
                         feat_prop, flow_prop.permute(0, 2, 3, 1), interpolation
                     )
@@ -848,20 +840,18 @@ class ProPainterBidirectionalPropagationInPaint(nn.Module):
                         mask_prop_valid = flow_warp(
                             mask_prop, flow_prop.permute(0, 2, 3, 1)
                         )
-                        mask_prop_valid = self.binary_mask(mask_prop_valid)
+                        mask_prop_valid = torch.where(mask_prop_valid > 0.1, 1, 0).to(mask_prop_valid)
 
-                        union_vaild_mask = self.binary_mask(
-                            mask_current * flow_vaild_mask * (1 - mask_prop_valid)
-                        )
+                        union_vaild_mask = mask_current * flow_vaild_mask * (1 - mask_prop_valid)
+                        union_vaild_mask = torch.where(union_vaild_mask > 0.1, 1, 0).to(union_vaild_mask)
+
                         feat_prop = (
                             union_vaild_mask * feat_warped
                             + (1 - union_vaild_mask) * feat_current
                         )
                         # update mask
-                        mask_prop = self.binary_mask(
-                            mask_current
-                            * (1 - (flow_vaild_mask * (1 - mask_prop_valid)))
-                        )
+                        mask_prop = mask_current * (1 - (flow_vaild_mask * (1 - mask_prop_valid)))
+                        mask_prop = torch.where(mask_prop > 0.1, 1, 0).to(mask_prop)
 
                 # refine
                 if self.learnable:
@@ -931,7 +921,7 @@ class ProPainterModulatedDeformConv2d(nn.Module):
         deform_groups=1,
         bias=True,
     ):
-        super(ProPainterModulatedDeformConv2d, self).__init__()
+        super().__init__()
 
         self.in_channels = in_channels
         self.out_channels = out_channels
@@ -964,7 +954,7 @@ class ProPainterDeformableAlignment(ProPainterModulatedDeformConv2d):
     def __init__(self, config, *args, **kwargs):
         self.max_residue_magnitude = kwargs.pop("max_residue_magnitude", 3)
 
-        super(ProPainterDeformableAlignment, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         self.config = config
         self.conv_offset = nn.Sequential(
@@ -1009,7 +999,7 @@ class ProPainterSecondOrderDeformableAlignment(ProPainterModulatedDeformConv2d):
     def __init__(self, *args, **kwargs):
         self.max_residue_magnitude = kwargs.pop("max_residue_magnitude", 5)
 
-        super(ProPainterSecondOrderDeformableAlignment, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         self.conv_offset = nn.Sequential(
             nn.Conv2d(3 * self.out_channels, self.out_channels, 3, 1, 1),
@@ -1223,7 +1213,7 @@ class ProPainterRecurrentFlowCompleteNet(nn.Module):
 
 class ProPainterEncoder(nn.Module):
     def __init__(self, config):
-        super(ProPainterEncoder, self).__init__()
+        super().__init__()
         self.config = config
         self.group = [1, 2, 4, 8, 1]
         negative_slope = 0.2
@@ -1271,7 +1261,7 @@ class ProPainterEncoder(nn.Module):
 
 class ProPainterSoftSplit(nn.Module):
     def __init__(self, config):
-        super(ProPainterSoftSplit, self).__init__()
+        super().__init__()
         self.config = config
 
         self.kernel_size = config.kernel_size
@@ -1305,7 +1295,7 @@ class ProPainterSoftSplit(nn.Module):
 
 class ProPainterSoftComp(nn.Module):
     def __init__(self, config):
-        super(ProPainterSoftComp, self).__init__()
+        super().__init__()
         self.config = config
         self.relu = nn.LeakyReLU(0.2, inplace=True)
         output_features = reduce((lambda x, y: x * y), config.kernel_size) * config.num_channels
@@ -1772,7 +1762,7 @@ class ProPainterSparseWindowAttention(nn.Module):
 
 class ProPainterFusionFeedForward(nn.Module):
     def __init__(self, hidden_size, hidden_dim=1960, token_to_token_params=None):
-        super(ProPainterFusionFeedForward, self).__init__()
+        super().__init__()
         # We set hidden_dim as a default to 1960
         self.fc1 = nn.Sequential(nn.Linear(hidden_size, hidden_dim))
         self.fc2 = nn.Sequential(nn.GELU(), nn.Linear(hidden_dim, hidden_size))
@@ -1966,7 +1956,7 @@ class ProPainterTemporalSparseTransformer(nn.Module):
 
 class ProPainterInpaintGenerator(nn.Module):
     def __init__(self, config):
-        super(ProPainterInpaintGenerator, self).__init__()
+        super().__init__()
 
         self.encoder = ProPainterEncoder(config)
 
@@ -2435,7 +2425,7 @@ class ProPainterDiscriminator(nn.Module):
         in_channels=3,
         use_spectral_norm=True,
     ):
-        super(ProPainterDiscriminator, self).__init__()
+        super().__init__()
         self.config = config
         num_features = 32
 
@@ -2507,7 +2497,7 @@ class ProPainterDiscriminator(nn.Module):
     def forward(self, completed_frames):
         completed_frames_t = torch.transpose(completed_frames, 1, 2)
         hidden_states = self.conv(completed_frames_t)
-        if self.config.GAN_LOSS != "hinge":
+        if self.config.gan_loss != "hinge":
             hidden_states = torch.sigmoid(hidden_states)
         hidden_states = torch.transpose(
             hidden_states, 1, 2
@@ -2518,7 +2508,7 @@ class ProPainterDiscriminator(nn.Module):
 # Adapted from https://github.com/richzhang/PerceptualSimilarity/blob/master/lpips/pretrained_networks.py
 class ProPainterVgg16(nn.Module):
     def __init__(self, requires_grad=False, pretrained=True):
-        super(ProPainterVgg16, self).__init__()
+        super().__init__()
         vgg_pretrained_features = tv.vgg16(pretrained=pretrained).features
         self.slice1 = nn.Sequential()
         self.slice2 = nn.Sequential()
@@ -2568,7 +2558,7 @@ class ProPainterVgg16(nn.Module):
 # Adapted from https://github.com/richzhang/PerceptualSimilarity/blob/master/lpips/lpips.py
 class ProPainterScalingLayer(nn.Module):
     def __init__(self):
-        super(ProPainterScalingLayer, self).__init__()
+        super().__init__()
         self.register_buffer(
             "shift", torch.Tensor([-0.030, -0.088, -0.188])[None, :, None, None]
         )
@@ -2585,7 +2575,7 @@ class ProPainterIntermediateLossLayer(nn.Module):
     """A single linear layer which does a 1x1 conv"""
 
     def __init__(self, num_channels, use_dropout=False):
-        super(ProPainterIntermediateLossLayer, self).__init__()
+        super().__init__()
 
         layers = (
             [
@@ -2631,7 +2621,7 @@ class ProPainterLpips(nn.Module):
             [False] for no dropout when training linear layers
         """
 
-        super(ProPainterLpips, self).__init__()
+        super().__init__()
 
         self.scaling_layer = ProPainterScalingLayer()
 
@@ -2692,7 +2682,7 @@ class ProPainterLpipsLoss(nn.Module):
         use_input_norm=True,
         range_norm=False,
     ):
-        super(ProPainterLpipsLoss, self).__init__()
+        super().__init__()
         self.perceptual = ProPainterLpips().eval()
         self.loss_weight = loss_weight
         self.use_input_norm = use_input_norm
@@ -2729,7 +2719,7 @@ class ProPainterAdversarialLoss(nn.Module):
         r"""
         type = nsgan | lsgan | hinge
         """
-        super(ProPainterAdversarialLoss, self).__init__()
+        super().__init__()
         self.type = type
         self.register_buffer("real_label", torch.tensor(target_real_label))
         self.register_buffer("fake_label", torch.tensor(target_fake_label))
@@ -3140,23 +3130,12 @@ def filter2d(
         torch.Tensor: the convolved tensor of same size and numbers of channels
         as the input with shape :math:`(batch_size, num_channels, height, width)`.
     """
-    if not isinstance(input, torch.Tensor):
-        raise TypeError(f"Input input is not torch.Tensor. Got {type(input)}")
-
-    if not isinstance(kernel, torch.Tensor):
-        raise TypeError(f"Input kernel is not torch.Tensor. Got {type(kernel)}")
-
-    if not isinstance(border_type, str):
-        raise TypeError(f"Input border_type is not string. Got {type(border_type)}")
 
     if border_type not in ["constant", "reflect", "replicate", "circular"]:
         raise ValueError(
             f"Invalid border type, we expect 'constant', \
         'reflect', 'replicate', 'circular'. Got:{border_type}"
         )
-
-    if not isinstance(padding, str):
-        raise TypeError(f"Input padding is not string. Got {type(padding)}")
 
     if padding not in ["valid", "same"]:
         raise ValueError(
@@ -3705,7 +3684,7 @@ class ProPainterLosses:
         self.config = config
         self.l1_loss = L1Loss()
         self.perc_loss = ProPainterLpipsLoss(use_input_norm=True, range_norm=True)
-        self.adversarial_loss = ProPainterAdversarialLoss(type=config.GAN_LOSS)
+        self.adversarial_loss = ProPainterAdversarialLoss(type=config.gan_loss)
         self.flow_loss = ProPainterFlowLoss()
         self.edge_loss = ProPainterEdgeLoss()
         self.canny = ProPainterCanny(
@@ -3791,7 +3770,7 @@ class ProPainterLosses:
         flow_loss, warp_loss = self.flow_loss(
             pred_flows_bi, gt_flows_bi, flow_masks, frames
         )
-        flow_loss = flow_loss * self.config.flow_weight
+        flow_loss = flow_loss * self.config.flow_weight_flow_complete_net
 
         # compute edge loss
         edge_loss = self.edge_loss(pred_edges_bi, gt_edges_bi, flow_masks)
