@@ -1752,7 +1752,7 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if labels is not None:
-            if labels.shape[1] > 448:
+            if labels.shape[1] > config.max_target_positions:
                 raise ValueError(
                     f"Labels' sequence length {labels.shape[1]} cannot exceed the maximum allowed length of {config.max_target_positions} tokens."
                 )
