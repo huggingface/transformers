@@ -50,7 +50,7 @@
 
 <div style="text-align: center">
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/Swin%20Stages.png">
-    <figcaption class="mt-2 text-center text-sm text-gray-500">A Swin backbone with multiple stages for outputting a feature map.</figcaption>
+    <figcaption class="mt-2 text-center text-sm text-gray-500">الصورة توضح مخطط مراحل نموذج Swin.</figcaption>
 </div>
 
 يسمح لك [`AutoBackbone`] باستخدام النماذج المُدربة مسبقًا كعمود فقري للحصول على خرائط ميزات من مراحل مختلفة من العمود الفقري. يجب عليك تحديد أحد المعلمات التالية في [`~PretrainedConfig.from_pretrained`]:
