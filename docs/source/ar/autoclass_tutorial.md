@@ -114,7 +114,7 @@
 >>> processor = AutoProcessor.from_pretrained("microsoft/layoutlmv2-base-uncased")
 ```
 
-## AutoModel
+## النموذج التلقائي (AutoModel)
 
 <frameworkcontent>
 <pt>
