@@ -1399,7 +1399,6 @@ class ProPainterSparseWindowAttention(nn.Module):
             )
             self.pool_layer.weight.data.fill_(1.0 / (pool_size[0] * pool_size[1]))
             self.pool_layer.bias.data.fill_(0)
-        # self.expand_size = tuple(i // 2 for i in window_size)
         self.expand_size = tuple((i + 1) // 2 for i in window_size)
 
         if any(i > 0 for i in self.expand_size):
@@ -1671,7 +1670,7 @@ class ProPainterSparseWindowAttention(nn.Module):
         mask = mask.view(batch_size, l_t, n_window_height * n_window_width)
         mask = torch.sum(mask, dim=1)  # [batch_size, n_window_height*n_window_width]
         for i in range(window_query.shape[0]):
-            ### For masked windows
+            # For masked windows
             mask_ind_i = mask[i].nonzero(as_tuple=False).view(-1)
             # mask output quary in current window
             # [batch_size, n_window_height*n_window_width, num_attention_heads, timesteps, window_height*window_width, channel_head]
@@ -1724,7 +1723,7 @@ class ProPainterSparseWindowAttention(nn.Module):
                     channel_head,
                 )
 
-            ### For unmasked windows
+            # For unmasked windows
             unmask_ind_i = (mask[i] == 0).nonzero(as_tuple=False).view(-1)
             # mask output quary in current window
             # [batch_size, n_window_height*n_window_width, num_attention_heads, timesteps, window_height*window_width, channel_head]
@@ -2174,10 +2173,6 @@ class ProPainterInpaintGenerator(nn.Module):
             attentions=all_self_attentions,
         )
 
-
-# ######################################################################
-#  ProPainterDiscriminator for Temporal Patch GAN
-# ######################################################################
 class ProPainterSpectralNorm(object):
     # Invariant before and after each forward call:
     #   u = normalize(W @ v)
@@ -2433,7 +2428,7 @@ def spectral_norm(
     ProPainterSpectralNorm.apply(module, name, num_power_iterations, dimension, eps)
     return module
 
-
+#  ProPainterDiscriminator for Temporal Patch GAN
 class ProPainterDiscriminator(nn.Module):
     def __init__(
         self,

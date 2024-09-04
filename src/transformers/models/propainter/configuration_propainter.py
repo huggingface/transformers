@@ -81,13 +81,6 @@ class ProPainterConfig(PretrainedConfig):
     ```"""
 
     model_type = "propainter"
-    # attribute_map = {
-    #     "hidden_size": "latent_dim",
-    #     "num_attention_heads": "attention_heads",
-    #     "num_hidden_layers": "num_enc_layers",
-    #     "vocab_size": "vocab_size",
-    #     "num_key_value_heads": "num_heads",
-    # }
 
     def __init__(
         self,

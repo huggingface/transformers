@@ -375,7 +375,6 @@ class ProPainterImageProcessor(BaseImageProcessor):
 
         # All transformations expect numpy arrays.
         image = to_numpy_array(image)
-        # print("checkkkkkk", image.shape)
         if is_scaled_image(image) and do_rescale:
             logger.warning_once(
                 "It looks like you are trying to rescale already rescaled images. If the input"
