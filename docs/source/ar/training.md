@@ -108,7 +108,7 @@
 ```py
 >>> def compute_metrics(eval_pred):
 ...     logits، labels = eval_pred
-...     التوقعات = np.argmax (logits، المحور = -1)
+...     predictions = np.argmax(logits, axis=-1)
 ...     return metric.compute (التنبؤات = التوقعات، المراجع = العلامات)
 ```
 
