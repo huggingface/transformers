@@ -211,7 +211,7 @@ model = AutoModelForCausalLM.from_pretrained(save_dir)
 
 ## إضافة طبقات قابلة للتدريب إضافية إلى محول PEFT
 
-يمكنك أيضًا ضبط طبقات قابلة للتدريب إضافية أعلى نموذج به محولات مرفقة عن طريق تمرير `modules_to_save` في تكوين PEFT الخاص بك. على سبيل المثال، إذا كنت تريد أيضًا ضبط `lm_head` أعلى نموذج بمحول LoRA:
+يمكنك أيضًا إجراء تدريب دقيق لمحوّلات قابلة للتدريب إضافية فوق نموذج يحتوي بالفعل على محوّلات عن طريق تمرير معلم `modules_to_save` في تكوين PEFT الخاص بك. على سبيل المثال، إذا كنت تريد أيضًا ضبط دقيق لرأس النموذج اللغوي`lm_head` فوق نموذج بمحوّل LoRA:
 
 ```py
 from transformers import AutoModelForCausalLM, OPTForCausalLM, AutoTokenizer
