@@ -1207,10 +1207,15 @@ class GenerationConfig(PushToHubMixin):
 
         # If any `output_...` flag is set to `True`, we ensure `return_dict_in_generate` is set to `True`.
         if generation_config.return_dict_in_generate is False:
-            if any(getattr(generation_config, extra_output_flag, False) for extra_output_flag in generation_config.extra_output_flags):
+            if any(
+                getattr(generation_config, extra_output_flag, False)
+                for extra_output_flag in generation_config.extra_output_flags
+            ):
                 generation_config.return_dict_in_generate = True
 
-        generation_config._original_object_hash = hash(generation_config)  # Hash to detect whether the instance was modified
+        generation_config._original_object_hash = hash(
+            generation_config
+        )  # Hash to detect whether the instance was modified
         return generation_config
 
     def update(self, **kwargs):

@@ -1019,7 +1019,6 @@ class PretrainedConfig(PushToHubMixin):
         """
         non_default_generation_parameters = {}
         decoder_attribute_name = None
-        default_config = None
 
         # Composite models don't have a default config, use their decoder config as a fallback for default values
         # If no known pattern is matched, then `default_config = None` -> check against the global generation defaults
@@ -1029,6 +1028,8 @@ class PretrainedConfig(PushToHubMixin):
             decoder_config = self.get_text_config(decoder=True)
             if decoder_config is not self:
                 default_config = decoder_config.__class__()
+            else:
+                decoder_config = None
 
         # If it is a composite model, we want to check the subconfig that will be used for generation
         self_decoder_config = self if decoder_attribute_name is None else getattr(self, decoder_attribute_name)
@@ -1079,8 +1080,8 @@ class PretrainedConfig(PushToHubMixin):
 
         if len(valid_text_config_names) > 1:
             raise ValueError(
-                f"Multiple valid text configs were found in the model config: {valid_text_config_names}. "
-                "Either don't use `get_text_config`, as it is ambiguous -- access the text configs directly."
+                f"Multiple valid text configs were found in the model config: {valid_text_config_names}. In this "
+                "case, using `get_text_config()` would be ambiguous. Please specify the desied text config directly."
             )
         elif len(valid_text_config_names) == 1:
             return getattr(self, valid_text_config_names[0])
