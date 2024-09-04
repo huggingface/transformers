@@ -317,7 +317,9 @@ class HieraEmbeddings(nn.Module):
 
         self.position_embeddings = nn.Parameter(torch.zeros(1, self.num_tokens, config.embed_dim))
 
-    def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
+    def interpolate_pos_encoding(
+        self, embeddings: torch.Tensor, pos_embeds: torch.Tensor, height: int, width: int
+    ) -> torch.Tensor:
         """
         This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher resolution
         images. This method is also adapted to support torch.jit tracing, no class embeddings, and different patch strides.
@@ -328,13 +330,11 @@ class HieraEmbeddings(nn.Module):
         """
 
         num_patches = embeddings.shape[1]
-        num_positions = self.position_embeddings.shape[1]
+        num_positions = pos_embeds.shape[1]
 
         # always interpolate when tracing to ensure the exported model works for dynamic input shapes
         if not torch.jit.is_tracing() and num_patches == num_positions and height == width:
-            return self.position_embeddings
-
-        patch_pos_embed = self.position_embeddings
+            return pos_embeds
 
         dim = embeddings.shape[-1]
 
@@ -342,18 +342,18 @@ class HieraEmbeddings(nn.Module):
         new_width = width // self.patch_stride[1]
 
         sqrt_num_positions = torch_int(num_positions**0.5)
-        patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
-        patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
+        pos_embeds = pos_embeds.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
+        pos_embeds = pos_embeds.permute(0, 3, 1, 2)
 
-        patch_pos_embed = nn.functional.interpolate(
-            patch_pos_embed,
+        pos_embeds = nn.functional.interpolate(
+            pos_embeds,
             size=(new_height, new_width),
             mode="bicubic",
             align_corners=False,
         )
 
-        patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
-        return patch_pos_embed
+        pos_embeds = pos_embeds.permute(0, 2, 3, 1).view(1, -1, dim)
+        return pos_embeds
 
     def get_position_embedding(
         self, embeddings: torch.Tensor, height: int, width: int, interpolate_pos_encoding: bool
