@@ -106,30 +106,30 @@ def convert_sparse_cross_attention_mask_to_dense(
 
 
 def prepare_cross_attention_mask(
-    cross_attention_masks: torch.Tensor,
+    cross_attention_mask: torch.Tensor,
     vision_tokens: torch.Tensor,
 ) -> Tuple[Tensor, Tensor]:
     
     if vision_tokens is None:
         raise ValueError("Vision tokens must be provided")
-    if vision_tokens.shape[1] != cross_attention_masks.shape[2]:
-        raise ValueError(f"Mismatch in number of images given and number of masks given {vision_tokens.shape} {cross_attention_masks.shape}")
-    if vision_tokens.shape[2] != cross_attention_masks.shape[3]:
-        raise ValueError(f"Vision tokens shape {vision_tokens.shape} mismatch with xattn shape {cross_attention_masks.shape}")
+    if vision_tokens.shape[1] != cross_attention_mask.shape[2]:
+        raise ValueError(f"Mismatch in number of images given and number of masks given {vision_tokens.shape} {cross_attention_mask.shape}")
+    if vision_tokens.shape[2] != cross_attention_mask.shape[3]:
+        raise ValueError(f"Vision tokens shape {vision_tokens.shape} mismatch with xattn shape {cross_attention_mask.shape}")
 
     seq_length = vision_tokens.shape[3]
-    batch_size, text_total_length, _, _ = cross_attention_masks.shape
+    batch_size, text_total_length, _, _ = cross_attention_mask.shape
 
-    cross_attention_masks = cross_attention_masks.repeat_interleave(seq_length, dim=2)
-    cross_attention_masks = cross_attention_masks.view(batch_size, text_total_length, -1)
-    cross_attention_masks = cross_attention_masks.unsqueeze(1)
+    cross_attention_mask = cross_attention_mask.repeat_interleave(seq_length, dim=2)
+    cross_attention_mask = cross_attention_mask.view(batch_size, text_total_length, -1)
+    cross_attention_mask = cross_attention_mask.unsqueeze(1)
 
-    inf_value = get_negative_inf_value(cross_attention_masks.dtype)
-    full_text_row_masked_out_mask = get_full_row_masked_out_mask(cross_attention_masks, inf_value)
+    inf_value = get_negative_inf_value(cross_attention_mask.dtype)
+    full_text_row_masked_out_mask = get_full_row_masked_out_mask(cross_attention_mask, inf_value)
     
-    cross_attention_masks *= full_text_row_masked_out_mask
+    cross_attention_mask *= full_text_row_masked_out_mask
 
-    return cross_attention_masks, full_text_row_masked_out_mask
+    return cross_attention_mask, full_text_row_masked_out_mask
 
 
 
@@ -147,7 +147,6 @@ def build_encoder_attention_mask(
     Build vision encoder attention mask that omits padding tokens.
     """
     masks = []
-    print(ar)
     for arx in ar:
         mask_i = torch.ones((num_chunks, x.shape[2], 1), dtype=x.dtype)
         mask_i[: arx[0] * arx[1], :ntok] = 0
@@ -639,51 +638,30 @@ class MllamaVisionTransformer(nn.Module):
         aspect_ratios = aspect_ratios.reshape(batch_size * num_concurrent_media, 2)
 
         # patch embedding
-        hidden_state = pixel_values.reshape(batch_size * num_concurrent_media * num_tiles, num_channels, height, width)
-        hidden_state = self.patch_embedding(hidden_state)
-        _, num_tokens, dim = hidden_state.shape
-        hidden_state = hidden_state.reshape(batch_size * num_concurrent_media, num_tiles, -1, dim)
-
-        x_ = torch.load("/home/ubuntu/projects/meta_mllama/logits-test-1/patch-embedding.pt")
-        diff = (hidden_state - x_).abs().max().item()
-        print(f"patch embedding diff: {diff}")
+        hidden_state = self.patch_embedding(pixel_values)
 
         # tile embeddings
+        _, num_tokens, dim = hidden_state.shape
+        hidden_state = hidden_state.reshape(batch_size * num_concurrent_media, num_tiles, -1, dim)
         hidden_state = self.pre_tile_pos_embed(hidden_state, aspect_ratios)
-        hidden_state = hidden_state.reshape(batch_size * num_concurrent_media * num_tiles, num_tokens, dim)
-
-        x_ = torch.load("/home/ubuntu/projects/meta_mllama/logits-test-1/tile-embedding.pt")
-        diff = (hidden_state - x_).abs().max().item()
-        print(f"pre tile pos embed diff: {diff}")
 
         # apply cls token
+        hidden_state = hidden_state.reshape(batch_size * num_concurrent_media * num_tiles, num_tokens, dim)
         hidden_state = self.apply_class_embedding(hidden_state)
         num_tokens += 1
-
-        x_ = torch.load("/home/ubuntu/projects/meta_mllama/logits-test-1/cls-embedding.pt")
-        diff = (hidden_state - x_).abs().max().item()
-        print(f"cls embedding diff: {diff}")
 
         # apply position embeddings
         hidden_state = hidden_state.reshape(batch_size * num_concurrent_media, num_tiles, num_tokens, dim)
         hidden_state = self.apply_positional_embedding(hidden_state, aspect_ratios)
-
-        x_ = torch.load("/home/ubuntu/projects/meta_mllama/logits-test-1/position-embedding.pt")
-        diff = (hidden_state - x_).abs().max().item()
-        print(f"pos embedding diff: {diff}")
 
         # apply encoder
         hidden_state = self.ln_pre(hidden_state)
         hidden_state, num_pad_tokens = expand_num_tokens_to_mult8(hidden_state)
         attention_mask = build_encoder_attention_mask(hidden_state, aspect_ratios, num_tokens, num_tiles, 1)
         hidden_state = hidden_state.view(batch_size * num_concurrent_media, -1, dim)
-        hidden_state, int_hidden_state = self.transformer(
+        hidden_state, intermediate_hidden_state = self.transformer(
             hidden_state, return_intermediate=self.return_intermediate, attention_mask=attention_mask
         )
-
-        x_, int_x_ = torch.load("/home/ubuntu/projects/meta_mllama/logits-test-1/local-transformer-output.pt")
-        diff = (hidden_state - x_).abs().max().item()
-        print(f"local transformer diff: {diff}")
 
         # apply global encoder
         hidden_state = self.ln_post(hidden_state)
@@ -696,10 +674,10 @@ class MllamaVisionTransformer(nn.Module):
 
         # adding intermediate layer outputs
         hidden_state = hidden_state.reshape(batch_size, num_concurrent_media, num_tiles, num_tokens, dim)
-        int_hidden_state = int_hidden_state.reshape(batch_size * num_concurrent_media, num_tiles, num_tokens + num_pad_tokens, -1)
-        int_hidden_state = contract_num_tokens_from_mult8(int_hidden_state, num_pad_tokens)
-        int_hidden_state = int_hidden_state.reshape(batch_size, num_concurrent_media, num_tiles, num_tokens, -1)
-        hidden_state = torch.cat([hidden_state, int_hidden_state], dim=-1)
+        intermediate_hidden_state = intermediate_hidden_state.reshape(batch_size * num_concurrent_media, num_tiles, num_tokens + num_pad_tokens, -1)
+        intermediate_hidden_state = contract_num_tokens_from_mult8(intermediate_hidden_state, num_pad_tokens)
+        intermediate_hidden_state = intermediate_hidden_state.reshape(batch_size, num_concurrent_media, num_tiles, num_tokens, -1)
+        hidden_state = torch.cat([hidden_state, intermediate_hidden_state], dim=-1)
 
         return hidden_state
 
@@ -1084,8 +1062,8 @@ class MllamaCrossAttentionLayer(torch.nn.Module):
 
         self.no_ffn = no_ffn
 
-    def compute_cross_attention_key_value(self, xattn_tokens: torch.Tensor) -> torch.Tensor:
-        return self.self_attn.compute_cross_attention_key_value(xattn_tokens)
+    def compute_cross_attention_key_value(self, hidden_state: torch.Tensor) -> torch.Tensor:
+        return self.self_attn.compute_cross_attention_key_value(hidden_state)
 
     def forward(
         self,
@@ -1259,21 +1237,8 @@ class MllamaCrossAttentionTextModel(PreTrainedModel):
         if not self.cache_is_setup:
             raise RuntimeError("Please set up cache before calling forward")
 
-        mask = self.mask_cache[:, :, position_ids]
+        attention_mask = self.mask_cache[:, :, position_ids]
         freqs_cis = self.freqs_cis[position_ids]
-
-        mask_ = torch.load("/home/ubuntu/projects/meta_mllama/logits-test-1/text-mask.pt", weights_only=True)
-        diff = (mask.float() - mask_.float()).abs().max().item()
-        print(f"mask diff: {diff}")
-
-        freqs_cis_ = torch.load("/home/ubuntu/projects/meta_mllama/logits-test-1/text-freqs_cis.pt", weights_only=True)
-        diff = (freqs_cis - freqs_cis_).abs().max().item()
-        print(f"freqs cis diff: {diff}")
-        
-        #TODO: Remove, only debug purposes, check freqs cis diff 1e-7 -> 0.1 diff in logits
-        freqs_cis = freqs_cis_
-
-        del mask_, freqs_cis_
 
         for idx, layer in enumerate(self.layers):
 
@@ -1288,22 +1253,12 @@ class MllamaCrossAttentionTextModel(PreTrainedModel):
                     full_text_row_masked_out_mask=full_text_row_masked_out_mask,
                 )
 
-                h_ = torch.load(f"/home/ubuntu/projects/meta_mllama/logits-test-1/text-xattn-{idx}.pt", weights_only=True)
-                diff = (hidden_state - h_).abs().max().item()
-                print(f"xattn {idx} diff: {diff}")
-                del h_
-
             hidden_state = layer(
                 hidden_state=hidden_state,
-                attention_mask=mask,
+                attention_mask=attention_mask,
                 freqs_cis=freqs_cis,
                 position_ids=position_ids,
             )
-
-            h_ = torch.load(f"/home/ubuntu/projects/meta_mllama/logits-test-1/text-hidden-{idx}.pt", weights_only=True)
-            diff = (hidden_state - h_).abs().max().item()
-            print(f"hidden {idx} diff: {diff}")
-            del h_
 
         hidden_state = self.norm(hidden_state)
 
@@ -1386,7 +1341,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
         cross_attention_key_value = torch.stack(cross_attention_key_value)
 
         # create masks for cross-attention based on image token locations
-        cross_attention_masks = convert_sparse_cross_attention_mask_to_dense(
+        cross_attention_mask = convert_sparse_cross_attention_mask_to_dense(
             cross_attention_token_mask=cross_attention_token_mask,
             num_tiles=num_tiles,
             total_len=total_len,
@@ -1395,32 +1350,30 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
             dtype=self.dtype,
         )
 
-        cross_attention_masks, full_text_row_masked_out_mask = prepare_cross_attention_mask(
-            cross_attention_masks=cross_attention_masks,
+        cross_attention_mask, full_text_row_masked_out_mask = prepare_cross_attention_mask(
+            cross_attention_mask=cross_attention_mask,
             vision_tokens=vision_tokens,
         )
 
-        return cross_attention_key_value, cross_attention_masks, full_text_row_masked_out_mask
+        return cross_attention_key_value, cross_attention_mask, full_text_row_masked_out_mask
 
     def forward(
         self,
         position_ids: torch.Tensor,
-        tokens: torch.Tensor,
-        cross_attention_masks: torch.Tensor,
+        input_ids: torch.Tensor,
+        cross_attention_key_value: torch.Tensor,
+        cross_attention_mask: torch.Tensor,
         full_text_row_masked_out_mask: torch.Tensor,
-        xattn_caches: torch.Tensor,
     ) -> torch.Tensor:
-        hidden_state = self.model.language_model.get_partially_trainable_embedding(tokens[:, position_ids])
-
-        h_ = torch.load("/home/ubuntu/projects/meta_mllama/logits-test-1/partially_trainable_embedding.pt", weights_only=True)
-        diff = torch.abs(hidden_state - h_).max()
-        print(f"Max partially_trainable_embedding diff: {diff}")
+        
+        input_ids = input_ids[:, position_ids]
+        embeddings = self.model.language_model.get_partially_trainable_embedding(input_ids)
 
         logits = self.model.language_model.forward(
             position_ids=position_ids,
-            hidden_state=hidden_state,
-            cross_attention_key_value=xattn_caches,
-            cross_attention_mask=cross_attention_masks[:, :, position_ids],
+            hidden_state=embeddings,
+            cross_attention_key_value=cross_attention_key_value,
+            cross_attention_mask=cross_attention_mask[:, :, position_ids],
             full_text_row_masked_out_mask=full_text_row_masked_out_mask[:, :, position_ids],
         )
 
