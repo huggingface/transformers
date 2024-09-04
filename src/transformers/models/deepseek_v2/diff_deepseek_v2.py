@@ -913,6 +913,7 @@ class DeepseekV2DecoderLayer(nn.Module):
         # TODO: no diff
         """
         Args:
+
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
             attention_mask (`torch.FloatTensor`, *optional*):
                 attention mask of size `(batch_size, sequence_length)` if flash attention is used or `(batch_size, 1,
@@ -948,7 +949,9 @@ class DeepseekV2DecoderLayer(nn.Module):
         # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
+
         hidden_states = self.mlp(hidden_states)
+
         hidden_states = residual + hidden_states
 
         outputs = (hidden_states,)
