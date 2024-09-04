@@ -339,10 +339,9 @@ def resize(
             image = to_pil_image(image, do_rescale=do_rescale, input_data_format=input_data_format)
         # PIL images are in the format (width, height)
         resized_image = image.resize((width, height), resample=resample, reducing_gap=reducing_gap)
-        print(resized_image.size())
 
     else:
-        # Resize using torch to align_corners which is required for some models.
+        # Resize using torch to align_corners which is required for some models and converting it to channel last format.
         requires_backends(resize, ["torch"])
 
         torch_image = torch.from_numpy(image).unsqueeze(0)
@@ -352,18 +351,22 @@ def resize(
         resample_to_mode = {PILImageResampling.BILINEAR: "bilinear", PILImageResampling.BICUBIC: "bicubic"}
         mode = resample_to_mode[resample]
 
-        resized_image = nn.functional.interpolate(
-            torch_image, size, mode=mode, align_corners=True
-        ).squeeze()
+        resized_image = nn.functional.interpolate(torch_image, size, mode=mode, align_corners=True).squeeze().numpy()
+
+        resized_image = to_channel_dimension_format(
+            resized_image, data_format, input_channel_dim=ChannelDimension.FIRST
+        )
+
 
     if return_numpy:
         resized_image = np.array(resized_image)
         # If the input image channel dimension was of size 1, then it is dropped when converting to a PIL image
         # so we need to add it back if necessary.
         resized_image = np.expand_dims(resized_image, axis=-1) if resized_image.ndim == 2 else resized_image
-        # Convert the resized image to channels last format.
+        # The image is always in channels last format after converting from a PIL image
         resized_image = to_channel_dimension_format(
-            resized_image, data_format)
+            resized_image, data_format, input_channel_dim=ChannelDimension.LAST
+        )
         # If an image was rescaled to be in the range [0, 255] before converting to a PIL image, then we need to
         # rescale it back to the original range.
         resized_image = rescale(resized_image, 1 / 255) if do_rescale else resized_image
