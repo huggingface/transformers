@@ -32,7 +32,6 @@ videos.*
 
 Tips:
 
-
 - We advise users to use `padding_side="left"` when computing batched generation as it leads to more accurate results. Simply make sure to call `processor.tokenizer.padding_side = "left"` before generating.
 
 <Tip warning={true}>
