@@ -57,7 +57,7 @@ pip install datasets
 * [attention_mask](glossary#attention-mask) يشير إلى ما إذا كان يجب الانتباه بالرمز أم لا.
 * [token_type_ids](glossary#token-type-ids) يحدد التسلسل الذي ينتمي إليه الرمز عندما يكون هناك أكثر من تسلسل واحد.
 
-أعد إدخالك عن طريق فك ترميز `input_ids`:
+أعد إدخالك الأصلي عن طريق فك ترميز `input_ids`:
 أعد إدخالك عن طريق فك ترميز `input_ids`:
 
 ```py
