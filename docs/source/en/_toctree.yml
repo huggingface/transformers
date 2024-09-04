@@ -26,7 +26,7 @@
   - local: agents
     title: Agents 101
   - local: agents_advanced
-    title: Agents, supercharged - Multi-agents, External tools and more
+    title: Agents, supercharged - Multi-agents, External tools, and more
   - local: llm_tutorial
     title: Generation with LLMs
   - local: conversations

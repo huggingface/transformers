@@ -13,14 +13,14 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-# Agents, supercharged - Multi-agents, External tools and more
+# Agents, supercharged - Multi-agents, External tools, and more
 
 [[open-in-colab]]
 
 ### What is an agent?
 
 > [!TIP]
-> If you're new to `transformers.agents` sure to first read the main [agents documentation](./agents.)
+> If you're new to `transformers.agents`, make sure to first read the main [agents documentation](./agents).
 
 In this page we're going to highlight several advanced uses of `transformers.agents`.
 
@@ -32,14 +32,13 @@ It empirically yields better performance on most benchmarks. The reason for this
 
 You can easily build hierarchical multi-agent systems with `transformers.agents`.
 
-To do so, encapsulate the agent in a [`ManagedAgent`] object, that needs arguments `agent`, `name`, and a `description` that will be embedded in its manager agent's system prompt to know how to call this managed agent.
+To do so, encapsulate the agent in a [`ManagedAgent`] object. This object needs arguments `agent`, `name`, and a `description`, which will then be embedded in the manager agent's system prompt to let it know how to call this managed agent, as we also do for tools.
 
-Here's an example:
+Here's an example of making an agent that managed a specitif web search agent using our [`DuckDuckGoSearchTool`]:
+
 ```py
 from transformers import ReactCodeAgent
-from transformers.agents.llm_engine import HfApiEngine
-from transformers.agents.search import DuckDuckGoSearchTool
-from transformers.agents.agents import ManagedAgent
+from transformers.agents import HfApiEngine, DuckDuckGoSearchTool, ManagedAgent
 
 llm_engine = HfApiEngine()
 
