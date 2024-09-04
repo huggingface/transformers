@@ -371,12 +371,9 @@ class PhiMoEAttention(nn.Module):
                 )
             kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
         
-        # print ("before apply rotary pos_emb", len(kv_seq_len),torch.norm(value_states).items(),\
-        #         torch.norm(query_states).items(), torch.norm(key_states).items(), position_ids)
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
-        # print ('after pos emb', torch.norm(query_states).item(), torch.norm(key_states).items())
         if past_key_value is not None:
             cache_kwargs = {"sin": sin, "cos": cos}  # Specific to RoPE models
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
@@ -976,7 +973,6 @@ def sparsemixer(scores, top_k, jitter_eps, training):
         selected_experts,
     )
 
-iterations = 0
 class PhiMoESparseMoeBlock(nn.Module):
     """
     This implementation is
@@ -995,9 +991,6 @@ class PhiMoESparseMoeBlock(nn.Module):
         self.ffn_dim = config.intermediate_size
         self.num_experts = config.num_local_experts
         self.top_k = config.num_experts_per_tok
-        global iterations
-        iterations +=1
-        self.iter = iterations
         # gating
         self.gate = nn.Linear(self.hidden_dim, self.num_experts, bias=False)
 
@@ -1013,8 +1006,6 @@ class PhiMoESparseMoeBlock(nn.Module):
         if self.training and self.input_jitter_noise > 0:
             hidden_states *= torch.empty_like(hidden_states).uniform_(1.0 - self.input_jitter_noise, 1.0 + self.input_jitter_noise)
         hidden_states = hidden_states.view(-1, hidden_dim)
-        # router_logits: (batch * sequence_length, n_experts)
-        # print ( 'moe', self.iter, torch.norm(hidden_states).item())
         router_logits = self.gate(hidden_states)
 
         routing_weights, selected_experts = sparsemixer(
@@ -1054,7 +1045,6 @@ class PhiMoESparseMoeBlock(nn.Module):
             # the `top_x` tensor here.
             final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
         final_hidden_states = final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
-        # print ( 'moe', self.iter, torch.norm(final_hidden_states).item())
         return final_hidden_states, router_logits
 
 
@@ -1168,15 +1158,6 @@ class PhiMoEPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         pass
-        # std = self.config.initializer_range
-        # if isinstance(module, nn.Linear):
-        #     module.weight.data.normal_(mean=0.0, std=std)
-        #     if module.bias is not None:
-        #         module.bias.data.zero_()
-        # elif isinstance(module, nn.Embedding):
-        #     module.weight.data.normal_(mean=0.0, std=std)
-        #     if module.padding_idx is not None:
-        #         module.weight.data[module.padding_idx].zero_()
 
 
 PHIMOE_INPUTS_DOCSTRING = r"""
