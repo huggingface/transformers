@@ -43,7 +43,12 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
-from ...utils import filter_out_non_signature_kwargs, is_scipy_available, logging, requires_backends
+from ...utils import (
+    filter_out_non_signature_kwargs,
+    is_scipy_available,
+    logging,
+    requires_backends,
+)
 
 
 if is_scipy_available():
@@ -58,7 +63,11 @@ logger = logging.get_logger(__name__)
 
 
 def make_batched(videos) -> List[List[VideoInput]]:
-    if isinstance(videos, (list, tuple)) and isinstance(videos[0], (list, tuple)) and is_valid_image(videos[0][0]):
+    if (
+        isinstance(videos, (list, tuple))
+        and isinstance(videos[0], (list, tuple))
+        and is_valid_image(videos[0][0])
+    ):
         return videos
 
     elif isinstance(videos, (list, tuple)) and is_valid_image(videos[0]):
@@ -92,13 +101,21 @@ def convert_to_grayscale_and_dilation(
     requires_backends(convert_to_grayscale_and_dilation, ["vision"])
     if isinstance(image, np.ndarray):
         if input_data_format == ChannelDimension.FIRST:
-            gray_image = image[0, ...] * 0.2989 + image[1, ...] * 0.5870 + image[2, ...] * 0.1140
+            gray_image = (
+                image[0, ...] * 0.2989 + image[1, ...] * 0.5870 + image[2, ...] * 0.1140
+            )
             gray_image = np.stack([gray_image] * 1, axis=0)
-            gray_dilated_image = binary_dilation(gray_image, iterations=mask_dilation).astype(np.uint8)
+            gray_dilated_image = binary_dilation(
+                gray_image, iterations=mask_dilation
+            ).astype(np.uint8)
         elif input_data_format == ChannelDimension.LAST:
-            gray_image = image[..., 0] * 0.2989 + image[..., 1] * 0.5870 + image[..., 2] * 0.1140
+            gray_image = (
+                image[..., 0] * 0.2989 + image[..., 1] * 0.5870 + image[..., 2] * 0.1140
+            )
             gray_image = np.stack([gray_image] * 1, axis=-1)
-            gray_dilated_image = binary_dilation(gray_image, iterations=mask_dilation).astype(np.uint8)
+            gray_dilated_image = binary_dilation(
+                gray_image, iterations=mask_dilation
+            ).astype(np.uint8)
         return gray_dilated_image
 
     if not isinstance(image, PIL.Image.Image):
@@ -135,12 +152,22 @@ def extrapolation(
     if input_data_format == ChannelDimension.LAST:
         for v in image:
             frame = np.zeros(((height_extr, width_extr, 3)), dtype=np.uint8)
-            frame[height_start : height_start + height, width_start : width_start + width, :] = v
+            frame[
+                height_start : height_start + height,
+                width_start : width_start + width,
+                :,
+            ] = v
             images.append(frame)
     elif input_data_format == ChannelDimension.FIRST:
         for v in image:
-            frame = np.zeros((3, height_extr, width_extr), dtype=np.uint8)  # Adjusted shape
-            frame[:, height_start : height_start + height, width_start : width_start + width] = v
+            frame = np.zeros(
+                (3, height_extr, width_extr), dtype=np.uint8
+            )  # Adjusted shape
+            frame[
+                :,
+                height_start : height_start + height,
+                width_start : width_start + width,
+            ] = v
 
             # Transpose to (height_extr, width_extr, num_channels)
             images.append(np.transpose(frame, (1, 2, 0)))  # Adjusted transpose
@@ -244,7 +271,9 @@ class ProPainterImageProcessor(BaseImageProcessor):
         super().__init__(**kwargs)
         size = size if size is not None else {"shortest_edge": 256}
         size = get_size_dict(size, default_to_square=False)
-        crop_size = crop_size if crop_size is not None else {"height": 224, "width": 224}
+        crop_size = (
+            crop_size if crop_size is not None else {"height": 224, "width": 224}
+        )
         crop_size = get_size_dict(crop_size, param_name="crop_size")
 
         self.do_resize = do_resize
@@ -255,7 +284,9 @@ class ProPainterImageProcessor(BaseImageProcessor):
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
         self.do_normalize = do_normalize
-        self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
+        self.image_mean = (
+            image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
+        )
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
         self.scale_hw = scale_hw
         self.mask_dilation = mask_dilation
@@ -289,12 +320,17 @@ class ProPainterImageProcessor(BaseImageProcessor):
         size = get_size_dict(size, default_to_square=False)
         if "shortest_edge" in size:
             output_size = get_resize_output_image_size(
-                image, size["shortest_edge"], default_to_square=False, input_data_format=input_data_format
+                image,
+                size["shortest_edge"],
+                default_to_square=False,
+                input_data_format=input_data_format,
             )
         elif "height" in size and "width" in size:
             output_size = (size["height"], size["width"])
         else:
-            raise ValueError(f"Size must have 'height' and 'width' or 'shortest_edge' as keys. Got {size.keys()}")
+            raise ValueError(
+                f"Size must have 'height' and 'width' or 'shortest_edge' as keys. Got {size.keys()}"
+            )
         return resize(
             image,
             size=output_size,
@@ -350,7 +386,12 @@ class ProPainterImageProcessor(BaseImageProcessor):
             input_data_format = infer_channel_dimension_format(image)
 
         if do_resize:
-            image = self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
+            image = self.resize(
+                image=image,
+                size=size,
+                resample=resample,
+                input_data_format=input_data_format,
+            )
 
         if is_mask_frame:
             image = convert_to_grayscale_and_dilation(
@@ -358,18 +399,30 @@ class ProPainterImageProcessor(BaseImageProcessor):
             )
 
         if do_center_crop:
-            image = self.center_crop(image, size=crop_size, input_data_format=input_data_format)
+            image = self.center_crop(
+                image, size=crop_size, input_data_format=input_data_format
+            )
 
         if do_rescale:
             image = self.rescale(
-                image=image, scale=rescale_factor, dtype=np.uint8, input_data_format=input_data_format
+                image=image,
+                scale=rescale_factor,
+                dtype=np.uint8,
+                input_data_format=input_data_format,
             )
 
         # If the mask frames even consisted of 0s and 255s, they are already rescaled and normally masks are not normalised as well
         if do_normalize and not (is_mask_frame):
-            image = self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
+            image = self.normalize(
+                image=image,
+                mean=image_mean,
+                std=image_std,
+                input_data_format=input_data_format,
+            )
 
-        image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
+        image = to_channel_dimension_format(
+            image, data_format, input_channel_dim=input_data_format
+        )
         return image
 
     @filter_out_non_signature_kwargs()
@@ -445,14 +498,20 @@ class ProPainterImageProcessor(BaseImageProcessor):
         """
         do_resize = do_resize if do_resize is not None else self.do_resize
         resample = resample if resample is not None else self.resample
-        do_center_crop = do_center_crop if do_center_crop is not None else self.do_center_crop
+        do_center_crop = (
+            do_center_crop if do_center_crop is not None else self.do_center_crop
+        )
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
+        rescale_factor = (
+            rescale_factor if rescale_factor is not None else self.rescale_factor
+        )
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
         scale_hw = scale_hw if scale_hw is not None else self.scale_hw
-        mask_dilation = mask_dilation if mask_dilation is not None else self.mask_dilation
+        mask_dilation = (
+            mask_dilation if mask_dilation is not None else self.mask_dilation
+        )
 
         size = size if size is not None else self.size
         size = get_size_dict(size, default_to_square=False)
@@ -478,7 +537,10 @@ class ProPainterImageProcessor(BaseImageProcessor):
         masks = make_batched(masks)
 
         video_size = get_image_size(to_numpy_array(videos[0][0]), input_data_format)
-        video_size = (video_size[0] - video_size[0] % 8, video_size[1] - video_size[1] % 8)
+        video_size = (
+            video_size[0] - video_size[0] % 8,
+            video_size[1] - video_size[1] % 8,
+        )
 
         videos = [
             [
@@ -532,20 +594,28 @@ class ProPainterImageProcessor(BaseImageProcessor):
         else:
             # for outpainting of videos
             videos, flow_masks, masks_dilated, (height_extr, width_extr) = [
-                extrapolation(video, scale=scale_hw, num_frames=len(video)) for video in videos
+                extrapolation(video, scale=scale_hw, num_frames=len(video))
+                for video in videos
             ]
 
         if scale_hw is None:
             # masks is for both flow_masks, masks_dilated, just add the same data to both variables in case of inpainting
-            flow_masks = masks_dilated = torch.stack([to_tensors(mask) for mask in pixel_values_masks], dim=0)
+            flow_masks = masks_dilated = torch.stack(
+                [to_tensors(mask) for mask in pixel_values_masks], dim=0
+            )
         else:
-            (flow_masks,) = torch.stack([to_tensors(mask) for mask in flow_masks], dim=0)
-            masks_dilated = torch.stack([to_tensors(mask) for mask in masks_dilated], dim=0)
+            (flow_masks,) = torch.stack(
+                [to_tensors(mask) for mask in flow_masks], dim=0
+            )
+            masks_dilated = torch.stack(
+                [to_tensors(mask) for mask in masks_dilated], dim=0
+            )
 
         # This input kwarg is only utilised during inference on a single batch or one video for predictions
         if len(videos) == 1:
             videos_inp = [
-                [np.array(frame).transpose(1, 2, 0).astype(np.uint8) for frame in video] for video in videos
+                [np.array(frame).transpose(1, 2, 0).astype(np.uint8) for frame in video]
+                for video in videos
             ][0]
         else:
             videos_inp = torch.empty(0)
