@@ -17,7 +17,7 @@
 
 تبدأ كل مهمة NLP تقريبًا بمُجزّئ للرموز. يقوم المُجزّئ بتحويل النص إلى شكل يمكن للنموذج معالجته.
 
-قم بتحميل محلل باستخدام [`AutoTokenizer.from_pretrained`]:
+قم بتحميل المُجزّئ باستخدام [`AutoTokenizer.from_pretrained`]:
 
 ```py
 >>> from transformers import AutoTokenizer
