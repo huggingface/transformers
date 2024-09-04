@@ -31,7 +31,7 @@ pip install accelerate
 
 ## الخلفي
 
-الإضافة الأخيرة هي استبدال `loss.backward()` النموذجي في حلقة التدريب الخاصة بك بأسلوب [`~accelerate.Accelerator.backward`] في 🤗 Accelerate:
+الإضافة الأخيرة هي استبدال الدالة المعتادة `loss.backward()` في حلقة التدريب الخاصة بك بدالة [`~accelerate.Accelerator.backward`] في 🤗 Accelerate:
 
 ```py
 >>> for epoch in range(num_epochs):
