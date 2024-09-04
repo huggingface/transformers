@@ -102,6 +102,8 @@ class TextKwargs(TypedDict, total=False):
             Whether or not to return the lengths of the encoded inputs.
         verbose (`bool`, *optional*):
             Whether or not to print more information and warnings.
+        padding_side (`str`, *optional*):
+            The side on which padding will be applied.
     """
 
     add_special_tokens: Optional[bool]
@@ -118,6 +120,7 @@ class TextKwargs(TypedDict, total=False):
     return_offsets_mapping: Optional[bool]
     return_length: Optional[bool]
     verbose: Optional[bool]
+    padding_side: Optional[str]
 
 
 class ImagesKwargs(TypedDict, total=False):
