@@ -38,12 +38,11 @@ def interpolate_pos_encoding(
 ) -> torch.Tensor:
     """
     This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher resolution
-    images. This method is also adapted to support models that do not have class embeddings (e.g., SigLIP or Hiera) and
-    to enable torch.jit tracing.
+    images. This method is also adapted to support torch.jit tracing.
 
     Adapted from:
-    https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174-L194 and
-    https://github.com/facebookresearch/dinov2/blob/e1277af2ba9496fbadf7aec6eba56e8d882d1e35/dinov2/models/vision_transformer.py#L179-L211
+      - https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174-L194, and
+      - https://github.com/facebookresearch/dinov2/blob/e1277af2ba9496fbadf7aec6eba56e8d882d1e35/dinov2/models/vision_transformer.py#L179-L211
     """
 
     num_patches = embeddings.shape[1] - num_class_embeds
