@@ -77,7 +77,7 @@ model.load_adapter(peft_model_id)
 
 ## التحميل في 8 بت أو 4 بت
 
-تدعم تكامل `bitsandbytes` أنواع بيانات الدقة 8 بت و4 بت، والتي تكون مفيدة لتحميل النماذج الكبيرة لأنها توفر الذاكرة (راجع دليل تكامل `bitsandbytes` [guide](./quantization#bitsandbytes-integration) لمعرفة المزيد). أضف `load_in_8bit` أو `load_in_4bit` المعلمات إلى [`~PreTrainedModel.from_pretrained`] وقم بتعيين `device_map="auto"` لتوزيع النموذج بشكل فعال على الأجهزة لديك:
+يدعم تكامل `bitsandbytes` أنواع بيانات الدقة 8 بت و4 بت، والتي تكون مفيدة لتحميل النماذج الكبيرة لأنها توفر  مساحة في الذاكرة (راجع دليل تكامل `bitsandbytes` [guide](./quantization#bitsandbytes-integration) لمعرفة المزيد). أضف المعلمات`load_in_8bit` أو `load_in_4bit` إلى [`~PreTrainedModel.from_pretrained`] وقم بتعيين `device_map="auto"` لتوزيع النموذج بشكل فعال على الأجهزة لديك:
 
 ```py
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
