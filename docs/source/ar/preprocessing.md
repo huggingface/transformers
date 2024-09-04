@@ -141,7 +141,6 @@ pip install datasets
 ```
 
 <Tip>
-<Tip>
 
 تحقق من دليل المفاهيم [Padding and truncation](./pad_truncation) لمعرفة المزيد حول وسادات وحجج البتر المختلفة.
 
