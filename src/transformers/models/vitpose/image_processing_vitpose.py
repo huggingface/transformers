@@ -53,8 +53,8 @@ def box_to_center_and_scale(
     box: Union[Tuple, List, np.ndarray],
     image_width: int,
     image_height: int,
-    pixel_std: float = 200.0,
-    padding: float = 1.25,
+    normalize_factor: float = 200.0,
+    padding_factor: float = 1.25,
 ):
     """
     Encodes a bounding box in COCO format into (center, scale).
@@ -66,9 +66,9 @@ def box_to_center_and_scale(
             Image width.
         image_height (`int`):
             Image height.
-        pixel_std (`float`):
+        normalize_factor (`float`):
             Width and height scale factor.
-        padding (`float`):
+        padding_factor (`float`):
             Bounding box padding factor.
 
     Returns:
@@ -87,8 +87,8 @@ def box_to_center_and_scale(
     elif width < aspect_ratio * height:
         width = height * aspect_ratio
 
-    scale = np.array([width / pixel_std, height / pixel_std], dtype=np.float32)
-    scale = scale * padding
+    scale = np.array([width / normalize_factor, height / normalize_factor], dtype=np.float32)
+    scale = scale * padding_factor
 
     return center, scale
 
@@ -226,7 +226,7 @@ def transform_preds(coords, center, scale, output_size):
         center (`np.ndarray[2,]`):
             Center of the bounding box (x, y).
         scale (`np.ndarray[2,]`):
-            Scale of the bounding box wrt [width, height].
+            Scale of the bounding box wrt original image of width and height.
         output_size (`np.ndarray[2,]):
             Size of the destination heatmaps in (height, width) format.
 
@@ -553,7 +553,7 @@ class ViTPoseImageProcessor(BaseImageProcessor):
             center (np.ndarray[N, 2]):
                 Center of the bounding box (x, y).
             scale (np.ndarray[N, 2]):
-                Scale of the bounding box wrt height/width.
+                Scale of the bounding box wrt original images of width and height.
             kernel (int, *optional*, defaults to 11):
                 Gaussian kernel size (K) for modulation, which should match the heatmap gaussian sigma when training.
                 K=17 for sigma=3 and k=11 for sigma=2.
