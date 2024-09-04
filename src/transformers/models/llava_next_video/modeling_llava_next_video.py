@@ -408,6 +408,10 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel):
         self.vision_resampler = LlavaNextVideoPooler(config)
         self.post_init()
 
+    @property
+    def padding_side(self):
+        return self._padding_side
+
     @padding_side.setter
     def padding_side(self, padding_side: str):
         if padding_side not in ["left", "right"]:

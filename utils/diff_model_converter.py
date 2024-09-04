@@ -366,7 +366,8 @@ def replace_call_to_super(class_finder: ClassFinder, updated_node: cst.ClassDef,
     assing_targets = {}
     docstring_node = []
     # Iterate directly from node.body as there can be property/setters with same names which are overwritten when we use a dict
-    for name, func in original_methods.items():
+    for func in  original_node.body.body:
+        name = func.name.value if hasattr(func, "name") else class_finder.python_module.code_for_node(func)
         if m.matches(func, m.FunctionDef()) and name in updated_methods and updated_methods[name] is not None:
             new_params = updated_methods[name].params
             # Replace the method in the replacement class, preserving decorators
@@ -387,7 +388,8 @@ def replace_call_to_super(class_finder: ClassFinder, updated_node: cst.ClassDef,
             end_meth.append(func)
 
     # Port new methods that are defined only in diff-file and append at the end
-    for name, func in updated_methods.items():
+    for func in updated_node.body.body:
+        name = func.name.value if hasattr(func, "name") else class_finder.python_module.code_for_node(func)
         if m.matches(func, DOCSTRING_NODE):
             # Extract the original docstring
             updated_docstring = func.body[0].value.value
