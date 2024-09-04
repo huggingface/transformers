@@ -33,7 +33,7 @@ pip install datasets
 
 </Tip>
 
-ابدأ بتحميل مُعرِّف رموز مُدرب مسبقًا باستخدام طريقة [`AutoTokenizer.from_pretrained`]. يقوم هذا بتنزيل *vocab* الذي تم تدريب النموذج عليه:
+ابدأ بتحميل  المُجزّئ اللغوي مُدرب مسبقًا باستخدام طريقة [`AutoTokenizer.from_pretrained`]. يقوم هذا بتنزيل المفردات *vocab* الذي تم تدريب النموذج عليه:
 
 ```py
 >>> from transformers import AutoTokenizer
