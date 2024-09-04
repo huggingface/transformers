@@ -61,7 +61,7 @@
 يمكن استخدام هذه المعلمات بشكل متبادل، ولكن إذا كنت تستخدم كلاً منها، فتأكد من أنها متوائمة مع بعضها البعض! إذا لم تمرر أيًا من هذه المعلمات، فسيقوم العمود الفقري بإرجاع خريطة الميزات من الطبقة الأخيرة.
 <div style="text-align: center">
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/Swin%20Stage%201.png">
-    <figcaption class="mt-2 text-center text-sm text-gray-500">A feature map from the first stage of the backbone. The patch partition refers to the model stem.</figcaption>
+    <figcaption class="mt-2 text-center text-sm text-gray-500">صورة توضح خريطة ميزات من المرحلة الأولى للعمود الفقري.</figcaption>
 </div>
 
 على سبيل المثال، في الرسم التخطيطي أعلاه، لإرجاع خريطة الميزات من المرحلة الأولى من العمود الفقري Swin، يمكنك تعيين `out_indices=(1,)`:
