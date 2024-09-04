@@ -191,6 +191,7 @@ _VALID_DICT_FIELDS = [
     "deepspeed",
     "gradient_checkpointing_kwargs",
     "lr_scheduler_kwargs",
+    "generation_config",
 ]
 
 
@@ -1520,7 +1521,7 @@ class TrainingArguments:
     predict_with_generate: bool = field(
         default=False, metadata={"help": "Whether to use generate to calculate generative metrics (ROUGE, BLEU)."}
     )
-    generation_config: Union[Dict, GenerationConfig] = field(
+    generation_config: Optional[Union[dict, str, GenerationConfig]] = field(
         default=None,
         metadata={
             "help": (
