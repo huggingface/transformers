@@ -21,7 +21,7 @@ import unittest
 import timeout_decorator  # noqa
 
 from transformers import OPTConfig, is_torch_available
-from transformers.testing_utils import require_torch, require_torch_accelerator, require_torch_fp16, slow, torch_device
+from transformers.testing_utils import require_torch, require_torch_accelerator, require_torch_fp16, require_torch_sdpa, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -321,6 +321,54 @@ class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
+
+    @require_torch_sdpa
+    @slow
+    def test_eager_matches_sdpa_generate(self):
+        """
+        Overwritting the common test as the test is flaky on tiny models
+        """
+        max_new_tokens = 30
+        _, input_dict = self.model_tester.prepare_config_and_inputs()
+        model_sdpa = OPTForCausalLM.from_pretrained("facebook/opt-125M",
+            torch_dtype=torch.float16,
+            low_cpu_mem_usage=True,
+            attn_implementation="sdpa",
+        ).to(torch_device)
+
+        input_dict["attention_mask"] = torch.ones_like(input_dict["input_ids"])
+
+        self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
+
+        model_eager = OPTForCausalLM.from_pretrained(
+            "facebook/opt-125M",
+            torch_dtype=torch.float16,
+            low_cpu_mem_usage=True,
+            attn_implementation="eager",
+        ).to(torch_device)
+
+        self.assertTrue(model_eager.config._attn_implementation == "eager")
+
+        for _, submodule in model_eager.named_modules():
+            if "SdpaAttention" in submodule.__class__.__name__:
+                raise ValueError("The eager model should not have SDPA attention layers")
+
+        has_sdpa = False
+        for _, submodule in model_sdpa.named_modules():
+            if "SdpaAttention" in submodule.__class__.__name__:
+                has_sdpa = True
+                break
+        if not has_sdpa:
+            raise ValueError("The SDPA model should have SDPA attention layers")
+
+        res_eager = model_eager.generate(**input_dict, max_new_tokens=max_new_tokens, do_sample=False)
+        res_sdpa = model_sdpa.generate(**input_dict, max_new_tokens=max_new_tokens, do_sample=False)
+
+        torch.testing.assert_close(
+            res_eager,
+            res_sdpa,
+            msg=f"\n{res_eager} \nvs\n{res_sdpa}",
+        )
 
     @unittest.skip(reason="Does not work on the tiny model as we keep hitting edge cases.")
     def test_model_parallelism(self):
