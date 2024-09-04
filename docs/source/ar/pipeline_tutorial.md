@@ -44,7 +44,7 @@
 {'text': ' I have a dream that one day this nation will rise up and live out the true meaning of its creed.'}
 ```
 
-الآن تبدو هذه النتيجة أكثر دقة! للحصول على مقارنة متعمقة حول Wav2Vec2 مقابل Whisper، راجع [دورة Audio Transformers](https://huggingface.co/learn/audio-course/chapter5/asr_models).
+الآن تبدو هذه النتيجة أكثر دقة! لمقارنة عميقة حول Wav2Vec2 مقابل Whisper، راجع [دورة Audio Transformers](https://huggingface.co/learn/audio-course/chapter5/asr_models).
 نحن نشجعك بشدة على التحقق من Hub للحصول على نماذج بلغات مختلفة، ونماذج متخصصة في مجالك، وأكثر من ذلك.
 يمكنك التحقق من نتائج النموذج ومقارنتها مباشرة من متصفحك على Hub لمعرفة ما إذا كان يناسبها
 أو التعامل مع الحالات الحدية بشكل أفضل من غيرها.
