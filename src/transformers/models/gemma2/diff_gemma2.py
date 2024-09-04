@@ -771,10 +771,9 @@ class Gemma2ForCausalLM(GemmaForCausalLM):
                 cache_position=cache_position,
                 batch_size=batch_size,
             )
-        
+
         if num_logits_to_keep is not None:
             model_inputs["num_logits_to_keep"] = num_logits_to_keep
-
 
         model_inputs.update(
             {
