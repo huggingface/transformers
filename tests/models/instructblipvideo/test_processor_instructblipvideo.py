@@ -1,4 +1,4 @@
-# Copyright 2023 The HuggingFace Team. All rights reserved.
+# Copyright 2024 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -30,25 +30,26 @@ if is_vision_available():
     from transformers import (
         AutoProcessor,
         BertTokenizerFast,
-        BlipImageProcessor,
         GPT2Tokenizer,
-        InstructBlipProcessor,
+        InstructBlipVideoImageProcessor,
+        InstructBlipVideoProcessor,
         PreTrainedTokenizerFast,
     )
 
 
 @require_vision
-class InstructBlipProcessorTest(ProcessorTesterMixin, unittest.TestCase):
-    processor_class = InstructBlipProcessor
+# Copied from tests.models.instructblip.test_processor_instructblip.InstructBlipProcessorTest with InstructBlip->InstructBlipVideo, BlipImageProcessor->InstructBlipVideoImageProcessor
+class InstructBlipVideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    processor_class = InstructBlipVideoProcessor
 
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
 
-        image_processor = BlipImageProcessor()
+        image_processor = InstructBlipVideoImageProcessor()
         tokenizer = GPT2Tokenizer.from_pretrained("hf-internal-testing/tiny-random-GPT2Model")
         qformer_tokenizer = BertTokenizerFast.from_pretrained("hf-internal-testing/tiny-random-bert")
 
-        processor = InstructBlipProcessor(image_processor, tokenizer, qformer_tokenizer)
+        processor = InstructBlipVideoProcessor(image_processor, tokenizer, qformer_tokenizer)
 
         processor.save_pretrained(self.tmpdirname)
 
@@ -64,19 +65,18 @@ class InstructBlipProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
 
+    # Ignore copy
     def prepare_image_inputs(self):
-        """This function prepares a list of PIL images, or a list of numpy arrays if one specifies numpify=True,
-        or a list of PyTorch tensors if one specifies torchify=True.
-        """
+        """This function prepares a list of list of PIL images"""
 
-        image_inputs = [np.random.randint(255, size=(3, 30, 400), dtype=np.uint8)]
-
-        image_inputs = [Image.fromarray(np.moveaxis(x, 0, -1)) for x in image_inputs]
-
-        return image_inputs
+        video_inputs = [
+            [Image.fromarray(np.random.randint(255, size=(30, 400, 3), dtype=np.uint8)) for _ in range(5)]
+            for _ in range(2)
+        ]
+        return video_inputs
 
     def test_save_load_pretrained_additional_features(self):
-        processor = InstructBlipProcessor(
+        processor = InstructBlipVideoProcessor(
             tokenizer=self.get_tokenizer(),
             image_processor=self.get_image_processor(),
             qformer_tokenizer=self.get_qformer_tokenizer(),
@@ -86,7 +86,7 @@ class InstructBlipProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
         image_processor_add_kwargs = self.get_image_processor(do_normalize=False, padding_value=1.0)
 
-        processor = InstructBlipProcessor.from_pretrained(
+        processor = InstructBlipVideoProcessor.from_pretrained(
             self.tmpdirname, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False, padding_value=1.0
         )
 
@@ -94,7 +94,7 @@ class InstructBlipProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertIsInstance(processor.tokenizer, PreTrainedTokenizerFast)
 
         self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
-        self.assertIsInstance(processor.image_processor, BlipImageProcessor)
+        self.assertIsInstance(processor.image_processor, InstructBlipVideoImageProcessor)
         self.assertIsInstance(processor.qformer_tokenizer, BertTokenizerFast)
 
     def test_image_processor(self):
@@ -102,7 +102,7 @@ class InstructBlipProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         tokenizer = self.get_tokenizer()
         qformer_tokenizer = self.get_qformer_tokenizer()
 
-        processor = InstructBlipProcessor(
+        processor = InstructBlipVideoProcessor(
             tokenizer=tokenizer, image_processor=image_processor, qformer_tokenizer=qformer_tokenizer
         )
 
@@ -119,7 +119,7 @@ class InstructBlipProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         tokenizer = self.get_tokenizer()
         qformer_tokenizer = self.get_qformer_tokenizer()
 
-        processor = InstructBlipProcessor(
+        processor = InstructBlipVideoProcessor(
             tokenizer=tokenizer, image_processor=image_processor, qformer_tokenizer=qformer_tokenizer
         )
 
@@ -141,7 +141,7 @@ class InstructBlipProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         tokenizer = self.get_tokenizer()
         qformer_tokenizer = self.get_qformer_tokenizer()
 
-        processor = InstructBlipProcessor(
+        processor = InstructBlipVideoProcessor(
             tokenizer=tokenizer, image_processor=image_processor, qformer_tokenizer=qformer_tokenizer
         )
 
@@ -164,7 +164,7 @@ class InstructBlipProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         tokenizer = self.get_tokenizer()
         qformer_tokenizer = self.get_qformer_tokenizer()
 
-        processor = InstructBlipProcessor(
+        processor = InstructBlipVideoProcessor(
             tokenizer=tokenizer, image_processor=image_processor, qformer_tokenizer=qformer_tokenizer
         )
 
@@ -180,7 +180,7 @@ class InstructBlipProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         tokenizer = self.get_tokenizer()
         qformer_tokenizer = self.get_qformer_tokenizer()
 
-        processor = InstructBlipProcessor(
+        processor = InstructBlipVideoProcessor(
             tokenizer=tokenizer, image_processor=image_processor, qformer_tokenizer=qformer_tokenizer
         )
 
@@ -194,7 +194,7 @@ class InstructBlipProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             ["input_ids", "attention_mask", "qformer_input_ids", "qformer_attention_mask", "pixel_values"],
         )
 
-    # Override as InstructBlipProcessor has qformer_tokenizer
+    # Override as InstructBlipVideoProcessor has qformer_tokenizer
     @require_vision
     @require_torch
     def test_tokenizer_defaults_preserved_by_kwargs(self):
@@ -214,7 +214,7 @@ class InstructBlipProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         inputs = processor(text=input_str, images=image_input, return_tensors="pt")
         self.assertEqual(len(inputs["input_ids"][0]), 117)
 
-    # Override as InstructBlipProcessor has qformer_tokenizer
+    # Override as InstructBlipVideoProcessor has qformer_tokenizer
     @require_torch
     @require_vision
     def test_image_processor_defaults_preserved_by_image_kwargs(self):
@@ -235,7 +235,7 @@ class InstructBlipProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         inputs = processor(text=input_str, images=image_input)
         self.assertEqual(len(inputs["pixel_values"][0][0]), 234)
 
-    # Override as InstructBlipProcessor has qformer_tokenizer
+    # Override as InstructBlipVideoProcessor has qformer_tokenizer
     @require_vision
     @require_torch
     def test_kwargs_overrides_default_tokenizer_kwargs(self):
@@ -257,7 +257,7 @@ class InstructBlipProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         self.assertEqual(len(inputs["input_ids"][0]), 112)
 
-    # Override as InstructBlipProcessor has qformer_tokenizer
+    # Override as InstructBlipVideoProcessor has qformer_tokenizer
     @require_torch
     @require_vision
     def test_kwargs_overrides_default_image_processor_kwargs(self):
@@ -278,7 +278,7 @@ class InstructBlipProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         inputs = processor(text=input_str, images=image_input, size=[224, 224])
         self.assertEqual(len(inputs["pixel_values"][0][0]), 224)
 
-    # Override as InstructBlipProcessor has qformer_tokenizer
+    # Override as InstructBlipVideoProcessor has qformer_tokenizer
     @require_torch
     @require_vision
     def test_unstructured_kwargs(self):
@@ -307,7 +307,7 @@ class InstructBlipProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(inputs["pixel_values"].shape[2], 214)
         self.assertEqual(len(inputs["input_ids"][0]), 76)
 
-    # Override as InstructBlipProcessor has qformer_tokenizer
+    # Override as InstructBlipVideoProcessor has qformer_tokenizer
     @require_torch
     @require_vision
     def test_unstructured_kwargs_batched(self):
@@ -337,7 +337,7 @@ class InstructBlipProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertEqual(len(inputs["input_ids"][0]), 6)
 
-    # Override as InstructBlipProcessor has qformer_tokenizer
+    # Override as InstructBlipVideoProcessor has qformer_tokenizer
     @require_torch
     @require_vision
     def test_doubly_passed_kwargs(self):
@@ -362,7 +362,7 @@ class InstructBlipProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 size={"height": 214, "width": 214},
             )
 
-    # Override as InstructBlipProcessor has qformer_tokenizer
+    # Override as InstructBlipVideoProcessor has qformer_tokenizer
     @require_torch
     @require_vision
     def test_structured_kwargs_nested(self):
@@ -394,7 +394,7 @@ class InstructBlipProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertEqual(len(inputs["input_ids"][0]), 76)
 
-    # Override as InstructBlipProcessor has qformer_tokenizer
+    # Override as InstructBlipVideoProcessor has qformer_tokenizer
     @require_torch
     @require_vision
     def test_structured_kwargs_nested_from_dict(self):

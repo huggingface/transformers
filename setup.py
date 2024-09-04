@@ -130,7 +130,7 @@ _deps = [
     "keras>2.9,<2.16",
     "keras-nlp>=0.3.1,<0.14.0",  # keras-nlp 0.14 doesn't support keras 2, see pin on keras.
     "librosa",
-    "nltk",
+    "nltk<=3.8.1",
     "natten>=0.14.6,<0.15.0",
     "numpy>=1.17",
     "onnxconverter-common",
