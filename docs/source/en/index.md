@@ -248,6 +248,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                     [Persimmon](model_doc/persimmon)                     |       ✅        |         ❌         |      ❌      |
 |                           [Phi](model_doc/phi)                           |       ✅        |         ❌         |      ❌      |
 |                          [Phi3](model_doc/phi3)                          |       ✅        |         ❌         |      ❌      |
+|                          [PhiMoE](model_doc/phimoe)                      |       ✅        |         ❌         |      ❌      |
 |                       [PhoBERT](model_doc/phobert)                       |       ✅        |         ✅         |      ✅      |
 |                    [Pix2Struct](model_doc/pix2struct)                    |       ✅        |         ❌         |      ❌      |
 |                        [PLBart](model_doc/plbart)                        |       ✅        |         ❌         |      ❌      |
