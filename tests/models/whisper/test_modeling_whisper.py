@@ -1703,6 +1703,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
     def test_labels_sequence_max_length_error_after_changing_config(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.max_target_positions = 500
 
         for model_class in self.all_generative_model_classes:
             model = model_class(config)
@@ -1714,7 +1715,6 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             new_max_length = config.max_target_positions + 100
             model.config.max_length = new_max_length
             model.generation_config.max_length = new_max_length
-            config.max_target_positions = new_max_length
 
             with self.assertRaises(ValueError):
                 model(input_features=input_features, labels=labels)
