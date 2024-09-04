@@ -49,7 +49,8 @@ GGML_TYPES = {
 # The Blocksizes are reported in bytes
 # Check out: https://github.com/ggerganov/llama.cpp/blob/8a56075b07a8b571bf95a912ffdce4c928c2b414/gguf-py/gguf/constants.py#L801
 GGML_BLOCK_SIZES = {
-    "Q8_0": 2 + 32,  # Q8_0 uses a blocksize of 32 (int8 tensors) + 2 bytes allocated for the scales
+    "Q8_0": 2
+    + 32,  # Q8_0 uses a blocksize of 32 (int8 tensors) + 2 bytes allocated for the scales
     "Q4_K": 144,
     # Q4_0 uses a blocksize of 32 but the 4-bit tensors are packed into 8-bit tensors + 2 bytes for the scales
     "Q4_0": 2 + 16,
@@ -228,7 +229,9 @@ def _gguf_parse_value(_value, data_type):
         array_data_type = None
     else:
         if data_type[0] != 9:
-            raise ValueError("Received multiple types, therefore expected the first type to indicate an array.")
+            raise ValueError(
+                "Received multiple types, therefore expected the first type to indicate an array."
+            )
         data_type, array_data_type = data_type
 
     if data_type in [0, 1, 2, 3, 4, 5, 10, 11]:
@@ -252,7 +255,9 @@ def dequantize_q4_k(data, n_bytes: int):
     block_size = GGML_BLOCK_SIZES["Q4_K"]
     num_blocks = n_bytes // block_size
 
-    data_f16 = np.frombuffer(data, dtype=np.float16).reshape(num_blocks, block_size // 2)
+    data_f16 = np.frombuffer(data, dtype=np.float16).reshape(
+        num_blocks, block_size // 2
+    )
     data_u8 = np.frombuffer(data, dtype=np.uint8).reshape(num_blocks, block_size)
 
     # Casting to float32 because float16 is very slow on CPU
@@ -283,7 +288,9 @@ def dequantize_q4_0(data, n_bytes: int):
     block_size = GGML_BLOCK_SIZES["Q4_0"]
     num_blocks = n_bytes // block_size
 
-    data_f16 = np.frombuffer(data, dtype=np.float16).reshape(num_blocks, block_size // 2)
+    data_f16 = np.frombuffer(data, dtype=np.float16).reshape(
+        num_blocks, block_size // 2
+    )
     data_u8 = np.frombuffer(data, dtype=np.uint8).reshape(num_blocks, block_size)
 
     # The scales are stored on the first 2 bytes and the rest corresponds to the quants
@@ -309,7 +316,9 @@ def dequantize_q6_k(data, n_bytes: int):
     block_size = GGML_BLOCK_SIZES["Q6_K"]
     num_blocks = n_bytes // block_size
 
-    data_f16 = np.frombuffer(data, dtype=np.float16).reshape(num_blocks, block_size // 2)
+    data_f16 = np.frombuffer(data, dtype=np.float16).reshape(
+        num_blocks, block_size // 2
+    )
     data_u8 = np.frombuffer(data, dtype=np.uint8).reshape(num_blocks, block_size)
     data_i8 = np.frombuffer(data, dtype=np.int8).reshape(num_blocks, block_size)
 
@@ -360,7 +369,11 @@ def dequantize_q8_0(data, n_bytes: int):
     block_size = GGML_BLOCK_SIZES["Q8_0"]
     num_blocks = n_bytes // block_size
 
-    scales = np.frombuffer(data, dtype=np.float16).reshape(num_blocks, 1 + 16)[:, :1].astype(np.float32)
+    scales = (
+        np.frombuffer(data, dtype=np.float16)
+        .reshape(num_blocks, 1 + 16)[:, :1]
+        .astype(np.float32)
+    )
     qs = np.frombuffer(data, dtype=np.int8).reshape(num_blocks, 2 + 32)[:, 2:]
 
     return scales * qs
@@ -373,8 +386,12 @@ def dequantize_q2_k(data, n_bytes: int):
     # https://github.com/ggerganov/ggml/blob/fca1caafea7de9fbd7efc733b9818f9cf2da3050/src/ggml-quants.h#L74
     num_blocks = n_bytes // GGML_BLOCK_SIZES["Q2_K"]
 
-    data_f16 = np.frombuffer(data, dtype=np.float16).reshape(num_blocks, GGML_BLOCK_SIZES["Q2_K"] // 2)
-    data_u8 = np.frombuffer(data, dtype=np.uint8).reshape(num_blocks, GGML_BLOCK_SIZES["Q2_K"])
+    data_f16 = np.frombuffer(data, dtype=np.float16).reshape(
+        num_blocks, GGML_BLOCK_SIZES["Q2_K"] // 2
+    )
+    data_u8 = np.frombuffer(data, dtype=np.uint8).reshape(
+        num_blocks, GGML_BLOCK_SIZES["Q2_K"]
+    )
 
     dmin = data_f16[:, -1].reshape(num_blocks, 1, 1).astype(np.float32)
     d = data_f16[:, -2].reshape(num_blocks, 1, 1).astype(np.float32)
@@ -413,11 +430,17 @@ def dequantize_q3_k(data, n_bytes: int):
     # https://github.com/ggerganov/ggml/blob/fca1caafea7de9fbd7efc733b9818f9cf2da3050/src/ggml-quants.h#L95
     num_blocks = n_bytes // GGML_BLOCK_SIZES["Q3_K"]
 
-    data_f16 = np.frombuffer(data, dtype=np.float16).reshape(num_blocks, GGML_BLOCK_SIZES["Q3_K"] // 2)
-    data_u8 = np.frombuffer(data, dtype=np.uint8).reshape(num_blocks, GGML_BLOCK_SIZES["Q3_K"])
+    data_f16 = np.frombuffer(data, dtype=np.float16).reshape(
+        num_blocks, GGML_BLOCK_SIZES["Q3_K"] // 2
+    )
+    data_u8 = np.frombuffer(data, dtype=np.uint8).reshape(
+        num_blocks, GGML_BLOCK_SIZES["Q3_K"]
+    )
 
     d = data_f16[:, -1].reshape(num_blocks, 1, 1).astype(np.float32)
-    bits = np.unpackbits(data_u8[:, :32].reshape(num_blocks, 32, 1), axis=-1, bitorder="little")
+    bits = np.unpackbits(
+        data_u8[:, :32].reshape(num_blocks, 32, 1), axis=-1, bitorder="little"
+    )
     bits = 4 ^ (bits << 2)
     qs = data_u8[:, 32 : 32 + 64].astype(np.int16)
     a, b, c = data_u8[:, 96 : 96 + 12].reshape(num_blocks, 3, 4).transpose(1, 0, 2)
@@ -462,8 +485,12 @@ def dequantize_q5_k(data, n_bytes: int):
     # https://github.com/ggerganov/ggml/blob/fca1caafea7de9fbd7efc733b9818f9cf2da3050/src/ggml-quants.h#L138
     num_blocks = n_bytes // GGML_BLOCK_SIZES["Q5_K"]
 
-    data_f16 = np.frombuffer(data, dtype=np.float16).reshape(num_blocks, GGML_BLOCK_SIZES["Q5_K"] // 2)
-    data_u8 = np.frombuffer(data, dtype=np.uint8).reshape(num_blocks, GGML_BLOCK_SIZES["Q5_K"])
+    data_f16 = np.frombuffer(data, dtype=np.float16).reshape(
+        num_blocks, GGML_BLOCK_SIZES["Q5_K"] // 2
+    )
+    data_u8 = np.frombuffer(data, dtype=np.uint8).reshape(
+        num_blocks, GGML_BLOCK_SIZES["Q5_K"]
+    )
 
     d = data_f16[:, 0].reshape(num_blocks, 1).astype(np.float32)
     dmin = data_f16[:, 1].reshape(num_blocks, 1).astype(np.float32)
@@ -563,7 +590,9 @@ class GGUFTokenizerSkeleton:
                     piece_l, piece_r = merge[:index], merge[index:]
                     if piece_l in tokens and piece_r in tokens:
                         local.append((piece_l, piece_r, piece_score))
-                local = sorted(local, key=lambda x: (vocab[x[0]], vocab[x[1]]), reverse=True)
+                local = sorted(
+                    local, key=lambda x: (vocab[x[0]], vocab[x[1]]), reverse=True
+                )
                 merges.extend(local)
             merges = sorted(merges, key=lambda val: val[2], reverse=True)
             merges = [(val[0], val[1]) for val in merges]
@@ -589,7 +618,9 @@ class GGUFLlamaConverter(LlamaConverter):
         self.proto = GGUFTokenizerSkeleton(tokenizer_dict)
         self.original_tokenizer = self.proto
         self.additional_kwargs = {}
-        self.is_llama_3_tokenizer = getattr(self.proto, "tokenizer_type", "llama") != "llama"
+        self.is_llama_3_tokenizer = (
+            getattr(self.proto, "tokenizer_type", "llama") != "llama"
+        )
 
     def vocab(self, proto):
         return list(zip(proto.tokens, proto.scores))
@@ -602,36 +633,65 @@ class GGUFLlamaConverter(LlamaConverter):
         merges = self.merges(self.proto)
         bpe_vocab = {word: i for i, (word, _score) in enumerate(vocab_scores)}
 
-        unk_token = proto.tokens[proto.unk_token_id] if proto.unk_token_id is not None else None
-        bos_token = proto.tokens[proto.bos_token_id] if getattr(proto, "bos_token_id", None) is not None else None
-        eos_token = proto.tokens[proto.bos_token_id] if getattr(proto, "eos_token_id", None) is not None else None
+        unk_token = (
+            proto.tokens[proto.unk_token_id] if proto.unk_token_id is not None else None
+        )
+        bos_token = (
+            proto.tokens[proto.bos_token_id]
+            if getattr(proto, "bos_token_id", None) is not None
+            else None
+        )
+        eos_token = (
+            proto.tokens[proto.bos_token_id]
+            if getattr(proto, "eos_token_id", None) is not None
+            else None
+        )
 
-        tokenizer = Tokenizer(BPE(bpe_vocab, merges, unk_token=unk_token, fuse_unk=True, byte_fallback=True))
+        tokenizer = Tokenizer(
+            BPE(
+                bpe_vocab,
+                merges,
+                unk_token=unk_token,
+                fuse_unk=True,
+                byte_fallback=True,
+            )
+        )
 
         special_tokens = []
 
         if not hasattr(self.proto, "token_type"):
             if unk_token is not None:
-                special_tokens.append(AddedToken(unk_token, normalized=False, special=True))
+                special_tokens.append(
+                    AddedToken(unk_token, normalized=False, special=True)
+                )
 
             if bos_token is not None:
-                special_tokens.append(AddedToken(bos_token, normalized=False, special=True))
+                special_tokens.append(
+                    AddedToken(bos_token, normalized=False, special=True)
+                )
 
             if eos_token is not None:
-                special_tokens.append(AddedToken(eos_token, normalized=False, special=True))
+                special_tokens.append(
+                    AddedToken(eos_token, normalized=False, special=True)
+                )
         else:
             # 3 stands for special tokens
             special_tokens_idx = np.where(np.array(self.proto.token_type) == 3)[0]
 
             for idx in special_tokens_idx:
-                special_tokens.append(AddedToken(self.proto.tokens[idx], normalized=False, special=True))
+                special_tokens.append(
+                    AddedToken(self.proto.tokens[idx], normalized=False, special=True)
+                )
 
         if len(special_tokens) != 0:
             tokenizer.add_special_tokens(special_tokens)
 
         if len(self.proto.added_tokens) != 0:
             tokenizer.add_tokens(
-                [AddedToken(added_token, normalized=False, special=False) for added_token in self.proto.added_tokens]
+                [
+                    AddedToken(added_token, normalized=False, special=False)
+                    for added_token in self.proto.added_tokens
+                ]
             )
 
         self.additional_kwargs["unk_token"] = unk_token
@@ -655,7 +715,11 @@ class GGUFLlamaConverter(LlamaConverter):
         ]
 
         if self.is_llama_3_tokenizer:
-            sequence += [decoders.ByteLevel(add_prefix_space=False, trim_offsets=False, use_regex=True)]
+            sequence += [
+                decoders.ByteLevel(
+                    add_prefix_space=False, trim_offsets=False, use_regex=True
+                )
+            ]
 
         if add_prefix_space:
             sequence += [decoders.Strip(content=" ", left=1)]
@@ -725,7 +789,7 @@ class GGUFQwen2MoeConverter(GGUFQwen2Converter):
 GGUF_TO_FAST_CONVERTERS = {
     "llama": GGUFLlamaConverter,
     "qwen2": GGUFQwen2Converter,
-    "qwen2_moe": GGUFQwen2MoeConverter
+    "qwen2_moe": GGUFQwen2MoeConverter,
 }
 
 
