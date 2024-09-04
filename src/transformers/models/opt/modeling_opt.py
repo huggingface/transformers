@@ -285,7 +285,7 @@ class OptFlashAttention2(OPTAttention):
         bsz, _, _ = hidden_states.size()
 
         # get query proj
-        query_states = self.q_proj(hidden_states)  # TODO check if scaling is needed? is this a bug?
+        query_states = self.q_proj(hidden_states) 
         # get key, value proj
         past_key_value, key_states, value_states = self._update_key_and_values(
             hidden_states, key_value_states, past_key_value, is_cross_attention, bsz
@@ -403,6 +403,10 @@ class OPTSdpaAttention(OPTAttention):
             attn_mask=causal_mask,
             dropout_p=self.dropout if self.training else 0.0,
             is_causal=is_causal,
+            # this model uses the scaling factor in the query projection for some reason, but not in Q@K^T
+            # so we need to scale to remove scaling in SDPA to have similar results with eager. 
+            # Maybe needs a change in the model to remove scaling in query projection
+            scale=1.0, 
         )
 
         attn_output = attn_output.transpose(1, 2).contiguous()
@@ -694,16 +698,7 @@ class OPTDecoder(OPTPreTrainedModel):
             )
 
             return causal_attention_mask, attention_mask
-
-        if self._use_sdpa and not output_attentions:
-            if AttentionMaskConverter._ignore_causal_mask_sdpa(
-                attention_mask,
-                inputs_embeds=inputs_embeds,
-                past_key_values_length=past_key_values_length,
-                is_training=self.training,
-            ):
-                return None, None
-
+       
         if attention_mask is None:
             attention_mask = torch.ones(batch_size, mask_seq_length, device=inputs_embeds.device)
         elif attention_mask.shape[1] != mask_seq_length:
