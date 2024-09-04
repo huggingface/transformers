@@ -454,7 +454,7 @@ class DiffConverterTransformer(CSTTransformer):
         self.all_safe_imports = []          # stores the import under simple statements
         self.global_scope_index = 0
         # fmt: on
-        self.config_body = []
+        self.config_body = {}
 
     def visit_ImportFrom(self, node: cst.ImportFrom) -> None:
         """When visiting imports from `transformers.models.xxx` we need to:
@@ -576,6 +576,15 @@ class DiffConverterTransformer(CSTTransformer):
                         # make sure the node is written after its dependencies
                         start_insert_idx = self.new_body[dependency]["insert_idx"] - 1
                     self.inserted_deps.append(dependency)
+                elif node is not None:
+                    # insert in config
+                    if dependency not in self.config_body:
+                        start_insert_idx -= 1
+                        self.config_body[dependency] = {"insert_idx": start_insert_idx, "node": node}
+                    elif dependency not in self.inserted_deps:
+                        # make sure the node is written after its dependencies
+                        start_insert_idx = self.config_body[dependency]["insert_idx"] - 1
+                    self.inserted_deps.append(dependency)
             if len(list_dependencies) > 0:
                 updated_node = replace_call_to_super(class_finder, updated_node, class_name)
             else:
@@ -583,7 +592,7 @@ class DiffConverterTransformer(CSTTransformer):
                     f"Unable to find dependencies for {super_class} in {super_file_name}. Here are the dependencies found: {class_finder.class_dependency_mapping}. (The automatic renaming might have gone wrong!)"
                 )
         if "Config" in class_name:
-            self.config_body += [updated_node]
+            self.config_body[class_name] = {"insert_idx": self.global_scope_index, "node": updated_node}
         else:
             self.new_body[class_name] = {"insert_idx": self.global_scope_index, "node": updated_node}
         return updated_node
@@ -618,7 +627,7 @@ class DiffConverterTransformer(CSTTransformer):
                 config_imports.append(i)
 
         if hasattr(self, "config_body"):
-            self.config_body = list(imports.values()) + config_imports + self.config_body
+            self.config_body = list(imports.values()) + config_imports + [k[1]["node"] for k in sorted(self.new_body.items(), key=lambda x: x[1]["insert_idx"])]
         dependency_imports.update(imports)
         dependency_imports.update({self.python_module.code_for_node(k): k for k in self.all_safe_imports})
         new_body = list(dependency_imports.values())
@@ -679,7 +688,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--files_to_parse",
-        default=["all"],
+        default=["src/transformers/models/instructblipvideo/diff_instructblipvideo.py"],
         nargs="+",
         help="A list of `diff_xxxx` files that should be converted to single model file",
     )
