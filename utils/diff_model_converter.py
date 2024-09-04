@@ -401,7 +401,7 @@ def replace_call_to_super(class_finder: ClassFinder, updated_node: cst.ClassDef,
                 logger.warning("We detected a docstring that will be appended to the super's doc")
                 # Split the docstring at the example section, assuming `"""` or `'''` is used to define the docstring
                 parts = original_docstring.split("```")
-                if "```" in updated_docstring and len(parts)>0:
+                if "```" in updated_docstring and len(parts) > 0:
                     # an example is provide! Overwrite the other example
                     split_updated_docstring = updated_docstring.split("```")
                     parts[1] = updated_docstring.split("```")[1]
