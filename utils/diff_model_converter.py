@@ -408,9 +408,10 @@ def replace_call_to_super(class_finder: ClassFinder, updated_node: cst.ClassDef,
                     updated_docstring = "".join(split_updated_docstring[:1] + split_updated_docstring[2:])
 
                 if len(parts) > 1:
+                    doc = updated_docstring.replace('r"""\n', "").lstrip("\n").replace('"""', "")
                     updated_docstring = "".join(
                         [
-                            parts[0] + updated_docstring.replace('"""', "").lstrip("\n"),
+                            parts[0] + doc,
                             "```",
                             parts[1],
                             "```",
@@ -418,7 +419,7 @@ def replace_call_to_super(class_finder: ClassFinder, updated_node: cst.ClassDef,
                         ]
                     )
                 elif updated_docstring not in docstring_node[0].body[0].value.value:
-                    updated_docstring = docstring_node[0].body[0].value.value + "\n" + updated_docstring
+                    updated_docstring = docstring_node[0].body[0].value.value + "\n" + updated_docstring.replace('r"""\n', "")
             else:
                 updated_docstring = func.body[0].value.value
             # Update the docstring in the original function
