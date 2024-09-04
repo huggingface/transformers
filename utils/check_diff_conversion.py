@@ -1,15 +1,15 @@
-import difflib
 import argparse
-import subprocess
-import os
-from io import StringIO
-from rich.console import Console
-from rich.syntax import Syntax
 import difflib
+import glob
+import logging
+from io import StringIO
 
 # Console for rich printing
 from diff_model_converter import convert_diff_file
-import logging
+from rich.console import Console
+from rich.syntax import Syntax
+
+
 logging.basicConfig()
 logging.getLogger().setLevel(logging.ERROR)
 console = Console()
@@ -59,12 +59,14 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Compare diff_xxx.py files with modeling_xxx.py files.")
     parser.add_argument(
         "--files",
-        default=["src/transformers/models/gemma/diff_gemma.py"],
+        default=["all"],
         type=list,
         nargs="+",
         help="List of diff_xxx.py files to compare."
     )
     args = parser.parse_args()
+    if args.files == ["all"]:
+        args.files = glob.glob("src/transformers/models/**/diff_*.py", recursive=True)
     non_matching_files = 0
     for diff_file_path in args.files:
         non_matching_files+=compare_files(diff_file_path)
