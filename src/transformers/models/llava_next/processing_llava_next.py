@@ -199,8 +199,8 @@ class LlavaNextProcessor(ProcessorMixin):
         because it divided each image into patches depending on its resolution. Therefore we need to calculate how many
         patches an image is divided into and get the number of features from that.
         """
-        current_width = patches_height * scale_height
-        current_height = patches_width * scale_width
+        current_height = patches_height * scale_height
+        current_width = patches_width * scale_width
 
         original_aspect_ratio = width / height
         current_aspect_ratio = current_width / current_height
