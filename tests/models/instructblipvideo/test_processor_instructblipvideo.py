@@ -67,15 +67,13 @@ class InstructBlipVideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     # Ignore copy
     def prepare_image_inputs(self):
-        """This function prepares a list of PIL images, or a list of numpy arrays if one specifies numpify=True,
-        or a list of PyTorch tensors if one specifies torchify=True.
-        """
+        """This function prepares a list of list of PIL images"""
 
-        image_inputs = [np.random.randint(255, size=(3, 30, 400), dtype=np.uint8)]
-
-        image_inputs = [Image.fromarray(np.moveaxis(x, 0, -1)) for x in image_inputs]
-
-        return image_inputs
+        video_inputs = [
+            [Image.fromarray(np.random.randint(255, size=(30, 400, 3), dtype=np.uint8)) for _ in range(5)]
+            for _ in range(2)
+        ]
+        return video_inputs
 
     def test_save_load_pretrained_additional_features(self):
         processor = InstructBlipVideoProcessor(
