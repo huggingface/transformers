@@ -1213,9 +1213,8 @@ class GenerationConfig(PushToHubMixin):
             ):
                 generation_config.return_dict_in_generate = True
 
-        generation_config._original_object_hash = hash(
-            generation_config
-        )  # Hash to detect whether the instance was modified
+        # Hash to detect whether the instance was modified
+        generation_config._original_object_hash = hash(generation_config)
         return generation_config
 
     def update(self, **kwargs):
