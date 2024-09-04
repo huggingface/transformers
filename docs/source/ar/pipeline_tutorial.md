@@ -31,7 +31,7 @@
 {'text': 'I HAVE A DREAM BUT ONE DAY THIS NATION WILL RISE UP LIVE UP THE TRUE MEANING OF ITS TREES'}
 ```
 
-هل هذه هي النتيجة التي كنت تبحث عنها؟ تحقق من بعض [نماذج التعرف على الكلام الأكثر تنزيلًا](https://huggingface.co/models?pipeline_tag=automatic-speech-recognition&sort=trending) 
+لم تحصل على النتيجة التي تريدها؟ تحقق من بعض [نماذج التعرف على الكلام الأكثر تنزيلًا](https://huggingface.co/models?pipeline_tag=automatic-speech-recognition&sort=trending) 
 على Hub لمعرفة ما إذا كان بإمكانك الحصول على نسخة منقحة أفضل.
 
 دعونا نجرب نموذج [Whisper large-v2](https://huggingface.co/openai/whisper-large) من OpenAI. تم إصدار Whisper بعد عامين من إصدار Wav2Vec2، وتم تدريبه على ما يقرب من 10 أضعاف كمية البيانات. وبهذه الصفة، فإنه يتفوق على Wav2Vec2 في معظم المعايير المرجعية لأسفل البئر. كما أن لديها الفائدة الإضافية المتمثلة في التنبؤ بعلامات الترقيم وعلامات الحالة، والتي لا يمكن تحقيقها مع Wav2Vec2.
