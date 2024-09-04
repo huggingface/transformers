@@ -88,7 +88,7 @@ model = AutoModelForCausalLM.from_pretrained(peft_model_id, quantization_config=
 
 ## إضافة محول جديد
 
-يمكنك استخدام [`~peft.PeftModel.add_adapter`] لإضافة محول جديد إلى نموذج بمحول موجود طالما أن المحول الجديد هو من نفس نوع المحول الحالي. على سبيل المثال، إذا كان لديك محول LoRA موجود ملحق بنموذج:
+يمكنك استخدام الدالة [`~peft.PeftModel.add_adapter`] لإضافة محوّل جديد إلى نموذج يحتوي بالفعل على محوّل آخر طالما أن المحول الجديد  مطابقًا للنوع الحالي. على سبيل المثال، إذا كان لديك محول LoRA موجود مرتبط بنموذج:
 
 ```py
 from transformers import AutoModelForCausalLM, OPTForCausalLM, AutoTokenizer
