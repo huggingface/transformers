@@ -1192,25 +1192,30 @@ class GenerationConfig(PushToHubMixin):
         """
         config_dict = model_config.to_dict()
         config_dict.pop("_from_model_config", None)
-        config = cls.from_dict(config_dict, return_unused_kwargs=False, _from_model_config=True)
+        generation_config = cls.from_dict(config_dict, return_unused_kwargs=False, _from_model_config=True)
 
         # Special case: some models have generation attributes set in the decoder. Use them if still unset in the
-        # generation config.
-        for decoder_name in ("decoder", "generator", "text_config"):
-            if decoder_name in config_dict:
-                default_generation_config = GenerationConfig()
-                decoder_config = config_dict[decoder_name]
-                for attr in config.to_dict().keys():
-                    if attr in decoder_config and getattr(config, attr) == getattr(default_generation_config, attr):
-                        setattr(config, attr, decoder_config[attr])
+        # generation config (which in turn is defined from the outer attributes of model config).
+        decoder_config = model_config.get_text_config(decoder=True)
+        if decoder_config is not model_config:
+            default_generation_config = GenerationConfig()
+            decoder_config_dict = decoder_config.to_dict()
+            for attr in generation_config.to_dict().keys():
+                is_unset = getattr(generation_config, attr) == getattr(default_generation_config, attr)
+                if attr in decoder_config_dict and is_unset:
+                    setattr(generation_config, attr, decoder_config_dict[attr])
 
         # If any `output_...` flag is set to `True`, we ensure `return_dict_in_generate` is set to `True`.
-        if config.return_dict_in_generate is False:
-            if any(getattr(config, extra_output_flag, False) for extra_output_flag in config.extra_output_flags):
-                config.return_dict_in_generate = True
+        if generation_config.return_dict_in_generate is False:
+            if any(
+                getattr(generation_config, extra_output_flag, False)
+                for extra_output_flag in generation_config.extra_output_flags
+            ):
+                generation_config.return_dict_in_generate = True
 
-        config._original_object_hash = hash(config)  # Hash to detect whether the instance was modified
-        return config
+        # Hash to detect whether the instance was modified
+        generation_config._original_object_hash = hash(generation_config)
+        return generation_config
 
     def update(self, **kwargs):
         """
