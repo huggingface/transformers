@@ -110,7 +110,7 @@ jobs:
         parallelism: 1
         steps:
             - checkout
-            - run: uv pip install -e .
+            - run: uv pip install -e ".[quality]"
             - run:
                 name: Show installed libraries and their versions
                 command: pip freeze | tee installed.txt
@@ -135,7 +135,7 @@ jobs:
         parallelism: 1
         steps:
             - checkout
-            - run: uv pip install -e .
+            - run: uv pip install -e ".[quality]"
             - run:
                 name: Show installed libraries and their versions
                 command: pip freeze | tee installed.txt
