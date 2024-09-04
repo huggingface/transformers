@@ -1728,6 +1728,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             new_max_length = config.max_target_positions + 100
             model.config.max_length = new_max_length
             model.generation_config.max_length = new_max_length
+            config.max_target_positions = new_max_length
 
             with self.assertRaises(ValueError):
                 model(input_features=input_features, labels=labels)
