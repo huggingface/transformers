@@ -1675,7 +1675,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                     past_key_values=past_key_values,
                 )
 
-     def test_labels_sequence_max_length(self):
+    def test_labels_sequence_max_length(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_generative_model_classes:
