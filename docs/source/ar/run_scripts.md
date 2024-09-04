@@ -125,7 +125,7 @@ python examples/tensorflow/summarization/run_summarization.py  \
 
 يدعم [Trainer](https://huggingface.co/docs/transformers/main_classes/trainer) التدريب الموزع والدقة المختلطة، مما يعني أنه يمكنك أيضًا استخدامه في نص برمجي. لتمكين كلتا الميزتين:
 
-- أضف حجة `fp16` لتمكين الدقة المختلطة.
+- أضف معامل `fp16` لتمكين الدقة المختلطة.
 - قم بتعيين عدد وحدات معالجة الرسومات (GPUs) التي تريد استخدامها باستخدام حجة `nproc_per_node`.
 
 ```bash
