@@ -93,7 +93,7 @@ class DeiTEmbeddings(nn.Module):
         if not torch.jit.is_tracing() and num_patches == num_positions and height == width:
             return self.position_embeddings
 
-        class_pos_embed = self.position_embeddings[:, :2]
+        class_and_dist_pos_embed = self.position_embeddings[:, :2]
         patch_pos_embed = self.position_embeddings[:, 2:]
 
         dim = embeddings.shape[-1]
@@ -114,7 +114,7 @@ class DeiTEmbeddings(nn.Module):
 
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
 
-        return torch.cat((class_pos_embed, patch_pos_embed), dim=1)
+        return torch.cat((class_and_dist_pos_embed, patch_pos_embed), dim=1)
 
     def forward(
         self,
