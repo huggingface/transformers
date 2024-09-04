@@ -27,6 +27,7 @@ from libcst.metadata import MetadataWrapper, ParentNodeProvider, PositionProvide
 from transformers import logging
 from transformers.models.auto.configuration_auto import CONFIG_MAPPING_NAMES
 
+
 logger = logging.get_logger(__name__)
 
 
@@ -179,7 +180,9 @@ class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
         self.new_name = new_name
         self.default_name = "".join(x.title() for x in new_name.split("_"))
         if self.new_name in CONFIG_MAPPING_NAMES:
-            self.default_name = CONFIG_MAPPING_NAMES[self.new_name].replace("Config","") # the best source of truth for class names. Could also just use the ones de
+            self.default_name = CONFIG_MAPPING_NAMES[self.new_name].replace(
+                "Config", ""
+            )  # the best source of truth for class names. Could also just use the ones de
         self.patterns = {
             old_name: new_name,
             old_name.upper(): new_name.upper(),
@@ -203,8 +206,6 @@ class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
     @m.leave(m.Name() | m.SimpleString() | m.Comment())
     def replace_name(self, original_node, updated_node):
         update = self.preserve_case_replace(updated_node.value)
-        if "struct" in update:
-            print(updated_node.value, "->", update)
         return updated_node.with_changes(value=update)
 
 
@@ -627,6 +628,7 @@ class DiffConverterTransformer(CSTTransformer):
             new_body = []
         return node.with_changes(body=[*new_body])
 
+
 def convert_diff_file(diff_file, old_model_name=None, new_model_name=None, cst_transformers=None):
     pattern = re.search(r"diff_(.*)(?=\.py$)", diff_file)
     if pattern is not None:
@@ -643,7 +645,7 @@ def convert_diff_file(diff_file, old_model_name=None, new_model_name=None, cst_t
         formatted_code = run_ruff(ruffed_code, False)
         if hasattr(cst_transformers, "config_body"):
             config_module = cst.Module(body=[*cst_transformers.config_body], header=new_mod.header)
-            config_ruffed_code = run_ruff(AUTO_GENERATED_MESSAGE+config_module.code, True)
+            config_ruffed_code = run_ruff(AUTO_GENERATED_MESSAGE + config_module.code, True)
             config_formatted_code = run_ruff(config_ruffed_code, False)
         return ruffed_code, formatted_code, config_ruffed_code, config_formatted_code
     else:
@@ -652,12 +654,10 @@ def convert_diff_file(diff_file, old_model_name=None, new_model_name=None, cst_t
 
 
 def save_modeling_file(diff_file, ruffed_code, formatted_code, config_ruffed_code, config_formatted_code):
-    non_comment_lines = len(
-        [line for line in formatted_code.strip().split("\n") if not line.strip().startswith("#")]
-    )
+    non_comment_lines = len([line for line in formatted_code.strip().split("\n") if not line.strip().startswith("#")])
     with open(diff_file.replace("diff_", "modeling_"), "w") as f:
         if len(formatted_code.strip()) > 0 and non_comment_lines > 0:
-                f.write(formatted_code)
+            f.write(formatted_code)
         else:
             non_comment_lines = len(
                 [line for line in formatted_code.strip().split("\n") if not line.strip().startswith("#")]
