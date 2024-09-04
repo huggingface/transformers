@@ -41,8 +41,8 @@ if is_torch_available():
         LlamaConfig,
         SinkCache,
         StaticCache,
+        convert_and_export_with_cache,
     )
-    from transformers.integrations.executorch import convert_and_export_with_cache
     from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_3
 
 

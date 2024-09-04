@@ -45,10 +45,6 @@ _import_structure = {
         "unset_hf_deepspeed_config",
     ],
     "eetq": ["replace_with_eetq_linear"],
-    "executorch": [
-        "TorchExportableModuleWithStaticCache",
-        "convert_and_export_with_cache",
-    ],
     "fbgemm_fp8": ["FbgemmFp8Linear", "replace_with_fbgemm_fp8_linear"],
     "ggml": [
         "GGUF_CONFIG_MAPPING",

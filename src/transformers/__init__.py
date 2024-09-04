@@ -140,6 +140,7 @@ _import_structure = {
         "is_tensorboard_available",
         "is_wandb_available",
     ],
+    "integrations.executorch": [],
     "modelcard": ["ModelCard"],
     "modeling_tf_pytorch_utils": [
         "convert_tf_weight_name_to_pt_weight_name",
@@ -4430,6 +4431,9 @@ else:
     _import_structure["models.musicgen_melody"].append("MusicgenMelodyFeatureExtractor")
     _import_structure["models.musicgen_melody"].append("MusicgenMelodyProcessor")
 
+if is_torch_available():
+    _import_structure["integrations.executorch"].append("TorchExportableModuleWithStaticCache")
+    _import_structure["integrations.executorch"].append("convert_and_export_with_cache")
 
 # FLAX-backed objects
 try:
