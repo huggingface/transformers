@@ -176,8 +176,8 @@ def post_dark_udp(coords, batch_heatmaps, kernel=3):
         [gaussian_filter(heatmap, sigma=0.8, radius=(radius, radius), axes=(0, 1)) for heatmap in heatmaps]
         for heatmap in batch_heatmaps
     ])
-    np.clip(batch_heatmaps, 0.001, 50, batch_heatmaps)
-    np.log(batch_heatmaps, batch_heatmaps)
+    batch_heatmaps = np.clip(batch_heatmaps, 0.001, 50)
+    batch_heatmaps = np.log(batch_heatmaps)
 
     batch_heatmaps_pad = np.pad(batch_heatmaps, ((0, 0), (0, 0), (1, 1), (1, 1)), mode="edge").flatten()
 
