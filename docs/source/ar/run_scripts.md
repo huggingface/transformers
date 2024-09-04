@@ -145,7 +145,7 @@ torchrun \
     --predict_with_generate
 ```
 
-تستخدم نصوص TensorFlow البرمجية استراتيجية [`MirroredStrategy`](https://www.tensorflow.org/guide/distributed_training#mirroredstrategy) للتدريب الموزع، ولا تحتاج إلى إضافة أي حجج إضافية إلى النص البرمجي التدريبي. سيستخدم نص TensorFlow البرمجي وحدات معالجة الرسومات (GPUs) متعددة بشكل افتراضي إذا كانت متوفرة.
+تستخدم نصوص TensorFlow البرمجية استراتيجية [`MirroredStrategy`](https://www.tensorflow.org/guide/distributed_training#mirroredstrategy) للتدريب الموزع، ولا تحتاج إلى إضافة أي معامﻻت إضافية إلى النص البرمجي التدريبي. سيستخدم نص TensorFlow البرمجي وحدات معالجة الرسومات (GPUs) متعددة بشكل افتراضي إذا كانت متوفرة.
 
 ## تشغيل نص برمجي على وحدة معالجة الدقة الفائقة (TPU)
 
