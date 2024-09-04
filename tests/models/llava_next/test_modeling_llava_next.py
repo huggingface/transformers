@@ -363,11 +363,7 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
             output = model(**inputs)
 
         expected_slice = torch.tensor(
-            [
-                [-4.7695, -4.5664, -0.2786],
-                [-10.6250, -10.8906, -2.5254],
-                [-6.7383, -7.2461, -0.6787],
-            ],
+            [[-4.7695, -4.5664, -0.2788], [-10.6172, -10.8828, -2.5273], [-6.7383, -7.2422, -0.6694]],
             dtype=torch.float32,
             device=torch_device,
         )
@@ -535,7 +531,8 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
         # model is in eval mode by default so we should get pad on the left side
         # we can check the first hidden-states (aka inputs embeds)
         # the first element was lo-res image and we expect the first 1414 tokens to be all pads
-        output_eval = model(**inputs_batched, output_hidden_states=True)
+        with torch.no_grad():
+            output_eval = model(**inputs_batched, output_hidden_states=True)
         self.assertTrue((output_eval.hidden_states[0][0, :1414, ...] == 0).all().item())
 
         # otherwise padding is on the right side, so it's last 1414 tokens

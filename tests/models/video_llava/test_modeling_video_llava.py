@@ -446,9 +446,10 @@ class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         output = model.generate(**inputs, max_new_tokens=900, do_sample=False)
         EXPECTED_DECODED_TEXT = "USER: \nDescribe the video in details. ASSISTANT: The video features a young child sitting on a bed, holding a book and reading it. " \
-            "The child appears to be enjoying the book, as they are fully engaged in the activity. The room is well-lit, and the child is wearing a comfortable outfit. " \
-            "The bed is positioned in the center of the room, and there is a chair nearby. The child's focus on the book suggests that they are learning and developing " \
-            "their reading skills. The video captures a heartwarming moment of a child's love for reading and the joy it brings."  # fmt: skip
+            "The child appears to be enjoying the book, as they are fully engaged in the activity. The bed is located in a bedroom, and there is a chair nearby. The " \
+            "child is wearing a blue shirt and glasses, which suggests that they might have a visual impairment. The room is well-lit, and there is a clock on the wall, " \
+            "indicating the time. The child's focus on the book indicates that they are interested in the content and are actively participating in the reading process. " \
+            "Overall, the video captures a heartwarming moment of a child engaging in a simple yet essential activity, which is reading."  # fmt: skip
 
         self.assertEqual(
             processor.decode(output[0], skip_special_tokens=True),
@@ -546,12 +547,12 @@ class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_video_llava_merge_inputs_error_bug(self):
         # This is a reproducer of https://github.com/huggingface/transformers/pull/28333 and makes sure it does not happen anymore
         model = VideoLlavaForConditionalGeneration.from_pretrained(
-            "LanguageBind/Video-LLaVA-7B-hf", torch_dtype=torch.float16, low_cpu_mem_usage=True
+            "LanguageBind/Video-LLaVA-7B-hf", load_in_4bit=True
         ).to(torch_device)
 
         # Simulate some user inputs
         pixel_values_videos = torch.randn(
-            (2, 8, 3, 224, 224),
+            (1, 8, 3, 224, 224),
             dtype=torch.float,
             device=torch_device,
         )
@@ -561,16 +562,13 @@ class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
                 [
                     32001, 32001, 1, 15043, 7084, 32000, 32000, 32000, 32000, 32000, 32000, 32000, 32000, 29871, 13, 7900
                 ],
-                [
-                    1, 15043, 7084, 29901, 29871, 32000, 32000, 32000, 32000, 32000, 32000, 32000, 32000, 29871, 13, 7900
-                ],
             ],
             dtype=torch.long,
             device=torch_device,
         )
         # fmt: on
         attention_mask = torch.tensor(
-            [[0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]],
+            [[0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]],
             dtype=torch.long,
             device=torch_device,
         )

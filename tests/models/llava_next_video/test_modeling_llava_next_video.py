@@ -474,7 +474,8 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
         # model is in eval mode by default so we should get pad on the left side
         # we can check the first hidden-states (aka inputs embeds)
         # the first element was lo-res image and we expect the first 1482 tokens to be all pads
-        output_eval = model(**inputs_batched, output_hidden_states=True)
+        with torch.no_grad():
+            output_eval = model(**inputs_batched, output_hidden_states=True)
         self.assertTrue((output_eval.hidden_states[0][0, :1482, ...] == 0).all().item())
 
         # otherwise padding is on the right side, so it's last 1482 tokens
