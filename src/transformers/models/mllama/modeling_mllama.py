@@ -107,20 +107,12 @@ def convert_sparse_cross_attention_mask_to_dense(
 
 def prepare_cross_attention_mask(
     cross_attention_mask: torch.Tensor,
-    vision_tokens: torch.Tensor,
+    num_vision_tokens: int,
 ) -> Tuple[Tensor, Tensor]:
-    
-    if vision_tokens is None:
-        raise ValueError("Vision tokens must be provided")
-    if vision_tokens.shape[1] != cross_attention_mask.shape[2]:
-        raise ValueError(f"Mismatch in number of images given and number of masks given {vision_tokens.shape} {cross_attention_mask.shape}")
-    if vision_tokens.shape[2] != cross_attention_mask.shape[3]:
-        raise ValueError(f"Vision tokens shape {vision_tokens.shape} mismatch with xattn shape {cross_attention_mask.shape}")
 
-    seq_length = vision_tokens.shape[3]
     batch_size, text_total_length, _, _ = cross_attention_mask.shape
 
-    cross_attention_mask = cross_attention_mask.repeat_interleave(seq_length, dim=2)
+    cross_attention_mask = cross_attention_mask.repeat_interleave(num_vision_tokens, dim=2)
     cross_attention_mask = cross_attention_mask.view(batch_size, text_total_length, -1)
     cross_attention_mask = cross_attention_mask.unsqueeze(1)
 
@@ -252,6 +244,14 @@ def apply_rotary_emb(
     xq_out = torch.view_as_real(xq_ * freqs_cis).flatten(3)
     xk_out = torch.view_as_real(xk_ * freqs_cis).flatten(3)
     return xq_out.type_as(xq), xk_out.type_as(xk)
+
+
+@dataclass
+class MllamaOutput(ModelOutput):
+    logits: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    cross_attention_key_value: Optional[torch.FloatTensor] = None
 
 
 class MllamaPatchEmbedding(nn.Module):
@@ -1302,74 +1302,66 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
     def setup_cache(self, max_batch_size: int, dtype: torch.dtype):
         self.model.language_model.setup_cache(max_batch_size, dtype)
 
-    def compute_vision_cross_attention_key_value_and_masks(
-        self,
-        pixel_values: torch.Tensor,  # shape: [batch_size, num_images, num_tiles, channels, height, width]
-        aspect_ratios: torch.Tensor, # shape: [batch_size, num_images, 2]
-        num_tiles: List[List[int]],  # shape: [batch_size, num_images]; num tiles per image
-        cross_attention_token_mask: List[List[List[int]]],  # shape: [batch_size, num_images, 2]; start token, end token
-        total_len: int,
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        
-        # TODO: make sure vision transformer with pure text also works
-        # Skip for now
-        skip_vision_encoder = False
-        if skip_vision_encoder:  # create dummy vision tokens
-            max_num_images = 0
-            num_tiles = [[self.vision_max_num_chunks] for _ in pixel_values]
-            vision_tokens = torch.zeros(
-                (
-                    len(pixel_values),  # batch size 
-                    max_num_images,   # most likely 1 but take it from model_inputs
-                    self.vision_max_num_chunks,
-                    self.model.vision_model.vision_encoder.num_patches,
-                    self.config.vision_config.projection_dim,
-                ),
-                device=self.device,
-            )
-
-        # get vision tokens from vision model
-        vision_tokens = self.model.vision_model(pixel_values, aspect_ratios)
-
-        # compute key value pairs for cross-attention with vision tokens
-        cross_attention_key_value = []
-        batch_size, *_, dim = vision_tokens.shape
-        vision_tokens_flattened = vision_tokens.view(batch_size, -1, dim)
-        for layer in self.model.language_model.cross_attention_layers:
-            layer_cross_attention_key_value = layer.compute_cross_attention_key_value(vision_tokens_flattened)
-            cross_attention_key_value.append(layer_cross_attention_key_value)
-        cross_attention_key_value = torch.stack(cross_attention_key_value)
-
-        # create masks for cross-attention based on image token locations
-        cross_attention_mask = convert_sparse_cross_attention_mask_to_dense(
-            cross_attention_token_mask=cross_attention_token_mask,
-            num_tiles=num_tiles,
-            total_len=total_len,
-            max_num_tiles=self.vision_max_num_chunks,
-            device=self.device,
-            dtype=self.dtype,
-        )
-
-        cross_attention_mask, full_text_row_masked_out_mask = prepare_cross_attention_mask(
-            cross_attention_mask=cross_attention_mask,
-            vision_tokens=vision_tokens,
-        )
-
-        return cross_attention_key_value, cross_attention_mask, full_text_row_masked_out_mask
-
     def forward(
         self,
         position_ids: torch.Tensor,
         input_ids: torch.Tensor,
-        cross_attention_key_value: torch.Tensor,
-        cross_attention_mask: torch.Tensor,
-        full_text_row_masked_out_mask: torch.Tensor,
-    ) -> torch.Tensor:
+        pixel_values: Optional[torch.Tensor] = None,  # shape: [batch_size, num_images, num_tiles, channels, height, width]
+        aspect_ratios: Optional[torch.Tensor] = None, # shape: [batch_size, num_images, 2]
+        num_tiles: Optional[List[List[int]]] = None,  # shape: [batch_size, num_images]; num tiles per image
+        cross_attention_token_mask: Optional[List[List[List[int]]]] = None,  # shape: [batch_size, num_images, 2]; start token, end token
+        cross_attention_key_value: Optional[torch.Tensor] = None,
+        cross_attention_mask: Optional[torch.Tensor] = None,
+        full_text_row_masked_out_mask: Optional[torch.Tensor] = None,
+    ) -> MllamaOutput:
+
+        if pixel_values is not None and cross_attention_key_value is not None:
+            raise ValueError(
+                "`pixel_values` and `cross_attention_key_value` cannot be provided simultaneously"
+            )
         
+        if pixel_values is not None:
+            print("pixel_values is not None")
+            if aspect_ratios is None or num_tiles is None or cross_attention_token_mask is None:
+                raise ValueError(
+                    "`aspect_ratios`, `num_tiles`, `cross_attention_token_mask` must be provided if `pixel_values` is provided"
+                )
+            
+            # get vision tokens from vision model
+            vision_tokens = self.model.vision_model(pixel_values, aspect_ratios)
+
+            # compute key value pairs for cross-attention with vision tokens
+            cross_attention_key_value = []
+            batch_size, *_, dim = vision_tokens.shape
+            vision_tokens_flattened = vision_tokens.view(batch_size, -1, dim)
+            for layer in self.model.language_model.cross_attention_layers:
+                layer_cross_attention_key_value = layer.compute_cross_attention_key_value(vision_tokens_flattened)
+                cross_attention_key_value.append(layer_cross_attention_key_value)
+            cross_attention_key_value = torch.stack(cross_attention_key_value)
+
+        if cross_attention_key_value is not None:
+            if cross_attention_token_mask is None or num_tiles is None:
+                raise ValueError("`cross_attention_token_mask` and `num_tiles` must be provided if `cross_attention_key_value` is provided")
+
+            # create masks for cross-attention based on image token locations
+            cross_attention_mask = convert_sparse_cross_attention_mask_to_dense(
+                cross_attention_token_mask=cross_attention_token_mask,
+                num_tiles=num_tiles,
+                total_len=input_ids.shape[-1] + 100,
+                max_num_tiles=self.vision_max_num_chunks,
+                device=self.device,
+                dtype=self.dtype,
+            )
+
+            cross_attention_mask, full_text_row_masked_out_mask = prepare_cross_attention_mask(
+                cross_attention_mask=cross_attention_mask,
+                num_vision_tokens=self.model.vision_model.vision_encoder.num_patches,
+            )
+
         input_ids = input_ids[:, position_ids]
         embeddings = self.model.language_model.get_partially_trainable_embedding(input_ids)
 
-        logits = self.model.language_model.forward(
+        logits = self.model.language_model(
             position_ids=position_ids,
             hidden_state=embeddings,
             cross_attention_key_value=cross_attention_key_value,
@@ -1379,7 +1371,10 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
 
         logits = self.lm_head(logits)
 
-        return logits
+        return MllamaOutput(
+            logits=logits,
+            cross_attention_key_value=cross_attention_key_value,
+        )
 
     # -----------------------------------------------------------
     # Methods from LLAVA model
