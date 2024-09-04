@@ -84,7 +84,7 @@
 
 بعد ذلك، قم بإنشاء كائن من فئة [`TrainingArguments`] والتي تحتوي على جميع العوامل والمتغيرات التي يمكنك ضبطها بالإضافة إلى خيارات تنشيط التدريب المختلفة. بالنسبة لهذا البرنامج التعليمي، يمكنك البدء بمعاملات التدريب الافتراضية [hyperparameters](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments)، ولكن لا تتردد في تجربتها للعثور على الإعدادات المثلى.
 
-حدد مكان حفظ نقاط الفحص من تدريبك:
+حدد مكان حفظ النسخ من تدريبك:
 
 ```py
 >>> from transformers import TrainingArguments
