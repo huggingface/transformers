@@ -57,7 +57,7 @@ _import_structure = {
     "agents": [
         "Agent",
         "CodeAgent",
-        "HfEngine",
+        "HfApiEngine",
         "PipelineTool",
         "ReactAgent",
         "ReactCodeAgent",
@@ -65,6 +65,7 @@ _import_structure = {
         "Tool",
         "Toolbox",
         "ToolCollection",
+        "TransformersEngine",
         "launch_gradio_demo",
         "load_tool",
         "stream_to_gradio",
@@ -602,6 +603,7 @@ _import_structure = {
     "models.nougat": ["NougatProcessor"],
     "models.nystromformer": ["NystromformerConfig"],
     "models.olmo": ["OlmoConfig"],
+    "models.olmoe": ["OlmoeConfig"],
     "models.oneformer": [
         "OneFormerConfig",
         "OneFormerProcessor",
@@ -2827,6 +2829,13 @@ else:
             "OlmoPreTrainedModel",
         ]
     )
+    _import_structure["models.olmoe"].extend(
+        [
+            "OlmoeForCausalLM",
+            "OlmoeModel",
+            "OlmoePreTrainedModel",
+        ]
+    )
     _import_structure["models.oneformer"].extend(
         [
             "OneFormerForUniversalSegmentation",
@@ -4806,7 +4815,7 @@ if TYPE_CHECKING:
     from .agents import (
         Agent,
         CodeAgent,
-        HfEngine,
+        HfApiEngine,
         PipelineTool,
         ReactAgent,
         ReactCodeAgent,
@@ -4814,6 +4823,7 @@ if TYPE_CHECKING:
         Tool,
         Toolbox,
         ToolCollection,
+        TransformersEngine,
         launch_gradio_demo,
         load_tool,
         stream_to_gradio,
@@ -5378,6 +5388,7 @@ if TYPE_CHECKING:
         NystromformerConfig,
     )
     from .models.olmo import OlmoConfig
+    from .models.olmoe import OlmoeConfig
     from .models.oneformer import (
         OneFormerConfig,
         OneFormerProcessor,
@@ -7336,6 +7347,11 @@ if TYPE_CHECKING:
             OlmoForCausalLM,
             OlmoModel,
             OlmoPreTrainedModel,
+        )
+        from .models.olmoe import (
+            OlmoeForCausalLM,
+            OlmoeModel,
+            OlmoePreTrainedModel,
         )
         from .models.oneformer import (
             OneFormerForUniversalSegmentation,
