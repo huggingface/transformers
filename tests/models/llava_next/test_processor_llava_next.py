@@ -12,7 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import unittest
+
 import torch
+
 from transformers.testing_utils import require_vision
 from transformers.utils import is_vision_available
 
@@ -44,6 +46,7 @@ class LlavaProcessorTest(unittest.TestCase):
         processor = AutoProcessor.from_pretrained("llava-hf/llava-v1.6-vicuna-7b-hf")
         processor.patch_size = 14
         processor.vision_feature_select_strategy = "default"
+        # Important to check with non square image
         image = torch.randint(0, 2, (3, 500, 316))
         expected_image_tokens = 1526
 
