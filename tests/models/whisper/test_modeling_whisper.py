@@ -210,6 +210,7 @@ class WhisperModelTester:
         attention_probs_dropout_prob=0.1,
         max_position_embeddings=20,
         max_source_positions=30,
+        max_target_positions=40,
         bos_token_id=98,
         eos_token_id=98,
         pad_token_id=0,
@@ -234,15 +235,13 @@ class WhisperModelTester:
         self.num_mel_bins = num_mel_bins
         self.max_position_embeddings = max_position_embeddings
         self.max_source_positions = max_source_positions
+        self.max_target_positions = max_target_positions
         self.eos_token_id = eos_token_id
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
         self.decoder_start_token_id = decoder_start_token_id
         self.num_conv_layers = num_conv_layers
         self.suppress_tokens = suppress_tokens
-
-        config = self.get_config()
-        self.max_target_positions = config.max_target_positions
 
     def prepare_config_and_inputs(self):
         input_features = floats_tensor([self.batch_size, self.num_mel_bins, self.seq_length], self.vocab_size)
@@ -271,6 +270,7 @@ class WhisperModelTester:
             attention_dropout=self.attention_probs_dropout_prob,
             max_position_embeddings=self.max_position_embeddings,
             max_source_positions=self.max_source_positions,
+            max_target_positions=self.max_target_positions,
             eos_token_id=self.eos_token_id,
             bos_token_id=self.bos_token_id,
             pad_token_id=self.pad_token_id,
@@ -1714,6 +1714,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             new_max_length = config.max_target_positions + 100
             model.config.max_length = new_max_length
             model.generation_config.max_length = new_max_length
+            config.max_target_positions = new_max_length
 
             with self.assertRaises(ValueError):
                 model(input_features=input_features, labels=labels)
