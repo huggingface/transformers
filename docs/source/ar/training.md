@@ -112,7 +112,7 @@
 ...     return metric.compute(predictions=predictions, references=labels)
 ```
 
-إذا كنت ترغب في مراقبة مقاييس التقييم الخاصة بك أثناء الضبط الدقيق، فحدد معلمة `eval_strategy` في حجج التدريب الخاصة بك للإبلاغ عن المقياس في نهاية كل حقبة:
+إذا كنت ترغب في مراقبة مقاييس التقييم الخاصة بك أثناء الضبط الدقيق، فحدد معلمة `eval_strategy` في معاملات التدريب الخاصة بك لإظهار مقياس التقييم في نهاية كل حقبة تدريبه:
 
 ```py
 >>> from transformers import TrainingArguments, Trainer
