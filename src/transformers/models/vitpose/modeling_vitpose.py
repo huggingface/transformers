@@ -40,7 +40,7 @@ _CONFIG_FOR_DOC = "ViTPoseConfig"
 
 
 @dataclass
-class PoseEstimatorOutput(ModelOutput):
+class VitPoseEstimatorOutput(ModelOutput):
     """
     Class for outputs of pose estimation models.
 
@@ -261,7 +261,7 @@ class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(VITPOSE_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=PoseEstimatorOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=VitPoseEstimatorOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values: torch.Tensor,
@@ -271,7 +271,7 @@ class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[tuple, PoseEstimatorOutput]:
+    ) -> Union[tuple, VitPoseEstimatorOutput]:
         """
         Returns:
 
@@ -331,7 +331,7 @@ class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
                 output = (heatmaps,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
-        return PoseEstimatorOutput(
+        return VitPoseEstimatorOutput(
             loss=loss,
             heatmaps=heatmaps,
             hidden_states=outputs.hidden_states,
