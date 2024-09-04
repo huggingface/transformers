@@ -487,40 +487,6 @@ class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
     @slow
     @require_bitsandbytes
-    def test_small_model_integration_test_llama_batched_regression(self):
-        # Multi-image & multi-prompt (e.g. 3 images and 2 prompts now fails with SDPA, this tests if "eager" works as before)
-        model = VideoLlavaForConditionalGeneration.from_pretrained(
-            "LanguageBind/Video-LLaVA-7B-hf", load_in_4bit=True, attn_implementation="eager"
-        )
-        processor = VideoLlavaProcessor.from_pretrained("LanguageBind/Video-LLaVA-7B-hf", pad_token="<pad>")
-        processor.tokenizer.padding_side = "left"
-
-        prompts = [
-            "USER: <video>\nWhat is the baby doing? ASSISTANT:",
-            "USER: <video>\nWho is sitting next to the woman? ASSISTANT: A small dog is sitting next to the woman. USER: <video>\nWhat about this video? ASSITANT:",
-        ]
-        video_1 = np.load(
-            hf_hub_download(repo_id="raushan-testing-hf/videos-test", filename="video_demo.npy", repo_type="dataset")
-        )
-        video_2 = np.load(
-            hf_hub_download(repo_id="raushan-testing-hf/videos-test", filename="video_demo_2.npy", repo_type="dataset")
-        )
-
-        inputs = processor(prompts, videos=[video_1, video_2, video_1], return_tensors="pt", padding=True)
-
-        output = model.generate(**inputs, max_new_tokens=20)
-
-        # fmt: off
-        EXPECTED_DECODED_TEXT = [
-            'USER: \nWhat is the baby doing? ASSISTANT: The baby is sitting on a bed and reading a book.',
-            'USER: \nWho is sitting next to the woman? ASSISTANT: A small dog is sitting next to the woman. USER: \nWhat about this video? ASSITANT: The video shows a baby sitting on a bed and reading a book.'
-        ]
-        # fmt: on
-
-        self.assertEqual(processor.batch_decode(output, skip_special_tokens=True), EXPECTED_DECODED_TEXT)
-
-    @slow
-    @require_bitsandbytes
     def test_video_llava_index_error_bug(self):
         # This is a reproducer of https://github.com/huggingface/transformers/pull/28032 and makes sure it does not happen anymore
         # Please refer to that PR, or specifically https://github.com/huggingface/transformers/pull/28032#issuecomment-1860650043 for

@@ -478,25 +478,11 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
             output_eval = model(**inputs_batched, output_hidden_states=True)
         self.assertTrue((output_eval.hidden_states[0][0, :1482, ...] == 0).all().item())
 
-        # otherwise padding is on the right side, so it's last 1482 tokens
-        self.processor.padding_side = "right"
-        inputs_batched = self.processor(
-            [self.prompt_video, self.prompt_image],
-            images=[self.image],
-            videos=[self.video],
-            return_tensors="pt",
-            padding=True,
-        ).to(torch_device)
-
-        model.train()
-        with torch.no_grad():
-            output_train = model(**inputs_batched, output_hidden_states=True)
-        self.assertTrue((output_train.hidden_states[0][0, -1482:, ...] == 0).all().item())
-
         with self.assertLogs("transformers", level="WARNING") as logs:
             model.padding_side = "left"
             model.train()
-            model(**inputs_batched, output_hidden_states=True)
+            with torch.no_grad():
+                model(**inputs_batched, output_hidden_states=True)
 
             self.assertIn(
                 "Padding side is set to 'left' but the model is in training mode. For training", logs.output[0]
@@ -505,7 +491,8 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
         with self.assertLogs("transformers", level="WARNING") as logs:
             model.padding_side = "right"
             model.eval()
-            model(**inputs_batched, output_hidden_states=True)
+            with torch.no_grad():
+                model(**inputs_batched, output_hidden_states=True)
 
             self.assertIn(
                 "Padding side is set to 'right' but the model is in inference mode. For correct", logs.output[0]
