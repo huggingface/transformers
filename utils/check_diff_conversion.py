@@ -45,7 +45,7 @@ def process_file(generated_modeling_content, file_type="modeling_", fix_and_over
             console.print(syntax)
         return 1
     else:
-        console.print(f"\n[bold green]No differences found for {file_path}.[/bold green]")
+        console.print(f"[bold green]No differences found for {file_path}.[/bold green]")
         return 0
 
 def compare_files(diff_file_path, fix_and_overwrite=False):
