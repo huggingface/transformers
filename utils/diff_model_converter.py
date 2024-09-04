@@ -268,8 +268,8 @@ class SuperTransformer(cst.CSTTransformer):
             comment_less_code = re.sub(r"#.*", "", self.python_module.code_for_node(stmt)).strip()
             comment_less_code = re.sub(r"\ *\n", "\n", comment_less_code).strip()
             if comment_less_code not in existing_nodes:
-                if m.matches(stmt, DOCSTRING_NODE):
-                    continue
+                # if m.matches(stmt, DOCSTRING_NODE):
+                #     continue
                 deduplicated_new_body.append(stmt)
                 existing_nodes.add(stmt)
             else:
@@ -396,10 +396,16 @@ def replace_call_to_super(class_finder: ClassFinder, updated_node: cst.ClassDef,
             if "    Args:\n        " not in updated_docstring:
                 if docstring_node[0] is None:
                     raise ValueError(f"Docstring of {name} is missing Args")
+
                 original_docstring = docstring_node[0].body[0].value.value
                 logger.warning("We detected a docstring that will be appended to the super's doc")
                 # Split the docstring at the example section, assuming `"""` or `'''` is used to define the docstring
                 parts = original_docstring.split("```")
+                if "```" in updated_docstring and len(parts)>0:
+                    # an example is provide! Overwrite the other example
+                    split_updated_docstring = updated_docstring.split("```")
+                    parts[1] = updated_docstring.split("```")[1]
+                    updated_docstring = "".join(split_updated_docstring[:1] + split_updated_docstring[2:])
 
                 if len(parts) > 1:
                     updated_docstring = "".join(

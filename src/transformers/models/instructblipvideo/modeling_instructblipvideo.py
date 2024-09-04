@@ -1378,6 +1378,48 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipVideoPreTrainedModel
         return_dict: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
     ) -> Union[Tuple, InstructBlipVideoForConditionalGenerationModelOutput]:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the language modeling loss. Indices should be in `[-100, 0, ..., config.vocab_size -
+            1]`. All labels set to `-100` are ignored (masked), the loss is only computed for labels in `[0, ...,
+            config.vocab_size]`
+
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import InstructBlipVideoProcessor, InstructBlipVideoForConditionalGeneration
+        >>> import torch
+        >>> from PIL import Image
+        >>> import requests
+
+        >>> model = InstructBlipVideoForConditionalGeneration.from_pretrained("Salesforce/instructblipvideo-vicuna-7b")
+        >>> processor = InstructBlipVideoProcessor.from_pretrained("Salesforce/instructblipvideo-vicuna-7b")
+
+        >>> device = "cuda" if torch.cuda.is_available() else "cpu"
+        >>> model.to(device)  # doctest: +IGNORE_RESULT
+
+        >>> url = "https://raw.githubusercontent.com/salesforce/LAVIS/main/docs/_static/Confusing-Pictures.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
+        >>> prompt = "What is unusual about this image?"
+        >>> inputs = processor(images=image, text=prompt, return_tensors="pt").to(device)
+
+        >>> outputs = model.generate(
+        ...     **inputs,
+        ...     do_sample=False,
+        ...     num_beams=5,
+        ...     max_length=256,
+        ...     min_length=1,
+        ...     top_p=0.9,
+        ...     repetition_penalty=1.5,
+        ...     length_penalty=1.0,
+        ...     temperature=1,
+        ... )
+        >>> generated_text = processor.batch_decode(outputs, skip_special_tokens=True)[0].strip()
+        >>> print(generated_text)
+        The unusual aspect of this image is that a man is ironing clothes on the back of a yellow SUV, which is parked in the middle of a busy city street. This is an unconventional approach to ironing clothes, as it requires the man to balance himself and his ironing equipment on top of the vehicle while navigating through traffic. Additionally, the presence of taxis and other vehicles in the scene further emphasizes the unusual nature of this situation.
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # step 1: forward the images through the vision encoder,
@@ -1507,6 +1549,26 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipVideoPreTrainedModel
         interpolate_pos_encoding: bool = False,
         **generate_kwargs,
     ) -> torch.LongTensor:
+        """
+        Overrides `generate` function to be able to use the model as a conditional generator.
+
+        Args:
+            pixel_values (`torch.FloatTensor` of shape (batch_size, num_channels, height, width)):
+                Input images to be processed.
+            qformer_input_ids (`torch.LongTensor` of shape (batch_size, sequence_length), *optional*):
+                The sequence used as a prompt to be fed to the Q-Former module.
+            qformer_attention_mask (`torch.LongTensor` of shape (batch_size, sequence_length), *optional*):
+                Mask to avoid performing attention on padding token indices.
+            input_ids (`torch.LongTensor` of shape (batch_size, sequence_length), *optional*):
+                The sequence used as a prompt for the generation.
+            attention_mask (`torch.LongTensor` of shape (batch_size, sequence_length), *optional*):
+                Mask to avoid performing attention on padding token indices.
+            interpolate_pos_encoding (`bool`, *optional*, defaults to `False`):
+                Whether to interpolate the positional encoding of the image embeddings.
+
+        Returns:
+            captions (list): A list of strings of length batch_size * num_captions.
+        """
         if hasattr(self, "hf_device_map"):
             # preprocess for `accelerate`
             self._preprocess_accelerate()

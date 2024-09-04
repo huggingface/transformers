@@ -187,13 +187,6 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
         interpolate_pos_encoding: bool = False,
     ) -> Union[Tuple, InstructBlipVideoForConditionalGenerationModelOutput]:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the language modeling loss. Indices should be in `[-100, 0, ..., config.vocab_size -
-            1]`. All labels set to `-100` are ignored (masked), the loss is only computed for labels in `[0, ...,
-            config.vocab_size]`
-
-        Returns:
-
         Examples:
 
         ```python
