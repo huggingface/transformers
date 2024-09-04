@@ -15,6 +15,9 @@
 import unittest
 
 import numpy as np
+from torch
+import tensorflow as tf
+import jax.numpy as jnp
 
 from transformers.models.whisper import WhisperTokenizer, WhisperTokenizerFast
 from transformers.models.whisper.tokenization_whisper import _combine_tokens_into_words, _find_longest_common_sequence
@@ -574,3 +577,30 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
 
         output = multilingual_tokenizer.decode(INPUT_TOKENS, output_offsets=True)["offsets"]
         self.assertEqual(output, [])
+
+    def test_convert_to_list(self):
+        test_list = [[1, 2, 3], [4, 5, 6]]
+
+        # Test with an already converted list
+        assert WhisperTokenizer._convert_to_list(test_list) == test_list
+        assert WhisperTokenizerFast._convert_to_list(test_list) == test_list
+        
+        # Test with a numpy array
+        np_array = np.array(test_list)
+        assert WhisperTokenizer._convert_to_list(np_array) == test_list
+        assert WhisperTokenizerFast._convert_to_list(np_array) == test_list
+
+        # Test with a PyTorch tensor
+        torch_tensor = torch.tensor(test_list)
+        assert WhisperTokenizer._convert_to_list(torch_tensor) == test_list
+        assert WhisperTokenizerFast._convert_to_list(torch_tensor) == test_list
+
+        # Test with a TensorFlow tensor
+        tf_tensor = tf.constant(test_list)
+        assert WhisperTokenizer._convert_to_list(tf_tensor) == test_list
+        assert WhisperTokenizerFast._convert_to_list(tf_tensor) == test_list
+
+        # Test with a JAX array
+        jax_array = jnp.array(test_list)
+        assert WhisperTokenizer._convert_to_list(jax_array) == test_list
+        assert WhisperTokenizerFast._convert_to_list(jax_array) == test_list
