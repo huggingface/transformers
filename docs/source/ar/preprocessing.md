@@ -41,7 +41,7 @@ pip install datasets
 >>> tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-cased")
 ```
 
-ثم مرر نصك إلى مُعرِّف الرموز:
+ثم مرر نصك إلى المُجزّئ اللغوي:
 
 ```py
 >>> encoded_input = tokenizer("Do not meddle in the affairs of wizards, for they are subtle and quick to anger.")
