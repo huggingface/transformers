@@ -108,7 +108,7 @@ transcriber = pipeline(model="openai/whisper-large-v2", device_map="auto")
 
 ### حجم الدفعة
 
-بشكل افتراضي، لن تقوم خطوط الأنابيب بتجزئة الاستدلال لأسباب موضحة بالتفصيل [هنا](https://huggingface.co/docs/transformers/main_classes/pipelines#pipeline-batching). والسبب هو أن التجزئة ليست أسرع بالضرورة، ويمكن أن تكون أبطأ في الواقع في بعض الحالات.
+بشكل افتراضي، لن تقوم خطوط الأنابيب بتجميع الاستدلال لأسباب مفصلة [هنا](https://huggingface.co/docs/transformers/main_classes/pipelines#pipeline-batching). والسبب هو أن التجميع ليست أسرع بالضرورة، ويمكن أن تكون أبطأ في الواقع في بعض الحالات.
 
 ولكن إذا نجحت في حالتك الاستخدام، فيمكنك استخدام ما يلي:
 
