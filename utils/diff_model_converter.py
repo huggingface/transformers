@@ -441,6 +441,13 @@ def replace_call_to_super(class_finder: ClassFinder, updated_node: cst.ClassDef,
 
     return original_node.with_changes(body=new_replacement_body)
 
+TYPE_TO_FILE_TYPE= {
+    "Config": "configuration",
+    "Tokenizer": "tokenization",
+    "Processor": "processor",
+    "ImageProcessor": "image_processing",
+    "FeatureExtractor": "feature_extractor"
+}
 
 class DiffConverterTransformer(CSTTransformer):
     METADATA_DEPENDENCIES = (ParentNodeProvider, ScopeProvider, PositionProvider)
@@ -457,13 +464,21 @@ class DiffConverterTransformer(CSTTransformer):
         self.transformers_imports = {}      # maps the imports name like "from transformers.models.xxx" to the parsed AST module
         self.imported_mapping = {}          # stores the name of the imported classes, with their source {"LlamaModel":"transformers.model.llama.modeling_llama"}
         self.visited_module = {}            # modules visited like "transformers.models.llama.modeling_llama"
-        self.new_body = {}                  # store the new body, all global scope nodes should be added here
         self.inserted_deps = []             # nodes inserted via super dependency
         self.all_imports = []               # just stores all of the imports
         self.all_safe_imports = []          # stores the import under simple statements
         self.global_scope_index = 0
         # fmt: on
-        self.config_body = {}
+        self.files = {                      # mapping for different component bodies
+            "modeling": {},
+            "configuration": {},
+            "tokenization": {},
+            "processing": {},
+            "image_processing": {},
+            "feature_extractor": {},
+        }
+        self.match_patterns = '|'.join(self.files.keys())
+        self.all_functions = {}
 
     def visit_ImportFrom(self, node: cst.ImportFrom) -> None:
         """When visiting imports from `transformers.models.xxx` we need to:
@@ -474,7 +489,7 @@ class DiffConverterTransformer(CSTTransformer):
         import_statement = self.python_module.code_for_node(node.module)
         if m.matches(node.module, m.Attribute()):
             for imported_ in node.names:
-                _import = re.search(r"transformers\.models\..*\.(modeling|configuration)_.*", import_statement)
+                _import = re.search(rf"transformers\.models\..*\.({self.match_patterns})_.*", import_statement)
                 if _import:
                     source = _import.groups()[0]
                     if source == "modeling" and "Config" in self.python_module.code_for_node(imported_):
@@ -493,13 +508,6 @@ class DiffConverterTransformer(CSTTransformer):
                     f"You are importing from {import_statement} directly using global imports. Import from the correct local path"
                 )
 
-    def leave_FunctionDef(self, original_node, node):
-        parent_node = self.get_metadata(cst.metadata.ParentNodeProvider, original_node)
-        if m.matches(parent_node, m.Module()):
-            self.global_scope_index += 100
-            self.new_body[node.name.value] = {"insert_idx": self.global_scope_index, "node": node}
-        return node
-
     def leave_SimpleStatementLine(self, original_node, updated_node):
         parent_node = self.get_metadata(cst.metadata.ParentNodeProvider, original_node)
         if m.matches(parent_node, m.Module()):
@@ -509,21 +517,14 @@ class DiffConverterTransformer(CSTTransformer):
                 return updated_node
             elif m.matches(updated_node, m.SimpleStatementLine(body=[m.ImportFrom()])):
                 full_statement = self.python_module.code_for_node(updated_node.body[0].module)
-                if re.search(r"transformers\.models\..*\.(modeling|configuration)_.*", full_statement):
+                if re.search(rf"transformers\.models\..*\.({self.match_patterns})_.*", full_statement):
+                    return cst.RemoveFromParent()
+                if re.search(rf".({self.match_patterns})_(\S)$", full_statement):
                     return cst.RemoveFromParent()
                 if updated_node not in self.all_safe_imports:
                     self.all_imports.append(updated_node)
                 return updated_node
             self.global_scope_index += 100
-            if m.matches(updated_node, m.SimpleStatementLine(body=[m.Assign()])):
-                # TODO This only works for single target assigns!
-                node_name = updated_node.body[0].targets[0].target.value
-            else:
-                node_name = self.python_module.code_for_node(updated_node.body[0])
-            self.new_body[node_name] = {
-                "insert_idx": self.global_scope_index,
-                "node": updated_node,
-            }
         return updated_node
 
     def leave_ClassDef(self, original_node, updated_node):
@@ -554,7 +555,7 @@ class DiffConverterTransformer(CSTTransformer):
                 raise ValueError(
                     f"Tried parsing the name of the imported package from {super_file_name}, could not extract the model name"
                 )
-
+            file_type =  re.search(r"models?\.\w*?\.(\w*?)_", super_file_name).groups()[0]
             visited_module = self.visited_module
             if super_file_name not in visited_module:  # only extract classes once
                 class_finder = find_classes_in_file(
@@ -575,35 +576,34 @@ class DiffConverterTransformer(CSTTransformer):
 
             list_dependencies = sorted(list_dependencies.items(), key=lambda x: x[1], reverse=True)
             start_insert_idx = self.global_scope_index
+            file_to_update = self.files[file_type]
             for dependency, _ in list_dependencies:
+                # we can write to the correct body, using the source of the parent class
                 node = class_finder.global_nodes.get(dependency, None)
-                if node is not None and "Config" not in class_name:
-                    if dependency not in self.new_body:
+                if node is not None:
+                    if dependency not in file_to_update:
                         start_insert_idx -= 1
-                        self.new_body[dependency] = {"insert_idx": start_insert_idx, "node": node}
+                        file_to_update[dependency] = {"insert_idx": start_insert_idx, "node": node}
                     elif dependency not in self.inserted_deps:
                         # make sure the node is written after its dependencies
-                        start_insert_idx = self.new_body[dependency]["insert_idx"] - 1
+                        start_insert_idx = file_to_update[dependency]["insert_idx"] - 1
                     self.inserted_deps.append(dependency)
-                elif node is not None:
-                    # insert in config
-                    if dependency not in self.config_body:
-                        start_insert_idx -= 1
-                        self.config_body[dependency] = {"insert_idx": start_insert_idx, "node": node}
-                    elif dependency not in self.inserted_deps:
-                        # make sure the node is written after its dependencies
-                        start_insert_idx = self.config_body[dependency]["insert_idx"] - 1
-                    self.inserted_deps.append(dependency)
+
             if len(list_dependencies) > 0:
                 updated_node = replace_call_to_super(class_finder, updated_node, class_name)
             else:
                 raise ValueError(
                     f"Unable to find dependencies for {super_class} in {super_file_name}. Here are the dependencies found: {class_finder.class_dependency_mapping}. (The automatic renaming might have gone wrong!)"
                 )
-        if "Config" in class_name:
-            self.config_body[class_name] = {"insert_idx": self.global_scope_index, "node": updated_node}
+
+        # Now, if a class was defined without parents, we look for the name
+        match_pattern = '|'.join(TYPE_TO_FILE_TYPE.keys())
+        match = re.search(rf"({match_pattern})$", class_name)
+        if match:
+            key = TYPE_TO_FILE_TYPE[match.group(1)]
+            self.files[key][class_name] = {"insert_idx": self.global_scope_index, "node": updated_node}
         else:
-            self.new_body[class_name] = {"insert_idx": self.global_scope_index, "node": updated_node}
+            self.files["modeling"][class_name] = {"insert_idx": self.global_scope_index, "node": updated_node}
         return updated_node
 
     def leave_If(self, original_node, node):
@@ -619,40 +619,20 @@ class DiffConverterTransformer(CSTTransformer):
     def leave_Module(self, original_node: cst.Assign, node):
         imports = {self.python_module.code_for_node(k): k for k in self.all_imports}
         dependency_imports = {}
-        config_imports = []
-        for visiter in self.visited_module.values():
-            dependency_imports.update({self.python_module.code_for_node(k): k for k in visiter.imports.values()})
+        for super_file_name, visiter in self.visited_module.items():
+            file_type = re.search(r"models?\.\w*?\.(\w*?)_", super_file_name).groups()[0]
+            dependency_imports[file_type] = {self.python_module.code_for_node(k): k for k in visiter.imports.values()}
+            dependency_imports[file_type].update(imports)
 
-        # manually clean up if it's importing a config from configuration file (ruff doesn't do that)
-        config_imports = []
-        for i in list(dependency_imports.values()):
-            if (
-                hasattr(i.body[0], "module")
-                and isinstance(i.body[0].module, cst.Name)
-                and f"configuration_{self.model_name}" in i.body[0].module.value
-            ):
-                pass
-            else:
-                config_imports.append(i)
-
-        if hasattr(self, "config_body"):
-            self.config_body = (
-                list(imports.values())
-                + config_imports
-                + [k[1]["node"] for k in sorted(self.config_body.items(), key=lambda x: x[1]["insert_idx"])]
-            )
-        dependency_imports.update(imports)
-        dependency_imports.update({self.python_module.code_for_node(k): k for k in self.all_safe_imports})
-        new_body = list(dependency_imports.values())
-        if len(self.new_body.keys()) > 0:
-            new_body += [k[1]["node"] for k in sorted(self.new_body.items(), key=lambda x: x[1]["insert_idx"])]
-        else:
-            new_body = []
-        return node.with_changes(body=[*new_body])
+        for file, body in self.files.items():
+            new_body = list(dependency_imports[file_type].values()) + [k[1]["node"] for k in sorted(body.items(), key=lambda x: x[1]["insert_idx"])]
+            self.files[file] = cst.Module(body=[*new_body], header=node.header)
+        return node
 
 
 def convert_diff_file(diff_file, old_model_name=None, new_model_name=None, cst_transformers=None):
     pattern = re.search(r"diff_(.*)(?=\.py$)", diff_file)
+    output = {}
     if pattern is not None:
         model_name = pattern.groups()[0]
         # Parse the Python file
@@ -662,14 +642,13 @@ def convert_diff_file(diff_file, old_model_name=None, new_model_name=None, cst_t
         wrapper = MetadataWrapper(module)
         if cst_transformers is None:
             cst_transformers = DiffConverterTransformer(module, model_name, old_model_name, new_model_name)
-        new_mod = wrapper.visit(cst_transformers)
-        ruffed_code = run_ruff(AUTO_GENERATED_MESSAGE + new_mod.code, True)
-        formatted_code = run_ruff(ruffed_code, False)
-        if hasattr(cst_transformers, "config_body"):
-            config_module = cst.Module(body=[*cst_transformers.config_body], header=new_mod.header)
-            config_ruffed_code = run_ruff(AUTO_GENERATED_MESSAGE + config_module.code, True)
-            config_formatted_code = run_ruff(config_ruffed_code, False)
-        return {"modeling":[formatted_code,ruffed_code], "configuration":[config_ruffed_code,  config_formatted_code]}
+        wrapper.visit(cst_transformers)
+        for file, node in cst_transformers.files.items():
+            if len(module.code.strip()) >0:
+                ruffed_code = run_ruff(AUTO_GENERATED_MESSAGE + node.code, True)
+                formatted_code = run_ruff(ruffed_code, False)
+                output[file] = [formatted_code, ruffed_code]
+        return output
     else:
         print(f"Diff pattern not found in {diff_file}, exiting")
         return {}
@@ -678,15 +657,16 @@ def convert_diff_file(diff_file, old_model_name=None, new_model_name=None, cst_t
 def save_modeling_file(diff_file, converted_file):
     for file_type in converted_file.keys():
         non_comment_lines = len([line for line in converted_file[file_type][0].strip().split("\n") if not line.strip().startswith("#")])
-        with open(diff_file.replace("diff_", f"{file_type}_"), "w") as f:
-            if len(converted_file[file_type][0].strip()) > 0 and non_comment_lines > 0:
+        if len(converted_file[file_type][0].strip()) > 0 and non_comment_lines > 0:
+            with open(diff_file.replace("diff_", f"{file_type}_"), "w") as f:
                 f.write(converted_file[file_type][0])
-            else:
-                non_comment_lines = len(
-                    [line for line in converted_file[file_type][0].strip().split("\n") if not line.strip().startswith("#")]
-                )
-                if len(converted_file[file_type][1].strip()) > 0 and non_comment_lines > 0:
-                    logger.warning("The modeling code contains erros, it's written without formatting")
+        else:
+            non_comment_lines = len(
+                [line for line in converted_file[file_type][0].strip().split("\n") if not line.strip().startswith("#")]
+            )
+            if len(converted_file[file_type][1].strip()) > 0 and non_comment_lines > 0:
+                logger.warning("The modeling code contains erros, it's written without formatting")
+                with open(diff_file.replace("diff_", f"{file_type}_"), "w") as f:
                     f.write(converted_file[file_type][1])
 
 if __name__ == "__main__":
