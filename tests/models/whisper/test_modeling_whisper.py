@@ -242,6 +242,7 @@ class WhisperModelTester:
         self.decoder_start_token_id = decoder_start_token_id
         self.num_conv_layers = num_conv_layers
         self.suppress_tokens = suppress_tokens
+        self.max_target_positions = 448
 
     def prepare_config_and_inputs(self):
         input_features = floats_tensor([self.batch_size, self.num_mel_bins, self.seq_length], self.vocab_size)
@@ -278,6 +279,7 @@ class WhisperModelTester:
             encoder_ffn_dim=self.hidden_size,
             decoder_start_token_id=self.decoder_start_token_id,
             suppress_tokens=self.suppress_tokens,
+            max_target_positions=self.max_target_positions,
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -1675,6 +1677,35 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                     use_cache=True,
                     past_key_values=past_key_values,
                 )
+
+     def test_labels_sequence_max_length(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+         
+        for model_class in self.all_generative_model_classes:
+            model = model_class(config)
+            dummy_input_features = torch.ones(1, config.num_mel_bins, 3000, dtype=torch.float32)
+
+            correct_labels_length = 448
+            assert correct_labels_length <= config.max_target_positions
+            dummy_labels = torch.ones(1, config.max_target_positions, dtype=torch.int64)
+
+            # The following model should run without any problem
+            model(input_features=dummy_input_features, labels=dummy_labels)
+
+            error_labels_length = 449
+            assert error_labels_length > config.max_target_positions
+            dummy_labels = torch.ones(1, config.max_target_positions, dtype=torch.int64)
+
+            with self.assertRaises(ValueError):
+                model(input_features=dummy_input_features, labels=dummy_labels)
+
+            new_max_length = 500
+            assert new_max_length > config.max_target_positions
+            model.config.max_length = 500
+            model.generation_config.max_length = 500
+
+            with self.assertRaises(ValueError):
+                model(input_features=dummy_input_features, labels=dummy_labels)
 
 
 @require_torch
