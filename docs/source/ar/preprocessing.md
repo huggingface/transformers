@@ -307,7 +307,7 @@ pip install datasets
 ### الحشو Pad
 
 في بعض الحالات، على سبيل المثال، عند ضبط نموذج [DETR](./model_doc/detr) بدقة، يقوم النموذج بتطبيق زيادة المقياس أثناء التدريب. قد يتسبب ذلك في اختلاف أحجام الصور في دفعة واحدة. يمكنك استخدام [`DetrImageProcessor.pad`]
-من [`DetrImageProcessor`] وتعريف `collate_fn` مخصص لتجميع الصور معًا.
+من [`DetrImageProcessor`] وتحديد دالة `collate_fn` مخصصة لتجميع الصور معًا.
 
 ```py
 >>> def collate_fn(batch):
