@@ -366,7 +366,7 @@ def replace_call_to_super(class_finder: ClassFinder, updated_node: cst.ClassDef,
     assing_targets = {}
     docstring_node = []
     # Iterate directly from node.body as there can be property/setters with same names which are overwritten when we use a dict
-    for func in  original_node.body.body:
+    for func in original_node.body.body:
         name = func.name.value if hasattr(func, "name") else class_finder.python_module.code_for_node(func)
         if m.matches(func, m.FunctionDef()) and name in updated_methods and updated_methods[name] is not None:
             new_params = updated_methods[name].params
@@ -629,7 +629,11 @@ class DiffConverterTransformer(CSTTransformer):
                 config_imports.append(i)
 
         if hasattr(self, "config_body"):
-            self.config_body = list(imports.values()) + config_imports + [k[1]["node"] for k in sorted(self.config_body.items(), key=lambda x: x[1]["insert_idx"])]
+            self.config_body = (
+                list(imports.values())
+                + config_imports
+                + [k[1]["node"] for k in sorted(self.config_body.items(), key=lambda x: x[1]["insert_idx"])]
+            )
         dependency_imports.update(imports)
         dependency_imports.update({self.python_module.code_for_node(k): k for k in self.all_safe_imports})
         new_body = list(dependency_imports.values())

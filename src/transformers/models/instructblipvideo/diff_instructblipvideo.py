@@ -102,6 +102,7 @@ class InstructBlipVideoConfig(PretrainedConfig):
     ```"""
 
     model_type = "instructblipvideo"
+
     def __init__(
         self,
         vision_config=None,

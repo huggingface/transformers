@@ -622,6 +622,7 @@ class GemmaForCausalLM(LlamaForCausalLM):
             attentions=outputs.attentions,
         )
 
+
 class GemmaForSequenceClassification(LlamaForSequenceClassification):
     pass
 
