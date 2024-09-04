@@ -16,7 +16,7 @@
 
 import gc
 import unittest
-from typing import List, Dict, Union
+from typing import Dict, List, Union
 
 import requests
 
