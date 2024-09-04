@@ -37,8 +37,7 @@ To do so, encapsulate the agent in a [`ManagedAgent`] object. This object needs 
 Here's an example of making an agent that managed a specitif web search agent using our [`DuckDuckGoSearchTool`]:
 
 ```py
-from transformers import ReactCodeAgent
-from transformers.agents import HfApiEngine, DuckDuckGoSearchTool, ManagedAgent
+from transformers.agents import ReactCodeAgent, HfApiEngine, DuckDuckGoSearchTool, ManagedAgent
 
 llm_engine = HfApiEngine()
 
@@ -46,7 +45,7 @@ web_agent = ReactCodeAgent(tools=[DuckDuckGoSearchTool()], llm_engine=llm_engine
 
 managed_web_agent = ManagedAgent(
     agent=web_agent,
-    name="web_agent",
+    name="web_search",
     description="Runs web searches for you. Give it your query as an argument."
 )
 
