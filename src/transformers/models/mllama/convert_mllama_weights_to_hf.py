@@ -574,7 +574,6 @@ def write_model(
         torch.save(state_dict, os.path.join(tmp_model_path, global_vision_filename))
         
 
-
     # the normal transformer - 32 layers for 90B, a CLIP model except with additional tile position embeddings
     # vision encoder embedding parameters
 
