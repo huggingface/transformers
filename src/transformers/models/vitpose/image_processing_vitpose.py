@@ -14,6 +14,7 @@
 # limitations under the License.
 """Image processor class for ViTPose."""
 
+import itertools
 import math
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -172,10 +173,12 @@ def post_dark_udp(coords, batch_heatmaps, kernel=3):
     if not (batch_size == 1 or batch_size == num_coords):
         raise ValueError("The batch size of heatmaps should be 1 or equal to the batch size of coordinates.")
     radius = int((kernel - 1) // 2)
-    batch_heatmaps = np.array([
-        [gaussian_filter(heatmap, sigma=0.8, radius=(radius, radius), axes=(0, 1)) for heatmap in heatmaps]
-        for heatmap in batch_heatmaps
-    ])
+    batch_heatmaps = np.array(
+        [
+            [gaussian_filter(heatmap, sigma=0.8, radius=(radius, radius), axes=(0, 1)) for heatmap in heatmaps]
+            for heatmaps in batch_heatmaps
+        ]
+    )
     batch_heatmaps = np.clip(batch_heatmaps, 0.001, 50)
     batch_heatmaps = np.log(batch_heatmaps)
 
@@ -436,7 +439,7 @@ class ViTPoseImageProcessor(BaseImageProcessor):
                 Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
                 passing in images with pixel values between 0 and 1, set `do_rescale=False`.
 
-            boxes (`List[List[float]]` or `np.ndarray`):
+            boxes (`List[List[List[float]]]` or `np.ndarray`):
                 List or array of bounding boxes for each image. Each box should be a list of 4 floats representing the bounding
                 box coordinates in COCO format (top_left_x, top_left_y, width, height).
 
@@ -484,6 +487,13 @@ class ViTPoseImageProcessor(BaseImageProcessor):
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
+
+        if isinstance(boxes, list):
+            if len(images) != len(boxes):
+                raise ValueError(f"Batch of images and boxes mismatch : {len(images)} != {len(boxes)}")
+        else:
+            if len(images) != boxes.shape[0]:
+                raise ValueError(f"Batch of images and boxes mismatch : {len(images)} != {boxes.shape[0]}")
 
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
@@ -588,12 +598,13 @@ class ViTPoseImageProcessor(BaseImageProcessor):
         Args:
             outputs (torch.Tensor):
                 Model outputs.
-            boxes (torch.Tensor of shape [batch_size, 4]):
-                Bounding boxes.
+            boxes (`List[List[List[float]]]` or `np.ndarray`):
+                List or array of bounding boxes for each image. Each box should be a list of 4 floats representing the bounding
+                box coordinates in COCO format (top_left_x, top_left_y, width, height).
             kernel_size (`int`, *optional*, defaults to 11):
                 Gaussian kernel size (K) for modulation.
         Returns:
-            `List[Dict]`: A list of dictionaries, each dictionary containing the keypoints and boxes for an image
+            `List[List[Dict]]`: A list of dictionaries, each dictionary containing the keypoints and boxes for an image
             in the batch as predicted by the model.
         """
 
@@ -601,9 +612,10 @@ class ViTPoseImageProcessor(BaseImageProcessor):
         batch_size = len(outputs.heatmaps)
         centers = np.zeros((batch_size, 2), dtype=np.float32)
         scales = np.zeros((batch_size, 2), dtype=np.float32)
+        flattened_boxes = list(itertools.chain(*boxes))
         for i in range(batch_size):
             width, height = self.size["width"], self.size["height"]
-            center, scale = box_to_center_and_scale(boxes[i], image_width=width, image_height=height)
+            center, scale = box_to_center_and_scale(flattened_boxes[i], image_width=width, image_height=height)
             centers[i, :] = center
             scales[i, :] = scale
 
@@ -621,11 +633,17 @@ class ViTPoseImageProcessor(BaseImageProcessor):
 
         bboxes_xyxy = torch.Tensor(coco_to_pascal_voc(all_boxes))
 
-        pose_results: List[Dict[str, torch.Tensor]] = []
-        for pose, bbox_xyxy in zip(poses, bboxes_xyxy):
-            pose_result = {}
-            pose_result["keypoints"] = pose
-            pose_result["bbox"] = bbox_xyxy
-            pose_results.append(pose_result)
+        results: List[List[Dict[str, torch.Tensor]]] = []
 
-        return pose_results
+        pose_bbox_pairs = zip(poses, bboxes_xyxy)
+
+        for batch_bbox in boxes:
+            batch_results: List[Dict[str, torch.Tensor]] = []
+            for _ in batch_bbox:
+                # Unpack the next pose and bbox_xyxy from the iterator
+                pose, bbox_xyxy = next(pose_bbox_pairs)
+                pose_result = {"keypoints": pose, "bbox": bbox_xyxy}
+                batch_results.append(pose_result)
+            results.append(batch_results)
+
+        return results

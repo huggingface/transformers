@@ -96,7 +96,11 @@ class ViTPoseConfig(PretrainedConfig):
 
         if backbone_config is None and backbone is None:
             logger.info("`backbone_config` is `None`. Initializing the config with the default `VitPose` backbone.")
-            backbone_config = CONFIG_MAPPING["vitpose_backbone"](out_indices=["stage4"])
+            backbone_config = CONFIG_MAPPING["vitpose_backbone"](
+                out_indices=[
+                    4,
+                ]
+            )
         elif isinstance(backbone_config, dict):
             backbone_model_type = backbone_config.get("model_type")
             config_class = CONFIG_MAPPING[backbone_model_type]
