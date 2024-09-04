@@ -25,7 +25,7 @@ from libcst import matchers as m
 from libcst.metadata import MetadataWrapper, ParentNodeProvider, PositionProvider, ScopeProvider
 
 from transformers import logging
-
+from transformers.models.auto.configuration_auto import CONFIG_MAPPING_NAMES
 
 logger = logging.get_logger(__name__)
 
@@ -178,6 +178,8 @@ class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
         self.old_name = old_name
         self.new_name = new_name
         self.default_name = "".join(x.title() for x in new_name.split("_"))
+        if self.new_name in CONFIG_MAPPING_NAMES:
+            self.default_name = CONFIG_MAPPING_NAMES[self.new_name]
         self.patterns = {
             old_name: new_name,
             old_name.upper(): new_name.upper(),
@@ -193,13 +195,16 @@ class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
 
         def replace(match):
             word = match.group(0)
-            return self.patterns.get(word, self.default_name)
+            result = self.patterns.get(word, self.default_name)
+            return result
 
         return compiled_regex.sub(replace, text)
 
     @m.leave(m.Name() | m.SimpleString() | m.Comment())
     def replace_name(self, original_node, updated_node):
         update = self.preserve_case_replace(updated_node.value)
+        if "struct" in update:
+            print(updated_node.value, "->", update)
         return updated_node.with_changes(value=update)
 
 
@@ -695,4 +700,4 @@ if __name__ == "__main__":
         print(f"Converting {file_name} to a single model single file format")
         module_path = file_name.replace("/", ".").replace(".py", "").replace("src.", "")
         converted_files = convert_diff_file(file_name, args.old_model_name, args.new_model_name)
-        converter = save_modeling_file(file_name, *convert_diff_file)
+        converter = save_modeling_file(file_name, *converted_files)
