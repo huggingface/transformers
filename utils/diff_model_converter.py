@@ -622,8 +622,7 @@ class DiffConverterTransformer(CSTTransformer):
             new_body = []
         return node.with_changes(body=[*new_body])
 
-
-def convert_file(diff_file, old_model_name=None, new_model_name=None, cst_transformers=None):
+def convert_diff_file(diff_file, old_model_name=None, new_model_name=None, cst_transformers=None):
     pattern = re.search(r"diff_(.*)(?=\.py$)", diff_file)
     if pattern is not None:
         model_name = pattern.groups()[0]
@@ -635,39 +634,40 @@ def convert_file(diff_file, old_model_name=None, new_model_name=None, cst_transf
         if cst_transformers is None:
             cst_transformers = DiffConverterTransformer(module, model_name, old_model_name, new_model_name)
         new_mod = wrapper.visit(cst_transformers)
-        ruffed_code = run_ruff(new_mod.code, True)
+        ruffed_code = run_ruff(AUTO_GENERATED_MESSAGE + new_mod.code, True)
         formatted_code = run_ruff(ruffed_code, False)
-        non_comment_lines = len(
-            [line for line in formatted_code.strip().split("\n") if not line.strip().startswith("#")]
-        )
+        if hasattr(cst_transformers, "config_body"):
+            config_module = cst.Module(body=[*cst_transformers.config_body], header=new_mod.header)
+            config_ruffed_code = run_ruff(AUTO_GENERATED_MESSAGE+config_module.code, True)
+            config_formatted_code = run_ruff(config_ruffed_code, False)
+        return ruffed_code, formatted_code, config_ruffed_code, config_formatted_code
+    else:
+        print(f"Diff pattern not found in {diff_file}, exiting")
+        return None, None, None, None
+
+
+def save_modeling_file(diff_file, ruffed_code, formatted_code, config_ruffed_code, config_formatted_code):
+    non_comment_lines = len(
+        [line for line in formatted_code.strip().split("\n") if not line.strip().startswith("#")]
+    )
+    with open(diff_file.replace("diff_", "modeling_"), "w") as f:
         if len(formatted_code.strip()) > 0 and non_comment_lines > 0:
-            with open(diff_file.replace("diff_", "modeling_"), "w") as f:
-                f.write(AUTO_GENERATED_MESSAGE + formatted_code)
+                f.write(formatted_code)
         else:
             non_comment_lines = len(
                 [line for line in formatted_code.strip().split("\n") if not line.strip().startswith("#")]
             )
             if len(ruffed_code.strip()) > 0 and non_comment_lines > 0:
                 logger.warning("The modeling code contains erros, it's written without formatting")
-                with open(diff_file.replace("diff_", "modeling_"), "w") as f:
-                    f.write(AUTO_GENERATED_MESSAGE + ruffed_code)
+                f.write(ruffed_code)
 
-        if hasattr(cst_transformers, "config_body"):
-            config_module = cst.Module(body=[*cst_transformers.config_body], header=new_mod.header)
-            with open(diff_file.replace("diff_", "configuration_"), "w") as f:
-                ruffed_code = run_ruff(config_module.code, True)
-                formatted_code = run_ruff(ruffed_code, False)
-
-                if len(formatted_code.strip()) > 0:
-                    f.write(AUTO_GENERATED_MESSAGE + formatted_code)
-                else:
-                    if len(ruffed_code.strip()) > 0:
-                        logger.warning("The configuration code contains erros, it's written without formatting")
-                        f.write(AUTO_GENERATED_MESSAGE + ruffed_code)
-    else:
-        print(f"Diff pattern not found in {diff_file}, exiting")
-    # TODO optimize by re-using the class_finder
-    return cst_transformers
+    with open(diff_file.replace("diff_", "configuration_"), "w") as f:
+        if len(config_formatted_code.strip()) > 0:
+            f.write(config_formatted_code)
+        else:
+            if len(config_ruffed_code.strip()) > 0:
+                logger.warning("The configuration code contains erros, it's written without formatting")
+                f.write(config_ruffed_code)
 
 
 if __name__ == "__main__":
@@ -694,4 +694,5 @@ if __name__ == "__main__":
     for file_name in args.files_to_parse:
         print(f"Converting {file_name} to a single model single file format")
         module_path = file_name.replace("/", ".").replace(".py", "").replace("src.", "")
-        converter = convert_file(file_name, args.old_model_name, args.new_model_name)
+        converted_files = convert_diff_file(file_name, args.old_model_name, args.new_model_name)
+        converter = save_modeling_file(file_name, *convert_diff_file)
