@@ -134,7 +134,7 @@ texts = transcriber(audio_filenames)
 {'text': ' I have a dream that one day this nation will rise up and live out the true meaning of its creed.', 'chunks': [{'timestamp': (0.0, 11.88), 'text': ' I have a dream that one day this nation will rise up and live out the true meaning of its'}, {'timestamp': (11.88, 12.38), 'text': ' creed.'}]}
 ```
 
-كما ترون، استنتج النموذج النص وأخرج أيضًا **متى** تم نطق الجمل المختلفة.
+كما ترون، استنتج النموذج النص.وكذلك حدد **وقت** نطق الجمل المختلفة.
 
 تتوفر العديد من المعلمات لكل مهمة، لذا تحقق من مرجع API لكل مهمة لمعرفة ما يمكنك تعديله!
 على سبيل المثال، تحتوي [`~transformers.AutomaticSpeechRecognitionPipeline`] على معلمة `chunk_length_s` مفيدة 
