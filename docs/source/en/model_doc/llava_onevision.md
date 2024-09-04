@@ -20,6 +20,8 @@ rendered properly in your Markdown viewer.
 
 The LLaVA-Onevision model was proposed in [LLaVA-OneVision: Easy Visual Task Transfer](https://arxiv.org/abs/2408.03326) by <Bo Li, Yuanhan Zhang, Dong Guo, Renrui Zhang, Feng Li, Hao Zhang, Kaichen Zhang, Yanwei Li, Ziwei Liu, Chunyuan Li
 
+LLaVA-Onevision is a Vision-Language Model that can generate text conditioned on one or several images/videos. The model consists of SigLIP vision encoder and a Qwen2 language backbone. The images are processed with anyres-9 technique where the image is split into 9 patches to better process high resolution images and capture as much details as possible. However, videos are pooled to a total sequence length of 196 tokens each frame for more memory efficient computation. LLaVA-Onevision is available in three sizes: 0.5B, 7B and 72B and achieves remarkable performance on benchmark evaluations.
+
 The abstract from the paper is the following:
 
 *We present LLaVA-OneVision, a family of open large multimodal models (LMMs)
@@ -29,6 +31,12 @@ single-image, multi-image, and video scenarios. Importantly, the design of LLaVA
 yielding new emerging capabilities. In particular, strong video understanding and
 cross-scenario capabilities are demonstrated through task transfer from images to
 videos.*
+
+
+<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/llava-ov-acrhitecture.png"
+alt="drawing" width="600"/>
+
+<small> LLaVA=Onevision architecture. Taken from the <a href="https://arxiv.org/abs/2408.03326">original paper.</a> </small>
 
 Tips:
 
