@@ -91,6 +91,9 @@ class ViTPoseConfig(PretrainedConfig):
         if backbone_config is not None and backbone is not None:
             raise ValueError("You can't specify both `backbone` and `backbone_config`.")
 
+        if use_timm_backbone:
+            raise ValueError("Currently using timm backbone is not supported yet.")
+
         if backbone_config is None and backbone is None:
             logger.info("`backbone_config` is `None`. Initializing the config with the default `VitPose` backbone.")
             backbone_config = CONFIG_MAPPING["vitpose_backbone"](out_features=["stage4"])
