@@ -85,6 +85,10 @@ jobs:
         run: |
           python3 -m pip install --no-cache-dir git+https://github.com/huggingface/accelerate@main#egg=accelerate
 
+      - name: update huggingface_hub cli
+        run: |
+          python3 -m pip install -U git+https://github.com/huggingface/huggingface_hub.git@36bc497644ed6f8cbc6d61d0ccecda369e66b26f
+          
       - name: NVIDIA-SMI
         run: |
           nvidia-smi
