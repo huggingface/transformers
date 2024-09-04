@@ -1586,6 +1586,8 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel):
                 pixel_values_videos = pixel_values_videos.type(self.visual.get_dtype())
                 video_embeds = self.visual(pixel_values_videos, grid_thw=video_grid_thw).to(inputs_embeds.device)
                 video_mask = input_ids == self.config.video_token_id
+                if self.training:
+                    inputs_embeds = inputs_embeds.clone()
                 inputs_embeds[video_mask] = video_embeds
             if attention_mask is not None:
                 attention_mask = attention_mask.to(inputs_embeds.device)
