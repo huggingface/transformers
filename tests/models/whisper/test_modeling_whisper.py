@@ -1606,7 +1606,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_generate_output_type(self, return_dict_in_generate):
         expected_output_type = GenerateEncoderDecoderOutput if return_dict_in_generate else torch.Tensor
         for model_class in self.all_generative_model_classes:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs()
+            config, inputs = self.model_tester.prepare_config_and_inputs()
             model = model_class(config).to(torch_device).eval()
 
             # short-form generation without fallback
