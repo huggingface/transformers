@@ -30,7 +30,7 @@ def pull_message(step_log: dict):
         used_code = step_log["tool_call"]["tool_name"] == "code interpreter"
         content = step_log["tool_call"]["tool_arguments"]
         if used_code:
-            content = f"```py\n{content}\n```"
+            content = f"<code>\n{content}\n</code>"
         yield ChatMessage(
             role="assistant",
             metadata={"title": f"🛠️ Used tool {step_log['tool_call']['tool_name']}"},
