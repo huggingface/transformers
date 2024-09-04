@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import unittest
-
+import torch
 from transformers.testing_utils import require_vision
 from transformers.utils import is_vision_available
 
@@ -39,3 +39,27 @@ class LlavaProcessorTest(unittest.TestCase):
 
         formatted_prompt = processor.apply_chat_template(messages, add_generation_prompt=True)
         self.assertEqual(expected_prompt, formatted_prompt)
+
+    def test_image_token_filling(self):
+        processor = AutoProcessor.from_pretrained("llava-hf/llava-v1.6-vicuna-7b-hf")
+        processor.patch_size = 14
+        processor.vision_feature_select_strategy = "default"
+        image = torch.randint(0, 2, (3, 500, 316))
+        expected_image_tokens = 1526
+
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image"},
+                    {"type": "text", "text": "What is shown in this image?"},
+                ],
+            },
+        ]
+        inputs = processor(
+            text=[processor.apply_chat_template(messages)],
+            images=[image],
+            return_tensors="pt",
+        )
+        image_tokens = (inputs["input_ids"] == 32000).sum().item()
+        self.assertEqual(expected_image_tokens, image_tokens)
