@@ -15,16 +15,18 @@
 """Testing suite for the PyTorch ProPainter model."""
 
 import copy
-import gc
 import unittest
+from typing import Dict, List, Tuple
 
 import numpy as np
-import requests
-
 from datasets import load_dataset
+
 from transformers import PretrainedConfig, ProPainterConfig
 from transformers.models.auto import get_values
-from transformers.models.auto.modeling_auto import MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES, MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES
+from transformers.models.auto.modeling_auto import (
+    MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES,
+    MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES,
+)
 from transformers.testing_utils import (
     require_accelerate,
     require_torch,
@@ -35,7 +37,6 @@ from transformers.testing_utils import (
     torch_device,
 )
 from transformers.utils import cached_property, is_torch_available, is_vision_available
-from typing import Dict, List, Tuple
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -44,13 +45,13 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 
 if is_torch_available():
     import torch
-    from torch import nn
+
     from transformers import ProPainterModel
 
 
 if is_vision_available():
-    from PIL import Image
     from transformers import ProPainterImageProcessor
+
 
 def _config_zero_init(config):
     configs_no_init = copy.deepcopy(config)
@@ -61,6 +62,7 @@ def _config_zero_init(config):
             no_init_subconfig = _config_zero_init(getattr(configs_no_init, key))
             setattr(configs_no_init, key, no_init_subconfig)
     return configs_no_init
+
 
 class ProPainterModelTester:
     def __init__(
@@ -83,14 +85,15 @@ class ProPainterModelTester:
         self.num_attention_heads = num_attention_heads
         self.num_frames = num_frames
 
-
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_frames, 3, self.image_size, self.image_size])
 
         pixel_values_inp = pixel_values.cpu().numpy().astype(np.uint8)[0]
         pixel_values_inp = [pixel_values_inp[t].transpose(1, 2, 0) for t in range(pixel_values_inp.shape[0])]
 
-        masks = ids_tensor([self.batch_size, self.num_frames, 1, self.image_size, self.image_size], vocab_size=2).float()
+        masks = ids_tensor(
+            [self.batch_size, self.num_frames, 1, self.image_size, self.image_size], vocab_size=2
+        ).float()
         flow_masks = masks_dilated = masks
         config = self.get_config()
 
@@ -101,21 +104,23 @@ class ProPainterModelTester:
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
-            num_local_frames_flow_complete_net = self.num_frames,
-            num_local_frames_propainter = self.num_frames,
+            num_local_frames_flow_complete_net=self.num_frames,
+            num_local_frames_propainter=self.num_frames,
         )
 
     @property
     def encoder_seq_length(self):
         window_size = self.get_config().window_size
-        return window_size[0]*window_size[1]
+        return window_size[0] * window_size[1]
 
     def create_and_check_model(self, config, pixel_values, pixel_values_inp, flow_masks, masks_dilated):
         model = ProPainterModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values, pixel_values_inp, flow_masks, masks_dilated)
-        self.parent.assertEqual(torch.tensor(result.reconstruction).shape, (self.num_frames, self.image_size, self.image_size, 3))
+        self.parent.assertEqual(
+            torch.tensor(result.reconstruction).shape, (self.num_frames, self.image_size, self.image_size, 3)
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -126,7 +131,12 @@ class ProPainterModelTester:
             flow_masks,
             masks_dilated,
         ) = config_and_inputs
-        inputs_dict = {"pixel_values": pixel_values, "pixel_values_inp": pixel_values_inp, "flow_masks": flow_masks, "masks_dilated": masks_dilated}
+        inputs_dict = {
+            "pixel_values": pixel_values,
+            "pixel_values_inp": pixel_values_inp,
+            "flow_masks": flow_masks,
+            "masks_dilated": masks_dilated,
+        }
         return config, inputs_dict
 
 
@@ -137,13 +147,7 @@ class ProPainterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     attention_mask and seq_length.
     """
 
-    all_model_classes = (
-        (
-            ProPainterModel,
-        )
-        if is_torch_available()
-        else ()
-    )
+    all_model_classes = (ProPainterModel,) if is_torch_available() else ()
     pipeline_model_mapping = {"image-to-image": ProPainterModel} if is_torch_available() else {}
     fx_compatible = False
 
@@ -230,11 +234,16 @@ class ProPainterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             else:
                 self.assertIn(
                     list(attentions[0][1].shape[-4:])[1],
-                    [6, 8]  # Allowable values for this dimension
+                    [6, 8],  # Allowable values for this dimension
                 )
                 self.assertListEqual(
                     list(attentions[0][1].shape[-4:]),
-                    [self.model_tester.num_attention_heads, list(attentions[0][1].shape[-4:])[1], encoder_seq_length, encoder_key_length],
+                    [
+                        self.model_tester.num_attention_heads,
+                        list(attentions[0][1].shape[-4:])[1],
+                        encoder_seq_length,
+                        encoder_key_length,
+                    ],
                 )
             out_len = len(outputs)
 
@@ -305,11 +314,16 @@ class ProPainterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             else:
                 self.assertIn(
                     list(attentions[0][1].shape[-4:])[1],
-                    [6, 8]  # Allowable values for this dimension
+                    [6, 8],  # Allowable values for this dimension
                 )
                 self.assertListEqual(
                     list(attentions[0][1].shape[-4:]),
-                    [self.model_tester.num_attention_heads, list(attentions[0][1].shape[-4:])[1], encoder_seq_length, encoder_key_length],
+                    [
+                        self.model_tester.num_attention_heads,
+                        list(attentions[0][1].shape[-4:])[1],
+                        encoder_seq_length,
+                        encoder_key_length,
+                    ],
                 )
 
     def test_feed_forward_chunking(self):
@@ -333,7 +347,7 @@ class ProPainterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             model.eval()
 
             hidden_states_with_chunk = model(**self._prepare_for_class(inputs_dict, model_class))[0]
-            #As the output at idx 0 is a tuple with three different losses together whihc are generator loss, discriminator loss and flow complete loss
+            # As the output at idx 0 is a tuple with three different losses together whihc are generator loss, discriminator loss and flow complete loss
             for hs_no_chunk, hs_with_chunk in zip(hidden_states_no_chunk, hidden_states_with_chunk):
                 self.assertTrue(torch.allclose(hs_no_chunk, hs_with_chunk, atol=1e-3))
 
@@ -349,7 +363,7 @@ class ProPainterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             model = model_class(config=configs_no_init)
             for name, param in model.named_parameters():
                 if param.requires_grad:
-                    #Because these are initialised by kaiming_normal_ method and due to weight init model's output is not deterministic
+                    # Because these are initialised by kaiming_normal_ method and due to weight init model's output is not deterministic
                     mean_value = (param.data.mean() * 1e9).round() / 1e9
                     if abs(mean_value.item()) < 1e-3:
                         self.assertAlmostEqual(
@@ -382,7 +396,7 @@ class ProPainterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             )
             self.assertEqual(len(hidden_states), expected_num_layers)
 
-            seq_length = [6,8] #Timesteps of tokens
+            seq_length = [6, 8]  # Timesteps of tokens
             self.assertIn(
                 list(hidden_states[0].shape[-2:]),
                 [[seq_length[0], self.model_tester.hidden_size], [seq_length[1], self.model_tester.hidden_size]],
@@ -445,12 +459,18 @@ class ProPainterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
                         # skip hidden states & attentions as the model is not deterministic due to weights init
                         is_hidden_state_tensor = False
-                        if len(tuple_object.shape)>0:
-                            is_hidden_state_tensor = ((tuple_object.shape[-1] == self.model_tester.hidden_size) or (tuple_object.shape[-2] == self.model_tester.encoder_seq_length) or (tuple_object.shape[-2] == 360))
+                        if len(tuple_object.shape) > 0:
+                            is_hidden_state_tensor = (
+                                (tuple_object.shape[-1] == self.model_tester.hidden_size)
+                                or (tuple_object.shape[-2] == self.model_tester.encoder_seq_length)
+                                or (tuple_object.shape[-2] == 360)
+                            )
                         if not is_hidden_state_tensor:
                             self.assertTrue(
                                 torch.allclose(
-                                    set_nan_tensor_to_zero(tuple_object), set_nan_tensor_to_zero(dict_object), atol=1e-4
+                                    set_nan_tensor_to_zero(tuple_object),
+                                    set_nan_tensor_to_zero(dict_object),
+                                    atol=1e-4,
                                 ),
                                 msg=(
                                     "Tuple and dict output are not equal. Difference:"
@@ -547,13 +567,13 @@ class ProPainterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             hidden_states.retain_grad()
 
             if self.has_attentions:
-                #each element has both spatial and temporal attention
+                # each element has both spatial and temporal attention
                 attentions_t = outputs.attentions[0]
                 attentions_t[0].retain_grad()
                 attentions_s = outputs.attentions[1]
                 attentions_s[0].retain_grad()
 
-            #output variable consists of three losses
+            # output variable consists of three losses
             output[0].flatten()[0].backward(retain_graph=True)
             output[1].flatten()[0].backward(retain_graph=True)
             output[2].flatten()[0].backward(retain_graph=True)
@@ -564,16 +584,16 @@ class ProPainterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
                 self.assertIsNotNone(attentions_t[0].grad)
                 self.assertIsNotNone(attentions_s[0].grad)
 
+
 # We will verify our results on a video of a boy riding a bicycle
 def prepare_video():
     ds = load_dataset("ruffy369/propainter-object-removal")
-    ds_images = ds['train']["image"]
-    num_frames = len(ds_images)//2
+    ds_images = ds["train"]["image"]
+    num_frames = len(ds_images) // 2
     video = [np.array(ds_images[i]) for i in range(num_frames)]
-    #stack to convert H,W mask frame to compatible H,W,C frame
-    masks = [np.stack([np.array(ds_images[i])] * 3, axis=-1) for i in range(num_frames, 2*num_frames)]
+    # stack to convert H,W mask frame to compatible H,W,C frame
+    masks = [np.stack([np.array(ds_images[i])] * 3, axis=-1) for i in range(num_frames, 2 * num_frames)]
     return video, masks
-
 
 
 @require_torch
@@ -596,14 +616,18 @@ class ProPainterModelIntegrationTest(unittest.TestCase):
             outputs = model(**inputs)
 
         # verify the logits
-        expected_shape = torch.Size((80, 240,432, 3))
+        expected_shape = torch.Size((80, 240, 432, 3))
         self.assertEqual(torch.tensor(outputs.reconstruction).shape, expected_shape)
 
-        expected_slice = torch.tensor([[117, 116, 122],
-        [118, 117, 123],
-        [118, 119, 124]], dtype=torch.uint8).to(torch_device)
+        expected_slice = torch.tensor([[117, 116, 122], [118, 117, 123], [118, 119, 124]], dtype=torch.uint8).to(
+            torch_device
+        )
 
-        self.assertTrue(torch.allclose(torch.tensor(outputs.reconstruction)[0, 0, :3, :3].to(torch_device), expected_slice, atol=1e-4))
+        self.assertTrue(
+            torch.allclose(
+                torch.tensor(outputs.reconstruction)[0, 0, :3, :3].to(torch_device), expected_slice, atol=1e-4
+            )
+        )
 
     @unittest.skip("Cant do half precision")
     @slow

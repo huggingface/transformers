@@ -15,8 +15,9 @@
 
 import inspect
 import unittest
-import numpy as np
 import warnings
+
+import numpy as np
 
 from transformers.image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 from transformers.testing_utils import require_torch, require_vision
@@ -127,7 +128,7 @@ class ProPainterImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
         self.assertTrue(hasattr(image_processing, "image_std"))
         self.assertTrue(hasattr(image_processing, "do_convert_rgb"))
 
-    # Copied from tests.models.cvideo_llava.test_image_processing_video_llava.VideoLlavaImageProcessingTest.test_image_processor_from_dict_with_kwargs
+    # Copied from tests.models.video_llava.test_image_processing_video_llava.VideoLlavaImageProcessingTest.test_image_processor_from_dict_with_kwargs
     def test_image_processor_from_dict_with_kwargs(self):
         image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
         self.assertEqual(image_processor.size, {"shortest_edge": 20})
@@ -148,7 +149,9 @@ class ProPainterImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
 
         mask_inputs = [[frame.point(lambda p: 1 if p >= 128 else 0) for frame in video] for video in video_inputs]
         # Test not batched input
-        encoded_videos = image_processing(images=video_inputs[0], masks=mask_inputs[0], return_tensors="pt").pixel_values
+        encoded_videos = image_processing(
+            images=video_inputs[0], masks=mask_inputs[0], return_tensors="pt"
+        ).pixel_values
         expected_output_video_shape = (1, 10, 3, 18, 18)
         self.assertEqual(tuple(encoded_videos.shape), expected_output_video_shape)
 
@@ -168,7 +171,9 @@ class ProPainterImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
 
         mask_inputs = [[np.where(frame > 128, 1, 0) for frame in video] for video in video_inputs]
         # Test not batched input
-        encoded_images = image_processing(images=video_inputs[0], masks=mask_inputs[0], return_tensors="pt").pixel_values
+        encoded_images = image_processing(
+            images=video_inputs[0], masks=mask_inputs[0], return_tensors="pt"
+        ).pixel_values
         expected_output_image_shape = (1, 10, 3, 18, 18)
         self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
@@ -187,9 +192,13 @@ class ProPainterImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
             self.assertIsInstance(video, list)
             self.assertIsInstance(video[0], torch.Tensor)
 
-        mask_inputs = [[torch.where(frame > 128, torch.tensor(1), torch.tensor(0)) for frame in video] for video in video_inputs]
+        mask_inputs = [
+            [torch.where(frame > 128, torch.tensor(1), torch.tensor(0)) for frame in video] for video in video_inputs
+        ]
         # Test not batched input
-        encoded_images = image_processing(images=video_inputs[0], masks=mask_inputs[0], return_tensors="pt").pixel_values
+        encoded_images = image_processing(
+            images=video_inputs[0], masks=mask_inputs[0], return_tensors="pt"
+        ).pixel_values
         expected_output_image_shape = (1, 10, 3, 18, 18)
         self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
@@ -197,7 +206,6 @@ class ProPainterImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
         encoded_images = image_processing(images=video_inputs, masks=mask_inputs, return_tensors="pt").pixel_values
         expected_output_image_shape = (5, 10, 3, 18, 18)
         self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
-
 
     def test_call_numpy_4_channels(self):
         # Test that can process images which have an arbitrary number of channels
@@ -212,7 +220,7 @@ class ProPainterImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
         # Test not batched input
         encoded_images = image_processor(
             video_inputs[0],
-            masks = mask_inputs[0],
+            masks=mask_inputs[0],
             return_tensors="pt",
             input_data_format="channels_first",
             image_mean=0,
@@ -224,7 +232,7 @@ class ProPainterImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
         # Test batched
         encoded_images = image_processor(
             video_inputs,
-            masks = mask_inputs,
+            masks=mask_inputs,
             return_tensors="pt",
             input_data_format="channels_first",
             image_mean=0,
@@ -263,7 +271,7 @@ class ProPainterImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
                 mask_inputs = [[frame.point(lambda p: 1 if p >= 128 else 0) for frame in video] for video in inputs]
                 with warnings.catch_warnings(record=True) as raised_warnings:
                     warnings.simplefilter("always")
-                    image_processor(inputs, masks = mask_inputs, extra_argument=True)
+                    image_processor(inputs, masks=mask_inputs, extra_argument=True)
 
                 messages = " ".join([str(w.message) for w in raised_warnings])
                 self.assertGreaterEqual(len(raised_warnings), 1)

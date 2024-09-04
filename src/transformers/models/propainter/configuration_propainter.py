@@ -14,11 +14,6 @@
 # limitations under the License.
 """ProPainter model configuration"""
 
-from collections import OrderedDict
-from typing import Mapping
-
-from packaging import version
-
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -30,9 +25,9 @@ class ProPainterConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ProPainterModel`]. It is used to instantiate a ProPainter
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the ProPainter [ruffy369/propainter](https://huggingface.co/ruffy369/propainter) 
-    architecture. 
-    
+    defaults will yield a similar configuration to that of the ProPainter [ruffy369/propainter](https://huggingface.co/ruffy369/propainter)
+    architecture.
+
     The original configuration and code can be referred from [here](https://github.com/sczhou/ProPainter)
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -94,7 +89,6 @@ class ProPainterConfig(PretrainedConfig):
     #     "num_key_value_heads": "num_heads",
     # }
 
-
     def __init__(
         self,
         width_flow_complete_net=432,
@@ -153,14 +147,13 @@ class ProPainterConfig(PretrainedConfig):
         pool_size=[4, 4],
         no_dis=0,
         flow_weight=0.25,
-        
         **kwargs,
     ):
         super().__init__(**kwargs)
 
-        self.width_flow_complete_net =  width_flow_complete_net
+        self.width_flow_complete_net = width_flow_complete_net
         self.height_flow_complete_net = height_flow_complete_net
-        self.width_propainter =  width_propainter
+        self.width_propainter = width_propainter
         self.height_propainter = height_propainter
         self.num_local_frames_flow_complete_net = num_local_frames_flow_complete_net
         self.num_ref_frames_flow_complete_net = num_ref_frames_flow_complete_net

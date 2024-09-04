@@ -25,7 +25,6 @@ from transformers.utils.generic import TensorType
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import (
     get_resize_output_image_size,
-    rescale,
     resize,
     to_channel_dimension_format,
 )
@@ -34,8 +33,8 @@ from ...image_utils import (
     IMAGENET_STANDARD_STD,
     ChannelDimension,
     ImageInput,
-    VideoInput,
     PILImageResampling,
+    VideoInput,
     get_image_size,
     infer_channel_dimension_format,
     is_scaled_image,
@@ -44,7 +43,8 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
-from ...utils import filter_out_non_signature_kwargs, logging, requires_backends, is_scipy_available
+from ...utils import filter_out_non_signature_kwargs, is_scipy_available, logging, requires_backends
+
 
 if is_scipy_available():
     from scipy.ndimage import binary_dilation
@@ -54,7 +54,7 @@ if is_vision_available():
 
 logger = logging.get_logger(__name__)
 
-#Adapted from original code at https://github.com/sczhou/ProPainter
+# Adapted from original code at https://github.com/sczhou/ProPainter
 
 
 def make_batched(videos) -> List[List[VideoInput]]:
@@ -69,11 +69,12 @@ def make_batched(videos) -> List[List[VideoInput]]:
 
     raise ValueError(f"Could not make batched video from {videos}")
 
+
 # Copied from transformers.models.superpoint.image_processing_superpoint.convert_to_grayscale
 def convert_to_grayscale_and_dilation(
     image: ImageInput,
     input_data_format: Optional[Union[str, ChannelDimension]] = None,
-    mask_dilation: int  = 4,
+    mask_dilation: int = 4,
 ) -> ImageInput:
     """
     Converts an image to grayscale format using the NTSC formula and performs binary dilation on an image. Only support numpy and PIL Image. TODO support torch
@@ -109,14 +110,14 @@ def convert_to_grayscale_and_dilation(
 
     return image
 
+
 def extrapolation(
     image: ImageInput,
     input_data_format: Optional[Union[str, ChannelDimension]] = None,
     scale: Optional[tuple[float, float]] = None,
     num_frames: int = None,
 ):
-    """Prepares the data for video outpainting.
-    """
+    """Prepares the data for video outpainting."""
     if input_data_format is None:
         input_data_format = infer_channel_dimension_format(image[0])
 
@@ -135,37 +136,40 @@ def extrapolation(
     if input_data_format == ChannelDimension.LAST:
         for v in image:
             frame = np.zeros(((height_extr, width_extr, 3)), dtype=np.uint8)
-            frame[height_start: height_start + height, width_start: width_start + width, :] = v
+            frame[height_start : height_start + height, width_start : width_start + width, :] = v
             images.append(frame)
     elif input_data_format == ChannelDimension.FIRST:
         for v in image:
             frame = np.zeros((3, height_extr, width_extr), dtype=np.uint8)  # Adjusted shape
-            frame[:, height_start: height_start + height, width_start: width_start + width] = v
-            
+            frame[:, height_start : height_start + height, width_start : width_start + width] = v
+
             # Transpose to (height_extr, width_extr, num_channels)
             images.append(np.transpose(frame, (1, 2, 0)))  # Adjusted transpose
 
     # Generates the mask for missing region.
     masks_dilated = []
     flow_masks = []
-    
+
     dilate_h = 4 if height_start > 10 else 0
     dilate_w = 4 if width_start > 10 else 0
     mask = np.ones(((height_extr, width_extr)), dtype=np.uint8)
-    
-    mask[height_start+dilate_h: height_start+height-dilate_h, 
-        width_start+dilate_w: width_start+width-dilate_w] = 0
+
+    mask[
+        height_start + dilate_h : height_start + height - dilate_h,
+        width_start + dilate_w : width_start + width - dilate_w,
+    ] = 0
     flow_masks.append((mask * 255))
 
-    mask[height_start: height_start+height, width_start: width_start+width] = 0
+    mask[height_start : height_start + height, width_start : width_start + width] = 0
     masks_dilated.append((mask * 255))
 
     flow_masks = flow_masks * num_frames
     masks_dilated = masks_dilated * num_frames
-    
+
     return images, flow_masks, masks_dilated, (height_extr, width_extr)
 
-#Adapted from transformers.image_transforms.NumpyToTensor
+
+# Adapted from transformers.image_transforms.NumpyToTensor
 class NumpyToTensor:
     """
     Convert a numpy array to a PyTorch tensor.
@@ -175,11 +179,12 @@ class NumpyToTensor:
 
     def __call__(self, image: np.ndarray):
         # Same as in PyTorch, we assume incoming numpy images are in HWC format
-        
-        image =  np.stack(image, axis=2)
+
+        image = np.stack(image, axis=2)
         image = torch.from_numpy(image).permute(2, 0, 1, 3).contiguous()
         image = image.float().div(255)
         return image
+
 
 class ProPainterImageProcessor(BaseImageProcessor):
     r"""
@@ -234,7 +239,7 @@ class ProPainterImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         scale_hw: Optional[tuple[float, float]] = None,
-        mask_dilation: int  = 4,
+        mask_dilation: int = 4,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -316,7 +321,7 @@ class ProPainterImageProcessor(BaseImageProcessor):
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         is_mask_frame: bool = None,
-        mask_dilation: int  = None,
+        mask_dilation: int = None,
     ) -> np.ndarray:
         """Preprocesses a single image."""
 
@@ -332,7 +337,6 @@ class ProPainterImageProcessor(BaseImageProcessor):
             size=size,
             resample=resample,
         )
-        
 
         # All transformations expect numpy arrays.
         image = to_numpy_array(image)
@@ -350,16 +354,20 @@ class ProPainterImageProcessor(BaseImageProcessor):
             image = self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
 
         if is_mask_frame:
-            image = convert_to_grayscale_and_dilation(image, input_data_format=input_data_format, mask_dilation=mask_dilation)
+            image = convert_to_grayscale_and_dilation(
+                image, input_data_format=input_data_format, mask_dilation=mask_dilation
+            )
 
         if do_center_crop:
             image = self.center_crop(image, size=crop_size, input_data_format=input_data_format)
 
         if do_rescale:
-            image = self.rescale(image=image, scale=rescale_factor, dtype =np.uint8, input_data_format=input_data_format)
+            image = self.rescale(
+                image=image, scale=rescale_factor, dtype=np.uint8, input_data_format=input_data_format
+            )
 
         # If the mask frames even consisted of 0s and 255s, they are already rescaled and normally masks are not normalised as well
-        if do_normalize and not(is_mask_frame):
+        if do_normalize and not (is_mask_frame):
             image = self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
 
         image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
@@ -471,7 +479,7 @@ class ProPainterImageProcessor(BaseImageProcessor):
         masks = make_batched(masks)
 
         video_size = get_image_size(to_numpy_array(videos[0][0]), input_data_format)
-        video_size = (video_size[0]-video_size[0]%8, video_size[1]-video_size[1]%8)
+        video_size = (video_size[0] - video_size[0] % 8, video_size[1] - video_size[1] % 8)
 
         videos = [
             [
@@ -489,7 +497,7 @@ class ProPainterImageProcessor(BaseImageProcessor):
                     image_std=image_std,
                     data_format=data_format,
                     input_data_format=input_data_format,
-                    is_mask_frame = False,
+                    is_mask_frame=False,
                 )
                 for img in video
             ]
@@ -500,48 +508,55 @@ class ProPainterImageProcessor(BaseImageProcessor):
         if scale_hw is None:
             for mask in masks:
                 pixel_values_mask = [
-                        self._preprocess_image(
-                            image=img,
-                            do_resize=True,
-                            size={"height": video_size[0], "width": video_size[1]},
-                            resample=PILImageResampling.NEAREST,
-                            do_center_crop=do_center_crop,
-                            crop_size=crop_size,
-                            do_rescale=True,
-                            rescale_factor=255,
-                            do_normalize=do_normalize,
-                            image_mean=image_mean,
-                            image_std=image_std,
-                            data_format=data_format,
-                            input_data_format=input_data_format,
-                            is_mask_frame = True,
-                            mask_dilation= mask_dilation,
-                        )
-                        for img in mask
-                    ]
+                    self._preprocess_image(
+                        image=img,
+                        do_resize=True,
+                        size={"height": video_size[0], "width": video_size[1]},
+                        resample=PILImageResampling.NEAREST,
+                        do_center_crop=do_center_crop,
+                        crop_size=crop_size,
+                        do_rescale=True,
+                        rescale_factor=255,
+                        do_normalize=do_normalize,
+                        image_mean=image_mean,
+                        image_std=image_std,
+                        data_format=data_format,
+                        input_data_format=input_data_format,
+                        is_mask_frame=True,
+                        mask_dilation=mask_dilation,
+                    )
+                    for img in mask
+                ]
                 if len(mask) == 1:
-                  pixel_values_mask = pixel_values_mask * len(videos[0])
+                    pixel_values_mask = pixel_values_mask * len(videos[0])
                 pixel_values_masks.append(pixel_values_mask)
         else:
-            #for outpainting of videos
-            videos, flow_masks, masks_dilated, (height_extr, width_extr)= [extrapolation(
-                        video, scale = scale_hw, num_frames=len(video))
-                        for video in videos]
+            # for outpainting of videos
+            videos, flow_masks, masks_dilated, (height_extr, width_extr) = [
+                extrapolation(video, scale=scale_hw, num_frames=len(video)) for video in videos
+            ]
 
         if scale_hw is None:
-            #masks is for both flow_masks, masks_dilated, just add the same data to both variables in case of inpainting
+            # masks is for both flow_masks, masks_dilated, just add the same data to both variables in case of inpainting
             flow_masks = masks_dilated = torch.stack([to_tensors(mask) for mask in pixel_values_masks], dim=0)
         else:
-            flow_masks, = torch.stack([to_tensors(mask) for mask in flow_masks], dim=0)
+            (flow_masks,) = torch.stack([to_tensors(mask) for mask in flow_masks], dim=0)
             masks_dilated = torch.stack([to_tensors(mask) for mask in masks_dilated], dim=0)
 
         # This input kwarg is only utilised during inference on a single batch or one video for predictions
-        if len(videos)==1:
-            videos_inp = [[np.array(frame).transpose(1,2,0).astype(np.uint8) for frame in video] for video in videos][0]
+        if len(videos) == 1:
+            videos_inp = [
+                [np.array(frame).transpose(1, 2, 0).astype(np.uint8) for frame in video] for video in videos
+            ][0]
         else:
             videos_inp = torch.empty(0)
 
         videos = torch.stack([to_tensors(video) * 2 - 1 for video in videos], dim=0)
 
-        data = {"pixel_values": videos, "pixel_values_inp": videos_inp, "flow_masks": flow_masks, "masks_dilated": masks_dilated}
+        data = {
+            "pixel_values": videos,
+            "pixel_values_inp": videos_inp,
+            "flow_masks": flow_masks,
+            "masks_dilated": masks_dilated,
+        }
         return BatchFeature(data=data, tensor_type=return_tensors)
