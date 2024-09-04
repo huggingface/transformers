@@ -800,7 +800,6 @@ class MllamaConverter(TikTokenConverter):
             "<|eot_id|>",  # end of turn
             "<|python_tag|>",
             "<|image|>",
-            "<|video|>",
         ] 
         special_tokens += [
             f"<|reserved_special_token_{i + 2}|>"
@@ -859,12 +858,12 @@ write_model(
     vocab_size=128256,
 )
 
-# write_tokenizer(
-#     "../llama-87b-vision-dummy/weights/Meta-Llama-3.1-87B-Vision-Dummy-20240624190000/tokenizer.model",
-#     "mllama",
-# )
+write_tokenizer(
+    tokenizer_path="/home/ubuntu/projects/meta_mllama/weights-11b-biases/tokenizer.model",
+    save_dir="/home/ubuntu/projects/new-model-addition-mllama/mllama-11b",
+)
 
-# write_image_processor(
-#     "../llama-87b-vision-dummy/weights/Meta-Llama-3.1-87B-Vision-Dummy-20240624190000/params.json",
-#     "mllama",
-# )
+write_image_processor(
+    config_path="/home/ubuntu/projects/meta_mllama/weights-11b-biases/params.json",
+    save_dir="/home/ubuntu/projects/new-model-addition-mllama/mllama-11b",
+)
