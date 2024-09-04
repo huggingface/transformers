@@ -146,7 +146,7 @@ pip install datasets
 
 </Tip>
 
-### بناء التنسرات Build tensors
+### بناء الموترات Build tensors
 
 أخيرًا، تريد أن يقوم  المجزئ اللغوي بإرجاع موترات (tensors) الفعلية التي ستُغذي النموذج.
 
