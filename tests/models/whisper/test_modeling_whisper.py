@@ -218,6 +218,8 @@ class WhisperModelTester:
         num_conv_layers=1,
         suppress_tokens=None,
     ):
+        config = self.get_config()
+        
         self.parent = parent
         self.batch_size = batch_size
         self.seq_length = seq_length
@@ -234,7 +236,7 @@ class WhisperModelTester:
         self.num_mel_bins = num_mel_bins
         self.max_position_embeddings = max_position_embeddings
         self.max_source_positions = max_source_positions
-        self.max_target_positions = 448
+        self.max_target_positions = config.max_target_positions
         self.eos_token_id = eos_token_id
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
