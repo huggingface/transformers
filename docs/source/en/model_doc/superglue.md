@@ -17,9 +17,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The SuperGlue model was proposed
-in [SuperGlue: Learning Feature Matching with Graph Neural Networks](https://arxiv.org/abs/1911.11763) by Paul-Edouard Sarlin, Daniel
-DeTone, Tomasz Malisiewicz and Andrew Rabinovich.
+The SuperGlue model was proposed in [SuperGlue: Learning Feature Matching with Graph Neural Networks](https://arxiv.org/abs/1911.11763) by Paul-Edouard Sarlin, Daniel DeTone, Tomasz Malisiewicz and Andrew Rabinovich.
 
 This model consists of matching two sets of interest points detected in an image. Paired with the 
 [SuperPoint model](https://huggingface.co/magic-leap-community/superpoint), it can be used to match two images and 
@@ -76,7 +74,7 @@ image0_matching_scores = outputs.matching_scores[0, 0][image0_indices]
 image1_matching_scores = outputs.matching_scores[0, 1][image1_indices]
 ```
 
-You can then print the matched keypoints on a side-by-side image to visualize the result :
+You can then print the matched keypoints on a side-by-side image to visualize the result:
 
 ```python
 import numpy as np
