@@ -23,7 +23,6 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...modeling_attn_mask_utils import (
-    AttentionMaskConverter,
     _prepare_4d_causal_attention_mask,
     _prepare_4d_causal_attention_mask_for_sdpa,
 )
@@ -285,7 +284,7 @@ class OptFlashAttention2(OPTAttention):
         bsz, _, _ = hidden_states.size()
 
         # get query proj
-        query_states = self.q_proj(hidden_states) 
+        query_states = self.q_proj(hidden_states)
         # get key, value proj
         past_key_value, key_states, value_states = self._update_key_and_values(
             hidden_states, key_value_states, past_key_value, is_cross_attention, bsz
@@ -404,9 +403,9 @@ class OPTSdpaAttention(OPTAttention):
             dropout_p=self.dropout if self.training else 0.0,
             is_causal=is_causal,
             # this model uses the scaling factor in the query projection for some reason, but not in Q@K^T
-            # so we need to scale to remove scaling in SDPA to have similar results with eager. 
+            # so we need to scale to remove scaling in SDPA to have similar results with eager.
             # Maybe needs a change in the model to remove scaling in query projection
-            scale=1.0, 
+            scale=1.0,
         )
 
         attn_output = attn_output.transpose(1, 2).contiguous()
@@ -698,7 +697,7 @@ class OPTDecoder(OPTPreTrainedModel):
             )
 
             return causal_attention_mask, attention_mask
-       
+
         if attention_mask is None:
             attention_mask = torch.ones(batch_size, mask_seq_length, device=inputs_embeds.device)
         elif attention_mask.shape[1] != mask_seq_length:

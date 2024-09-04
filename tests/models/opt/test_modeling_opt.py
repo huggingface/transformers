@@ -21,7 +21,14 @@ import unittest
 import timeout_decorator  # noqa
 
 from transformers import OPTConfig, is_torch_available
-from transformers.testing_utils import require_torch, require_torch_accelerator, require_torch_fp16, require_torch_sdpa, slow, torch_device
+from transformers.testing_utils import (
+    require_torch,
+    require_torch_accelerator,
+    require_torch_fp16,
+    require_torch_sdpa,
+    slow,
+    torch_device,
+)
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -330,7 +337,8 @@ class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         """
         max_new_tokens = 30
         _, input_dict = self.model_tester.prepare_config_and_inputs()
-        model_sdpa = OPTForCausalLM.from_pretrained("facebook/opt-125M",
+        model_sdpa = OPTForCausalLM.from_pretrained(
+            "facebook/opt-125M",
             torch_dtype=torch.float16,
             low_cpu_mem_usage=True,
             attn_implementation="sdpa",
