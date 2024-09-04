@@ -18,6 +18,7 @@ import gc
 import unittest
 
 import requests
+from typing import List, Dict, Union
 
 from transformers import (
     AutoProcessor,
@@ -496,7 +497,7 @@ class Qwen2VLIntegrationTest(unittest.TestCase):
             EXPECTED_DECODED_TEXT,
         )
 
-    def extract_vision_info(self, conversations: list[dict] | list[list[dict]]) -> list[dict]:
+    def extract_vision_info(self, conversations: Union[List[Dict], List[List[Dict]]]) -> List[Dict]:
         """
         Extracts vision information (image or video data) from a list of conversations.
 
