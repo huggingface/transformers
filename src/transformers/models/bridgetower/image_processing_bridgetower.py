@@ -115,8 +115,8 @@ def get_resize_output_image_size(
         new_width = scale * new_width
 
     new_height, new_width = int(new_height + 0.5), int(new_width + 0.5)
-    new_height = new_height // size_divisor * size_divisor
-    new_width = new_width // size_divisor * size_divisor
+    new_height = max(1, new_height // size_divisor) * size_divisor
+    new_width = max(1, new_width // size_divisor) * size_divisor
 
     return new_height, new_width
 
@@ -238,9 +238,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
                 The channel dimension format of the input image. If not provided, it will be inferred.
         """
         size = get_size_dict(size, default_to_square=False)
-        if "shortest_edge" not in size:
-            raise ValueError(f"The `size` dictionary must contain the key `shortest_edge`. Got {size.keys()}")
-        shorter = size["shortest_edge"]
+        shorter = size["shortest_edge"] if "shortest_edge" in size else min(size["height"], size["width"])
         longer = int(1333 / 800 * shorter)
         output_size = get_resize_output_image_size(
             image, shorter=shorter, longer=longer, size_divisor=size_divisor, input_data_format=input_data_format

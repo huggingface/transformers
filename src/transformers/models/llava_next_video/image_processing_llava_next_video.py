@@ -46,21 +46,28 @@ logger = logging.get_logger(__name__)
 
 
 if is_vision_available():
-    from PIL import Image
+    import PIL
 
 
+# Copied from transformers.models.vivit.image_processing_vivit.make_batched_videos
 def make_batched_videos(videos) -> List[VideoInput]:
     if isinstance(videos, (list, tuple)) and isinstance(videos[0], (list, tuple)) and is_valid_image(videos[0][0]):
-        return videos
+        if isinstance(videos[0][0], PIL.Image.Image) or len(videos[0][0].shape) == 3:
+            return videos
 
     elif isinstance(videos, (list, tuple)) and is_valid_image(videos[0]):
-        if isinstance(videos[0], Image.Image):
+        if isinstance(videos[0], PIL.Image.Image) or len(videos[0].shape) == 3:
             return [videos]
         elif len(videos[0].shape) == 4:
-            return [list(video) for video in videos]
+            return videos
 
-    elif is_valid_image(videos) and len(videos.shape) == 4:
-        return [list(videos)]
+    elif is_valid_image(videos):
+        if isinstance(videos, PIL.Image.Image) or len(videos.shape) == 3:
+            return [[videos]]
+        elif len(videos.shape) == 4:
+            return [videos]
+        elif len(videos.shape) == 5:
+            return videos
 
     raise ValueError(f"Could not make batched video from {videos}")
 
@@ -212,7 +219,7 @@ class LlavaNextVideoImageProcessor(BaseImageProcessor):
         do_convert_rgb: bool = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-    ) -> Image.Image:
+    ) -> PIL.Image.Image:
         """
         Preprocess an image or batch of images. Copy of the `preprocess` method from `CLIPImageProcessor`.
 

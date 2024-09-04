@@ -22,16 +22,18 @@ import unittest
 import numpy as np
 import pytest
 
-from transformers import BertTokenizer, BertTokenizerFast
+from transformers import BertTokenizer, BertTokenizerFast, FlavaProcessor
 from transformers.models.bert.tokenization_bert import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_vision
 from transformers.utils import IMAGE_PROCESSOR_NAME, is_vision_available
+
+from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
     from PIL import Image
 
-    from transformers import FlavaImageProcessor, FlavaProcessor
+    from transformers import FlavaImageProcessor
     from transformers.models.flava.image_processing_flava import (
         FLAVA_CODEBOOK_MEAN,
         FLAVA_CODEBOOK_STD,
@@ -41,7 +43,9 @@ if is_vision_available():
 
 
 @require_vision
-class FlavaProcessorTest(unittest.TestCase):
+class FlavaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    processor_class = FlavaProcessor
+
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
 

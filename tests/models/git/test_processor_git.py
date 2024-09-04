@@ -21,6 +21,8 @@ import pytest
 from transformers.testing_utils import require_vision
 from transformers.utils import is_vision_available
 
+from ...test_processing_common import ProcessorTesterMixin
+
 
 if is_vision_available():
     from PIL import Image
@@ -29,7 +31,9 @@ if is_vision_available():
 
 
 @require_vision
-class GitProcessorTest(unittest.TestCase):
+class GitProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    processor_class = GitProcessor
+
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
 

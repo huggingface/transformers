@@ -16,10 +16,24 @@
 Image/Text processor class for AltCLIP
 """
 
+import sys
 import warnings
+from typing import List, Optional, Union
 
-from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import BatchEncoding
+from ...feature_extraction_utils import BatchFeature
+from ...image_utils import ImageInput
+from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
+
+
+if sys.version_info >= (3, 11):
+    from typing import Unpack
+else:
+    from typing_extensions import Unpack
+
+
+class AltCLIPProcessorKwargs(ProcessingKwargs, total=False):
+    _defaults = {}
 
 
 class AltCLIPProcessor(ProcessorMixin):
@@ -59,7 +73,14 @@ class AltCLIPProcessor(ProcessorMixin):
 
         super().__init__(image_processor, tokenizer)
 
-    def __call__(self, text=None, images=None, return_tensors=None, **kwargs):
+    def __call__(
+        self,
+        text: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
+        images: Optional[ImageInput] = None,
+        audio=None,
+        videos=None,
+        **kwargs: Unpack[AltCLIPProcessorKwargs],
+    ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to XLMRobertaTokenizerFast's [`~XLMRobertaTokenizerFast.__call__`] if `text` is not
@@ -68,24 +89,16 @@ class AltCLIPProcessor(ProcessorMixin):
         of the above two methods for more information.
 
         Args:
-            text (`str`, `List[str]`, `List[List[str]]`):
+            text (`TextInput`, `PreTokenizedInput`, `List[TextInput]`, `List[PreTokenizedInput]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
+            images (`ImageInput`, *optional*):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. Both channels-first and channels-last formats are supported.
 
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
-
         Returns:
-            [`BatchEncoding`]: A [`BatchEncoding`] with the following fields:
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 
             - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
             - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
@@ -97,19 +110,20 @@ class AltCLIPProcessor(ProcessorMixin):
         if text is None and images is None:
             raise ValueError("You have to specify either text or images. Both cannot be none.")
 
+        output_kwargs = self._merge_kwargs(
+            AltCLIPProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
+
+        data = {}
         if text is not None:
-            encoding = self.tokenizer(text, return_tensors=return_tensors, **kwargs)
-
+            text_features = self.tokenizer(text, **output_kwargs["text_kwargs"])
+            data.update(text_features)
         if images is not None:
-            image_features = self.image_processor(images, return_tensors=return_tensors, **kwargs)
-
-        if text is not None and images is not None:
-            encoding["pixel_values"] = image_features.pixel_values
-            return encoding
-        elif text is not None:
-            return encoding
-        else:
-            return BatchEncoding(data=dict(**image_features), tensor_type=return_tensors)
+            image_features = self.image_processor(images, **output_kwargs["images_kwargs"])
+            data.update(image_features)
+        return BatchFeature(data=data, tensor_type=output_kwargs["common_kwargs"].get("return_tensors"))
 
     def batch_decode(self, *args, **kwargs):
         """
