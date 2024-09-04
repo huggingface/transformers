@@ -24,11 +24,14 @@ from transformers.models.wav2vec2.tokenization_wav2vec2 import VOCAB_FILES_NAMES
 from transformers.models.wav2vec2_bert import Wav2Vec2BertProcessor
 from transformers.utils import FEATURE_EXTRACTOR_NAME
 
+from ...test_processing_common import ProcessorTesterMixin
 from ..wav2vec2.test_feature_extraction_wav2vec2 import floats_list
 
 
 # Copied from tests.models.wav2vec2.test_processor_wav2vec2.Wav2Vec2ProcessorTest with Wav2Vec2FeatureExtractor->SeamlessM4TFeatureExtractor, Wav2Vec2Processor->Wav2Vec2BertProcessor
-class Wav2Vec2BertProcessorTest(unittest.TestCase):
+class Wav2Vec2BertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    processor_class = Wav2Vec2BertProcessor
+
     def setUp(self):
         vocab = "<pad> <s> </s> <unk> | E T A O N I H S R D L U M W C F G Y P B V K ' X J Q Z".split(" ")
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
@@ -55,6 +58,12 @@ class Wav2Vec2BertProcessorTest(unittest.TestCase):
 
         with open(self.feature_extraction_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(feature_extractor_map) + "\n")
+
+    def get_component(self, attribute, **kwargs):
+        assert attribute in self.processor_class.attributes
+        if attribute == "tokenizer":
+            return self.get_tokenizer(**kwargs)
+        return super().get_component(attribute, **kwargs)
 
     def get_tokenizer(self, **kwargs_init):
         kwargs = self.add_kwargs_tokens_map.copy()

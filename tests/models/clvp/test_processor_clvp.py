@@ -21,14 +21,19 @@ import unittest
 from transformers import ClvpFeatureExtractor, ClvpProcessor, ClvpTokenizer
 from transformers.testing_utils import require_torch
 
+from ...test_processing_common import ProcessorTesterMixin
 from .test_feature_extraction_clvp import floats_list
 
 
 @require_torch
-class ClvpProcessorTest(unittest.TestCase):
+class ClvpProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    from_pretrained_id = "susnato/clvp_dev"
+    processor_class = ClvpProcessor
+
     def setUp(self):
-        self.checkpoint = "susnato/clvp_dev"
         self.tmpdirname = tempfile.mkdtemp()
+        processor = ClvpProcessor.from_pretrained(self.from_pretrained_id)
+        processor.save_pretrained(self.tmpdirname)
 
     def tearDown(self):
         super().tearDown()
@@ -37,11 +42,11 @@ class ClvpProcessorTest(unittest.TestCase):
 
     # Copied from transformers.tests.models.whisper.test_processor_whisper.WhisperProcessorTest.get_tokenizer with Whisper->Clvp
     def get_tokenizer(self, **kwargs):
-        return ClvpTokenizer.from_pretrained(self.checkpoint, **kwargs)
+        return ClvpTokenizer.from_pretrained(self.from_pretrained_id, **kwargs)
 
     # Copied from transformers.tests.models.whisper.test_processor_whisper.WhisperProcessorTest.get_feature_extractor with Whisper->Clvp
     def get_feature_extractor(self, **kwargs):
-        return ClvpFeatureExtractor.from_pretrained(self.checkpoint, **kwargs)
+        return ClvpFeatureExtractor.from_pretrained(self.from_pretrained_id, **kwargs)
 
     # Copied from transformers.tests.models.whisper.test_processor_whisper.WhisperProcessorTest.test_save_load_pretrained_default with Whisper->Clvp
     def test_save_load_pretrained_default(self):

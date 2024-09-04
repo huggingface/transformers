@@ -30,6 +30,7 @@ from ...image_utils import (
     ChannelDimension,
     ImageInput,
     PILImageResampling,
+    VideoInput,
     infer_channel_dimension_format,
     is_scaled_image,
     is_valid_image,
@@ -47,15 +48,25 @@ if is_vision_available():
 logger = logging.get_logger(__name__)
 
 
-def make_batched(videos) -> List[List[ImageInput]]:
+# Copied from transformers.models.vivit.image_processing_vivit.make_batched_videos
+def make_batched_videos(videos) -> List[VideoInput]:
     if isinstance(videos, (list, tuple)) and isinstance(videos[0], (list, tuple)) and is_valid_image(videos[0][0]):
-        return videos
+        if isinstance(videos[0][0], PIL.Image.Image) or len(videos[0][0].shape) == 3:
+            return videos
 
     elif isinstance(videos, (list, tuple)) and is_valid_image(videos[0]):
-        return [videos]
+        if isinstance(videos[0], PIL.Image.Image) or len(videos[0].shape) == 3:
+            return [videos]
+        elif len(videos[0].shape) == 4:
+            return videos
 
     elif is_valid_image(videos):
-        return [[videos]]
+        if isinstance(videos, PIL.Image.Image) or len(videos.shape) == 3:
+            return [[videos]]
+        elif len(videos.shape) == 4:
+            return [videos]
+        elif len(videos.shape) == 5:
+            return videos
 
     raise ValueError(f"Could not make batched video from {videos}")
 
@@ -317,7 +328,7 @@ class VideoMAEImageProcessor(BaseImageProcessor):
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
 
-        videos = make_batched(videos)
+        videos = make_batched_videos(videos)
 
         videos = [
             [

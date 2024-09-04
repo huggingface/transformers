@@ -16,12 +16,25 @@
 Text/audio processor class for MusicGen Melody
 """
 
-from typing import List, Optional
+import sys
+from typing import List, Optional, Union
 
 import numpy as np
 
-from ...processing_utils import ProcessorMixin
+from ...feature_extraction_utils import BatchFeature
+from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from ...tokenization_utils_base import AudioInput, PreTokenizedInput, TextInput
 from ...utils import to_numpy
+
+
+if sys.version_info >= (3, 11):
+    from typing import Unpack
+else:
+    from typing_extensions import Unpack
+
+
+class MusicgenMelodyProcessorKwargs(ProcessingKwargs, total=False):
+    _defaults = {}
 
 
 class MusicgenMelodyProcessor(ProcessorMixin):
@@ -42,14 +55,18 @@ class MusicgenMelodyProcessor(ProcessorMixin):
     feature_extractor_class = "MusicgenMelodyFeatureExtractor"
     tokenizer_class = ("T5Tokenizer", "T5TokenizerFast")
 
-    def __init__(self, feature_extractor, tokenizer):
-        super().__init__(feature_extractor, tokenizer)
-
     # Copied from transformers.models.musicgen.processing_musicgen.MusicgenProcessor.get_decoder_prompt_ids
     def get_decoder_prompt_ids(self, task=None, language=None, no_timestamps=True):
         return self.tokenizer.get_decoder_prompt_ids(task=task, language=language, no_timestamps=no_timestamps)
 
-    def __call__(self, audio=None, text=None, **kwargs):
+    def __call__(
+        self,
+        audio: Optional[AudioInput] = None,
+        text: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
+        images=None,
+        videos=None,
+        **kwargs: Unpack[MusicgenMelodyProcessorKwargs],
+    ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and audio(s). This method forwards the `audio`
         and `kwargs` arguments to MusicgenMelodyFeatureExtractor's [`~MusicgenMelodyFeatureExtractor.__call__`] if `audio` is not
@@ -57,41 +74,42 @@ class MusicgenMelodyProcessor(ProcessorMixin):
         PreTrainedTokenizer's [`~PreTrainedTokenizer.__call__`] if `text` is not `None`. Please refer to the doctsring of the above two methods for more information.
 
         Args:
-            audio (`np.ndarray`, `torch.Tensor`, `List[np.ndarray]`, `List[torch.Tensor]`):
+            audio (`AudioInput`, *optional*):
                 The audio or batch of audios to be prepared. Each audio can be NumPy array or PyTorch tensor. In case
                 of a NumPy array/PyTorch tensor, each audio should be a mono-stereo signal of shape (T), where T is the sample length of the audio.
-            text (`str`, `List[str]`, `List[List[str]]`):
+            text (`TextInput`, `PreTokenizedInput`, `List[TextInput]`, `List[PreTokenizedInput]`, *optional*):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            kwargs (*optional*):
-                Remaining dictionary of keyword arguments that will be passed to the feature extractor and/or the
-                tokenizer.
+
         Returns:
-            [`BatchEncoding`]: A [`BatchEncoding`] with the following fields:
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
             - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
             - **input_features** -- Audio input features to be fed to a model. Returned when `audio` is not `None`.
             - **attention_mask** -- List of token indices specifying which tokens should be attended to by the model when `text` is not `None`.
             When only `audio` is specified, returns the timestamps attention mask.
         """
 
-        sampling_rate = kwargs.pop("sampling_rate", None)
-
         if audio is None and text is None:
             raise ValueError("You need to specify either an `audio` or `text` input to process.")
 
-        if text is not None:
-            inputs = self.tokenizer(text, **kwargs)
-        if audio is not None:
-            audio_inputs = self.feature_extractor(audio, sampling_rate=sampling_rate, **kwargs)
+        output_kwargs = self._merge_kwargs(
+            MusicgenMelodyProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
 
-        if text is None:
-            return audio_inputs
-        elif audio is None:
-            return inputs
-        else:
-            inputs["input_features"] = audio_inputs["input_features"]
-            return inputs
+        data = {}
+        if text is not None:
+            text_features = self.tokenizer(text, **output_kwargs["text_kwargs"])
+            data.update(text_features)
+        if audio is not None:
+            audio_features = self.feature_extractor(audio, **output_kwargs["audio_kwargs"])
+            if text is not None:
+                data["input_features"] = audio_features["input_features"]
+            else:
+                data.update(audio_features)
+        return BatchFeature(data, tensor_type=output_kwargs["common_kwargs"].get("return_tensors"))
 
     # Copied from transformers.models.musicgen.processing_musicgen.MusicgenProcessor.batch_decode with padding_mask->attention_mask
     def batch_decode(self, *args, **kwargs):

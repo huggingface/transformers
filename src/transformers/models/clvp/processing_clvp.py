@@ -17,7 +17,27 @@
 Processor class for CLVP
 """
 
-from ...processing_utils import ProcessorMixin
+import sys
+from typing import List, Optional, Union
+
+from ...feature_extraction_utils import BatchFeature
+from ...processing_utils import AudioKwargs, ProcessingKwargs, ProcessorMixin
+from ...tokenization_utils_base import AudioInput, PreTokenizedInput, TextInput
+
+
+if sys.version_info >= (3, 11):
+    from typing import Unpack
+else:
+    from typing_extensions import Unpack
+
+
+class ClvpAudioProcessorKwargs(AudioKwargs, total=False):
+    raw_speech: Optional[AudioInput]
+
+
+class ClvpProcessorKwargs(ProcessingKwargs, total=False):
+    audio_kwargs: ClvpAudioProcessorKwargs
+    _defaults = {}
 
 
 class ClvpProcessor(ProcessorMixin):
@@ -45,33 +65,67 @@ class ClvpProcessor(ProcessorMixin):
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
 
-    def __call__(self, *args, **kwargs):
+    def __call__(
+        self,
+        text: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
+        audio: Optional[AudioInput] = None,
+        images=None,
+        videos=None,
+        **kwargs: Unpack[ClvpProcessorKwargs],
+    ) -> BatchFeature:
         """
         Forwards the `audio` and `sampling_rate` arguments to [`~ClvpFeatureExtractor.__call__`] and the `text`
         argument to [`~ClvpTokenizer.__call__`]. Please refer to the doctsring of the above two methods for more
         information.
+
+        Args:
+            text (`TextInput`, `PreTokenizedInput`, `List[TextInput]`, `List[PreTokenizedInput]`, *optional*):
+                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
+                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
+                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
+            audio (`AudioInput`, *optional*):
+                The audio or batch of audios to be prepared. Each audio can be NumPy array or PyTorch tensor. In case
+                of a NumPy array/PyTorch tensor, each audio should be of shape (C, T), where C is a number of channels,
+                and T the sample length of the audio.
+
+        Returns:
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
+
+            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
+            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
+              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
+              `None`).
+            - **audio_features** -- Audio features to be fed to a model. Returned when `audios` is not `None`.
         """
 
-        raw_speech = kwargs.pop("raw_speech", None)
-        sampling_rate = kwargs.pop("sampling_rate", None)
-        text = kwargs.pop("text", None)
+        output_kwargs = self._merge_kwargs(
+            ClvpProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
 
-        if raw_speech is None and text is None:
-            raise ValueError("You need to specify either an `raw_speech` or `text` input to process.")
+        raw_speech = output_kwargs["audio_kwargs"].pop("raw_speech", None)
 
-        if raw_speech is not None:
-            inputs = self.feature_extractor(raw_speech, sampling_rate=sampling_rate, **kwargs)
+        if audio is not None and raw_speech is not None:
+            raise ValueError("Only one of `audio` and `raw_speech` must be specified.")
+        if audio is None and raw_speech is not None:
+            audio = raw_speech
+
+        if audio is None and text is None:
+            raise ValueError("You need to specify either an `audio` or `text` input to process.")
+
+        data = {}
+        if audio is not None:
+            audio_features = self.feature_extractor(audio, **output_kwargs["audio_kwargs"])
+            data.update(audio_features)
         if text is not None:
-            encodings = self.tokenizer(text, **kwargs)
-
-        if text is None:
-            return inputs
-        elif raw_speech is None:
-            return encodings
-        else:
-            inputs["input_ids"] = encodings["input_ids"]
-            inputs["attention_mask"] = encodings["attention_mask"]
-            return inputs
+            text_features = self.tokenizer(text, **output_kwargs["text_kwargs"])
+            if audio is not None:
+                data["input_ids"] = text_features["input_ids"]
+                data["attention_mask"] = text_features["attention_mask"]
+            else:
+                data.update(text_features)
+        return BatchFeature(data, tensor_type=output_kwargs["common_kwargs"].get("return_tensors"))
 
     # Copied from transformers.models.whisper.processing_whisper.WhisperProcessor.batch_decode with Whisper->Clvp
     def batch_decode(self, *args, **kwargs):
