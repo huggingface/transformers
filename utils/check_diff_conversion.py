@@ -14,51 +14,47 @@ logging.basicConfig()
 logging.getLogger().setLevel(logging.ERROR)
 console = Console()
 
-
-def compare_files(diff_file_path, fix_and_overwrite=False):
-    # Generate the expected modeling content
-    generated_modeling_content = convert_diff_file(diff_file_path)
-    modeling_file_path = diff_file_path.replace("diff_", "modeling_")
+def process_file(generated_modeling_content, file_type="modeling_", fix_and_overwrite=False):
+    file_path = diff_file_path.replace("diff_", f"{file_type}_")
     # Read the actual modeling file
-    with open(modeling_file_path, "r") as modeling_file:
-        modeling_content = modeling_file.read()
-
-    # Store the output in a buffer
-    output_buffer = StringIO(generated_modeling_content[1])
-
-    # Read the buffer content
+    with open(file_path, "r") as modeling_file:
+        content = modeling_file.read()
+    output_buffer = StringIO(generated_modeling_content[file_type][0])
     output_buffer.seek(0)
     output_content = output_buffer.read()
-
-    # Compare input and output contents
     diff = difflib.unified_diff(
-        modeling_content.splitlines(),
+        content.splitlines(),
         output_content.splitlines(),
-        fromfile=f"{modeling_file_path}_generated",
-        tofile=f"{modeling_file_path}",
+        fromfile=f"{file_path}_generated",
+        tofile=f"{file_path}",
         lineterm="",
     )
-
-    # Convert the diff generator to a list for further processing
     diff_list = list(diff)
-
     # Check for differences
     if diff_list:
         if fix_and_overwrite:
-            with open(modeling_file_path, "w") as modeling_file:
+            with open(file_path, "w") as modeling_file:
                 modeling_file.write(generated_modeling_content)
-            console.print(f"[bold blue]Overwritten {modeling_file_path} with the generated content.[/bold blue]")
+            console.print(f"[bold blue]Overwritten {file_path} with the generated content.[/bold blue]")
         else:
             console.print(
-                f"\n[bold red]Differences found between the generated modeling code and {modeling_file_path}:[/bold red]\n"
+                f"\n[bold red]Differences found between the generated code and {file_path}:[/bold red]\n"
             )
             diff_text = "\n".join(diff_list)
             syntax = Syntax(diff_text, "diff", theme="ansi_dark", line_numbers=True)
             console.print(syntax)
         return 1
     else:
-        console.print(f"\n[bold green]No differences found for {modeling_file_path}.[/bold green]")
+        console.print(f"\n[bold green]No differences found for {file_path}.[/bold green]")
         return 0
+
+def compare_files(diff_file_path, fix_and_overwrite=False):
+    # Generate the expected modeling content
+    generated_modeling_content = convert_diff_file(diff_file_path)
+    diff = 0
+    for file_type in generated_modeling_content.keys():
+        diff += process_file(generated_modeling_content, file_type, fix_and_overwrite)
+    return diff
 
 
 if __name__ == "__main__":

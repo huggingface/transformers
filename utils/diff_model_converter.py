@@ -669,33 +669,25 @@ def convert_diff_file(diff_file, old_model_name=None, new_model_name=None, cst_t
             config_module = cst.Module(body=[*cst_transformers.config_body], header=new_mod.header)
             config_ruffed_code = run_ruff(AUTO_GENERATED_MESSAGE + config_module.code, True)
             config_formatted_code = run_ruff(config_ruffed_code, False)
-        return ruffed_code, formatted_code, config_ruffed_code, config_formatted_code
+        return {"modeling":[formatted_code,ruffed_code], "configuration":[config_ruffed_code,  config_formatted_code]}
     else:
         print(f"Diff pattern not found in {diff_file}, exiting")
-        return None, None, None, None
+        return {}
 
 
-def save_modeling_file(diff_file, ruffed_code, formatted_code, config_ruffed_code, config_formatted_code):
-    non_comment_lines = len([line for line in formatted_code.strip().split("\n") if not line.strip().startswith("#")])
-    with open(diff_file.replace("diff_", "modeling_"), "w") as f:
-        if len(formatted_code.strip()) > 0 and non_comment_lines > 0:
-            f.write(formatted_code)
-        else:
-            non_comment_lines = len(
-                [line for line in formatted_code.strip().split("\n") if not line.strip().startswith("#")]
-            )
-            if len(ruffed_code.strip()) > 0 and non_comment_lines > 0:
-                logger.warning("The modeling code contains erros, it's written without formatting")
-                f.write(ruffed_code)
-
-    with open(diff_file.replace("diff_", "configuration_"), "w") as f:
-        if len(config_formatted_code.strip()) > 0:
-            f.write(config_formatted_code)
-        else:
-            if len(config_ruffed_code.strip()) > 0:
-                logger.warning("The configuration code contains erros, it's written without formatting")
-                f.write(config_ruffed_code)
-
+def save_modeling_file(diff_file, converted_file):
+    for file_type in converted_file.keys():
+        non_comment_lines = len([line for line in converted_file[file_type][0].strip().split("\n") if not line.strip().startswith("#")])
+        with open(diff_file.replace("diff_", f"{file_type}_"), "w") as f:
+            if len(converted_file[file_type].strip()) > 0 and non_comment_lines > 0:
+                f.write(converted_file[file_type])
+            else:
+                non_comment_lines = len(
+                    [line for line in converted_file[file_type][0].strip().split("\n") if not line.strip().startswith("#")]
+                )
+                if len(converted_file[file_type][1].strip()) > 0 and non_comment_lines > 0:
+                    logger.warning("The modeling code contains erros, it's written without formatting")
+                    f.write(converted_file[file_type][1])
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -722,4 +714,4 @@ if __name__ == "__main__":
         print(f"Converting {file_name} to a single model single file format")
         module_path = file_name.replace("/", ".").replace(".py", "").replace("src.", "")
         converted_files = convert_diff_file(file_name, args.old_model_name, args.new_model_name)
-        converter = save_modeling_file(file_name, *converted_files)
+        converter = save_modeling_file(file_name, converted_files)
