@@ -82,7 +82,7 @@
 
 ### فرط المعالم
 
-بعد ذلك، قم بإنشاء فئة [`TrainingArguments`] والتي تحتوي على جميع فرط المعالم التي يمكنك ضبطها بالإضافة إلى أعلام لتنشيط خيارات التدريب المختلفة. بالنسبة لهذا البرنامج التعليمي، يمكنك البدء بفرط المعالم الافتراضية [hyperparameters](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments)، ولكن لا تتردد في تجربتها للعثور على الإعدادات المثلى.
+بعد ذلك، قم بإنشاء كائن من فئة [`TrainingArguments`] والتي تحتوي على جميع العوامل والمتغيرات التي يمكنك ضبطها بالإضافة إلى خيارات تنشيط التدريب المختلفة. بالنسبة لهذا البرنامج التعليمي، يمكنك البدء بمعاملات التدريب الافتراضية [hyperparameters](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments)، ولكن لا تتردد في تجربتها للعثور على الإعدادات المثلى.
 
 حدد مكان حفظ نقاط الفحص من تدريبك:
 
