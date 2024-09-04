@@ -58,7 +58,6 @@ pip install datasets
 * [token_type_ids](glossary#token-type-ids) يحدد التسلسل الذي ينتمي إليه الرمز عندما يكون هناك أكثر من تسلسل واحد.
 
 أعد إدخالك الأصلي عن طريق فك ترميز `input_ids`:
-أعد إدخالك عن طريق فك ترميز `input_ids`:
 
 ```py
 >>> tokenizer.decode(encoded_input["input_ids"])
