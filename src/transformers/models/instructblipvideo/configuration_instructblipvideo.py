@@ -27,7 +27,7 @@ from ...models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
 from ...utils import (
     logging,
 )
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
 
 
 logger = logging.get_logger(__name__)
@@ -322,8 +322,6 @@ class InstructBlipVideoConfig(PretrainedConfig):
         image_token_index=None,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
         if vision_config is None:
             vision_config = {}
             logger.info("vision_config is None. initializing the InstructBlipVideoVisionConfig with default values.")
@@ -350,6 +348,7 @@ class InstructBlipVideoConfig(PretrainedConfig):
         self.use_decoder_only_language_model = self.text_config.model_type in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
         self.initializer_factor = 1.0
         self.initializer_range = 0.02
+        super().__init__(**kwargs)
 
     @classmethod
     def from_vision_qformer_text_configs(
