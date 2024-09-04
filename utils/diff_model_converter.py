@@ -268,8 +268,6 @@ class SuperTransformer(cst.CSTTransformer):
             comment_less_code = re.sub(r"#.*", "", self.python_module.code_for_node(stmt)).strip()
             comment_less_code = re.sub(r"\ *\n", "\n", comment_less_code).strip()
             if comment_less_code not in existing_nodes:
-                # if m.matches(stmt, DOCSTRING_NODE):
-                #     continue
                 deduplicated_new_body.append(stmt)
                 existing_nodes.add(stmt)
             else:
@@ -304,7 +302,6 @@ class SuperTransformer(cst.CSTTransformer):
             else:
                 new_body.append(expr)
         if not self.has_docstring and parent_has_docstring:
-            # TODO maybe call supdate body here?
             new_body = [self.original_methods[func_name].body.body[0]] + new_body
         return node.with_changes(body=new_body)
 
@@ -419,7 +416,9 @@ def replace_call_to_super(class_finder: ClassFinder, updated_node: cst.ClassDef,
                         ]
                     )
                 elif updated_docstring not in docstring_node[0].body[0].value.value:
-                    updated_docstring = docstring_node[0].body[0].value.value + "\n" + updated_docstring.replace('r"""\n', "")
+                    updated_docstring = (
+                        docstring_node[0].body[0].value.value + "\n" + updated_docstring.replace('r"""\n', "")
+                    )
             else:
                 updated_docstring = func.body[0].value.value
             # Update the docstring in the original function
@@ -441,13 +440,15 @@ def replace_call_to_super(class_finder: ClassFinder, updated_node: cst.ClassDef,
 
     return original_node.with_changes(body=new_replacement_body)
 
-TYPE_TO_FILE_TYPE= {
+
+TYPE_TO_FILE_TYPE = {
     "Config": "configuration",
     "Tokenizer": "tokenization",
     "Processor": "processor",
     "ImageProcessor": "image_processing",
-    "FeatureExtractor": "feature_extractor"
+    "FeatureExtractor": "feature_extractor",
 }
+
 
 class DiffConverterTransformer(CSTTransformer):
     METADATA_DEPENDENCIES = (ParentNodeProvider, ScopeProvider, PositionProvider)
@@ -469,7 +470,7 @@ class DiffConverterTransformer(CSTTransformer):
         self.all_safe_imports = []          # stores the import under simple statements
         self.global_scope_index = 0
         # fmt: on
-        self.files = {                      # mapping for different component bodies
+        self.files = {  # mapping for different component bodies
             "modeling": {},
             "configuration": {},
             "tokenization": {},
@@ -477,7 +478,7 @@ class DiffConverterTransformer(CSTTransformer):
             "image_processing": {},
             "feature_extractor": {},
         }
-        self.match_patterns = '|'.join(self.files.keys())
+        self.match_patterns = "|".join(self.files.keys())
         self.all_functions = {}
 
     def visit_ImportFrom(self, node: cst.ImportFrom) -> None:
@@ -519,8 +520,6 @@ class DiffConverterTransformer(CSTTransformer):
                 full_statement = self.python_module.code_for_node(updated_node.body[0].module)
                 if re.search(rf"transformers\.models\..*\.({self.match_patterns})_.*", full_statement):
                     return cst.RemoveFromParent()
-                if re.search(rf".({self.match_patterns})_(\S)$", full_statement):
-                    return cst.RemoveFromParent()
                 if updated_node not in self.all_safe_imports:
                     self.all_imports.append(updated_node)
                 return updated_node
@@ -555,7 +554,7 @@ class DiffConverterTransformer(CSTTransformer):
                 raise ValueError(
                     f"Tried parsing the name of the imported package from {super_file_name}, could not extract the model name"
                 )
-            file_type =  re.search(r"models?\.\w*?\.(\w*?)_", super_file_name).groups()[0]
+            file_type = re.search(r"models?\.\w*?\.(\w*?)_", super_file_name).groups()[0]
             visited_module = self.visited_module
             if super_file_name not in visited_module:  # only extract classes once
                 class_finder = find_classes_in_file(
@@ -597,7 +596,7 @@ class DiffConverterTransformer(CSTTransformer):
                 )
 
         # Now, if a class was defined without parents, we look for the name
-        match_pattern = '|'.join(TYPE_TO_FILE_TYPE.keys())
+        match_pattern = "|".join(TYPE_TO_FILE_TYPE.keys())
         match = re.search(rf"({match_pattern})$", class_name)
         if match:
             key = TYPE_TO_FILE_TYPE[match.group(1)]
@@ -625,7 +624,9 @@ class DiffConverterTransformer(CSTTransformer):
             dependency_imports[file_type].update(imports)
 
         for file, body in self.files.items():
-            new_body = list(dependency_imports[file_type].values()) + [k[1]["node"] for k in sorted(body.items(), key=lambda x: x[1]["insert_idx"])]
+            new_body = [k[1]["node"] for k in sorted(body.items(), key=lambda x: x[1]["insert_idx"])]
+            if file in dependency_imports.keys():
+                new_body = list(dependency_imports[file].values()) + new_body
             self.files[file] = cst.Module(body=[*new_body], header=node.header)
         return node
 
@@ -644,7 +645,7 @@ def convert_diff_file(diff_file, old_model_name=None, new_model_name=None, cst_t
             cst_transformers = DiffConverterTransformer(module, model_name, old_model_name, new_model_name)
         wrapper.visit(cst_transformers)
         for file, node in cst_transformers.files.items():
-            if len(module.code.strip()) >0:
+            if len(module.code.strip()) > 0:
                 ruffed_code = run_ruff(AUTO_GENERATED_MESSAGE + node.code, True)
                 formatted_code = run_ruff(ruffed_code, False)
                 output[file] = [formatted_code, ruffed_code]
@@ -656,7 +657,9 @@ def convert_diff_file(diff_file, old_model_name=None, new_model_name=None, cst_t
 
 def save_modeling_file(diff_file, converted_file):
     for file_type in converted_file.keys():
-        non_comment_lines = len([line for line in converted_file[file_type][0].strip().split("\n") if not line.strip().startswith("#")])
+        non_comment_lines = len(
+            [line for line in converted_file[file_type][0].strip().split("\n") if not line.strip().startswith("#")]
+        )
         if len(converted_file[file_type][0].strip()) > 0 and non_comment_lines > 0:
             with open(diff_file.replace("diff_", f"{file_type}_"), "w") as f:
                 f.write(converted_file[file_type][0])
@@ -668,6 +671,7 @@ def save_modeling_file(diff_file, converted_file):
                 logger.warning("The modeling code contains erros, it's written without formatting")
                 with open(diff_file.replace("diff_", f"{file_type}_"), "w") as f:
                     f.write(converted_file[file_type][1])
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

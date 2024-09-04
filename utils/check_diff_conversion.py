@@ -14,6 +14,7 @@ logging.basicConfig()
 logging.getLogger().setLevel(logging.ERROR)
 console = Console()
 
+
 def process_file(generated_modeling_content, file_type="modeling_", fix_and_overwrite=False):
     file_path = diff_file_path.replace("diff_", f"{file_type}_")
     # Read the actual modeling file
@@ -37,9 +38,7 @@ def process_file(generated_modeling_content, file_type="modeling_", fix_and_over
                 modeling_file.write(generated_modeling_content)
             console.print(f"[bold blue]Overwritten {file_path} with the generated content.[/bold blue]")
         else:
-            console.print(
-                f"\n[bold red]Differences found between the generated code and {file_path}:[/bold red]\n"
-            )
+            console.print(f"\n[bold red]Differences found between the generated code and {file_path}:[/bold red]\n")
             diff_text = "\n".join(diff_list)
             syntax = Syntax(diff_text, "diff", theme="ansi_dark", line_numbers=True)
             console.print(syntax)
@@ -47,6 +46,7 @@ def process_file(generated_modeling_content, file_type="modeling_", fix_and_over
     else:
         console.print(f"[bold green]No differences found for {file_path}.[/bold green]")
         return 0
+
 
 def compare_files(diff_file_path, fix_and_overwrite=False):
     # Generate the expected modeling content
