@@ -732,6 +732,7 @@ class _LM_head(torch.autograd.Function):
         # grad_input[mask] /= batch_size
         grad_input[reverse_mask] = 0
         grad_input = grad_input.to(weights.dtype)
+        grad_input *= dneg_logprobs
         if hasattr(weights, 'grad') and weights.grad != None:
             torch.addmm(
                     weights.grad,
@@ -743,11 +744,6 @@ class _LM_head(torch.autograd.Function):
             weights.grad = grad_input.T @ cur_hidden_states
             
         grad_input = grad_input @ weights
-        
-        # grad_input = grad_input.to(hidden_states.dtype)
-
-        weights.grad *= dneg_logprobs
-        grad_input *= dneg_logprobs
         
         return grad_input, None, None
 
