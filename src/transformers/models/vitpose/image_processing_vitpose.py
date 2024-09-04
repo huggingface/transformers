@@ -124,9 +124,9 @@ def get_keypoint_predictions(heatmaps):
     Returns:
         tuple: A tuple containing aggregated results.
 
-        - coords (np.ndarray[N, K, 2]):
+        - coords (`np.ndarray` of shape `(batch_size, num_keypoints, 2)`):
             Predicted keypoint location.
-        - scores (np.ndarray[N, K, 1]):
+        - scores (`np.ndarray` of shape `(batch_size, num_keypoints, 1)`):
             Scores (confidence) of the keypoints.
     """
     if not isinstance(heatmaps, np.ndarray):
@@ -219,18 +219,18 @@ def transform_preds(coords, center, scale, output_size):
         num_keypoints: K
 
     Args:
-        coords (`np.ndarray[K, ndims]`):
+        coords (`np.ndarray` of shape `(num_keypoints, ndims)`):
 
             * If ndims=2, corrds are predicted keypoint location.
             * If ndims=4, corrds are composed of (x, y, scores, tags)
             * If ndims=5, corrds are composed of (x, y, scores, tags,
               flipped_tags)
 
-        center (`np.ndarray[2,]`):
+        center (`np.ndarray` of shape `(2,)`):
             Center of the bounding box (x, y).
-        scale (`np.ndarray[2,]`):
+        scale (`np.ndarray` of shape `(2,)`):
             Scale of the bounding box wrt original image of width and height.
-        output_size (`np.ndarray[2,]):
+        output_size (`np.ndarray` of shape `(2,)`):
             Size of the destination heatmaps in (height, width) format.
 
     Returns:
@@ -560,9 +560,9 @@ class ViTPoseImageProcessor(BaseImageProcessor):
         Args:
             heatmaps (`np.ndarray` of shape `(batch_size, num_keypoints, height, width])`):
                 Model predicted heatmaps.
-            center (np.ndarray[N, 2]):
+            center (`np.ndarray` of shape `(batch_size, 2)`):
                 Center of the bounding box (x, y).
-            scale (np.ndarray[N, 2]):
+            scale (`np.ndarray` of shape `(batch_size, 2)`):
                 Scale of the bounding box wrt original images of width and height.
             kernel (int, *optional*, defaults to 11):
                 Gaussian kernel size (K) for modulation, which should match the heatmap gaussian sigma when training.
@@ -571,9 +571,9 @@ class ViTPoseImageProcessor(BaseImageProcessor):
         Returns:
             tuple: A tuple containing keypoint predictions and scores.
 
-            - preds (np.ndarray[batch_size, num_keypoints, 2]):
+            - preds (`np.ndarray` of shape `(batch_size, num_keypoints, 2)`):
                 Predicted keypoint location in images.
-            - scores (np.ndarray[batch_size, num_keypoints, 1]):
+            - scores (`np.ndarray` of shape `(batch_size, num_keypoints, 1)`):
                 Scores (confidence) of the keypoints.
         """
         # Avoid mutation
