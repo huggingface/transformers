@@ -30,10 +30,9 @@ if is_vision_available():
     from transformers import (
         AutoProcessor,
         BertTokenizerFast,
-        BlipImageProcessor,
         GPT2Tokenizer,
-        InstructBlipVideoProcessor,
         InstructBlipVideoImageProcessor,
+        InstructBlipVideoProcessor,
         PreTrainedTokenizerFast,
     )
 
