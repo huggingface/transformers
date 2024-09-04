@@ -666,12 +666,6 @@ IDEFICS3_VISION_START_DOCSTRING = r"""
 )
 class Idefics3VisionTransformer(Idefics3PreTrainedModel):
     config_class = Idefics3VisionConfig
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["Idefics3VisionAttention"]
-    _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn_2 = True
-    _supports_cache_class = True
 
     def __init__(self, config: Idefics3VisionConfig):
         super().__init__(config)
