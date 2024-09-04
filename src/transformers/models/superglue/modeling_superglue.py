@@ -33,7 +33,7 @@ _CONFIG_FOR_DOC_ = "SuperGlueConfig"
 _CHECKPOINT_FOR_DOC_ = "stevenbucaille/superglue_indoor"
 
 
-def concat_inconsistent_pairs(
+def concat_ragged_pairs(
     inconsistent_tensor0: Tuple[torch.Tensor], inconsistent_tensor1: Tuple[torch.Tensor]
 ) -> Tuple[torch.Tensor]:
     """
@@ -97,7 +97,7 @@ def concat_inconsistent_pairs(
     return consistent_tensors
 
 
-def stack_inconsistent_tensor_list(tensor_list: List[torch.Tensor]) -> torch.Tensor:
+def stack_ragged_tensor_list(tensor_list: List[torch.Tensor]) -> torch.Tensor:
     """
     Stack a list of tensors with inconsistent dimensions. We assume that each tensor is at least 3D. The tensors can be
     anything but this function is mainly used to stack hidden states tensors of a keypoint matching model. The
@@ -148,7 +148,7 @@ def stack_inconsistent_tensor_list(tensor_list: List[torch.Tensor]) -> torch.Ten
     return stacked_tensors
 
 
-def batch_inconsistent_tensor_list(tensor_list: List[Tuple[torch.Tensor]]) -> List[torch.Tensor]:
+def batch_ragged_tensor_list(tensor_list: List[Tuple[torch.Tensor]]) -> List[torch.Tensor]:
     """
     Batch a list of tuples of tensors with inconsistent dimensions.
     For a list of N tuples of T tensors : `[(tensor0_0, tensor0_1, ..., tensor0_T), (tensor1_0, tensor1_1, ...,
@@ -782,7 +782,7 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
 
         hidden_states = attentions = None
         if output_hidden_states:
-            hidden_states = batch_inconsistent_tensor_list(list_hidden_states)
+            hidden_states = batch_ragged_tensor_list(list_hidden_states)
         if output_attentions:
             attentions = batch_inconsistent_tensor_list(list_attentions)
 
