@@ -16,9 +16,9 @@
 
 import gc
 import unittest
+from typing import List, Dict, Union
 
 import requests
-from typing import List, Dict, Union
 
 from transformers import (
     AutoProcessor,
