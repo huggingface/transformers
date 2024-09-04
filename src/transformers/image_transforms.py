@@ -354,9 +354,8 @@ def resize(
         resized_image = nn.functional.interpolate(torch_image, size, mode=mode, align_corners=True).squeeze().numpy()
 
         resized_image = to_channel_dimension_format(
-            resized_image, data_format, input_channel_dim=ChannelDimension.FIRST
+            resized_image, channel_dim=ChannelDimension.LAST, input_channel_dim=ChannelDimension.FIRST
         )
-
 
     if return_numpy:
         resized_image = np.array(resized_image)
