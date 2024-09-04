@@ -1681,7 +1681,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         for model_class in self.all_generative_model_classes:
             model = model_class(config)
             input_features = input_dict["input_features"]
-            
+
             labels_length = 448
             assert labels_length <= config.max_target_positions
             labels = torch.ones(1, labels_length, dtype=torch.int64)
