@@ -41,7 +41,7 @@ pip install git+https://github.com/huggingface/peft.git
 
 لتحميل نموذج محول PEFT واستخدامه من 🤗 Transformers، تأكد من أن مستودع Hub أو الدليل المحلي يحتوي على ملف `adapter_config.json` وأوزان المحوّل، كما هو موضح في صورة المثال أعلاه. بعد ذلك، يمكنك تحميل نموذج محوّل PEFT باستخدام فئة `AutoModelFor`. على سبيل المثال، لتحميل نموذج محول PEFT للنمذجة اللغوية السببية:
 
-1. حدد معرف نموذج PEFT
+1. حدد معرف النموذج  لPEFT
 2. مرره إلى فئة [`AutoModelForCausalLM`]
 
 ```py
