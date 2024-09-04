@@ -21,7 +21,7 @@ pip install accelerate
 
 ## الاستعداد للتسريع
 
-الخطوة التالية هي تمرير جميع كائنات التدريب ذات الصلة إلى طريقة [`~accelerate.Accelerator.prepare`]. ويشمل ذلك DataLoaders للتدريب والتقييم، ونموذجًا ومُحَسِّنًا:
+الخطوة التالية هي تمرير جميع كائنات التدريب ذات الصلة إلى دالة الإعداد [`~accelerate.Accelerator.prepare`]. ويشمل ذلك DataLoaders للتدريب والتقييم، ونموذجًا ومُحَسِّنً المعاملات (optimizer):
 
 ```py
 >>> train_dataloader, eval_dataloader, model, optimizer = accelerator.prepare(
