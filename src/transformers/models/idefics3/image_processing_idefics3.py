@@ -793,16 +793,9 @@ class Idefics3ImageProcessor(BaseImageProcessor):
                 " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
             )
 
-        new_images_list = []
-        for images in images_list:
-            new_images = []
-            for img in images:
-                if img.ndim == 2:
-                    img = np.expand_dims(img, axis=-1)
-                new_images.append(img)
-            new_images_list.append(new_images)
-        images_list = new_images_list
-        del new_images_list
+        images_list = [
+            [np.expand_dims(img, axis=-1) if img.ndim == 2 else img for img in images] for images in images_list
+        ]
 
         if input_data_format is None:
             # We assume that all images have the same channel dimension format.
