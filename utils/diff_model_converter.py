@@ -688,7 +688,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--files_to_parse",
-        default=["src/transformers/models/gemma/diff_gemma.py"],
+        default=["all"],
         nargs="+",
         help="A list of `diff_xxxx` files that should be converted to single model file",
     )
