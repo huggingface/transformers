@@ -1010,16 +1010,12 @@ def _validate_images_text_input_order(images, text):
             if len(t) == 0:
                 # ... not empty
                 return False
-            elif isinstance(t[0], (str, int)):
-                # ... list of strings or int (for encoded inputs)
+            elif isinstance(t[0], str):
+                # ... list of strings
                 return True
             elif isinstance(t[0], (list, tuple)):
-                # ... list of list of strings or int (for list of encoded inputs)
-                if isinstance(t[0][0], (str, int)):
-                    return True
-                elif isinstance(t[0][0], (list, tuple)):
-                    # ... list of list of list of int (for list of list of encoded inputs)
-                    return isinstance(t[0][0][0], int)
+                # ... list of list of strings
+                return isinstance(t[0][0], str)
         return False
 
     def _is_valid(input, validator):
