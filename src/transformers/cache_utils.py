@@ -1020,6 +1020,7 @@ class StaticCache(Cache):
         device: torch.device = None,
         dtype: torch.dtype = torch.float32,
         max_batch_size: Optional[int] = None,
+        layer_device_mapping: Optional[dict] = None,
     ) -> None:
         super().__init__()
         if max_batch_size is not None:
@@ -1047,6 +1048,8 @@ class StaticCache(Cache):
         # Note: There will be significant perf decrease if switching to use 5D tensors instead.
         cache_shape = (self.batch_size, self.num_key_value_heads, self.max_cache_len, self.head_dim)
         for idx in range(config.num_hidden_layers):
+            if layer_device_mapping is not None:
+                device = layer_device_mapping[idx]
             new_layer_key_cache = torch.zeros(cache_shape, dtype=self.dtype, device=device)
             new_layer_value_cache = torch.zeros(cache_shape, dtype=self.dtype, device=device)
             # Notes:
@@ -1090,8 +1093,6 @@ class StaticCache(Cache):
             A tuple containing the updated key and value states.
         """
         cache_position = cache_kwargs.get("cache_position")
-        self.key_cache[layer_idx] = self.key_cache[layer_idx].to(device=key_states.device)
-        self.value_cache[layer_idx] = self.value_cache[layer_idx].to(device=value_states.device)
         k_out = self.key_cache[layer_idx]
         v_out = self.value_cache[layer_idx]
 
@@ -1190,6 +1191,7 @@ class SlidingWindowCache(StaticCache):
         device: torch.device = None,
         dtype: torch.dtype = torch.float32,
         max_batch_size: Optional[int] = None,
+        layer_device_mapping: Optional[dict] = None,
     ) -> None:
         super().__init__()
         if not hasattr(config, "sliding_window") or config.sliding_window is None:
@@ -1206,6 +1208,7 @@ class SlidingWindowCache(StaticCache):
             device=device,
             dtype=dtype,
             max_batch_size=max_batch_size,
+            layer_device_mapping=layer_device_mapping,
         )
 
     def update(
@@ -1239,7 +1242,6 @@ class SlidingWindowCache(StaticCache):
         v_out = v_out[:, :, indices]
 
         try:
-            cache_position.to(device=k_out.device)
             k_out.index_copy_(2, cache_position, key_states)
             v_out.index_copy_(2, cache_position, value_states)
         except NotImplementedError:
@@ -1484,6 +1486,7 @@ class HybridCache(Cache):
         device: Union[torch.device, str] = "cpu",
         dtype: torch.dtype = torch.float32,
         max_batch_size: Optional[int] = None,
+        layer_device_mapping: Optional[dict] = None,
     ) -> None:
         super().__init__()
         if max_batch_size is not None:
@@ -1521,6 +1524,8 @@ class HybridCache(Cache):
             self.head_dim,
         )
         for i in range(config.num_hidden_layers):
+            if layer_device_mapping is not None:
+                device = layer_device_mapping[i]
             # Note: `mark_static_address` is used to tag the cache as an fixed data pointer, preventing cuda graph
             # breaks when updating the cache.
             cache_shape = global_cache_shape if not self.is_sliding[i] else sliding_cache_shape
@@ -1576,8 +1581,6 @@ class HybridCache(Cache):
     ) -> Tuple[torch.Tensor]:
         cache_position = cache_kwargs.get("cache_position")
         sliding_window = cache_kwargs.get("sliding_window")
-        self.key_cache[layer_idx] = self.key_cache[layer_idx].to(device=key_states.device)
-        self.value_cache[layer_idx] = self.value_cache[layer_idx].to(device=value_states.device)
         k_out = self.key_cache[layer_idx]
         v_out = self.value_cache[layer_idx]
         if sliding_window:
