@@ -381,13 +381,12 @@ class ProPainterRaftOpticalFlow(nn.Module):
         self.context_dim = config.num_channels
 
         self.feature_network = ProPainterBasicEncoder(
-            config, output_dim=256, norm_fn="instance", dropout=self.config.dropout
+            config, output_dim=256, norm_fn="instance"
         )
         self.context_network = ProPainterBasicEncoder(
             config,
             output_dim=self.hidden_dim + self.context_dim,
             norm_fn="batch",
-            dropout=self.config.dropout,
         )
         self.update_block = ProPainterBasicUpdateBlock(
             config, hidden_dim=self.hidden_dim
