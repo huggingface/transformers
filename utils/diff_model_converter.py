@@ -297,7 +297,7 @@ class SuperTransformer(cst.CSTTransformer):
             elif m.matches(expr, DOCSTRING_NODE):
                 self.has_docstring = True
                 if parent_has_docstring:  # actually here we ought to de-duplicate?
-                    new_node = self.update_body(self.original_methods[func_name].body.body, node.body)
+                    new_node = self.update_body(self.original_methods[func_name].body.body[:1], [expr])
                 else:
                     new_node = [expr]
                 new_body.extend(new_node)
@@ -688,7 +688,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--files_to_parse",
-        default=["src/transformers/models/instructblipvideo/diff_instructblipvideo.py"],
+        default=["src/transformers/models/gemma/diff_gemma.py"],
         nargs="+",
         help="A list of `diff_xxxx` files that should be converted to single model file",
     )
