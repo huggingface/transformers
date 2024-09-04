@@ -1606,7 +1606,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_generate_output_type(self, return_dict_in_generate):
         expected_output_type = GenerateEncoderDecoderOutput if return_dict_in_generate else torch.Tensor
         for model_class in self.all_generative_model_classes:
-            config, inputs = self.model_tester.prepare_config_and_inputs()
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs()
             model = model_class(config).to(torch_device).eval()
 
             # short-form generation without fallback
@@ -1676,25 +1676,25 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 )
 
     def test_labels_sequence_max_length(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_generative_model_classes:
             model = model_class(config)
-            dummy_input_features = torch.ones(1, config.num_mel_bins, config.seq_length, dtype=torch.float32)
+            input_features = input_dict["input_features"]
 
             correct_labels_length = 448
             assert correct_labels_length <= config.max_target_positions
-            dummy_labels = torch.ones(1, config.max_target_positions, dtype=torch.int64)
+            labels = torch.ones(1, config.max_target_positions, dtype=torch.int64)
 
             # The following model should run without any problem
-            model(input_features=dummy_input_features, labels=dummy_labels)
+            model(input_features=input_features, labels=labels)
 
             error_labels_length = 449
             assert error_labels_length > config.max_target_positions
-            dummy_labels = torch.ones(1, config.max_target_positions, dtype=torch.int64)
+            labels = torch.ones(1, config.max_target_positions, dtype=torch.int64)
 
             with self.assertRaises(ValueError):
-                model(input_features=dummy_input_features, labels=dummy_labels)
+                model(input_features=input_features, labels=labels)
 
             new_max_length = 500
             assert new_max_length > config.max_target_positions
@@ -1702,7 +1702,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             model.generation_config.max_length = 500
 
             with self.assertRaises(ValueError):
-                model(input_features=dummy_input_features, labels=dummy_labels)
+                model(input_features=input_features, labels=labels)
 
 
 @require_torch
