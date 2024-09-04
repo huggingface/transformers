@@ -11,7 +11,7 @@
 pip install accelerate
 ```
 
-ثم قم باستيراد وإنشاء كائن [`~accelerate.Accelerator`]. سيقوم [`~accelerate.Accelerator`] تلقائيًا بالكشف عن نوع الإعداد الموزع الخاص بك وتهيئة جميع المكونات اللازمة للتدريب. لا تحتاج إلى وضع نموذجك على جهاز بشكل صريح.
+ثم قم باستيراد وإنشاء كائن [`~accelerate.Accelerator`]. سيقوم [`~accelerate.Accelerator`] تلقائيًا باكتشاف نوع الإعداد الموزع الخاص بك وتهيئة جميع المكونات اللازمة للتدريب. لن تحتاج إلى وضع نموذجك على جهاز بشكل معين.
 
 ```py
 >>> from accelerate import Accelerator
