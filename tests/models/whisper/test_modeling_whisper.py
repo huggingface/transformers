@@ -1682,8 +1682,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             model = model_class(config)
             input_features = input_dict["input_features"]
 
-            labels_length = 448
-            assert labels_length <= config.max_target_positions
+            labels_length = config.max_target_positions
             labels = torch.ones(1, labels_length, dtype=torch.int64)
 
             model(input_features=input_features, labels=labels)
@@ -1695,8 +1694,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             model = model_class(config)
             input_features = input_dict["input_features"]
 
-            labels_length = 449
-            assert labels_length > config.max_target_positions
+            labels_length = config.max_target_positions + 1
             labels = torch.ones(1, labels_length, dtype=torch.int64)
 
             with self.assertRaises(ValueError):
@@ -1709,14 +1707,12 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             model = model_class(config)
             input_features = input_dict["input_features"]
 
-            labels_length = 449
-            assert labels_length > config.max_target_positions
+            labels_length = config.max_target_positions + 1
             labels = torch.ones(1, labels_length, dtype=torch.int64)
 
-            new_max_length = 500
-            assert new_max_length > config.max_target_positions
-            model.config.max_length = 500
-            model.generation_config.max_length = 500
+            new_max_length = config.max_target_positions + 100
+            model.config.max_length = new_max_length
+            model.generation_config.max_length = new_max_length
 
             with self.assertRaises(ValueError):
                 model(input_features=input_features, labels=labels)
