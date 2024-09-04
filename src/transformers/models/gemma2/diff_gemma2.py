@@ -59,11 +59,11 @@ logger = logging.get_logger(__name__)
 
 class Gemma2Config(GemmaConfig):
     """
-    final_logit_softcapping (`float`, *optional*, defaults to 30.0): scaling factor when applying tanh softcapping on the logits.
-    attn_logit_softcapping (`float`, *optional*, defaults to 50.0): scaling factor when applying tanh softcapping on the attention scores.
-    query_pre_attn_scalar (`float`, *optional*, defaults to 224): scaling factor used on the attention scores
-    sliding_window (`int`, *optional*, defaults to 4096): in Gemma2, every other layer uses sliding window attention. This is the
-        size of the sliding window.
+        final_logit_softcapping (`float`, *optional*, defaults to 30.0): scaling factor when applying tanh softcapping on the logits.
+        attn_logit_softcapping (`float`, *optional*, defaults to 50.0): scaling factor when applying tanh softcapping on the attention scores.
+        query_pre_attn_scalar (`float`, *optional*, defaults to 224): scaling factor used on the attention scores
+        sliding_window (`int`, *optional*, defaults to 4096): in Gemma2, every other layer uses sliding window attention. This is the
+            size of the sliding window.
     """
 
     cache_implementation = "hybrid"

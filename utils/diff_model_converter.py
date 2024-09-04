@@ -679,8 +679,8 @@ def save_modeling_file(diff_file, converted_file):
     for file_type in converted_file.keys():
         non_comment_lines = len([line for line in converted_file[file_type][0].strip().split("\n") if not line.strip().startswith("#")])
         with open(diff_file.replace("diff_", f"{file_type}_"), "w") as f:
-            if len(converted_file[file_type].strip()) > 0 and non_comment_lines > 0:
-                f.write(converted_file[file_type])
+            if len(converted_file[file_type][0].strip()) > 0 and non_comment_lines > 0:
+                f.write(converted_file[file_type][0])
             else:
                 non_comment_lines = len(
                     [line for line in converted_file[file_type][0].strip().split("\n") if not line.strip().startswith("#")]
