@@ -22,8 +22,8 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from transformers.models.llama.modeling_llama import (
-    LlamaFlashAttention2,
     LlamaDecoderLayer,
+    LlamaFlashAttention2,
     LlamaForCausalLM,
     LlamaForSequenceClassification,
     LlamaForTokenClassification,
@@ -244,6 +244,7 @@ class GemmaDynamicNTKScalingRotaryEmbedding(GemmaRotaryEmbedding):
         cos, sin = super().forward(x, position_ids)
         return cos, sin
 
+
 class GemmaMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -455,6 +456,7 @@ class GemmaSdpaAttention(GemmaAttention):
 
         return attn_output, None, past_key_value
 
+
 # TODO felix: does this inheritance really work out in the end to GemmaFlashAttention2 inheriting form GemmaAttention?
 class GemmaFlashAttention2(LlamaFlashAttention2):
     """
@@ -556,6 +558,7 @@ class GemmaFlashAttention2(LlamaFlashAttention2):
 
         return attn_output, attn_weights, past_key_value
 
+
 class GemmaDecoderLayer(LlamaDecoderLayer):
     def forward(
         self,
@@ -619,6 +622,7 @@ class GemmaDecoderLayer(LlamaDecoderLayer):
             outputs += (present_key_value,)
 
         return outputs
+
 
 class GemmaModel(LlamaModel):
     def __init__(self, config: GemmaConfig):
