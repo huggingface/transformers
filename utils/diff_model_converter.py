@@ -617,10 +617,12 @@ class DiffConverterTransformer(CSTTransformer):
 
     def leave_Module(self, original_node: cst.Assign, node):
         imports = {self.python_module.code_for_node(k): k for k in self.all_imports}
-        dependency_imports = { file_type: imports.copy() for file_type in self.files}
+        dependency_imports = {file_type: imports.copy() for file_type in self.files}
         for super_file_name, visiter in self.visited_module.items():
             file_type = re.search(r"models?\.\w*?\.(\w*?)_", super_file_name).groups()[0]
-            dependency_imports[file_type].update({self.python_module.code_for_node(k): k for k in visiter.imports.values()})
+            dependency_imports[file_type].update(
+                {self.python_module.code_for_node(k): k for k in visiter.imports.values()}
+            )
 
         for file, body in self.files.items():
             new_body = [k[1]["node"] for k in sorted(body.items(), key=lambda x: x[1]["insert_idx"])]
