@@ -20,7 +20,6 @@ import torch.nn as nn
 import torch.utils.checkpoint
 from torch.nn import CrossEntropyLoss
 
-from ...configuration_utils import PretrainedConfig
 from transformers.models.gemma.modeling_gemma import (
     GemmaAttention,
     GemmaDecoderLayer,
@@ -37,6 +36,7 @@ from transformers.models.gemma.modeling_gemma import (
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, HybridCache
+from ...configuration_utils import PretrainedConfig
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
@@ -160,7 +160,7 @@ class Gemma2Config(PretrainedConfig):
         sliding_window=4096,
         final_logit_softcapping=30.0,
         attn_logit_softcapping=50.0,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             pad_token_id=pad_token_id,
