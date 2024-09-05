@@ -958,11 +958,6 @@ class OlmoModel(OlmoPreTrainedModel):
         past_key_values: Cache,
         output_attentions: bool,
     ):
-        # TODO: As of torch==2.2.0, the `attention_mask` passed to the model in `generate` is 2D and of dynamic length even when the static
-        # KV cache is used. This is an issue for torch.compile which then recaptures cudagraphs at each decode steps due to the dynamic shapes.
-        # (`recording cudagraph tree for symint key 13`, etc.), which is VERY slow. A workaround is `@torch.compiler.disable`, but this prevents using
-        # `fullgraph=True`. See more context in https://github.com/huggingface/transformers/pull/29114
-
         if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and 0.0 in attention_mask:
                 return attention_mask
@@ -1167,7 +1162,7 @@ class OlmoForCausalLM(OlmoPreTrainedModel):
         cache_position=None,
         position_ids=None,
         use_cache=True,
-        num_logits_to_keep=0,
+        num_logits_to_keep=None,
         **kwargs,
     ):
         # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
@@ -1218,6 +1213,9 @@ class OlmoForCausalLM(OlmoPreTrainedModel):
                 batch_size=batch_size,
             )
 
+        if num_logits_to_keep is not None:
+            model_inputs["num_logits_to_keep"] = num_logits_to_keep
+
         model_inputs.update(
             {
                 "position_ids": position_ids,
@@ -1225,7 +1223,6 @@ class OlmoForCausalLM(OlmoPreTrainedModel):
                 "past_key_values": past_key_values,
                 "use_cache": use_cache,
                 "attention_mask": attention_mask,
-                "num_logits_to_keep": num_logits_to_keep,
             }
         )
         return model_inputs
