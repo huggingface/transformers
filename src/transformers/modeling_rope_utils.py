@@ -365,7 +365,7 @@ def _check_received_keys(rope_type: str, received_keys: set, required_keys: set,
     # BC: "rope_type" was originally "type" -- let's check for "rope_type" when "type" is present
     if "type" in received_keys:
         received_keys -= {"type"}
-        received_keys.add("rope_type")
+        required_keys.add("rope_type")
 
     missing_keys = required_keys - received_keys
     if missing_keys:
