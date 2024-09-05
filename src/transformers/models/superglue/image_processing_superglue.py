@@ -31,6 +31,7 @@ from ...image_utils import (
     is_valid_image,
     to_numpy_array,
     valid_images,
+    validate_preprocess_arguments,
 )
 from ...utils import TensorType, logging, requires_backends
 
@@ -95,7 +96,7 @@ def convert_to_grayscale(
     return image
 
 
-def check_image_pairs_input(image_pairs: ImageInput):
+def validate_and_format_image_pairs(image_pairs: ImageInput):
     error_message = "Input images must be a list of pairs of images, list of batch 2 arrays because SuperGlue takes pairs of images."
 
     def _flatten(image_pairs):
@@ -308,9 +309,7 @@ class SuperGlueImageProcessor(BaseImageProcessor):
         size = size if size is not None else self.size
         size = get_size_dict(size, default_to_square=False)
 
-        images = check_image_pairs_input(images)
-
-        # images = make_list_of_images(images)
+        images = validate_and_format_image_pairs(images)
 
         if not valid_images(images):
             raise ValueError(
@@ -318,11 +317,12 @@ class SuperGlueImageProcessor(BaseImageProcessor):
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
 
-        if do_resize and size is None:
-            raise ValueError("Size must be specified if do_resize is True.")
-
-        if do_rescale and rescale_factor is None:
-            raise ValueError("Rescale factor must be specified if do_rescale is True.")
+        validate_preprocess_arguments(
+            do_resize=do_resize,
+            size=size,
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+        )
 
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
