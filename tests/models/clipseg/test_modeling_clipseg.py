@@ -796,7 +796,7 @@ class CLIPSegModelIntegrationTest(unittest.TestCase):
 
         # forward pass
         with torch.no_grad():
-            outputs = model(**inputs)
+            outputs = model(**inputs, interpolate_pos_encoding=True)
 
         # verify the predicted masks
         self.assertEqual(
@@ -804,13 +804,13 @@ class CLIPSegModelIntegrationTest(unittest.TestCase):
             torch.Size((3, 352, 352)),
         )
         expected_masks_slice = torch.tensor(
-            [[-7.4613, -7.4785, -7.3628], [-7.3268, -7.0899, -7.1333], [-6.9838, -6.7900, -6.8913]]
+            [[-7.4729, -7.4890, -7.3732], [-7.3379, -7.1001, -7.1432], [-6.9942, -6.8002, -6.9010]]
         ).to(torch_device)
         self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_masks_slice, atol=1e-3))
 
         # verify conditional and pooled output
         expected_conditional = torch.tensor([0.5601, -0.0314, 0.1980]).to(torch_device)
-        expected_pooled_output = torch.tensor([0.5036, -0.2681, -0.2644]).to(torch_device)
+        expected_pooled_output = torch.tensor([0.5050, -0.2674, -0.2627]).to(torch_device)
         self.assertTrue(torch.allclose(outputs.conditional_embeddings[0, :3], expected_conditional, atol=1e-3))
         self.assertTrue(torch.allclose(outputs.pooled_output[0, :3], expected_pooled_output, atol=1e-3))
 
