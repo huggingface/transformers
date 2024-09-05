@@ -485,7 +485,6 @@ class ChatTemplateTest(unittest.TestCase):
     def _get_tokenizer(self):
         return AutoTokenizer.from_pretrained("hf-internal-testing/tiny-gpt2-with-chatml-template")
 
-    @require_jinja
     def test_chat_template(self):
         dummy_template = "{% for message in messages %}{{message['role'] + message['content']}}{% endfor %}"
         dummy_conversation = [
@@ -777,3 +776,5 @@ class ChatTemplateTest(unittest.TestCase):
             new_tokenizer = tokenizer.from_pretrained(tmp_dir_name)
         # Assert that the serialized list is correctly reconstructed as a single dict
         self.assertEqual(new_tokenizer.chat_template, tokenizer.chat_template)
+
+# TODO Why aren't tests running?
