@@ -110,6 +110,10 @@ jobs:
         working-directory: /transformers
         run: ls -l /mnt/cache/hub/models--ylacombe--bark-small/blobs/04fd39ae31c48ce4c2578d25e07f436b671fa900fd526de06d68054735fe4fc6.incomplete
 
+      - name: Remove cache 1
+        working-directory: /transformers
+        run: rm -rf /mnt/cache/hub/models--ylacombe--bark-small/blobs/04fd39ae31c48ce4c2578d25e07f436b671fa900fd526de06d68054735fe4fc6.incomplete
+
       - name: Run all tests on GPU
         working-directory: /transformers
         run: python3 -m pytest tests/${{ matrix.folders }} -k "BarkProcessorTest and test_save_load_pretrained_additional_features"
