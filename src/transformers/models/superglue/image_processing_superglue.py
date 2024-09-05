@@ -96,37 +96,63 @@ def convert_to_grayscale(
 
 
 def check_image_pairs_input(image_pairs: ImageInput):
-    value_error_message = "Input images must be a list of pairs of images, list of batch 2 arrays because SuperGlue takes pairs of images."
+    error_message = "Input images must be a list of pairs of images, list of batch 2 arrays because SuperGlue takes pairs of images."
+
+    def _flatten(image_pairs):
+        return [image for image_pair in image_pairs for image in image_pair]
+
     if is_valid_image(image_pairs):
-        if get_image_type(image_pairs) != ImageType.PIL:
-            if image_pairs.ndim == 4 and len(image_pairs) == 2:
+        # Single PIL image
+        if get_image_type(image_pairs) == ImageType.PIL:
+            raise ValueError(error_message)
+
+        images_shape = image_pairs.shape
+
+        # Array of two concatenated images (n_images, height, width, channels)
+        if len(images_shape) == 4 and images_shape[0] == 2:
+            return [image_pairs[0], image_pairs[1]]
+
+        # Array of batch of pairs of images (batch_size, 2, height, width, channels)
+        if len(images_shape) == 5 and images_shape[1] == 2:
+            return _flatten(image_pairs)
+
+    # List of images
+    if isinstance(image_pairs, list) and all(is_valid_image(image_pair) for image_pair in image_pairs):
+        if all(get_image_type(image_pair) != ImageType.PIL for image_pair in image_pairs):
+            if all(image_pair.ndim == 3 for image_pair in image_pairs) and len(image_pairs) == 2:
                 return [image_pairs[i] for i in range(len(image_pairs))]
-            if image_pairs.ndim == 5 and len(image_pairs[0]) == 2:
-                return [image for image_pair in image_pairs for image in image_pair]
-    elif isinstance(image_pairs, list):
-        all_image_pair_is_valid_image = all(is_valid_image(image_pair) for image_pair in image_pairs)
-        all_image_pair_is_list = all(isinstance(image_pair, list) for image_pair in image_pairs)
-        if all_image_pair_is_valid_image:
-            if all(get_image_type(image_pair) != ImageType.PIL for image_pair in image_pairs):
-                if all(image_pair.ndim == 3 for image_pair in image_pairs) and len(image_pairs) == 2:
-                    return [image_pairs[i] for i in range(len(image_pairs))]
-                if all(image_pair.ndim == 4 for image_pair in image_pairs) and len(image_pairs[0]) == 2:
-                    return [image for image_pair in image_pairs for image in image_pair]
-            else:
-                if len(image_pairs) == 2:
-                    return image_pairs
-        elif all_image_pair_is_list:
-            all_image_is_valid_image = all(is_valid_image(image) for image_pair in image_pairs for image in image_pair)
-            if all_image_is_valid_image:
-                all_image_pair_are_pairs = all(len(image_pair) == 2 for image_pair in image_pairs)
-                if all(get_image_type(image) != ImageType.PIL for image_pair in image_pairs for image in image_pair):
-                    all_image_3d_arrays = all(image.ndim == 3 for image_pair in image_pairs for image in image_pair)
-                    if all_image_3d_arrays and all_image_pair_are_pairs:
-                        return [image for image_pair in image_pairs for image in image_pair]
-                else:
-                    if all_image_pair_are_pairs:
-                        return [image for image_pair in image_pairs for image in image_pair]
-    raise ValueError(value_error_message)
+
+            if all(image_pair.ndim == 4 for image_pair in image_pairs) and len(image_pairs[0]) == 2:
+                return _flatten(image_pairs)
+
+        elif len(image_pairs) == 2:
+            return image_pairs
+
+        raise ValueError(error_message)
+
+    # List of list of images
+    if (
+        isinstance(image_pairs, list)
+        and all(isinstance(image_pair, list) for image_pair in image_pairs)
+        and all(is_valid_image(image) for image_pair in image_pairs for image in image_pair)
+    ):
+        # List of list aren't all pairs
+        if not all(len(image_pair) == 2 for image_pair in image_pairs):
+            raise ValueError(error_message)
+
+        image_pairs = _flatten(image_pairs)
+
+        for image in image_pairs:
+            if not is_valid_image(image):
+                raise ValueError(error_message)
+
+            # If any image is an array, it must be a 3D array
+            if get_image_type(image) != ImageType.PIL and image.ndim != 3:
+                raise ValueError(error_message)
+
+        return image_pairs
+
+    raise ValueError(error_message)
 
 
 class SuperGlueImageProcessor(BaseImageProcessor):
