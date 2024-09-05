@@ -2217,8 +2217,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             dtype=old_embeddings.weight.dtype,
         )
 
-        # initialize all new embeddings (in particular added tokens)
-        self._init_weights(new_embeddings)
+        # initialize new embeddings (in particular added tokens) if `new_num_tokens` is larger
+        # than `old_num_tokens`. The new embeddings will de drawn from a multivariate normal
+        # distribution that has old embeddings' mean and covariance. as descriped in this article:
+        # https://nlp.stanford.edu/~johnhew/vocab-expansion.html
+        if new_num_tokens > old_num_tokens:
+            added_num_tokens = new_num_tokens - old_num_tokens
+            mu = torch.mean(old_embeddings.weight.data, axis=0)
+            cov = (old_embeddings.weight.data - mu).T @ (old_embeddings.weight.data - mu) / old_num_tokens
+            dist = torch.distributions.multivariate_normal.MultivariateNormal(mu, covariance_matrix=1e-5 * cov)
+            new_embeddings.weight.data[-1*added_num_tokens:, :] = dist.sample(sample_shape=(added_num_tokens,))
 
         # Copy token embeddings from the previous weights
 
