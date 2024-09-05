@@ -52,21 +52,23 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 METADATA_FIELDS = ("_from_model_config", "_commit_hash", "_original_object_hash", "transformers_version")
 NEEDS_CACHE_CONFIG = {}
-
-NEED_SETUP_CACHE_CLASSES_MAPPING = {
-    "static": StaticCache,
-    "offloaded_static": OffloadedStaticCache,
-    "sliding_window": SlidingWindowCache,
-    "hybrid": HybridCache,
-    "mamba": MambaCache,
-}
-QUANT_BACKEND_CLASSES_MAPPING = {"quanto": QuantoQuantizedCache, "HQQ": HQQQuantizedCache}
-ALL_CACHE_IMPLEMENTATIONS = [NEED_SETUP_CACHE_CLASSES_MAPPING.keys()] + [QUANT_BACKEND_CLASSES_MAPPING.keys()]
+NEED_SETUP_CACHE_CLASSES_MAPPING = {}
+QUANT_BACKEND_CLASSES_MAPPING = {}
+ALL_CACHE_IMPLEMENTATIONS = []
 
 if is_torch_available():
     from ..cache_utils import QuantizedCacheConfig
 
     NEEDS_CACHE_CONFIG["quantized"] = QuantizedCacheConfig
+    NEED_SETUP_CACHE_CLASSES_MAPPING = {
+        "static": StaticCache,
+        "offloaded_static": OffloadedStaticCache,
+        "sliding_window": SlidingWindowCache,
+        "hybrid": HybridCache,
+        "mamba": MambaCache,
+    }
+    QUANT_BACKEND_CLASSES_MAPPING = {"quanto": QuantoQuantizedCache, "HQQ": HQQQuantizedCache}
+    ALL_CACHE_IMPLEMENTATIONS = [NEED_SETUP_CACHE_CLASSES_MAPPING.keys()] + [QUANT_BACKEND_CLASSES_MAPPING.keys()]
 
 
 class GenerationMode(ExplicitEnum):
