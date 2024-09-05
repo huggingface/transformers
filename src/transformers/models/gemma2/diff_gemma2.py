@@ -70,6 +70,7 @@ class Gemma2Config(GemmaConfig):
 
     def __init__(
         self,
+        hidden_activation="gelu_pytorch_tanh",
         query_pre_attn_scalar=224,
         sliding_window=4096,
         final_logit_softcapping=30.0,
@@ -77,6 +78,7 @@ class Gemma2Config(GemmaConfig):
         **super_kwargs,
     ):
         super().__init__(self, **super_kwargs)
+        self.hidden_activation = hidden_activation
         self.query_pre_attn_scalar = query_pre_attn_scalar
         self.sliding_window = sliding_window
         self.final_logit_softcapping = final_logit_softcapping
