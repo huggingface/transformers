@@ -13,8 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-""" PyTorch Phi-MoE model."""
-
+"""PyTorch Phi-MoE model."""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -26,6 +25,7 @@ logger = logging.get_logger(__name__)
 PHIMOE_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "microsoft/Phi-3.5-MoE-instruct": "https://huggingface.co/microsoft/Phi-3.5-MoE-instruct/resolve/main/config.json",
 }
+
 
 class PhiMoEConfig(PretrainedConfig):
     r"""
@@ -107,7 +107,7 @@ class PhiMoEConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
-    
+
     model_type = "phimoe"
     keys_to_ignore_at_inference = ["past_key_values"]
 
@@ -138,8 +138,8 @@ class PhiMoEConfig(PretrainedConfig):
         router_aux_loss_coef=0.001,
         router_jitter_noise=0.01,
         input_jitter_noise=0.0,
-        attention_bias = False,
-        lm_head_bias = False,
+        attention_bias=False,
+        lm_head_bias=False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -224,13 +224,9 @@ class PhiMoEConfig(PretrainedConfig):
                 f"`rope_scaling`'s long_factor field must have length {self.hidden_size // self.num_attention_heads // 2}, got {len(rope_scaling_long_factor)}"
             )
         if not isinstance(rope_scaling_short_mscale, (int, float)):
-            raise ValueError(
-                f"`rope_scaling`'s short_mscale field must be a number, got {rope_scaling_short_mscale}"
-            )
+            raise ValueError(f"`rope_scaling`'s short_mscale field must be a number, got {rope_scaling_short_mscale}")
         if not isinstance(rope_scaling_long_mscale, (int, float)):
-            raise ValueError(
-                f"`rope_scaling`'s long_mscale field must be a number, got {rope_scaling_long_mscale}"
-            )
+            raise ValueError(f"`rope_scaling`'s long_mscale field must be a number, got {rope_scaling_long_mscale}")
         if not isinstance(original_max_position_embeddings, int):
             raise ValueError(
                 f"`rope_scaling`'s original_max_position_embeddings field must be an integer, got {original_max_position_embeddings}"

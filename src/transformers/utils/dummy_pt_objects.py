@@ -7034,6 +7034,7 @@ class Phi3PreTrainedModel(metaclass=DummyObject):
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
+
 class PhiMoEForCausalLM(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -7060,6 +7061,7 @@ class PhiMoEPreTrainedModel(metaclass=DummyObject):
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
+
 
 class Pix2StructForConditionalGeneration(metaclass=DummyObject):
     _backends = ["torch"]

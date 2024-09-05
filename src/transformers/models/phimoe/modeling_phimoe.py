@@ -13,7 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-""" PyTorch PhiMoE model."""
+"""PyTorch PhiMoE model."""
+
 import inspect
 import math
 import warnings
@@ -47,10 +48,8 @@ from transformers.utils import (
     replace_return_docstrings,
 )
 from transformers.utils.import_utils import is_torch_fx_available
-from .configuration_phimoe import PhiMoEConfig
 
-from einops import rearrange
-from flash_attn.layers.rotary import RotaryEmbedding as FlashRotaryEmbedding
+from .configuration_phimoe import PhiMoEConfig
 
 
 if is_flash_attn_2_available():
@@ -200,7 +199,6 @@ class PhiMoERotaryEmbedding(nn.Module):
 
 
 class Phi3LongRoPEScaledRotaryEmbedding(nn.Module):
-
     def __init__(self, dim, config):
         super().__init__()
         self.dim = dim
@@ -222,10 +220,13 @@ class Phi3LongRoPEScaledRotaryEmbedding(nn.Module):
         else:
             rescale_factors = torch.tensor(self.short_factor, dtype=torch.float32, device=x.device)
             mscale = self.short_mscale
-        assert rescale_factors.shape == (self.dim // 2, ), \
-            f"misaligned shape for LongRoPE rescale factors: {rescale_factors.shape}"
+        assert rescale_factors.shape == (
+            self.dim // 2,
+        ), f"misaligned shape for LongRoPE rescale factors: {rescale_factors.shape}"
 
-        inv_freq = 1.0 / (rescale_factors * (self.base ** (torch.arange(0, self.dim, 2).float().to(x.device) / self.dim)))
+        inv_freq = 1.0 / (
+            rescale_factors * (self.base ** (torch.arange(0, self.dim, 2).float().to(x.device) / self.dim))
+        )
 
         t = torch.arange(seq_len, device=x.device, dtype=torch.float32)
         freqs = torch.outer(t, inv_freq)
@@ -240,7 +241,6 @@ def rotate_half(x):
     x1 = x[..., : x.shape[-1] // 2]
     x2 = x[..., x.shape[-1] // 2 :]
     return torch.cat((-x2, x1), dim=-1)
-
 
 
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
@@ -283,7 +283,6 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-
 class PhiMoEAttention(nn.Module):
     """
     Multi-headed attention from 'Attention Is All You Need' paper. Modified to use sliding window attention: Longformer
@@ -317,11 +316,15 @@ class PhiMoEAttention(nn.Module):
                 f" and `num_heads`: {self.num_heads})."
             )
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=self.config.attention_bias)
-        self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=self.config.attention_bias)
-        self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=self.config.attention_bias)
+        self.k_proj = nn.Linear(
+            self.hidden_size, self.num_key_value_heads * self.head_dim, bias=self.config.attention_bias
+        )
+        self.v_proj = nn.Linear(
+            self.hidden_size, self.num_key_value_heads * self.head_dim, bias=self.config.attention_bias
+        )
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=self.config.attention_bias)
 
-        if getattr(config, 'rope_scaling', None) is None:
+        if getattr(config, "rope_scaling", None) is None:
             self.rotary_emb = PhiMoERotaryEmbedding(
                 self.head_dim,
                 max_position_embeddings=self.max_position_embeddings,
@@ -370,7 +373,7 @@ class PhiMoEAttention(nn.Module):
                     "with a layer index."
                 )
             kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
-        
+
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
@@ -418,7 +421,6 @@ class PhiMoEAttention(nn.Module):
             attn_weights = None
 
         return attn_output, attn_weights, past_key_value
-
 
 
 class PhiMoEFlashAttention2(PhiMoEAttention):
@@ -714,7 +716,6 @@ class PhiMoEFlashAttention2(PhiMoEAttention):
         )
 
 
-
 class PhiMoESdpaAttention(PhiMoEAttention):
     """
     PhiMoE attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
@@ -838,140 +839,151 @@ class PhiMoEBLockSparseTop2MLP(PhiMoEBlockSparseTop2MLP):
 class mp(torch.autograd.Function):
     @staticmethod
     def forward(
-        ctx, 
-        scores: torch.Tensor, 
-        multiplier: torch.Tensor, 
+        ctx,
+        scores: torch.Tensor,
+        multiplier: torch.Tensor,
         selected_experts: torch.Tensor,
         masked_gates: torch.Tensor,
         mask_for_one: torch.Tensor,
     ):
         ctx.save_for_backward(multiplier, selected_experts, masked_gates)
         return multiplier * mask_for_one
-        
+
     @staticmethod
     def backward(
-        ctx, 
-        grad_at_output: torch.Tensor, 
+        ctx,
+        grad_at_output: torch.Tensor,
     ):
         multiplier, selected_experts, masked_gates = ctx.saved_tensors
-        
+
         grad_at_output = grad_at_output * multiplier
-        
+
         grad_at_scores_expaned = masked_gates * grad_at_output.mul(-1)
         grad_at_scores_expaned.scatter_add_(
             dim=-1,
             index=selected_experts,
             src=grad_at_output,
         )
-        
+
         return (
-            grad_at_scores_expaned, 
-            None, 
-            None, 
-            None, 
-            None, 
+            grad_at_scores_expaned,
+            None,
+            None,
+            None,
+            None,
         )
-    
+
+
 def sparsemixer(scores, top_k, jitter_eps, training):
     assert top_k == 2
-    
+
     ################ first expert ################
-    
+
     with torch.no_grad():
         # compute mask for sparsity
         mask_logits_threshold, max_ind = scores.max(dim=-1, keepdim=True)
         factor = scores.abs().clamp(min=mask_logits_threshold)
-        mask_logits_threshold = (
-            (mask_logits_threshold - scores) / factor
-        ) > (2 * jitter_eps)
+        mask_logits_threshold = ((mask_logits_threshold - scores) / factor) > (2 * jitter_eps)
 
-    # apply mask 
-    masked_gates = scores.masked_fill(mask_logits_threshold, float('-inf'))
+    # apply mask
+    masked_gates = scores.masked_fill(mask_logits_threshold, float("-inf"))
     if training:
         selected_experts = (
-            masked_gates - torch.empty_like(masked_gates, memory_format=torch.legacy_contiguous_format).exponential_().log()
-        ).max(dim=-1)[1].unsqueeze(-1) # gumbel sampling, more robust than than the multinomial method
+            (
+                masked_gates
+                - torch.empty_like(masked_gates, memory_format=torch.legacy_contiguous_format).exponential_().log()
+            )
+            .max(dim=-1)[1]
+            .unsqueeze(-1)
+        )  # gumbel sampling, more robust than than the multinomial method
     else:
         selected_experts = max_ind
-        
+
     # compute scores for gradients
     masked_gates = torch.softmax(masked_gates, dim=-1)
     multiplier_o = masked_gates.gather(dim=-1, index=selected_experts)
-    
+
     if training:
-        # compute midpoint mask 
+        # compute midpoint mask
         max_scores, max_ind = masked_gates.max(dim=-1, keepdim=True)
         mask_for_one = torch.logical_or(
             selected_experts == max_ind,
-            torch.rand_like(max_scores) > 0.75 # Heun's third-order method: f(x) - f(0) = .25 f'(x) + .75 f'(x/3.)
-        ) 
+            torch.rand_like(max_scores) > 0.75,  # Heun's third-order method: f(x) - f(0) = .25 f'(x) + .75 f'(x/3.)
+        )
         # 1 -> 1.0 & 0 -> 1./3: lambda x: (x + 0.5) / 1.5
         mask_for_one = torch.add(0.3333, mask_for_one, alpha=0.6667).type_as(masked_gates)
 
         multiplier = mp.apply(
-            scores, 
-            multiplier_o, 
-            selected_experts, 
-            masked_gates, 
+            scores,
+            multiplier_o,
+            selected_experts,
+            masked_gates,
             mask_for_one,
         )
     else:
         multiplier = multiplier_o
 
-    # masked out first expert 
+    # masked out first expert
     masked_scores = torch.scatter(
         scores,
         -1,
         selected_experts,
-        float('-inf'),
+        float("-inf"),
     )
     with torch.no_grad():
         # compute mask for sparsity
         mask_logits_threshold, max_ind = masked_scores.max(dim=-1, keepdim=True)
         factor = scores.abs().clamp(min=mask_logits_threshold)
-        mask_logits_threshold = (
-            (mask_logits_threshold - scores) / factor
-        ) > (2 * jitter_eps)
+        mask_logits_threshold = ((mask_logits_threshold - scores) / factor) > (2 * jitter_eps)
 
-    # apply mask 
-    masked_gates_top2 = masked_scores.masked_fill(mask_logits_threshold, float('-inf'))
+    # apply mask
+    masked_gates_top2 = masked_scores.masked_fill(mask_logits_threshold, float("-inf"))
     if training:
         selected_experts_top2 = (
-            masked_gates_top2 - torch.empty_like(masked_gates_top2, memory_format=torch.legacy_contiguous_format).exponential_().log()
-        ).max(dim=-1)[1].unsqueeze(-1) # gumbel sampling, more robust than than the multinomial method
+            (
+                masked_gates_top2
+                - torch.empty_like(masked_gates_top2, memory_format=torch.legacy_contiguous_format)
+                .exponential_()
+                .log()
+            )
+            .max(dim=-1)[1]
+            .unsqueeze(-1)
+        )  # gumbel sampling, more robust than than the multinomial method
     else:
         selected_experts_top2 = max_ind
     # compute scores for gradients
     masked_gates_top2 = torch.softmax(masked_gates_top2, dim=-1)
     multiplier_top2_o = masked_gates_top2.gather(dim=-1, index=selected_experts_top2)
-    
-    if training: 
-        # compute midpoint mask 
+
+    if training:
+        # compute midpoint mask
         max_scores, max_ind = masked_gates_top2.max(dim=-1, keepdim=True)
         mask_for_one_top2 = torch.logical_or(
             selected_experts_top2 == max_ind,
-            torch.rand_like(max_scores).uniform_() > 0.75 # Heun's third-order method: f(x) - f(0) = .25 f'(x) + .75 f'(x/3.)
-        ) 
+            torch.rand_like(max_scores).uniform_()
+            > 0.75,  # Heun's third-order method: f(x) - f(0) = .25 f'(x) + .75 f'(x/3.)
+        )
         # 1 -> 1.0 & 0 -> 1./3: lambda x: (x + 0.5) / 1.5
         mask_for_one_top2 = torch.add(0.3333, mask_for_one_top2, alpha=0.6667).type_as(masked_gates_top2)
 
         multiplier_top2 = mp.apply(
-            scores, 
-            multiplier_top2_o, 
-            selected_experts_top2, 
-            masked_gates_top2, 
+            scores,
+            multiplier_top2_o,
+            selected_experts_top2,
+            masked_gates_top2,
             mask_for_one_top2,
         )
     else:
         multiplier_top2 = multiplier_top2_o
-    
+
     multiplier = torch.concat((multiplier, multiplier_top2), dim=-1)
     selected_experts = torch.concat((selected_experts, selected_experts_top2), dim=-1)
-    
+
     return (
-        multiplier, 
+        multiplier,
         selected_experts,
     )
+
 
 class PhiMoESparseMoeBlock(nn.Module):
     """
@@ -999,19 +1011,21 @@ class PhiMoESparseMoeBlock(nn.Module):
         # Jitter parameters
         self.router_jitter_noise = config.router_jitter_noise
         self.input_jitter_noise = config.input_jitter_noise
-        
+
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         """ """
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         if self.training and self.input_jitter_noise > 0:
-            hidden_states *= torch.empty_like(hidden_states).uniform_(1.0 - self.input_jitter_noise, 1.0 + self.input_jitter_noise)
+            hidden_states *= torch.empty_like(hidden_states).uniform_(
+                1.0 - self.input_jitter_noise, 1.0 + self.input_jitter_noise
+            )
         hidden_states = hidden_states.view(-1, hidden_dim)
         router_logits = self.gate(hidden_states)
 
         routing_weights, selected_experts = sparsemixer(
-            router_logits, 
-            top_k=2, 
-            jitter_eps=self.router_jitter_noise, 
+            router_logits,
+            top_k=2,
+            jitter_eps=self.router_jitter_noise,
             training=self.training,
         )
 
@@ -1057,7 +1071,9 @@ class PhiMoEDecoderLayer(nn.Module):
 
         self.block_sparse_moe = PhiMoESparseMoeBlock(config)
         self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.rms_norm_eps, elementwise_affine=True)
-        self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.rms_norm_eps, elementwise_affine=True)
+        self.post_attention_layernorm = nn.LayerNorm(
+            config.hidden_size, eps=config.rms_norm_eps, elementwise_affine=True
+        )
 
     def forward(
         self,
@@ -1145,7 +1161,6 @@ PHIMOE_START_DOCSTRING = r"""
     "The bare PhiMoE Model outputting raw hidden-states without any specific head on top.",
     PHIMOE_START_DOCSTRING,
 )
-
 class PhiMoEPreTrainedModel(PreTrainedModel):
     config_class = PhiMoEConfig
     base_model_prefix = "model"
@@ -1220,7 +1235,6 @@ PHIMOE_INPUTS_DOCSTRING = r"""
     "The bare PhiMoE Model outputting raw hidden-states without any specific head on top.",
     PHIMOE_START_DOCSTRING,
 )
-
 class PhiMoEModel(PhiMoEPreTrainedModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`PhiMoEDecoderLayer`]
@@ -1562,11 +1576,17 @@ class PhiMoEForCausalLM(PhiMoEPreTrainedModel):
     ):
         # When the first time input length reached long and short factor switching point, enforce re-compute cache
         # It will cause downside of slower at this single token position, however, better than current failure.
-        if past_key_values and self.config.rope_scaling and input_ids.shape[1] >= self.config.original_max_position_embeddings + 1:
-            past_length = past_key_values.seen_tokens if isinstance(past_key_values, Cache) else past_key_values[0][0].shape[2]
+        if (
+            past_key_values
+            and self.config.rope_scaling
+            and input_ids.shape[1] >= self.config.original_max_position_embeddings + 1
+        ):
+            past_length = (
+                past_key_values.seen_tokens if isinstance(past_key_values, Cache) else past_key_values[0][0].shape[2]
+            )
             if past_length <= self.config.original_max_position_embeddings:
                 past_key_values = None
-        
+
         # Omit tokens covered by past_key_values
         if past_key_values is not None:
             if isinstance(past_key_values, Cache):
