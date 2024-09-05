@@ -1,6 +1,9 @@
 import os
 from pathlib import Path
+from datasets import load_dataset
 
+
+ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 
 def get_file(lpath, outfile=None, **kwargs) -> None:
     # # Taken from https://github.com/fsspec/filesystem_spec/blob/47b445ae4c284a82dd15e0287b1ffc410e8fc470/fsspec/spec.py#L883
@@ -22,4 +25,4 @@ def get_file(lpath, outfile=None, **kwargs) -> None:
         print(outfile)
 
 
-get_file(lpath="/mnt/cache/datasets/downloads/0f3877f8b8ff8f882b5032f93535a4d21bd7475946970fbf306f79c2769f3d0d.incomplete")
+# get_file(lpath="/mnt/cache/datasets/downloads/0f3877f8b8ff8f882b5032f93535a4d21bd7475946970fbf306f79c2769f3d0d.incomplete")
