@@ -188,17 +188,17 @@ def convert_sam_checkpoint(model_name, checkpoint_path, pytorch_dump_folder, pus
             output = hf_model(**inputs)
             scores = output.iou_scores.squeeze()
 
-        # Test with 2 points and 1 image.
-        input_points = [[[400, 650], [800, 650]]]
-        input_labels = [[1, 1]]
+        # # Test with 2 points and 1 image.
+        # input_points = [[[400, 650], [800, 650]]]
+        # input_labels = [[1, 1]]
 
-        inputs = processor(
-            images=np.array(raw_image), input_points=[input_points], input_labels=input_labels, return_tensors="pt"
-        ).to(device)
+        # inputs = processor(
+        #     images=np.array(raw_image), input_points=[input_points], input_labels=input_labels, return_tensors="pt"
+        # ).to(device)
 
-        with torch.no_grad():
-            output = hf_model(**inputs)
-            scores = output.iou_scores.squeeze()
+        # with torch.no_grad():
+        #     output = hf_model(**inputs)
+        #     scores = output.iou_scores.squeeze()
 
 
     if pytorch_dump_folder is not None:
