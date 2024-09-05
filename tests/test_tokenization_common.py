@@ -4222,6 +4222,7 @@ class ChatTemplateTest(unittest.TestCase):
         self.assertEqual(output, expected_output)  # Test output is the same after reloading
         # Check that no error raised
         tokenizer.apply_chat_template(dummy_conversation, tokenize=True, return_dict=False)
+        raise ValueError("Test that this test is run, and fails!")
 
     @require_jinja
     def test_chat_template_batched(self):
