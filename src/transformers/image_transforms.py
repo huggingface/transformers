@@ -26,13 +26,7 @@ from .image_utils import (
     get_image_size,
     infer_channel_dimension_format,
 )
-from .utils import (
-    ExplicitEnum,
-    TensorType,
-    is_jax_tensor,
-    is_tf_tensor,
-    is_torch_tensor,
-)
+from .utils import ExplicitEnum, TensorType, is_jax_tensor, is_tf_tensor, is_torch_tensor
 from .utils.import_utils import (
     is_flax_available,
     is_tf_available,

@@ -110,16 +110,12 @@ class DepthEstimationPipeline(Pipeline):
             [self.image_size[::-1]],
         )
 
-        outputs = [
-            {
-                "predicted_depth": output,
-                "depth": Image.fromarray(
-                    (((output - output.min()) / (output.max() - output.min())).detach().cpu().numpy() * 255).astype(
-                        "uint8"
-                    )
-                ),
-            }
-            for output in outputs
-        ]
+        formatted_outputs = []
+        for predicted_depth in outputs:
+            depth = predicted_depth.detach().cpu().numpy()
+            depth = (depth - depth.min()) / (depth.max() - depth.min())
+            depth = Image.fromarray((depth * 255).astype("uint8"))
 
-        return outputs[0] if len(outputs) == 1 else outputs
+            formatted_outputs.append({"predicted_depth": predicted_depth, "depth": depth})
+
+        return formatted_outputs[0] if len(outputs) == 1 else formatted_outputs

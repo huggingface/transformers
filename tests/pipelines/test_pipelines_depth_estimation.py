@@ -16,11 +16,7 @@ import unittest
 
 from huggingface_hub.utils import insecure_hashlib
 
-from transformers import (
-    MODEL_FOR_DEPTH_ESTIMATION_MAPPING,
-    is_torch_available,
-    is_vision_available,
-)
+from transformers import MODEL_FOR_DEPTH_ESTIMATION_MAPPING, is_torch_available, is_vision_available
 from transformers.pipelines import DepthEstimationPipeline, pipeline
 from transformers.testing_utils import (
     is_pipeline_test,

@@ -21,12 +21,7 @@ from transformers.file_utils import is_torch_available, is_vision_available
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import (
-    ModelTesterMixin,
-    _config_zero_init,
-    floats_tensor,
-    ids_tensor,
-)
+from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -405,9 +400,8 @@ class DPTModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((384, 384))
         self.assertTrue(predicted_depth.shape == expected_shape)
 
-        predicted_depth_l = image_processor.post_process_depth_estimation(outputs=outputs, target_sizes=[(500, 500)])[
-            0
-        ]
+        predicted_depth_l = image_processor.post_process_depth_estimation(outputs=outputs, target_sizes=[(500, 500)])
+        predicted_depth_l = predicted_depth_l[0]
         expected_shape = torch.Size((500, 500))
         self.assertTrue(predicted_depth_l.shape == expected_shape)
 

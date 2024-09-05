@@ -124,33 +124,36 @@ Pass the prepared inputs through the model:
 
 >>> with torch.no_grad():
 ...     outputs = model(pixel_values)
-...     outputs_flip = model(pixel_values=torch.flip(inputs.pixel_values, dims=[3]))
 ```
-
-<Tip>
-According to the [original implementation](https://github.com/isl-org/ZoeDepth/blob/edb6daf45458569e24f50250ef1ed08c015f17a7/zoedepth/models/depth_model.py#L131) ZoeDepth model performs inference on both the original and flipped images by default and averages out the results. The `post_process_depth_estimation` function will handle this for us by passing the flipped outputs to the optional `outputs_flip` argument.
-</Tip>
 
 Let's post-process the results to remove any padding and resize the depth map to match the original image size. The `post_process_depth_estimation` outputs a list of dicts containing the `"predicted_depth"` and the `"depth"` image visualization.
 
 ```py
+>>> # ZoeDepth dynamically pads the input image. Thus we pass the original image size as argument
+>>> # to `post_process_depth_estimation` to remove the padding and resize to original dimensions.
 >>> post_processed_output = image_processor.post_process_depth_estimation(
 ...     outputs,
-...     source_size=[image.size[::-1]],
-...     outputs_flip=outputs_flip,
+...     source_sizes=[image.size[::-1]],
 ... )
+
 >>> predicted_depth = post_processed_output[0]
->>> depth = Image.fromarray(
-...     (
-...         (
-...             (predicted_depth - predicted_depth.min()) / (predicted_depth.max() - predicted_depth.min())
-...         ).detach().cpu().numpy() * 255
-...     ).astype("uint8")
-... )
+>>> depth = (predicted_depth - predicted_depth.min()) / (predicted_depth.max() - predicted_depth.min())
+>>> depth = depth.detach().cpu().numpy() * 255
+>>> depth = Image.fromarray(depth.astype("uint8"))
 ```
 
 <Tip>
-Due to ZoeDepth's dynamic padding of the input image during inference we need to pass the original image size (`image.size[::-1]`) as input to the `post_process_depth_estimation` function to get the final depth map with the same dimensions as the original image.
+In the [original implementation](https://github.com/isl-org/ZoeDepth/blob/edb6daf45458569e24f50250ef1ed08c015f17a7/zoedepth/models/depth_model.py#L131) ZoeDepth model performs inference on both the original and flipped images and averages out the results. The `post_process_depth_estimation` function can handle this for us by passing the flipped outputs to the optional `outputs_flipped` argument:
+```Python
+>>> with torch.no_grad():   
+...     outputs = model(pixel_values)
+...     outputs_flipped = model(pixel_values=torch.flip(inputs.pixel_values, dims=[3]))
+>>> post_processed_output = image_processor.post_process_depth_estimation(
+...     outputs,
+...     source_sizes=[image.size[::-1]],
+...     outputs_flipped=outputs_flipped,
+... )
+```
 </Tip>
 
 <div class="flex justify-center">

@@ -288,12 +288,12 @@ class ZoeDepthModelIntegrationTest(unittest.TestCase):
         images,
         outputs,
         raw_outputs,
-        raw_outputs_flip=None,
+        raw_outputs_flipped=None,
     ):
         outputs_large = image_processor.post_process_depth_estimation(
             raw_outputs,
             [img.size[::-1] for img in images],
-            outputs_flip=raw_outputs_flip,
+            outputs_flipped=raw_outputs_flipped,
             target_sizes=[tuple(np.array(img.size[::-1]) * 2) for img in images],
             do_remove_padding=pad_input,
         )
@@ -310,14 +310,14 @@ class ZoeDepthModelIntegrationTest(unittest.TestCase):
 
         with torch.no_grad():
             raw_outputs = model(**inputs)
-            raw_outputs_flip = None
+            raw_outputs_flipped = None
             if flip_aug:
-                raw_outputs_flip = model(pixel_values=torch.flip(inputs.pixel_values, dims=[3]))
+                raw_outputs_flipped = model(pixel_values=torch.flip(inputs.pixel_values, dims=[3]))
 
         outputs = image_processor.post_process_depth_estimation(
             raw_outputs,
             [img.size[::-1] for img in images],
-            outputs_flip=raw_outputs_flip,
+            outputs_flipped=raw_outputs_flipped,
             do_remove_padding=pad_input,
         )
 
@@ -326,7 +326,7 @@ class ZoeDepthModelIntegrationTest(unittest.TestCase):
             self.assertTrue(img.size == out.shape[::-1])
             self.assertTrue(torch.allclose(expected_slice, out[:3, :3], rtol=1e-3))
 
-        self.check_target_size(image_processor, pad_input, images, outputs, raw_outputs, raw_outputs_flip)
+        self.check_target_size(image_processor, pad_input, images, outputs, raw_outputs, raw_outputs_flipped)
 
     def test_post_processing_depth_estimation_post_processing_nopad_noflip(self):
         images = [prepare_img()] * 2
