@@ -1468,7 +1468,7 @@ class GenerationMixin:
             # This is needed here if we don't want to make changes in accelerate in order to save execution_device
             # For offloaded case, we need to get the execution device, not just the device where it is offloaded
             if hasattr(self, "hf_device_map"):
-                main_device = main_device = [d for d in self.hf_device_map.values() if d not in ["cpu", "disk"]][0]
+                main_device = [d for d in self.hf_device_map.values() if d not in ["cpu", "disk"]][0]
                 execution_device = {
                     name: main_device if device in ["cpu", "disk"] else device
                     for name, device in self.hf_device_map.items()
