@@ -470,13 +470,18 @@ class Phi3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
             "use_cache": True,
             "do_sample": False,
             "return_dict_in_generate": True,
+            "output_logits": True,
         }
         output_with_long_factor = model.generate(input_tensor, **generation_args_long)
         keys_with_long_factor = output_with_long_factor.past_key_values[0][0]
+        last_token_logits = output_with_long_factor.logits[-1][-1]
+        regenerated_last_token_logits = model(output_with_long_factor.sequences[:, :-1]).logits[0][-1]
         keys_with_long_factor = keys_with_long_factor[:, :, : config.original_max_position_embeddings - 1, :]
 
         # KV cache is re-computed after reaching the (`config.original_max_position_embeddings`+1)th token position
-        self.assertFalse(torch.allclose(keys_with_short_factor, keys_with_long_factor, atol=1e-5))
+        self.assertFalse(torch.allclose(keys_with_short_factor, keys_with_long_factor, atol=1e-3, rtol=1e-3))
+        # Last token generated using long factor
+        self.assertTrue(torch.allclose(last_token_logits, regenerated_last_token_logits, atol=1e-3, rtol=1e-3))
 
 
 @slow
