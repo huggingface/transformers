@@ -342,7 +342,12 @@ class Gemma2SdpaAttention(Gemma2Attention):
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
+            cache_kwargs = {
+                "sin": sin,
+                "cos": cos,
+                "sliding_window": self.sliding_window,
+                "cache_position": cache_position,
+            }
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
@@ -641,7 +646,7 @@ class Gemma2ForCausalLM(GemmaForCausalLM):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        num_logits_to_keep: int = None,
+        num_logits_to_keep: int = 0,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         if self.training and self.config._attn_implementation != "eager":
             logger.warning_once(
