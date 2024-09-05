@@ -395,7 +395,7 @@ Choose which backend to use by specifying it via `torch_compile_backend` in the 
 * `dynamo.optimize("aot_cudagraphs")` - cudagraphs with AotAutograd. [Read more](https://github.com/pytorch/torchdynamo/pull/757)
 
 **Inference-only backend**s:
-* `dynamo.optimize("ofi")` -  Uses Torchscript optimize_for_inference.  [Read more](https://pytorch.org/docs/stable/generated/torch.jit.optimize_for_inference.html)
+* `dynamo.optimize("ofi")` -  Uses TorchScript optimize_for_inference.  [Read more](https://pytorch.org/docs/stable/generated/torch.jit.optimize_for_inference.html)
 * `dynamo.optimize("fx2trt")` -  Uses NVIDIA TensorRT for inference optimizations.  [Read more](https://pytorch.org/TensorRT/tutorials/getting_started_with_fx_path.html)
 * `dynamo.optimize("onnxrt")` -  Uses ONNXRT for inference on CPU/GPU.  [Read more](https://onnxruntime.ai/)
 * `dynamo.optimize("ipex")` -  Uses IPEX for inference on CPU.  [Read more](https://github.com/intel/intel-extension-for-pytorch)
