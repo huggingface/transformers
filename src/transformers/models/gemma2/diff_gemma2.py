@@ -648,7 +648,7 @@ class Gemma2ForCausalLM(GemmaForCausalLM):
         cache_position: Optional[torch.LongTensor] = None,
         num_logits_to_keep: int = 0,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
-        """"
+        r"""
         ```python
         >>> from transformers import AutoTokenizer, GemmaForCausalLM
 
@@ -663,6 +663,7 @@ class Gemma2ForCausalLM(GemmaForCausalLM):
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "What is your favorite condiment?"
         ```"""
+
         if self.training and self.config._attn_implementation != "eager":
             logger.warning_once(
                 "It is strongly recommended to train Gemma2 models with the `eager` attention implementation "
