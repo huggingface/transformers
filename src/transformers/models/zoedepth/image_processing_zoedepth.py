@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 
+
 if TYPE_CHECKING:
     from .modeling_zoedepth import ZoeDepthDepthEstimatorOutput
 
@@ -46,6 +47,7 @@ from ...utils import (
     logging,
     requires_backends,
 )
+
 
 if is_vision_available():
     import PIL
@@ -231,7 +233,9 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
         requires_backends(self, "torch")
         resample_to_mode = {PILImageResampling.BILINEAR: "bilinear", PILImageResampling.BICUBIC: "bicubic"}
         mode = resample_to_mode[resample]
-        resized_image = nn.functional.interpolate(torch_image, (int(height), int(width)), mode=mode, align_corners=True)
+        resized_image = nn.functional.interpolate(
+            torch_image, (int(height), int(width)), mode=mode, align_corners=True
+        )
         resized_image = resized_image.squeeze().numpy()
 
         resized_image = to_channel_dimension_format(
@@ -412,7 +416,8 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
 
         if do_rescale:
             images = [
-                self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format) for image in images
+                self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
+                for image in images
             ]
 
         if do_pad:
@@ -492,7 +497,7 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
         if do_remove_padding is None:
             do_remove_padding = self.do_pad
 
-        if (source_sizes is None and do_remove_padding):
+        if source_sizes is None and do_remove_padding:
             raise ValueError(
                 "Either `source_sizes` should be passed in, or `do_remove_padding` should be set to False"
             )
