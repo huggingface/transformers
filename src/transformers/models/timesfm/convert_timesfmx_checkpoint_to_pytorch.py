@@ -35,7 +35,11 @@ import torch
 from flax import traverse_util
 from timesfmx import checkpoints
 
-from transformers import TimesFMConfig, TimesFMEncoderModel, TimesFMForConditionalGeneration
+from transformers import (
+    TimesFMConfig,
+    TimesFMEncoderModel,
+    TimesFMForConditionalGeneration,
+)
 from transformers.utils import logging
 
 
@@ -69,7 +73,9 @@ def timesfmx_layer_norm_lookup(params, i, prefix, layer_name):
     return params[f"{prefix}/layers_{i}/{layer_name}/scale"]
 
 
-def convert_timesfmx_to_pytorch(variables: dict, *, num_layers: int, num_decoder_layers: int, is_encoder_only: bool):
+def convert_timesfmx_to_pytorch(
+    variables: dict, *, num_layers: int, num_decoder_layers: int, is_encoder_only: bool
+):
     """Converts the parameters from TimesFMX-Flax to Transformers-PyTorch."""
     old = traverse_util.flatten_dict(variables["target"])
     old = {"/".join(k): v for k, v in old.items()}
@@ -86,7 +92,9 @@ def convert_timesfmx_to_pytorch(variables: dict, *, num_layers: int, num_decoder
     # Encoder.
     for i in range(num_layers):
         # Block i, layer 0 (Self Attention).
-        layer_norm = timesfmx_layer_norm_lookup(old, i, "encoder", "pre_attention_layer_norm")
+        layer_norm = timesfmx_layer_norm_lookup(
+            old, i, "encoder", "pre_attention_layer_norm"
+        )
         k, o, q, v = timesfmx_attention_lookup(old, i, "encoder", "attention")
         new[f"encoder.block.{i}.layer.0.layer_norm.weight"] = layer_norm
         new[f"encoder.block.{i}.layer.0.SelfAttention.k.weight"] = k.T
@@ -114,7 +122,9 @@ def convert_timesfmx_to_pytorch(variables: dict, *, num_layers: int, num_decoder
         # Decoder.
         for i in range(num_decoder_layers):
             # Block i, layer 0 (Self Attention).
-            layer_norm = timesfmx_layer_norm_lookup(old, i, "decoder", "pre_self_attention_layer_norm")
+            layer_norm = timesfmx_layer_norm_lookup(
+                old, i, "decoder", "pre_self_attention_layer_norm"
+            )
             k, o, q, v = timesfmx_attention_lookup(old, i, "decoder", "self_attention")
             new[f"decoder.block.{i}.layer.0.layer_norm.weight"] = layer_norm
             new[f"decoder.block.{i}.layer.0.SelfAttention.k.weight"] = k.T
@@ -123,8 +133,12 @@ def convert_timesfmx_to_pytorch(variables: dict, *, num_layers: int, num_decoder
             new[f"decoder.block.{i}.layer.0.SelfAttention.v.weight"] = v.T
 
             # Block i, layer 1 (Cross Attention).
-            layer_norm = timesfmx_layer_norm_lookup(old, i, "decoder", "pre_cross_attention_layer_norm")
-            k, o, q, v = timesfmx_attention_lookup(old, i, "decoder", "encoder_decoder_attention")
+            layer_norm = timesfmx_layer_norm_lookup(
+                old, i, "decoder", "pre_cross_attention_layer_norm"
+            )
+            k, o, q, v = timesfmx_attention_lookup(
+                old, i, "decoder", "encoder_decoder_attention"
+            )
             new[f"decoder.block.{i}.layer.1.layer_norm.weight"] = layer_norm
             new[f"decoder.block.{i}.layer.1.EncDecAttention.k.weight"] = k.T
             new[f"decoder.block.{i}.layer.1.EncDecAttention.o.weight"] = o.T
@@ -132,7 +146,9 @@ def convert_timesfmx_to_pytorch(variables: dict, *, num_layers: int, num_decoder
             new[f"decoder.block.{i}.layer.1.EncDecAttention.v.weight"] = v.T
 
             # Block i, layer 2 (MLP).
-            layer_norm = timesfmx_layer_norm_lookup(old, i, "decoder", "pre_mlp_layer_norm")
+            layer_norm = timesfmx_layer_norm_lookup(
+                old, i, "decoder", "pre_mlp_layer_norm"
+            )
             wi, wo = timesfmx_mlp_lookup(old, i, "decoder", split_mlp_wi)
             new[f"decoder.block.{i}.layer.2.layer_norm.weight"] = layer_norm
             if split_mlp_wi:
@@ -143,9 +159,9 @@ def convert_timesfmx_to_pytorch(variables: dict, *, num_layers: int, num_decoder
             new[f"decoder.block.{i}.layer.2.DenseReluDense.wo.weight"] = wo.T
 
         new["decoder.final_layer_norm.weight"] = old["decoder/decoder_norm/scale"]
-        new["decoder.block.0.layer.0.SelfAttention.relative_attention_bias.weight"] = old[
-            "decoder/relpos_bias/rel_embedding"
-        ].T
+        new["decoder.block.0.layer.0.SelfAttention.relative_attention_bias.weight"] = (
+            old["decoder/relpos_bias/rel_embedding"].T
+        )
 
         # LM Head (only in v1.1 checkpoints, in v1.0 embeddings are used instead)
         if "decoder/logits_dense/kernel" in old:
@@ -157,7 +173,9 @@ def convert_timesfmx_to_pytorch(variables: dict, *, num_layers: int, num_decoder
 def make_state_dict(converted_params, is_encoder_only: bool):
     """Prepares a state dict for the PyTorch model."""
     # Make a state dict with torch tensors.
-    state_dict = collections.OrderedDict([(k, torch.from_numpy(v.copy())) for (k, v) in converted_params.items()])
+    state_dict = collections.OrderedDict(
+        [(k, torch.from_numpy(v.copy())) for (k, v) in converted_params.items()]
+    )
 
     # Add what is missing.
     if "encoder.embed_tokens.weight" not in state_dict:
@@ -174,7 +192,9 @@ def make_state_dict(converted_params, is_encoder_only: bool):
     return state_dict
 
 
-def load_timesfmx_weights_in_timesfm(model, config, timesfmx_checkpoint_path, is_encoder_only):
+def load_timesfmx_weights_in_timesfm(
+    model, config, timesfmx_checkpoint_path, is_encoder_only
+):
     """Replaces the params in model witht the TimesFMX converted params."""
     variables = checkpoints.load_timesfmx_checkpoint(timesfmx_checkpoint_path)
     converted = convert_timesfmx_to_pytorch(
@@ -188,7 +208,10 @@ def load_timesfmx_weights_in_timesfm(model, config, timesfmx_checkpoint_path, is
 
 
 def convert_timesfmx_checkpoint_to_pytorch(
-    timesfmx_checkpoint_path, config_file, pytorch_dump_path, is_encoder_only: bool = False
+    timesfmx_checkpoint_path,
+    config_file,
+    pytorch_dump_path,
+    is_encoder_only: bool = False,
 ):
     """Loads the config and model, converts the TimesFMX checkpoint, and saves a PyTorch checkpoint."""
     # Initialise PyTorch model
@@ -202,7 +225,9 @@ def convert_timesfmx_checkpoint_to_pytorch(
         model = TimesFMForConditionalGeneration(config)
 
     # Load weights from tf checkpoint
-    load_timesfmx_weights_in_timesfm(model, config, timesfmx_checkpoint_path, is_encoder_only)
+    load_timesfmx_weights_in_timesfm(
+        model, config, timesfmx_checkpoint_path, is_encoder_only
+    )
 
     # Save pytorch-model
     print(f"Save PyTorch model to {pytorch_dump_path}")
@@ -214,10 +239,16 @@ def convert_timesfmx_checkpoint_to_pytorch(
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Converts a native TimesFMX checkpoint into a PyTorch checkpoint.")
+    parser = argparse.ArgumentParser(
+        description="Converts a native TimesFMX checkpoint into a PyTorch checkpoint."
+    )
     # Required parameters
     parser.add_argument(
-        "--timesfmx_checkpoint_path", default=None, type=str, required=True, help="Path to the TimesFMX checkpoint."
+        "--timesfmx_checkpoint_path",
+        default=None,
+        type=str,
+        required=True,
+        help="Path to the TimesFMX checkpoint.",
     )
     parser.add_argument(
         "--config_file",
@@ -227,12 +258,22 @@ if __name__ == "__main__":
         help="The config json file corresponding to the pre-trained TimesFM model.\nThis specifies the model architecture.",
     )
     parser.add_argument(
-        "--pytorch_dump_path", default=None, type=str, required=True, help="Path to the output PyTorch model."
+        "--pytorch_dump_path",
+        default=None,
+        type=str,
+        required=True,
+        help="Path to the output PyTorch model.",
     )
     parser.add_argument(
-        "--is_encoder_only", action="store_true", help="Check if the model is encoder-decoder model", default=False
+        "--is_encoder_only",
+        action="store_true",
+        help="Check if the model is encoder-decoder model",
+        default=False,
     )
     args = parser.parse_args()
     convert_timesfmx_checkpoint_to_pytorch(
-        args.timesfmx_checkpoint_path, args.config_file, args.pytorch_dump_path, args.is_encoder_only
+        args.timesfmx_checkpoint_path,
+        args.config_file,
+        args.pytorch_dump_path,
+        args.is_encoder_only,
     )

@@ -82,7 +82,11 @@ class TimesFMConfig(PretrainedConfig):
 
     model_type = "timesfm"
     keys_to_ignore_at_inference = ["past_key_values"]
-    attribute_map = {"hidden_size": "d_model", "num_attention_heads": "num_heads", "num_hidden_layers": "num_layers"}
+    attribute_map = {
+        "hidden_size": "d_model",
+        "num_attention_heads": "num_heads",
+        "num_hidden_layers": "num_layers",
+    }
 
     def __init__(
         self,
@@ -167,10 +171,16 @@ class TimesFMOnnxConfig(OnnxSeq2SeqConfigWithPast):
         if self.use_past:
             common_inputs["attention_mask"][1] = "past_encoder_sequence + sequence"
             common_inputs["decoder_input_ids"] = {0: "batch"}
-            common_inputs["decoder_attention_mask"] = {0: "batch", 1: "past_decoder_sequence + sequence"}
+            common_inputs["decoder_attention_mask"] = {
+                0: "batch",
+                1: "past_decoder_sequence + sequence",
+            }
         else:
             common_inputs["decoder_input_ids"] = {0: "batch", 1: "decoder_sequence"}
-            common_inputs["decoder_attention_mask"] = {0: "batch", 1: "decoder_sequence"}
+            common_inputs["decoder_attention_mask"] = {
+                0: "batch",
+                1: "decoder_sequence",
+            }
 
         if self.use_past:
             self.fill_with_past_key_values_(common_inputs, direction="inputs")
