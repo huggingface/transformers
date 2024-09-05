@@ -211,9 +211,9 @@ class Gemma2Attention(GemmaAttention):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(self, config: Gemma2Config, layer_idx: Optional[int] = None):
+        super().__init__(config, layer_idx)
         self.scaling = config.query_pre_attn_scalar**-0.5
         self.sliding_window = config.sliding_window if not bool(layer_idx % 2) else None
-        super().__init__(config, layer_idx)
 
     def forward(
         self,
@@ -493,12 +493,12 @@ class Gemma2SdpaAttention(Gemma2Attention):
 
 class Gemma2DecoderLayer(GemmaDecoderLayer):
     def __init__(self, config: Gemma2Config, layer_idx: int):
+        super().__init__(config, layer_idx)
         self.config = config
         self.is_sliding = not bool(layer_idx % 2)
         self.pre_feedforward_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_feedforward_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.sliding_window = config.sliding_window
-        super().__init__(config, layer_idx)
 
     def forward(
         self,

@@ -221,9 +221,9 @@ class LlavaNextVideoMultiModalProjector(LlavaNextMultiModalProjector):
 
 class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
     def __init__(self, config: LlavaNextVideoConfig, **super_kwargs):
+        super().__init__(config, **super_kwargs)
         self.vision_resampler = LlavaNextVideoPooler(config)
         self.post_init()
-        super().__init__(config, **super_kwargs)
 
     def _get_image_features(self, pixel_values, image_sizes):
         # ! infer image_num_patches from image_sizes

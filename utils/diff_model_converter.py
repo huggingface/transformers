@@ -270,11 +270,13 @@ def merge_docstrings(original_docstring, updated_docstring):
 class SuperTransformer(cst.CSTTransformer):
     METADATA_DEPENDENCIES = (ParentNodeProvider,)
 
-    def __init__(self, python_module: cst.Module, original_methods, updated_methods):
+    def __init__(self, python_module: cst.Module, original_methods, updated_methods, class_name=""):
         self.python_module = python_module
         self.original_methods = original_methods
         self.updated_methods = updated_methods
         self.all_assign_target = {}
+        self.deleted_targets = {} # child node can delete some arguments
+        self.class_name = class_name
 
     def update_body(self, existing_body, new_statements):
         """
@@ -285,19 +287,26 @@ class SuperTransformer(cst.CSTTransformer):
         for node in new_statements:
             code = self.python_module.code_for_node(node)
             if m.matches(node, m.SimpleStatementLine(body=[m.Assign()])):
-                target = self.python_module.code_for_node(node.body[0].targets[0])
+                target = self.python_module.code_for_node(node.body[0].targets[0].target)
                 self.all_assign_target[target] = node
+            if m.matches(node, m.SimpleStatementLine(body=[m.Del()])):
+                target = self.python_module.code_for_node(node.body[0].target)
+                self.deleted_targets[target] = node
+                continue
             comment_less_code = re.sub(r"#.*", "", code).strip()
             comment_less_code = re.sub(r"\ *\n", "\n", comment_less_code).strip()
             existing_nodes.add(comment_less_code)
         for stmt in existing_body:
             if m.matches(stmt, m.SimpleStatementLine(body=[m.Assign()])):
-                target = self.python_module.code_for_node(stmt.body[0].targets[0])
+                target = self.python_module.code_for_node(stmt.body[0].targets[0].target)
+                if target in self.deleted_targets:
+                    logger.warning(f"Deleted the assign for {target}")
+                    continue
                 if target in self.all_assign_target:
                     stmt = self.all_assign_target[target]
             comment_less_code = re.sub(r"#.*", "", self.python_module.code_for_node(stmt)).strip()
             comment_less_code = re.sub(r"\ *\n", "\n", comment_less_code).strip()
-            if comment_less_code not in existing_nodes:
+            if comment_less_code not in existing_nodes or "super().__init__" in comment_less_code:
                 deduplicated_new_body.append(stmt)
                 existing_nodes.add(stmt)
             else:
@@ -315,13 +324,17 @@ class SuperTransformer(cst.CSTTransformer):
             parent_has_docstring = m.matches(self.original_methods[func_name].body.body[0], DOCSTRING_NODE)
         new_body = []
         for idx, expr in enumerate(node.body):
-            if m.matches(
-                expr,
-                m.SimpleStatementLine(
-                    body=[m.Return(SUPER_CALL_NODE(func_name)) | m.Expr(SUPER_CALL_NODE(func_name))]
-                ),
-            ) and idx != 0:
-                new_body = self.update_body(self.original_methods[func_name].body.body, node.body) + new_body
+            if (
+                m.matches(
+                    expr,
+                    m.SimpleStatementLine(
+                        body=[m.Return(SUPER_CALL_NODE(func_name)) | m.Expr(SUPER_CALL_NODE(func_name))]
+                    ),
+                )
+            ):
+                if idx!=0 and func_name == "__init__":
+                    raise ValueError(f"The call to super() in {self.class_name} should be at the top of the init")
+                new_body.extend(self.update_body(self.original_methods[func_name].body.body, node.body))
             elif m.matches(expr, DOCSTRING_NODE):
                 self.has_docstring = True
                 if parent_has_docstring:  # actually here we ought to de-duplicate?
@@ -332,7 +345,7 @@ class SuperTransformer(cst.CSTTransformer):
                 else:
                     new_node = [expr]
                 new_body.extend(new_node)
-            else:
+            elif not m.matches(expr, m.SimpleStatementLine(body=[m.Del()])):
                 new_body.append(expr)
         if not self.has_docstring and parent_has_docstring:
             new_body = [self.original_methods[func_name].body.body[0]] + new_body
@@ -439,7 +452,7 @@ def replace_call_to_super(class_finder: ClassFinder, updated_node: cst.ClassDef,
     result_node = original_node.with_changes(body=cst.IndentedBlock(body=end_meth))
     temp_module = cst.Module(body=[result_node])
     new_module = MetadataWrapper(temp_module)
-    new_replacement_class = new_module.visit(SuperTransformer(temp_module, original_methods, updated_methods))
+    new_replacement_class = new_module.visit(SuperTransformer(temp_module, original_methods, updated_methods, class_name))
     new_replacement_body = new_replacement_class.body[0].body  # get the indented block
 
     return original_node.with_changes(body=new_replacement_body)
