@@ -77,7 +77,7 @@ Python has two logging systems that are often used in conjunction: `logging`, wh
 which allows further classification of warnings in specific buckets, e.g., `FutureWarning` for a feature or path
 that has already been deprecated and `DeprecationWarning` to indicate an upcoming deprecation.
 
-We use both in the `transformers` library. We leverage and adapt `logging`'s `captureWarning` method to allow
+We use both in the `transformers` library. We leverage and adapt `logging`'s `captureWarnings` method to allow
 management of these warning messages by the verbosity setters above.
 
 What does that mean for developers of the library? We should respect the following heuristic:
