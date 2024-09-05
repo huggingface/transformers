@@ -1050,16 +1050,18 @@ class StaticCache(Cache):
         for idx in range(config.num_hidden_layers):
             if layer_device_map is not None:
                 device = layer_device_map[idx]
-            new_layer_key_cache = torch.zeros(cache_shape, dtype=self.dtype, device=device)
-            new_layer_value_cache = torch.zeros(cache_shape, dtype=self.dtype, device=device)
+            else:
+                layer_device = device
+            new_layer_key_cache = torch.zeros(cache_shape, dtype=self.dtype, device=layer_device)
+            new_layer_value_cache = torch.zeros(cache_shape, dtype=self.dtype, device=layer_device)
             # Notes:
             # 1. `mark_static_address` is used to tag the cache as an fixed data pointer, preventing cuda graph
             #     breaks when updating the cache. It can't be used if the cache code is being compiled (but in that case
             #     it is not needed anyway)
             # 2. `torch.export()` requires mutations to be registered as buffers.
             if not is_torchdynamo_compiling():
-                self.register_buffer(f"key_cache_{idx}", torch.zeros(cache_shape, dtype=dtype, device=device))
-                self.register_buffer(f"value_cache_{idx}", torch.zeros(cache_shape, dtype=dtype, device=device))
+                self.register_buffer(f"key_cache_{idx}", torch.zeros(cache_shape, dtype=dtype, device=layer_device))
+                self.register_buffer(f"value_cache_{idx}", torch.zeros(cache_shape, dtype=dtype, device=layer_device))
                 new_layer_key_cache = getattr(self, f"key_cache_{idx}")
                 new_layer_value_cache = getattr(self, f"value_cache_{idx}")
                 torch._dynamo.mark_static_address(new_layer_key_cache)
@@ -1525,12 +1527,14 @@ class HybridCache(Cache):
         )
         for i in range(config.num_hidden_layers):
             if layer_device_map is not None:
-                device = layer_device_map[i]
+                layer_device = layer_device_map[i]
+            else:
+                layer_device = device
             # Note: `mark_static_address` is used to tag the cache as an fixed data pointer, preventing cuda graph
             # breaks when updating the cache.
             cache_shape = global_cache_shape if not self.is_sliding[i] else sliding_cache_shape
-            new_layer_key_cache = torch.zeros(cache_shape, dtype=self.dtype, device=device)
-            new_layer_value_cache = torch.zeros(cache_shape, dtype=self.dtype, device=device)
+            new_layer_key_cache = torch.zeros(cache_shape, dtype=self.dtype, device=layer_device)
+            new_layer_value_cache = torch.zeros(cache_shape, dtype=self.dtype, device=layer_device)
             torch._dynamo.mark_static_address(new_layer_key_cache)
             torch._dynamo.mark_static_address(new_layer_value_cache)
             self.key_cache.append(new_layer_key_cache)
