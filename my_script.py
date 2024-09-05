@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 
 
-def get_file(self, rpath, lpath, callback=_DEFAULT_CALLBACK, outfile=None, **kwargs) -> None:
+def get_file(self, rpath, lpath, outfile=None, **kwargs) -> None:
     # # Taken from https://github.com/fsspec/filesystem_spec/blob/47b445ae4c284a82dd15e0287b1ffc410e8fc470/fsspec/spec.py#L883
     # if isfilelike(lpath):
     #     outfile = lpath
