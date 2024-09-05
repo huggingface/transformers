@@ -65,7 +65,7 @@ verbose to the most verbose), those levels (with their corresponding int values 
   critical errors.
 - `transformers.logging.ERROR` (int value, 40): only report errors.
 - `transformers.logging.WARNING` or `transformers.logging.WARN` (int value, 30): only reports error and
-  warnings. This the default level used by the library.
+  warnings. This is the default level used by the library.
 - `transformers.logging.INFO` (int value, 20): reports error, warnings and basic information.
 - `transformers.logging.DEBUG` (int value, 10): report all information.
 
