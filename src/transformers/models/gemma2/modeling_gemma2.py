@@ -781,7 +781,7 @@ class Gemma2Model(Gemma2PreTrainedModel):
     """
 
     def __init__(self, config: Gemma2Config):
-        self.rotary_emb = Gemma2RotaryEmbedding(config=config)
+        super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
