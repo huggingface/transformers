@@ -1449,31 +1449,31 @@ class GenerationMixin:
                     # models. May cause trobles with non-text modalities.
                     cache_dtype = self.get_output_embeddings().weight.dtype
 
-            def get_layer_device_mapping(execution_device: Optional[dict] = None):
-                if execution_device is None or len(execution_device) <= 1:
+            def get_layer_device_mapping(execution_device_map: Optional[dict] = None):
+                if execution_device_map is None or len(execution_device_map) <= 1:
                     return None
                 layer_device_mapping = {}
-                for layer in execution_device:
+                for layer in execution_device_map:
                     for idx in range(self.config.num_hidden_layers):
                         if f".{idx}." in f"{layer}.":
-                            layer_device_mapping[idx] = execution_device[layer]
+                            layer_device_mapping[idx] = execution_device_map[layer]
                             break
                 for idx in range(self.config.num_hidden_layers):
                     if idx not in layer_device_mapping:
                         raise RuntimeError(f"layer {idx} has not been mapped to a device.")
                 return layer_device_mapping
 
-            execution_device = None
+            execution_device_map = None
             # Taken from dispatch_model from accelerate.
             # This is needed here if we don't want to make changes in accelerate in order to save execution_device
             # For offloaded case, we need to get the execution device, not just the device where it is offloaded
             if hasattr(self, "hf_device_map"):
                 main_device = [d for d in self.hf_device_map.values() if d not in ["cpu", "disk"]][0]
-                execution_device = {
+                execution_device_map = {
                     name: main_device if device in ["cpu", "disk"] else device
                     for name, device in self.hf_device_map.items()
                 }
-            layer_device_mapping = get_layer_device_mapping(execution_device)
+            layer_device_mapping = get_layer_device_mapping(execution_device_map)
 
             cache_kwargs = {
                 "config": self.config,
