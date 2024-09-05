@@ -65,7 +65,10 @@ from .utils import (
     requires_backends,
     to_py_obj,
 )
-from .utils.chat_template_utils import _compile_jinja_template, _render_with_assistant_indices
+from .utils.chat_template_utils import (
+    _compile_jinja_template,
+    _render_with_assistant_indices,
+)
 from .utils.import_utils import PROTOBUF_IMPORT_ERROR
 
 
@@ -1631,6 +1634,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             # we reconstruct that into a single dict while loading them.
             self.chat_template = {template["name"]: template["template"] for template in self.chat_template}
 
+        self.inverse_template = kwargs.pop("inverse_template", None)
+
         super().__init__(**kwargs)
 
     @property
@@ -1915,6 +1920,21 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 return out["input_ids"]
         else:
             return rendered
+
+    def apply_inverse_template(self, chat: str, inverse_template: Optional[str] = None):
+        if inverse_template is None:
+            if self.inverse_template is not None:
+                inverse_template = self.inverse_template
+            else:
+                raise ValueError(
+                    "Cannot use apply_inverse_template() because tokenizer.inverse_template is not set! Please set "
+                    "the tokenizer.inverse_template attribute to a valid Jinja template string."
+                )
+        # Compilation function uses a cache to avoid recompiling the same template
+        compiled_template = _compile_jinja_template(inverse_template)
+
+        template_out = compiled_template.render(chat=chat)
+        return json.loads(template_out)
 
     def get_chat_template(self, chat_template: Optional[str] = None, tools: Optional[List[Dict]] = None) -> str:
         """
@@ -2598,6 +2618,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 tokenizer_config["chat_template"] = [{"name": k, "template": v} for k, v in self.chat_template.items()]
             else:
                 tokenizer_config["chat_template"] = self.chat_template
+
+        if self.inverse_template is not None:
+            tokenizer_config["inverse_template"] = self.inverse_template
 
         if len(self.init_inputs) > 0:
             tokenizer_config["init_inputs"] = copy.deepcopy(self.init_inputs)

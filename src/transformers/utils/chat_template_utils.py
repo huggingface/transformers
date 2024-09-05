@@ -16,6 +16,7 @@ import inspect
 import json
 import re
 from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import datetime
 from functools import lru_cache
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union, get_args, get_origin, get_type_hints
@@ -28,7 +29,7 @@ from .import_utils import is_jinja_available, is_torch_available, is_vision_avai
 if is_jinja_available():
     import jinja2
     from jinja2.ext import Extension
-    from jinja2.sandbox import ImmutableSandboxedEnvironment
+    from jinja2.sandbox import ImmutableSandboxedEnvironment, SandboxedEnvironment
 else:
     jinja2 = None
 
@@ -406,17 +407,6 @@ def _compile_jinja_template(chat_template):
             "apply_chat_template requires jinja2>=3.1.0 to be installed. Your version is " f"{jinja2.__version__}."
         )
 
-    def raise_exception(message):
-        raise jinja2.exceptions.TemplateError(message)
-
-    def tojson(x, ensure_ascii=False, indent=None, separators=None, sort_keys=False):
-        # We override the built-in tojson filter because Jinja's default filter escapes HTML characters
-        # We also expose some options like custom indents and separators
-        return json.dumps(x, ensure_ascii=ensure_ascii, indent=indent, separators=separators, sort_keys=sort_keys)
-
-    def strftime_now(format):
-        return datetime.now().strftime(format)
-
     jinja_env = ImmutableSandboxedEnvironment(
         trim_blocks=True, lstrip_blocks=True, extensions=[AssistantTracker, jinja2.ext.loopcontrols]
     )
@@ -424,3 +414,76 @@ def _compile_jinja_template(chat_template):
     jinja_env.globals["raise_exception"] = raise_exception
     jinja_env.globals["strftime_now"] = strftime_now
     return jinja_env.from_string(chat_template)
+
+
+@lru_cache
+def _compile_inverse_template(inverse_template):
+    if version.parse(jinja2.__version__) < version.parse("3.1.0"):
+        raise ImportError(
+            "apply_chat_template requires jinja2>=3.1.0 to be installed. Your version is " f"{jinja2.__version__}."
+        )
+
+    jinja_env = SandboxedEnvironment(trim_blocks=True, lstrip_blocks=True, extensions=[jinja2.ext.loopcontrols])
+    jinja_env.globals["raise_exception"] = raise_exception
+    jinja_env.globals["finditer"] = finditer
+    jinja_env.globals["sort_by_group_start"] = sort_by_group_start
+    jinja_env.filters["tojson"] = tojson
+    jinja_env.globals["json_loads"] = json_loads
+    jinja_env.globals["IGNORECASE"] = re.IGNORECASE
+    jinja_env.globals["MULTILINE"] = re.MULTILINE
+    jinja_env.globals["DOTALL"] = re.DOTALL
+    return jinja_env.from_string(inverse_template)
+
+
+# Functions for the Jinja2 environments below this line
+
+
+def raise_exception(message):
+    raise jinja2.exceptions.TemplateError(message)
+
+
+def tojson(x, ensure_ascii=False, indent=None, separators=None, sort_keys=False):
+    # We override the built-in tojson filter because Jinja's default filter escapes HTML characters
+    # We also expose some options like custom indents and separators
+    return json.dumps(x, ensure_ascii=ensure_ascii, indent=indent, separators=separators, sort_keys=sort_keys)
+
+
+def strftime_now(format_str):
+    return datetime.now().strftime(format_str)
+
+
+def finditer(pattern, string, flags=0, add_tag=None, add_tag_from_group=None):
+    @dataclass
+    class NewMatchObject:
+        group: List[str]
+        group_starts: List[int]
+        tag: Optional[str]
+
+    if add_tag is not None and add_tag_from_group is not None:
+        raise jinja2.exceptions.TemplateError("Cannot use add_tag and add_tag_from_group at the same time!")
+    out = []
+    for match in re.finditer(pattern, string, flags=flags):
+        # groups() by default does not include group(0), the whole string
+        # so we add it in manually to make things match up
+        groups = [match.group(0)] + list(match.groups())
+        group_starts = [match.start(i) for i in range(len(groups))]
+        if add_tag_from_group is not None:
+            add_tag = groups[add_tag_from_group]
+        out.append(NewMatchObject(group=groups, group_starts=group_starts, tag=add_tag))
+    return out
+
+
+def sort_by_group_start(matches, group_idx=0, group_idx_by_tag=None):
+    if group_idx_by_tag is None:
+        group_idx_by_tag = {}
+
+    def sort_key(match):
+        # Use the idx specific to this tag if present, or the global group_idx if not
+        idx = group_idx_by_tag.get(match.tag, group_idx)
+        return match.group_starts[idx]
+
+    return sorted(matches, key=sort_key)
+
+
+def json_loads(string):
+    return json.loads(string)
