@@ -251,7 +251,7 @@ def merge_docstrings(original_docstring, updated_docstring):
 
         if len(parts) > 1:
             doc = updated_docstring.replace('r"""\n', "").lstrip("\n").replace('"""', "")
-            doc = re.sub(r'\n {4}', '\n        ', doc)
+            doc = re.sub(r"\n {4}", "\n        ", doc)
             # TODO ADD TABULATION AS MAKE STYLE REMOVES THEM!!!!!
             updated_docstring = "".join(
                 [
