@@ -16,6 +16,7 @@
 """Testing suite for the PyTorch Phi-3 model."""
 
 import unittest
+from typing import List
 
 from parameterized import parameterized
 
@@ -46,12 +47,12 @@ if is_torch_available():
     end_of_text_token = 32000
 
     class Phi3MiniWithStaticCache(torch.nn.Module):
-        def __init__(self, model: Phi3ForCausalLM, max_batch_size: int, max_seq_len: int):
+        def __init__(self, model: Phi3ForCausalLM, batch_size: int, max_seq_len: int):
             super().__init__()
             self.model = model
             self.cache = StaticCache(
                 config=model.config,
-                max_batch_size=max_batch_size,
+                batch_size=batch_size,
                 max_cache_len=max_seq_len,
                 device=self.model.device,
                 dtype=self.model.dtype,
@@ -69,7 +70,7 @@ if is_torch_available():
             ).logits
 
         @staticmethod
-        def generate(model: Phi3ForCausalLM, prompt_tokens: torch.LongTensor, max_seq_len: int) -> list[int]:
+        def generate(model: Phi3ForCausalLM, prompt_tokens: torch.LongTensor, max_seq_len: int) -> List[int]:
             model = Phi3MiniWithStaticCache(model, 1, max_seq_len + prompt_tokens.shape[-1])
 
             response_tokens = []

@@ -322,6 +322,51 @@ class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
             for key in model_batched_output:
                 recursive_check(model_batched_output[key], model_row_output[key], model_name, key)
 
+    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
+    def test_inputs_embeds(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            inputs = self._prepare_for_class(inputs_dict, model_class)
+
+            input_ids = inputs["input_ids"]
+            del inputs["input_ids"]
+            del inputs["pixel_values_images"]
+            del inputs["pixel_values_videos"]
+
+            wte = model.get_input_embeddings()
+            inputs["inputs_embeds"] = wte(input_ids)
+
+            with torch.no_grad():
+                model(**inputs)
+
+    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
+    # while some other models require pixel_values to be present
+    def test_inputs_embeds_matches_input_ids(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            inputs = self._prepare_for_class(inputs_dict, model_class)
+            input_ids = inputs["input_ids"]
+            del inputs["input_ids"]
+            del inputs["pixel_values_images"]
+            del inputs["pixel_values_videos"]
+
+            inputs_embeds = model.get_input_embeddings()(input_ids)
+
+            with torch.no_grad():
+                out_ids = model(input_ids=input_ids, **inputs)[0]
+                out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
+            self.assertTrue(torch.allclose(out_embeds, out_ids))
+
 
 @require_torch
 class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
@@ -545,3 +590,35 @@ class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
             labels=input_ids,
         ).loss
         loss.backward()
+
+    @slow
+    @require_bitsandbytes
+    def test_expansion_in_processing(self):
+        model_id = "LanguageBind/Video-LLaVA-7B-hf"
+        model = VideoLlavaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
+        processor = VideoLlavaProcessor.from_pretrained(model_id)
+
+        prompt = "USER: <video>Describe the video in details. ASSISTANT:"
+        video_file = hf_hub_download(
+            repo_id="raushan-testing-hf/videos-test", filename="video_demo.npy", repo_type="dataset"
+        )
+        video_file = np.load(video_file)
+
+        # check processing with expansion of inputs
+        processor.vision_feature_select_strategy = "default"
+        processor.patch_size = 14
+        inputs_expanded = processor(prompt, videos=video_file, return_tensors="pt").to(torch_device, torch.float16)
+        self.assertTrue(inputs_expanded.input_ids.shape[-1] == 2073)
+
+        # check processing without expansion of inputs (legacy behavior)
+        processor.vision_feature_select_strategy = None
+        processor.patch_size = None
+        inputs = processor(prompt, videos=video_file, return_tensors="pt").to(torch_device, torch.float16)
+        self.assertTrue(inputs.input_ids.shape[-1] == 18)
+
+        # generate exactly 20 tokens
+        output = model.generate(**inputs, min_new_tokens=20, max_new_tokens=20)
+        output_expanded = model.generate(**inputs_expanded, min_new_tokens=20, max_new_tokens=20)
+
+        # check that both inputs are handled correctly and generate the same output
+        self.assertListEqual(output_expanded[:, -20:].tolist(), output[:, -20:].tolist())

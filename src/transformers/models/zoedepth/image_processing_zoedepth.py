@@ -35,7 +35,14 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
-from ...utils import TensorType, is_torch_available, is_vision_available, logging, requires_backends
+from ...utils import (
+    TensorType,
+    filter_out_non_signature_kwargs,
+    is_torch_available,
+    is_vision_available,
+    logging,
+    requires_backends,
+)
 
 
 if is_vision_available():
@@ -164,24 +171,6 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
         self.ensure_multiple_of = ensure_multiple_of
         self.resample = resample
 
-        self._valid_processor_keys = [
-            "images",
-            "do_resize",
-            "size",
-            "keep_aspect_ratio",
-            "ensure_multiple_of",
-            "resample",
-            "do_rescale",
-            "rescale_factor",
-            "do_normalize",
-            "image_mean",
-            "image_std",
-            "do_pad",
-            "return_tensors",
-            "data_format",
-            "input_data_format",
-        ]
-
     def resize(
         self,
         image: np.ndarray,
@@ -301,6 +290,7 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
             input_data_format=input_data_format,
         )
 
+    @filter_out_non_signature_kwargs()
     def preprocess(
         self,
         images: ImageInput,
