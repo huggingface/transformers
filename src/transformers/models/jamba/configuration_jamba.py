@@ -126,41 +126,41 @@ class JambaConfig(PretrainedConfig):
     keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
-            self,
-            vocab_size=65536,
-            tie_word_embeddings=False,
-            hidden_size=4096,
-            intermediate_size=14336,
-            num_hidden_layers=32,
-            num_attention_heads=32,
-            num_key_value_heads=8,
-            hidden_act="silu",
-            initializer_range=0.02,
-            rms_norm_eps=1e-6,
-            use_cache=True,
-            num_logits_to_keep=1,
-            output_router_logits=False,
-            router_aux_loss_coef=0.001,
-            pad_token_id=0,
-            bos_token_id=1,
-            eos_token_id=2,
-            sliding_window=None,
-            max_position_embeddings=262144,
-            attention_dropout=0.0,
-            num_experts_per_tok=2,
-            num_experts=16,
-            expert_layer_period=2,
-            expert_layer_offset=1,
-            attn_layer_period=8,
-            attn_layer_offset=4,
-            use_mamba_kernels=True,
-            mamba_d_state=16,
-            mamba_d_conv=4,
-            mamba_expand=2,
-            mamba_dt_rank="auto",
-            mamba_conv_bias=True,
-            mamba_proj_bias=False,
-            **kwargs,
+        self,
+        vocab_size=65536,
+        tie_word_embeddings=False,
+        hidden_size=4096,
+        intermediate_size=14336,
+        num_hidden_layers=32,
+        num_attention_heads=32,
+        num_key_value_heads=8,
+        hidden_act="silu",
+        initializer_range=0.02,
+        rms_norm_eps=1e-6,
+        use_cache=True,
+        num_logits_to_keep=1,
+        output_router_logits=False,
+        router_aux_loss_coef=0.001,
+        pad_token_id=0,
+        bos_token_id=1,
+        eos_token_id=2,
+        sliding_window=None,
+        max_position_embeddings=262144,
+        attention_dropout=0.0,
+        num_experts_per_tok=2,
+        num_experts=16,
+        expert_layer_period=2,
+        expert_layer_offset=1,
+        attn_layer_period=8,
+        attn_layer_offset=4,
+        use_mamba_kernels=True,
+        mamba_d_state=16,
+        mamba_d_conv=4,
+        mamba_expand=2,
+        mamba_dt_rank="auto",
+        mamba_conv_bias=True,
+        mamba_proj_bias=False,
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.tie_word_embeddings = tie_word_embeddings
@@ -189,8 +189,12 @@ class JambaConfig(PretrainedConfig):
         self.num_experts_per_tok = num_experts_per_tok
         self.num_experts = num_experts
 
-        assert attn_layer_offset < attn_layer_period, f"attention layer offset ({attn_layer_offset}) must be smaller than attention layer period ({attn_layer_period})"
-        assert expert_layer_offset < expert_layer_period, f"expert layer offset ({expert_layer_offset}) must be smaller than expert layer period ({expert_layer_period})"
+        assert (
+            attn_layer_offset < attn_layer_period
+        ), f"attention layer offset ({attn_layer_offset}) must be smaller than attention layer period ({attn_layer_period})"
+        assert (
+            expert_layer_offset < expert_layer_period
+        ), f"expert layer offset ({expert_layer_offset}) must be smaller than expert layer period ({expert_layer_period})"
 
         self.expert_layer_period = expert_layer_period
         self.expert_layer_offset = expert_layer_offset
