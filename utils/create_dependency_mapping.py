@@ -1,8 +1,6 @@
-import os
 import ast
-from collections import defaultdict
-
 from collections import defaultdict, deque
+
 
 # Function to perform topological sorting
 def topological_sort(dependencies):
@@ -14,7 +12,7 @@ def topological_sort(dependencies):
     for node, deps in dependencies.items():
         for dep in deps:
             graph[dep].append(node)  # node depends on dep
-            in_degree[node] += 1     # increase in-degree of node
+            in_degree[node] += 1  # increase in-degree of node
 
     # Add all nodes with zero in-degree to the queue
     zero_in_degree_queue = deque([node for node in dependencies if in_degree[node] == 0])
@@ -38,9 +36,10 @@ def topological_sort(dependencies):
 
     return sorted_list
 
+
 # Function to extract class and import info from a file
 def extract_classes_and_imports(file_path):
-    with open(file_path, 'r') as file:
+    with open(file_path, "r") as file:
         tree = ast.parse(file.read(), filename=file_path)
     imports = set()
 

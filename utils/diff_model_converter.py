@@ -20,10 +20,11 @@ from typing import Dict
 
 import libcst as cst
 from check_copies import run_ruff
+from create_dependency_mapping import find_priority_list
 from libcst import ClassDef, CSTTransformer, CSTVisitor
 from libcst import matchers as m
 from libcst.metadata import MetadataWrapper, ParentNodeProvider, PositionProvider, ScopeProvider
-from create_dependency_mapping import find_priority_list
+
 from transformers import logging
 from transformers.models.auto.configuration_auto import CONFIG_MAPPING_NAMES
 
@@ -696,7 +697,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
     if args.files_to_parse == ["all"]:
         args.files_to_parse = glob.glob("src/transformers/models/**/diff_*.py", recursive=True)
-
 
     # THE ORDER IN WHICH WE GENERATE THE DIFF IS SUPER IMPORTANT!
     for file_name in find_priority_list(args.files_to_parse):
