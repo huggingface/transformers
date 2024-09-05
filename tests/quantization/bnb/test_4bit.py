@@ -300,18 +300,10 @@ class Bnb4BitTest(Base4bitTest):
             with self.assertRaises(ValueError):
                 # Tries with `cuda`
                 self.model_4bit.cuda()
-        else:
-            with self.assertRaises(ValueError):
-                # Tries with `str`
-                self.model_4bit.to("cpu")
 
         with self.assertRaises(ValueError):
             # Tries with a `dtype`
             self.model_4bit.to(torch.float16)
-
-        with self.assertRaises(ValueError):
-            # Tries with a `device`
-            self.model_4bit.to(torch.device(torch_device))
 
         with self.assertRaises(ValueError):
             # Tries to cast the 4-bit model to float32 using `float()`
@@ -322,6 +314,8 @@ class Bnb4BitTest(Base4bitTest):
             self.model_4bit.half()
 
         # Test if we did not break anything
+        self.model_4bit.to(torch.device(torch_device))
+
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
 
         self.model_fp16 = self.model_fp16.to(torch.float32)
