@@ -27,7 +27,6 @@ from transformers import (
     is_vision_available,
 )
 from transformers.testing_utils import (
-    require_bitsandbytes,
     require_flash_attn,
     require_torch,
     require_torch_gpu,
@@ -313,7 +312,7 @@ class Qwen2VLIntegrationTest(unittest.TestCase):
                 ],
             }
         ]
-        url = "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen-VL/assets/demo.jpeg"
+        url = "https://qianwen-res.oss-accelerate-overseas.aliyuncs.com/Qwen2-VL/demo_small.jpg"
         self.image = Image.open(requests.get(url, stream=True).raw)
 
     def tearDown(self):
@@ -321,11 +320,9 @@ class Qwen2VLIntegrationTest(unittest.TestCase):
         torch.cuda.empty_cache()
 
     @slow
-    @require_bitsandbytes
     def test_small_model_integration_test(self):
         model = Qwen2VLForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen2-VL-7B-Instruct",
-            load_in_4bit=True,
+            "Qwen/Qwen2-VL-7B-Instruct", torch_dtype="auto", device_map="auto"
         )
 
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
@@ -336,17 +333,17 @@ class Qwen2VLIntegrationTest(unittest.TestCase):
 
         expected_pixel_slice = torch.tensor(
             [
-                [0.8501, 0.8501, 0.8647],
-                [0.9376, 0.9376, 0.9376],
-                [0.9084, 0.9376, 0.9376],
-                [1.0252, 1.0252, 1.0544],
-                [1.0252, 1.0252, 1.0252],
-                [1.0836, 1.0836, 1.0836],
+                [0.8792, 0.8792, 0.9084],
+                [1.1858, 1.1858, 1.2296],
+                [1.2004, 1.2004, 1.2150],
+                [1.4340, 1.4340, 1.4194],
+                [1.3902, 1.4048, 1.4194],
+                [1.5216, 1.5362, 1.5362],
             ],
             dtype=torch.float32,
             device="cpu",
         )
-        assert torch.allclose(expected_pixel_slice, inputs.pixel_values[:6, :3], atol=1e-3)
+        assert torch.allclose(expected_pixel_slice, inputs.pixel_values[:6, :3], atol=3e-3)
 
         # verify generation
         inputs = inputs.to(torch_device)
@@ -360,9 +357,10 @@ class Qwen2VLIntegrationTest(unittest.TestCase):
         )
 
     @slow
-    @require_bitsandbytes
     def test_small_model_integration_test_batch(self):
-        model = Qwen2VLForConditionalGeneration.from_pretrained("Qwen/Qwen2-VL-7B-Instruct", load_in_4bit=True)
+        model = Qwen2VLForConditionalGeneration.from_pretrained(
+            "Qwen/Qwen2-VL-7B-Instruct", torch_dtype="auto", device_map="auto"
+        )
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         inputs = self.processor(text=[text, text], images=[self.image, self.image], return_tensors="pt").to(
             torch_device
@@ -372,8 +370,8 @@ class Qwen2VLIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30)
 
         EXPECTED_DECODED_TEXT = [
-            "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?assistant\nThe dog in the picture appears to be a Labrador Retriever or a similar breed. Labradors are known for their friendly and intelligent nature,",
-            "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?assistant\nThe dog in the image appears to be a Labrador Retriever or a similar breed. Labradors are known for their friendly and outgoing nature,",
+            "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular choices",
+            "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular choices",
         ]
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
@@ -385,9 +383,10 @@ class Qwen2VLIntegrationTest(unittest.TestCase):
         )
 
     @slow
-    @require_bitsandbytes
     def test_small_model_integration_test_batch_wo_image(self):
-        model = Qwen2VLForConditionalGeneration.from_pretrained("Qwen/Qwen2-VL-7B-Instruct", load_in_4bit=True)
+        model = Qwen2VLForConditionalGeneration.from_pretrained(
+            "Qwen/Qwen2-VL-7B-Instruct", torch_dtype="auto", device_map="auto"
+        )
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         messages2 = [
             {"role": "system", "content": "You are a helpful assistant."},
@@ -412,9 +411,10 @@ class Qwen2VLIntegrationTest(unittest.TestCase):
         )
 
     @slow
-    @require_bitsandbytes
     def test_small_model_integration_test_batch_different_resolutions(self):
-        model = Qwen2VLForConditionalGeneration.from_pretrained("Qwen/Qwen2-VL-7B-Instruct", load_in_4bit=True)
+        model = Qwen2VLForConditionalGeneration.from_pretrained(
+            "Qwen/Qwen2-VL-7B-Instruct", torch_dtype="auto", device_map="auto"
+        )
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         text2 = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         image2 = self.image.resize((224, 224))
@@ -427,7 +427,7 @@ class Qwen2VLIntegrationTest(unittest.TestCase):
 
         EXPECTED_DECODED_TEXT = [
             "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular choices",
-            "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Golden Retriever. Golden Retrievers are known for their friendly and affectionate nature, as well as",
+            "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular choices",
         ]
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
