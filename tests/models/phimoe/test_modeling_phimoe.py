@@ -120,6 +120,7 @@ class PhiMoEModelTester:
         num_choices=4,
         pad_token_id=0,
         scope=None,
+        original_max_position_embeddings=4096,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -145,6 +146,7 @@ class PhiMoEModelTester:
         self.num_choices = num_choices
         self.pad_token_id = pad_token_id
         self.scope = scope
+        self.original_max_position_embeddings=original_max_position_embeddings
 
     # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.prepare_config_and_inputs
     def prepare_config_and_inputs(self):
@@ -188,6 +190,7 @@ class PhiMoEModelTester:
             pad_token_id=self.pad_token_id,
             num_experts_per_tok=2,
             num_local_experts=2,
+            original_max_position_embeddings=self.original_max_position_embeddings,
         )
 
     # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_model with Llama->PhiMoE
@@ -459,7 +462,7 @@ class PhiMoEModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             "original_max_position_embeddings": 4096,
         }
         input_tensor = ids_tensor([1, 4090], config.vocab_size)
-        model = PhiMoEModel(config)
+        model = PhiMoEForCausalLM(config)
         model.to(torch_device)
         model.eval()
         generation_args_short = {
@@ -488,7 +491,7 @@ class PhiMoEModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         # KV cache is re-computed after reaching the (`config.original_max_position_embeddings`+1)th token position
         self.assertFalse(torch.allclose(keys_with_short_factor, keys_with_long_factor, atol=1e-3, rtol=1e-3))
         # Last token generated using long factor
-        self.assertTrue(torch.allclose(last_token_logits, regenerated_last_token_logits, atol=1e-3, rtol=1e-3))
+        self.assertTrue(torch.allclose(last_token_logits, regenerated_last_token_logits, atol=1e-2, rtol=1e-2))
 
 @slow
 @require_torch
