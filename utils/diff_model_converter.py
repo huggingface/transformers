@@ -424,41 +424,11 @@ def replace_call_to_super(class_finder: ClassFinder, updated_node: cst.ClassDef,
         if m.matches(func, DOCSTRING_NODE): # This processes the docstring of the class!
             # Extract the original docstring
             updated_docstring = func.body[0].value.value
-            if "    Args:\n        " not in updated_docstring:
-                if docstring_node[0] is None:
-                    raise ValueError(f"Docstring of {name} is missing Args")
-
-                original_docstring = docstring_node[0].body[0].value.value
-                logger.warning("We detected a docstring that will be appended to the super's doc")
-                # Split the docstring at the example section, assuming `"""` or `'''` is used to define the docstring
-                parts = original_docstring.split("```")
-                if "```" in updated_docstring and len(parts) > 0:
-                    # an example is provide! Overwrite the other example
-                    split_updated_docstring = updated_docstring.split("```")
-                    parts[1] = updated_docstring.split("```")[1]
-                    updated_docstring = "".join(split_updated_docstring[:1] + split_updated_docstring[2:])
-
-                if len(parts) > 1:
-                    doc = updated_docstring.replace('r"""\n', "").lstrip("\n").replace('"""', "")
-                    # TODO ADD TABULATION AS MAKE STYLE REMOVES THEM!!!!!
-                    updated_docstring = "".join(
-                        [
-                            parts[0] + doc,
-                            "```",
-                            parts[1],
-                            "```",
-                            parts[2],
-                        ]
-                    )
-                elif updated_docstring not in docstring_node[0].body[0].value.value:
-                    updated_docstring = (
-                        docstring_node[0].body[0].value.value + "\n" + updated_docstring.replace('r"""\n', "")
-                    )
-            else:
-                updated_docstring = func.body[0].value.value
+            original_docstring = docstring_node[0].body[0].value.value
+            merged_doc = merge_docstrings(original_docstring, updated_docstring)
             # Update the docstring in the original function
             docstring_node = [
-                docstring_node[0].with_changes(body=[cst.Expr(value=cst.SimpleString(value=updated_docstring))])
+                docstring_node[0].with_changes(body=[cst.Expr(value=cst.SimpleString(value=merged_doc))])
             ]
         if name not in original_methods and func is not None and isinstance(func, cst.FunctionDef):
             end_meth.append(func)
