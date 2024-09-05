@@ -114,29 +114,33 @@ jobs:
         working-directory: /transformers
         run: rm -rf /mnt/cache/datasets/downloads/0f3877f8b8ff8f882b5032f93535a4d21bd7475946970fbf306f79c2769f3d0d.incomplete
 
-      - name: Create dir
+      - name: Run python script
         working-directory: /transformers
-        run: |
-          python3 -c 'import os; lpath = "/mnt/cache/datasets/downloads/0f3877f8b8ff8f882b5032f93535a4d21bd7475946970fbf306f79c2769f3d0d.incomplete"; os.makedirs(os.path.dirname(lpath), exist_ok=True)'
+        run: python3 my_script.py
 
-      - name: Show dir
-        working-directory: /transformers
-        run: |
-          ls -l /mnt/cache/datasets/downloads/
-
-      - name: Remove cache 1
-        working-directory: /transformers
-        run: |
-          python3 -c 'lpath = "/mnt/cache/datasets/downloads/0f3877f8b8ff8f882b5032f93535a4d21bd7475946970fbf306f79c2769f3d0d.incomplete"; outfile = open(lpath, "wb"); print(outfile)'
-
-      - name: Show file
-        working-directory: /transformers
-        run: |
-          ls -l /mnt/cache/datasets/downloads/0f3877f8b8ff8f882b5032f93535a4d21bd7475946970fbf306f79c2769f3d0d.incomplete
-
-      - name: Run all tests on GPU
-        working-directory: /transformers
-        run: python3 -m pytest tests/${{ matrix.folders }} -k "ASTFeatureExtractionTest and test_integration"
+#      - name: Create dir
+#        working-directory: /transformers
+#        run: |
+#          python3 -c 'import os; lpath = "/mnt/cache/datasets/downloads/0f3877f8b8ff8f882b5032f93535a4d21bd7475946970fbf306f79c2769f3d0d.incomplete"; os.makedirs(os.path.dirname(lpath), exist_ok=True)'
+#
+#      - name: Show dir
+#        working-directory: /transformers
+#        run: |
+#          ls -l /mnt/cache/datasets/downloads/
+#
+#      - name: Remove cache 1
+#        working-directory: /transformers
+#        run: |
+#          python3 -c 'lpath = "/mnt/cache/datasets/downloads/0f3877f8b8ff8f882b5032f93535a4d21bd7475946970fbf306f79c2769f3d0d.incomplete"; outfile = open(lpath, "wb"); print(outfile)'
+#
+#      - name: Show file
+#        working-directory: /transformers
+#        run: |
+#          ls -l /mnt/cache/datasets/downloads/0f3877f8b8ff8f882b5032f93535a4d21bd7475946970fbf306f79c2769f3d0d.incomplete
+#
+#      - name: Run all tests on GPU
+#        working-directory: /transformers
+#        run: python3 -m pytest tests/${{ matrix.folders }} -k "ASTFeatureExtractionTest and test_integration"
 
 #        run: python3 -m pytest -rsfE -v --make-reports=${{ inputs.machine_type }}_run_models_gpu_${{ matrix.folders }}_test_reports tests/${{ matrix.folders }}
 
