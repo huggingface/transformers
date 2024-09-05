@@ -33,6 +33,7 @@ from ..cache_utils import (
     HybridCache,
     MambaCache,
     OffloadedCache,
+    OffloadedStaticCache,
     QuantizedCacheConfig,
     QuantoQuantizedCache,
     SlidingWindowCache,
@@ -47,7 +48,7 @@ from ..models.auto import (
     MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
     MODEL_FOR_VISION_2_SEQ_MAPPING,
 )
-from ..pytorch_utils import is_torch_greater_or_equal_than_2_4
+from ..pytorch_utils import isin_mps_friendly
 from ..tokenization_utils import ExtensionsTrie
 from ..utils import (
     ModelOutput,
@@ -119,6 +120,7 @@ if is_accelerate_available():
 
 NEED_SETUP_CACHE_CLASSES_MAPPING = {
     "static": StaticCache,
+    "offloaded_static": OffloadedStaticCache,
     "sliding_window": SlidingWindowCache,
     "hybrid": HybridCache,
     "mamba": MambaCache,
@@ -472,18 +474,11 @@ class GenerationMixin:
         if not is_input_ids:
             return default_attention_mask
 
-        # Otherwise we have may have information -> try to infer the attention mask
-        if inputs.device.type == "mps" and not is_torch_greater_or_equal_than_2_4:
-            # mps does not support torch.isin for torch<2.4 (https://github.com/pytorch/pytorch/issues/77764)
-            raise ValueError(
-                "Can't infer missing attention mask on `mps` device for torch<2.4. Please provide an `attention_mask` or upgrade to torch>=2.4"
-            )
-
         is_pad_token_in_inputs = (pad_token_id is not None) and (
-            torch.isin(elements=inputs, test_elements=pad_token_id).any()
+            isin_mps_friendly(elements=inputs, test_elements=pad_token_id).any()
         )
         is_pad_token_not_equal_to_eos_token_id = (eos_token_id is None) or ~(
-            torch.isin(elements=eos_token_id, test_elements=pad_token_id).any()
+            isin_mps_friendly(elements=eos_token_id, test_elements=pad_token_id).any()
         )
         can_infer_attention_mask = is_pad_token_in_inputs * is_pad_token_not_equal_to_eos_token_id
         attention_mask_from_padding = inputs.ne(pad_token_id).long()
@@ -1660,7 +1655,7 @@ class GenerationMixin:
         if not is_torchdynamo_compiling():  # Checks that depend on tensor-dependent control flow
             if (
                 eos_token_tensor is not None
-                and torch.isin(elements=eos_token_tensor, test_elements=pad_token_tensor).any()
+                and isin_mps_friendly(elements=eos_token_tensor, test_elements=pad_token_tensor).any()
             ):
                 if kwargs_has_attention_mask is not None and not kwargs_has_attention_mask:
                     logger.warning_once(
@@ -3969,6 +3964,7 @@ class GenerationMixin:
 
             #  1. Fetch candidate sequences from a `CandidateGenerator`
             candidate_input_ids, candidate_logits = candidate_generator.get_candidates(input_ids)
+            candidate_input_ids = candidate_input_ids.to(self.device)
             if candidate_logits is not None:
                 candidate_logits = candidate_logits.to(self.device)
 
