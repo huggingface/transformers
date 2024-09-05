@@ -61,7 +61,6 @@ The original code can be found [here](https://github.com/ViTAE-Transformer/ViTPo
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/vitpose-coco.jpg" alt="drawing" width="600"/>
 
 
-
 ## ViTPoseImageProcessor
 
 [[autodoc]] ViTPoseImageProcessor
