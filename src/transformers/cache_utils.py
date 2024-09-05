@@ -1020,7 +1020,7 @@ class StaticCache(Cache):
         device: torch.device = None,
         dtype: torch.dtype = torch.float32,
         max_batch_size: Optional[int] = None,
-        layer_device_mapping: Optional[dict] = None,
+        layer_device_map: Optional[dict] = None,
     ) -> None:
         super().__init__()
         if max_batch_size is not None:
@@ -1048,8 +1048,8 @@ class StaticCache(Cache):
         # Note: There will be significant perf decrease if switching to use 5D tensors instead.
         cache_shape = (self.batch_size, self.num_key_value_heads, self.max_cache_len, self.head_dim)
         for idx in range(config.num_hidden_layers):
-            if layer_device_mapping is not None:
-                device = layer_device_mapping[idx]
+            if layer_device_map is not None:
+                device = layer_device_map[idx]
             new_layer_key_cache = torch.zeros(cache_shape, dtype=self.dtype, device=device)
             new_layer_value_cache = torch.zeros(cache_shape, dtype=self.dtype, device=device)
             # Notes:
@@ -1191,7 +1191,7 @@ class SlidingWindowCache(StaticCache):
         device: torch.device = None,
         dtype: torch.dtype = torch.float32,
         max_batch_size: Optional[int] = None,
-        layer_device_mapping: Optional[dict] = None,
+        layer_device_map: Optional[dict] = None,
     ) -> None:
         super().__init__()
         if not hasattr(config, "sliding_window") or config.sliding_window is None:
@@ -1208,7 +1208,7 @@ class SlidingWindowCache(StaticCache):
             device=device,
             dtype=dtype,
             max_batch_size=max_batch_size,
-            layer_device_mapping=layer_device_mapping,
+            layer_device_map=layer_device_map,
         )
 
     def update(
@@ -1486,7 +1486,7 @@ class HybridCache(Cache):
         device: Union[torch.device, str] = "cpu",
         dtype: torch.dtype = torch.float32,
         max_batch_size: Optional[int] = None,
-        layer_device_mapping: Optional[dict] = None,
+        layer_device_map: Optional[dict] = None,
     ) -> None:
         super().__init__()
         if max_batch_size is not None:
@@ -1524,8 +1524,8 @@ class HybridCache(Cache):
             self.head_dim,
         )
         for i in range(config.num_hidden_layers):
-            if layer_device_mapping is not None:
-                device = layer_device_mapping[i]
+            if layer_device_map is not None:
+                device = layer_device_map[i]
             # Note: `mark_static_address` is used to tag the cache as an fixed data pointer, preventing cuda graph
             # breaks when updating the cache.
             cache_shape = global_cache_shape if not self.is_sliding[i] else sliding_cache_shape

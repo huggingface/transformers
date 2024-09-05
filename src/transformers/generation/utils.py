@@ -1449,7 +1449,7 @@ class GenerationMixin:
                     # models. May cause trobles with non-text modalities.
                     cache_dtype = self.get_output_embeddings().weight.dtype
 
-            def get_layer_device_mapping(execution_device_map: Optional[dict] = None):
+            def get_layer_device_map(execution_device_map: Optional[dict] = None):
                 if execution_device_map is None or len(execution_device_map) <= 1:
                     return None
                 layer_device_mapping = {}
@@ -1473,7 +1473,7 @@ class GenerationMixin:
                     name: main_device if device in ["cpu", "disk"] else device
                     for name, device in self.hf_device_map.items()
                 }
-            layer_device_mapping = get_layer_device_mapping(execution_device_map)
+            layer_device_map = get_layer_device_map(execution_device_map)
 
             cache_kwargs = {
                 "config": self.config,
@@ -1481,7 +1481,7 @@ class GenerationMixin:
                 "max_cache_len": max_cache_len,
                 "device": device,
                 "dtype": cache_dtype,
-                "layer_device_mapping": layer_device_mapping,
+                "layer_device_map": layer_device_map,
             }
             self._cache = cache_cls(**cache_kwargs)
             if requires_cross_attention_cache:
