@@ -407,12 +407,8 @@ class Qwen2VLIntegrationTest(unittest.TestCase):
         ]
 
         self.assertEqual(
-            self.processor.batch_decode(output[0], skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT[0],
-        )
-        self.assertEqual(
-            self.processor.batch_decode(output[1], skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT[1],
+            self.processor.batch_decode(output, skip_special_tokens=True),
+            EXPECTED_DECODED_TEXT,
         )
 
     @slow
@@ -434,12 +430,8 @@ class Qwen2VLIntegrationTest(unittest.TestCase):
             "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Golden Retriever. Golden Retrievers are known for their friendly and affectionate nature, as well as",
         ]
         self.assertEqual(
-            self.processor.batch_decode(output[0], skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT[0],
-        )
-        self.assertEqual(
-            self.processor.batch_decode(output[1], skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT[1],
+            self.processor.batch_decode(output, skip_special_tokens=True),
+            EXPECTED_DECODED_TEXT,
         )
 
     @slow
@@ -466,8 +458,8 @@ class Qwen2VLIntegrationTest(unittest.TestCase):
         ]
 
         self.assertEqual(
-            self.processor.batch_decode(output[0], skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT[0],
+            self.processor.batch_decode(output, skip_special_tokens=True),
+            EXPECTED_DECODED_TEXT,
         )
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True)[0],
@@ -503,10 +495,6 @@ class Qwen2VLIntegrationTest(unittest.TestCase):
         ]
 
         self.assertEqual(
-            self.processor.batch_decode(output[0], skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT[0],
-        )
-        self.assertEqual(
-            self.processor.batch_decode(output, skip_special_tokens=True)[0],
-            self.processor.batch_decode(output, skip_special_tokens=True)[1],
+            self.processor.batch_decode(output, skip_special_tokens=True),
+            EXPECTED_DECODED_TEXT,
         )
