@@ -13,10 +13,11 @@
 # limitations under the License.
 
 import unittest
-import numpy as np
-import torch
-import tensorflow as tf
+
 import jax.numpy as jnp
+import numpy as np
+import tensorflow as tf
+import torch
 
 from transformers.models.whisper import WhisperTokenizer, WhisperTokenizerFast
 from transformers.models.whisper.tokenization_whisper import (
