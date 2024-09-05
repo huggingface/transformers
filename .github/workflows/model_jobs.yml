@@ -102,21 +102,21 @@ jobs:
         working-directory: /transformers
         run: pip freeze
 
-#      - name: Check cache 0
-#        working-directory: /transformers
-#        run: ls -l /mnt/cache/hub/models--suno--bark/snapshots/70a8a7d34168586dc5d028fa9666aceade177992/pytorch_model.bin
+      - name: Check cache 0
+        working-directory: /transformers
+        run: ls -l /mnt/cache/datasets/downloads/0f3877f8b8ff8f882b5032f93535a4d21bd7475946970fbf306f79c2769f3d0d.incomplete
 #
 #      - name: Check cache 1
 #        working-directory: /transformers
 #        run: ls -l /mnt/cache/hub/models--ylacombe--bark-small/blobs/04fd39ae31c48ce4c2578d25e07f436b671fa900fd526de06d68054735fe4fc6.incomplete
 
-      - name: Remove cache 1
-        working-directory: /transformers
-        run: rm -rf /mnt/cache/hub/models--ylacombe--bark-small
+#      - name: Remove cache 1
+#        working-directory: /transformers
+#        run: rm -rf /mnt/cache/hub/models--ylacombe--bark-small
 
       - name: Run all tests on GPU
         working-directory: /transformers
-        run: python3 -m pytest tests/${{ matrix.folders }} -k "BarkProcessorTest and test_save_load_pretrained_additional_features"
+        run: python3 -m pytest tests/${{ matrix.folders }} -k "ASTFeatureExtractionTest and test_integration"
 
 #        run: python3 -m pytest -rsfE -v --make-reports=${{ inputs.machine_type }}_run_models_gpu_${{ matrix.folders }}_test_reports tests/${{ matrix.folders }}
 
