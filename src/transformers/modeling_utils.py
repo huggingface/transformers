@@ -2218,8 +2218,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         )
 
         # initialize new embeddings (in particular added tokens) if `new_num_tokens` is larger
-        # than `old_num_tokens`. The new embeddings will de drawn from a multivariate normal
-        # distribution that has old embeddings' mean and covariance. as descriped in this article:
+        # than `old_num_tokens`. The new embeddings will be drawn from a multivariate normal
+        # distribution that has old embeddings' mean and covariance. as described in this article:
         # https://nlp.stanford.edu/~johnhew/vocab-expansion.html
         if new_num_tokens > old_num_tokens:
             added_num_tokens = new_num_tokens - old_num_tokens
