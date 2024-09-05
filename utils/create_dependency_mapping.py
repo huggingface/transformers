@@ -63,27 +63,7 @@ def map_dependencies(py_files):
     return dependencies
 
 
-# Find all .py files in the directory
-def find_py_files(directory):
-    py_files = []
-    for root, _, files in os.walk(directory):
-        for file in files:
-            if file.endswith(".py") and "/src/transformers/models/" in root and "diff" in file:
-                if file != "diff_model_converter.py":
-                    py_files.append(os.path.join(root, file))
-    return py_files
-
-
-# Example: Running this script
-if __name__ == '__main__':
-    # Step 1: Find all Python files in the current directory (or specify a different path)
-    py_files = find_py_files(os.getcwd())
-
-    # Step 2: Extract dependencies between classes
+def find_priority_list(py_files):
     dependencies = map_dependencies(py_files)
-
-    # Step 3: Perform topological sorting based on dependencies
     ordered_classes = topological_sort(dependencies)
-
-    # Print the ordered dependencies
-    print(ordered_classes)
+    return ordered_classes

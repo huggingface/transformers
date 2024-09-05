@@ -23,7 +23,7 @@ from check_copies import run_ruff
 from libcst import ClassDef, CSTTransformer, CSTVisitor
 from libcst import matchers as m
 from libcst.metadata import MetadataWrapper, ParentNodeProvider, PositionProvider, ScopeProvider
-
+from create_dependency_mapping import find_priority_list
 from transformers import logging
 from transformers.models.auto.configuration_auto import CONFIG_MAPPING_NAMES
 
@@ -699,8 +699,7 @@ if __name__ == "__main__":
 
 
     # THE ORDER IN WHICH WE GENERATE THE DIFF IS SUPER IMPORTANT!
-    
-    for file_name in args.files_to_parse:
+    for file_name in find_priority_list(args.files_to_parse):
         print(f"Converting {file_name} to a single model single file format")
         module_path = file_name.replace("/", ".").replace(".py", "").replace("src.", "")
         converted_files = convert_diff_file(file_name, args.old_model_name, args.new_model_name)
