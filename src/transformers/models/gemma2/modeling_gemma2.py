@@ -22,8 +22,8 @@
 from typing import List, Optional, Tuple, Union
 
 import torch
+import torch.nn as nn
 import torch.utils.checkpoint
-from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
@@ -39,7 +39,6 @@ from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_flash_attn_2_available,
     is_flash_attn_greater_or_equal,
     is_flash_attn_greater_or_equal_2_10,
     is_torchdynamo_compiling,
@@ -47,13 +46,6 @@ from ...utils import (
     replace_return_docstrings,
 )
 from .configuration_gemma2 import Gemma2Config
-
-
-if is_flash_attn_2_available():
-    from ...modeling_flash_attention_utils import _flash_attention_forward
-
-
-logger = logging.get_logger(__name__)
 
 
 class Gemma2RMSNorm(nn.Module):
@@ -89,6 +81,9 @@ class Gemma2MLP(nn.Module):
 
     def forward(self, x):
         return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+
+
+logger = logging.get_logger(__name__)
 
 
 class Gemma2RotaryEmbedding(nn.Module):

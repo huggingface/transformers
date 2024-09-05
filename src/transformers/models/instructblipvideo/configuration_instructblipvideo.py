@@ -24,9 +24,7 @@ from typing import Union
 
 from ...configuration_utils import PretrainedConfig
 from ...models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
-from ...utils import (
-    logging,
-)
+from ...utils import logging
 from ..auto import CONFIG_MAPPING
 
 

@@ -38,7 +38,6 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -48,9 +47,6 @@ from ...utils import (
     replace_return_docstrings,
 )
 from .configuration_gemma import GemmaConfig
-
-
-logger = logging.get_logger(__name__)
 
 
 def _prepare_4d_causal_attention_mask_with_cache_position(
@@ -126,7 +122,7 @@ class GemmaRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.eps}"
 
 
-ALL_LAYERNORM_LAYERS.append(GemmaRMSNorm)
+logger = logging.get_logger(__name__)
 
 
 class GemmaRotaryEmbedding(nn.Module):
