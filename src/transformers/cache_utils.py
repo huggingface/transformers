@@ -1049,7 +1049,7 @@ class StaticCache(Cache):
         cache_shape = (self.batch_size, self.num_key_value_heads, self.max_cache_len, self.head_dim)
         for idx in range(config.num_hidden_layers):
             if layer_device_map is not None:
-                device = layer_device_map[idx]
+                layer_device = layer_device_map[idx]
             else:
                 layer_device = device
             new_layer_key_cache = torch.zeros(cache_shape, dtype=self.dtype, device=layer_device)
