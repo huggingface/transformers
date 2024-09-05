@@ -114,12 +114,25 @@ jobs:
         working-directory: /transformers
         run: rm -rf /mnt/cache/datasets/downloads/0f3877f8b8ff8f882b5032f93535a4d21bd7475946970fbf306f79c2769f3d0d.incomplete
 
+      - name: Create dir
+        working-directory: /transformers
+        run: |
+          python3 -c 'import os; lpath = "/mnt/cache/datasets/downloads/0f3877f8b8ff8f882b5032f93535a4d21bd7475946970fbf306f79c2769f3d0d.incomplete"; os.makedirs(os.path.dirname(lpath), exist_ok=True)'
+
+      - name: Show dir
+        working-directory: /transformers
+        run: |
+          ls -l /mnt/cache/datasets/downloads/
+
       - name: Remove cache 1
         working-directory: /transformers
         run: |
-          python3 -c 'import os; os.makedirs("/mnt/cache/datasets/downloads/", exist_ok=True)'
-          python3 -c 'lpath = "/mnt/cache/datasets/downloads/0f3877f8b8ff8f882b5032f93535a4d21bd7475946970fbf306f79c2769f3d0d.incomplete"; outfile = open(lpath, "wb")'
+          python3 -c 'lpath = "/mnt/cache/datasets/downloads/0f3877f8b8ff8f882b5032f93535a4d21bd7475946970fbf306f79c2769f3d0d.incomplete"; outfile = open(lpath, "wb"); print(outfile)'
 
+      - name: Show file
+        working-directory: /transformers
+        run: |
+          ls -l /mnt/cache/datasets/downloads/0f3877f8b8ff8f882b5032f93535a4d21bd7475946970fbf306f79c2769f3d0d.incomplete
 
       - name: Run all tests on GPU
         working-directory: /transformers
