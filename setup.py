@@ -190,7 +190,7 @@ _deps = [
     "uvicorn",
     "pytest-rich",
     "libcst",
-    "rich"
+    "rich",
 ]
 
 

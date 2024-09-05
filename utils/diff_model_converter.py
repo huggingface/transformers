@@ -407,6 +407,7 @@ def replace_call_to_super(class_finder: ClassFinder, updated_node: cst.ClassDef,
 
                 if len(parts) > 1:
                     doc = updated_docstring.replace('r"""\n', "").lstrip("\n").replace('"""', "")
+                    # TODO ADD TABULATION AS MAKE STYLE REMOVES THEM!!!!!
                     updated_docstring = "".join(
                         [
                             parts[0] + doc,
