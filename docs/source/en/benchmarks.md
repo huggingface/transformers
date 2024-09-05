@@ -35,7 +35,7 @@ The classes [`PyTorchBenchmark`] and [`TensorFlowBenchmark`] allow to flexibly b
 
 <Tip>
 
-Hereby, _inference_ is defined by a single forward pass, and _training_ is defined by a single forward pass and
+Here, _inference_ is defined by a single forward pass, and _training_ is defined by a single forward pass and
 backward pass.
 
 </Tip>
