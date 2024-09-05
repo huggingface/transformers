@@ -14,10 +14,7 @@
 
 import unittest
 
-import jax.numpy as jnp
 import numpy as np
-import tensorflow as tf
-import torch
 
 from transformers.models.whisper import WhisperTokenizer, WhisperTokenizerFast
 from transformers.models.whisper.tokenization_whisper import (
@@ -25,9 +22,19 @@ from transformers.models.whisper.tokenization_whisper import (
     _find_longest_common_sequence,
 )
 from transformers.testing_utils import slow
+from transformers.utils import is_flax_available, is_tf_available, is_torch_available
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
+
+if is_flax_available():
+    import jax.numpy as jnp
+
+if is_tf_available():
+    import tensorflow as tf
+
+if is_torch_available():
+    import torch
 
 ES_CODE = 50262
 EN_CODE = 50259
@@ -623,17 +630,20 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
         assert WhisperTokenizer._convert_to_list(np_array) == test_list
         assert WhisperTokenizerFast._convert_to_list(np_array) == test_list
 
-        # Test with a PyTorch tensor
-        torch_tensor = torch.tensor(test_list)
-        assert WhisperTokenizer._convert_to_list(torch_tensor) == test_list
-        assert WhisperTokenizerFast._convert_to_list(torch_tensor) == test_list
+        if is_torch_available():
+            # Test with a PyTorch tensor
+            torch_tensor = torch.tensor(test_list)
+            assert WhisperTokenizer._convert_to_list(torch_tensor) == test_list
+            assert WhisperTokenizerFast._convert_to_list(torch_tensor) == test_list
 
-        # Test with a TensorFlow tensor
-        tf_tensor = tf.constant(test_list)
-        assert WhisperTokenizer._convert_to_list(tf_tensor) == test_list
-        assert WhisperTokenizerFast._convert_to_list(tf_tensor) == test_list
+        if is_tf_available():
+            # Test with a TensorFlow tensor
+            tf_tensor = tf.constant(test_list)
+            assert WhisperTokenizer._convert_to_list(tf_tensor) == test_list
+            assert WhisperTokenizerFast._convert_to_list(tf_tensor) == test_list
 
-        # Test with a JAX array
-        jax_array = jnp.array(test_list)
-        assert WhisperTokenizer._convert_to_list(jax_array) == test_list
-        assert WhisperTokenizerFast._convert_to_list(jax_array) == test_list
+        if is_flax_available():
+            # Test with a JAX array
+            jax_array = jnp.array(test_list)
+            assert WhisperTokenizer._convert_to_list(jax_array) == test_list
+            assert WhisperTokenizerFast._convert_to_list(jax_array) == test_list
