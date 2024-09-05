@@ -802,6 +802,7 @@ class Gemma2Model(Gemma2PreTrainedModel):
     """
 
     def __init__(self, config: Gemma2Config):
+        self.rotary_emb = Gemma2RotaryEmbedding(config=config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
@@ -810,7 +811,6 @@ class Gemma2Model(Gemma2PreTrainedModel):
             [Gemma2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.rotary_emb = Gemma2RotaryEmbedding(config=config)
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
