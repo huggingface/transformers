@@ -21,11 +21,11 @@ with extra methods beings exposed
 from array import array
 
 import numpy as np
-from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers
-from tokenizers.models import BPE
+from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
+from tokenizers.models import BPE, Unigram
 
 from .. import AddedToken
-from ..convert_slow_tokenizer import LlamaConverter, Qwen2Converter
+from ..convert_slow_tokenizer import LlamaConverter, Qwen2Converter, T5Converter
 from ..utils import logging
 from ..utils.logging import tqdm
 
@@ -79,6 +79,39 @@ GGUF_TENSOR_MAPPING = {
         "output.weight": "lm_head.weight",
         "output_norm": "model.norm",
     },
+    "t5": {
+        "token_embd": "embed_tokens",
+        "ffn_up": "layer.1.DenseReluDense.wi_1",
+        "ffn_down": "layer.1.DenseReluDense.wo",
+        "ffn_gate": "layer.1.DenseReluDense.wi_0",
+        "ffn_norm": "layer.1.layer_norm",
+        "attn_norm": "layer.0.layer_norm",
+        "attn_q": "layer.0.SelfAttention.q",
+        "attn_v": "layer.0.SelfAttention.v",
+        "dec.blk.\d+.attn_k": "layer.0.SelfAttention.k",
+        "attn_output": "layer.0.SelfAttention.o",
+        "attn_rel_b": "layer.0.SelfAttention.relative_attention_bias",
+        "output.weight": "lm_head.weight",
+        "output_norm": "final_layer_norm",
+    },
+    "t5encoder": {
+        "token_embd": "embed_tokens",
+        "blk.": "block.",
+        "enc": "encoder",
+        "dec": "decoder",
+        "ffn_up": "layer.1.DenseReluDense.wi_1",
+        "ffn_down": "layer.1.DenseReluDense.wo",
+        "ffn_gate": "layer.1.DenseReluDense.wi_0",
+        "ffn_norm": "layer.1.layer_norm",
+        "attn_norm": "layer.0.layer_norm",
+        "attn_q": "layer.0.SelfAttention.q",
+        "attn_v": "layer.0.SelfAttention.v",
+        "attn_k": "layer.0.SelfAttention.k",
+        "attn_output": "layer.0.SelfAttention.o",
+        "attn_rel_b": "layer.0.SelfAttention.relative_attention_bias",
+        "output.weight": "lm_head.weight",
+        "output_norm": "final_layer_norm",
+    },
 }
 
 
@@ -112,6 +145,18 @@ GGUF_CONFIG_MAPPING = {
         "vocab_size": "vocab_size",
     },
     "qwen2": {
+        "context_length": "max_position_embeddings",
+        "block_count": "num_hidden_layers",
+        "feed_forward_length": "intermediate_size",
+        "embedding_length": "hidden_size",
+        "rope.dimension_count": None,
+        "rope.freq_base": "rope_theta",
+        "attention.head_count": "num_attention_heads",
+        "attention.head_count_kv": "num_key_value_heads",
+        "attention.layer_norm_rms_epsilon": "rms_norm_eps",
+        "vocab_size": "vocab_size",
+    },
+    "t5": {
         "context_length": "max_position_embeddings",
         "block_count": "num_hidden_layers",
         "feed_forward_length": "intermediate_size",
@@ -355,9 +400,73 @@ class GGUFQwen2Converter(Qwen2Converter):
         return tokenizer
 
 
+class GGUFT5Converter(T5Converter):
+    def __init__(self, tokenizer_dict):
+        # set dummy data to avoid unnecessary merges calculation
+        tokenizer_dict["merges"] = ["dummy text"]
+
+        self.proto = GGUFTokenizerSkeleton(tokenizer_dict)
+        self.token2id = {k: v for v, k in enumerate(self.proto.tokens)}
+        self.original_tokenizer = self.proto
+        self.additional_kwargs = {}
+
+    def vocab(self, proto):
+        return list(zip(proto.tokens, proto.scores))
+
+    def normalizer(self, proto):
+        if getattr(self.original_tokenizer, "legacy", True):
+            sequence = []
+            if getattr(self.original_tokenizer, "add_prefix_space", True):
+                sequence += [normalizers.Prepend(prepend="▁")]
+            sequence += [normalizers.Replace(pattern=" ", content="▁")]
+            return normalizers.Sequence(sequence)
+        return None  # non-legacy, no normalizer
+
+    def post_processor(self):
+        return processors.TemplateProcessing(
+            single=["$A", "</s>"],
+            pair=["$A", "</s>", "$B", "</s>"],
+            special_tokens=[
+                ("</s>", self.token2id["</s>"]),
+            ],
+        )
+
+    def converted(self) -> Tokenizer:
+        vocab_scores = self.vocab(self.proto)
+        tokenizer = Tokenizer(
+                        Unigram(
+                            vocab_scores,
+                            unk_id=self.proto.unk_token_id,
+                            byte_fallback=False,
+                        )
+                    )
+
+        # Tokenizer assemble
+        normalizer = self.normalizer(self.proto)
+        if normalizer is not None:
+            tokenizer.normalizer = normalizer
+
+        replacement = "▁"
+        add_prefix_space = True
+        if hasattr(self.original_tokenizer, "add_prefix_space"):
+            add_prefix_space = self.original_tokenizer.add_prefix_space
+
+        pre_tokenizer = self.pre_tokenizer(replacement, add_prefix_space)
+        if pre_tokenizer is not None:
+            tokenizer.pre_tokenizer = pre_tokenizer
+
+        tokenizer.decoder = self.decoder(replacement, add_prefix_space)
+        post_processor = self.post_processor()
+        if post_processor:
+            tokenizer.post_processor = post_processor
+
+        return tokenizer
+
+
 GGUF_TO_FAST_CONVERTERS = {
     "llama": GGUFLlamaConverter,
     "qwen2": GGUFQwen2Converter,
+    "t5": GGUFT5Converter,
 }
 
 

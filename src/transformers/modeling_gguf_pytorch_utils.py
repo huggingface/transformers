@@ -93,6 +93,8 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
     # to add this patch to ensure things work correctly on our side.
     if "llama" in architecture and "mistral" in model_name:
         updated_architecture = "mistral"
+    elif "t5encoder" in architecture:
+        updated_architecture = "t5"
     else:
         updated_architecture = architecture
 
