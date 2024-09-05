@@ -169,7 +169,7 @@ class GenerationConfig(PushToHubMixin):
             Whether or not the model should use the past last key/values attentions (if applicable to the model) to
             speed up decoding.
         cache_implementation (`str`, *optional*, default to `None`):
-            Name of the cache class that will be instantiated in `generate`, for fasted decoding. Possible values are:
+            Name of the cache class that will be instantiated in `generate`, for faster decoding. Possible values are:
             {ALL_CACHE_IMPLEMENTATIONS}. We support other cache types, but they must be manually instantiated and
             passed to `generate` through the `past_key_values` argument. See our
             [cache documentation](https://huggingface.co/docs/transformers/en/kv_cache) for further information.
