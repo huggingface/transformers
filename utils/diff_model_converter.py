@@ -696,6 +696,10 @@ if __name__ == "__main__":
     args = parser.parse_args()
     if args.files_to_parse == ["all"]:
         args.files_to_parse = glob.glob("src/transformers/models/**/diff_*.py", recursive=True)
+
+
+    # THE ORDER IN WHICH WE GENERATE THE DIFF IS SUPER IMPORTANT!
+    
     for file_name in args.files_to_parse:
         print(f"Converting {file_name} to a single model single file format")
         module_path = file_name.replace("/", ".").replace(".py", "").replace("src.", "")
