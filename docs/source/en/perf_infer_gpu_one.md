@@ -60,6 +60,7 @@ FlashAttention-2 is currently supported for the following architectures:
 * [Llava](https://huggingface.co/docs/transformers/model_doc/llava)
 * [Llava-NeXT](https://huggingface.co/docs/transformers/model_doc/llava_next)
 * [Llava-NeXT-Video](https://huggingface.co/docs/transformers/model_doc/llava_next_video)
+* [LLaVA-Onevision](https://huggingface.co/docs/transformers/model_doc/llava_onevision)
 * [VipLlava](https://huggingface.co/docs/transformers/model_doc/vipllava)
 * [VideoLlava](https://huggingface.co/docs/transformers/model_doc/video_llava)
 * [M2M100](https://huggingface.co/docs/transformers/model_doc/m2m_100)
@@ -71,6 +72,7 @@ FlashAttention-2 is currently supported for the following architectures:
 * [Nemotron](https://huggingface.co/docs/transformers/model_doc/nemotron)
 * [NLLB](https://huggingface.co/docs/transformers/model_doc/nllb)
 * [OLMo](https://huggingface.co/docs/transformers/model_doc/olmo#transformers.OlmoModel)
+* [OLMoE](https://huggingface.co/docs/transformers/model_doc/olmoe#transformers.OlmoeModel)
 * [OPT](https://huggingface.co/docs/transformers/model_doc/opt#transformers.OPTModel)
 * [Phi](https://huggingface.co/docs/transformers/model_doc/phi#transformers.PhiModel)
 * [Phi3](https://huggingface.co/docs/transformers/model_doc/phi3#transformers.Phi3Model)
@@ -201,6 +203,7 @@ FlashAttention is more memory efficient, meaning you can train on much larger se
 PyTorch's [`torch.nn.functional.scaled_dot_product_attention`](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html) (SDPA) can also call FlashAttention and memory-efficient attention kernels under the hood. SDPA support is currently being added natively in Transformers and is used by default for `torch>=2.1.1` when an implementation is available. You may also set `attn_implementation="sdpa"` in `from_pretrained()` to explicitly request SDPA to be used.
 
 For now, Transformers supports SDPA inference and training for the following architectures:
+* [Albert](https://huggingface.co/docs/transformers/model_doc/albert#transformers.AlbertModel)
 * [Audio Spectrogram Transformer](https://huggingface.co/docs/transformers/model_doc/audio-spectrogram-transformer#transformers.ASTModel)
 * [Bart](https://huggingface.co/docs/transformers/model_doc/bart#transformers.BartModel)
 * [Bert](https://huggingface.co/docs/transformers/model_doc/bert#transformers.BertModel)
@@ -224,11 +227,13 @@ For now, Transformers supports SDPA inference and training for the following arc
 * [JetMoe](https://huggingface.co/docs/transformers/model_doc/jetmoe#transformers.JetMoeModel)
 * [Jamba](https://huggingface.co/docs/transformers/model_doc/jamba#transformers.JambaModel)
 * [Llama](https://huggingface.co/docs/transformers/model_doc/llama#transformers.LlamaModel)
+* [LLaVA-Onevision](https://huggingface.co/docs/transformers/model_doc/llava_onevision)
 * [Mistral](https://huggingface.co/docs/transformers/model_doc/mistral#transformers.MistralModel)
 * [Mixtral](https://huggingface.co/docs/transformers/model_doc/mixtral#transformers.MixtralModel)
 * [Musicgen](https://huggingface.co/docs/transformers/model_doc/musicgen#transformers.MusicgenModel)
 * [MusicGen Melody](https://huggingface.co/docs/transformers/model_doc/musicgen_melody#transformers.MusicgenMelodyModel)
 * [OLMo](https://huggingface.co/docs/transformers/model_doc/olmo#transformers.OlmoModel)
+* [OLMoE](https://huggingface.co/docs/transformers/model_doc/olmoe#transformers.OlmoeModel)
 * [PaliGemma](https://huggingface.co/docs/transformers/model_doc/paligemma#transformers.PaliGemmaForConditionalGeneration)
 * [Phi](https://huggingface.co/docs/transformers/model_doc/phi#transformers.PhiModel)
 * [Phi3](https://huggingface.co/docs/transformers/model_doc/phi3#transformers.Phi3Model)
