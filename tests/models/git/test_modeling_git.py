@@ -594,9 +594,7 @@ class GitModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[-1.0274,  2.6038,  0.8594], [ 1.6899,  1.3264, -0.5352], [-1.4955, -0.1172,  0.0266]]
+            [[-1.0274, 2.6038, 0.8594], [1.6899, 1.3264, -0.5352], [-1.4955, -0.1172, 0.0266]]
         ).to(torch_device)
 
-        self.assertTrue(
-            torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4)
-        )
+        self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
