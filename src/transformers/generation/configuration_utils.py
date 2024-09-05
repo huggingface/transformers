@@ -288,7 +288,9 @@ class GenerationConfig(PushToHubMixin):
             Whether or not to return the unprocessed prediction logit scores. See `logits` under returned tensors for
             more details.
         return_dict_in_generate (`bool`, *optional*, defaults to `False`):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~utils.ModelOutput`], as opposed to returning exclusively the generated
+            sequence. This flag must be set to `True` to return the generation cache (when `use_cache` is `True`)
+            or optional outputs (see flags starting with `output_`)
 
         > Special tokens that can be used at generation time
 
@@ -333,6 +335,8 @@ class GenerationConfig(PushToHubMixin):
             Additional generation kwargs will be forwarded to the `generate` function of the model. Kwargs that are not
             present in `generate`'s signature will be used in the model forward pass.
     """
+
+    extra_output_flags = ("output_attentions", "output_hidden_states", "output_scores", "output_logits")
 
     def __init__(self, **kwargs):
         # Parameters that control the length of the output
@@ -727,7 +731,17 @@ class GenerationConfig(PushToHubMixin):
                 self.watermarking_config = WatermarkingConfig.from_dict(self.watermarking_config)
             self.watermarking_config.validate()
 
-        # 7. check common issue: passing `generate` arguments inside the generation config
+        # 7. other incorrect combinations
+        if self.return_dict_in_generate is not True:
+            for extra_output_flag in self.extra_output_flags:
+                if getattr(self, extra_output_flag) is True:
+                    warnings.warn(
+                        f"`return_dict_in_generate` is NOT set to `True`, but `{extra_output_flag}` is. When "
+                        f"`return_dict_in_generate` is not `True`, `{extra_output_flag}` is ignored.",
+                        UserWarning,
+                    )
+
+        # 8. check common issue: passing `generate` arguments inside the generation config
         generate_arguments = (
             "logits_processor",
             "stopping_criteria",
@@ -786,7 +800,8 @@ class GenerationConfig(PushToHubMixin):
 
         if use_auth_token is not None:
             warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
+                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. "
+                "Please use `token` instead.",
                 FutureWarning,
             )
             if kwargs.get("token", None) is not None:
@@ -1177,20 +1192,30 @@ class GenerationConfig(PushToHubMixin):
         """
         config_dict = model_config.to_dict()
         config_dict.pop("_from_model_config", None)
-        config = cls.from_dict(config_dict, return_unused_kwargs=False, _from_model_config=True)
+        generation_config = cls.from_dict(config_dict, return_unused_kwargs=False, _from_model_config=True)
 
         # Special case: some models have generation attributes set in the decoder. Use them if still unset in the
-        # generation config.
-        for decoder_name in ("decoder", "generator", "text_config"):
-            if decoder_name in config_dict:
-                default_generation_config = GenerationConfig()
-                decoder_config = config_dict[decoder_name]
-                for attr in config.to_dict().keys():
-                    if attr in decoder_config and getattr(config, attr) == getattr(default_generation_config, attr):
-                        setattr(config, attr, decoder_config[attr])
+        # generation config (which in turn is defined from the outer attributes of model config).
+        decoder_config = model_config.get_text_config(decoder=True)
+        if decoder_config is not model_config:
+            default_generation_config = GenerationConfig()
+            decoder_config_dict = decoder_config.to_dict()
+            for attr in generation_config.to_dict().keys():
+                is_unset = getattr(generation_config, attr) == getattr(default_generation_config, attr)
+                if attr in decoder_config_dict and is_unset:
+                    setattr(generation_config, attr, decoder_config_dict[attr])
 
-        config._original_object_hash = hash(config)  # Hash to detect whether the instance was modified
-        return config
+        # If any `output_...` flag is set to `True`, we ensure `return_dict_in_generate` is set to `True`.
+        if generation_config.return_dict_in_generate is False:
+            if any(
+                getattr(generation_config, extra_output_flag, False)
+                for extra_output_flag in generation_config.extra_output_flags
+            ):
+                generation_config.return_dict_in_generate = True
+
+        # Hash to detect whether the instance was modified
+        generation_config._original_object_hash = hash(generation_config)
+        return generation_config
 
     def update(self, **kwargs):
         """
