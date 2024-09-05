@@ -725,15 +725,10 @@ class GGUFQwen2Converter(Qwen2Converter):
         return tokenizer
 
 
-class GGUFQwen2MoeConverter(GGUFQwen2Converter):
-    def __init__(self, tokenizer_dict):
-        super().__init__(tokenizer_dict)
-
-
 GGUF_TO_FAST_CONVERTERS = {
     "llama": GGUFLlamaConverter,
     "qwen2": GGUFQwen2Converter,
-    "qwen2_moe": GGUFQwen2MoeConverter,
+    "qwen2_moe": GGUFQwen2Converter,
 }
 
 
