@@ -28,7 +28,9 @@ from transformers import (
 )
 from transformers.testing_utils import (
     require_bitsandbytes,
+    require_flash_attn,
     require_torch,
+    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -334,12 +336,12 @@ class Qwen2VLIntegrationTest(unittest.TestCase):
 
         expected_pixel_slice = torch.tensor(
             [
-                [0.8501, 0.8647, 0.8647],
-                [1.0106, 1.0106, 1.0252],
-                [0.9960, 1.0106, 1.0252],
-                [1.0982, 1.1128, 1.1274],
-                [1.0836, 1.0982, 1.0982],
-                [1.1858, 1.1858, 1.1858],
+                [0.8501, 0.8501, 0.8647],
+                [0.9376, 0.9376, 0.9376],
+                [0.9084, 0.9376, 0.9376],
+                [1.0252, 1.0252, 1.0544],
+                [1.0252, 1.0252, 1.0252],
+                [1.0836, 1.0836, 1.0836],
             ],
             dtype=torch.float32,
             device="cpu",
@@ -350,7 +352,7 @@ class Qwen2VLIntegrationTest(unittest.TestCase):
         inputs = inputs.to(torch_device)
 
         output = model.generate(**inputs, max_new_tokens=30)
-        EXPECTED_DECODED_TEXT = "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?assistant\nThe dog in the picture appears to be a Labrador Retriever or a similar breed. Labradors are known for their friendly and intelligent nature,"
+        EXPECTED_DECODED_TEXT = "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular choices"
 
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
@@ -392,57 +394,119 @@ class Qwen2VLIntegrationTest(unittest.TestCase):
             {"role": "user", "content": "Who are you?"},
         ]
         text2 = self.processor.apply_chat_template(messages2, tokenize=False, add_generation_prompt=True)
-        inputs = self.processor(text=[text, text2], images=[self.image], return_tensors="pt").to(torch_device)
+        inputs = self.processor(text=[text, text2], images=[self.image], padding=True, return_tensors="pt").to(
+            torch_device
+        )
 
         # it should not matter whether two images are the same size or not
         output = model.generate(**inputs, max_new_tokens=30)
 
         EXPECTED_DECODED_TEXT = [
-            "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?assistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and outgoing personalities, as well as their",
-            "system\nYou are a helpful assistant.user\nWho are you?assistant\nI am Qwen, a large language model created by Alibaba Cloud. I am designed to assist with various tasks and answer a wide range of questions to",
+            "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular choices",
+            "system\nYou are a helpful assistant.\nuser\nWho are you?\nassistant\nI am Qwen, a large language model created by Alibaba Cloud. I am designed to answer a wide range of questions and provide information on various topics",
         ]
 
         self.assertEqual(
-            self.processor.batch_decode(output, skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
+            self.processor.batch_decode(output[0], skip_special_tokens=True),
+            EXPECTED_DECODED_TEXT[0],
+        )
+        self.assertEqual(
+            self.processor.batch_decode(output[1], skip_special_tokens=True),
+            EXPECTED_DECODED_TEXT[1],
         )
 
     @slow
     @require_bitsandbytes
     def test_small_model_integration_test_batch_different_resolutions(self):
         model = Qwen2VLForConditionalGeneration.from_pretrained("Qwen/Qwen2-VL-7B-Instruct", load_in_4bit=True)
-        text, vision_infos = self.processor.apply_chat_template(
-            self.messages, tokenize=False, add_generation_prompt=True
+        text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
+        text2 = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
+        image2 = self.image.resize((224, 224))
+        inputs = self.processor(text=[text, text2], images=[self.image, image2], padding=True, return_tensors="pt").to(
+            torch_device
         )
-        messages2 = [
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "image",
-                        "image": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen-VL/assets/demo.jpeg",
-                        "resized_height": 504,
-                        "resized_width": 252,
-                    },
-                    {"type": "text", "text": "What kind of dog is this?"},
-                ],
-            }
-        ]
-        text2, vision_infos2 = self.processor.apply_chat_template(
-            messages2, tokenize=False, add_generation_prompt=True
-        )
-        inputs = self.processor(
-            text=[text, text2], vision_infos=[vision_infos, vision_infos2], return_tensors="pt"
-        ).to(torch_device)
 
         # it should not matter whether two images are the same size or not
         output = model.generate(**inputs, max_new_tokens=30)
 
         EXPECTED_DECODED_TEXT = [
-            "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?assistant\nThe dog in the picture appears to be a Labrador Retriever or a similar breed. Labradors are known for their friendly and intelligent nature,",
-            "system\nYou are a helpful assistant.\nuser\nWho are you?assistant\nI am a large language model created by Alibaba Cloud. I am called Qwen.",
+            "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular choices",
+            "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Golden Retriever. Golden Retrievers are known for their friendly and affectionate nature, as well as",
         ]
         self.assertEqual(
-            self.processor.batch_decode(output, skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
+            self.processor.batch_decode(output[0], skip_special_tokens=True),
+            EXPECTED_DECODED_TEXT[0],
+        )
+        self.assertEqual(
+            self.processor.batch_decode(output[1], skip_special_tokens=True),
+            EXPECTED_DECODED_TEXT[1],
+        )
+
+    @slow
+    @require_flash_attn
+    @require_torch_gpu
+    def test_small_model_integration_test_batch_flashatt2(self):
+        model = Qwen2VLForConditionalGeneration.from_pretrained(
+            "Qwen/Qwen2-VL-7B-Instruct",
+            torch_dtype=torch.bfloat16,
+            attn_implementation="flash_attention_2",
+            device_map="auto",
+        )
+        text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
+        inputs = self.processor(text=[text, text], images=[self.image, self.image], return_tensors="pt").to(
+            torch_device
+        )
+
+        # it should not matter whether two images are the same size or not
+        output = model.generate(**inputs, max_new_tokens=30)
+
+        EXPECTED_DECODED_TEXT = [
+            "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular choices",
+            "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular choices",
+        ]
+
+        self.assertEqual(
+            self.processor.batch_decode(output[0], skip_special_tokens=True),
+            EXPECTED_DECODED_TEXT[0],
+        )
+        self.assertEqual(
+            self.processor.batch_decode(output, skip_special_tokens=True)[0],
+            self.processor.batch_decode(output, skip_special_tokens=True)[1],
+        )
+
+    @slow
+    @require_flash_attn
+    @require_torch_gpu
+    def test_small_model_integration_test_batch_wo_image_flashatt2(self):
+        model = Qwen2VLForConditionalGeneration.from_pretrained(
+            "Qwen/Qwen2-VL-7B-Instruct",
+            torch_dtype=torch.bfloat16,
+            attn_implementation="flash_attention_2",
+            device_map="auto",
+        )
+        text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
+        messages2 = [
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": "Who are you?"},
+        ]
+        text2 = self.processor.apply_chat_template(messages2, tokenize=False, add_generation_prompt=True)
+        inputs = self.processor(text=[text, text2], images=[self.image], padding=True, return_tensors="pt").to(
+            torch_device
+        )
+
+        # it should not matter whether two images are the same size or not
+        output = model.generate(**inputs, max_new_tokens=30)
+
+        EXPECTED_DECODED_TEXT = [
+            "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular choices",
+            "system\nYou are a helpful assistant.\nuser\nWho are you?\nassistant\nI am Qwen, a large language model created by Alibaba Cloud. I am designed to answer a wide range of questions and provide information on various topics",
+        ]
+
+        self.assertEqual(
+            self.processor.batch_decode(output[0], skip_special_tokens=True),
+            EXPECTED_DECODED_TEXT[0],
+        )
+        self.assertEqual(
+            self.processor.batch_decode(output, skip_special_tokens=True)[0],
+            self.processor.batch_decode(output, skip_special_tokens=True)[1],
         )
