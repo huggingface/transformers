@@ -589,14 +589,14 @@ class GitModelIntegrationTest(unittest.TestCase):
             outputs = model(**inputs, interpolate_pos_encoding=True)
 
         # verify the logits
-        expected_shape = torch.Size((1, 26, 768))
+        expected_shape = torch.Size((1, 130, 768))
 
-        self.assertEqual(outputs.vision_model_output.last_hidden_state.shape, expected_shape)
+        self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[-0.0966, 0.3521, -0.3485], [0.5785, 0.8967, 0.3586], [0.2314, 0.3896, 0.2557]]
+            [[-1.0274,  2.6038,  0.8594], [ 1.6899,  1.3264, -0.5352], [-1.4955, -0.1172,  0.0266]]
         ).to(torch_device)
 
         self.assertTrue(
-            torch.allclose(outputs.vision_model_output.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4)
+            torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4)
         )
