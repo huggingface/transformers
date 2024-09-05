@@ -275,7 +275,7 @@ class SuperTransformer(cst.CSTTransformer):
         self.original_methods = original_methods
         self.updated_methods = updated_methods
         self.all_assign_target = {}
-        self.deleted_targets = {} # child node can delete some arguments
+        self.deleted_targets = {}  # child node can delete some arguments
         self.class_name = class_name
 
     def update_body(self, existing_body, new_statements):
@@ -324,15 +324,13 @@ class SuperTransformer(cst.CSTTransformer):
             parent_has_docstring = m.matches(self.original_methods[func_name].body.body[0], DOCSTRING_NODE)
         new_body = []
         for idx, expr in enumerate(node.body):
-            if (
-                m.matches(
-                    expr,
-                    m.SimpleStatementLine(
-                        body=[m.Return(SUPER_CALL_NODE(func_name)) | m.Expr(SUPER_CALL_NODE(func_name))]
-                    ),
-                )
+            if m.matches(
+                expr,
+                m.SimpleStatementLine(
+                    body=[m.Return(SUPER_CALL_NODE(func_name)) | m.Expr(SUPER_CALL_NODE(func_name))]
+                ),
             ):
-                if idx!=0 and func_name == "__init__":
+                if idx != 0 and func_name == "__init__":
                     raise ValueError(f"The call to super() in {self.class_name} should be at the top of the init")
                 new_body.extend(self.update_body(self.original_methods[func_name].body.body, node.body))
             elif m.matches(expr, DOCSTRING_NODE):
@@ -452,7 +450,9 @@ def replace_call_to_super(class_finder: ClassFinder, updated_node: cst.ClassDef,
     result_node = original_node.with_changes(body=cst.IndentedBlock(body=end_meth))
     temp_module = cst.Module(body=[result_node])
     new_module = MetadataWrapper(temp_module)
-    new_replacement_class = new_module.visit(SuperTransformer(temp_module, original_methods, updated_methods, class_name))
+    new_replacement_class = new_module.visit(
+        SuperTransformer(temp_module, original_methods, updated_methods, class_name)
+    )
     new_replacement_body = new_replacement_class.body[0].body  # get the indented block
 
     return original_node.with_changes(body=new_replacement_body)

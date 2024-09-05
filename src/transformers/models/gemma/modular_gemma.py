@@ -627,7 +627,7 @@ class GemmaDecoderLayer(LlamaDecoderLayer):
 class GemmaModel(LlamaModel):
     def __init__(self, config: GemmaConfig):
         super().__init__(config)
-        del self.rotary_emb # Gemma does not implement rotary emb at the modeling level yet!
+        del self.rotary_emb  # Gemma does not implement rotary emb at the modeling level yet!
 
     def forward(
         self,
