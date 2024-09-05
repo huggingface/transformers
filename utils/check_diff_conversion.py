@@ -16,7 +16,7 @@ console = Console()
 
 
 def process_file(generated_modeling_content, file_type="modeling_", fix_and_overwrite=False):
-    file_path = diff_file_path.replace("diff_", f"{file_type}_")
+    file_path = diff_file_path.replace("modular_", f"{file_type}_")
     # Read the actual modeling file
     with open(file_path, "r") as modeling_file:
         content = modeling_file.read()
@@ -65,7 +65,7 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     if args.files == ["all"]:
-        args.files = glob.glob("src/transformers/models/**/diff_*.py", recursive=True)
+        args.files = glob.glob("src/transformers/models/**/modular_*.py", recursive=True)
     non_matching_files = 0
     for diff_file_path in args.files:
         non_matching_files += compare_files(diff_file_path, args.fix_and_overwrite)
