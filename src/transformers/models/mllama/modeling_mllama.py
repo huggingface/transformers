@@ -1347,7 +1347,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
             cross_attention_mask = convert_sparse_cross_attention_mask_to_dense(
                 cross_attention_token_mask=cross_attention_token_mask,
                 num_tiles=num_tiles,
-                total_len=input_ids.shape[-1] + 100,
+                total_len=input_ids.shape[-1],
                 max_num_tiles=self.vision_max_num_chunks,
                 device=self.device,
                 dtype=self.dtype,
