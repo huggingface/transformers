@@ -435,21 +435,7 @@ def _compile_inverse_template(inverse_template):
     return jinja_env.from_string(inverse_template)
 
 
-# Functions for the Jinja2 environments below this line
-
-
-def raise_exception(message):
-    raise jinja2.exceptions.TemplateError(message)
-
-
-def tojson(x, ensure_ascii=False, indent=None, separators=None, sort_keys=False):
-    # We override the built-in tojson filter because Jinja's default filter escapes HTML characters
-    # We also expose some options like custom indents and separators
-    return json.dumps(x, ensure_ascii=ensure_ascii, indent=indent, separators=separators, sort_keys=sort_keys)
-
-
-def strftime_now(format_str):
-    return datetime.now().strftime(format_str)
+# Functions for the Jinja environments below this line
 
 
 def finditer(pattern, string, flags=0, add_tag=None, add_tag_from_group=None):
@@ -487,3 +473,17 @@ def sort_by_group_start(matches, group_idx=0, group_idx_by_tag=None):
 
 def json_loads(string):
     return json.loads(string)
+
+
+def raise_exception(message):
+    raise jinja2.exceptions.TemplateError(message)
+
+
+def tojson(x, ensure_ascii=False, indent=None, separators=None, sort_keys=False):
+    # We override the built-in tojson filter because Jinja's default filter escapes HTML characters
+    # We also expose some options like custom indents and separators
+    return json.dumps(x, ensure_ascii=ensure_ascii, indent=indent, separators=separators, sort_keys=sort_keys)
+
+
+def strftime_now(format_str):
+    return datetime.now().strftime(format_str)

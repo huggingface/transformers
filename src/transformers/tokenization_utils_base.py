@@ -66,6 +66,7 @@ from .utils import (
     to_py_obj,
 )
 from .utils.chat_template_utils import (
+    _compile_inverse_template,
     _compile_jinja_template,
     _render_with_assistant_indices,
 )
@@ -1921,7 +1922,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         else:
             return rendered
 
-    def apply_inverse_template(self, chat: str, inverse_template: Optional[str] = None):
+    def apply_inverse_template(self, chat: str, inverse_template: Optional[str] = None, skip_json_load: bool = False):
         if inverse_template is None:
             if self.inverse_template is not None:
                 inverse_template = self.inverse_template
@@ -1931,10 +1932,13 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     "the tokenizer.inverse_template attribute to a valid Jinja template string."
                 )
         # Compilation function uses a cache to avoid recompiling the same template
-        compiled_template = _compile_jinja_template(inverse_template)
+        compiled_template = _compile_inverse_template(inverse_template)
 
         template_out = compiled_template.render(chat=chat)
-        return json.loads(template_out)
+        if skip_json_load:
+            return template_out
+        else:
+            return json.loads(template_out)
 
     def get_chat_template(self, chat_template: Optional[str] = None, tools: Optional[List[Dict]] = None) -> str:
         """
