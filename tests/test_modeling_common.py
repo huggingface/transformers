@@ -1822,6 +1822,10 @@ class ModelTesterMixin:
             self.assertEqual(type_model_embed_pre_resize, type_model_embed_post_resize)
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
             model(**self._prepare_for_class(inputs_dict, model_class))
+            # Check that added embeddings mean is close to the old embeddings mean 
+            old_embeddings_mean = torch.mean(model_embed.weight.data[:model_vocab_size, :], axis=0)
+            new_embeddings_mean = torch.mean(model_embed.weight.data[-10:, :], axis=0)
+            self.assert_almost_equals(old_embeddings_mean, new_embeddings_mean, tol=1e-3)
 
             # Check that resizing the token embeddings with a smaller vocab size decreases the model's vocab size
             model_embed = model.resize_token_embeddings(model_vocab_size - 15)
