@@ -1452,16 +1452,16 @@ class GenerationMixin:
             def get_layer_device_map(execution_device_map: Optional[dict] = None):
                 if execution_device_map is None or len(execution_device_map) <= 1:
                     return None
-                layer_device_mapping = {}
+                layer_device_map = {}
                 for layer in execution_device_map:
                     for idx in range(self.config.num_hidden_layers):
                         if f".{idx}." in f"{layer}.":
-                            layer_device_mapping[idx] = execution_device_map[layer]
+                            layer_device_map[idx] = execution_device_map[layer]
                             break
                 for idx in range(self.config.num_hidden_layers):
-                    if idx not in layer_device_mapping:
+                    if idx not in layer_device_map:
                         raise RuntimeError(f"layer {idx} has not been mapped to a device.")
-                return layer_device_mapping
+                return layer_device_map
 
             execution_device_map = None
             # Taken from dispatch_model from accelerate.
