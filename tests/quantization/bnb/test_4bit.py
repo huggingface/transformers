@@ -273,10 +273,11 @@ class Bnb4BitTest(Base4bitTest):
         self.assertEqual(self.model_4bit.device.type, "cpu")
         self.assertAlmostEqual(self.model_4bit.get_memory_footprint(), mem_before)
 
-        # Move back to CUDA device
-        self.model_4bit.to(0)
-        self.assertEqual(self.model_4bit.device, torch.device(0))
-        self.assertAlmostEqual(self.model_4bit.get_memory_footprint(), mem_before)
+        if torch.cuda.is_available():
+            # Move back to CUDA device
+            self.model_4bit.to(0)
+            self.assertEqual(self.model_4bit.device, torch.device(0))
+            self.assertAlmostEqual(self.model_4bit.get_memory_footprint(), mem_before)
 
     def test_device_and_dtype_assignment(self):
         r"""
@@ -299,6 +300,10 @@ class Bnb4BitTest(Base4bitTest):
             with self.assertRaises(ValueError):
                 # Tries with `cuda`
                 self.model_4bit.cuda()
+        else:
+            with self.assertRaises(ValueError):
+                # Tries with `str`
+                self.model_4bit.to("cpu")
 
         with self.assertRaises(ValueError):
             # Tries with a `dtype`
@@ -322,8 +327,9 @@ class Bnb4BitTest(Base4bitTest):
         self.model_fp16 = self.model_fp16.to(torch.float32)
         _ = self.model_fp16.generate(input_ids=encoded_input["input_ids"].to(torch_device), max_new_tokens=10)
 
-        # Check that this does not throw an error
-        _ = self.model_fp16.cuda()
+        if torch.cuda.is_available():
+            # Check that this does not throw an error
+            _ = self.model_fp16.cuda()
 
         # Check this does not throw an error
         _ = self.model_fp16.to("cpu")
