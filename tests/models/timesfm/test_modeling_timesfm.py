@@ -21,7 +21,6 @@ import tempfile
 import unittest
 
 from transformers import TimesFMConfig, is_torch_available
-from transformers.models.auto.modeling_auto import MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES
 from transformers.testing_utils import (
     require_accelerate,
     require_sentencepiece,
@@ -48,11 +47,7 @@ if is_torch_available():
     from transformers import (
         AutoTokenizer,
         ByT5Tokenizer,
-        TimesFMEncoderModel,
-        TimesFMForConditionalGeneration,
-        TimesFMForQuestionAnswering,
-        TimesFMForSequenceClassification,
-        TimesFMForTokenClassification,
+        TimesFMForPrediction,
         TimesFMModel,
         T5Tokenizer,
     )
@@ -249,7 +244,7 @@ class TimesFMModelTester:
         decoder_attention_mask,
         lm_labels,
     ):
-        model = TimesFMForConditionalGeneration(config=config).to(torch_device).eval()
+        model = TimesFMForPrediction(config=config).to(torch_device).eval()
         outputs = model(
             input_ids=input_ids,
             decoder_input_ids=decoder_input_ids,
@@ -258,26 +253,6 @@ class TimesFMModelTester:
         )
         self.parent.assertEqual(len(outputs), 4)
         self.parent.assertEqual(outputs["logits"].size(), (self.batch_size, self.decoder_seq_length, self.vocab_size))
-        self.parent.assertEqual(outputs["loss"].size(), ())
-
-    def create_and_check_with_sequence_classification_head(
-        self,
-        config,
-        input_ids,
-        decoder_input_ids,
-        attention_mask,
-        decoder_attention_mask,
-        lm_labels,
-    ):
-        labels = torch.tensor([1] * self.batch_size, dtype=torch.long, device=torch_device)
-        model = TimesFMForSequenceClassification(config=config).to(torch_device).eval()
-        outputs = model(
-            input_ids=input_ids,
-            decoder_input_ids=input_ids,
-            labels=labels,
-        )
-        # self.parent.assertEqual(len(outputs), 4)
-        self.parent.assertEqual(outputs["logits"].size(), (self.batch_size, config.num_labels))
         self.parent.assertEqual(outputs["loss"].size(), ())
 
     def create_and_check_decoder_model_past(
@@ -415,7 +390,7 @@ class TimesFMModelTester:
         decoder_attention_mask,
         lm_labels,
     ):
-        model = TimesFMForConditionalGeneration(config=config).to(torch_device).eval()
+        model = TimesFMForPrediction(config=config).to(torch_device).eval()
         torch.manual_seed(0)
         output_without_past_cache = model.generate(
             input_ids[:1], num_beams=2, max_length=5, do_sample=True, use_cache=False
@@ -446,7 +421,7 @@ class TimesFMModelTester:
         decoder_attention_mask,
         lm_labels,
     ):
-        for model_class in [TimesFMModel, TimesFMForConditionalGeneration]:
+        for model_class in [TimesFMModel, TimesFMForPrediction]:
             torch.manual_seed(0)
             model = model_class(config=config).to(torch_device).eval()
             # load state dict copies weights but does not tie them
@@ -520,7 +495,7 @@ class TimesFMModelTester:
         prev_vocab_size = config.vocab_size
 
         config.tie_word_embeddings = False
-        model = TimesFMForConditionalGeneration(config=config).to(torch_device).eval()
+        model = TimesFMForPrediction(config=config).to(torch_device).eval()
         model.resize_token_embeddings(prev_vocab_size - 10)
 
         self.parent.assertEqual(model.get_input_embeddings().weight.shape[0], prev_vocab_size - 10)
@@ -551,12 +526,12 @@ class TimesFMModelTester:
 @require_torch
 class TimesFMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (TimesFMModel, TimesFMForConditionalGeneration, TimesFMForSequenceClassification, TimesFMForQuestionAnswering)
+        (TimesFMModel, TimesFMForPrediction)
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (TimesFMForConditionalGeneration,) if is_torch_available() else ()
-    all_parallelizable_model_classes = (TimesFMModel, TimesFMForConditionalGeneration) if is_torch_available() else ()
+    all_generative_model_classes = (TimesFMForPrediction,) if is_torch_available() else ()
+    all_parallelizable_model_classes = (TimesFMModel, TimesFMForPrediction) if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = True
@@ -573,7 +548,7 @@ class TimesFMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_inputs_embeds(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        for model_class in (TimesFMModel, TimesFMForConditionalGeneration, TimesFMForQuestionAnswering):
+        for model_class in (TimesFMModel, TimesFMForPrediction):
             model = model_class(config)
             model.to(torch_device)
             model.eval()
@@ -608,10 +583,6 @@ class TimesFMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_with_lm_head(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_with_lm_head(*config_and_inputs)
-
-    def test_with_sequence_classification_head(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_with_sequence_classification_head(*config_and_inputs)
 
     def test_decoder_model_past(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -695,7 +666,7 @@ class TimesFMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         config = config_and_inputs[0]
         max_length = config_and_inputs[1].shape[-1] + 3
-        model = TimesFMForConditionalGeneration(config).eval()
+        model = TimesFMForPrediction(config).eval()
         model.to(torch_device)
 
         head_masking = {
@@ -799,50 +770,6 @@ class TimesFMEncoderOnlyModelTester:
             attention_mask,
         )
 
-    def create_and_check_model(
-        self,
-        config,
-        input_ids,
-        attention_mask,
-    ):
-        model = TimesFMEncoderModel(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-        )
-        result = model(input_ids=input_ids)
-        encoder_output = result.last_hidden_state
-
-        self.parent.assertEqual(encoder_output.size(), (self.batch_size, self.encoder_seq_length, self.hidden_size))
-
-    def create_and_check_model_fp16_forward(
-        self,
-        config,
-        input_ids,
-        attention_mask,
-    ):
-        model = TimesFMEncoderModel(config=config).to(torch_device).half().eval()
-        output = model(input_ids, attention_mask=attention_mask)["last_hidden_state"]
-        self.parent.assertFalse(torch.isnan(output).any().item())
-
-    def create_and_check_with_token_classification_head(
-        self,
-        config,
-        input_ids,
-        attention_mask,
-    ):
-        labels = torch.tensor([1] * self.seq_length * self.batch_size, dtype=torch.long, device=torch_device)
-        model = TimesFMForTokenClassification(config=config).to(torch_device).eval()
-        outputs = model(
-            input_ids=input_ids,
-            labels=labels,
-            attention_mask=attention_mask,
-        )
-        self.parent.assertEqual(outputs["logits"].size(), (self.batch_size, self.seq_length, config.num_labels))
-        self.parent.assertEqual(outputs["loss"].size(), ())
-
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -856,41 +783,6 @@ class TimesFMEncoderOnlyModelTester:
             "attention_mask": attention_mask,
         }
         return config, inputs_dict
-
-
-class TimesFMEncoderOnlyModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (TimesFMEncoderModel, TimesFMForTokenClassification) if is_torch_available() else ()
-    test_pruning = False
-    test_resize_embeddings = False
-    test_model_parallel = True
-    pipeline_model_mapping = (
-        {
-            "token-classification": TimesFMForTokenClassification,
-        }
-        if is_torch_available()
-        else {}
-    )
-    all_parallelizable_model_classes = (TimesFMEncoderModel,) if is_torch_available() else ()
-
-    def setUp(self):
-        self.model_tester = TimesFMEncoderOnlyModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=TimesFMConfig, d_model=37)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
-    @unittest.skipIf(torch_device == "cpu", "Cant do half precision")
-    def test_model_fp16_forward(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model_fp16_forward(*config_and_inputs)
-
-    def test_with_token_classification_head(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_with_token_classification_head(*config_and_inputs)
 
 
 def use_task_specific_params(model, task):
@@ -922,38 +814,38 @@ class TimesFMModelFp16Tests(unittest.TestCase):
         with unittest.mock.patch("builtins.__import__", side_effect=import_accelerate_mock):
             accelerate_available = False
 
-            model = TimesFMForConditionalGeneration.from_pretrained("google/timesfm-1.0-200m", torch_dtype=torch.float16)
+            model = TimesFMForPrediction.from_pretrained("google/timesfm-1.0-200m", torch_dtype=torch.float16)
             self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.float32)
             self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wi.weight.dtype == torch.float16)
 
             # Load without in bf16
-            model = TimesFMForConditionalGeneration.from_pretrained("google/timesfm-1.0-200m", torch_dtype=torch.bfloat16)
+            model = TimesFMForPrediction.from_pretrained("google/timesfm-1.0-200m", torch_dtype=torch.bfloat16)
             self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.bfloat16)
             self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wi.weight.dtype == torch.bfloat16)
 
         # Load using `accelerate` in bf16
-        model = TimesFMForConditionalGeneration.from_pretrained(
+        model = TimesFMForPrediction.from_pretrained(
             "google/timesfm-1.0-200m", torch_dtype=torch.bfloat16, device_map="auto"
         )
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.bfloat16)
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wi.weight.dtype == torch.bfloat16)
 
         # Load using `accelerate` in bf16
-        model = TimesFMForConditionalGeneration.from_pretrained(
+        model = TimesFMForPrediction.from_pretrained(
             "google/timesfm-1.0-200m", torch_dtype=torch.bfloat16, low_cpu_mem_usage=True
         )
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.bfloat16)
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wi.weight.dtype == torch.bfloat16)
 
         # Load without using `accelerate`
-        model = TimesFMForConditionalGeneration.from_pretrained(
+        model = TimesFMForPrediction.from_pretrained(
             "google/timesfm-1.0-200m", torch_dtype=torch.float16, low_cpu_mem_usage=True
         )
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.float32)
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wi.weight.dtype == torch.float16)
 
         # Load using `accelerate`
-        model = TimesFMForConditionalGeneration.from_pretrained(
+        model = TimesFMForPrediction.from_pretrained(
             "google/timesfm-1.0-200m", torch_dtype=torch.float16, device_map="auto"
         )
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.float32)
@@ -966,7 +858,7 @@ class TimesFMModelFp16Tests(unittest.TestCase):
 class TimesFMModelIntegrationTests(unittest.TestCase):
     @cached_property
     def model(self):
-        return TimesFMForConditionalGeneration.from_pretrained("google-timesfm/timesfm-base").to(torch_device)
+        return TimesFMForPrediction.from_pretrained("google-timesfm/timesfm-base").to(torch_device)
 
     @cached_property
     def tokenizer(self):
@@ -979,7 +871,7 @@ class TimesFMModelIntegrationTests(unittest.TestCase):
         """
         model_name = "google/flan-timesfm-small"
         tokenizer = T5Tokenizer.from_pretrained(model_name)
-        model = TimesFMForConditionalGeneration.from_pretrained(model_name)
+        model = TimesFMForPrediction.from_pretrained(model_name)
         model = torch.quantization.quantize_dynamic(model, {torch.nn.Linear}, dtype=torch.qint8)
         input_text = "Answer the following yes/no question by reasoning step-by-step. Can you write a whole Haiku in a single tweet?"
         input_ids = tokenizer(input_text, return_tensors="pt").input_ids
@@ -987,7 +879,7 @@ class TimesFMModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_small_generation(self):
-        model = TimesFMForConditionalGeneration.from_pretrained("google/timesfm-1.0-200m").to(torch_device)
+        model = TimesFMForPrediction.from_pretrained("google/timesfm-1.0-200m").to(torch_device)
         model.config.max_length = 8
         model.config.num_beams = 1
         model.config.do_sample = False
@@ -1014,7 +906,7 @@ class TimesFMModelIntegrationTests(unittest.TestCase):
         >>> score = timesfm_model.score(inputs=["Hello there"], targets=["Hi I am"], vocabulary=vocab)
         """
 
-        model = TimesFMForConditionalGeneration.from_pretrained("google/timesfm-1.0-200m").to(torch_device)
+        model = TimesFMForPrediction.from_pretrained("google/timesfm-1.0-200m").to(torch_device)
         tokenizer = T5Tokenizer.from_pretrained("google/timesfm-1.0-200m")
 
         input_ids = tokenizer("Hello there", return_tensors="pt").input_ids
@@ -1040,7 +932,7 @@ class TimesFMModelIntegrationTests(unittest.TestCase):
         >>> score = timesfm_model.score(inputs=["Hello there"], targets=["Hi I am"], vocabulary=vocab)
         """
 
-        model = TimesFMForConditionalGeneration.from_pretrained("google/timesfm-v1_1-small").to(torch_device)
+        model = TimesFMForPrediction.from_pretrained("google/timesfm-v1_1-small").to(torch_device)
         tokenizer = T5Tokenizer.from_pretrained("google/timesfm-v1_1-small")
 
         input_ids = tokenizer("Hello there", return_tensors="pt").input_ids
@@ -1064,7 +956,7 @@ class TimesFMModelIntegrationTests(unittest.TestCase):
         >>> score = timesfm_model.score(inputs=["Hello there"], targets=["Hi I am"], vocabulary=vocab)
         """
 
-        model = TimesFMForConditionalGeneration.from_pretrained("google/bytimesfm-small").to(torch_device)
+        model = TimesFMForPrediction.from_pretrained("google/bytimesfm-small").to(torch_device)
         tokenizer = ByT5Tokenizer.from_pretrained("google/bytimesfm-small")
 
         input_ids = tokenizer("Hello there", return_tensors="pt").input_ids
@@ -1405,7 +1297,7 @@ class TimesFMModelIntegrationTests(unittest.TestCase):
         )
         article = "summarize: " + article.strip()
         timesfm_tokenizer = AutoTokenizer.from_pretrained("flax-community/timesfm-base-cnn-dm")
-        timesfm_model = TimesFMForConditionalGeneration.from_pretrained("flax-community/timesfm-base-cnn-dm").to(torch_device)
+        timesfm_model = TimesFMForPrediction.from_pretrained("flax-community/timesfm-base-cnn-dm").to(torch_device)
         input_ids = timesfm_tokenizer(
             article, add_special_tokens=False, truncation=True, max_length=512, return_tensors="pt"
         ).input_ids.to(torch_device)
@@ -1434,7 +1326,7 @@ class TestAsymmetricTimesFM(unittest.TestCase):
             decoder_attention_mask,
             lm_labels,
         ) = inputs
-        model = TimesFMForConditionalGeneration(config=config).to(torch_device).eval()
+        model = TimesFMForPrediction(config=config).to(torch_device).eval()
         outputs = model(
             input_ids=input_ids,
             decoder_input_ids=decoder_input_ids,

@@ -3710,14 +3710,9 @@ else:
     )
     _import_structure["models.timesfm"].extend(
         [
-            "TimesFMEncoderModel",
-            "TimesFMForConditionalGeneration",
-            "TimesFMForQuestionAnswering",
-            "TimesFMForSequenceClassification",
-            "TimesFMForTokenClassification",
+            "TimesFMForPrediction",
             "TimesFMModel",
             "TimesFMPreTrainedModel",
-            "load_tf_weights_in_timesfm",
         ]
     )
     _import_structure["models.table_transformer"].extend(
@@ -8436,14 +8431,9 @@ if TYPE_CHECKING:
             load_tf_weights_in_t5,
         )
         from .models.timesfm import (
-            TimesFMEncoderModel,
-            TimesFMForConditionalGeneration,
-            TimesFMForQuestionAnswering,
-            TimesFMForSequenceClassification,
-            TimesFMForTokenClassification,
+            TimesFMForPrediction,
             TimesFMModel,
             TimesFMPreTrainedModel,
-            load_tf_weights_in_timesfm,
         )
         from .models.table_transformer import (
             TableTransformerForObjectDetection,

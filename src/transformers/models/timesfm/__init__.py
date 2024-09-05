@@ -30,14 +30,9 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_timesfm"] = [
-        "TimesFMEncoderModel",
-        "TimesFMForConditionalGeneration",
+        "TimesFMForPrediction",
         "TimesFMModel",
         "TimesFMPreTrainedModel",
-        "load_tf_weights_in_timesfm",
-        "TimesFMForQuestionAnswering",
-        "TimesFMForSequenceClassification",
-        "TimesFMForTokenClassification",
     ]
 
 if TYPE_CHECKING:
@@ -50,14 +45,9 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_timesfm import (
-            TimesFMEncoderModel,
-            TimesFMForConditionalGeneration,
-            TimesFMForQuestionAnswering,
-            TimesFMForSequenceClassification,
-            TimesFMForTokenClassification,
+            TimesFMForPrediction,
             TimesFMModel,
             TimesFMPreTrainedModel,
-            load_tf_weights_in_timesfm,
         )
 
 else:
