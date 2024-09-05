@@ -1387,37 +1387,60 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipVideoPreTrainedModel
 
         Examples:
 
-        ```python
+                ```python
         >>> from transformers import InstructBlipVideoProcessor, InstructBlipVideoForConditionalGeneration
         >>> import torch
-        >>> from PIL import Image
-        >>> import requests
+        >>> from huggingface_hub import hf_hub_download
+        >>> import av
+        >>> import numpy as np
 
-        >>> model = InstructBlipVideoForConditionalGeneration.from_pretrained("Salesforce/instructblipvideo-vicuna-7b")
-        >>> processor = InstructBlipVideoProcessor.from_pretrained("Salesforce/instructblipvideo-vicuna-7b")
+        >>> def read_video_pyav(container, indices):
+        ...     '''
+        ...     Decode the video with PyAV decoder.
+        ...     Args:
+        ...         container (`av.container.input.InputContainer`): PyAV container.
+        ...         indices (`List[int]`): List of frame indices to decode.
+        ...     Returns:
+        ...         result (np.ndarray): np array of decoded frames of shape (num_frames, height, width, 3).
+        ...     '''
+        ...     frames = []
+        ...     container.seek(0)
+        ...     start_index = indices[0]
+        ...     end_index = indices[-1]
+        ...     for i, frame in enumerate(container.decode(video=0)):
+        ...         if i > end_index:
+        ...             break
+        ...         if i >= start_index and i in indices:
+        ...             frames.append(frame)
+        ...     return np.stack([x.to_ndarray(format="rgb24") for x in frames])
 
-        >>> device = "cuda" if torch.cuda.is_available() else "cpu"
-        >>> model.to(device)  # doctest: +IGNORE_RESULT
+        >>> model = InstructBlipVideoForConditionalGeneration.from_pretrained("Salesforce/instructblip-vicuna-7b", device_map="auto")
+        >>> processor = InstructBlipVideoProcessor.from_pretrained("Salesforce/instructblip-vicuna-7b")
 
-        >>> url = "https://raw.githubusercontent.com/salesforce/LAVIS/main/docs/_static/Confusing-Pictures.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
-        >>> prompt = "What is unusual about this image?"
-        >>> inputs = processor(images=image, text=prompt, return_tensors="pt").to(device)
+        >>> file_path = hf_hub_download(
+        ...       repo_id="nielsr/video-demo", filename="eating_spaghetti.mp4", repo_type="dataset"
+        ... )
+        >>> container = av.open(file_path)
+
+        >>> # sample uniformly 4 frames from the videWhy is this video funny?o
+        >>> total_frames = container.streams.video[0].frames
+        >>> indices = np.arange(0, total_frames, total_frames / 4).astype(int)
+        >>> clip = read_video_pyav(container, indices)
+
+        >>> prompt = "What is happening in the video?"
+        >>> inputs = processor(text=prompt, images=clip, return_tensors="pt").to(model.device)
 
         >>> outputs = model.generate(
         ...     **inputs,
         ...     do_sample=False,
         ...     num_beams=5,
         ...     max_length=256,
-        ...     min_length=1,
-        ...     top_p=0.9,
         ...     repetition_penalty=1.5,
         ...     length_penalty=1.0,
-        ...     temperature=1,
         ... )
         >>> generated_text = processor.batch_decode(outputs, skip_special_tokens=True)[0].strip()
         >>> print(generated_text)
-        The unusual aspect of this image is that a man is ironing clothes on the back of a yellow SUV, which is parked in the middle of a busy city street. This is an unconventional approach to ironing clothes, as it requires the man to balance himself and his ironing equipment on top of the vehicle while navigating through traffic. Additionally, the presence of taxis and other vehicles in the scene further emphasizes the unusual nature of this situation.
+        "A person is eating a bowl of pasta, and they are using a fork to eat it. The person is sitting at a table, and the plate of pasta is on the table in front"
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

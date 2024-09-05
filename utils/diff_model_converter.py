@@ -239,7 +239,7 @@ def SUPER_CALL_NODE(func_name):
 
 
 def merge_docstrings(original_docstring, updated_docstring):
-    if "    Args:\n        " not in updated_docstring:
+    if "        Args:\n        " not in updated_docstring:
         logger.warning("We detected a docstring that will be appended to the super's doc")
         # Split the docstring at the example section, assuming `"""` or `'''` is used to define the docstring
         parts = original_docstring.split("```")

@@ -187,8 +187,6 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
         interpolate_pos_encoding: bool = False,
     ) -> Union[Tuple, InstructBlipVideoForConditionalGenerationModelOutput]:
         r"""
-        Examples:
-
         ```python
         >>> from transformers import InstructBlipVideoProcessor, InstructBlipVideoForConditionalGeneration
         >>> import torch
@@ -373,7 +371,7 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
         interpolate_pos_encoding: bool = False,
         **generate_kwargs,
     ) -> torch.LongTensor:
-        """
+        r"""
         Overrides `generate` function to be able to use the model as a conditional generator.
 
         Args:
