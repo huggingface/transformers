@@ -306,11 +306,11 @@ class TokenizerUtilsTest(unittest.TestCase):
                 self.assertEqual(len(tokenizer.added_tokens_encoder), added_tokens_size + 1)
 
     @require_sentencepiece
-    @unittest.expectedFailure
     def test_sentencepiece_cohabitation(self):
         from sentencepiece import sentencepiece_model_pb2 as _original_protobuf  # noqa: F401
 
         from transformers.convert_slow_tokenizer import import_protobuf  # noqa: F401
 
-        # Now this will try to import sentencepiece_model_pb2_new.py and fail due to a conflict with the protobuf file
+        # Now this will try to import sentencepiece_model_pb2_new.py. This should not fail even if the protobuf
+        # was already imported.
         import_protobuf()
