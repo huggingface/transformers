@@ -13,9 +13,8 @@
 # limitations under the License.
 
 import unittest
-
 import numpy as np
-from torch
+import torch
 import tensorflow as tf
 import jax.numpy as jnp
 
@@ -584,7 +583,7 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
         # Test with an already converted list
         assert WhisperTokenizer._convert_to_list(test_list) == test_list
         assert WhisperTokenizerFast._convert_to_list(test_list) == test_list
-        
+
         # Test with a numpy array
         np_array = np.array(test_list)
         assert WhisperTokenizer._convert_to_list(np_array) == test_list
