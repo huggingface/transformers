@@ -29,3 +29,4 @@ timm
 albumentations >= 1.4.5
 torchmetrics
 pycocotools
+Pillow>=10.0.1,<=15.0

@@ -148,7 +148,7 @@ def convert_donut_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
     model.load_state_dict(new_state_dict)
 
     # verify results on scanned document
-    dataset = load_dataset("hf-internal-testing/example-documents")
+    dataset = load_dataset("hf-internal-testing/example-documents")  # no-script
     image = dataset["test"][0]["image"].convert("RGB")
 
     tokenizer = XLMRobertaTokenizerFast.from_pretrained(model_name, from_slow=True)

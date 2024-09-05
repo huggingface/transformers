@@ -116,12 +116,6 @@ class BlenderbotModelTester:
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
 
-        # forcing a certain token to be generated, sets all other tokens to -inf
-        # if however the token to be generated is already at -inf then it can lead token
-        # `nan` values and thus break generation
-        self.forced_bos_token_id = None
-        self.forced_eos_token_id = None
-
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(
             3,
@@ -150,8 +144,6 @@ class BlenderbotModelTester:
             eos_token_id=self.eos_token_id,
             bos_token_id=self.bos_token_id,
             pad_token_id=self.pad_token_id,
-            forced_bos_token_id=self.forced_bos_token_id,
-            forced_eos_token_id=self.forced_eos_token_id,
         )
 
     def get_pipeline_config(self):
@@ -237,7 +229,6 @@ class BlenderbotModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     all_generative_model_classes = (BlenderbotForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "conversational": BlenderbotForConditionalGeneration,
             "feature-extraction": BlenderbotModel,
             "summarization": BlenderbotForConditionalGeneration,
             "text-generation": BlenderbotForCausalLM,
@@ -369,7 +360,6 @@ class BlenderbotStandaloneDecoderModelTester:
         decoder_attention_heads=4,
         max_position_embeddings=30,
         is_encoder_decoder=False,
-        encoder_no_repeat_ngram_size=0,
         pad_token_id=0,
         bos_token_id=1,
         eos_token_id=2,
@@ -400,7 +390,6 @@ class BlenderbotStandaloneDecoderModelTester:
         self.use_cache = use_cache
         self.max_position_embeddings = max_position_embeddings
         self.is_encoder_decoder = is_encoder_decoder
-        self.encoder_no_repeat_ngram_size = encoder_no_repeat_ngram_size
 
         self.scope = None
         self.decoder_key_length = decoder_seq_length
@@ -432,7 +421,6 @@ class BlenderbotStandaloneDecoderModelTester:
             decoder_start_token_id=self.decoder_start_token_id,
             max_position_embeddings=self.max_position_embeddings,
             is_encoder_decoder=self.is_encoder_decoder,
-            encoder_no_repeat_ngram_size=self.encoder_no_repeat_ngram_size,
         )
 
         return (
@@ -566,6 +554,6 @@ class BlenderbotStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMix
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_attention_mask_past(*config_and_inputs)
 
+    @unittest.skip(reason="decoder cannot keep gradients")
     def test_retain_grad_hidden_states_attentions(self):
-        # decoder cannot keep gradients
         return

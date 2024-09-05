@@ -43,6 +43,7 @@ class DeiTImageProcessingTester(unittest.TestCase):
         image_mean=[0.5, 0.5, 0.5],
         image_std=[0.5, 0.5, 0.5],
     ):
+        super().__init__()
         size = size if size is not None else {"height": 20, "width": 20}
         crop_size = crop_size if crop_size is not None else {"height": 18, "width": 18}
 
@@ -93,6 +94,7 @@ class DeiTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     test_cast_dtype = True
 
     def setUp(self):
+        super().setUp()
         self.image_processor_tester = DeiTImageProcessingTester(self)
 
     @property

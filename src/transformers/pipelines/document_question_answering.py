@@ -294,7 +294,10 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
         if input.get("image", None) is not None:
             image = load_image(input["image"], timeout=timeout)
             if self.image_processor is not None:
-                image_features.update(self.image_processor(images=image, return_tensors=self.framework))
+                image_inputs = self.image_processor(images=image, return_tensors=self.framework)
+                if self.framework == "pt":
+                    image_inputs = image_inputs.to(self.torch_dtype)
+                image_features.update(image_inputs)
             elif self.feature_extractor is not None:
                 image_features.update(self.feature_extractor(images=image, return_tensors=self.framework))
             elif self.model_type == ModelType.VisionEncoderDecoder:
@@ -375,7 +378,7 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
             # p_mask: mask with 1 for token than cannot be in the answer (0 for token which can be in an answer)
             # We put 0 on the tokens from the context and 1 everywhere else (question and special tokens)
             # This logic mirrors the logic in the question_answering pipeline
-            p_mask = [[tok != 1 for tok in encoding.sequence_ids(span_id)] for span_id in range(num_spans)]
+            p_mask = np.array([[tok != 1 for tok in encoding.sequence_ids(span_id)] for span_id in range(num_spans)])
             for span_idx in range(num_spans):
                 if self.framework == "pt":
                     span_encoding = {k: torch.tensor(v[span_idx : span_idx + 1]) for (k, v) in encoding.items()}

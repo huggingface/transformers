@@ -15,7 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from .agents import BASE_PYTHON_TOOLS
-from .python_interpreter import InterpretorError, evaluate
+from .python_interpreter import InterpreterError, evaluate
 
 
 ### Fake tools for test
@@ -113,7 +113,7 @@ class Problem:
             The inputs that will be fed to the tools. For this testing environment, only strings are accepted as
             values. Pass along a dictionary when you want to specify the values of each inputs, or just the list of
             inputs expected (the value used will be `<<input_name>>` in this case).
-        answer (`str` or `list[str`]):
+        answer (`str` or `list[str]`):
             The theoretical answer (or list of possible valid answers) to the problem, as code.
     """
 
@@ -256,7 +256,7 @@ def evaluate_code(code, inputs=None, state=None, verbose=False, return_interpret
 
     try:
         return evaluate(code, tools, state)
-    except InterpretorError as e:
+    except InterpreterError as e:
         return str(e)
     except Exception as e:
         if verbose:

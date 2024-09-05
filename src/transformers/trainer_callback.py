@@ -16,7 +16,6 @@
 Callbacks to use with the Trainer class and customize the training loop.
 """
 
-import copy
 import dataclasses
 import json
 from dataclasses import dataclass
@@ -345,6 +344,12 @@ class TrainerCallback:
         """
         pass
 
+    def on_optimizer_step(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        """
+        Event called after the optimizer step but before gradients are zeroed out. Useful for monitoring gradients.
+        """
+        pass
+
     def on_substep_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
         """
         Event called at the end of an substep during gradient accumulation.
@@ -469,6 +474,9 @@ class CallbackHandler(TrainerCallback):
         control.should_evaluate = False
         control.should_save = False
         return self.call_event("on_step_begin", args, state, control)
+
+    def on_optimizer_step(self, args: TrainingArguments, state: TrainerState, control: TrainerControl):
+        return self.call_event("on_optimizer_step", args, state, control)
 
     def on_substep_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl):
         return self.call_event("on_substep_end", args, state, control)
@@ -608,13 +616,16 @@ class ProgressCallback(TrainerCallback):
 
     def on_log(self, args, state, control, logs=None, **kwargs):
         if state.is_world_process_zero and self.training_bar is not None:
-            # avoid modifying the logs object as it is shared between callbacks
-            logs = copy.deepcopy(logs)
-            _ = logs.pop("total_flos", None)
+            # make a shallow copy of logs so we can mutate the fields copied
+            # but avoid doing any value pickling.
+            shallow_logs = {}
+            for k, v in logs.items():
+                shallow_logs[k] = v
+            _ = shallow_logs.pop("total_flos", None)
             # round numbers so that it looks better in console
-            if "epoch" in logs:
-                logs["epoch"] = round(logs["epoch"], 2)
-            self.training_bar.write(str(logs))
+            if "epoch" in shallow_logs:
+                shallow_logs["epoch"] = round(shallow_logs["epoch"], 2)
+            self.training_bar.write(str(shallow_logs))
 
     def on_train_end(self, args, state, control, **kwargs):
         if state.is_world_process_zero:

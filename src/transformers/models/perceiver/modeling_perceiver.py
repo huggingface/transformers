@@ -1740,6 +1740,10 @@ class PerceiverForOpticalFlow(PerceiverPreTrainedModel):
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        loss = None
+        if labels is not None:
+            raise NotImplementedError("Optical flow training is not yet supported")
+
         outputs = self.perceiver(
             inputs=inputs,
             attention_mask=attention_mask,
@@ -1749,10 +1753,6 @@ class PerceiverForOpticalFlow(PerceiverPreTrainedModel):
             return_dict=return_dict,
         )
         logits = outputs.logits if return_dict else outputs[0]
-
-        loss = None
-        if labels is not None:
-            raise NotImplementedError("Optical flow training is not yet supported")
 
         if not return_dict:
             output = (logits,) + outputs[2:]
@@ -1974,6 +1974,10 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        loss = None
+        if labels is not None:
+            raise NotImplementedError("Multimodal autoencoding training is not yet supported")
+
         outputs = self.perceiver(
             inputs=inputs,
             attention_mask=attention_mask,
@@ -1984,10 +1988,6 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
             return_dict=return_dict,
         )
         logits = outputs.logits if return_dict else outputs[0]
-
-        loss = None
-        if labels is not None:
-            raise NotImplementedError("Multimodal autoencoding training is not yet supported")
 
         if not return_dict:
             output = (logits,) + outputs[2:]

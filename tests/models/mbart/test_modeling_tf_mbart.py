@@ -161,7 +161,6 @@ class TFMBartModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     all_generative_model_classes = (TFMBartForConditionalGeneration,) if is_tf_available() else ()
     pipeline_model_mapping = (
         {
-            "conversational": TFMBartForConditionalGeneration,
             "feature-extraction": TFMBartModel,
             "summarization": TFMBartForConditionalGeneration,
             "text2text-generation": TFMBartForConditionalGeneration,

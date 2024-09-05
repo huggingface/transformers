@@ -62,7 +62,7 @@ Following the original Vision Transformer, some follow-up works have been made:
 This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code (written in JAX) can be
 found [here](https://github.com/google-research/vision_transformer).
 
-Note that we converted the weights from Ross Wightman's [timm library](https://github.com/rwightman/pytorch-image-models), 
+Note that we converted the weights from Ross Wightman's [timm library](https://github.com/rwightman/pytorch-image-models),
 who already converted the weights from JAX to PyTorch. Credits go to him!
 
 ## Usage tips
@@ -156,6 +156,11 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 ## ViTImageProcessor
 
 [[autodoc]] ViTImageProcessor
+    - preprocess
+
+## ViTImageProcessorFast
+
+[[autodoc]] ViTImageProcessorFast
     - preprocess
 
 <frameworkcontent>

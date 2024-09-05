@@ -120,12 +120,6 @@ class MBartModelTester:
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
 
-        # forcing a certain token to be generated, sets all other tokens to -inf
-        # if however the token to be generated is already at -inf then it can lead token
-        # `nan` values and thus break generation
-        self.forced_bos_token_id = None
-        self.forced_eos_token_id = None
-
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(
@@ -155,8 +149,6 @@ class MBartModelTester:
             eos_token_id=self.eos_token_id,
             bos_token_id=self.bos_token_id,
             pad_token_id=self.pad_token_id,
-            forced_bos_token_id=self.forced_bos_token_id,
-            forced_eos_token_id=self.forced_eos_token_id,
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -240,7 +232,6 @@ class MBartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     all_generative_model_classes = (MBartForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "conversational": MBartForConditionalGeneration,
             "feature-extraction": MBartModel,
             "fill-mask": MBartForConditionalGeneration,
             "question-answering": MBartForQuestionAnswering,
@@ -370,6 +361,24 @@ class MBartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             2,
         )
 
+    @unittest.skip(
+        reason="This architecure has tied weights by default and there is no way to remove it, check: https://github.com/huggingface/transformers/pull/31771#issuecomment-2210915245"
+    )
+    def test_load_save_without_tied_weights(self):
+        pass
+
+    def test_resize_embeddings_persists_embeddings_type(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
+
+        config.scale_embedding = True
+        model = MBartForConditionalGeneration(config)
+        old_type = type(model.model.decoder.embed_tokens)
+
+        model.resize_token_embeddings(new_num_tokens=config.vocab_size)
+
+        new_type = type(model.model.decoder.embed_tokens)
+        self.assertIs(old_type, new_type)
+
 
 def assert_tensors_close(a, b, atol=1e-12, prefix=""):
     """If tensors have different shapes, different values or a and b are not both tensors, raise a nice Assertion error."""
@@ -497,7 +506,7 @@ class MBartCC25IntegrationTest(AbstractSeq2SeqIntegrationTest):
     ]
     tgt_text = ["Şeful ONU declară că nu există o soluţie militară în Siria", "to be padded"]
 
-    @unittest.skip("This test is broken, still generates english")
+    @unittest.skip(reason="This test is broken, still generates english")
     def test_cc25_generate(self):
         inputs = self.tokenizer([self.src_text[0]], return_tensors="pt").to(torch_device)
         translated_tokens = self.model.generate(
@@ -732,6 +741,6 @@ class MBartStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, u
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_attention_mask_past(*config_and_inputs)
 
+    @unittest.skip(reason="Decoder cannot retain gradients")
     def test_retain_grad_hidden_states_attentions(self):
-        # decoder cannot keep gradients
         return

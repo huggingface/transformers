@@ -27,8 +27,10 @@ from transformers import (
     AutoImageProcessor,
     CLIPConfig,
     CLIPImageProcessor,
+    ViTImageProcessor,
+    ViTImageProcessorFast,
 )
-from transformers.testing_utils import DUMMY_UNKNOWN_IDENTIFIER
+from transformers.testing_utils import DUMMY_UNKNOWN_IDENTIFIER, require_torchvision, require_vision
 
 
 sys.path.append(str(Path(__file__).parent.parent.parent.parent / "utils"))
@@ -132,6 +134,23 @@ class AutoImageProcessorTest(unittest.TestCase):
             "hf-internal-testing/config-no-model does not appear to have a file named preprocessor_config.json.",
         ):
             _ = AutoImageProcessor.from_pretrained("hf-internal-testing/config-no-model")
+
+    @require_vision
+    @require_torchvision
+    def test_use_fast_selection(self):
+        checkpoint = "hf-internal-testing/tiny-random-vit"
+
+        # Slow image processor is selected by default
+        image_processor = AutoImageProcessor.from_pretrained(checkpoint)
+        self.assertIsInstance(image_processor, ViTImageProcessor)
+
+        # Fast image processor is selected when use_fast=True
+        image_processor = AutoImageProcessor.from_pretrained(checkpoint, use_fast=True)
+        self.assertIsInstance(image_processor, ViTImageProcessorFast)
+
+        # Slow image processor is selected when use_fast=False
+        image_processor = AutoImageProcessor.from_pretrained(checkpoint, use_fast=False)
+        self.assertIsInstance(image_processor, ViTImageProcessor)
 
     def test_from_pretrained_dynamic_image_processor(self):
         # If remote code is not set, we will time out when asking whether to load the model.

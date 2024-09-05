@@ -25,9 +25,11 @@ from packaging import version
 from .utils import (
     ExplicitEnum,
     is_jax_tensor,
+    is_numpy_array,
     is_tf_tensor,
     is_torch_available,
     is_torch_tensor,
+    is_torchvision_available,
     is_vision_available,
     logging,
     requires_backends,
@@ -52,6 +54,19 @@ if is_vision_available():
     else:
         PILImageResampling = PIL.Image
 
+    if is_torchvision_available():
+        from torchvision.transforms import InterpolationMode
+
+        pil_torch_interpolation_mapping = {
+            PILImageResampling.NEAREST: InterpolationMode.NEAREST,
+            PILImageResampling.BOX: InterpolationMode.BOX,
+            PILImageResampling.BILINEAR: InterpolationMode.BILINEAR,
+            PILImageResampling.HAMMING: InterpolationMode.HAMMING,
+            PILImageResampling.BICUBIC: InterpolationMode.BICUBIC,
+            PILImageResampling.LANCZOS: InterpolationMode.LANCZOS,
+        }
+
+
 if TYPE_CHECKING:
     if is_torch_available():
         import torch
@@ -65,7 +80,16 @@ ImageInput = Union[
 ]  # noqa
 
 
-VideoInput = Union[np.ndarray, "torch.Tensor", List[np.ndarray], List["torch.Tensor"]]  # noqa
+VideoInput = Union[
+    List["PIL.Image.Image"],
+    "np.ndarray",
+    "torch.Tensor",
+    List["np.ndarray"],
+    List["torch.Tensor"],
+    List[List["PIL.Image.Image"]],
+    List[List["np.ndarrray"]],
+    List[List["torch.Tensor"]],
+]  # noqa
 
 
 class ChannelDimension(ExplicitEnum):
@@ -90,14 +114,30 @@ def is_pil_image(img):
     return is_vision_available() and isinstance(img, PIL.Image.Image)
 
 
+class ImageType(ExplicitEnum):
+    PIL = "pillow"
+    TORCH = "torch"
+    NUMPY = "numpy"
+    TENSORFLOW = "tensorflow"
+    JAX = "jax"
+
+
+def get_image_type(image):
+    if is_pil_image(image):
+        return ImageType.PIL
+    if is_torch_tensor(image):
+        return ImageType.TORCH
+    if is_numpy_array(image):
+        return ImageType.NUMPY
+    if is_tf_tensor(image):
+        return ImageType.TENSORFLOW
+    if is_jax_tensor(image):
+        return ImageType.JAX
+    raise ValueError(f"Unrecognised image type {type(image)}")
+
+
 def is_valid_image(img):
-    return (
-        (is_vision_available() and isinstance(img, PIL.Image.Image))
-        or isinstance(img, np.ndarray)
-        or is_torch_tensor(img)
-        or is_tf_tensor(img)
-        or is_jax_tensor(img)
-    )
+    return is_pil_image(img) or is_numpy_array(img) or is_torch_tensor(img) or is_tf_tensor(img) or is_jax_tensor(img)
 
 
 def valid_images(imgs):
@@ -202,7 +242,12 @@ def infer_channel_dimension_format(
     else:
         raise ValueError(f"Unsupported number of image dimensions: {image.ndim}")
 
-    if image.shape[first_dim] in num_channels:
+    if image.shape[first_dim] in num_channels and image.shape[last_dim] in num_channels:
+        logger.warning(
+            f"The channel dimension is ambiguous. Got image shape {image.shape}. Assuming channels are the first dimension."
+        )
+        return ChannelDimension.FIRST
+    elif image.shape[first_dim] in num_channels:
         return ChannelDimension.FIRST
     elif image.shape[last_dim] in num_channels:
         return ChannelDimension.LAST
@@ -332,7 +377,7 @@ def load_image(image: Union[str, "PIL.Image.Image"], timeout: Optional[float] = 
     elif isinstance(image, PIL.Image.Image):
         image = image
     else:
-        raise ValueError(
+        raise TypeError(
             "Incorrect format used for image. Should be an url linking to an image, a base64 string, a local path, or a PIL image."
         )
     image = PIL.ImageOps.exif_transpose(image)
@@ -363,22 +408,22 @@ def validate_preprocess_arguments(
 
     """
     if do_rescale and rescale_factor is None:
-        raise ValueError("rescale_factor must be specified if do_rescale is True.")
+        raise ValueError("`rescale_factor` must be specified if `do_rescale` is `True`.")
 
     if do_pad and size_divisibility is None:
         # Here, size_divisor might be passed as the value of size
         raise ValueError(
-            "Depending on moel, size_divisibility, size_divisor, pad_size or size must be specified if do_pad is True."
+            "Depending on the model, `size_divisibility`, `size_divisor`, `pad_size` or `size` must be specified if `do_pad` is `True`."
         )
 
     if do_normalize and (image_mean is None or image_std is None):
-        raise ValueError("image_mean and image_std must both be specified if do_normalize is True.")
+        raise ValueError("`image_mean` and `image_std` must both be specified if `do_normalize` is `True`.")
 
     if do_center_crop and crop_size is None:
-        raise ValueError("crop_size must be specified if do_center_crop is True.")
+        raise ValueError("`crop_size` must be specified if `do_center_crop` is `True`.")
 
     if do_resize and (size is None or resample is None):
-        raise ValueError("size and resample must be specified if do_resize is True.")
+        raise ValueError("`size` and `resample` must be specified if `do_resize` is `True`.")
 
 
 # In the future we can add a TF implementation here when we have TF models.
@@ -534,9 +579,15 @@ class ImageFeatureExtractionMixin:
             import torch
 
             if not isinstance(mean, torch.Tensor):
-                mean = torch.tensor(mean)
+                if isinstance(mean, np.ndarray):
+                    mean = torch.from_numpy(mean)
+                else:
+                    mean = torch.tensor(mean)
             if not isinstance(std, torch.Tensor):
-                std = torch.tensor(std)
+                if isinstance(std, np.ndarray):
+                    std = torch.from_numpy(std)
+                else:
+                    std = torch.tensor(std)
 
         if image.ndim == 3 and image.shape[0] in [1, 3]:
             return (image - mean[:, None, None]) / std[:, None, None]

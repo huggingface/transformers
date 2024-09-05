@@ -16,12 +16,20 @@ rendered properly in your Markdown viewer.
 
 # MEGA
 
+<Tip warning={true}>
+
+This model is in maintenance mode only, we don't accept any new PRs changing its code.
+If you run into any issues running this model, please reinstall the last version that supported this model: v4.40.2.
+You can do so by running the following command: `pip install -U transformers==4.40.2`.
+
+</Tip>
+
 ## Overview
 
 The MEGA model was proposed in [Mega: Moving Average Equipped Gated Attention](https://arxiv.org/abs/2209.10655) by Xuezhe Ma, Chunting Zhou, Xiang Kong, Junxian He, Liangke Gui, Graham Neubig, Jonathan May, and Luke Zettlemoyer.
-MEGA proposes a new approach to self-attention with each encoder layer having a multi-headed exponential moving average in addition to a single head of standard dot-product attention, giving the attention mechanism 
-stronger positional biases. This allows MEGA to perform competitively to Transformers on standard benchmarks including LRA 
-while also having significantly fewer parameters. MEGA's compute efficiency allows it to scale to very long sequences, making it an 
+MEGA proposes a new approach to self-attention with each encoder layer having a multi-headed exponential moving average in addition to a single head of standard dot-product attention, giving the attention mechanism
+stronger positional biases. This allows MEGA to perform competitively to Transformers on standard benchmarks including LRA
+while also having significantly fewer parameters. MEGA's compute efficiency allows it to scale to very long sequences, making it an
 attractive option for long-document NLP tasks.
 
 The abstract from the paper is the following:
@@ -34,8 +42,8 @@ The original code can be found [here](https://github.com/facebookresearch/mega).
 
 ## Usage tips
 
-- MEGA can perform quite well with relatively few parameters. See Appendix D in the MEGA paper for examples of architectural specs which perform well in various settings. If using MEGA as a decoder, be sure to set `bidirectional=False` to avoid errors with default bidirectional. 
-- Mega-chunk is a variant of mega that reduces time and spaces complexity from quadratic to linear. Utilize chunking with MegaConfig.use_chunking and control chunk size with MegaConfig.chunk_size 
+- MEGA can perform quite well with relatively few parameters. See Appendix D in the MEGA paper for examples of architectural specs which perform well in various settings. If using MEGA as a decoder, be sure to set `bidirectional=False` to avoid errors with default bidirectional.
+- Mega-chunk is a variant of mega that reduces time and spaces complexity from quadratic to linear. Utilize chunking with MegaConfig.use_chunking and control chunk size with MegaConfig.chunk_size
 
 
 ## Implementation Notes

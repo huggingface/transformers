@@ -284,7 +284,6 @@ score: 0.9327, start: 30, end: 54, answer: huggingface/transformers
 有两种类型的话语模型：
 
 * causal：模型的目标是预测序列中的下一个`token`，而未来的`tokens`被遮盖。
-  
 
     ```py
     >>> from transformers import pipeline
@@ -294,9 +293,8 @@ score: 0.9327, start: 30, end: 54, answer: huggingface/transformers
     >>> generator(prompt)  # doctest: +SKIP
     ```
 
-*  masked：模型的目标是预测序列中被遮蔽的`token`，同时具有对序列中所有`tokens`的完全访问权限。
+* masked：模型的目标是预测序列中被遮蔽的`token`，同时具有对序列中所有`tokens`的完全访问权限。
 
-    
     ```py
     >>> text = "Hugging Face is a community-based open-source <mask> for machine learning."
     >>> fill_mask = pipeline(task="fill-mask")

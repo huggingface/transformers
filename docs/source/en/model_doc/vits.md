@@ -93,11 +93,32 @@ from transformers import VitsTokenizer
 tokenizer = VitsTokenizer.from_pretrained("facebook/mms-tts-eng")
 print(tokenizer.is_uroman)
 ```
+If the is_uroman attribute is `True`, the tokenizer will automatically apply the `uroman` package to your text inputs, but you need to install uroman if not already installed using:  
+```
+pip install --upgrade uroman
+```
+Note: Python version required to use `uroman` as python package should be >= `3.10`. 
+You can use the tokenizer as usual without any additional preprocessing steps:
+```python
+import torch
+from transformers import VitsTokenizer, VitsModel, set_seed
+import os
+import subprocess
 
-If required, you should apply the uroman package to your text inputs **prior** to passing them to the `VitsTokenizer`, 
-since currently the tokenizer does not support performing the pre-processing itself.  
+tokenizer = VitsTokenizer.from_pretrained("facebook/mms-tts-kor")
+model = VitsModel.from_pretrained("facebook/mms-tts-kor")
+text = "이봐 무슨 일이야"
+inputs = tokenizer(text=text, return_tensors="pt")
 
+set_seed(555)  # make deterministic
+with torch.no_grad():
+   outputs = model(inputs["input_ids"])
+
+waveform = outputs.waveform[0]
+```
+If you don't want to upgrade to python >= `3.10`, then you can use the `uroman` perl package to pre-process the text inputs to the Roman alphabet.
 To do this, first clone the uroman repository to your local machine and set the bash variable `UROMAN` to the local path:
+
 
 ```bash
 git clone https://github.com/isi-nlp/uroman.git

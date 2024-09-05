@@ -66,12 +66,12 @@ of the model was contributed by [sayakpaul](https://huggingface.co/sayakpaul). T
   important preprocessing step is that images and segmentation maps are randomly cropped and padded to the same size,
   such as 512x512 or 640x640, after which they are normalized.
 - One additional thing to keep in mind is that one can initialize [`SegformerImageProcessor`] with
-  `reduce_labels` set to `True` or `False`. In some datasets (like ADE20k), the 0 index is used in the annotated
+  `do_reduce_labels` set to `True` or `False`. In some datasets (like ADE20k), the 0 index is used in the annotated
   segmentation maps for background. However, ADE20k doesn't include the "background" class in its 150 labels.
-  Therefore, `reduce_labels` is used to reduce all labels by 1, and to make sure no loss is computed for the
+  Therefore, `do_reduce_labels` is used to reduce all labels by 1, and to make sure no loss is computed for the
   background class (i.e. it replaces 0 in the annotated maps by 255, which is the *ignore_index* of the loss function
   used by [`SegformerForSemanticSegmentation`]). However, other datasets use the 0 index as
-  background class and include this class as part of all labels. In that case, `reduce_labels` should be set to
+  background class and include this class as part of all labels. In that case, `do_reduce_labels` should be set to
   `False`, as loss should also be computed for the background class.
 - As most models, SegFormer comes in different sizes, the details of which can be found in the table below
   (taken from Table 7 of the [original paper](https://arxiv.org/abs/2105.15203)).

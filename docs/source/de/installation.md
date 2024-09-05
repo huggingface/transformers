@@ -162,7 +162,7 @@ Transformers verwendet die Shell-Umgebungsvariablen `PYTORCH_TRANSFORMERS_CACHE`
 
 ## Offline Modus
 
-Transformers ist in der Lage, in einer Firewall- oder Offline-Umgebung zu laufen, indem es nur lokale Dateien verwendet. Setzen Sie die Umgebungsvariable `TRANSFORMERS_OFFLINE=1`, um dieses Verhalten zu aktivieren.
+Transformers ist in der Lage, in einer Firewall- oder Offline-Umgebung zu laufen, indem es nur lokale Dateien verwendet. Setzen Sie die Umgebungsvariable `HF_HUB_OFFLINE=1`, um dieses Verhalten zu aktivieren.
 
 <Tip>
 
@@ -179,7 +179,7 @@ python examples/pytorch/translation/run_translation.py --model_name_or_path goog
 Führen Sie das gleiche Programm in einer Offline-Instanz mit aus:
 
 ```bash
-HF_DATASETS_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
+HF_DATASETS_OFFLINE=1 HF_HUB_OFFLINE=1 \
 python examples/pytorch/translation/run_translation.py --model_name_or_path google-t5/t5-small --dataset_name wmt16 --dataset_config ro-en ...
 ```
 

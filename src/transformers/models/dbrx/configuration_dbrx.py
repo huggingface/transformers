@@ -37,8 +37,8 @@ class DbrxAttentionConfig(PretrainedConfig):
             The dropout probability for the attention layers.
         clip_qkv (`float`, *optional*):
             If set, clip the queries, keys, and values in the attention layer to this value.
-        kv_n_heads (`Optional[int]`, defaults to 1): For grouped_query_attention only, allow user to specify number of kv heads.
-        rope_theta (`float`, defaults to 10000.0): The base frequency for rope.
+        kv_n_heads (`int`, *optional*, defaults to 1): For grouped_query_attention only, allow user to specify number of kv heads.
+        rope_theta (`float`, *optional*, defaults to 10000.0): The base frequency for rope.
     """
 
     def __init__(
@@ -92,11 +92,11 @@ class DbrxFFNConfig(PretrainedConfig):
         ffn_act_fn (`dict`, *optional*, defaults to `None`): A dict specifying activation function for the FFN.
             The dict should have a key 'name' with the value being the name of the activation function along with
             any additional keyword arguments. If `None`, then set to `{"name": "silu"}`.
-        ffn_hidden_size (`int`, defaults to 3584): The hidden size of the feedforward network.
-        moe_num_experts (`int`, defaults to 4): The number of experts in the mixture of experts layer.
-        moe_top_k (`int`, defaults to 1): The number of experts to use in the mixture of experts layer.
+        ffn_hidden_size (`int`, *optional*, defaults to 3584): The hidden size of the feedforward network.
+        moe_num_experts (`int`, *optional*, defaults to 4): The number of experts in the mixture of experts layer.
+        moe_top_k (`int`, *optional*, defaults to 1): The number of experts to use in the mixture of experts layer.
         moe_jitter_eps (`float`, *optional*, defaults to `None`): If not `None`, the jitter epsilon for the mixture of experts layer.
-        moe_loss_weight (`float`, defaults to 0.01): The loss weight for the mixture of experts layer.
+        moe_loss_weight (`float`, *optional*, defaults to 0.01): The loss weight for the mixture of experts layer.
         moe_normalize_expert_weights (`float`, *optional*, defaults to 1.0): The normalization factor for the expert weights.
     """
 
@@ -249,6 +249,7 @@ class DbrxConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.initializer_range = initializer_range
         self.output_router_logits = output_router_logits
+        self.num_key_value_heads = self.attn_config.kv_n_heads
 
         tie_word_embeddings = kwargs.pop("tie_word_embeddings", False)
         if tie_word_embeddings:

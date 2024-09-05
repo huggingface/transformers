@@ -26,7 +26,7 @@ from transformers.testing_utils import require_tf, require_torch, slow
 logger = logging.getLogger()
 
 
-@unittest.skip("Temporarily disable the doc tests.")
+@unittest.skip(reason="Temporarily disable the doc tests.")
 @require_torch
 @require_tf
 @slow

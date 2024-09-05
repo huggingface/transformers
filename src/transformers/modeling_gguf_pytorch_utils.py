@@ -14,6 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import Optional
+
 import numpy as np
 from tqdm import tqdm
 
@@ -22,9 +24,9 @@ from .integrations import (
     GGUF_TENSOR_MAPPING,
     GGUF_TOKENIZER_MAPPING,
     _gguf_parse_value,
-    load_dequant_gguf_tensor,
 )
 from .utils import is_torch_available
+from .utils.import_utils import is_gguf_available
 from .utils.logging import get_logger
 
 
@@ -69,14 +71,14 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
             Whether to read the tensors from the file and return them. Not doing so is faster
             and only loads the metadata in memory.
     """
-    try:
-        from gguf import GGUFReader
-    except (ImportError, ModuleNotFoundError):
+    if is_gguf_available() and is_torch_available():
+        from gguf import GGUFReader, dequantize
+    else:
         logger.error(
-            "Loading a GGUF checkpoint in PyTorch, requires both PyTorch and GGUF to be installed. Please see "
+            "Loading a GGUF checkpoint in PyTorch, requires both PyTorch and GGUF>=0.10.0 to be installed. Please see "
             "https://pytorch.org/ and https://github.com/ggerganov/llama.cpp/tree/master/gguf-py for installation instructions."
         )
-        raise
+        raise ImportError("Please install torch and gguf>=0.10.0 to load a GGUF checkpoint in PyTorch.")
 
     reader = GGUFReader(gguf_checkpoint_path)
     fields = reader.fields
@@ -128,6 +130,18 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
         if gguf_key in reader_keys:
             logger.info(f"Some keys were not parsed and added into account {gguf_key} | {value}")
 
+    # retrieve config vocab_size from tokenizer
+    # Pleas refer to https://github.com/huggingface/transformers/issues/32526 for more details
+    if "vocab_size" not in parsed_parameters["config"]:
+        tokenizer_parameters = parsed_parameters["tokenizer"]
+        if "tokens" in tokenizer_parameters:
+            parsed_parameters["config"]["vocab_size"] = len(tokenizer_parameters["tokens"])
+        else:
+            logger.warning(
+                "Can't find a way to retrieve missing config vocab_size from tokenizer parameters. "
+                "This will use default value from model config class and cause unexpected behavior."
+            )
+
     if return_tensors:
         tensor_key_mapping = GGUF_TO_TRANSFORMERS_MAPPING["tensors"][architecture]
 
@@ -140,17 +154,17 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
                         tensor_name_mapping, GGUF_TO_TRANSFORMERS_MAPPING["tensors"][tensor_name_mapping]
                     )
 
-            shape = tensor.shape
             name = tensor.name
 
-            weights = load_dequant_gguf_tensor(shape=shape, ggml_type=tensor.tensor_type, data=tensor.data)
+            weights = dequantize(tensor.data, tensor.tensor_type)
 
             if architecture == "llama" and (".attn_k." in name or ".attn_q." in name):
                 num_heads = parsed_parameters["config"]["num_attention_heads"]
-                tmp_shape = (int(shape[-1] // num_heads // 2), num_heads, 2, shape[0])
-                weights = weights.reshape(tmp_shape)
-                weights = weights.transpose(0, 2, 1, 3)
-                weights = weights.reshape(shape[::-1])
+                num_kv_heads = parsed_parameters["config"]["num_key_value_heads"]
+                if ".attn_q." in name:
+                    weights = reverse_permute_weights(weights, num_heads, num_heads)
+                elif ".attn_k." in name:
+                    weights = reverse_permute_weights(weights, num_heads, num_kv_heads)
 
             for tensor_name in tensor_key_mapping:
                 if tensor_name in name:
@@ -163,3 +177,14 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
         logger.info(f"Some keys of the GGUF file were not considered: {reader_keys}")
 
     return parsed_parameters
+
+
+def reverse_permute_weights(weights: np.ndarray, n_head: int, num_kv_heads: Optional[int] = None) -> np.ndarray:
+    # Original permutation implementation
+    # https://github.com/ggerganov/llama.cpp/blob/a38b884c6c4b0c256583acfaaabdf556c62fabea/convert_hf_to_gguf.py#L1402-L1408
+    if num_kv_heads is not None and n_head != num_kv_heads:
+        n_head = num_kv_heads
+
+    dim = weights.shape[0] // n_head // 2
+    w = weights.reshape(n_head, dim, 2, *weights.shape[1:])
+    return w.swapaxes(2, 1).reshape(weights.shape)

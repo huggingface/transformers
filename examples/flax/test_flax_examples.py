@@ -265,6 +265,7 @@ class ExamplesTests(TestCasePlus):
             --dataset_config clean
             --train_split_name validation
             --eval_split_name validation
+            --trust_remote_code
             --output_dir {tmp_dir}
             --overwrite_output_dir
             --num_train_epochs=2

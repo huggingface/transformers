@@ -278,14 +278,14 @@ class Pop2PianoFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittes
     def test_padding_from_array(self):
         pass
 
-    @unittest.skip("Pop2PianoFeatureExtractor does not support truncation")
+    @unittest.skip(reason="Pop2PianoFeatureExtractor does not support truncation")
     def test_attention_mask_with_truncation(self):
         pass
 
-    @unittest.skip("Pop2PianoFeatureExtractor does not supports truncation")
+    @unittest.skip(reason="Pop2PianoFeatureExtractor does not supports truncation")
     def test_truncation_from_array(self):
         pass
 
-    @unittest.skip("Pop2PianoFeatureExtractor does not supports truncation")
+    @unittest.skip(reason="Pop2PianoFeatureExtractor does not supports truncation")
     def test_truncation_from_list(self):
         pass

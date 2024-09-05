@@ -311,10 +311,6 @@ class FlaxMarianModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGeneratio
             outputs = model(input_ids)
             self.assertIsNotNone(outputs)
 
-    @unittest.skip("Skipping for now, to fix @ArthurZ or @ydshieh")
-    def test_pipeline_conversational(self):
-        pass
-
 
 @require_flax
 @require_sentencepiece

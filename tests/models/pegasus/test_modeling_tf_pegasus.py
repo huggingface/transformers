@@ -182,7 +182,6 @@ class TFPegasusModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
     all_generative_model_classes = (TFPegasusForConditionalGeneration,) if is_tf_available() else ()
     pipeline_model_mapping = (
         {
-            "conversational": TFPegasusForConditionalGeneration,
             "feature-extraction": TFPegasusModel,
             "summarization": TFPegasusForConditionalGeneration,
             "text2text-generation": TFPegasusForConditionalGeneration,

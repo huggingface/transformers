@@ -48,6 +48,7 @@ class Swin2SRImageProcessingTester(unittest.TestCase):
         do_pad=True,
         pad_size=8,
     ):
+        super().__init__()
         self.parent = parent
         self.batch_size = batch_size
         self.num_channels = num_channels
@@ -72,6 +73,8 @@ class Swin2SRImageProcessingTester(unittest.TestCase):
 
         if isinstance(img, Image.Image):
             input_width, input_height = img.size
+        elif isinstance(img, np.ndarray):
+            input_height, input_width = img.shape[-3:-1]
         else:
             input_height, input_width = img.shape[-2:]
 
@@ -98,6 +101,7 @@ class Swin2SRImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = Swin2SRImageProcessor if is_vision_available() else None
 
     def setUp(self):
+        super().setUp()
         self.image_processor_tester = Swin2SRImageProcessingTester(self)
 
     @property
@@ -159,7 +163,7 @@ class Swin2SRImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         # Test not batched input
         encoded_images = image_processing(
-            image_inputs[0], return_tensors="pt", input_data_format="channels_first"
+            image_inputs[0], return_tensors="pt", input_data_format="channels_last"
         ).pixel_values
         expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
         self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))

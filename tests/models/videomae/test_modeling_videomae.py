@@ -220,7 +220,7 @@ class VideoMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     def test_inputs_embeds(self):
         pass
 
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -245,7 +245,7 @@ class VideoMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     def test_attention_outputs(self):
         if not self.has_attentions:
-            pass
+            self.skipTest(reason="Model does not have attentions")
 
         else:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

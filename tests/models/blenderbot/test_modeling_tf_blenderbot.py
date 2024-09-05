@@ -183,7 +183,6 @@ class TFBlenderbotModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Te
     all_generative_model_classes = (TFBlenderbotForConditionalGeneration,) if is_tf_available() else ()
     pipeline_model_mapping = (
         {
-            "conversational": TFBlenderbotForConditionalGeneration,
             "feature-extraction": TFBlenderbotModel,
             "summarization": TFBlenderbotForConditionalGeneration,
             "text2text-generation": TFBlenderbotForConditionalGeneration,

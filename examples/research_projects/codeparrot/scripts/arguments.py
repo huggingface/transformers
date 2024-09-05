@@ -132,7 +132,7 @@ class PreprocessingArguments:
         default="transformersbook/codeparrot", metadata={"help": "Folder or name of dataset to process."}
     )
     output_dir: Optional[str] = field(
-        default="codeparrot-clean", metadata={"help": "Folder to save processed processed dataset."}
+        default="codeparrot-clean", metadata={"help": "Folder to save processed dataset."}
     )
     samples_per_file: Optional[int] = field(
         default=100_000, metadata={"help": "Number of files to save per JSON output file."}

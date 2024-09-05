@@ -53,8 +53,8 @@ else:
 class ObjectDetectionPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_OBJECT_DETECTION_MAPPING
 
-    def get_test_pipeline(self, model, tokenizer, processor):
-        object_detector = ObjectDetectionPipeline(model=model, image_processor=processor)
+    def get_test_pipeline(self, model, tokenizer, processor, torch_dtype="float32"):
+        object_detector = ObjectDetectionPipeline(model=model, image_processor=processor, torch_dtype=torch_dtype)
         return object_detector, ["./tests/fixtures/tests_samples/COCO/000000039769.png"]
 
     def run_pipeline_test(self, object_detector, examples):
@@ -103,7 +103,7 @@ class ObjectDetectionPipelineTests(unittest.TestCase):
                 )
 
     @require_tf
-    @unittest.skip("Object detection not implemented in TF")
+    @unittest.skip(reason="Object detection not implemented in TF")
     def test_small_model_tf(self):
         pass
 

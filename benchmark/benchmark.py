@@ -32,6 +32,8 @@ from pathlib import Path
 
 from git import Repo
 
+from huggingface_hub import HfApi
+
 from optimum_benchmark import Benchmark
 from optimum_benchmark_wrapper import main
 
@@ -99,7 +101,7 @@ def summarize(run_dir, metrics, expand_metrics=False):
         # post-processing of report: show a few selected/important metric
         for metric in metrics:
             keys = metric.split(".")
-            value = report
+            value = report.to_dict()
             current = metrics_values
             for key in keys:
                 # Avoid KeyError when a user's specified metric has typo.
@@ -143,7 +145,6 @@ def summarize(run_dir, metrics, expand_metrics=False):
         with open(os.path.join(report_dir, "summary.json"), "w") as fp:
             json.dump(summary, fp, indent=4)
 
-    # TODO: upload to Hub
     return summaries
 
 
@@ -191,7 +192,6 @@ def combine_summaries(summaries):
     with open(os.path.join(exp_run_dir, "summary.json"), "w") as fp:
         json.dump(combined, fp, indent=4)
 
-    # TODO: upload to Hub
     print(json.dumps(combined, indent=4))
 
     return combined
@@ -216,6 +216,11 @@ if __name__ == "__main__":
         help="Comma-separated list of branch names and/or commit sha values on which the benchmark will run. If `diff` is specified, it will run on both the current head and the `main` branch.",
     )
     parser.add_argument("--metrics", type=str, help="The metrics to be included in the summary.")
+
+    parser.add_argument("--repo_id", type=str, default=None, help="The repository to which the file will be uploaded.")
+    parser.add_argument("--path_in_repo", type=str, default=None, help="Relative filepath in the repo.")
+    parser.add_argument("--token", type=str, default=None, help="A valid user access token (string).")
+
     args, optimum_benchmark_args = parser.parse_known_args()
 
     repo = Repo(PATH_TO_REPO)
@@ -308,3 +313,14 @@ if __name__ == "__main__":
             json.dump(run_summaries, fp, indent=4)
 
         combined_summary = combine_summaries(run_summaries)
+
+        if args.repo_id is not None and args.path_in_repo is not None:
+            # Upload to Hub
+            api = HfApi()
+            api.upload_folder(
+                folder_path=exp_run_dir,
+                path_in_repo=args.path_in_repo,
+                repo_id=args.repo_id,
+                repo_type="dataset",
+                token=args.token,
+            )

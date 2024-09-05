@@ -432,7 +432,9 @@ class BertSdpaSelfAttention(BertSelfAttention):
         # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
         # The tgt_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create
         # a causal mask in case tgt_len == 1.
-        is_causal = True if self.is_decoder and attention_mask is None and tgt_len > 1 else False
+        is_causal = (
+            True if self.is_decoder and not is_cross_attention and attention_mask is None and tgt_len > 1 else False
+        )
 
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             query_layer,
@@ -1217,7 +1219,7 @@ class BertForPreTraining(BertPreTrainedModel):
 
                 - 0 indicates sequence B is a continuation of sequence A,
                 - 1 indicates sequence B is a random sequence.
-            kwargs (`Dict[str, any]`, optional, defaults to *{}*):
+            kwargs (`Dict[str, any]`, *optional*, defaults to `{}`):
                 Used to hide legacy arguments that have been deprecated.
 
         Returns:

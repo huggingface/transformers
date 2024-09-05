@@ -132,12 +132,6 @@ class MarianModelTester:
         self.bos_token_id = bos_token_id
         self.decoder_start_token_id = decoder_start_token_id
 
-        # forcing a certain token to be generated, sets all other tokens to -inf
-        # if however the token to be generated is already at -inf then it can lead token
-        # `nan` values and thus break generation
-        self.forced_bos_token_id = None
-        self.forced_eos_token_id = None
-
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(
             3,
@@ -167,8 +161,6 @@ class MarianModelTester:
             bos_token_id=self.bos_token_id,
             pad_token_id=self.pad_token_id,
             decoder_start_token_id=self.decoder_start_token_id,
-            forced_bos_token_id=self.forced_bos_token_id,
-            forced_eos_token_id=self.forced_eos_token_id,
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -248,7 +240,6 @@ class MarianModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     all_generative_model_classes = (MarianMTModel,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "conversational": MarianMTModel,
             "feature-extraction": MarianModel,
             "summarization": MarianMTModel,
             "text-generation": MarianForCausalLM,
@@ -347,11 +338,8 @@ class MarianModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         model.resize_decoder_token_embeddings(config.vocab_size + 1)
         self.assertEqual(model.lm_head.weight.shape, (config.vocab_size + 1, config.d_model))
 
+    @unittest.skip
     def test_tie_word_embeddings_decoder(self):
-        pass
-
-    @unittest.skip("Skipping for now, to fix @ArthurZ or @ydshieh")
-    def test_pipeline_conversational(self):
         pass
 
     @unittest.skip(
@@ -372,15 +360,15 @@ class MarianModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip("No support for low_cpu_mem_usage=True.")
+    @unittest.skip(reason="No support for low_cpu_mem_usage=True.")
     def test_save_load_low_cpu_mem_usage(self):
         pass
 
-    @unittest.skip("No support for low_cpu_mem_usage=True.")
+    @unittest.skip(reason="No support for low_cpu_mem_usage=True.")
     def test_save_load_low_cpu_mem_usage_checkpoints(self):
         pass
 
-    @unittest.skip("No support for low_cpu_mem_usage=True.")
+    @unittest.skip(reason="No support for low_cpu_mem_usage=True.")
     def test_save_load_low_cpu_mem_usage_no_safetensors(self):
         pass
 
@@ -413,7 +401,7 @@ class ModelManagementTests(unittest.TestCase):
     @require_torch
     def test_model_names(self):
         model_list = list_models()
-        model_ids = [x.modelId for x in model_list if x.modelId.startswith(ORG_NAME)]
+        model_ids = [x.id for x in model_list if x.id.startswith(ORG_NAME)]
         bad_model_ids = [mid for mid in model_ids if "+" in model_ids]
         self.assertListEqual([], bad_model_ids)
         self.assertGreater(len(model_ids), 500)
@@ -904,6 +892,6 @@ class MarianStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, 
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_attention_mask_past(*config_and_inputs)
 
+    @unittest.skip(reason="Decoder cannot keep gradients")
     def test_retain_grad_hidden_states_attentions(self):
-        # decoder cannot keep gradients
         return

@@ -101,9 +101,11 @@ def get_max_height_width(
     return (max_height, max_width)
 
 
-def get_size_with_aspect_ratio(image_size, size, max_size=None) -> Tuple[int, int]:
+def get_size_with_aspect_ratio(
+    image_size: Tuple[int, int], size: int, max_size: Optional[int] = None, mod_size: int = 16
+) -> Tuple[int, int]:
     """
-    Computes the output image size given the input image size and the desired output size.
+    Computes the output image size given the input image size and the desired output size with multiple of divisible_size.
 
     Args:
         image_size (`Tuple[int, int]`):
@@ -112,25 +114,40 @@ def get_size_with_aspect_ratio(image_size, size, max_size=None) -> Tuple[int, in
             The desired output size.
         max_size (`int`, *optional*):
             The maximum allowed output size.
+        mod_size (`int`, *optional*):
+            The size to make multiple of mod_size.
     """
     height, width = image_size
+    raw_size = None
     if max_size is not None:
         min_original_size = float(min((height, width)))
         max_original_size = float(max((height, width)))
         if max_original_size / min_original_size * size > max_size:
-            size = int(round(max_size * min_original_size / max_original_size))
+            raw_size = max_size * min_original_size / max_original_size
+            size = int(round(raw_size))
 
-    if width <= height and width != size:
-        height = int(size * height / width)
-        width = size
-    elif height < width and height != size:
-        width = int(size * width / height)
-        height = size
-    width_mod = np.mod(width, 16)
-    height_mod = np.mod(height, 16)
-    width = width - width_mod
-    height = height - height_mod
-    return (height, width)
+    if width < height:
+        ow = size
+        if max_size is not None and raw_size is not None:
+            oh = int(raw_size * height / width)
+        else:
+            oh = int(size * height / width)
+    elif (height <= width and height == size) or (width <= height and width == size):
+        oh, ow = height, width
+    else:
+        oh = size
+        if max_size is not None and raw_size is not None:
+            ow = int(raw_size * width / height)
+        else:
+            ow = int(size * width / height)
+
+    if mod_size is not None:
+        ow_mod = np.mod(ow, mod_size)
+        oh_mod = np.mod(oh, mod_size)
+        ow = ow - ow_mod
+        oh = oh - oh_mod
+
+    return (oh, ow)
 
 
 # Copied from transformers.models.detr.image_processing_detr.get_image_size_for_max_height_width
