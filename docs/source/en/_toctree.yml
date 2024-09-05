@@ -24,7 +24,9 @@
   - local: model_sharing
     title: Share your model
   - local: agents
-    title: Agents
+    title: Agents 101
+  - local: agents_advanced
+    title: Agents, supercharged - Multi-agents, External tools, and more
   - local: llm_tutorial
     title: Generation with LLMs
   - local: conversations
@@ -94,6 +96,8 @@
       title: Text to speech
     - local: tasks/image_text_to_text
       title: Image-text-to-text
+    - local: tasks/video_text_to_text
+      title: Video-text-to-text
     title: Multimodal
   - isExpanded: false
     sections:
@@ -488,6 +492,8 @@
         title: Nyströmformer
       - local: model_doc/olmo
         title: OLMo
+      - local: model_doc/olmoe
+        title: OLMoE
       - local: model_doc/open-llama
         title: Open-Llama
       - local: model_doc/opt
