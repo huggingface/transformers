@@ -91,7 +91,7 @@ jobs:
 
       - name: update datasets
         run: |
-          python3 -m pip install -U git+https://github.com/huggingface/datasets.git@dummy          
+          python3 -m pip install -U git+https://github.com/huggingface/datasets.git@main          
 
       - name: NVIDIA-SMI
         run: |
