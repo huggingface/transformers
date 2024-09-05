@@ -22,15 +22,6 @@ from dataclasses import dataclass, is_dataclass
 from typing import TYPE_CHECKING, Any, Dict, Optional, Union
 
 from .. import __version__
-from ..cache_utils import (
-    HQQQuantizedCache,
-    HybridCache,
-    MambaCache,
-    OffloadedStaticCache,
-    QuantoQuantizedCache,
-    SlidingWindowCache,
-    StaticCache,
-)
 from ..configuration_utils import PretrainedConfig
 from ..utils import (
     GENERATION_CONFIG_NAME,
@@ -57,7 +48,16 @@ QUANT_BACKEND_CLASSES_MAPPING = {}
 ALL_CACHE_IMPLEMENTATIONS = []
 
 if is_torch_available():
-    from ..cache_utils import QuantizedCacheConfig
+    from ..cache_utils import (
+        HQQQuantizedCache,
+        HybridCache,
+        MambaCache,
+        OffloadedStaticCache,
+        QuantizedCacheConfig,
+        QuantoQuantizedCache,
+        SlidingWindowCache,
+        StaticCache,
+    )
 
     NEEDS_CACHE_CONFIG["quantized"] = QuantizedCacheConfig
     NEED_SETUP_CACHE_CLASSES_MAPPING = {
