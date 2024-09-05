@@ -626,9 +626,10 @@ class DiffConverterTransformer(CSTTransformer):
 
         for file, body in self.files.items():
             new_body = [k[1]["node"] for k in sorted(body.items(), key=lambda x: x[1]["insert_idx"])]
-            if file in dependency_imports.keys():
-                new_body = list(dependency_imports[file].values()) + new_body
-            self.files[file] = cst.Module(body=[*new_body], header=node.header)
+            if len(new_body) > 0:
+                if file in dependency_imports.keys():
+                    new_body = list(dependency_imports[file].values()) + new_body
+                self.files[file] = cst.Module(body=[*new_body], header=node.header)
         return node
 
 
@@ -646,7 +647,7 @@ def convert_diff_file(diff_file, old_model_name=None, new_model_name=None, cst_t
             cst_transformers = DiffConverterTransformer(module, model_name, old_model_name, new_model_name)
         wrapper.visit(cst_transformers)
         for file, node in cst_transformers.files.items():
-            if len(module.code.strip()) > 0:
+            if node != {}:
                 ruffed_code = run_ruff(AUTO_GENERATED_MESSAGE + node.code, True)
                 formatted_code = run_ruff(ruffed_code, False)
                 output[file] = [formatted_code, ruffed_code]
