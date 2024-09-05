@@ -525,6 +525,7 @@ class FalconMambaIntegrationTests(unittest.TestCase):
 
         self.assertListEqual(out, EXPECTED_OUTPUT)
 
+    @require_torch_multi_gpu
     def test_training_kernel(self):
         model_id = "tiiuae/falcon-mamba-7b"
 
