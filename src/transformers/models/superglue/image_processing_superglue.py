@@ -320,6 +320,7 @@ class SuperGlueImageProcessor(BaseImageProcessor):
         validate_preprocess_arguments(
             do_resize=do_resize,
             size=size,
+            resample=resample,
             do_rescale=do_rescale,
             rescale_factor=rescale_factor,
         )
