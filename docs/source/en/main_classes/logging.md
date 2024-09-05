@@ -30,7 +30,7 @@ transformers.logging.set_verbosity_info()
 ```
 
 You can also use the environment variable `TRANSFORMERS_VERBOSITY` to override the default verbosity. You can set it
-to one of the following: `debug`, `info`, `warning`, `error`, `critical`. For example:
+to one of the following: `debug`, `info`, `warning`, `error`, `critical`, `fatal`. For example:
 
 ```bash
 TRANSFORMERS_VERBOSITY=error ./myprogram.py
