@@ -110,9 +110,9 @@ jobs:
 #        working-directory: /transformers
 #        run: ls -l /mnt/cache/hub/models--ylacombe--bark-small/blobs/04fd39ae31c48ce4c2578d25e07f436b671fa900fd526de06d68054735fe4fc6.incomplete
 
-#      - name: Remove cache 1
-#        working-directory: /transformers
-#        run: rm -rf /mnt/cache/hub/models--ylacombe--bark-small
+      - name: Remove cache 1
+        working-directory: /transformers
+        run: rm -rf /mnt/cache/datasets/downloads/0f3877f8b8ff8f882b5032f93535a4d21bd7475946970fbf306f79c2769f3d0d.incomplete
 
       - name: Run all tests on GPU
         working-directory: /transformers
