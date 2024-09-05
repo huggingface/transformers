@@ -413,7 +413,7 @@ For example with a vanilla AdamW, the memory requirement for the optimizer state
 * Momentum: 4 bytes/param
 * Variance: 4 bytes/param
 
-Suppose a model with 7B parameters and 200 millions parameters injected with [Low Rank Adapters](https://huggingface.co/docs/peft/conceptual_guides/lora).
+Suppose a model with 7B parameters and 200 million parameters injected with [Low Rank Adapters](https://huggingface.co/docs/peft/conceptual_guides/lora).
 
 The memory requirement for the optimizer state of the plain model would be 12 * 7 = 84 GB (assuming 7B trainable parameters).
 
