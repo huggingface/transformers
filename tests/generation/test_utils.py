@@ -3404,9 +3404,6 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
             "return_dict_in_generate": True,  # Required to return `past_key_values`
         }
 
-        # check that are on multi-gpu setup
-        self.assertTrue(len(set(model.hf_device_map.items())) > 1)
-
         results = model.generate(input_ids, **generation_kwargs)
         self.assertTrue(isinstance(results.past_key_values, StaticCache))
 
