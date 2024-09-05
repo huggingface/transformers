@@ -321,7 +321,9 @@ class SuperTransformer(cst.CSTTransformer):
                     body=[m.Return(SUPER_CALL_NODE(func_name)) | m.Expr(SUPER_CALL_NODE(func_name))]
                 ),
             ):
-                new_body.extend(self.update_body(self.original_methods[func_name].body.body, node.body))
+                # TODO BIG trick here
+                if "self" not in self.python_module.code_for_node(expr):
+                    new_body.extend(self.update_body(self.original_methods[func_name].body.body, node.body))
             elif m.matches(expr, DOCSTRING_NODE):
                 self.has_docstring = True
                 if parent_has_docstring:  # actually here we ought to de-duplicate?
