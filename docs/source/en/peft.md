@@ -125,7 +125,7 @@ Now you can use [`~peft.PeftModel.set_adapter`] to set which adapter to use:
 ```py
 # use adapter_1
 model.set_adapter("adapter_1")
-output = model.generate(**inputs)
+output_disabled = model.generate(**inputs)
 print(tokenizer.decode(output_disabled[0], skip_special_tokens=True))
 
 # use adapter_2
