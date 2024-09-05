@@ -102,13 +102,13 @@ jobs:
         working-directory: /transformers
         run: pip freeze
 
-      - name: Check cache 0
-        working-directory: /transformers
-        run: ls -l /mnt/cache/hub/models--suno--bark/snapshots/70a8a7d34168586dc5d028fa9666aceade177992/pytorch_model.bin
-
-      - name: Check cache 1
-        working-directory: /transformers
-        run: ls -l /mnt/cache/hub/models--ylacombe--bark-small/blobs/04fd39ae31c48ce4c2578d25e07f436b671fa900fd526de06d68054735fe4fc6.incomplete
+#      - name: Check cache 0
+#        working-directory: /transformers
+#        run: ls -l /mnt/cache/hub/models--suno--bark/snapshots/70a8a7d34168586dc5d028fa9666aceade177992/pytorch_model.bin
+#
+#      - name: Check cache 1
+#        working-directory: /transformers
+#        run: ls -l /mnt/cache/hub/models--ylacombe--bark-small/blobs/04fd39ae31c48ce4c2578d25e07f436b671fa900fd526de06d68054735fe4fc6.incomplete
 
       - name: Remove cache 1
         working-directory: /transformers
