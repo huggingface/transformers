@@ -110,6 +110,7 @@ plt.scatter(
 )
 plt.savefig(f"output_image.png")
 ```
+![image/png](https://cdn-uploads.huggingface.co/production/uploads/632885ba1558dac67c440aa8/ZtFmphEhx8tcbEQqOolyE.png)
 
 This model was contributed by [stevenbucaille](https://huggingface.co/stevenbucaille).
 The original code can be found [here](https://github.com/magicleap/SuperPointPretrainedNetwork).

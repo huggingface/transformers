@@ -15,7 +15,7 @@ import unittest
 
 import numpy as np
 
-from transformers.testing_utils import require_torch, require_vision, slow
+from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import (
@@ -133,7 +133,6 @@ class SuperPointImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
         for image in pre_processed_images["pixel_values"]:
             self.assertTrue(np.all(image[0, ...] == image[1, ...]) and np.all(image[1, ...] == image[2, ...]))
 
-    @slow
     @require_torch
     def test_post_processing_keypoint_detection(self):
         image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
@@ -151,7 +150,8 @@ class SuperPointImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
                     keypoints[:, 1] <= image_size[0]
                 )
                 all_above_zero = torch.all(keypoints[:, 0] >= 0) and torch.all(keypoints[:, 1] >= 0)
-                self.assertTrue(all_below_image_size and all_above_zero)
+                self.assertTrue(all_below_image_size)
+                self.assertTrue(all_above_zero)
 
         tuple_image_sizes = [(image.size[0], image.size[1]) for image in image_inputs]
         tuple_post_processed_outputs = image_processor.post_process_keypoint_detection(outputs, tuple_image_sizes)
