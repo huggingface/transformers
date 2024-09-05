@@ -107,6 +107,7 @@ class PhiMoEModelTester:
         hidden_size=32,
         num_hidden_layers=2,
         num_attention_heads=4,
+        num_key_value_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
@@ -131,6 +132,7 @@ class PhiMoEModelTester:
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
+        self.num_key_value_heads = num_key_value_heads
         self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
         self.hidden_dropout_prob = hidden_dropout_prob
@@ -174,6 +176,7 @@ class PhiMoEModelTester:
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
+            num_key_value_heads=self.num_key_value_heads,
             intermediate_size=self.intermediate_size,
             hidden_act=self.hidden_act,
             hidden_dropout_prob=self.hidden_dropout_prob,
@@ -183,6 +186,8 @@ class PhiMoEModelTester:
             is_decoder=False,
             initializer_range=self.initializer_range,
             pad_token_id=self.pad_token_id,
+            num_experts_per_tok=2,
+            num_local_experts=2,
         )
 
     # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_model with Llama->PhiMoE
@@ -365,7 +370,7 @@ class PhiMoEModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_llama_sequence_classification_model with Llama->PhiMoE,llama->PhiMoE
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_llama_sequence_classification_model with Llama->PhiMoE,llama->phimoe
     def test_phimoe_sequence_classification_model(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 3
@@ -378,7 +383,7 @@ class PhiMoEModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_llama_sequence_classification_model_for_single_label with Llama->PhiMoE,llama->PhiMoE
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_llama_sequence_classification_model_for_single_label with Llama->PhiMoE,llama->phimoe
     def test_phimoe_sequence_classification_model_for_single_label(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 3
@@ -392,7 +397,7 @@ class PhiMoEModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_llama_sequence_classification_model_for_multi_label with Llama->PhiMoE,llama->PhiMoE
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_llama_sequence_classification_model_for_multi_label with Llama->PhiMoE,llama->phimoe
     def test_phimoe_sequence_classification_model_for_multi_label(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 3
@@ -425,8 +430,11 @@ class PhiMoEModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         n_factors = config.hidden_size // config.num_attention_heads // 2
         config.rope_scaling = {
             "type": scaling_type,
-            "short_factor": [5.0 for _ in range(n_factors)],
+            "short_factor": [3.0 for _ in range(n_factors)],
             "long_factor": [5.0 for _ in range(n_factors)],
+            "short_mscale": 1.243163121016122,
+            "long_mscale": 1.243163121016122,
+            "original_max_position_embeddings": 4096,
         }
         scaled_model = PhiMoEModel(config)
         scaled_model.to(torch_device)
@@ -438,6 +446,49 @@ class PhiMoEModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         self.assertFalse(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
         self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
 
+    @parameterized.expand([("longrope",)])
+    def test_model_rope_scaling_short_long_factor(self, scaling_type):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        n_factors = config.hidden_size // config.num_key_value_heads // 2
+        config.rope_scaling = {
+            "type": scaling_type,
+            "short_factor": [3.0 for _ in range(n_factors)],
+            "long_factor": [5.0 for _ in range(n_factors)],
+            "short_mscale": 1.243163121016122,
+            "long_mscale": 1.243163121016122,
+            "original_max_position_embeddings": 4096,
+        }
+        input_tensor = ids_tensor([1, 4090], config.vocab_size)
+        model = PhiMoEModel(config)
+        model.to(torch_device)
+        model.eval()
+        generation_args_short = {
+            "max_length": config.original_max_position_embeddings,
+            "temperature": 0.0,
+            "use_cache": True,
+            "do_sample": False,
+            "return_dict_in_generate": True,
+        }
+        output_with_short_factor = model.generate(input_tensor, **generation_args_short)
+        keys_with_short_factor = output_with_short_factor.past_key_values[0][0]
+        generation_args_long = {
+            "max_length": config.original_max_position_embeddings + 5,
+            "temperature": 0.0,
+            "use_cache": True,
+            "do_sample": False,
+            "return_dict_in_generate": True,
+            "output_logits": True,
+        }
+        output_with_long_factor = model.generate(input_tensor, **generation_args_long)
+        keys_with_long_factor = output_with_long_factor.past_key_values[0][0]
+        last_token_logits = output_with_long_factor.logits[-1][-1]
+        regenerated_last_token_logits = model(output_with_long_factor.sequences[:, :-1]).logits[0][-1]
+        keys_with_long_factor = keys_with_long_factor[:, :, : config.original_max_position_embeddings - 1, :]
+
+        # KV cache is re-computed after reaching the (`config.original_max_position_embeddings`+1)th token position
+        self.assertFalse(torch.allclose(keys_with_short_factor, keys_with_long_factor, atol=1e-3, rtol=1e-3))
+        # Last token generated using long factor
+        self.assertTrue(torch.allclose(last_token_logits, regenerated_last_token_logits, atol=1e-3, rtol=1e-3))
 
 @slow
 @require_torch
