@@ -19,7 +19,10 @@ import tensorflow as tf
 import jax.numpy as jnp
 
 from transformers.models.whisper import WhisperTokenizer, WhisperTokenizerFast
-from transformers.models.whisper.tokenization_whisper import _combine_tokens_into_words, _find_longest_common_sequence
+from transformers.models.whisper.tokenization_whisper import (
+    _combine_tokens_into_words,
+    _find_longest_common_sequence,
+)
 from transformers.testing_utils import slow
 
 from ...test_tokenization_common import TokenizerTesterMixin
@@ -85,7 +88,9 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
             ["I", "Ġwas", "Ġborn", "Ġin", "Ġ9", "2000", ",", "Ġand", "Ġthis", "Ġis", "Ġfals", "Ã©", "."],  # fmt: skip
         )
         ids = tokenizer.convert_tokens_to_ids(tokens)
-        self.assertListEqual(ids, [40, 390, 4232, 294, 1722, 25743, 11, 293, 341, 307, 16720, 526, 13])
+        self.assertListEqual(
+            ids, [40, 390, 4232, 294, 1722, 25743, 11, 293, 341, 307, 16720, 526, 13]
+        )
 
         back_tokens = tokenizer.convert_ids_to_tokens(ids)
         self.assertListEqual(
@@ -115,7 +120,9 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         expected_encoding = {'input_ids': [[50257, 50362, 41762, 364, 357, 36234, 1900, 355, 12972, 13165, 354, 12, 35636, 364, 290, 12972, 13165, 354, 12, 5310, 13363, 12, 4835, 8, 3769, 2276, 12, 29983, 45619, 357, 13246, 51, 11, 402, 11571, 12, 17, 11, 5564, 13246, 38586, 11, 16276, 44, 11, 4307, 346, 33, 861, 11, 16276, 7934, 23029, 329, 12068, 15417, 28491, 357, 32572, 52, 8, 290, 12068, 15417, 16588, 357, 32572, 38, 8, 351, 625, 3933, 10, 2181, 13363, 4981, 287, 1802, 10, 8950, 290, 2769, 48817, 1799, 1022, 449, 897, 11, 9485, 15884, 354, 290, 309, 22854, 37535, 13, 50256], [50257, 50362, 13246, 51, 318, 3562, 284, 662, 12, 27432, 2769, 8406, 4154, 282, 24612, 422, 9642, 9608, 276, 2420, 416, 26913, 21143, 319, 1111, 1364, 290, 826, 4732, 287, 477, 11685, 13, 50256], [50257, 50362, 464, 2068, 7586, 21831, 18045, 625, 262, 16931, 3290, 13, 50256]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]}  # fmt: skip
 
         self.tokenizer_integration_test_util(
-            expected_encoding=expected_encoding, model_name="openai/whisper-tiny.en", padding=False
+            expected_encoding=expected_encoding,
+            model_name="openai/whisper-tiny.en",
+            padding=False,
         )
 
     def test_output_offsets(self):
@@ -125,7 +132,9 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
             tokenizer.decode(previous_sequence, output_offsets=True),
             {
                 "text": " not worth thinking about.",
-                "offsets": [{"text": " not worth thinking about.", "timestamp": (22.56, 24.96)}],
+                "offsets": [
+                    {"text": " not worth thinking about.", "timestamp": (22.56, 24.96)}
+                ],
             },
         )
 
@@ -139,7 +148,10 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
                     " small, sharp blow high on his chest.<|endoftext|>"
                 ),
                 "offsets": [
-                    {"text": " of spectators, retrievality is not worth thinking about.", "timestamp": (0.0, 5.0)},
+                    {
+                        "text": " of spectators, retrievality is not worth thinking about.",
+                        "timestamp": (0.0, 5.0),
+                    },
                     {
                         "text": " His instant panic was followed by a small, sharp blow high on his chest.",
                         "timestamp": (5.0, 9.4),
@@ -205,12 +217,24 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         ]
         # fmt: on
         expected_with_special_tokens = "<|startofprev|> Mr. Quilter<|startoftranscript|><|en|><|transcribe|><|notimestamps|> On the general principles of art, Mr. Quilter writes with equal lucidity.<|endoftext|>"
-        expected_without_special_tokens = " On the general principles of art, Mr. Quilter writes with equal lucidity."
-        self.assertEqual(tokenizer.decode(encoded_input, skip_special_tokens=False), expected_with_special_tokens)
-        self.assertEqual(tokenizer.decode(encoded_input, skip_special_tokens=True), expected_without_special_tokens)
-        self.assertEqual(rust_tokenizer.decode(encoded_input, skip_special_tokens=False), expected_with_special_tokens)
+        expected_without_special_tokens = (
+            " On the general principles of art, Mr. Quilter writes with equal lucidity."
+        )
         self.assertEqual(
-            rust_tokenizer.decode(encoded_input, skip_special_tokens=True), expected_without_special_tokens
+            tokenizer.decode(encoded_input, skip_special_tokens=False),
+            expected_with_special_tokens,
+        )
+        self.assertEqual(
+            tokenizer.decode(encoded_input, skip_special_tokens=True),
+            expected_without_special_tokens,
+        )
+        self.assertEqual(
+            rust_tokenizer.decode(encoded_input, skip_special_tokens=False),
+            expected_with_special_tokens,
+        )
+        self.assertEqual(
+            rust_tokenizer.decode(encoded_input, skip_special_tokens=True),
+            expected_without_special_tokens,
         )
 
     def test_skip_special_tokens_with_timestamps(self):
@@ -229,19 +253,27 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         expected_with_special_tokens = "<|startoftranscript|><|notimestamps|><|0.00|> He has grave doubts whether Sir Frederick Layton's work is really Greek after all and<|6.24|><|6.24|> can discover in it but little of rocky Ithaca.<|9.44|><|endoftext|>"
         expected_without_special_tokens = "<|0.00|> He has grave doubts whether Sir Frederick Layton's work is really Greek after all and<|6.24|><|6.24|> can discover in it but little of rocky Ithaca.<|9.44|>"
         self.assertEqual(
-            tokenizer.decode(encoded_input, decode_with_timestamps=True, skip_special_tokens=False),
+            tokenizer.decode(
+                encoded_input, decode_with_timestamps=True, skip_special_tokens=False
+            ),
             expected_with_special_tokens,
         )
         self.assertEqual(
-            tokenizer.decode(encoded_input, decode_with_timestamps=True, skip_special_tokens=True),
+            tokenizer.decode(
+                encoded_input, decode_with_timestamps=True, skip_special_tokens=True
+            ),
             expected_without_special_tokens,
         )
         self.assertEqual(
-            rust_tokenizer.decode(encoded_input, decode_with_timestamps=True, skip_special_tokens=False),
+            rust_tokenizer.decode(
+                encoded_input, decode_with_timestamps=True, skip_special_tokens=False
+            ),
             expected_with_special_tokens,
         )
         self.assertEqual(
-            rust_tokenizer.decode(encoded_input, decode_with_timestamps=True, skip_special_tokens=True),
+            rust_tokenizer.decode(
+                encoded_input, decode_with_timestamps=True, skip_special_tokens=True
+            ),
             expected_without_special_tokens,
         )
 
@@ -253,7 +285,9 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer_prompt_ids = tokenizer.get_prompt_ids(prompt)
         fast_tokenizer_prompt_ids = rust_tokenizer.get_prompt_ids(prompt)
 
-        self.assertListEqual(tokenizer_prompt_ids.tolist(), fast_tokenizer_prompt_ids.tolist())
+        self.assertListEqual(
+            tokenizer_prompt_ids.tolist(), fast_tokenizer_prompt_ids.tolist()
+        )
 
     def test_tokenizer_decode_prompt(self):
         prompt_text = "What does the fox say?"
@@ -268,13 +302,17 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         input_ids = np.hstack([prompt_ids, input_ids])
 
         # encode using fast tokenizer
-        rust_prompt_ids = rust_tokenizer.get_prompt_ids(prompt_text, return_tensors="np")
+        rust_prompt_ids = rust_tokenizer.get_prompt_ids(
+            prompt_text, return_tensors="np"
+        )
         rust_input_ids = rust_tokenizer(input_text, return_tensors="np").input_ids[0]
         rust_input_ids = np.hstack([rust_prompt_ids, rust_input_ids])
 
         # check with prompt in output
         pred_text = tokenizer.decode(input_ids, skip_special_tokens=False)
-        rust_pred_text = rust_tokenizer.decode(rust_input_ids, skip_special_tokens=False)
+        rust_pred_text = rust_tokenizer.decode(
+            rust_input_ids, skip_special_tokens=False
+        )
 
         # check correctness for both tokenizers
         expected_text = f"<|startofprev|> {prompt_text}<|startoftranscript|><|notimestamps|>{input_text}<|endoftext|>"
@@ -295,7 +333,13 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         # 'whatever "whatever" said someone, clever!?'
         encoded_input = [1363, 7969, 503, 1363, 7969, 1, 848, 1580, 11, 13494, 7323]
         expected_words = ["whatever", ' "whatever"', " said", " someone,", " clever!?"]
-        expected_tokens = [[1363, 7969], [503, 1363, 7969, 1], [848], [1580, 11], [13494, 7323]]
+        expected_tokens = [
+            [1363, 7969],
+            [503, 1363, 7969, 1],
+            [848],
+            [1580, 11],
+            [13494, 7323],
+        ]
         expected_indices = [[0, 1], [2, 3, 4, 5], [6], [7, 8], [9, 10]]
         output = _combine_tokens_into_words(tokenizer, encoded_input)
         self.assertEqual(expected_words, output[0])
@@ -316,27 +360,41 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
 
         # tokenizer tests
         encoded_input = tokenizer(input_str).input_ids
-        decoded_output = tokenizer.decode(encoded_input, skip_special_tokens=True, basic_normalize=False)
+        decoded_output = tokenizer.decode(
+            encoded_input, skip_special_tokens=True, basic_normalize=False
+        )
         self.assertEqual(decoded_output, input_str)
 
-        decoded_output_normalize = tokenizer.decode(encoded_input, skip_special_tokens=True, basic_normalize=True)
+        decoded_output_normalize = tokenizer.decode(
+            encoded_input, skip_special_tokens=True, basic_normalize=True
+        )
         self.assertEqual(decoded_output_normalize, expected_output_normalize)
 
         decoded_output_diacritics = tokenizer.decode(
-            encoded_input, skip_special_tokens=True, basic_normalize=True, remove_diacritics=True
+            encoded_input,
+            skip_special_tokens=True,
+            basic_normalize=True,
+            remove_diacritics=True,
         )
         self.assertEqual(decoded_output_diacritics, expected_output_diacritics)
 
         # fast tokenizer tests
         encoded_input = rust_tokenizer(input_str).input_ids
-        decoded_output = rust_tokenizer.decode(encoded_input, skip_special_tokens=True, basic_normalize=False)
+        decoded_output = rust_tokenizer.decode(
+            encoded_input, skip_special_tokens=True, basic_normalize=False
+        )
         self.assertEqual(decoded_output, input_str)
 
-        decoded_output_normalize = rust_tokenizer.decode(encoded_input, skip_special_tokens=True, basic_normalize=True)
+        decoded_output_normalize = rust_tokenizer.decode(
+            encoded_input, skip_special_tokens=True, basic_normalize=True
+        )
         self.assertEqual(decoded_output_normalize, expected_output_normalize)
 
         decoded_output_diacritics = rust_tokenizer.decode(
-            encoded_input, skip_special_tokens=True, basic_normalize=True, remove_diacritics=True
+            encoded_input,
+            skip_special_tokens=True,
+            basic_normalize=True,
+            remove_diacritics=True,
         )
         self.assertEqual(decoded_output_diacritics, expected_output_diacritics)
 
@@ -356,9 +414,14 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         ]
         # fmt: on
 
-        tokenizer = WhisperTokenizer.from_pretrained("onnx-community/whisper-tiny.en_timestamped")
+        tokenizer = WhisperTokenizer.from_pretrained(
+            "onnx-community/whisper-tiny.en_timestamped"
+        )
         result = tokenizer._decode_asr(
-            model_outputs, return_timestamps="word", return_language=False, time_precision=0.02
+            model_outputs,
+            return_timestamps="word",
+            return_language=False,
+            time_precision=0.02,
         )
 
         EXPECTED_OUTPUT = (
@@ -382,16 +445,26 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.tokenizer: WhisperTokenizer = WhisperTokenizer.from_pretrained(cls.checkpoint_name)
+        cls.tokenizer: WhisperTokenizer = WhisperTokenizer.from_pretrained(
+            cls.checkpoint_name
+        )
         return cls
 
     def test_tokenizer_equivalence(self):
         text = "다람쥐 헌 쳇바퀴에 타고파"
-        multilingual_tokenizer = WhisperTokenizer.from_pretrained("openai/whisper-tiny", language="korean")
-        monolingual_tokenizer = WhisperTokenizer.from_pretrained("openai/whisper-tiny.en")
+        multilingual_tokenizer = WhisperTokenizer.from_pretrained(
+            "openai/whisper-tiny", language="korean"
+        )
+        monolingual_tokenizer = WhisperTokenizer.from_pretrained(
+            "openai/whisper-tiny.en"
+        )
 
-        monolingual_tokens = monolingual_tokenizer.encode(text, add_special_tokens=False)
-        multilingual_tokens = multilingual_tokenizer.encode(text, add_special_tokens=False)
+        monolingual_tokens = monolingual_tokenizer.encode(
+            text, add_special_tokens=False
+        )
+        multilingual_tokens = multilingual_tokenizer.encode(
+            text, add_special_tokens=False
+        )
 
         assert monolingual_tokenizer.decode(monolingual_tokens) == text
         assert multilingual_tokenizer.decode(multilingual_tokens) == text
@@ -436,10 +509,14 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
 
         self.assertListEqual(multilingual_tokens, EXPECTED_MULTI)
 
-        special_transcript = multilingual_tokenizer.decode(multilingual_tokens, skip_special_tokens=False)
+        special_transcript = multilingual_tokenizer.decode(
+            multilingual_tokens, skip_special_tokens=False
+        )
         self.assertEqual(special_transcript, EXPECTED_SPECIAL_TEXT)
 
-        transcript = multilingual_tokenizer.decode(multilingual_tokens, skip_special_tokens=True)
+        transcript = multilingual_tokenizer.decode(
+            multilingual_tokens, skip_special_tokens=True
+        )
         self.assertEqual(transcript, text)
 
     def test_vocab_size(self):
@@ -450,7 +527,9 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
         self.assertIn(ES_CODE, self.tokenizer.all_special_ids)
         generated_ids = [ES_CODE, 4, 1601, 47, 7647, 2]
         result = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
-        expected_spanish = self.tokenizer.decode(generated_ids[1:], skip_special_tokens=True)
+        expected_spanish = self.tokenizer.decode(
+            generated_ids[1:], skip_special_tokens=True
+        )
         self.assertEqual(result, expected_spanish)
         self.assertNotIn(self.tokenizer.eos_token, result)
 
@@ -459,7 +538,9 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
             "openai/whisper-tiny", language="spanish", task="translate"
         )
         batch = ["El gato ", "El gato se sentó"]
-        batch_output = multilingual_tokenizer.batch_encode_plus(batch, padding=True).input_ids
+        batch_output = multilingual_tokenizer.batch_encode_plus(
+            batch, padding=True
+        ).input_ids
 
         # fmt: off
         EXPECTED_MULTI = [
@@ -481,7 +562,9 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
         multilingual_tokenizer.set_prefix_tokens(language="english")
 
         batch = ["the cat", "the cat sat"]
-        batch_output = multilingual_tokenizer.batch_encode_plus(batch, padding=True).input_ids
+        batch_output = multilingual_tokenizer.batch_encode_plus(
+            batch, padding=True
+        ).input_ids
 
         # fmt: off
         EXPECTED_MULTI = [
@@ -495,10 +578,16 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
         self.assertListEqual(batch_output, EXPECTED_MULTI)
 
     def test_batch_encoding_decoding(self):
-        multilingual_tokenizer = WhisperTokenizer.from_pretrained("openai/whisper-tiny", language="spanish")
+        multilingual_tokenizer = WhisperTokenizer.from_pretrained(
+            "openai/whisper-tiny", language="spanish"
+        )
         batch = ["hola güey", "que onda"]
-        batch_encoding = multilingual_tokenizer.batch_encode_plus(batch, padding=True).input_ids
-        transcription = multilingual_tokenizer.batch_decode(batch_encoding, skip_special_tokens=True)
+        batch_encoding = multilingual_tokenizer.batch_encode_plus(
+            batch, padding=True
+        ).input_ids
+        transcription = multilingual_tokenizer.batch_decode(
+            batch_encoding, skip_special_tokens=True
+        )
         self.assertListEqual(batch, transcription)
 
     def test_offset_decoding(self):
@@ -515,7 +604,9 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
             2619, 4004, 811, 2709, 702, 51449, 51449, 50257
         ]
         # fmt: on
-        output = multilingual_tokenizer.decode(INPUT_TOKENS, output_offsets=True)["offsets"]
+        output = multilingual_tokenizer.decode(INPUT_TOKENS, output_offsets=True)[
+            "offsets"
+        ]
 
         self.assertEqual(
             output,
@@ -539,7 +630,9 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
             ],
         )
         # test `decode_with_offsets`
-        output = multilingual_tokenizer.decode(INPUT_TOKENS, decode_with_timestamps=True)
+        output = multilingual_tokenizer.decode(
+            INPUT_TOKENS, decode_with_timestamps=True
+        )
         self.assertEqual(
             output,
             "<|startoftranscript|><|en|><|transcribe|><|0.00|> Lennils, pictures are a sort of upguards and atom"
@@ -556,7 +649,9 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
         ]
         # fmt: on
 
-        output = multilingual_tokenizer.decode(INPUT_TOKENS, output_offsets=True)["offsets"]
+        output = multilingual_tokenizer.decode(INPUT_TOKENS, output_offsets=True)[
+            "offsets"
+        ]
         self.assertEqual(
             output[0],
             {
@@ -574,7 +669,9 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
         ]
         # fmt: on
 
-        output = multilingual_tokenizer.decode(INPUT_TOKENS, output_offsets=True)["offsets"]
+        output = multilingual_tokenizer.decode(INPUT_TOKENS, output_offsets=True)[
+            "offsets"
+        ]
         self.assertEqual(output, [])
 
     def test_convert_to_list(self):
