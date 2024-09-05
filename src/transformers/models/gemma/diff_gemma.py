@@ -557,7 +557,7 @@ class GemmaModel(LlamaModel):
                     output_attentions,
                     use_cache,
                     cache_position,
-                    position_embeddings
+                    position_embeddings,
                 )
             else:
                 layer_outputs = decoder_layer(
@@ -568,7 +568,7 @@ class GemmaModel(LlamaModel):
                     output_attentions=output_attentions,
                     use_cache=use_cache,
                     cache_position=cache_position,
-                    position_embeddings=position_embeddings
+                    position_embeddings=position_embeddings,
                 )
 
             hidden_states = layer_outputs[0]

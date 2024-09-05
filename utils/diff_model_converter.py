@@ -237,6 +237,7 @@ DOCSTRING_NODE = m.SimpleStatementLine(
 def SUPER_CALL_NODE(func_name):
     return m.Call(func=m.Attribute(value=m.Call(func=m.Name("super")), attr=m.Name(func_name)))
 
+
 def merge_docstrings(original_docstring, updated_docstring):
     if "    Args:\n        " not in updated_docstring:
         logger.warning("We detected a docstring that will be appended to the super's doc")
@@ -261,12 +262,11 @@ def merge_docstrings(original_docstring, updated_docstring):
                 ]
             )
         elif updated_docstring not in original_docstring:
-            updated_docstring = (
-                original_docstring + "\n" + updated_docstring.replace('r"""\n', "")
-            )
+            updated_docstring = original_docstring + "\n" + updated_docstring.replace('r"""\n', "")
     else:
         updated_docstring = original_docstring
     return updated_docstring
+
 
 class SuperTransformer(cst.CSTTransformer):
     METADATA_DEPENDENCIES = (ParentNodeProvider,)
@@ -421,7 +421,7 @@ def replace_call_to_super(class_finder: ClassFinder, updated_node: cst.ClassDef,
     # Port new methods that are defined only in diff-file and append at the end
     for func in updated_node.body.body:
         name = func.name.value if hasattr(func, "name") else class_finder.python_module.code_for_node(func)
-        if m.matches(func, DOCSTRING_NODE): # This processes the docstring of the class!
+        if m.matches(func, DOCSTRING_NODE):  # This processes the docstring of the class!
             # Extract the original docstring
             updated_docstring = func.body[0].value.value
             original_docstring = docstring_node[0].body[0].value.value
