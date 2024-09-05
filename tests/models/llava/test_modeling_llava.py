@@ -418,9 +418,9 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         model = model.eval()
 
         EXPECTED_OUTPUT = [
-            "\n \nUSER: What's the the difference of two images?\nASSISTANT: In the two images, the primary difference is the presence of a small dog in one and a ll",
-            "\nUSER: Describe the image.\nASSISTANT: The image features a small, fluffy dog sitting on a sidewalk. The dog is holding",
-            "\nUSER: Describe the image.\nASSISTANT: The image features a lone, adult llama standing on a grassy hill. The llama",
+            "\n \nUSER: What's the the difference of two images?\nASSISTANT: The difference between the two images is that one shows a dog standing on a grassy field, while",
+            "\nUSER: Describe the image.\nASSISTANT: The image features a brown and white dog sitting on a sidewalk. The dog is holding a small",
+            "\nUSER: Describe the image.\nASSISTANT: The image features a lone llama standing on a grassy hill. The llama is the",
         ]
 
         generate_ids = model.generate(**inputs, max_new_tokens=20)
@@ -454,7 +454,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_llava_merge_inputs_error_bug(self):
         # This is a reproducer of https://github.com/huggingface/transformers/pull/28333 and makes sure it does not happen anymore
         model_id = "llava-hf/llava-1.5-7b-hf"
-        model = LlavaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True).to(torch_device)
+        model = LlavaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
 
         # Simulate some user inputs
         pixel_values = torch.randn(

@@ -484,9 +484,7 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
             with torch.no_grad():
                 model(**inputs_batched, output_hidden_states=True)
 
-            self.assertIn(
-                "Padding side is set to 'left' but the model is in training mode. For training", logs.output[0]
-            )
+            self.assertIn("Padding side is set to 'left' but the model is in training mode. For training", logs)
 
         with self.assertLogs("transformers", level="WARNING") as logs:
             model.padding_side = "right"
@@ -494,9 +492,7 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
             with torch.no_grad():
                 model(**inputs_batched, output_hidden_states=True)
 
-            self.assertIn(
-                "Padding side is set to 'right' but the model is in inference mode. For correct", logs.output[0]
-            )
+            self.assertIn("Padding side is set to 'right' but the model is in inference mode. For correct", logs)
 
     @slow
     @require_bitsandbytes
