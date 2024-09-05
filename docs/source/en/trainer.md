@@ -299,7 +299,7 @@ trainer = trl.SFTTrainer(
 trainer.train()
 ```
 
-To pass extra arguments supports by GaLore, you should pass correctly `optim_args`, for example:
+To pass extra arguments supported by GaLore, you should pass correctly `optim_args`, for example:
 
 ```python
 import torch
