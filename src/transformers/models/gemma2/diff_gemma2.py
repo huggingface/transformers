@@ -317,7 +317,7 @@ class Gemma2FlashAttention2(Gemma2Attention):
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[torch.LongTensor] = None, 
+        position_embeddings: Optional[torch.LongTensor] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         output_attentions = False
 
@@ -475,7 +475,6 @@ class Gemma2SdpaAttention(Gemma2Attention):
             cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {
@@ -540,7 +539,7 @@ class Gemma2DecoderLayer(GemmaDecoderLayer):
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[torch.LongTensor] = None
+        position_embeddings: Optional[torch.LongTensor] = None,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         if self.is_sliding and attention_mask is not None:  # efficient SDPA and no padding
             # Flash-attn is a 2D tensor
@@ -569,7 +568,7 @@ class Gemma2DecoderLayer(GemmaDecoderLayer):
             output_attentions=output_attentions,
             use_cache=use_cache,
             cache_position=cache_position,
-            position_embeddings=position_embeddings
+            position_embeddings=position_embeddings,
         )
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = residual + hidden_states
@@ -699,7 +698,7 @@ class Gemma2Model(GemmaModel):
                     output_attentions,
                     use_cache,
                     cache_position,
-                    position_embedding
+                    position_embedding,
                 )
             else:
                 layer_outputs = decoder_layer(
@@ -710,7 +709,7 @@ class Gemma2Model(GemmaModel):
                     output_attentions=output_attentions,
                     use_cache=use_cache,
                     cache_position=cache_position,
-                    position_embedding=position_embedding
+                    position_embedding=position_embedding,
                 )
 
             hidden_states = layer_outputs[0]

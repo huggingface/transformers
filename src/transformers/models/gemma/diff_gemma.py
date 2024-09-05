@@ -27,6 +27,7 @@ from transformers.models.llama.modeling_llama import (
     LlamaForSequenceClassification,
     LlamaForTokenClassification,
     LlamaModel,
+    LlamaRotaryEmbedding,
     apply_rotary_pos_emb,
     repeat_kv,
 )
@@ -209,6 +210,10 @@ class GemmaMLP(nn.Module):
 
     def forward(self, x):
         return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+
+
+class GemmaRotaryEmbedding(LlamaRotaryEmbedding):
+    pass
 
 
 class GemmaAttention(nn.Module):
