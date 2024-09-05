@@ -768,15 +768,14 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel):
     ) -> Union[Tuple, LlavaNextVideoCausalLMOutputWithPast]:
         r"""
         Args:
+            pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_frames, num_channels, image_size, image_size)):
+                The tensors corresponding to the input videos. Pixel values can be obtained using
+                [`AutoImageProcessor`]. See [`LlavaNextVideoVideoProcessor.__call__`] for details. [`LlavaProcessor`] uses
+                [`LlavaNextVideoVideoProcessor`] for processing videos.
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
                 config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
                 (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
-            num_logits_to_keep (`int`, *optional*):
-                Calculate logits for the last `num_logits_to_keep` tokens. If `0`, calculate logits for all
-                `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
-                token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
 
         Returns:
 
@@ -785,21 +784,57 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
+        >>> import av
         >>> from transformers import AutoProcessor, LlavaNextVideoForConditionalGeneration
 
-        >>> model = LlavaNextVideoForConditionalGeneration.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf")
-        >>> processor = AutoProcessor.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf")
+        >>> def read_video_pyav(container, indices):
+        ...     '''
+        ...     Decode the video with PyAV decoder.
+        ...     Args:
+        ...         container (`av.container.input.InputContainer`): PyAV container.
+        ...         indices (`List[int]`): List of frame indices to decode.
+        ...     Returns:
+        ...         result (np.ndarray): np array of decoded frames of shape (num_frames, height, width, 3).
+        ...     '''
+        ...     frames = []
+        ...     container.seek(0)
+        ...     start_index = indices[0]
+        ...     end_index = indices[-1]
+        ...     for i, frame in enumerate(container.decode(video=0)):
+        ...         if i > end_index:
+        ...             break
+        ...         if i >= start_index and i in indices:
+        ...             frames.append(frame)
+        ...     return np.stack([x.to_ndarray(format="rgb24") for x in frames])
 
-        >>> prompt = "[INST] <image>\nWhat is shown in this image? [/INST]"
+        >>> model = LlavaNextVideoForConditionalGeneration.from_pretrained("llava-hf/LLaVA-NeXT-Video-7B-hf", device_map="auto")
+        >>> processor = AutoProcessor.from_pretrained("llava-hf/LLaVA-NeXT-Video-7B-hf")
+
+        >>> prompt = "USER: <video>\nWhy is this video funny? ASSISTANT:"
+        >>> video_path = hf_hub_download(repo_id="raushan-testing-hf/videos-test", filename="sample_demo_1.mp4", repo_type="dataset")
+        >>> container = av.open(video_path)
+
+        >>> # sample uniformly 8 frames from the video (model was trained with 32 frames per video, but this video is short)
+        >>> total_frames = container.streams.video[0].frames
+        >>> indices = np.arange(0, total_frames, total_frames / 8).astype(int)
+        >>> clip = read_video_pyav(container, indices)
+        >>> inputs_video = processor(text=prompt, videos=clip, return_tensors="pt").to(model.device)
+
+        >>> # load an image to generate from an image
+        >>> prompt = "USER:<image>\nWhat is shown in this image? ASSISTANT:"
         >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> inputs_image = processor(text=prompt, images=image, return_tensors="pt").to(model.device)
 
-        >>> inputs = processor(text=prompt, images=image, return_tensors="pt")
-
-        >>> # Generate
-        >>> generate_ids = model.generate(**inputs, max_length=30)
+        >>> # Generate from video
+        >>> generate_ids = model.generate(**inputs_video, max_length=50)
         >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "[INST]  \nWhat is shown in this image? [/INST] The image appears to be a radar chart, which is a type of multi-dimensional plot (...)"
+        "USER:\nWhy is this video funny? ASSISTANT: The humor in this video comes from the unexpected and endearing sight of a baby wearing glasses and (...)"
+
+        >>> # Generate from image
+        >>> generate_ids = model.generate(**inputs_image, max_length=30)
+        >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        "USER: \nWhat's the content of the image? ASSISTANT: The image shows a red stop sign on a pole, with a traditional Chinese archway (...)"
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -869,7 +904,7 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel):
                         (image_features, feature_lens, self.config.image_token_index),
                         (video_features, video_feature_lens, self.config.video_token_index),
                     )
-                    for features, lens, special_token in zip(iterator):
+                    for features, lens, special_token in iterator:
                         if features is not None:
                             (
                                 inputs_embeds,

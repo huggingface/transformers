@@ -426,7 +426,7 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
                         (image_features, feature_lens, self.config.image_token_index),
                         (video_features, video_feature_lens, self.config.video_token_index),
                     )
-                    for features, lens, special_token in zip(iterator):
+                    for features, lens, special_token in iterator:
                         if features is not None:
                             (
                                 inputs_embeds,

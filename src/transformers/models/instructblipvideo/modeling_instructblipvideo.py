@@ -1571,12 +1571,12 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipVideoPreTrainedModel
         interpolate_pos_encoding: bool = False,
         **generate_kwargs,
     ) -> torch.LongTensor:
-        """
+        r"""
         Overrides `generate` function to be able to use the model as a conditional generator.
 
         Args:
-            pixel_values (`torch.FloatTensor` of shape (batch_size, num_channels, height, width)):
-                Input images to be processed.
+            pixel_values (`torch.FloatTensor` of shape (batch_size, num_channels, height, width) or
+                (batch_size, num_frames, num_channels, height, width)): Input images or videos to be processed.
             qformer_input_ids (`torch.LongTensor` of shape (batch_size, sequence_length), *optional*):
                 The sequence used as a prompt to be fed to the Q-Former module.
             qformer_attention_mask (`torch.LongTensor` of shape (batch_size, sequence_length), *optional*):

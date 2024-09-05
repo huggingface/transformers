@@ -264,8 +264,6 @@ def merge_docstrings(original_docstring, updated_docstring):
             )
         elif updated_docstring not in original_docstring:
             updated_docstring = original_docstring + "\n" + updated_docstring.replace('r"""\n', "")
-    else:
-        updated_docstring = original_docstring
     return updated_docstring
 
 
