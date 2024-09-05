@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Image processor class for ProPainter."""
+"""Video processor class for ProPainter."""
 
 from typing import Dict, List, Optional, Union
 
@@ -29,8 +29,8 @@ from ...image_transforms import (
     to_channel_dimension_format,
 )
 from ...image_utils import (
-    IMAGENET_STANDARD_MEAN,
-    IMAGENET_STANDARD_STD,
+    OPENAI_CLIP_MEAN,
+    OPENAI_CLIP_STD,
     ChannelDimension,
     ImageInput,
     PILImageResampling,
@@ -71,38 +71,41 @@ def make_batched(videos) -> List[List[VideoInput]]:
         return videos
 
     elif isinstance(videos, (list, tuple)) and is_valid_image(videos[0]):
-        return [videos]
+        if isinstance(videos[0], PIL.Image.Image) or len(videos[0].shape) == 3:
+            return [videos]
+        elif len(videos[0].shape) == 4:
+            return [list(video) for video in videos]
 
-    elif is_valid_image(videos):
-        return [[videos]]
+    elif is_valid_image(videos) and len(videos.shape) == 4:
+        return [list(videos)]
 
     raise ValueError(f"Could not make batched video from {videos}")
 
 
 def convert_to_grayscale_and_dilation(
-    image: ImageInput,
+    images: ImageInput,
     input_data_format: Optional[Union[str, ChannelDimension]] = None,
     mask_dilation: int = 4,
 ) -> ImageInput:
     """
-    Converts an image to grayscale format using the NTSC formula and performs binary dilation on an image. Only support numpy and PIL Image. TODO support torch
+    Converts images(video frames) to grayscale format using the NTSC formula and performs binary dilation on an images. Only support numpy and PIL images. TODO support torch
     and tensorflow grayscale conversion
 
-    This function is supposed to return a 1-channel image, but it returns a 3-channel image with the same value in each
+    This function is supposed to return a 1-channel images, but it returns a 3-channel images with the same value in each
     channel, because of an issue that is discussed in :
     https://github.com/huggingface/transformers/pull/25786#issuecomment-1730176446
 
     Args:
-        image (Image):
-            The image to convert.
+        images (Image):
+            The images to convert.
         input_data_format (`ChannelDimension` or `str`, *optional*):
             The channel dimension format for the input image.
     """
     requires_backends(convert_to_grayscale_and_dilation, ["vision"])
-    if isinstance(image, np.ndarray):
+    if isinstance(images, np.ndarray):
         if input_data_format == ChannelDimension.FIRST:
             gray_image = (
-                image[0, ...] * 0.2989 + image[1, ...] * 0.5870 + image[2, ...] * 0.1140
+                images[0, ...] * 0.2989 + images[1, ...] * 0.5870 + images[2, ...] * 0.1140
             )
             gray_image = np.stack([gray_image] * 1, axis=0)
             gray_dilated_image = binary_dilation(
@@ -110,7 +113,7 @@ def convert_to_grayscale_and_dilation(
             ).astype(np.uint8)
         elif input_data_format == ChannelDimension.LAST:
             gray_image = (
-                image[..., 0] * 0.2989 + image[..., 1] * 0.5870 + image[..., 2] * 0.1140
+                images[..., 0] * 0.2989 + images[..., 1] * 0.5870 + images[..., 2] * 0.1140
             )
             gray_image = np.stack([gray_image] * 1, axis=-1)
             gray_dilated_image = binary_dilation(
@@ -118,26 +121,27 @@ def convert_to_grayscale_and_dilation(
             ).astype(np.uint8)
         return gray_dilated_image
 
-    if not isinstance(image, PIL.Image.Image):
-        return image
+    if not isinstance(images, PIL.Image.Image):
+        return images
 
-    image = np.array(image.convert("L"))
-    image = binary_dilation(image, iterations=mask_dilation).astype(np.uint8)
+    images = np.array(images.convert("L"))
+    images = binary_dilation(images, iterations=mask_dilation).astype(np.uint8)
 
-    return image
+    return images
 
 
 def extrapolation(
-    image: ImageInput,
-    input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    images: ImageInput,
     scale: Optional[tuple[float, float]] = None,
     num_frames: int = None,
+    data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
+    input_data_format: Optional[Union[str, ChannelDimension]] = None,
 ):
     """Prepares the data for video outpainting."""
     if input_data_format is None:
-        input_data_format = infer_channel_dimension_format(image[0])
+        input_data_format = infer_channel_dimension_format(images[0])
 
-    height, width = get_image_size(image)
+    height, width = get_image_size(images, input_data_format)
 
     # Defines new FOV.
     height_extr = int(scale[0] * height)
@@ -150,7 +154,7 @@ def extrapolation(
     # Extrapolates the FOV for video.
     images = []
     if input_data_format == ChannelDimension.LAST:
-        for v in image:
+        for v in images:
             frame = np.zeros(((height_extr, width_extr, 3)), dtype=np.uint8)
             frame[
                 height_start : height_start + height,
@@ -159,7 +163,7 @@ def extrapolation(
             ] = v
             images.append(frame)
     elif input_data_format == ChannelDimension.FIRST:
-        for v in image:
+        for v in images:
             frame = np.zeros(
                 (3, height_extr, width_extr), dtype=np.uint8
             )  # Adjusted shape
@@ -192,8 +196,19 @@ def extrapolation(
     flow_masks = flow_masks * num_frames
     masks_dilated = masks_dilated * num_frames
 
-    return images, flow_masks, masks_dilated, (height_extr, width_extr)
+    images = [
+            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
+        ]
 
+    flow_masks = [
+            to_channel_dimension_format(flow_mask, data_format, input_channel_dim=input_data_format) for flow_mask in flow_masks
+        ]
+
+    masks_dilated = [
+            to_channel_dimension_format(mask_dilated, data_format, input_channel_dim=input_data_format) for mask_dilated in masks_dilated
+        ]
+
+    return images, flow_masks, masks_dilated
 
 # Adapted from transformers.image_transforms.NumpyToTensor
 class NumpyToTensor:
@@ -212,58 +227,59 @@ class NumpyToTensor:
         return image
 
 
-class ProPainterImageProcessor(BaseImageProcessor):
+class ProPainterVideoProcessor(BaseImageProcessor):
     r"""
-    Constructs a ProPainter image processor.
+    Constructs a ProPainter video processor.
 
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
-            Whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden by the
+            Whether to resize the video's (height, width) dimensions to the specified `size`. Can be overridden by the
             `do_resize` parameter in the `preprocess` method.
         size (`Dict[str, int]` *optional*, defaults to `{"shortest_edge": 256}`):
-            Size of the output image after resizing. The shortest edge of the image will be resized to
-            `size["shortest_edge"]` while maintaining the aspect ratio of the original image. Can be overriden by
+            Size of the output video after resizing. The shortest edge of the video will be resized to
+            `size["shortest_edge"]` while maintaining the aspect ratio of the original video. Can be overriden by
             `size` in the `preprocess` method.
         resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
-            Resampling filter to use if resizing the image. Can be overridden by the `resample` parameter in the
+            Resampling filter to use if resizing the video. Can be overridden by the `resample` parameter in the
             `preprocess` method.
         do_center_crop (`bool`, *optional*, defaults to `False`):
-            Whether to center crop the image to the specified `crop_size`. Can be overridden by the `do_center_crop`
+            Whether to center crop the video to the specified `crop_size`. Can be overridden by the `do_center_crop`
             parameter in the `preprocess` method.
         crop_size (`Dict[str, int]`, *optional*, defaults to `{"height": 224, "width": 224}`):
-            Size of the image after applying the center crop. Can be overridden by the `crop_size` parameter in the
+            Size of the video after applying the center crop. Can be overridden by the `crop_size` parameter in the
             `preprocess` method.
         do_rescale (`bool`, *optional*, defaults to `False`):
-            Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the `do_rescale`
+            Whether to rescale the video by the specified scale `rescale_factor`. Can be overridden by the `do_rescale`
             parameter in the `preprocess` method.
         rescale_factor (`int` or `float`, *optional*, defaults to `1/127.5`):
-            Defines the scale factor to use if rescaling the image. Can be overridden by the `rescale_factor` parameter
+            Defines the scale factor to use if rescaling the video. Can be overridden by the `rescale_factor` parameter
             in the `preprocess` method.
         do_normalize (`bool`, *optional*, defaults to `False`):
-            Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
+            Whether to normalize the video. Can be overridden by the `do_normalize` parameter in the `preprocess`
             method.
         image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
-            Mean to use if normalizing the image. This is a float or list of floats the length of the number of
-            channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
+            Mean to use if normalizing the video. This is a float or list of floats the length of the number of
+            channels in the video. Can be overridden by the `image_mean` parameter in the `preprocess` method.
         image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
-            Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
-            number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
+            Standard deviation to use if normalizing the video. This is a float or list of floats the length of the
+            number of channels in the video. Can be overridden by the `image_std` parameter in the `preprocess` method.
     """
 
-    model_input_names = ["pixel_values"]
+    model_input_names = ["pixel_values_videos"]
 
     def __init__(
         self,
         do_resize: bool = False,
         size: Dict[str, int] = None,
-        resample: PILImageResampling = PILImageResampling.BICUBIC,
+        resample: PILImageResampling = PILImageResampling.NEAREST,
         do_center_crop: bool = False,
         crop_size: Dict[str, int] = None,
-        do_rescale: bool = False,
-        rescale_factor: Union[int, float] = 255,
+        do_rescale: bool = True,
+        rescale_factor: Union[int, float] = 1/255,
         do_normalize: bool = False,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
+        video_painting_mode: str = "video_inpainting",
         scale_hw: Optional[tuple[float, float]] = None,
         mask_dilation: int = 4,
         **kwargs,
@@ -284,10 +300,9 @@ class ProPainterImageProcessor(BaseImageProcessor):
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
         self.do_normalize = do_normalize
-        self.image_mean = (
-            image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
-        )
-        self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
+        self.image_mean = image_mean if image_mean is not None else OPENAI_CLIP_MEAN
+        self.image_std = image_std if image_std is not None else OPENAI_CLIP_STD
+        self.video_painting_mode = video_painting_mode
         self.scale_hw = scale_hw
         self.mask_dilation = mask_dilation
 
@@ -302,7 +317,7 @@ class ProPainterImageProcessor(BaseImageProcessor):
         **kwargs,
     ) -> np.ndarray:
         """
-        Resize an image.
+        Resize an image (video frame).
 
         Args:
             image (`np.ndarray`):
@@ -341,9 +356,9 @@ class ProPainterImageProcessor(BaseImageProcessor):
             **kwargs,
         )
 
-    def _preprocess_image(
+    def _preprocess(
         self,
-        image: ImageInput,
+        images: ImageInput,
         do_resize: bool = None,
         size: Dict[str, int] = None,
         resample: PILImageResampling = None,
@@ -359,7 +374,7 @@ class ProPainterImageProcessor(BaseImageProcessor):
         is_mask_frame: bool = None,
         mask_dilation: int = None,
     ) -> np.ndarray:
-        """Preprocesses a single image."""
+        """Preprocesses a single image (one video frame)."""
 
         validate_preprocess_arguments(
             do_rescale=do_rescale,
@@ -375,61 +390,57 @@ class ProPainterImageProcessor(BaseImageProcessor):
         )
 
         # All transformations expect numpy arrays.
-        image = to_numpy_array(image)
-        if is_scaled_image(image) and do_rescale:
+        images = [to_numpy_array(image) for image in images]
+
+        if is_scaled_image(images[0]) and do_rescale:
             logger.warning_once(
-                "It looks like you are trying to rescale already rescaled images. If the input"
+                "It looks like you are trying to rescale already rescaled videos. If the input"
                 " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
             )
 
         if input_data_format is None:
-            input_data_format = infer_channel_dimension_format(image)
+            # We assume that all images have the same channel dimension format.
+            input_data_format = infer_channel_dimension_format(images[0])
 
         if do_resize:
-            image = self.resize(
-                image=image,
-                size=size,
-                resample=resample,
-                input_data_format=input_data_format,
-            )
+            images = [
+                self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
+                for image in images
+            ]
 
         if is_mask_frame:
-            image = convert_to_grayscale_and_dilation(
-                image, input_data_format=input_data_format, mask_dilation=mask_dilation
-            )
+            images = convert_to_grayscale_and_dilation(images, input_data_format=input_data_format, mask_dilation=mask_dilation)
 
         if do_center_crop:
-            image = self.center_crop(
-                image, size=crop_size, input_data_format=input_data_format
-            )
+            images = [
+                self.center_crop(image, size=crop_size, input_data_format=input_data_format)
+                for image in images
+            ]
 
         if do_rescale:
-            image = self.rescale(
-                image=image,
-                scale=rescale_factor,
-                dtype=np.uint8,
-                input_data_format=input_data_format,
-            )
+            images = [
+                self.rescale(image=image, scale=rescale_factor, dtype=np.uint8, input_data_format=input_data_format)
+                for image in images
+            ]
 
         # If the mask frames even consisted of 0s and 255s, they are already rescaled and normally masks are not normalised as well
         if do_normalize and not (is_mask_frame):
-            image = self.normalize(
-                image=image,
-                mean=image_mean,
-                std=image_std,
-                input_data_format=input_data_format,
-            )
+            images = [
+                self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
+                for image in images
+            ]
 
-        image = to_channel_dimension_format(
-            image, data_format, input_channel_dim=input_data_format
-        )
-        return image
+        images = [
+            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
+        ]
+
+        return images
 
     @filter_out_non_signature_kwargs()
     def preprocess(
         self,
-        images: VideoInput,
-        masks: ImageInput,
+        videos: VideoInput,
+        masks: VideoInput,
         do_resize: bool = None,
         size: Dict[str, int] = None,
         resample: PILImageResampling = None,
@@ -443,40 +454,41 @@ class ProPainterImageProcessor(BaseImageProcessor):
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        video_painting_mode: str = None,
         scale_hw: Optional[tuple[float, float]] = None,
         mask_dilation: int = None,
-    ) -> ImageInput:
+    ):
         """
-        Preprocess an image or batch of images.
+        Preprocess an video or batch of videos.
 
         Args:
-            images (`ImageInput`):
+            videos (`VideoInput`):
                 Video frames to preprocess. Expects a single or batch of video frames with pixel values ranging from 0
                 to 255. If passing in frames with pixel values between 0 and 1, set `do_rescale=False`.
-            masks (`ImageInput`):
+            masks (`VideoInput`):
                 masks for each frames to preprocess. Expects a single or batch of masks frames with pixel values ranging from 0
                 to 255. If passing in frames with pixel values between 0 and 1, set `do_rescale=False`.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
-                Whether to resize the image.
+                Whether to resize the video.
             size (`Dict[str, int]`, *optional*, defaults to `self.size`):
-                Size of the image after applying resize.
+                Size of the video after applying resize.
             resample (`PILImageResampling`, *optional*, defaults to `self.resample`):
-                Resampling filter to use if resizing the image. This can be one of the enum `PILImageResampling`, Only
+                Resampling filter to use if resizing the video. This can be one of the enum `PILImageResampling`, Only
                 has an effect if `do_resize` is set to `True`.
             do_center_crop (`bool`, *optional*, defaults to `self.do_centre_crop`):
-                Whether to centre crop the image.
+                Whether to centre crop the video.
             crop_size (`Dict[str, int]`, *optional*, defaults to `self.crop_size`):
-                Size of the image after applying the centre crop.
+                Size of the video after applying the centre crop.
             do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
-                Whether to rescale the image values between [0 - 1].
+                Whether to rescale the video values between [0 - 1].
             rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
-                Rescale factor to rescale the image by if `do_rescale` is set to `True`.
+                Rescale factor to rescale the video by if `do_rescale` is set to `True`.
             do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
-                Whether to normalize the image.
+                Whether to normalize the video.
             image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
-                Image mean.
+                video mean.
             image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
-                Image standard deviation.
+                video standard deviation.
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                     - Unset: Return a list of `np.ndarray`.
@@ -485,16 +497,16 @@ class ProPainterImageProcessor(BaseImageProcessor):
                     - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
                     - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
-                The channel dimension format for the output image. Can be one of:
-                    - `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                    - `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                    - Unset: Use the inferred channel dimension format of the input image.
+                The channel dimension format for the output video. Can be one of:
+                    - `ChannelDimension.FIRST`: video in (num_channels, height, width) format.
+                    - `ChannelDimension.LAST`: video in (height, width, num_channels) format.
+                    - Unset: Use the inferred channel dimension format of the input video.
             input_data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format for the input image. If unset, the channel dimension format is inferred
-                from the input image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
+                The channel dimension format for the input video. If unset, the channel dimension format is inferred
+                from the input video. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: video in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: video in (height, width, num_channels) format.
+                - `"none"` or `ChannelDimension.NONE`: video in (height, width) format.
         """
         do_resize = do_resize if do_resize is not None else self.do_resize
         resample = resample if resample is not None else self.resample
@@ -508,7 +520,7 @@ class ProPainterImageProcessor(BaseImageProcessor):
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
-        scale_hw = scale_hw if scale_hw is not None else self.scale_hw
+        video_painting_mode = video_painting_mode if video_painting_mode is not None else self.video_painting_mode
         mask_dilation = (
             mask_dilation if mask_dilation is not None else self.mask_dilation
         )
@@ -518,20 +530,21 @@ class ProPainterImageProcessor(BaseImageProcessor):
         crop_size = crop_size if crop_size is not None else self.crop_size
         crop_size = get_size_dict(crop_size, param_name="crop_size")
 
+        if video_painting_mode == "video_outpainting":
+            assert scale_hw is not None, 'Please provide a outpainting scale (s_h, s_w).'
+
         to_tensors = NumpyToTensor()
 
-        if not valid_images(images):
+        if not valid_images(videos):
             raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
+                "Invalid video type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
         if not valid_images(masks):
             raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
+                "Invalid video type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
-
-        videos = images
 
         videos = make_batched(videos)
         masks = make_batched(masks)
@@ -542,10 +555,30 @@ class ProPainterImageProcessor(BaseImageProcessor):
             video_size[1] - video_size[1] % 8,
         )
 
-        videos = [
-            [
-                self._preprocess_image(
-                    image=img,
+        pixel_values = [
+            self._preprocess(
+                images=video,
+                do_resize=do_resize,
+                size=size,
+                resample=resample,
+                do_center_crop=do_center_crop,
+                crop_size=crop_size,
+                do_rescale=do_rescale,
+                rescale_factor=rescale_factor,
+                do_normalize=do_normalize,
+                image_mean=image_mean,
+                image_std=image_std,
+                data_format=data_format,
+                input_data_format=input_data_format,
+                is_mask_frame=False,
+            )
+            for video in videos
+        ]
+
+        if video_painting_mode is "video_inpainting":
+            pixel_values_masks = [
+                self._preprocess(
+                    images=mask,
                     do_resize=do_resize,
                     size=size,
                     resample=resample,
@@ -558,47 +591,40 @@ class ProPainterImageProcessor(BaseImageProcessor):
                     image_std=image_std,
                     data_format=data_format,
                     input_data_format=input_data_format,
-                    is_mask_frame=False,
+                    is_mask_frame=True,
+                    mask_dilation=mask_dilation,
+                ) * len(pixel_values[0])
+                if len(masks) == 1
+                else
+                self._preprocess(
+                    images=mask,
+                    do_resize=do_resize,
+                    size=size,
+                    resample=resample,
+                    do_center_crop=do_center_crop,
+                    crop_size=crop_size,
+                    do_rescale=do_rescale,
+                    rescale_factor=rescale_factor,
+                    do_normalize=do_normalize,
+                    image_mean=image_mean,
+                    image_std=image_std,
+                    data_format=data_format,
+                    input_data_format=input_data_format,
+                    is_mask_frame=True,
+                    mask_dilation=mask_dilation,
                 )
-                for img in video
+                for mask in masks
             ]
-            for video in videos
-        ]
-
-        pixel_values_masks = []
-        if scale_hw is None:
-            for mask in masks:
-                pixel_values_mask = [
-                    self._preprocess_image(
-                        image=img,
-                        do_resize=True,
-                        size={"height": video_size[0], "width": video_size[1]},
-                        resample=PILImageResampling.NEAREST,
-                        do_center_crop=do_center_crop,
-                        crop_size=crop_size,
-                        do_rescale=True,
-                        rescale_factor=255,
-                        do_normalize=do_normalize,
-                        image_mean=image_mean,
-                        image_std=image_std,
-                        data_format=data_format,
-                        input_data_format=input_data_format,
-                        is_mask_frame=True,
-                        mask_dilation=mask_dilation,
-                    )
-                    for img in mask
-                ]
-                if len(mask) == 1:
-                    pixel_values_mask = pixel_values_mask * len(videos[0])
-                pixel_values_masks.append(pixel_values_mask)
-        else:
+        elif video_painting_mode is "video_outpainting":
             # for outpainting of videos
-            videos, flow_masks, masks_dilated, (height_extr, width_extr) = [
-                extrapolation(video, scale=scale_hw, num_frames=len(video))
+            pixel_values, flow_masks, masks_dilated = [
+                extrapolation(video, scale=scale_hw, num_frames=len(video), input_data_format=input_data_format)
                 for video in videos
             ]
+        else:
+            raise ValueError(f"Unsupported video painting mode: {video_painting_mode}")
 
-        if scale_hw is None:
+        if video_painting_mode is "video_inpainting":
             # masks is for both flow_masks, masks_dilated, just add the same data to both variables in case of inpainting
             flow_masks = masks_dilated = torch.stack(
                 [to_tensors(mask) for mask in pixel_values_masks], dim=0
@@ -612,18 +638,18 @@ class ProPainterImageProcessor(BaseImageProcessor):
             )
 
         # This input kwarg is only utilised during inference on a single batch or one video for predictions
-        if len(videos) == 1:
+        if len(pixel_values) == 1:
             videos_inp = [
                 [np.array(frame).transpose(1, 2, 0).astype(np.uint8) for frame in video]
-                for video in videos
+                for video in pixel_values
             ][0]
         else:
             videos_inp = torch.empty(0)
 
-        videos = torch.stack([to_tensors(video) * 2 - 1 for video in videos], dim=0)
+        pixel_values = torch.stack([to_tensors(video) * 2 - 1 for video in pixel_values], dim=0)
 
         data = {
-            "pixel_values": videos,
+            "pixel_values_videos": pixel_values,
             "pixel_values_inp": videos_inp,
             "flow_masks": flow_masks,
             "masks_dilated": masks_dilated,

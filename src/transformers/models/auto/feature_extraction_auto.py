@@ -77,7 +77,6 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("perceiver", "PerceiverFeatureExtractor"),
         ("poolformer", "PoolFormerFeatureExtractor"),
         ("pop2piano", "Pop2PianoFeatureExtractor"),
-        ("propainter", "ProPainterFeatureExtractor"),
         ("regnet", "ConvNextFeatureExtractor"),
         ("resnet", "ConvNextFeatureExtractor"),
         ("seamless_m4t", "SeamlessM4TFeatureExtractor"),

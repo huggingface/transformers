@@ -506,7 +506,7 @@ class PoolFormerImageProcessor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
-class ProPainterImageProcessor(metaclass=DummyObject):
+class ProPainterVideoProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 
     def __init__(self, *args, **kwargs):

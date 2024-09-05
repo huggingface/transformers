@@ -29,7 +29,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["image_processing_propainter"] = ["ProPainterImageProcessor"]
+    _import_structure["video_processing_propainter"] = ["ProPainterVideoProcessor"]
 
 try:
     if not is_torch_available():
@@ -52,7 +52,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .feature_extraction_propainter import ProPainterFeatureExtractor
-        from .image_processing_propainter import ProPainterImageProcessor
+        from .video_processing_propainter import ProPainterVideoProcessor
 
     try:
         if not is_torch_available():

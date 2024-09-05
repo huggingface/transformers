@@ -50,7 +50,7 @@ if is_torch_available():
 
 
 if is_vision_available():
-    from transformers import ProPainterImageProcessor
+    from transformers import ProPainterVideoProcessor
 
 
 def _config_zero_init(config):
@@ -707,16 +707,16 @@ def prepare_video():
 @require_vision
 class ProPainterModelIntegrationTest(unittest.TestCase):
     @cached_property
-    def default_image_processor(self):
-        return ProPainterImageProcessor() if is_vision_available() else None
+    def default_video_processor(self):
+        return ProPainterVideoProcessor() if is_vision_available() else None
 
     @slow
     def test_inference_video_reconstruction(self):
         model = ProPainterModel.from_pretrained("ruffy369/ProPainter").to(torch_device)
 
-        image_processor = self.default_image_processor
+        video_processor = self.default_video_processor
         video, masks = prepare_video()
-        inputs = image_processor(images=video, masks=masks, return_tensors="pt").to(
+        inputs = video_processor(videos=video, masks=masks, return_tensors="pt").to(
             torch_device
         )
 
@@ -752,10 +752,10 @@ class ProPainterModelIntegrationTest(unittest.TestCase):
         model = ProPainterModel.from_pretrained(
             "ruffy369/ProPainter", torch_dtype=torch.float16
         )
-        image_processor = self.default_image_processor
+        video_processor = self.default_video_processor
 
         video, masks = prepare_video()
-        inputs = image_processor(images=video, masks=masks, return_tensors="pt").to(
+        inputs = video_processor(videos=video, masks=masks, return_tensors="pt").to(
             torch_device
         )
 

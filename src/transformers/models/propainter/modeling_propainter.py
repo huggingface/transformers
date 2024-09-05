@@ -126,13 +126,13 @@ class ProPainterBasicEncoder(nn.Module):
         self.config = config
 
         if norm_fn == "group":
-            self.norm1 = nn.GroupNorm(num_groups=8, num_channels=64)
+            self.norm1 = nn.GroupNorm(num_groups=config.num_hidden_layers, num_channels=config.in_channels[0])
 
         elif norm_fn == "batch":
-            self.norm1 = nn.BatchNorm2d(64)
+            self.norm1 = nn.BatchNorm2d(config.in_channels[0])
 
         elif norm_fn == "instance":
-            self.norm1 = nn.InstanceNorm2d(64)
+            self.norm1 = nn.InstanceNorm2d(config.in_channels[0])
 
         elif norm_fn == "none":
             self.norm1 = nn.Sequential()
@@ -140,12 +140,8 @@ class ProPainterBasicEncoder(nn.Module):
         else:
             raise ValueError(f"Unsupported normalization function: {norm_fn}")
 
-        self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3)
+        self.conv1 = nn.Conv2d(3, config.in_channels[0], kernel_size=7, stride=2, padding=3)
         self.relu1 = nn.ReLU(inplace=True)
-
-        in_channels = (64, 64, 96)
-        channels = (64, 96, 128)
-        strides = (1, 2, 2)
 
         self.resblocks = [
             [
@@ -156,7 +152,7 @@ class ProPainterBasicEncoder(nn.Module):
                     config, num_channels, num_channels, norm_fn, stride=1
                 ),
             ]
-            for in_channel, num_channels, stride in zip(in_channels, channels, strides)
+            for in_channel, num_channels, stride in zip(config.in_channels, config.channels, config.strides)
         ]
         # using itertools makes flattening a little faster :)
         self.resblocks = nn.ModuleList(
@@ -204,8 +200,8 @@ class ProPainterBasicMotionEncoder(nn.Module):
         self.conv_corr1 = nn.Conv2d(corr_planes, 256, 1, padding=0)
         self.conv_corr2 = nn.Conv2d(256, 192, 3, padding=1)
         self.conv_flow1 = nn.Conv2d(2, 128, 7, padding=3)
-        self.conv_flow2 = nn.Conv2d(128, 64, 3, padding=1)
-        self.conv = nn.Conv2d(64 + 192, 128 - 2, 3, padding=1)
+        self.conv_flow2 = nn.Conv2d(128, config.in_channels[0], 3, padding=1)
+        self.conv = nn.Conv2d(config.in_channels[0] + 192, 128 - 2, 3, padding=1)
 
     def forward(self, flow, corr):
         hidden_states_corr = F.relu(self.conv_corr1(corr))
@@ -301,7 +297,7 @@ class ProPainterBasicUpdateBlock(nn.Module):
         self.mask = nn.Sequential(
             nn.Conv2d(128, 256, 3, padding=1),
             nn.ReLU(inplace=True),
-            nn.Conv2d(256, 64 * 9, 1, padding=0),
+            nn.Conv2d(256, config.in_channels[0] * 9, 1, padding=0),
         )
 
     def forward(self, net, inp, corr, flow):
@@ -1076,14 +1072,14 @@ class ProPainterRecurrentFlowCompleteNet(nn.Module):
         self.encoder1 = nn.Sequential(
             ProPainterP3DBlock(32, 32, 3, 1, 1),
             nn.LeakyReLU(0.2, inplace=True),
-            ProPainterP3DBlock(32, 64, 3, 2, 1),
+            ProPainterP3DBlock(32, config.in_channels[0], 3, 2, 1),
             nn.LeakyReLU(0.2, inplace=True),
         )  # 4x
 
         self.encoder2 = nn.Sequential(
-            ProPainterP3DBlock(64, 64, 3, 1, 1),
+            ProPainterP3DBlock(config.in_channels[0], config.in_channels[0], 3, 1, 1),
             nn.LeakyReLU(0.2, inplace=True),
-            ProPainterP3DBlock(64, self.config.num_channels, 3, 2, 1),
+            ProPainterP3DBlock(config.in_channels[0], self.config.num_channels, 3, 2, 1),
             nn.LeakyReLU(0.2, inplace=True),
         )  # 8x
 
@@ -1125,14 +1121,14 @@ class ProPainterRecurrentFlowCompleteNet(nn.Module):
         self.decoder2 = nn.Sequential(
             nn.Conv2d(self.config.num_channels, self.config.num_channels, 3, 1, 1),
             nn.LeakyReLU(0.2, inplace=True),
-            ProPainterDeconv(self.config.num_channels, 64, 3, 1),
+            ProPainterDeconv(self.config.num_channels, config.in_channels[0], 3, 1),
             nn.LeakyReLU(0.2, inplace=True),
         )  # 4x
 
         self.decoder1 = nn.Sequential(
-            nn.Conv2d(64, 64, 3, 1, 1),
+            nn.Conv2d(config.in_channels[0], config.in_channels[0], 3, 1, 1),
             nn.LeakyReLU(0.2, inplace=True),
-            ProPainterDeconv(64, 32, 3, 1),
+            ProPainterDeconv(config.in_channels[0], 32, 3, 1),
             nn.LeakyReLU(0.2, inplace=True),
         )  # 2x
 
@@ -1252,11 +1248,11 @@ class ProPainterEncoder(nn.Module):
         negative_slope = 0.2
         self.layers = nn.ModuleList(
             [
-                nn.Conv2d(5, 64, kernel_size=3, stride=2, padding=1),
+                nn.Conv2d(5, config.in_channels[0], kernel_size=3, stride=2, padding=1),
                 nn.LeakyReLU(negative_slope, inplace=True),
-                nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1),
+                nn.Conv2d(config.in_channels[0], config.in_channels[0], kernel_size=3, stride=1, padding=1),
                 nn.LeakyReLU(negative_slope, inplace=True),
-                nn.Conv2d(64, config.num_channels, kernel_size=3, stride=2, padding=1),
+                nn.Conv2d(config.in_channels[0], config.num_channels, kernel_size=3, stride=2, padding=1),
                 nn.LeakyReLU(negative_slope, inplace=True),
                 nn.Conv2d(config.num_channels, 256, kernel_size=3, stride=1, padding=1),
                 nn.LeakyReLU(negative_slope, inplace=True),
@@ -2012,11 +2008,11 @@ class ProPainterInpaintGenerator(nn.Module):
                 config.num_channels, config.num_channels, kernel_size=3, padding=1
             ),
             nn.LeakyReLU(0.2, inplace=True),
-            nn.Conv2d(config.num_channels, 64, kernel_size=3, stride=1, padding=1),
+            nn.Conv2d(config.num_channels, config.in_channels[0], kernel_size=3, stride=1, padding=1),
             nn.LeakyReLU(0.2, inplace=True),
-            ProPainterDeconv(64, 64, kernel_size=3, padding=1),
+            ProPainterDeconv(config.in_channels[0], config.in_channels[0], kernel_size=3, padding=1),
             nn.LeakyReLU(0.2, inplace=True),
-            nn.Conv2d(64, 3, kernel_size=3, stride=1, padding=1),
+            nn.Conv2d(config.in_channels[0], 3, kernel_size=3, stride=1, padding=1),
         )
 
         # soft split and soft composition

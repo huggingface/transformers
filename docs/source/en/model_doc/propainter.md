@@ -26,7 +26,7 @@ The abstract from the paper is the following:
 
 ## Usage tips:
 
-- The model is used for both video inpainting and video outpainting. To switch between modes, you need to provide a value of a `tuple(h,w)` to the `scale_hw` keyword argument in the `ProPainterImageProcessor`. In the usage example, we have demonstrated both ways of providing video frames and their corresponding masks regardless of whether the data is in `.mp4`, `.jpg`, or any other image/video format.
+- The model is used for both video inpainting and video outpainting. To switch between modes, you need to provide a value of a `tuple(h,w)` to the `scale_hw` keyword argument in the `ProPainterVideoProcessor`. In the usage example, we have demonstrated both ways of providing video frames and their corresponding masks regardless of whether the data is in `.mp4`, `.jpg`, or any other image/video format.
 
 This model was contributed by [ruffy369](https://huggingface.co/ruffy369). The original code can be found [here](https://github.com/sczhou/ProPainter).
 
@@ -38,11 +38,12 @@ The model can accept videos frames and their corresponding masks frame(s) as inp
 import av
 import cv2
 import numpy as np
+import torch
 
 from datasets import load_dataset
 from huggingface_hub import hf_hub_download
 from PIL import Image
-from transformers import ProPainterImageProcessor, ProPainterModel
+from transformers import ProPainterVideoProcessor, ProPainterModel
 
 np.random.seed(0)
 
@@ -108,11 +109,11 @@ masks = list(masks)
 
 # Forward pass:
 
-device = "cuda"
-image_processor = ProPainterImageProcessor()
-inputs = image_processor(images = video, masks = masks)to(device)
+device = "cuda" if torch.cuda.is_available() else "cpu"
+video_processor = ProPainterVideoProcessor()
+inputs = video_processor(videos = video, masks = masks).to(device)
 
-model = transformers.ProPainterModel.from_pretrained("ruffy369/ProPainter").to(device)
+model = ProPainterModel.from_pretrained("ruffy369/ProPainter").to(device)
 
 # The first input in this always has a value for inference as its not utilised during training
 with torch.no_grad():
@@ -129,7 +130,7 @@ masks = [np.stack([np.array(ds_images[i])] * 3, axis=-1) for i in range(num_fram
 
 # Forward pass:
 
-inputs = image_processor(images = video, masks = masks)to(device)
+inputs = video_processor(videos = video, masks = masks).to(device)
 
 # The first input in this always has a value for inference as its not utilised during training
 with torch.no_grad():

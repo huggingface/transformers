@@ -114,7 +114,6 @@ else:
             ("perceiver", ("PerceiverImageProcessor",)),
             ("pix2struct", ("Pix2StructImageProcessor",)),
             ("poolformer", ("PoolFormerImageProcessor",)),
-            ("propainter", ("ProPainterImageProcessor",)),
             ("pvt", ("PvtImageProcessor",)),
             ("pvt_v2", ("PvtImageProcessor",)),
             ("qwen2_vl", ("Qwen2VLImageProcessor",)),
