@@ -146,7 +146,7 @@ class PhiMoEModelTester:
         self.num_choices = num_choices
         self.pad_token_id = pad_token_id
         self.scope = scope
-        self.original_max_position_embeddings=original_max_position_embeddings
+        self.original_max_position_embeddings = original_max_position_embeddings
 
     # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.prepare_config_and_inputs
     def prepare_config_and_inputs(self):
@@ -492,6 +492,7 @@ class PhiMoEModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         self.assertFalse(torch.allclose(keys_with_short_factor, keys_with_long_factor, atol=1e-3, rtol=1e-3))
         # Last token generated using long factor
         self.assertTrue(torch.allclose(last_token_logits, regenerated_last_token_logits, atol=1e-2, rtol=1e-2))
+
 
 @slow
 @require_torch

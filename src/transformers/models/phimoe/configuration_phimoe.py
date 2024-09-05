@@ -74,7 +74,7 @@ class PhiMoEConfig(PretrainedConfig):
             The id of the "end-of-sequence" token.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether the model's input and output word embeddings should be tied.
-        rope_theta (`float`, *optional*, defaults to 10000.0):
+        rope_theta (`float`, *optional*, defaults to 1000000.0):
             The base period of the RoPE embeddings.
         rope_scaling (`dict`, *optional*):
             The scaling strategy for the RoPE embeddings. If `None`, no scaling is applied. If a dictionary, it must
@@ -94,10 +94,13 @@ class PhiMoEConfig(PretrainedConfig):
         output_router_logits (`bool`, *optional*, defaults to `False`):
             Whether or not the router logits should be returned by the model. Enabeling this will also
             allow the model to output the auxiliary loss. See [here]() for more details
-        router_aux_loss_coef (`float`, *optional*, defaults to 0.0):
+        router_aux_loss_coef (`float`, *optional*, defaults to 0.001):
             The aux loss factor for the total loss.
         router_jitter_noise (`float`, *optional*, defaults to 0.01):
             Amount of noise to add to the router.
+        input_jitter_noise (`float`, *optional*, defaults to 0.0): Input jitter noise
+        attention_bias (`bool`, *optional*, defaults to `False`): Attention bias
+        lm_head_bias (`bool`, *optional*, defaults to `False`): LM head bias
     ```python
     >>> from transformers import PhiMoEModel, PhiMoEConfig
     >>> # Initializing a Phi-3 style configuration
