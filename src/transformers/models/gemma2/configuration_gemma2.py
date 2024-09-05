@@ -88,7 +88,7 @@ class Gemma2Config(PretrainedConfig):
         query_pre_attn_scalar (`float`, *optional*, defaults to 224): scaling factor used on the attention scores
         sliding_window (`int`, *optional*, defaults to 4096): in Gemma2, every other layer uses sliding window attention. This is the
             size of the sliding window.
-    ```python
+        ```python
     >>> from transformers import Gemma2Model, Gemma2Config
     >>> # Initializing a Gemma2 gemma2-7b style configuration
     >>> configuration = Gemma2Config()
