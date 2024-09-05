@@ -1305,7 +1305,7 @@ class Phi3ForCausalLM(Phi3PreTrainedModel):
         cache_position=None,
         position_ids=None,
         use_cache=True,
-        num_logits_to_keep=0,
+        num_logits_to_keep=None,
         **kwargs,
     ):
         # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
@@ -1356,6 +1356,9 @@ class Phi3ForCausalLM(Phi3PreTrainedModel):
                 batch_size=batch_size,
             )
 
+        if num_logits_to_keep is not None:
+            model_inputs["num_logits_to_keep"] = num_logits_to_keep
+
         model_inputs.update(
             {
                 "position_ids": position_ids,
@@ -1363,7 +1366,6 @@ class Phi3ForCausalLM(Phi3PreTrainedModel):
                 "past_key_values": past_key_values,
                 "use_cache": use_cache,
                 "attention_mask": attention_mask,
-                "num_logits_to_keep": num_logits_to_keep,
             }
         )
         return model_inputs
