@@ -162,7 +162,7 @@ def batch_ragged_tensor_list(tensor_list: List[Tuple[torch.Tensor]]) -> List[tor
     Returns: (`List[torch.Tensor]`): List of tensors with consistent dimensions.
     """
     list_of_tuples = list(zip(*map(list, tensor_list)))
-    return [stack_inconsistent_tensor_list(element) for element in list_of_tuples]
+    return [stack_ragged_tensor_list(element) for element in list_of_tuples]
 
 
 def normalize_keypoints(keypoints: torch.Tensor, height: int, width: int) -> torch.Tensor:
@@ -418,7 +418,7 @@ class SuperGlueAttentionalGNN(nn.Module):
         all_attentions = () if output_attentions else None
 
         if output_hidden_states:
-            new_hidden_state = concat_inconsistent_pairs((descriptors0,), (descriptors1,))
+            new_hidden_state = concat_ragged_pairs((descriptors0,), (descriptors1,))
             all_hidden_states = all_hidden_states + new_hidden_state
 
         for gnn_layer, layer_type in zip(self.layers, self.layers_types):
@@ -440,9 +440,9 @@ class SuperGlueAttentionalGNN(nn.Module):
             delta1 = gnn_outputs1[0]
 
             if output_hidden_states:
-                all_hidden_states = all_hidden_states + concat_inconsistent_pairs(gnn_outputs0[1], gnn_outputs1[1])
+                all_hidden_states = all_hidden_states + concat_ragged_pairs(gnn_outputs0[1], gnn_outputs1[1])
             if output_attentions:
-                all_attentions = all_attentions + concat_inconsistent_pairs(gnn_outputs0[2], gnn_outputs1[2])
+                all_attentions = all_attentions + concat_ragged_pairs(gnn_outputs0[2], gnn_outputs1[2])
 
             descriptors0 = descriptors0 + delta0
             descriptors1 = descriptors1 + delta1
@@ -666,11 +666,9 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
         matches1 = torch.where(valid1, indices1, indices1.new_tensor(-1))
 
         if output_hidden_states:
-            all_hidden_states = all_hidden_states + concat_inconsistent_pairs(
-                encoded_keypoints0[1], encoded_keypoints1[1]
-            )
+            all_hidden_states = all_hidden_states + concat_ragged_pairs(encoded_keypoints0[1], encoded_keypoints1[1])
             all_hidden_states = all_hidden_states + gnn_outputs[2]
-            all_hidden_states = all_hidden_states + concat_inconsistent_pairs(
+            all_hidden_states = all_hidden_states + concat_ragged_pairs(
                 (projected_descriptors0,), (projected_descriptors1,)
             )
             all_hidden_states = tuple(x.transpose(-1, -2) for x in all_hidden_states)
@@ -784,7 +782,7 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
         if output_hidden_states:
             hidden_states = batch_ragged_tensor_list(list_hidden_states)
         if output_attentions:
-            attentions = batch_inconsistent_tensor_list(list_attentions)
+            attentions = batch_ragged_tensor_list(list_attentions)
 
         if not return_dict:
             return tuple(

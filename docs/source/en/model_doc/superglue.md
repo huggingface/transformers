@@ -109,6 +109,8 @@ plt.savefig("matched_image.png")
 plt.close()
 ```
 
+![image/png](https://cdn-uploads.huggingface.co/production/uploads/632885ba1558dac67c440aa8/PiLL7svnN2dTqOxrsobJb.png)
+
 This model was contributed by [stevenbucaille](https://huggingface.co/stevenbucaille).
 The original code can be found [here](https://github.com/magicleap/SuperGluePretrainedNetwork).
 
