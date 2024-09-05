@@ -35,10 +35,9 @@ from ...image_utils import (
     is_valid_image,
     to_numpy_array,
     valid_images,
-    validate_kwargs,
     validate_preprocess_arguments,
 )
-from ...utils import TensorType, is_vision_available, logging
+from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
 
 
 if is_vision_available():
@@ -128,21 +127,6 @@ class InstructBlipVideoImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else OPENAI_CLIP_MEAN
         self.image_std = image_std if image_std is not None else OPENAI_CLIP_STD
         self.do_convert_rgb = do_convert_rgb
-        self._valid_processor_keys = [
-            "images",
-            "do_resize",
-            "size",
-            "resample",
-            "do_rescale",
-            "rescale_factor",
-            "do_normalize",
-            "image_mean",
-            "image_std",
-            "do_convert_rgb",
-            "return_tensors",
-            "data_format",
-            "input_data_format",
-        ]
 
     # Copied from transformers.models.vit.image_processing_vit.ViTImageProcessor.resize with PILImageResampling.BILINEAR->PILImageResampling.BICUBIC
     def resize(
@@ -195,6 +179,7 @@ class InstructBlipVideoImageProcessor(BaseImageProcessor):
         )
 
     # Ignore copy
+    @filter_out_non_signature_kwargs()
     def preprocess(
         self,
         images: VideoInput = None,
@@ -210,7 +195,6 @@ class InstructBlipVideoImageProcessor(BaseImageProcessor):
         do_convert_rgb: bool = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
     ) -> PIL.Image.Image:
         """
         Preprocess a video or batch of images/videos.
@@ -272,7 +256,6 @@ class InstructBlipVideoImageProcessor(BaseImageProcessor):
         size = get_size_dict(size, default_to_square=False)
 
         videos = make_batched_videos(images)
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
 
         validate_preprocess_arguments(
             do_rescale=do_rescale,

@@ -58,9 +58,9 @@ Integrations:
 - deepspeed: HF Trainer/Accelerate: @muellerzr
 - ray/raytune: @richardliaw, @amogkam
 - Big Model Inference: @SunMarc
-- quantization (bitsandbytes, autogpt): @SunMarc 
+- quantization (bitsandbytes, autogpt): @SunMarc
 
-Documentation: @stevhliu and @MKhalusova
+Documentation: @stevhliu
 
 HF projects:
 

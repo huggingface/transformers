@@ -544,7 +544,7 @@ class ImageProcessingMixin(PushToHubMixin):
             response.raise_for_status()
             return Image.open(BytesIO(response.content))
         else:
-            raise ValueError(f"only a single or a list of entries is supported but got type={type(image_url_or_urls)}")
+            raise TypeError(f"only a single or a list of entries is supported but got type={type(image_url_or_urls)}")
 
 
 ImageProcessingMixin.push_to_hub = copy_func(ImageProcessingMixin.push_to_hub)

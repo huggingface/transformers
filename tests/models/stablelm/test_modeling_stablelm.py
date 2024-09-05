@@ -16,6 +16,7 @@
 
 import unittest
 
+import pytest
 from parameterized import parameterized
 
 from transformers import StableLmConfig, is_torch_available, set_seed
@@ -539,6 +540,7 @@ class StableLmModelIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     @slow
     @require_flash_attn
+    @pytest.mark.flash_attn_test
     def test_model_3b_long_prompt(self):
         EXPECTED_OUTPUT_TOKEN_IDS = [3, 3, 3]
         input_ids = [306, 338] * 2047

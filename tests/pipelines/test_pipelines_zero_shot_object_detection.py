@@ -43,9 +43,11 @@ else:
 class ZeroShotObjectDetectionPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING
 
-    def get_test_pipeline(self, model, tokenizer, processor):
+    def get_test_pipeline(self, model, tokenizer, processor, torch_dtype="float32"):
         object_detector = pipeline(
-            "zero-shot-object-detection", model="hf-internal-testing/tiny-random-owlvit-object-detection"
+            "zero-shot-object-detection",
+            model="hf-internal-testing/tiny-random-owlvit-object-detection",
+            torch_dtype=torch_dtype,
         )
 
         examples = [

@@ -755,13 +755,13 @@ class BlipModel(BlipPreTrainedModel):
         super().__init__(config)
 
         if not isinstance(config.text_config, BlipTextConfig):
-            raise ValueError(
+            raise TypeError(
                 "config.text_config is expected to be of type BlipTextConfig but is of type"
                 f" {type(config.text_config)}."
             )
 
         if not isinstance(config.vision_config, BlipVisionConfig):
-            raise ValueError(
+            raise TypeError(
                 "config.vision_config is expected to be of type BlipVisionConfig but is of type"
                 f" {type(config.vision_config)}."
             )

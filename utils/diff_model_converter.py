@@ -497,7 +497,7 @@ class DiffConverterTransformer(CSTTransformer):
                         start_insert_idx -= 1
                         self.new_body[dependency] = {"insert_idx": start_insert_idx, "node": node}
                     elif dependency not in self.inserted_deps:
-                        # make sure the node is written after it's dependencies
+                        # make sure the node is written after its dependencies
                         start_insert_idx = self.new_body[dependency]["insert_idx"] - 1
                     self.inserted_deps.append(dependency)
             if len(list_dependencies) > 0:

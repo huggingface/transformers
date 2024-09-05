@@ -758,6 +758,12 @@ class LongT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             [encoder_expected_shape] * len(attentions),
         )
 
+    @unittest.skip(
+        reason="This architecure has tied weights by default and there is no way to remove it, check: https://github.com/huggingface/transformers/pull/31771#issuecomment-2210915245"
+    )
+    def test_load_save_without_tied_weights(self):
+        pass
+
 
 @require_torch
 class LongT5TGlobalModelTest(LongT5ModelTest):
@@ -1096,6 +1102,12 @@ class LongT5EncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
                     list(self_attentions[0].shape[-3:]),
                     [self.model_tester.num_attention_heads, block_len, 3 * block_len],
                 )
+
+    @unittest.skip(
+        reason="This architecure has tied weights by default and there is no way to remove it, check: https://github.com/huggingface/transformers/pull/31771#issuecomment-2210915245"
+    )
+    def test_load_save_without_tied_weights(self):
+        pass
 
 
 class LongT5EncoderOnlyTGlobalModelTest(LongT5EncoderOnlyModelTest):

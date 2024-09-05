@@ -56,8 +56,8 @@ def hashimage(image: Image) -> str:
 class DepthEstimationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_DEPTH_ESTIMATION_MAPPING
 
-    def get_test_pipeline(self, model, tokenizer, processor):
-        depth_estimator = DepthEstimationPipeline(model=model, image_processor=processor)
+    def get_test_pipeline(self, model, tokenizer, processor, torch_dtype="float32"):
+        depth_estimator = DepthEstimationPipeline(model=model, image_processor=processor, torch_dtype=torch_dtype)
         return depth_estimator, [
             "./tests/fixtures/tests_samples/COCO/000000039769.png",
             "./tests/fixtures/tests_samples/COCO/000000039769.png",

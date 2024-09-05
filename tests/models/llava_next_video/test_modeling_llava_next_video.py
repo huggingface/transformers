@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch Llava-NeXT model."""
+"""Testing suite for the PyTorch Llava-NeXT-Video model."""
 
 import gc
 import unittest
@@ -124,7 +124,7 @@ class LlavaNextVideoVisionText2TextModelTester:
         self.batch_size = 3
         self.num_channels = 3
         self.image_size = 30
-        self.encoder_seq_length = 468
+        self.encoder_seq_length = 469
         self.image_grid_pinpoints = [[32, 32]]
 
     def get_config(self):
@@ -166,9 +166,7 @@ class LlavaNextVideoVisionText2TextModelTester:
     def prepare_config_and_inputs_for_common(self):
         config, pixel_values, pixel_values_videos = self.prepare_config_and_inputs()
         input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 2) + 2
-        # make attention mask left-padded to avoid issues with "model has no attribute padding_side"
         attention_mask = torch.ones(input_ids.shape, dtype=torch.long).to(torch_device)
-        attention_mask[:, :1] = 0
         # we are giving 3 images and videos let's make sure we pass in 3 special tokens
         input_ids[:, 1] = config.image_token_index
         input_ids[:, 2] = config.video_token_index
@@ -254,8 +252,8 @@ class LlavaNextVideoForConditionalGenerationModelTest(ModelTesterMixin, Generati
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
 
+    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
     def test_inputs_embeds(self):
-        # overwrite because llava can't support both inputs_embeds and pixel values at ipnut
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -275,6 +273,29 @@ class LlavaNextVideoForConditionalGenerationModelTest(ModelTesterMixin, Generati
 
             with torch.no_grad():
                 model(**inputs)
+
+    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
+    # while some other models require pixel_values to be present
+    def test_inputs_embeds_matches_input_ids(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            inputs = self._prepare_for_class(inputs_dict, model_class)
+            input_ids = inputs["input_ids"]
+            del inputs["input_ids"]
+            del inputs["pixel_values"]
+            del inputs["pixel_values_videos"]
+
+            inputs_embeds = model.get_input_embeddings()(input_ids)
+
+            with torch.no_grad():
+                out_ids = model(input_ids=input_ids, **inputs)[0]
+                out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
+            self.assertTrue(torch.allclose(out_embeds, out_ids))
 
     @unittest.skip(
         reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
@@ -453,3 +474,85 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
             self.processor.decode(output_batched[0], skip_special_tokens=True),
             self.processor.decode(output_single[0], skip_special_tokens=True),
         )
+
+    @slow
+    @require_bitsandbytes
+    def test_padding_side_when_merging_inputs(self):
+        model = LlavaNextVideoForConditionalGeneration.from_pretrained(
+            "llava-hf/LLaVA-NeXT-Video-7B-hf", load_in_4bit=True
+        )
+
+        inputs_batched = self.processor(
+            [self.prompt_video, self.prompt_image],
+            images=[self.image],
+            videos=[self.video],
+            return_tensors="pt",
+            padding=True,
+        ).to(torch_device)
+
+        # model is in eval mode by default so we should get pad on the left side
+        # we can check the first hidden-states (aka inputs embeds)
+        # the first element was lo-res image and we expect the first 1482 tokens to be all pads
+        output_eval = model(**inputs_batched, output_hidden_states=True)
+        self.assertTrue((output_eval.hidden_states[0][0, :1482, ...] == 0).all().item())
+
+        # otherwise padding is on the right side, so it's last 1482 tokens
+        self.processor.padding_side = "right"
+        inputs_batched = self.processor(
+            [self.prompt_video, self.prompt_image],
+            images=[self.image],
+            videos=[self.video],
+            return_tensors="pt",
+            padding=True,
+        ).to(torch_device)
+
+        model.train()
+        with torch.no_grad():
+            output_train = model(**inputs_batched, output_hidden_states=True)
+        self.assertTrue((output_train.hidden_states[0][0, -1482:, ...] == 0).all().item())
+
+        with self.assertLogs("transformers", level="WARNING") as logs:
+            model.padding_side = "left"
+            model.train()
+            model(**inputs_batched, output_hidden_states=True)
+
+            self.assertIn(
+                "Padding side is set to 'left' but the model is in training mode. For training", logs.output[0]
+            )
+
+        with self.assertLogs("transformers", level="WARNING") as logs:
+            model.padding_side = "right"
+            model.eval()
+            model(**inputs_batched, output_hidden_states=True)
+
+            self.assertIn(
+                "Padding side is set to 'right' but the model is in inference mode. For correct", logs.output[0]
+            )
+
+    @slow
+    @require_bitsandbytes
+    def test_expansion_in_processing(self):
+        model_id = "llava-hf/LLaVA-NeXT-Video-7B-hf"
+        model = LlavaNextVideoForConditionalGeneration.from_pretrained(
+            "llava-hf/LLaVA-NeXT-Video-7B-hf", load_in_4bit=True
+        )
+        processor = AutoProcessor.from_pretrained(model_id)
+
+        # check processing with expansion of inputs
+        processor.vision_feature_select_strategy = "default"
+        processor.patch_size = 14
+        inputs_expanded = processor(self.prompt_video, videos=[self.video], return_tensors="pt").to(torch_device)
+        self.assertTrue(inputs_expanded.input_ids.shape[-1] == 1170)
+
+        # check processing without expansion of inputs (legacy behavior)
+        processor.vision_feature_select_strategy = None
+        processor.patch_size = None
+        inputs = processor(self.prompt_video, videos=[self.video], return_tensors="pt").to(torch_device)
+        self.assertTrue(inputs.input_ids.shape[-1] == 19)
+
+        # generate exactly 20 tokens
+        output = model.generate(**inputs, min_new_tokens=20, max_new_tokens=20)
+        output_expanded = model.generate(**inputs_expanded, min_new_tokens=20, max_new_tokens=20)
+
+        # check that both inputs are handled correctly and generate the same output
+        self.assertListEqual(output_expanded[:, -20:].tolist(), output[:, -20:].tolist())

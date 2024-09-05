@@ -181,6 +181,7 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
     base_model_prefix = "speech_encoder_decoder"
     main_input_name = "inputs"
     supports_gradient_checkpointing = True
+    _supports_param_buffer_assignment = False
 
     def __init__(
         self,
@@ -463,7 +464,7 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
         >>> processor = AutoProcessor.from_pretrained("facebook/wav2vec2-xls-r-300m-en-to-15")
         >>> model = SpeechEncoderDecoderModel.from_pretrained("facebook/wav2vec2-xls-r-300m-en-to-15")
 
-        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True)
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 
         >>> input_values = processor(ds[0]["audio"]["array"], return_tensors="pt").input_values
         >>> # Inference: Translate English speech to German

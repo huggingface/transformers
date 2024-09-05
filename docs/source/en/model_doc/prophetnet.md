@@ -51,7 +51,7 @@ The Authors' code can be found [here](https://github.com/microsoft/ProphetNet).
 
 - ProphetNet is a model with absolute position embeddings so it's usually advised to pad the inputs on the right rather than
   the left.
-- The model architecture is based on the original Transformer, but replaces the “standard” self-attention mechanism in the decoder by a a main self-attention mechanism and a self and n-stream (predict) self-attention mechanism.
+- The model architecture is based on the original Transformer, but replaces the “standard” self-attention mechanism in the decoder by a main self-attention mechanism and a self and n-stream (predict) self-attention mechanism.
 
 ## Resources
 

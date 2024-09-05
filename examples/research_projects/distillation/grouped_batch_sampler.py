@@ -59,7 +59,7 @@ class GroupedBatchSampler(BatchSampler):
 
     def __init__(self, sampler, group_ids, batch_size):
         if not isinstance(sampler, Sampler):
-            raise ValueError(
+            raise TypeError(
                 "sampler should be an instance of torch.utils.data.Sampler, but got sampler={}".format(sampler)
             )
         self.sampler = sampler

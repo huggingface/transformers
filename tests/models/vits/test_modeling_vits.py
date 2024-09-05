@@ -181,6 +181,10 @@ class VitsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_pipeline_feature_extraction(self):
         super().test_pipeline_feature_extraction()
 
+    @is_flaky(description="torch 2.2.0 gives `Timeout >120.0s`")
+    def test_pipeline_feature_extraction_fp16(self):
+        super().test_pipeline_feature_extraction_fp16()
+
     @unittest.skip(reason="Need to fix this after #26538")
     def test_model_forward(self):
         set_seed(12345)

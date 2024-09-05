@@ -58,6 +58,13 @@ class BridgeTowerImageProcessor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
+class ChameleonImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 class ChineseCLIPFeatureExtractor(metaclass=DummyObject):
     _backends = ["vision"]
 
@@ -506,6 +513,13 @@ class PvtImageProcessor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
+class Qwen2VLImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 class RTDetrImageProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 
@@ -647,6 +661,13 @@ class YolosFeatureExtractor(metaclass=DummyObject):
 
 
 class YolosImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
+class ZoeDepthImageProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 
     def __init__(self, *args, **kwargs):

@@ -52,6 +52,7 @@ class VideoLlavaImageProcessingTester(unittest.TestCase):
         image_std=OPENAI_CLIP_STD,
         do_convert_rgb=True,
     ):
+        super().__init__()
         size = size if size is not None else {"shortest_edge": 20}
         crop_size = crop_size if crop_size is not None else {"height": 18, "width": 18}
         self.parent = parent
@@ -97,8 +98,7 @@ class VideoLlavaImageProcessingTester(unittest.TestCase):
             torchify=torchify,
         )
 
-    def prepare_video_inputs(self, equal_resolution=False, torchify=False):
-        numpify = not torchify
+    def prepare_video_inputs(self, equal_resolution=False, numpify=False, torchify=False):
         images = prepare_image_inputs(
             batch_size=self.batch_size,
             num_channels=self.num_channels,
@@ -108,15 +108,19 @@ class VideoLlavaImageProcessingTester(unittest.TestCase):
             numpify=numpify,
             torchify=torchify,
         )
-
         # let's simply copy the frames to fake a long video-clip
-        videos = []
-        for image in images:
-            if numpify:
-                video = image[None, ...].repeat(8, 0)
-            else:
-                video = image[None, ...].repeat(8, 1, 1, 1)
-            videos.append(video)
+        if numpify or torchify:
+            videos = []
+            for image in images:
+                if numpify:
+                    video = image[None, ...].repeat(8, 0)
+                else:
+                    video = image[None, ...].repeat(8, 1, 1, 1)
+                videos.append(video)
+        else:
+            videos = []
+            for pil_image in images:
+                videos.append([pil_image] * 8)
 
         return videos
 
@@ -197,9 +201,27 @@ class VideoLlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
         # Initialize image_processing
         image_processing = self.image_processing_class(**self.image_processor_dict)
         # create random numpy tensors
-        video_inputs = self.image_processor_tester.prepare_video_inputs(equal_resolution=True)
+        video_inputs = self.image_processor_tester.prepare_video_inputs(numpify=True, equal_resolution=True)
         for video in video_inputs:
             self.assertIsInstance(video, np.ndarray)
+
+        # Test not batched input
+        encoded_videos = image_processing(images=None, videos=video_inputs[0], return_tensors="pt").pixel_values_videos
+        expected_output_video_shape = (1, 8, 3, 18, 18)
+        self.assertEqual(tuple(encoded_videos.shape), expected_output_video_shape)
+
+        # Test batched
+        encoded_videos = image_processing(images=None, videos=video_inputs, return_tensors="pt").pixel_values_videos
+        expected_output_video_shape = (5, 8, 3, 18, 18)
+        self.assertEqual(tuple(encoded_videos.shape), expected_output_video_shape)
+
+    def test_call_pil_videos(self):
+        # Initialize image_processing
+        image_processing = self.image_processing_class(**self.image_processor_dict)
+        # the inputs come in list of lists batched format
+        video_inputs = self.image_processor_tester.prepare_video_inputs(equal_resolution=True)
+        for video in video_inputs:
+            self.assertIsInstance(video[0], Image.Image)
 
         # Test not batched input
         encoded_videos = image_processing(images=None, videos=video_inputs[0], return_tensors="pt").pixel_values_videos

@@ -161,6 +161,8 @@ class ImageClassificationPipeline(Pipeline):
     def preprocess(self, image, timeout=None):
         image = load_image(image, timeout=timeout)
         model_inputs = self.image_processor(images=image, return_tensors=self.framework)
+        if self.framework == "pt":
+            model_inputs = model_inputs.to(self.torch_dtype)
         return model_inputs
 
     def _forward(self, model_inputs):
@@ -169,9 +171,9 @@ class ImageClassificationPipeline(Pipeline):
 
     def postprocess(self, model_outputs, function_to_apply=None, top_k=5):
         if function_to_apply is None:
-            if self.model.config.problem_type == "multi_label_classification" or self.model.config.num_labels == 1:
+            if self.model.config.problem_type == "single_label_classification" or self.model.config.num_labels == 1:
                 function_to_apply = ClassificationFunction.SIGMOID
-            elif self.model.config.problem_type == "single_label_classification" or self.model.config.num_labels > 1:
+            elif self.model.config.problem_type == "multi_label_classification" or self.model.config.num_labels > 1:
                 function_to_apply = ClassificationFunction.SOFTMAX
             elif hasattr(self.model.config, "function_to_apply") and function_to_apply is None:
                 function_to_apply = self.model.config.function_to_apply

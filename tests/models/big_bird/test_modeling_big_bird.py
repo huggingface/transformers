@@ -716,7 +716,7 @@ class BigBirdModelIntegrationTest(unittest.TestCase):
         """
 
         if not self.test_attention_probs:
-            self.skip("test_attention_probs is set to False")
+            self.skipTest("test_attention_probs is set to False")
 
         model = BigBirdModel.from_pretrained(
             "google/bigbird-roberta-base", attention_type="block_sparse", num_random_blocks=3, block_size=16
