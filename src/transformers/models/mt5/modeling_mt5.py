@@ -2432,3 +2432,15 @@ class MT5ForQuestionAnswering(MT5PreTrainedModel):
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
         )
+
+
+__all__ = [
+    "MT5PreTrainedModel",
+    "MT5Stack",
+    "MT5Model",
+    "MT5ForConditionalGeneration",
+    "MT5EncoderModel",
+    "MT5ForSequenceClassification",
+    "MT5ForTokenClassification",
+    "MT5ForQuestionAnswering",
+]

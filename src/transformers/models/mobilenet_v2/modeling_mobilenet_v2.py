@@ -857,3 +857,12 @@ class MobileNetV2ForSemanticSegmentation(MobileNetV2PreTrainedModel):
             hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=None,
         )
+
+
+__all__ = [
+    "load_tf_weights_in_mobilenet_v2",
+    "MobileNetV2PreTrainedModel",
+    "MobileNetV2Model",
+    "MobileNetV2ForImageClassification",
+    "MobileNetV2ForSemanticSegmentation",
+]

@@ -1039,7 +1039,6 @@ class TFDebertaOnlyMLMHead(keras.layers.Layer):
                 self.predictions.build(None)
 
 
-# @keras_serializable
 class TFDebertaMainLayer(keras.layers.Layer):
     config_class = DebertaConfig
 
@@ -1640,3 +1639,14 @@ class TFDebertaForQuestionAnswering(TFDebertaPreTrainedModel, TFQuestionAnswerin
         if getattr(self, "qa_outputs", None) is not None:
             with tf.name_scope(self.qa_outputs.name):
                 self.qa_outputs.build([None, None, self.config.hidden_size])
+
+
+__all__ = [
+    "TFDebertaPreTrainedModel",
+    "TFDebertaModel",
+    "TFDebertaForMaskedLM",
+    "TFDebertaForSequenceClassification",
+    "TFDebertaForTokenClassification",
+    "TFDebertaForQuestionAnswering",
+    "TFDebertaMainLayer",
+]

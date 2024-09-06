@@ -674,6 +674,7 @@ STARCODER2_START_DOCSTRING = r"""
     "The bare Starcoder2 Model outputting raw hidden-states without any specific head on top.",
     STARCODER2_START_DOCSTRING,
 )
+
 # Copied from transformers.models.qwen2.modeling_qwen2.Qwen2PreTrainedModel with Qwen2->Starcoder2
 class Starcoder2PreTrainedModel(PreTrainedModel):
     config_class = Starcoder2Config
@@ -1412,3 +1413,12 @@ class Starcoder2ForTokenClassification(Starcoder2PreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "Starcoder2PreTrainedModel",
+    "Starcoder2Model",
+    "Starcoder2ForCausalLM",
+    "Starcoder2ForSequenceClassification",
+    "Starcoder2ForTokenClassification",
+]

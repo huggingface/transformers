@@ -962,6 +962,7 @@ class ErnieMForQuestionAnswering(ErnieMPreTrainedModel):
     compute `start_prob` and `end_prob`, designed for Universal Information Extraction.""",
     ERNIE_M_START_DOCSTRING,
 )
+# Copied from paddlenlp.transformers.ernie_m.modeling.UIEM
 class ErnieMForInformationExtraction(ErnieMPreTrainedModel):
     def __init__(self, config):
         super(ErnieMForInformationExtraction, self).__init__(config)
@@ -1045,3 +1046,14 @@ class ErnieMForInformationExtraction(ErnieMPreTrainedModel):
             hidden_states=result.hidden_states,
             attentions=result.attentions,
         )
+
+
+__all__ = [
+    "ErnieMPreTrainedModel",
+    "ErnieMModel",
+    "ErnieMForSequenceClassification",
+    "ErnieMForMultipleChoice",
+    "ErnieMForTokenClassification",
+    "ErnieMForQuestionAnswering",
+    "ErnieMForInformationExtraction",
+]

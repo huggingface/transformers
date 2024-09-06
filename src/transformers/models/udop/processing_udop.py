@@ -202,3 +202,6 @@ class UdopProcessor(ProcessorMixin):
     # Copied from transformers.models.layoutlmv3.processing_layoutlmv3.LayoutLMv3Processor.model_input_names
     def model_input_names(self):
         return ["input_ids", "bbox", "attention_mask", "pixel_values"]
+
+
+__all__ = ["UdopProcessor"]

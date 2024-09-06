@@ -118,3 +118,6 @@ class FlaxMT5ForConditionalGeneration(FlaxT5ForConditionalGeneration):
 
     model_type = "mt5"
     config_class = MT5Config
+
+
+__all__ = ["FlaxMT5Model", "FlaxMT5EncoderModel", "FlaxMT5ForConditionalGeneration"]

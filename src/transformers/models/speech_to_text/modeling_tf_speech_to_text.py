@@ -1601,3 +1601,11 @@ class TFSpeech2TextForConditionalGeneration(TFSpeech2TextPreTrainedModel, TFCaus
             return tf_weight, "model.decoder.embed_tokens.weight"
         else:
             return (tf_weight,)
+
+
+__all__ = [
+    "TFSpeech2TextPreTrainedModel",
+    "TFSpeech2TextModel",
+    "TFSpeech2TextForConditionalGeneration",
+    "TFSpeech2TextMainLayer",
+]

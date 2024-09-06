@@ -260,3 +260,6 @@ class Idefics2Config(PretrainedConfig):
         self.text_config = text_config
 
         super().__init__(**kwargs, tie_word_embeddings=tie_word_embeddings)
+
+
+__all__ = ["Idefics2Config"]

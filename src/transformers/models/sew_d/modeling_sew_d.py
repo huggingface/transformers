@@ -1752,3 +1752,6 @@ class SEWDForSequenceClassification(SEWDPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = ["SEWDPreTrainedModel", "SEWDModel", "SEWDForCTC", "SEWDForSequenceClassification"]

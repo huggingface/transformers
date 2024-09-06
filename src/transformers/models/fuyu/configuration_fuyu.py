@@ -224,3 +224,6 @@ class FuyuConfig(PretrainedConfig):
         output = super().to_dict()
         output.pop("_vocab_size", None)
         return output
+
+
+__all__ = ["FuyuConfig"]

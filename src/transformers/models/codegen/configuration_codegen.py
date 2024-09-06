@@ -17,10 +17,11 @@
 from collections import OrderedDict
 from typing import Any, List, Mapping, Optional
 
-from ... import PreTrainedTokenizer, TensorType, is_torch_available
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfigWithPast, PatchingSpec
+from ...tokenization_utils import PreTrainedTokenizer, TensorType
 from ...utils import logging
+from ...utils.import_utils import is_torch_available
 
 
 logger = logging.get_logger(__name__)
@@ -225,3 +226,6 @@ class CodeGenOnnxConfig(OnnxConfigWithPast):
     @property
     def default_onnx_opset(self) -> int:
         return 13
+
+
+__all__ = ["CodeGenConfig", "CodeGenOnnxConfig"]

@@ -50,7 +50,7 @@ repo-consistency:
 # this target runs checks on all files
 
 quality:
-	@python -c "from transformers import *" || (echo '🚨 import failed, this means you introduced unprotected imports! 🚨'; exit 1)
+	@python -c "from transformers import *" || (echo '🚨 import failed, this means you introduced unprotected imports! Have you added this object to the __all__ object of the module? 🚨'; exit 1)
 	ruff check $(check_dirs) setup.py conftest.py
 	ruff format --check $(check_dirs) setup.py conftest.py
 	python utils/sort_auto_mappings.py --check_only

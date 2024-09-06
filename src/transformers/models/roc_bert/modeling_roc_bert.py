@@ -1993,3 +1993,17 @@ class RoCBertForQuestionAnswering(RoCBertPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "load_tf_weights_in_roc_bert",
+    "RoCBertPreTrainedModel",
+    "RoCBertModel",
+    "RoCBertForPreTraining",
+    "RoCBertForMaskedLM",
+    "RoCBertForCausalLM",
+    "RoCBertForSequenceClassification",
+    "RoCBertForMultipleChoice",
+    "RoCBertForTokenClassification",
+    "RoCBertForQuestionAnswering",
+]

@@ -1681,3 +1681,17 @@ class ElectraForCausalLM(ElectraPreTrainedModel):
                 tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
             )
         return reordered_past
+
+
+__all__ = [
+    "load_tf_weights_in_electra",
+    "ElectraPreTrainedModel",
+    "ElectraModel",
+    "ElectraForSequenceClassification",
+    "ElectraForPreTraining",
+    "ElectraForMaskedLM",
+    "ElectraForTokenClassification",
+    "ElectraForQuestionAnswering",
+    "ElectraForMultipleChoice",
+    "ElectraForCausalLM",
+]

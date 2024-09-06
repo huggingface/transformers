@@ -941,3 +941,13 @@ class MptForQuestionAnswering(MptPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "MptPreTrainedModel",
+    "MptModel",
+    "MptForCausalLM",
+    "MptForSequenceClassification",
+    "MptForTokenClassification",
+    "MptForQuestionAnswering",
+]

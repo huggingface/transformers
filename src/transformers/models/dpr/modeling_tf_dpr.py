@@ -788,3 +788,13 @@ class TFDPRReader(TFDPRPretrainedReader):
         if getattr(self, "span_predictor", None) is not None:
             with tf.name_scope(self.span_predictor.name):
                 self.span_predictor.build(None)
+
+
+__all__ = [
+    "TFDPRPretrainedContextEncoder",
+    "TFDPRPretrainedQuestionEncoder",
+    "TFDPRPretrainedReader",
+    "TFDPRContextEncoder",
+    "TFDPRQuestionEncoder",
+    "TFDPRReader",
+]

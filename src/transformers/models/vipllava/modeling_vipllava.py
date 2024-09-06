@@ -21,9 +21,9 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
-from ... import PreTrainedModel
 from ...activations import ACT2FN
 from ...modeling_outputs import ModelOutput
+from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -587,3 +587,6 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel):
             model_inputs["pixel_values"] = pixel_values
 
         return model_inputs
+
+
+__all__ = ["VipLlavaPreTrainedModel", "VipLlavaForConditionalGeneration"]

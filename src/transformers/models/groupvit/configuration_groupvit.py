@@ -447,3 +447,6 @@ class GroupViTOnnxConfig(OnnxConfig):
     @property
     def default_onnx_opset(self) -> int:
         return 14
+
+
+__all__ = ["GroupViTTextConfig", "GroupViTVisionConfig", "GroupViTConfig", "GroupViTOnnxConfig"]

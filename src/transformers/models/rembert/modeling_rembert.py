@@ -1520,3 +1520,16 @@ class RemBertForQuestionAnswering(RemBertPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "load_tf_weights_in_rembert",
+    "RemBertPreTrainedModel",
+    "RemBertModel",
+    "RemBertForMaskedLM",
+    "RemBertForCausalLM",
+    "RemBertForSequenceClassification",
+    "RemBertForMultipleChoice",
+    "RemBertForTokenClassification",
+    "RemBertForQuestionAnswering",
+]

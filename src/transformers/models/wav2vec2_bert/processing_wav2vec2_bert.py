@@ -144,3 +144,6 @@ class Wav2Vec2BertProcessor(ProcessorMixin):
         to the docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)
+
+
+__all__ = ["Wav2Vec2BertProcessor"]

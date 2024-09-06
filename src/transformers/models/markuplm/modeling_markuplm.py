@@ -1321,3 +1321,12 @@ class MarkupLMForSequenceClassification(MarkupLMPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "MarkupLMPreTrainedModel",
+    "MarkupLMModel",
+    "MarkupLMForQuestionAnswering",
+    "MarkupLMForTokenClassification",
+    "MarkupLMForSequenceClassification",
+]

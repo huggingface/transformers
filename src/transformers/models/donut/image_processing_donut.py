@@ -40,7 +40,7 @@ from ...image_utils import (
     validate_preprocess_arguments,
 )
 from ...utils import TensorType, filter_out_non_signature_kwargs, logging
-from ...utils.import_utils import is_vision_available
+from ...utils.import_utils import export, is_vision_available
 
 
 logger = logging.get_logger(__name__)
@@ -50,6 +50,7 @@ if is_vision_available():
     import PIL
 
 
+@export(backends=("vision",))
 class DonutImageProcessor(BaseImageProcessor):
     r"""
     Constructs a Donut image processor.
@@ -457,3 +458,6 @@ class DonutImageProcessor(BaseImageProcessor):
 
         data = {"pixel_values": images}
         return BatchFeature(data=data, tensor_type=return_tensors)
+
+
+__all__ = ["DonutImageProcessor"]

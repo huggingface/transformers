@@ -2335,3 +2335,13 @@ class ProphetNetDecoderWrapper(ProphetNetPreTrainedModel):
 
     def forward(self, *args, **kwargs):
         return self.decoder(*args, **kwargs)
+
+
+__all__ = [
+    "ProphetNetPreTrainedModel",
+    "ProphetNetEncoder",
+    "ProphetNetDecoder",
+    "ProphetNetModel",
+    "ProphetNetForConditionalGeneration",
+    "ProphetNetForCausalLM",
+]

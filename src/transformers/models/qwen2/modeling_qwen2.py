@@ -1359,6 +1359,7 @@ class Qwen2ForSequenceClassification(Qwen2PreTrainedModel):
     """,
     QWEN2_START_DOCSTRING,
 )
+
 # Copied from transformers.models.llama.modeling_llama.LlamaForTokenClassification with Llama->Qwen2, LLAMA->QWEN2
 class Qwen2ForTokenClassification(Qwen2PreTrainedModel):
     def __init__(self, config):
@@ -1435,3 +1436,12 @@ class Qwen2ForTokenClassification(Qwen2PreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "Qwen2PreTrainedModel",
+    "Qwen2Model",
+    "Qwen2ForCausalLM",
+    "Qwen2ForSequenceClassification",
+    "Qwen2ForTokenClassification",
+]

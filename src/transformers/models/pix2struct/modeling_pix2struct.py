@@ -1781,3 +1781,11 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
             "cross_attn_head_mask": cross_attn_head_mask,
             "use_cache": use_cache,
         }
+
+
+__all__ = [
+    "Pix2StructPreTrainedModel",
+    "Pix2StructVisionModel",
+    "Pix2StructTextModel",
+    "Pix2StructForConditionalGeneration",
+]

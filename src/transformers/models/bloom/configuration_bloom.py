@@ -21,7 +21,7 @@ from packaging import version
 
 
 if TYPE_CHECKING:
-    from ... import PreTrainedTokenizer, TensorType
+    from ...tokenization_utils import PreTrainedTokenizer, TensorType
 
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfigWithPast, PatchingSpec
@@ -232,3 +232,6 @@ class BloomOnnxConfig(OnnxConfigWithPast):
     @property
     def default_onnx_opset(self) -> int:
         return 13
+
+
+__all__ = ["BloomConfig", "BloomOnnxConfig"]

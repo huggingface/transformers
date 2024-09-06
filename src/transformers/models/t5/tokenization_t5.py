@@ -25,6 +25,7 @@ import sentencepiece as spm
 from ...convert_slow_tokenizer import import_protobuf
 from ...tokenization_utils import PreTrainedTokenizer
 from ...tokenization_utils_base import AddedToken
+from ...utils.import_utils import export
 
 
 if TYPE_CHECKING:
@@ -42,6 +43,7 @@ VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
 SPIECE_UNDERLINE = "▁"
 
 
+@export(backends=("sentencepiece",))
 class T5Tokenizer(PreTrainedTokenizer):
     """
     Construct a T5 tokenizer. Based on [SentencePiece](https://github.com/google/sentencepiece).
@@ -445,3 +447,6 @@ class T5Tokenizer(PreTrainedTokenizer):
                 fi.write(content_spiece_model)
 
         return (out_vocab_file,)
+
+
+__all__ = ["T5Tokenizer"]

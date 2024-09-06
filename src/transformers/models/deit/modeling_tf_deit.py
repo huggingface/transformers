@@ -1222,3 +1222,13 @@ class TFDeiTForImageClassificationWithTeacher(TFDeiTPreTrainedModel):
         if getattr(self, "distillation_classifier", None) is not None:
             with tf.name_scope(self.distillation_classifier.name):
                 self.distillation_classifier.build([None, None, self.config.hidden_size])
+
+
+__all__ = [
+    "TFDeiTPreTrainedModel",
+    "TFDeiTModel",
+    "TFDeiTForMaskedImageModeling",
+    "TFDeiTForImageClassification",
+    "TFDeiTForImageClassificationWithTeacher",
+    "TFDeiTMainLayer",
+]

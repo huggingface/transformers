@@ -42,6 +42,7 @@ from ...utils import (
     logging,
 )
 from ...utils.deprecation import deprecate_kwarg
+from ...utils.import_utils import export
 
 
 if is_vision_available():
@@ -54,6 +55,7 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
+@export(backends=("vision",))
 class BeitImageProcessor(BaseImageProcessor):
     r"""
     Constructs a BEiT image processor.
@@ -510,3 +512,6 @@ class BeitImageProcessor(BaseImageProcessor):
             semantic_segmentation = [semantic_segmentation[i] for i in range(semantic_segmentation.shape[0])]
 
         return semantic_segmentation
+
+
+__all__ = ["BeitImageProcessor"]

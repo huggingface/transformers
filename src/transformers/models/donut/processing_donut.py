@@ -195,3 +195,6 @@ class DonutProcessor(ProcessorMixin):
             FutureWarning,
         )
         return self.image_processor
+
+
+__all__ = ["DonutProcessor"]

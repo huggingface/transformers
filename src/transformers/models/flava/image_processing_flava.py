@@ -37,6 +37,7 @@ from ...image_utils import (
     validate_preprocess_arguments,
 )
 from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
+from ...utils.import_utils import export
 
 
 if is_vision_available():
@@ -133,6 +134,7 @@ class FlavaMaskingGenerator:
         return mask
 
 
+@export(backends=("vision",))
 class FlavaImageProcessor(BaseImageProcessor):
     r"""
     Constructs a Flava image processor.
@@ -698,3 +700,6 @@ class FlavaImageProcessor(BaseImageProcessor):
             data["bool_masked_pos"] = masks
 
         return BatchFeature(data=data, tensor_type=return_tensors)
+
+
+__all__ = ["FlavaImageProcessor"]

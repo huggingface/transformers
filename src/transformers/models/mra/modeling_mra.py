@@ -1478,3 +1478,14 @@ class MraForQuestionAnswering(MraPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "MraPreTrainedModel",
+    "MraModel",
+    "MraForMaskedLM",
+    "MraForSequenceClassification",
+    "MraForMultipleChoice",
+    "MraForTokenClassification",
+    "MraForQuestionAnswering",
+]

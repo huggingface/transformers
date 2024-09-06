@@ -671,3 +671,5 @@ overwrite_call_docstring(FlaxViTForImageClassification, FLAX_VISION_CLASSIF_DOCS
 append_replace_return_docstrings(
     FlaxViTForImageClassification, output_type=FlaxSequenceClassifierOutput, config_class=ViTConfig
 )
+
+__all__ = ["FlaxViTPreTrainedModel", "FlaxViTModel", "FlaxViTForImageClassification"]

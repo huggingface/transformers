@@ -1183,3 +1183,16 @@ class FNetForQuestionAnswering(FNetPreTrainedModel):
         return QuestionAnsweringModelOutput(
             loss=total_loss, start_logits=start_logits, end_logits=end_logits, hidden_states=outputs.hidden_states
         )
+
+
+__all__ = [
+    "FNetPreTrainedModel",
+    "FNetModel",
+    "FNetForPreTraining",
+    "FNetForMaskedLM",
+    "FNetForNextSentencePrediction",
+    "FNetForSequenceClassification",
+    "FNetForMultipleChoice",
+    "FNetForTokenClassification",
+    "FNetForQuestionAnswering",
+]

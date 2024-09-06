@@ -1485,3 +1485,14 @@ class ViltForTokenClassification(ViltPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "ViltPreTrainedModel",
+    "ViltModel",
+    "ViltForMaskedLM",
+    "ViltForQuestionAnswering",
+    "ViltForImageAndTextRetrieval",
+    "ViltForImagesAndTextClassification",
+    "ViltForTokenClassification",
+]

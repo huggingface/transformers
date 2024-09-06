@@ -23,6 +23,7 @@ import numpy as np
 from ...feature_extraction_utils import BatchFeature
 from ...tokenization_utils import AddedToken, BatchEncoding, PaddingStrategy, PreTrainedTokenizer, TruncationStrategy
 from ...utils import TensorType, is_pretty_midi_available, logging, requires_backends, to_numpy
+from ...utils.import_utils import export
 
 
 if is_pretty_midi_available():
@@ -59,6 +60,15 @@ def token_note_to_note(number, current_velocity, default_velocity, note_onsets_r
     return notes
 
 
+@export(
+    backends=(
+        "essentia",
+        "librosa",
+        "pretty_midi",
+        "scipy",
+        "torch",
+    )
+)
 class Pop2PianoTokenizer(PreTrainedTokenizer):
     """
     Constructs a Pop2Piano tokenizer. This tokenizer does not require training.
@@ -362,7 +372,7 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
 
     def encode_plus(
         self,
-        notes: Union[np.ndarray, List[pretty_midi.Note]],
+        notes: Union[np.ndarray, List["pretty_midi.Note"]],
         truncation_strategy: Optional[TruncationStrategy] = None,
         max_length: Optional[int] = None,
         **kwargs,
@@ -433,7 +443,7 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
 
     def batch_encode_plus(
         self,
-        notes: Union[np.ndarray, List[pretty_midi.Note]],
+        notes: Union[np.ndarray, List["pretty_midi.Note"]],
         truncation_strategy: Optional[TruncationStrategy] = None,
         max_length: Optional[int] = None,
         **kwargs,
@@ -474,8 +484,8 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
         self,
         notes: Union[
             np.ndarray,
-            List[pretty_midi.Note],
-            List[List[pretty_midi.Note]],
+            List["pretty_midi.Note"],
+            List[List["pretty_midi.Note"]],
         ],
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
@@ -714,3 +724,6 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
             return BatchEncoding({"notes": notes_list, "pretty_midi_objects": pretty_midi_objects_list})
 
         return BatchEncoding({"notes": notes_list})
+
+
+__all__ = ["Pop2PianoTokenizer"]

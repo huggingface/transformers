@@ -17,10 +17,10 @@
 from collections import OrderedDict
 from typing import Any, Mapping, Optional
 
-from ... import PreTrainedTokenizer
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig, OnnxSeq2SeqConfigWithPast
 from ...onnx.utils import compute_effective_axis_dimension
+from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import TensorType, is_torch_available, logging
 
 
@@ -278,3 +278,6 @@ class M2M100OnnxConfig(OnnxSeq2SeqConfigWithPast):
         return common_inputs
 
     generate_dummy_inputs = _generate_dummy_inputs_for_default_and_seq2seq_lm
+
+
+__all__ = ["M2M100Config", "M2M100OnnxConfig"]

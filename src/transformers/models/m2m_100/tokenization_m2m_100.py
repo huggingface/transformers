@@ -23,6 +23,7 @@ import sentencepiece
 
 from ...tokenization_utils import BatchEncoding, PreTrainedTokenizer
 from ...utils import logging
+from ...utils.import_utils import export
 
 
 logger = logging.get_logger(__name__)
@@ -44,6 +45,7 @@ FAIRSEQ_LANGUAGE_CODES = {
 # fmt: on
 
 
+@export(backends=("sentencepiece",))
 class M2M100Tokenizer(PreTrainedTokenizer):
     """
     Construct an M2M100 tokenizer. Based on [SentencePiece](https://github.com/google/sentencepiece).
@@ -377,3 +379,6 @@ def load_json(path: str) -> Union[Dict, List]:
 def save_json(data, path: str) -> None:
     with open(path, "w") as f:
         json.dump(data, f, indent=2)
+
+
+__all__ = ["M2M100Tokenizer"]

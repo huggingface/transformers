@@ -23,7 +23,7 @@ from ...utils import logging
 
 
 if TYPE_CHECKING:
-    from ... import FeatureExtractionMixin, TensorType
+    from ...feature_extraction_utils import FeatureExtractionMixin, TensorType
 
 logger = logging.get_logger(__name__)
 
@@ -194,3 +194,6 @@ class ImageGPTOnnxConfig(OnnxConfig):
         inputs = dict(preprocessor(images=input_image, return_tensors=framework))
 
         return inputs
+
+
+__all__ = ["ImageGPTConfig", "ImageGPTOnnxConfig"]

@@ -46,6 +46,7 @@ from ...utils import (
     logging,
     requires_backends,
 )
+from ...utils.import_utils import export
 
 
 if is_torch_available():
@@ -179,6 +180,7 @@ class FuyuBatchFeature(BatchFeature):
         return self
 
 
+@export(backends=("vision",))
 class FuyuImageProcessor(BaseImageProcessor):
     """
     This class should handle the image processing part before the main FuyuForCausalLM. In particular, it should
@@ -718,3 +720,6 @@ class FuyuImageProcessor(BaseImageProcessor):
                 "image_patch_indices_per_subsequence": image_patch_indices_per_subsequence,
             }
         )
+
+
+__all__ = ["FuyuImageProcessor"]

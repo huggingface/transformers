@@ -931,3 +931,11 @@ class DecisionTransformerModel(DecisionTransformerPreTrainedModel):
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
+
+
+__all__ = [
+    "DecisionTransformerGPT2PreTrainedModel",
+    "DecisionTransformerGPT2Model",
+    "DecisionTransformerPreTrainedModel",
+    "DecisionTransformerModel",
+]

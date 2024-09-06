@@ -1410,3 +1410,6 @@ class SamModel(SamPreTrainedModel):
             vision_attentions=vision_attentions,
             mask_decoder_attentions=mask_decoder_attentions,
         )
+
+
+__all__ = ["SamPreTrainedModel", "SamModel"]

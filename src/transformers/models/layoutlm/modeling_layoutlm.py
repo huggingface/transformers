@@ -1373,3 +1373,13 @@ class LayoutLMForQuestionAnswering(LayoutLMPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "LayoutLMPreTrainedModel",
+    "LayoutLMModel",
+    "LayoutLMForMaskedLM",
+    "LayoutLMForSequenceClassification",
+    "LayoutLMForTokenClassification",
+    "LayoutLMForQuestionAnswering",
+]

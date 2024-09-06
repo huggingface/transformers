@@ -764,6 +764,8 @@ GEMMA_INPUTS_DOCSTRING = r"""
     "The bare Gemma Model outputting raw hidden-states without any specific head on top.",
     GEMMA_START_DOCSTRING,
 )
+
+# Copied from transformers.models.llama.modeling_llama.LlamaModel with LLAMA->GEMMA,Llama->Gemma
 class GemmaModel(GemmaPreTrainedModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`GemmaDecoderLayer`]
@@ -1402,3 +1404,12 @@ class GemmaForTokenClassification(GemmaPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "GemmaPreTrainedModel",
+    "GemmaModel",
+    "GemmaForCausalLM",
+    "GemmaForSequenceClassification",
+    "GemmaForTokenClassification",
+]

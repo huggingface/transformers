@@ -492,6 +492,8 @@ class Transformer(nn.Module):
 
 
 # INTERFACE FOR ENCODER AND TASK SPECIFIC MODEL #
+
+
 class DistilBertPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1271,3 +1273,14 @@ class DistilBertForMultipleChoice(DistilBertPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "DistilBertPreTrainedModel",
+    "DistilBertModel",
+    "DistilBertForMaskedLM",
+    "DistilBertForSequenceClassification",
+    "DistilBertForQuestionAnswering",
+    "DistilBertForTokenClassification",
+    "DistilBertForMultipleChoice",
+]

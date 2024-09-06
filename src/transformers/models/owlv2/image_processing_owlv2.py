@@ -48,6 +48,7 @@ from ...utils import (
     logging,
     requires_backends,
 )
+from ...utils.import_utils import export
 
 
 if is_torch_available():
@@ -175,6 +176,7 @@ def _clip_warp_output(input_image, output_image):
     return output_image
 
 
+@export(backends=("vision",))
 class Owlv2ImageProcessor(BaseImageProcessor):
     r"""
     Constructs an OWLv2 image processor.
@@ -607,3 +609,6 @@ class Owlv2ImageProcessor(BaseImageProcessor):
             results.append({"scores": box_scores, "labels": None, "boxes": boxes})
 
         return results
+
+
+__all__ = ["Owlv2ImageProcessor"]

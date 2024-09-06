@@ -1993,3 +1993,13 @@ append_call_sample_docstring(
     FlaxCausalLMOutputWithCrossAttentions,
     _CONFIG_FOR_DOC,
 )
+
+__all__ = [
+    "FlaxBartPreTrainedModel",
+    "FlaxBartModel",
+    "FlaxBartForConditionalGeneration",
+    "FlaxBartForSequenceClassification",
+    "FlaxBartForQuestionAnswering",
+    "FlaxBartDecoderPreTrainedModel",
+    "FlaxBartForCausalLM",
+]

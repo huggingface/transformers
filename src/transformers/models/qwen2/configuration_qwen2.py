@@ -138,3 +138,6 @@ class Qwen2Config(PretrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
+
+
+__all__ = ["Qwen2Config"]

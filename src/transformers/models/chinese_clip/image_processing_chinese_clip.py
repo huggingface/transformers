@@ -39,6 +39,7 @@ from ...image_utils import (
     validate_preprocess_arguments,
 )
 from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
+from ...utils.import_utils import export
 
 
 logger = logging.get_logger(__name__)
@@ -48,6 +49,7 @@ if is_vision_available():
     import PIL
 
 
+@export(backends=("vision",))
 class ChineseCLIPImageProcessor(BaseImageProcessor):
     r"""
     Constructs a Chinese-CLIP image processor.
@@ -304,3 +306,6 @@ class ChineseCLIPImageProcessor(BaseImageProcessor):
 
         data = {"pixel_values": images}
         return BatchFeature(data=data, tensor_type=return_tensors)
+
+
+__all__ = ["ChineseCLIPImageProcessor"]

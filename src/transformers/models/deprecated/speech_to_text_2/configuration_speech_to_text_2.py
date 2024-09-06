@@ -129,3 +129,6 @@ class Speech2Text2Config(PretrainedConfig):
             decoder_start_token_id=decoder_start_token_id,
             **kwargs,
         )
+
+
+__all__ = ["Speech2Text2Config"]

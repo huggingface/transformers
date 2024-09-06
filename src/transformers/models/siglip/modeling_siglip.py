@@ -1567,3 +1567,12 @@ class SiglipForImageClassification(SiglipPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "SiglipPreTrainedModel",
+    "SiglipTextModel",
+    "SiglipVisionModel",
+    "SiglipModel",
+    "SiglipForImageClassification",
+]

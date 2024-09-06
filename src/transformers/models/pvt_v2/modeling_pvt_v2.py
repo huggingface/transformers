@@ -698,3 +698,6 @@ class PvtV2Backbone(PvtV2Model, BackboneMixin):
             hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=None,
         )
+
+
+__all__ = ["PvtV2PreTrainedModel", "PvtV2Model", "PvtV2ForImageClassification", "PvtV2Backbone"]

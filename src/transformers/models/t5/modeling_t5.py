@@ -64,6 +64,8 @@ _CHECKPOINT_FOR_DOC = "google-t5/t5-small"
 # This is a conversion method from TF 1.0 to PyTorch
 # More details: https://medium.com/huggingface/from-tensorflow-to-pytorch-265f40ef2a28
 ####################################################
+
+
 def load_tf_weights_in_t5(model, config, tf_checkpoint_path):
     """Load tf checkpoints in a pytorch model."""
     try:
@@ -2376,3 +2378,15 @@ class T5ForQuestionAnswering(T5PreTrainedModel):
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
         )
+
+
+__all__ = [
+    "load_tf_weights_in_t5",
+    "T5PreTrainedModel",
+    "T5Model",
+    "T5ForConditionalGeneration",
+    "T5EncoderModel",
+    "T5ForSequenceClassification",
+    "T5ForTokenClassification",
+    "T5ForQuestionAnswering",
+]

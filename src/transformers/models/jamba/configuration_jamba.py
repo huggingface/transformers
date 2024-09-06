@@ -222,3 +222,6 @@ class JambaConfig(PretrainedConfig):
             self.num_experts if i % self.expert_layer_period == self.expert_layer_offset else 1
             for i in range(self.num_hidden_layers)
         ]
+
+
+__all__ = ["JambaConfig"]

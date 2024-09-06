@@ -28,12 +28,11 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
-from ... import PreTrainedModel
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import ModelOutput
-from ...modeling_utils import PretrainedConfig
+from ...modeling_utils import PretrainedConfig, PreTrainedModel
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
     add_start_docstrings,
@@ -1753,3 +1752,6 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel):
         for layer_past in past:
             reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
         return reordered_past
+
+
+__all__ = ["IdeficsPreTrainedModel", "IdeficsModel", "IdeficsForVisionText2Text"]

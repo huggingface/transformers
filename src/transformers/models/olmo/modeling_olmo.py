@@ -1227,3 +1227,6 @@ class OlmoForCausalLM(OlmoPreTrainedModel):
             }
         )
         return model_inputs
+
+
+__all__ = ["OlmoPreTrainedModel", "OlmoModel", "OlmoForCausalLM"]

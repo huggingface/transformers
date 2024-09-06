@@ -1216,6 +1216,7 @@ ALL_DECODER_LAYER_TYPES = {"attention": JambaAttentionDecoderLayer, "mamba": Jam
     JAMBA_START_DOCSTRING,
 )
 # Adapted from transformers.models.mistral.modeling_mistral.MistralModel with MISTRAL->JAMBA, Mistral->Jamba
+
 class JambaModel(JambaPreTrainedModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`JambaDecoderLayer`]
@@ -1424,6 +1425,8 @@ class JambaModel(JambaPreTrainedModel):
 
 
 # Adapted from transformers.models.mixtral.modeling_mixtral.MixtralForCausalLM with MIXTRAL->JAMBA, Mixtral->Jamba
+
+
 class JambaForCausalLM(JambaPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -1761,3 +1764,6 @@ class JambaForSequenceClassification(JambaPreTrainedModel):
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
+
+
+__all__ = ["JambaPreTrainedModel", "JambaModel", "JambaForCausalLM", "JambaForSequenceClassification"]

@@ -1960,3 +1960,15 @@ class GPT2ForQuestionAnswering(GPT2PreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "load_tf_weights_in_gpt2",
+    "GPT2PreTrainedModel",
+    "GPT2Model",
+    "GPT2LMHeadModel",
+    "GPT2DoubleHeadsModel",
+    "GPT2ForSequenceClassification",
+    "GPT2ForTokenClassification",
+    "GPT2ForQuestionAnswering",
+]

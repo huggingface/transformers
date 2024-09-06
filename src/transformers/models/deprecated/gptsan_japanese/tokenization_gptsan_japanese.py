@@ -498,3 +498,6 @@ class SubWordJapaneseTokenizer:
 
     def convert_id_to_token(self, index):
         return self.ids_to_tokens[index][0]
+
+
+__all__ = ["GPTSanJapaneseTokenizer"]

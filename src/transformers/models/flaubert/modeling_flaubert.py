@@ -644,6 +644,7 @@ class FlaubertModel(FlaubertPreTrainedModel):
     FLAUBERT_START_DOCSTRING,
 )
 # Copied transformers.models.xlm.modeling_xlm.XLMWithLMHeadModel with XLM_INPUTS->FLAUBERT_INPUTS,XLM->Flaubert
+
 class FlaubertWithLMHeadModel(FlaubertPreTrainedModel):
     _tied_weights_keys = ["pred_layer.proj.weight"]
 
@@ -742,6 +743,7 @@ class FlaubertWithLMHeadModel(FlaubertPreTrainedModel):
     FLAUBERT_START_DOCSTRING,
 )
 # Copied transformers.models.xlm.modeling_xlm.XLMForSequenceClassification with XLM_INPUTS->FLAUBERT_INPUTS,XLM->Flaubert
+
 class FlaubertForSequenceClassification(FlaubertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1297,3 +1299,15 @@ class FlaubertForMultipleChoice(FlaubertPreTrainedModel):
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
+
+
+__all__ = [
+    "FlaubertPreTrainedModel",
+    "FlaubertModel",
+    "FlaubertWithLMHeadModel",
+    "FlaubertForSequenceClassification",
+    "FlaubertForTokenClassification",
+    "FlaubertForQuestionAnsweringSimple",
+    "FlaubertForQuestionAnswering",
+    "FlaubertForMultipleChoice",
+]

@@ -17,11 +17,11 @@
 from collections import OrderedDict
 from typing import Any, Mapping, Optional
 
-from ... import PreTrainedTokenizer
 from ...configuration_utils import PretrainedConfig
 from ...file_utils import TensorType, is_torch_available
 from ...onnx import OnnxConfig, OnnxConfigWithPast, OnnxSeq2SeqConfigWithPast
 from ...onnx.utils import compute_effective_axis_dimension
+from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
 
 
@@ -390,3 +390,6 @@ class BlenderbotOnnxConfig(OnnxSeq2SeqConfigWithPast):
             inputs_or_outputs[f"{name}.{i}.decoder.value"] = {0: "batch", 2: decoder_sequence}
             inputs_or_outputs[f"{name}.{i}.encoder.key"] = {0: "batch", 2: encoder_sequence}
             inputs_or_outputs[f"{name}.{i}.encoder.value"] = {0: "batch", 2: encoder_sequence}
+
+
+__all__ = ["BlenderbotConfig", "BlenderbotOnnxConfig"]

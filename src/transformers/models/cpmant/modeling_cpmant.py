@@ -866,3 +866,6 @@ class CpmAntForCausalLM(CpmAntPreTrainedModel):
             key_value_layer[0] = key_value_layer[0][beam_idx]
             key_value_layer[1] = key_value_layer[1][beam_idx]
         return past_key_values
+
+
+__all__ = ["CpmAntPreTrainedModel", "CpmAntModel", "CpmAntForCausalLM"]

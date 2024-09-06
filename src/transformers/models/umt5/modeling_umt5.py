@@ -1855,3 +1855,14 @@ class UMT5ForQuestionAnswering(UMT5PreTrainedModel):
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
         )
+
+
+__all__ = [
+    "UMT5PreTrainedModel",
+    "UMT5Model",
+    "UMT5ForConditionalGeneration",
+    "UMT5EncoderModel",
+    "UMT5ForSequenceClassification",
+    "UMT5ForTokenClassification",
+    "UMT5ForQuestionAnswering",
+]

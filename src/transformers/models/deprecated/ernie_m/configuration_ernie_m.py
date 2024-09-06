@@ -109,3 +109,6 @@ class ErnieMConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.classifier_dropout = classifier_dropout
         self.act_dropout = act_dropout
+
+
+__all__ = ["ErnieMConfig"]

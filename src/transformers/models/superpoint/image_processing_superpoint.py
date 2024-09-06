@@ -17,7 +17,6 @@ from typing import Dict, Optional, Union
 
 import numpy as np
 
-from ... import is_vision_available
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import resize, to_channel_dimension_format
 from ...image_utils import (
@@ -30,6 +29,7 @@ from ...image_utils import (
     valid_images,
 )
 from ...utils import TensorType, logging, requires_backends
+from ...utils.import_utils import export, is_vision_available
 
 
 if is_vision_available():
@@ -84,6 +84,7 @@ def convert_to_grayscale(
     return image
 
 
+@export(backends=("vision",))
 class SuperPointImageProcessor(BaseImageProcessor):
     r"""
     Constructs a SuperPoint image processor.
@@ -270,3 +271,6 @@ class SuperPointImageProcessor(BaseImageProcessor):
         data = {"pixel_values": images}
 
         return BatchFeature(data=data, tensor_type=return_tensors)
+
+
+__all__ = ["SuperPointImageProcessor"]

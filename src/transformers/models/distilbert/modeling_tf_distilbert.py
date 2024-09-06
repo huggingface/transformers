@@ -477,6 +477,8 @@ class TFDistilBertMainLayer(keras.layers.Layer):
 
 
 # INTERFACE FOR ENCODER AND TASK SPECIFIC MODEL #
+
+
 class TFDistilBertPreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1133,3 +1135,15 @@ class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel, TFQuestionAn
         if getattr(self, "qa_outputs", None) is not None:
             with tf.name_scope(self.qa_outputs.name):
                 self.qa_outputs.build([None, None, self.config.dim])
+
+
+__all__ = [
+    "TFDistilBertPreTrainedModel",
+    "TFDistilBertModel",
+    "TFDistilBertForMaskedLM",
+    "TFDistilBertForSequenceClassification",
+    "TFDistilBertForTokenClassification",
+    "TFDistilBertForMultipleChoice",
+    "TFDistilBertForQuestionAnswering",
+    "TFDistilBertMainLayer",
+]

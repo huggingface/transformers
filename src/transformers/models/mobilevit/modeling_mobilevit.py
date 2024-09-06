@@ -1070,3 +1070,11 @@ class MobileViTForSemanticSegmentation(MobileViTPreTrainedModel):
             hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=None,
         )
+
+
+__all__ = [
+    "MobileViTPreTrainedModel",
+    "MobileViTModel",
+    "MobileViTForImageClassification",
+    "MobileViTForSemanticSegmentation",
+]

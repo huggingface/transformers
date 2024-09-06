@@ -23,7 +23,8 @@ from ...utils import logging
 
 
 if TYPE_CHECKING:
-    from ... import FeatureExtractionMixin, PreTrainedTokenizerBase, TensorType
+    from ...feature_extraction_utils import FeatureExtractionMixin
+    from ...tokenization_utils import PreTrainedTokenizerBase, TensorType
 
 
 logger = logging.get_logger(__name__)
@@ -189,3 +190,6 @@ class DebertaOnnxConfig(OnnxConfig):
         if self._config.type_vocab_size == 0 and "token_type_ids" in dummy_inputs:
             del dummy_inputs["token_type_ids"]
         return dummy_inputs
+
+
+__all__ = ["DebertaConfig", "DebertaOnnxConfig"]

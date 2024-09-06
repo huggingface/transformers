@@ -212,7 +212,6 @@ class PerceiverOnnxConfig(OnnxConfig):
         image_height: int = 40,
     ) -> Mapping[str, Any]:
         # copied from `transformers.onnx.config.OnnxConfig` and slightly altered/simplified
-
         if isinstance(preprocessor, PreTrainedTokenizerBase):
             # If dynamic axis (-1) we forward with a fixed dimension of 2 samples to avoid optimizations made by ONNX
             batch_size = compute_effective_axis_dimension(
@@ -239,3 +238,6 @@ class PerceiverOnnxConfig(OnnxConfig):
             raise ValueError(
                 "Unable to generate dummy inputs for the model. Please provide a tokenizer or a preprocessor."
             )
+
+
+__all__ = ["PerceiverConfig", "PerceiverOnnxConfig"]

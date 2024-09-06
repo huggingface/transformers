@@ -1772,3 +1772,13 @@ class TFLayoutLMv3ForQuestionAnswering(TFLayoutLMv3PreTrainedModel, TFQuestionAn
         if getattr(self, "qa_outputs", None) is not None:
             with tf.name_scope(self.qa_outputs.name):
                 self.qa_outputs.build(None)
+
+
+__all__ = [
+    "TFLayoutLMv3PreTrainedModel",
+    "TFLayoutLMv3Model",
+    "TFLayoutLMv3ForSequenceClassification",
+    "TFLayoutLMv3ForTokenClassification",
+    "TFLayoutLMv3ForQuestionAnswering",
+    "TFLayoutLMv3MainLayer",
+]

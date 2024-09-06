@@ -2272,3 +2272,12 @@ class WhisperForAudioClassification(WhisperPreTrainedModel):
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
+
+
+__all__ = [
+    "WhisperPreTrainedModel",
+    "WhisperModel",
+    "WhisperForConditionalGeneration",
+    "WhisperForCausalLM",
+    "WhisperForAudioClassification",
+]

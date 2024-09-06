@@ -759,3 +759,6 @@ class FlavaConfig(PretrainedConfig):
             image_codebook_config=image_codebook_config.to_dict(),
             **kwargs,
         )
+
+
+__all__ = ["FlavaImageConfig", "FlavaTextConfig", "FlavaMultimodalConfig", "FlavaImageCodebookConfig", "FlavaConfig"]
