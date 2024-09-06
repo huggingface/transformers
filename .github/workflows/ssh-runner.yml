@@ -20,7 +20,8 @@ env:
 jobs:
   ssh_runner:
     name: "SSH"
-    runs-on: aws-g4dn-2xlarge-cache-test
+    runs-on:
+      group: aws-g4dn-2xlarge-cache-test
     container:
       image: huggingface/transformers-all-latest-gpu
       options: --gpus all --privileged --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
