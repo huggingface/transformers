@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Image processor class for ViTPose."""
+"""Image processor class for VitPose."""
 
 import itertools
 import math
@@ -322,9 +322,9 @@ def scipy_warp_affine(src, M, size):
     return new_src
 
 
-class ViTPoseImageProcessor(BaseImageProcessor):
+class VitPoseImageProcessor(BaseImageProcessor):
     r"""
-    Constructs a ViTPose image processor.
+    Constructs a VitPose image processor.
 
     Args:
         do_affine_transform (`bool`, *optional*, defaults to `True`):

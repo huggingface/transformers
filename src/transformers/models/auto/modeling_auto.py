@@ -1298,7 +1298,7 @@ MODEL_FOR_BACKBONE_MAPPING_NAMES = OrderedDict(
         ("swinv2", "Swinv2Backbone"),
         ("timm_backbone", "TimmBackbone"),
         ("vitdet", "VitDetBackbone"),
-        ("vitpose_backbone", "ViTPoseBackbone"),
+        ("vitpose_backbone", "VitPoseBackbone"),
     ]
 )
 

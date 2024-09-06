@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""ViTPose model configuration"""
+"""VitPose model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -22,11 +22,11 @@ from ..auto.configuration_auto import CONFIG_MAPPING
 logger = logging.get_logger(__name__)
 
 
-class ViTPoseConfig(PretrainedConfig):
+class VitPoseConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`ViTPoseForPoseEstimation`]. It is used to instantiate a
-    ViTPose model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the ViTPose
+    This is the configuration class to store the configuration of a [`VitPoseForPoseEstimation`]. It is used to instantiate a
+    VitPose model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the VitPose
     [google/vitpose-base-patch16-224](https://huggingface.co/google/vitpose-base-patch16-224) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -57,13 +57,13 @@ class ViTPoseConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import ViTPoseConfig, ViTPoseForPoseEstimation
+    >>> from transformers import VitPoseConfig, VitPoseForPoseEstimation
 
-    >>> # Initializing a ViTPose configuration
-    >>> configuration = ViTPoseConfig()
+    >>> # Initializing a VitPose configuration
+    >>> configuration = VitPoseConfig()
 
     >>> # Initializing a model (with random weights) from the configuration
-    >>> model = ViTPoseForPoseEstimation(configuration)
+    >>> model = VitPoseForPoseEstimation(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config

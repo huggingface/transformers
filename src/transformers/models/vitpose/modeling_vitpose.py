@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch ViTPose model."""
+"""PyTorch VitPose model."""
 
 from dataclasses import dataclass
 from typing import Optional, Tuple, Union
@@ -30,13 +30,13 @@ from ...utils import (
     replace_return_docstrings,
 )
 from ...utils.backbone_utils import load_backbone
-from .configuration_vitpose import ViTPoseConfig
+from .configuration_vitpose import VitPoseConfig
 
 
 logger = logging.get_logger(__name__)
 
 # General docstring
-_CONFIG_FOR_DOC = "ViTPoseConfig"
+_CONFIG_FOR_DOC = "VitPoseConfig"
 
 
 @dataclass
@@ -67,13 +67,13 @@ class VitPoseEstimatorOutput(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
-class ViTPosePreTrainedModel(PreTrainedModel):
+class VitPosePreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = ViTPoseConfig
+    config_class = VitPoseConfig
     base_model_prefix = "vit"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
@@ -99,7 +99,7 @@ VITPOSE_START_DOCSTRING = r"""
     behavior.
 
     Parameters:
-        config ([`ViTPoseConfig`]): Model configuration class with all the parameters of the model.
+        config ([`VitPoseConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
@@ -107,8 +107,8 @@ VITPOSE_START_DOCSTRING = r"""
 VITPOSE_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`ViTPoseImageProcessor`]. See
-            [`ViTPoseImageProcessor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`VitPoseImageProcessor`]. See
+            [`VitPoseImageProcessor.__call__`] for details.
 
         dataset_index (`torch.Tensor` of shape `(batch_size,)`):
             Index to use in the Mixture-of-Experts (MoE) blocks of the backbone.
@@ -169,7 +169,7 @@ def flip_back(output_flipped, flip_pairs, target_type="gaussian-heatmap"):
     return output_flipped_back
 
 
-class ViTPoseSimpleDecoder(nn.Module):
+class VitPoseSimpleDecoder(nn.Module):
     """
     Simple decoding head consisting of a ReLU activation, 4x upsampling and a 3x3 convolution, turning the
     feature maps into heatmaps.
@@ -196,7 +196,7 @@ class ViTPoseSimpleDecoder(nn.Module):
         return heatmaps
 
 
-class ViTPoseClassicDecoder(nn.Module):
+class VitPoseClassicDecoder(nn.Module):
     """
     Classic decoding head consisting of a 2 deconvolutional blocks, followed by a 1x1 convolution layer,
     turning the feature maps into heatmaps.
@@ -235,11 +235,11 @@ class ViTPoseClassicDecoder(nn.Module):
 
 
 @add_start_docstrings(
-    "The ViTPose model with a pose estimation head on top.",
+    "The VitPose model with a pose estimation head on top.",
     VITPOSE_START_DOCSTRING,
 )
-class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
-    def __init__(self, config: ViTPoseConfig) -> None:
+class VitPoseForPoseEstimation(VitPosePreTrainedModel):
+    def __init__(self, config: VitPoseConfig) -> None:
         super().__init__(config)
 
         self.backbone = load_backbone(config)
@@ -255,7 +255,7 @@ class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
         config.backbone_hidden_size = self.backbone.config.hidden_size
         config.image_size = self.backbone.config.image_size
         config.patch_size = self.backbone.config.patch_size
-        self.head = ViTPoseSimpleDecoder(config) if config.use_simple_decoder else ViTPoseClassicDecoder(config)
+        self.head = VitPoseSimpleDecoder(config) if config.use_simple_decoder else VitPoseClassicDecoder(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -278,13 +278,13 @@ class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import AutoImageProcessor, ViTPoseForPoseEstimation
+        >>> from transformers import AutoImageProcessor, VitPoseForPoseEstimation
         >>> import torch
         >>> from PIL import Image
         >>> import requests
 
         >>> processor = AutoImageProcessor.from_pretrained("")
-        >>> model = ViTPoseForPoseEstimation.from_pretrained("")
+        >>> model = VitPoseForPoseEstimation.from_pretrained("")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)

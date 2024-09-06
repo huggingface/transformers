@@ -12,14 +12,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch ViTPose model."""
+"""Testing suite for the PyTorch VitPose model."""
 
 import inspect
 import unittest
 
 import requests
 
-from transformers import ViTPoseBackboneConfig, ViTPoseConfig
+from transformers import VitPoseBackboneConfig, VitPoseConfig
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
@@ -30,16 +30,16 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 if is_torch_available():
     import torch
 
-    from transformers import ViTPoseForPoseEstimation
+    from transformers import VitPoseForPoseEstimation
 
 
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ViTPoseImageProcessor
+    from transformers import VitPoseImageProcessor
 
 
-class ViTPoseModelTester:
+class VitPoseModelTester:
     def __init__(
         self,
         parent,
@@ -84,7 +84,7 @@ class ViTPoseModelTester:
         self.out_indices = out_indices
         self.scope = scope
 
-        # in ViTPose, the seq length equals the number of patches
+        # in VitPose, the seq length equals the number of patches
         num_patches = (image_size[0] // patch_size[0]) * (image_size[1] // patch_size[1])
         self.seq_length = num_patches
 
@@ -100,12 +100,12 @@ class ViTPoseModelTester:
         return config, pixel_values, labels
 
     def get_config(self):
-        return ViTPoseConfig(
+        return VitPoseConfig(
             backbone_config=self.get_backbone_config(),
         )
 
     def get_backbone_config(self):
-        return ViTPoseBackboneConfig(
+        return VitPoseBackboneConfig(
             image_size=self.image_size,
             patch_size=self.patch_size,
             num_channels=self.num_channels,
@@ -118,7 +118,7 @@ class ViTPoseModelTester:
         )
 
     def create_and_check_for_pose_estimation(self, config, pixel_values, labels):
-        model = ViTPoseForPoseEstimation(config)
+        model = VitPoseForPoseEstimation(config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
@@ -142,13 +142,13 @@ class ViTPoseModelTester:
 
 
 @require_torch
-class ViTPoseModelTest(ModelTesterMixin, unittest.TestCase):
+class VitPoseModelTest(ModelTesterMixin, unittest.TestCase):
     """
-    Here we also overwrite some of the tests of test_modeling_common.py, as ViTPose does not use input_ids, inputs_embeds,
+    Here we also overwrite some of the tests of test_modeling_common.py, as VitPose does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
-    all_model_classes = (ViTPoseForPoseEstimation,) if is_torch_available() else ()
+    all_model_classes = (VitPoseForPoseEstimation,) if is_torch_available() else ()
     fx_compatible = False
 
     test_pruning = False
@@ -156,8 +156,8 @@ class ViTPoseModelTest(ModelTesterMixin, unittest.TestCase):
     test_head_masking = False
 
     def setUp(self):
-        self.model_tester = ViTPoseModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ViTPoseConfig, has_text_modality=False, hidden_size=37)
+        self.model_tester = VitPoseModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=VitPoseConfig, has_text_modality=False, hidden_size=37)
 
     def test_config(self):
         self.config_tester.create_and_test_config_to_json_string()
@@ -167,31 +167,31 @@ class ViTPoseModelTest(ModelTesterMixin, unittest.TestCase):
         self.config_tester.check_config_can_be_init_without_params()
         self.config_tester.check_config_arguments_init()
 
-    @unittest.skip(reason="ViTPose does not support input and output embeddings")
+    @unittest.skip(reason="VitPose does not support input and output embeddings")
     def test_model_common_attributes(self):
         pass
 
-    @unittest.skip(reason="ViTPose does not support input and output embeddings")
+    @unittest.skip(reason="VitPose does not support input and output embeddings")
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="ViTPose does not support input and output embeddings")
+    @unittest.skip(reason="VitPose does not support input and output embeddings")
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(reason="ViTPose does not support training yet")
+    @unittest.skip(reason="VitPose does not support training yet")
     def test_training(self):
         pass
 
-    @unittest.skip(reason="ViTPose does not support training yet")
+    @unittest.skip(reason="VitPose does not support training yet")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(reason="ViTPose does not support training yet")
+    @unittest.skip(reason="VitPose does not support training yet")
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
-    @unittest.skip(reason="ViTPose does not support training yet")
+    @unittest.skip(reason="VitPose does not support training yet")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
@@ -215,7 +215,7 @@ class ViTPoseModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model_from_pretrained(self):
         # TODO update organization
         model_name = "nielsr/vitpose-base-simple"
-        model = ViTPoseForPoseEstimation.from_pretrained(model_name)
+        model = VitPoseForPoseEstimation.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
 
@@ -228,17 +228,17 @@ def prepare_img():
 
 @require_torch
 @require_vision
-class ViTPoseModelIntegrationTest(unittest.TestCase):
+class VitPoseModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
         # TODO update organization
-        return ViTPoseImageProcessor.from_pretrained("nielsr/vitpose-base-simple") if is_vision_available() else None
+        return VitPoseImageProcessor.from_pretrained("nielsr/vitpose-base-simple") if is_vision_available() else None
 
     @slow
     def test_inference_pose_estimation(self):
         image_processor = self.default_image_processor
         # TODO update organization
-        model = ViTPoseForPoseEstimation.from_pretrained("nielsr/vitpose-base-simple")
+        model = VitPoseForPoseEstimation.from_pretrained("nielsr/vitpose-base-simple")
 
         image = prepare_img()
         boxes = [[[412.8, 157.61, 53.05, 138.01], [384.43, 172.21, 15.12, 35.74]]]
@@ -279,7 +279,7 @@ class ViTPoseModelIntegrationTest(unittest.TestCase):
     def test_batched_inference(self):
         image_processor = self.default_image_processor
         # TODO update organization
-        model = ViTPoseForPoseEstimation.from_pretrained("nielsr/vitpose-base-simple")
+        model = VitPoseForPoseEstimation.from_pretrained("nielsr/vitpose-base-simple")
 
         image = prepare_img()
         boxes = [

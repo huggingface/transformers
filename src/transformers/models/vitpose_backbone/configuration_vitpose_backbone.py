@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""ViTPose backbone configuration"""
+"""VitPose backbone configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -22,11 +22,11 @@ from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_feat
 logger = logging.get_logger(__name__)
 
 
-class ViTPoseBackboneConfig(BackboneConfigMixin, PretrainedConfig):
+class VitPoseBackboneConfig(BackboneConfigMixin, PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`ViTPoseBackbone`]. It is used to instantiate a
-    ViTPose model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the ViTPose
+    This is the configuration class to store the configuration of a [`VitPoseBackbone`]. It is used to instantiate a
+    VitPose model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the VitPose
     [google/vitpose-base-patch16-224](https://huggingface.co/google/vitpose-base-patch16-224) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -78,13 +78,13 @@ class ViTPoseBackboneConfig(BackboneConfigMixin, PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import ViTPoseBackboneConfig, ViTPoseBackbone
+    >>> from transformers import VitPoseBackboneConfig, VitPoseBackbone
 
-    >>> # Initializing a ViTPose configuration
-    >>> configuration = ViTPoseBackboneConfig()
+    >>> # Initializing a VitPose configuration
+    >>> configuration = VitPoseBackboneConfig()
 
     >>> # Initializing a model (with random weights) from the configuration
-    >>> model = ViTPoseBackbone(configuration)
+    >>> model = VitPoseBackbone(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config

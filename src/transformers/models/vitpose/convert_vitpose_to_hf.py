@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert ViTPose checkpoints from the original repository.
+"""Convert VitPose checkpoints from the original repository.
 
 URL: https://github.com/vitae-transformer/vitpose
 """
@@ -26,7 +26,7 @@ import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
 
-from transformers import ViTPoseBackboneConfig, ViTPoseConfig, ViTPoseForPoseEstimation, ViTPoseImageProcessor
+from transformers import VitPoseBackboneConfig, VitPoseConfig, VitPoseForPoseEstimation, VitPoseImageProcessor
 from transformers.models.vitpose.image_processing_vitpose import coco_to_pascal_voc
 
 
@@ -71,7 +71,7 @@ def get_config(model_name):
     num_experts = 6 if "+" in model_name else 1
     part_features = 192 if "+" in model_name else 0
 
-    backbone_config = ViTPoseBackboneConfig(out_indices=[12], num_experts=num_experts, part_features=part_features)
+    backbone_config = VitPoseBackboneConfig(out_indices=[12], num_experts=num_experts, part_features=part_features)
     # size of the architecture
     if "small" in model_name:
         backbone_config.hidden_size = 768
@@ -91,7 +91,7 @@ def get_config(model_name):
 
     use_simple_decoder = "simple" in model_name
 
-    config = ViTPoseConfig(
+    config = VitPoseConfig(
         backbone_config=backbone_config,
         num_labels=17,
         use_simple_decoder=use_simple_decoder,
@@ -186,14 +186,14 @@ model_name_to_file_name = {
 @torch.no_grad()
 def convert_vitpose_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     """
-    Copy/paste/tweak model's weights to our ViTPose structure.
+    Copy/paste/tweak model's weights to our VitPose structure.
     """
 
-    # define default ViTPose configuration
+    # define default VitPose configuration
     config = get_config(model_name)
 
     # load HuggingFace model
-    model = ViTPoseForPoseEstimation(config)
+    model = VitPoseForPoseEstimation(config)
     model.eval()
 
     # load original state_dict
@@ -217,7 +217,7 @@ def convert_vitpose_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
                 assert "associate_heads" in key
 
     # create image processor
-    image_processor = ViTPoseImageProcessor()
+    image_processor = VitPoseImageProcessor()
 
     # verify image processor
     image = prepare_img()
@@ -319,7 +319,7 @@ if __name__ == "__main__":
         default="vitpose-base-simple",
         choices=model_name_to_file_name.keys(),
         type=str,
-        help="Name of the ViTPose model you'd like to convert.",
+        help="Name of the VitPose model you'd like to convert.",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."

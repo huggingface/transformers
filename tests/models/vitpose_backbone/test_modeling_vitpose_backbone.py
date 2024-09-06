@@ -12,12 +12,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch ViTPose backbone model."""
+"""Testing suite for the PyTorch VitPose backbone model."""
 
 import inspect
 import unittest
 
-from transformers import ViTPoseBackboneConfig
+from transformers import VitPoseBackboneConfig
 from transformers.testing_utils import require_torch
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -27,14 +27,14 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 
 if is_torch_available():
-    from transformers import ViTPoseBackbone
+    from transformers import VitPoseBackbone
 
 
 if is_vision_available():
     from PIL import Image
 
 
-class ViTPoseBackboneModelTester:
+class VitPoseBackboneModelTester:
     def __init__(
         self,
         parent,
@@ -75,7 +75,7 @@ class ViTPoseBackboneModelTester:
         self.num_labels = num_labels
         self.scope = scope
 
-        # in ViTPoseBackbone, the seq length equals the number of patches
+        # in VitPoseBackbone, the seq length equals the number of patches
         num_patches = (image_size[0] // patch_size[0]) * (image_size[1] // patch_size[1])
         self.seq_length = num_patches
 
@@ -91,7 +91,7 @@ class ViTPoseBackboneModelTester:
         return config, pixel_values, labels
 
     def get_config(self):
-        return ViTPoseBackboneConfig(
+        return VitPoseBackboneConfig(
             image_size=self.image_size,
             patch_size=self.patch_size,
             num_channels=self.num_channels,
@@ -118,60 +118,60 @@ class ViTPoseBackboneModelTester:
 
 
 @require_torch
-class ViTPoseBackboneModelTest(ModelTesterMixin, unittest.TestCase):
+class VitPoseBackboneModelTest(ModelTesterMixin, unittest.TestCase):
     """
-    Here we also overwrite some of the tests of test_modeling_common.py, as ViTPoseBackbone does not use input_ids, inputs_embeds,
+    Here we also overwrite some of the tests of test_modeling_common.py, as VitPoseBackbone does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
-    all_model_classes = (ViTPoseBackbone,) if is_torch_available() else ()
+    all_model_classes = (VitPoseBackbone,) if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
 
     def setUp(self):
-        self.model_tester = ViTPoseBackboneModelTester(self)
+        self.model_tester = VitPoseBackboneModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=ViTPoseBackboneConfig, has_text_modality=False, hidden_size=37
+            self, config_class=VitPoseBackboneConfig, has_text_modality=False, hidden_size=37
         )
 
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @unittest.skip(reason="ViTPoseBackbone does not support input and output embeddings")
+    @unittest.skip(reason="VitPoseBackbone does not support input and output embeddings")
     def test_model_common_attributes(self):
         pass
 
-    @unittest.skip(reason="ViTPoseBackbone does not support input and output embeddings")
+    @unittest.skip(reason="VitPoseBackbone does not support input and output embeddings")
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="ViTPoseBackbone does not support input and output embeddings")
+    @unittest.skip(reason="VitPoseBackbone does not support input and output embeddings")
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(reason="ViTPoseBackbone does not support feedforward chunking")
+    @unittest.skip(reason="VitPoseBackbone does not support feedforward chunking")
     def test_feed_forward_chunking(self):
         pass
 
-    @unittest.skip(reason="ViTPoseBackbone does not output a loss")
+    @unittest.skip(reason="VitPoseBackbone does not output a loss")
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
-    @unittest.skip(reason="ViTPoseBackbone does not support training yet")
+    @unittest.skip(reason="VitPoseBackbone does not support training yet")
     def test_training(self):
         pass
 
-    @unittest.skip(reason="ViTPoseBackbone does not support training yet")
+    @unittest.skip(reason="VitPoseBackbone does not support training yet")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(reason="ViTPoseBackbone does not support training yet")
+    @unittest.skip(reason="VitPoseBackbone does not support training yet")
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
-    @unittest.skip(reason="ViTPoseBackbone does not support training yet")
+    @unittest.skip(reason="VitPoseBackbone does not support training yet")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
@@ -195,11 +195,11 @@ def prepare_img():
 
 
 @require_torch
-class ViTPoseBackboneTest(unittest.TestCase, BackboneTesterMixin):
-    all_model_classes = (ViTPoseBackbone,) if is_torch_available() else ()
-    config_class = ViTPoseBackboneConfig
+class VitPoseBackboneTest(unittest.TestCase, BackboneTesterMixin):
+    all_model_classes = (VitPoseBackbone,) if is_torch_available() else ()
+    config_class = VitPoseBackboneConfig
 
     has_attentions = False
 
     def setUp(self):
-        self.model_tester = ViTPoseBackboneModelTester(self)
+        self.model_tester = VitPoseBackboneModelTester(self)

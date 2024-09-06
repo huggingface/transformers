@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING
 from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_vision_available
 
 
-_import_structure = {"configuration_vitpose": ["ViTPoseConfig"]}
+_import_structure = {"configuration_vitpose": ["VitPoseConfig"]}
 
 
 try:
@@ -29,7 +29,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["image_processing_vitpose"] = ["ViTPoseImageProcessor"]
+    _import_structure["image_processing_vitpose"] = ["VitPoseImageProcessor"]
 
 
 try:
@@ -39,12 +39,12 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_vitpose"] = [
-        "ViTPosePreTrainedModel",
-        "ViTPoseForPoseEstimation",
+        "VitPosePreTrainedModel",
+        "VitPoseForPoseEstimation",
     ]
 
 if TYPE_CHECKING:
-    from .configuration_vitpose import ViTPoseConfig
+    from .configuration_vitpose import VitPoseConfig
 
     try:
         if not is_vision_available():
@@ -52,7 +52,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .image_processing_vitpose import ViTPoseImageProcessor
+        from .image_processing_vitpose import VitPoseImageProcessor
 
     try:
         if not is_torch_available():
@@ -61,8 +61,8 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_vitpose import (
-            ViTPoseForPoseEstimation,
-            ViTPosePreTrainedModel,
+            VitPoseForPoseEstimation,
+            VitPosePreTrainedModel,
         )
 
 else:

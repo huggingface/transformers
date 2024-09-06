@@ -646,7 +646,7 @@ class VitMatteImageProcessor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
-class ViTPoseImageProcessor(metaclass=DummyObject):
+class VitPoseImageProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 
     def __init__(self, *args, **kwargs):

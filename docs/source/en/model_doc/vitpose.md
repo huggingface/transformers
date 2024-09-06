@@ -10,11 +10,11 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 specific language governing permissions and limitations under the License.
 -->
 
-# ViTPose
+# VitPose
 
 ## Overview
 
-The ViTPose model was proposed in [ViTPose: Simple Vision Transformer Baselines for Human Pose Estimation](https://arxiv.org/abs/2204.12484) by Yufei Xu, Jing Zhang, Qiming Zhang, Dacheng Tao. ViTPose employs a standard, non-hierarchical [Vision Transformer](https://arxiv.org/pdf/2010.11929v2) as backbone for the task of keypoint estimation. A simple decoder head is added on top to predict the heatmaps from a given image. Despite its simplicity, the model gets state-of-the-art results on the challenging MS COCO Keypoint Detection benchmark.
+The VitPose model was proposed in [ViTPose: Simple Vision Transformer Baselines for Human Pose Estimation](https://arxiv.org/abs/2204.12484) by Yufei Xu, Jing Zhang, Qiming Zhang, Dacheng Tao. VitPose employs a standard, non-hierarchical [Vision Transformer](https://arxiv.org/pdf/2010.11929v2) as backbone for the task of keypoint estimation. A simple decoder head is added on top to predict the heatmaps from a given image. Despite its simplicity, the model gets state-of-the-art results on the challenging MS COCO Keypoint Detection benchmark.
 
 The abstract from the paper is the following:
 
@@ -29,20 +29,20 @@ The original code can be found [here](https://github.com/ViTAE-Transformer/ViTPo
 - To enable MoE (Mixture of Experts) function in the backbone, the user has to give appropriate input indices to the backbone model. 
   However, it is not used in default parameters.
 - The current model utilizes a 2-step inference pipeline. The first step involves placing a bounding box around the region corresponding to the person.
-  After that, the second step uses ViTPose to predict the keypoints.
+  After that, the second step uses VitPose to predict the keypoints.
 
 ```py
 >>> import torch
 >>> import requests
 
 >>> from PIL import Image
->>> from transformers import ViTPoseImageProcessor, ViTPoseForPoseEstimation
+>>> from transformers import VitPoseImageProcessor, VitPoseForPoseEstimation
 
 >>> url = 'http://images.cocodataset.org/val2017/000000000139.jpg' 
 >>> image = Image.open(requests.get(url, stream=True).raw)
 
->>> image_processor = ViTPoseImageProcessor.from_pretrained("nielsr/vitpose-base-simple")
->>> model = ViTPoseForPoseEstimation.from_pretrained("nielsr/vitpose-base-simple")
+>>> image_processor = VitPoseImageProcessor.from_pretrained("nielsr/vitpose-base-simple")
+>>> model = VitPoseForPoseEstimation.from_pretrained("nielsr/vitpose-base-simple")
 
 >>> boxes = [[[412.8, 157.61, 53.05, 138.01], [384.43, 172.21, 15.12, 35.74]]]
 
@@ -61,16 +61,16 @@ The original code can be found [here](https://github.com/ViTAE-Transformer/ViTPo
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/vitpose-coco.jpg" alt="drawing" width="600"/>
 
 
-## ViTPoseImageProcessor
+## VitPoseImageProcessor
 
-[[autodoc]] ViTPoseImageProcessor
+[[autodoc]] VitPoseImageProcessor
     - preprocess
 
-## ViTPoseConfig
+## VitPoseConfig
 
-[[autodoc]] ViTPoseConfig
+[[autodoc]] VitPoseConfig
 
-## ViTPoseForPoseEstimation
+## VitPoseForPoseEstimation
 
-[[autodoc]] ViTPoseForPoseEstimation
+[[autodoc]] VitPoseForPoseEstimation
     - forward
