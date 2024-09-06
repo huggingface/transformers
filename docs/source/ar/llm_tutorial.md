@@ -20,7 +20,7 @@ pip install transformers bitsandbytes>=0.39.0 -q
 
 ## توليد النص
 
-يأخذ نموذج اللغة المدرب لـ [نمذجة اللغة السببية](tasks/language_modeling) تسلسل رموز النص كإدخال ويعيد توزيع الاحتمالية للرمز التالي.
+يأخذ نموذج اللغة المدرب لـ [نمذجة اللغة السببية](tasks/language_modeling) يأخذ تسلسلًا من رموز نصية كمدخل ويعيد توزيع الاحتمالية للرمز التالي.
 
 <!-- [GIF 1 -- FWD PASS] -->
 <figure class="image table text-center m-0 w-full">
