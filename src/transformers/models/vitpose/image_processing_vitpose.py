@@ -298,9 +298,9 @@ def get_warp_matrix(theta: float, size_input: np.ndarray, size_dst: np.ndarray, 
 
 def scipy_warp_affine(src, M, size):
     """
-    This function implements cv2.warpAffine used in the original implementation using scipy.
+    This function implements cv2.warpAffine function using affine_transform in scipy. See https://docs.scipy.org/doc/scipy/reference/generated/scipy.ndimage.affine_transform.html and https://docs.opencv.org/4.x/d4/d61/tutorial_warp_affine.html for more details.
 
-    Note: the original implementation uses cv2.INTER_LINEAR.
+    Note: the original implementation of cv2.warpAffine uses cv2.INTER_LINEAR.
     """
     channels = [src[..., i] for i in range(src.shape[-1])]
 
