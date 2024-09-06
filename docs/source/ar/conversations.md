@@ -152,7 +152,7 @@ print("Decoded output:\n", decoded_output)
 الأفكار العامة، وأترك التفاصيل للوثائق المرتبطة بها. الخطوات الرئيسية هي:
 1. يتم تحميل [النماذج](https://huggingface.co/learn/nlp-course/en/chapter2/3) و [المُجزّئات اللغوية](https://huggingface.co/learn/nlp-course/en/chapter2/4?fw=pt) من Hugging Face Hub.
 2. يتم تنسيق الدردشة باستخدام [قالب الدردشة](https://huggingface.co/docs/transformers/main/en/chat_templating) للمحلل
-3. يتم [تحليل](https://huggingface.co/learn/nlp-course/en/chapter2/4) الدردشة المنسقة باستخدام المحلل.
+3. يتم [تحليل](https://huggingface.co/learn/nlp-course/en/chapter2/4) الدردشة المنسقة باستخدام مُجزّئ اللغوي.
 4. نقوم [بتوليد](https://huggingface.co/docs/transformers/en/llm_tutorial) استجابة من النموذج.
 5. يتم فك تشفير الرموز التي ينتجها النموذج مرة أخرى إلى سلسلة
 
