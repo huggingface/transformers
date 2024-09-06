@@ -87,11 +87,11 @@ jobs:
 
       - name: update huggingface_hub cli
         run: |
-          python3 -m pip install -U git+https://github.com/huggingface/huggingface_hub.git@dummy
+          python3 -m pip install -U git+https://github.com/huggingface/huggingface_hub.git@main
 
-      - name: update datasets
-        run: |
-          python3 -m pip install -U git+https://github.com/huggingface/datasets.git@main
+#      - name: update datasets
+#        run: |
+#          python3 -m pip install -U git+https://github.com/huggingface/datasets.git@main
 
       - name: NVIDIA-SMI
         run: |
@@ -106,13 +106,13 @@ jobs:
         working-directory: /transformers
         run: pip freeze
 
-      - name: Check cache 0
-        working-directory: /transformers
-        run: rm -rf /mnt/cache/datasets/downloads/0f3877f8b8ff8f882b5032f93535a4d21bd7475946970fbf306f79c2769f3d0d.incomplete
-
-      - name: Check cache 0
-        working-directory: /transformers
-        run: rm -rf /mnt/cache/hub/datasets--hf-internal-testing--librispeech_asr_dummy/
+#      - name: Check cache 0
+#        working-directory: /transformers
+#        run: rm -rf /mnt/cache/datasets/downloads/0f3877f8b8ff8f882b5032f93535a4d21bd7475946970fbf306f79c2769f3d0d.incomplete
+#
+#      - name: Check cache 0
+#        working-directory: /transformers
+#        run: rm -rf /mnt/cache/hub/datasets--hf-internal-testing--librispeech_asr_dummy/
 
 #
 ##      - name: Check cache 1
