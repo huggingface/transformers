@@ -10,7 +10,7 @@
 
 <iframe width="560" height="315" src="https://www.youtube.com/embed/XvSGPZFEjDY" title="مشغل فيديو YouTube"
 frameborder="0" allow="accelerometer; تشغيل تلقائي; لوحة مفاتيح افتراضية; جيروسكوب;
-صورة مصغرة" allowfullscreen></iframe>
+picture-in-picture" allowfullscreen></iframe>
 
 <Tip>
 
