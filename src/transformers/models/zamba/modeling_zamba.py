@@ -813,8 +813,6 @@ class ZambaAttentionDecoderLayer(nn.Module):
         self.input_layernorm = ZambaRMSNorm(2 * config.hidden_size, eps=config.rms_norm_eps)
         self.pre_ff_layernorm = ZambaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-    # The argument original_hidden_states is concatenated with hidden_states (which is the output of the previous (mamba) layer)
-    # The concatenated tensor is then used as input of the pre-attention RMSNorm (see fig. 2 in https://arxiv.org/pdf/2405.16712).
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -831,7 +829,10 @@ class ZambaAttentionDecoderLayer(nn.Module):
         """
         Args:
             hidden_states (`torch.FloatTensor`): output of previous Mamba layer of shape `(batch, seq_len, embed_dim)`
-            original_hidden_states (`torch.FloatTensor`): word embedding output of shape `(batch, seq_len, embed_dim)`
+            original_hidden_states (`torch.FloatTensor`): word embedding output of shape `(batch, seq_len, embed_dim)`.
+                This is concatenated with `hidden_states` (which is the output of the previous (mamba) layer). The 
+                concatenated tensor is then used as input of the pre-attention RMSNorm 
+                (see fig. 2 in https://arxiv.org/pdf/2405.16712).
             attention_mask (`torch.FloatTensor`, *optional*): attention mask of size
                 `(batch, sequence_length)` where padding elements are indicated by 0.
             past_key_value (`HybridMambaAttentionDynamicCache`, *optional*): cached past key and value projection states
