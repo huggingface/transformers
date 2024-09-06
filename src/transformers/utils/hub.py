@@ -1201,7 +1201,6 @@ def create_and_tag_model_card(
         # Ensure model_card.data.tags is a list and not None
         if model_card.data.tags is None:
             model_card.data.tags = []
-    
         for model_tag in tags:
             if model_tag not in model_card.data.tags:
                 model_card.data.tags.append(model_tag)
