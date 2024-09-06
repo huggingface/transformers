@@ -2223,12 +2223,23 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # https://nlp.stanford.edu/~johnhew/vocab-expansion.html
         if new_num_tokens > old_num_tokens:
             added_num_tokens = new_num_tokens - old_num_tokens
-            mean_embedding = torch.mean(old_embeddings.weight.data, axis=0)
-            covariance = (
-                (old_embeddings.weight.data - mean_embedding).T
-                @ (old_embeddings.weight.data - mean_embedding)
-                / old_num_tokens
-            )
+            if is_deepspeed_zero3_enabled() and not is_quantized:
+                import deepspeed
+
+                with deepspeed.zero.GatheredParameters(old_embeddings.weight, modifier_rank=None):
+                    mean_embedding = torch.mean(old_embeddings.weight.data, axis=0)
+                    covariance = (
+                        (old_embeddings.weight.data - mean_embedding).T
+                        @ (old_embeddings.weight.data - mean_embedding)
+                        / old_num_tokens
+                    )
+            else:
+                mean_embedding = torch.mean(old_embeddings.weight.data, axis=0)
+                covariance = (
+                    (old_embeddings.weight.data - mean_embedding).T
+                    @ (old_embeddings.weight.data - mean_embedding)
+                    / old_num_tokens
+                )
             distribution = torch.distributions.multivariate_normal.MultivariateNormal(
                 mean_embedding, covariance_matrix=1e-5 * covariance
             )
