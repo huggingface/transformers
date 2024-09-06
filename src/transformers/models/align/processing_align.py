@@ -16,6 +16,8 @@
 Image/Text processor class for ALIGN
 """
 
+from typing import List, Union
+
 
 try:
     from typing import Unpack

@@ -3895,7 +3895,6 @@ else:
             "TFConvBertForQuestionAnswering",
             "TFConvBertForSequenceClassification",
             "TFConvBertForTokenClassification",
-            "TFConvBertLayer",
             "TFConvBertModel",
             "TFConvBertPreTrainedModel",
         ]
@@ -4226,7 +4225,6 @@ else:
             "TFRemBertForQuestionAnswering",
             "TFRemBertForSequenceClassification",
             "TFRemBertForTokenClassification",
-            "TFRemBertLayer",
             "TFRemBertModel",
             "TFRemBertPreTrainedModel",
         ]
@@ -4272,7 +4270,6 @@ else:
             "TFRoFormerForQuestionAnswering",
             "TFRoFormerForSequenceClassification",
             "TFRoFormerForTokenClassification",
-            "TFRoFormerLayer",
             "TFRoFormerModel",
             "TFRoFormerPreTrainedModel",
         ]

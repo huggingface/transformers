@@ -15,9 +15,9 @@
 Import utilities: Utilities related to imports and our lazy inits.
 """
 
+import importlib.machinery
 import importlib.metadata
 import importlib.util
-import importlib.machinery
 import json
 import os
 import shutil
@@ -28,7 +28,7 @@ from collections import OrderedDict
 from functools import lru_cache
 from itertools import chain
 from types import ModuleType
-from typing import Any, Tuple, Union, Dict, Set, FrozenSet
+from typing import Any, Dict, FrozenSet, Optional, Set, Tuple, Union
 
 from packaging import version
 
@@ -1618,6 +1618,7 @@ def is_torch_fx_proxy(x):
 BACKENDS_T = FrozenSet[str]
 IMPORT_STRUCTURE_T = Dict[BACKENDS_T, Dict[str, Set[str]]]
 
+
 class _LazyModule(ModuleType):
     """
     Module class that surfaces all objects but only performs associated imports when the objects are requested.
@@ -1631,7 +1632,7 @@ class _LazyModule(ModuleType):
         module_file: str,
         import_structure: IMPORT_STRUCTURE_T,
         module_spec: importlib.machinery.ModuleSpec = None,
-        extra_objects: Dict[str, object] = None
+        extra_objects: Dict[str, object] = None,
     ):
         super().__init__(name)
 
@@ -1653,7 +1654,7 @@ class _LazyModule(ModuleType):
                     callable, error = BACKENDS_MAPPING[backend]
                     if not callable():
                         missing_backends.append(backend)
-                self._modules.union(set(module.keys()))
+                self._modules = self._modules.union(set(module.keys()))
 
                 for key, values in module.items():
                     if len(missing_backends):
@@ -1667,7 +1668,6 @@ class _LazyModule(ModuleType):
 
                 # Needed for autocompletion in an IDE
                 self.__all__.extend(list(module.keys()) + list(chain(*module.values())))
-
 
             self.__file__ = module_file
             self.__spec__ = module_spec
@@ -1787,10 +1787,10 @@ def export(*, backends=()):
 
 
 BASE_FILE_REQUIREMENTS = {
-    lambda e: 'modeling_tf_' in e: ('tf',),
-    lambda e: 'modeling_flax_' in e: ('flax',),
-    lambda e: 'modeling_' in e: ('torch',),
-    lambda e: e.startswith('tokenization_') and e.endswith('_fast'): ('tokenizers',),
+    lambda e: "modeling_tf_" in e: ("tf",),
+    lambda e: "modeling_flax_" in e: ("flax",),
+    lambda e: "modeling_" in e: ("torch",),
+    lambda e: e.startswith("tokenization_") and e.endswith("_fast"): ("tokenizers",),
 }
 
 
@@ -1800,7 +1800,7 @@ def fetch__all__(file_content):
     Returns None if not defined, otherwise returns a list of strings.
     """
 
-    if '__all__' not in file_content:
+    if "__all__" not in file_content:
         return []
 
     lines = file_content.splitlines()
@@ -1810,7 +1810,7 @@ def fetch__all__(file_content):
 
     lines = lines[start_index:]
 
-    if not lines[0].startswith('__all__'):
+    if not lines[0].startswith("__all__"):
         raise ValueError(
             "fetch__all__ accepts a list of lines, with the first line being the __all__ variable declaration"
         )
@@ -1887,7 +1887,6 @@ def create_import_structure_from_path(module_path):
     """
     import_structure = {}
     if os.path.isdir(module_path):
-
         directory = module_path
         adjacent_modules = []
 
@@ -1910,9 +1909,8 @@ def create_import_structure_from_path(module_path):
 
     module_requirements = {}
     for module_name in adjacent_modules:
-
         # Only modules ending in `.py` are accepted here.
-        if not module_name.endswith('.py'):
+        if not module_name.endswith(".py"):
             continue
 
         with open(os.path.join(directory, module_name)) as f:
@@ -1936,10 +1934,9 @@ def create_import_structure_from_path(module_path):
         # Objects that have a `@export` assigned to them will get exported
         # with the backends specified in the decorator as well as the file backends.
         exported_objects = set()
-        if '@export' in file_content:
+        if "@export" in file_content:
             lines = file_content.split("\n")
             for index, line in enumerate(lines):
-
                 # This allows exporting items with other decorators. We'll take a look
                 # at the line that follows at the same indentation level.
                 if line.startswith((" ", "\t", "@", ")")) and not line.startswith("@export"):
@@ -2014,10 +2011,9 @@ def create_import_structure_from_path(module_path):
 
         # All objects that are in __all__ should be exported by default.
         # These objects are exported with the file backends.
-        if '__all__' in file_content:
+        if "__all__" in file_content:
             for _all_object in fetch__all__(file_content):
                 if _all_object not in exported_objects:
-
                     backends = frozenset(base_requirements)
                     if backends not in module_requirements:
                         module_requirements[backends] = {}
@@ -2076,6 +2072,7 @@ def spread_import_structure(nested_import_structure):
     }
 
     """
+
     def propagate_frozenset(unordered_import_structure):
         tuple_first_import_structure = {}
         for _key, _value in unordered_import_structure.items():
