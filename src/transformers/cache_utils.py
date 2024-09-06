@@ -990,6 +990,9 @@ class StaticCache(Cache):
             The device on which the cache should be initialized. Should be the same as the layer.
         dtype (`torch.dtype`, *optional*, defaults to `torch.float32`):
             The default `dtype` to use when initializing the layer.
+        layer_device_map(`Dict[int, Union[str, torch.device, int]]]`, `optional`):
+            Mapping between the layers and its device. This is required when you are manually initializing the cache and the model is splitted between differents gpus.
+            You can know which layers mapped to which device by checking the associated device_map: `model.hf_device_map`.
 
     Example:
 
@@ -1020,7 +1023,7 @@ class StaticCache(Cache):
         device: torch.device = None,
         dtype: torch.dtype = torch.float32,
         max_batch_size: Optional[int] = None,
-        layer_device_map: Optional[dict] = None,
+        layer_device_map: Optional[Dict[int, Union[str, torch.device, int]]] = None,
     ) -> None:
         super().__init__()
         if max_batch_size is not None:
@@ -1094,7 +1097,21 @@ class StaticCache(Cache):
         Return:
             A tuple containing the updated key and value states.
         """
+
+        for state_str, state_device, self_state_device in [
+            ("key_states", key_states.device, self.key_cache[layer_idx].device),
+            ("value_states", value_states.device, self.value_states[layer_idx].device),
+        ]:
+            if state_device != self_state_device:
+                raise ValueError(
+                    f"computed {state_str} from layer {layer_idx} is on device {state_device} "
+                    f"whereas stored {state_str} is on device {self_state_device}. "
+                    f"If you are manually initializing the cache, make sure to pass the argument `layer_device_map` if you are using multi-gpu. "
+                    " Otherwise, you can just pass `cache_implementation` in `model.generate()` to correclty initialize the cache."
+                )
+
         cache_position = cache_kwargs.get("cache_position")
+
         k_out = self.key_cache[layer_idx]
         v_out = self.value_cache[layer_idx]
 
@@ -1163,6 +1180,9 @@ class SlidingWindowCache(StaticCache):
             The device on which the cache should be initialized. Should be the same as the layer.
         dtype (`torch.dtype`, *optional*, defaults to `torch.float32`):
             The default `dtype` to use when initializing the layer.
+        layer_device_map(`Dict[int, Union[str, torch.device, int]]]`, `optional`):
+            Mapping between the layers and its device. This is required when you are manually initializing the cache and the model is splitted between differents gpus.
+            You can know which layers mapped to which device by checking the associated device_map: `model.hf_device_map`.
 
     Example:
 
@@ -1193,7 +1213,7 @@ class SlidingWindowCache(StaticCache):
         device: torch.device = None,
         dtype: torch.dtype = torch.float32,
         max_batch_size: Optional[int] = None,
-        layer_device_map: Optional[dict] = None,
+        layer_device_map: Optional[Dict[int, Union[str, torch.device, int]]] = None,
     ) -> None:
         super().__init__()
         if not hasattr(config, "sliding_window") or config.sliding_window is None:
@@ -1220,6 +1240,18 @@ class SlidingWindowCache(StaticCache):
         layer_idx: int,
         cache_kwargs: Optional[Dict[str, Any]] = None,
     ) -> Tuple[torch.Tensor]:
+        for state_str, state_device, self_state_device in [
+            ("key_states", key_states.device, self.key_cache[layer_idx].device),
+            ("value_states", value_states.device, self.value_states[layer_idx].device),
+        ]:
+            if state_device != self_state_device:
+                raise ValueError(
+                    f"computed {state_str} from layer {layer_idx} is on device {state_device} "
+                    f"whereas stored {state_str} is on device {self_state_device}. "
+                    f"If you are manually initializing the cache, make sure to pass the argument `layer_device_map` if you are using multi-gpu. "
+                    " Otherwise, you can just pass `cache_implementation` in `model.generate()` to correclty initialize the cache."
+                )
+
         cache_position = cache_kwargs.get("cache_position")
         k_out = self.key_cache[layer_idx]
         v_out = self.value_cache[layer_idx]
@@ -1458,6 +1490,9 @@ class HybridCache(Cache):
             The device on which the cache should be initialized. Should be the same as the layer.
         dtype (torch.dtype, *optional*, defaults to `torch.float32`):
             The default `dtype` to use when initializing the layer.
+        layer_device_map(`Dict[int, Union[str, torch.device, int]]]`, `optional`):
+            Mapping between the layers and its device. This is required when you are manually initializing the cache and the model is splitted between differents gpus.
+            You can know which layers mapped to which device by checking the associated device_map: `model.hf_device_map`.
 
     Example:
 
@@ -1488,7 +1523,7 @@ class HybridCache(Cache):
         device: Union[torch.device, str] = "cpu",
         dtype: torch.dtype = torch.float32,
         max_batch_size: Optional[int] = None,
-        layer_device_map: Optional[dict] = None,
+        layer_device_map: Optional[Dict[int, Union[str, torch.device, int]]] = None,
     ) -> None:
         super().__init__()
         if max_batch_size is not None:
@@ -1583,6 +1618,18 @@ class HybridCache(Cache):
         layer_idx: int,
         cache_kwargs: Optional[Dict[str, Any]] = None,
     ) -> Tuple[torch.Tensor]:
+        for state_str, state_device, self_state_device in [
+            ("key_states", key_states.device, self.key_cache[layer_idx].device),
+            ("value_states", value_states.device, self.value_states[layer_idx].device),
+        ]:
+            if state_device != self_state_device:
+                raise ValueError(
+                    f"computed {state_str} from layer {layer_idx} is on device {state_device} "
+                    f"whereas stored {state_str} is on device {self_state_device}. "
+                    f"If you are manually initializing the cache, make sure to pass the argument `layer_device_map` if you are using multi-gpu. "
+                    " Otherwise, you can just pass `cache_implementation` in `model.generate()` to correclty initialize the cache."
+                )
+
         cache_position = cache_kwargs.get("cache_position")
         sliding_window = cache_kwargs.get("sliding_window")
         k_out = self.key_cache[layer_idx]
