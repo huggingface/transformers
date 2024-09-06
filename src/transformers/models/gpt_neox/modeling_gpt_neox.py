@@ -1565,3 +1565,13 @@ class GPTNeoXForQuestionAnswering(GPTNeoXPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "GPTNeoXPreTrainedModel",
+    "GPTNeoXModel",
+    "GPTNeoXForCausalLM",
+    "GPTNeoXForSequenceClassification",
+    "GPTNeoXForTokenClassification",
+    "GPTNeoXForQuestionAnswering",
+]

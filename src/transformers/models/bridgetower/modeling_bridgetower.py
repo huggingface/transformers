@@ -1905,3 +1905,12 @@ class BridgeTowerForContrastiveLearning(BridgeTowerPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "BridgeTowerPreTrainedModel",
+    "BridgeTowerModel",
+    "BridgeTowerForMaskedLM",
+    "BridgeTowerForImageAndTextRetrieval",
+    "BridgeTowerForContrastiveLearning",
+]

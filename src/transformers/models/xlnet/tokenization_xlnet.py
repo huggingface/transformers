@@ -23,6 +23,7 @@ import sentencepiece as spm
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import SPIECE_UNDERLINE, logging
+from ...utils.import_utils import export
 
 
 logger = logging.get_logger(__name__)
@@ -38,6 +39,7 @@ SEG_ID_SEP = 3
 SEG_ID_PAD = 4
 
 
+@export(backends=("sentencepiece",))
 class XLNetTokenizer(PreTrainedTokenizer):
     """
     Construct an XLNet tokenizer. Based on [SentencePiece](https://github.com/google/sentencepiece).
@@ -380,3 +382,6 @@ class XLNetTokenizer(PreTrainedTokenizer):
                 fi.write(content_spiece_model)
 
         return (out_vocab_file,)
+
+
+__all__ = ["XLNetTokenizer"]

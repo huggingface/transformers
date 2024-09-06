@@ -806,3 +806,6 @@ class MambaForCausalLM(MambaPreTrainedModel):
             cache_params=mamba_outputs.cache_params,
             hidden_states=mamba_outputs.hidden_states,
         )
+
+
+__all__ = ["MambaPreTrainedModel", "MambaModel", "MambaForCausalLM"]

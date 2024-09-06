@@ -38,6 +38,7 @@ from ...utils import (
     logging,
     requires_backends,
 )
+from ...utils.import_utils import export
 
 
 if is_vision_available():
@@ -98,6 +99,7 @@ def apply_tesseract(
     return words, normalized_boxes
 
 
+@export(backends=("vision",))
 class LayoutLMv2ImageProcessor(BaseImageProcessor):
     r"""
     Constructs a LayoutLMv2 image processor.
@@ -296,3 +298,6 @@ class LayoutLMv2ImageProcessor(BaseImageProcessor):
             data["words"] = words_batch
             data["boxes"] = boxes_batch
         return data
+
+
+__all__ = ["LayoutLMv2ImageProcessor"]

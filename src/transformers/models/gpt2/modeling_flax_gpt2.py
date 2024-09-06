@@ -777,3 +777,5 @@ append_call_sample_docstring(
     FlaxCausalLMOutputWithCrossAttentions,
     _CONFIG_FOR_DOC,
 )
+
+__all__ = ["FlaxGPT2PreTrainedModel", "FlaxGPT2Model", "FlaxGPT2LMHeadModel"]

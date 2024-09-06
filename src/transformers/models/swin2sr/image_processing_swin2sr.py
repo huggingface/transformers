@@ -31,11 +31,13 @@ from ...image_utils import (
     validate_preprocess_arguments,
 )
 from ...utils import TensorType, filter_out_non_signature_kwargs, logging
+from ...utils.import_utils import export
 
 
 logger = logging.get_logger(__name__)
 
 
+@export(backends=("vision",))
 class Swin2SRImageProcessor(BaseImageProcessor):
     r"""
     Constructs a Swin2SR image processor.
@@ -201,3 +203,6 @@ class Swin2SRImageProcessor(BaseImageProcessor):
 
         data = {"pixel_values": images}
         return BatchFeature(data=data, tensor_type=return_tensors)
+
+
+__all__ = ["Swin2SRImageProcessor"]

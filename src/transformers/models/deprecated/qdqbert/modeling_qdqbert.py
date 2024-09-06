@@ -718,6 +718,8 @@ class QDQBertPreTrainingHeads(nn.Module):
 
 
 # Based on transformers.models.bert.modeling_bert.BertPreTrainedModel with Bert -> QDQBert
+
+
 class QDQBertPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1732,3 +1734,17 @@ class QDQBertForQuestionAnswering(QDQBertPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "load_tf_weights_in_qdqbert",
+    "QDQBertPreTrainedModel",
+    "QDQBertModel",
+    "QDQBertLMHeadModel",
+    "QDQBertForMaskedLM",
+    "QDQBertForNextSentencePrediction",
+    "QDQBertForSequenceClassification",
+    "QDQBertForMultipleChoice",
+    "QDQBertForTokenClassification",
+    "QDQBertForQuestionAnswering",
+]

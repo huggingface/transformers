@@ -25,7 +25,7 @@ from ..auto.configuration_auto import AutoConfig
 
 
 if TYPE_CHECKING:
-    from ... import PreTrainedTokenizerBase, TensorType
+    from ...tokenization_utils import PreTrainedTokenizerBase, TensorType
 
 logger = logging.get_logger(__name__)
 
@@ -207,3 +207,6 @@ class VisionEncoderDecoderOnnxConfig(OnnxConfig):
         """
         decoder_config.encoder_hidden_size = encoder_config.hidden_size
         return VisionEncoderDecoderDecoderOnnxConfig(decoder_config, feature)
+
+
+__all__ = ["VisionEncoderDecoderConfig", "VisionEncoderDecoderOnnxConfig"]

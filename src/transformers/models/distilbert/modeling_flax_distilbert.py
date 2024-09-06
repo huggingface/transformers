@@ -893,3 +893,13 @@ append_call_sample_docstring(
     FlaxQuestionAnsweringModelOutput,
     _CONFIG_FOR_DOC,
 )
+
+__all__ = [
+    "FlaxDistilBertPreTrainedModel",
+    "FlaxDistilBertModel",
+    "FlaxDistilBertForMaskedLM",
+    "FlaxDistilBertForSequenceClassification",
+    "FlaxDistilBertForMultipleChoice",
+    "FlaxDistilBertForTokenClassification",
+    "FlaxDistilBertForQuestionAnswering",
+]

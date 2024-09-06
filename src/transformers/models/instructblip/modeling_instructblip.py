@@ -1652,3 +1652,11 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
                 outputs = torch.cat([bos_tokens, outputs], dim=-1)
 
         return outputs
+
+
+__all__ = [
+    "InstructBlipPreTrainedModel",
+    "InstructBlipVisionModel",
+    "InstructBlipQFormerModel",
+    "InstructBlipForConditionalGeneration",
+]

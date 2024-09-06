@@ -726,6 +726,8 @@ class TFBlipTextPreTrainedModel(TFPreTrainedModel):
 
 
 # Adapted from https://github.com/salesforce/BLIP/blob/3a29b7410476bf5f2ba0955827390eb6ea1f4f9d/models/med.py#L571
+
+
 class TFBlipTextModel(TFBlipTextPreTrainedModel):
     """
     The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
@@ -1120,3 +1122,6 @@ class TFBlipTextLMHeadModel(TFBlipTextPreTrainedModel):
         if getattr(self, "cls", None) is not None:
             with tf.name_scope(self.cls.name):
                 self.cls.build(None)
+
+
+__all__ = ["TFBlipTextModel"]

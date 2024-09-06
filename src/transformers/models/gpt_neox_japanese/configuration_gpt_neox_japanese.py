@@ -115,3 +115,6 @@ class GPTNeoXJapaneseConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.attention_dropout = attention_dropout
         self.hidden_dropout = hidden_dropout
+
+
+__all__ = ["GPTNeoXJapaneseConfig"]

@@ -844,3 +844,6 @@ class RwkvForCausalLM(RwkvPreTrainedModel):
             hidden_states=rwkv_outputs.hidden_states,
             attentions=rwkv_outputs.attentions,
         )
+
+
+__all__ = ["RwkvPreTrainedModel", "RwkvModel", "RwkvForCausalLM"]

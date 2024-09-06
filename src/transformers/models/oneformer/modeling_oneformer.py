@@ -3255,3 +3255,6 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
             if loss is not None:
                 output = (loss) + output
         return output
+
+
+__all__ = ["OneFormerPreTrainedModel", "OneFormerModel", "OneFormerForUniversalSegmentation"]

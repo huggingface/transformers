@@ -41,6 +41,7 @@ from ...image_utils import (
     validate_preprocess_arguments,
 )
 from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
+from ...utils.import_utils import export
 
 
 logger = logging.get_logger(__name__)
@@ -66,6 +67,7 @@ def make_batched_videos(videos) -> List[VideoInput]:
     raise ValueError(f"Could not make batched video from {videos}")
 
 
+@export(backends=("vision",))
 class VideoLlavaImageProcessor(BaseImageProcessor):
     r"""
     Constructs a CLIP image processor.
@@ -402,3 +404,6 @@ class VideoLlavaImageProcessor(BaseImageProcessor):
         image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
 
         return image
+
+
+__all__ = ["VideoLlavaImageProcessor"]

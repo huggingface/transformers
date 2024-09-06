@@ -17,8 +17,9 @@
 from collections import OrderedDict
 from typing import Any, List, Mapping, Optional
 
-from ... import PretrainedConfig, PreTrainedTokenizer
+from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig, PatchingSpec
+from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import TensorType, is_torch_available, logging
 
 
@@ -194,3 +195,6 @@ class LayoutLMOnnxConfig(OnnxConfig):
         batch_size, seq_length = input_dict["input_ids"].shape
         input_dict["bbox"] = torch.tensor([*[box] * seq_length]).tile(batch_size, 1, 1)
         return input_dict
+
+
+__all__ = ["LayoutLMConfig", "LayoutLMOnnxConfig"]

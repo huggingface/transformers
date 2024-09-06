@@ -1246,3 +1246,12 @@ class PersimmonForTokenClassification(PersimmonPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "PersimmonPreTrainedModel",
+    "PersimmonModel",
+    "PersimmonForCausalLM",
+    "PersimmonForSequenceClassification",
+    "PersimmonForTokenClassification",
+]

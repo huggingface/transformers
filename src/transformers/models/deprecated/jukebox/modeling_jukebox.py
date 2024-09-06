@@ -2661,3 +2661,6 @@ class JukeboxModel(JukeboxPreTrainedModel):
             )
         music_tokens = self._sample(music_tokens, labels, sample_levels, **sampling_kwargs)
         return music_tokens
+
+
+__all__ = ["JukeboxVQVAE", "JukeboxPrior", "JukeboxPreTrainedModel", "JukeboxModel"]

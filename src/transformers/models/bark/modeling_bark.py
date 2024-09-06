@@ -546,6 +546,8 @@ BARK_CAUSAL_MODEL_INPUTS_DOCSTRING = r"""
 
 
 # GPT2-like autoregressive model
+
+
 class BarkCausalModel(BarkPreTrainedModel):
     config_class = BarkSubModelConfig
 
@@ -1811,3 +1813,13 @@ class BarkModel(BarkPreTrainedModel):
         config.coarse_acoustics_config._attn_implementation = config._attn_implementation
         config.fine_acoustics_config._attn_implementation = config._attn_implementation
         return config
+
+
+__all__ = [
+    "BarkPreTrainedModel",
+    "BarkCausalModel",
+    "BarkFineModel",
+    "BarkCoarseModel",
+    "BarkSemanticModel",
+    "BarkModel",
+]

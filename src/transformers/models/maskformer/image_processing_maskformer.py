@@ -51,6 +51,7 @@ from ...utils import (
     logging,
 )
 from ...utils.deprecation import deprecate_kwarg
+from ...utils.import_utils import export
 
 
 logger = logging.get_logger(__name__)
@@ -352,6 +353,7 @@ def get_maskformer_resize_output_image_size(
     return output_size
 
 
+@export(backends=("vision",))
 class MaskFormerImageProcessor(BaseImageProcessor):
     r"""
     Constructs a MaskFormer image processor. The image processor can be used to prepare image(s) and optional targets
@@ -1271,3 +1273,6 @@ class MaskFormerImageProcessor(BaseImageProcessor):
 
             results.append({"segmentation": segmentation, "segments_info": segments})
         return results
+
+
+__all__ = ["MaskFormerImageProcessor"]

@@ -2226,3 +2226,17 @@ class LukeForMultipleChoice(LukePreTrainedModel):
             entity_hidden_states=outputs.entity_hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "LukePreTrainedModel",
+    "LukeModel",
+    "LukeForMaskedLM",
+    "LukeForEntityClassification",
+    "LukeForEntityPairClassification",
+    "LukeForEntitySpanClassification",
+    "LukeForSequenceClassification",
+    "LukeForTokenClassification",
+    "LukeForQuestionAnswering",
+    "LukeForMultipleChoice",
+]

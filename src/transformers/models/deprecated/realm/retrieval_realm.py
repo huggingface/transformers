@@ -162,3 +162,6 @@ class RealmRetriever:
                 start_pos_ += padded
                 end_pos_ += padded
         return has_answers, start_pos, end_pos
+
+
+__all__ = ["RealmRetriever"]

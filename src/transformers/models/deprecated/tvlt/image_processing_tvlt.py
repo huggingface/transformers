@@ -39,6 +39,7 @@ from ....image_utils import (
     validate_preprocess_arguments,
 )
 from ....utils import TensorType, logging
+from ....utils.import_utils import export
 
 
 logger = logging.get_logger(__name__)
@@ -67,6 +68,7 @@ def make_batched(videos) -> List[List[ImageInput]]:
     raise ValueError(f"Could not make batched video from {videos}")
 
 
+@export(backends=("vision",))
 class TvltImageProcessor(BaseImageProcessor):
     r"""
     Constructs a TVLT image processor.
@@ -433,3 +435,6 @@ class TvltImageProcessor(BaseImageProcessor):
             data = {"pixel_values": videos, "pixel_mask": video_masks}
 
         return BatchFeature(data=data, tensor_type=return_tensors)
+
+
+__all__ = ["TvltImageProcessor"]

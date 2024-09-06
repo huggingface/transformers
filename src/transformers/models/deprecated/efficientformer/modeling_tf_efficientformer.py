@@ -1188,3 +1188,12 @@ class TFEfficientFormerForImageClassificationWithTeacher(TFEfficientFormerPreTra
             if hasattr(self.distillation_classifier, "name"):
                 with tf.name_scope(self.distillation_classifier.name):
                     self.distillation_classifier.build([None, None, self.config.hidden_sizes[-1]])
+
+
+__all__ = [
+    "TFEfficientFormerPreTrainedModel",
+    "TFEfficientFormerModel",
+    "TFEfficientFormerForImageClassification",
+    "TFEfficientFormerForImageClassificationWithTeacher",
+    "TFEfficientFormerMainLayer",
+]

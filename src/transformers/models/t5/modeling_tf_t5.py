@@ -934,6 +934,8 @@ class TFT5MainLayer(keras.layers.Layer):
 # Here you just need to specify a few (self-explanatory)
 # pointers for your model.
 ####################################################
+
+
 class TFT5PreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1678,3 +1680,6 @@ class TFT5EncoderModel(TFT5PreTrainedModel):
         if getattr(self, "encoder", None) is not None:
             with tf.name_scope(self.encoder.name):
                 self.encoder.build(None)
+
+
+__all__ = ["TFT5PreTrainedModel", "TFT5Model", "TFT5ForConditionalGeneration", "TFT5EncoderModel", "TFT5MainLayer"]

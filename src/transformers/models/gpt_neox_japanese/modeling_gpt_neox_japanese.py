@@ -724,3 +724,6 @@ class GPTNeoXJapaneseForCausalLM(GPTNeoXJapanesePreTrainedModel):
                 + layer_past[2:],
             )
         return reordered_past
+
+
+__all__ = ["GPTNeoXJapanesePreTrainedModel", "GPTNeoXJapaneseModel", "GPTNeoXJapaneseForCausalLM"]

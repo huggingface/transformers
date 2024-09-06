@@ -2633,3 +2633,15 @@ append_call_sample_docstring(
     FlaxCausalLMOutputWithCrossAttentions,
     _CONFIG_FOR_DOC,
 )
+
+__all__ = [
+    "FlaxBigBirdPreTrainedModel",
+    "FlaxBigBirdModel",
+    "FlaxBigBirdForPreTraining",
+    "FlaxBigBirdForMaskedLM",
+    "FlaxBigBirdForSequenceClassification",
+    "FlaxBigBirdForMultipleChoice",
+    "FlaxBigBirdForTokenClassification",
+    "FlaxBigBirdForQuestionAnswering",
+    "FlaxBigBirdForCausalLM",
+]

@@ -705,3 +705,6 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
             model_inputs["pixel_values_videos"] = pixel_values_videos
 
         return model_inputs
+
+
+__all__ = ["VideoLlavaPreTrainedModel", "VideoLlavaForConditionalGeneration"]

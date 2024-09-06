@@ -42,6 +42,7 @@ from ...image_utils import (
     validate_preprocess_arguments,
 )
 from ...utils import filter_out_non_signature_kwargs, logging
+from ...utils.import_utils import export
 
 
 if is_vision_available():
@@ -63,6 +64,7 @@ def make_batched(videos) -> List[List[ImageInput]]:
     raise ValueError(f"Could not make batched video from {videos}")
 
 
+@export(backends=("vision",))
 class VivitImageProcessor(BaseImageProcessor):
     r"""
     Constructs a Vivit image processor.
@@ -402,3 +404,6 @@ class VivitImageProcessor(BaseImageProcessor):
 
         data = {"pixel_values": videos}
         return BatchFeature(data=data, tensor_type=return_tensors)
+
+
+__all__ = ["VivitImageProcessor"]

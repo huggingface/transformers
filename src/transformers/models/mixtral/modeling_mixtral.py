@@ -848,6 +848,7 @@ MIXTRAL_START_DOCSTRING = r"""
     "The bare Mixtral Model outputting raw hidden-states without any specific head on top.",
     MIXTRAL_START_DOCSTRING,
 )
+
 # Copied from transformers.models.qwen2.modeling_qwen2.Qwen2PreTrainedModel with Qwen2->Mixtral
 class MixtralPreTrainedModel(PreTrainedModel):
     config_class = MixtralConfig
@@ -946,6 +947,7 @@ MIXTRAL_INPUTS_DOCSTRING = r"""
     "The bare Mixtral Model outputting raw hidden-states without any specific head on top.",
     MIXTRAL_START_DOCSTRING,
 )
+
 # copied from transformers.models.mistral.modeling_mistral.MistralModel with MISTRAL->MIXTRAL,Mistral->Mixtral
 # TODO @longjie no longer copied from Mistral after static cache
 class MixtralModel(MixtralPreTrainedModel):
@@ -1596,3 +1598,12 @@ class MixtralForTokenClassification(MixtralPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "MixtralPreTrainedModel",
+    "MixtralModel",
+    "MixtralForCausalLM",
+    "MixtralForSequenceClassification",
+    "MixtralForTokenClassification",
+]

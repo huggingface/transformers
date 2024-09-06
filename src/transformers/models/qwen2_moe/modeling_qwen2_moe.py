@@ -1632,3 +1632,12 @@ class Qwen2MoeForTokenClassification(Qwen2MoePreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "Qwen2MoePreTrainedModel",
+    "Qwen2MoeModel",
+    "Qwen2MoeForCausalLM",
+    "Qwen2MoeForSequenceClassification",
+    "Qwen2MoeForTokenClassification",
+]

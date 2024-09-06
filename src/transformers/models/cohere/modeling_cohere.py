@@ -1183,3 +1183,6 @@ class CohereForCausalLM(CoherePreTrainedModel):
             }
         )
         return model_inputs
+
+
+__all__ = ["CoherePreTrainedModel", "CohereModel", "CohereForCausalLM"]

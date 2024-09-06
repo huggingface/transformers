@@ -732,3 +732,5 @@ class FlaxBloomForCausalLM(FlaxBloomPreTrainedModel):
 
 
 append_call_sample_docstring(FlaxBloomForCausalLM, _CHECKPOINT_FOR_DOC, FlaxCausalLMOutput, _CONFIG_FOR_DOC)
+
+__all__ = ["FlaxBloomPreTrainedModel", "FlaxBloomModel", "FlaxBloomForCausalLM"]

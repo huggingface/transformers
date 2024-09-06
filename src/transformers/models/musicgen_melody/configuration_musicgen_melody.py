@@ -267,3 +267,6 @@ class MusicgenMelodyConfig(PretrainedConfig):
     def _attn_implementation(self, value):
         self._attn_implementation_internal = value
         self.decoder._attn_implementation = value
+
+
+__all__ = ["MusicgenMelodyDecoderConfig", "MusicgenMelodyConfig"]

@@ -1447,3 +1447,6 @@ class DbrxForCausalLM(DbrxPreTrainedModel):
             }
         )
         return model_inputs
+
+
+__all__ = ["DbrxPreTrainedModel", "DbrxModel", "DbrxForCausalLM"]

@@ -63,6 +63,7 @@ from ...utils import (
     is_vision_available,
     logging,
 )
+from ...utils.import_utils import export
 
 
 if is_torch_available():
@@ -784,6 +785,7 @@ def compute_segments(
     return segmentation, segments
 
 
+@export(backends=("vision",))
 class DetrImageProcessor(BaseImageProcessor):
     r"""
     Constructs a Detr image processor.
@@ -2042,3 +2044,6 @@ class DetrImageProcessor(BaseImageProcessor):
 
             results.append({"segmentation": segmentation, "segments_info": segments})
         return results
+
+
+__all__ = ["DetrImageProcessor"]

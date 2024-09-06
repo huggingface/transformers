@@ -377,3 +377,6 @@ class Blip2Config(PretrainedConfig):
             text_config=text_config.to_dict() if text_config is not None else None,
             **kwargs,
         )
+
+
+__all__ = ["Blip2VisionConfig", "Blip2QFormerConfig", "Blip2Config"]

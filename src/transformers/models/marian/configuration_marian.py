@@ -17,10 +17,10 @@
 from collections import OrderedDict
 from typing import Any, Mapping, Optional
 
-from ... import PreTrainedTokenizer
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig, OnnxConfigWithPast, OnnxSeq2SeqConfigWithPast
 from ...onnx.utils import compute_effective_axis_dimension
+from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import TensorType, is_torch_available, logging
 
 
@@ -389,3 +389,6 @@ class MarianOnnxConfig(OnnxSeq2SeqConfigWithPast):
     @property
     def atol_for_validation(self) -> float:
         return 1e-4
+
+
+__all__ = ["MarianConfig", "MarianOnnxConfig"]

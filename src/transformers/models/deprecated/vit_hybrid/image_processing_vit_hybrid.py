@@ -40,6 +40,7 @@ from ....image_utils import (
     validate_preprocess_arguments,
 )
 from ....utils import TensorType, is_vision_available, logging
+from ....utils.import_utils import export
 
 
 logger = logging.get_logger(__name__)
@@ -49,6 +50,7 @@ if is_vision_available():
     import PIL
 
 
+@export(backends=("vision",))
 class ViTHybridImageProcessor(BaseImageProcessor):
     r"""
     Constructs a ViT Hybrid image processor.
@@ -336,3 +338,6 @@ class ViTHybridImageProcessor(BaseImageProcessor):
 
         data = {"pixel_values": images}
         return BatchFeature(data=data, tensor_type=return_tensors)
+
+
+__all__ = ["ViTHybridImageProcessor"]

@@ -38,6 +38,7 @@ from ...image_utils import (
     validate_preprocess_arguments,
 )
 from ...utils import TensorType, filter_out_non_signature_kwargs, is_torch_available, is_torch_tensor, logging
+from ...utils.import_utils import export
 
 
 if is_torch_available():
@@ -47,6 +48,7 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
+@export(backends=("vision",))
 class MobileNetV2ImageProcessor(BaseImageProcessor):
     r"""
     Constructs a MobileNetV2 image processor.
@@ -347,3 +349,6 @@ class MobileNetV2ImageProcessor(BaseImageProcessor):
             semantic_segmentation = [semantic_segmentation[i] for i in range(semantic_segmentation.shape[0])]
 
         return semantic_segmentation
+
+
+__all__ = ["MobileNetV2ImageProcessor"]

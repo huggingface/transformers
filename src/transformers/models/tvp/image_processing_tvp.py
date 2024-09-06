@@ -39,6 +39,7 @@ from ...image_utils import (
     validate_preprocess_arguments,
 )
 from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
+from ...utils.import_utils import export
 
 
 if is_vision_available():
@@ -81,6 +82,7 @@ def get_resize_output_image_size(
     return size
 
 
+@export(backends=("vision",))
 class TvpImageProcessor(BaseImageProcessor):
     r"""
     Constructs a Tvp image processor.
@@ -476,3 +478,6 @@ class TvpImageProcessor(BaseImageProcessor):
 
         data = {"pixel_values": videos}
         return BatchFeature(data=data, tensor_type=return_tensors)
+
+
+__all__ = ["TvpImageProcessor"]

@@ -16,11 +16,10 @@
 
 import warnings
 
-from transformers import AutoTokenizer
-from transformers.utils import is_torch_available
-from transformers.utils.generic import ExplicitEnum
-
+from ...models.auto.tokenization_auto import AutoTokenizer
 from ...processing_utils import ProcessorMixin
+from ...utils import is_torch_available
+from ...utils.generic import ExplicitEnum
 
 
 if is_torch_available():
@@ -228,3 +227,6 @@ class MgpstrProcessor(ProcessorMixin):
         """
         decode_strs = [seq.replace(" ", "") for seq in self.wp_tokenizer.batch_decode(sequences)]
         return decode_strs
+
+
+__all__ = ["MgpstrProcessor"]

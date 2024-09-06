@@ -1849,3 +1849,13 @@ class WavLMForXVector(WavLMPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "WavLMPreTrainedModel",
+    "WavLMModel",
+    "WavLMForCTC",
+    "WavLMForSequenceClassification",
+    "WavLMForAudioFrameClassification",
+    "WavLMForXVector",
+]

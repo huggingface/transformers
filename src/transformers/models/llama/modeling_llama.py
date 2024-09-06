@@ -1615,3 +1615,13 @@ class LlamaForTokenClassification(LlamaPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "LlamaPreTrainedModel",
+    "LlamaModel",
+    "LlamaForCausalLM",
+    "LlamaForSequenceClassification",
+    "LlamaForQuestionAnswering",
+    "LlamaForTokenClassification",
+]

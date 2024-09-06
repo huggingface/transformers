@@ -2739,3 +2739,12 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
             attention_mask=attention_mask,
             guidance_scale=1.0,
         )
+
+
+__all__ = [
+    "MusicgenPreTrainedModel",
+    "MusicgenDecoder",
+    "MusicgenModel",
+    "MusicgenForCausalLM",
+    "MusicgenForConditionalGeneration",
+]

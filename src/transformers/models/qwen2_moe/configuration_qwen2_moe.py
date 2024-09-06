@@ -175,3 +175,6 @@ class Qwen2MoeConfig(PretrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
+
+
+__all__ = ["Qwen2MoeConfig"]

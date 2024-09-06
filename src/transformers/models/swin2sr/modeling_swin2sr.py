@@ -1175,3 +1175,6 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = ["Swin2SRPreTrainedModel", "Swin2SRModel", "Swin2SRForImageSuperResolution"]

@@ -1787,3 +1787,16 @@ class TFCamembertForCausalLM(TFCamembertPreTrainedModel, TFCausalLanguageModelin
         if getattr(self, "lm_head", None) is not None:
             with tf.name_scope(self.lm_head.name):
                 self.lm_head.build(None)
+
+
+__all__ = [
+    "TFCamembertPreTrainedModel",
+    "TFCamembertModel",
+    "TFCamembertForMaskedLM",
+    "TFCamembertForSequenceClassification",
+    "TFCamembertForTokenClassification",
+    "TFCamembertForMultipleChoice",
+    "TFCamembertForQuestionAnswering",
+    "TFCamembertForCausalLM",
+    "TFCamembertMainLayer",
+]

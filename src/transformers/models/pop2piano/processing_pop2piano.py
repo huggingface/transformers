@@ -23,8 +23,18 @@ from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils import BatchEncoding, PaddingStrategy, TruncationStrategy
 from ...utils import TensorType
+from ...utils.import_utils import export
 
 
+@export(
+    backends=(
+        "essentia",
+        "librosa",
+        "pretty_midi",
+        "scipy",
+        "torch",
+    )
+)
 class Pop2PianoProcessor(ProcessorMixin):
     r"""
     Constructs an Pop2Piano processor which wraps a Pop2Piano Feature Extractor and Pop2Piano Tokenizer into a single
@@ -137,3 +147,6 @@ class Pop2PianoProcessor(ProcessorMixin):
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
         args = cls._get_arguments_from_pretrained(pretrained_model_name_or_path, **kwargs)
         return cls(*args)
+
+
+__all__ = ["Pop2PianoProcessor"]

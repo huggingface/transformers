@@ -1387,3 +1387,6 @@ class SinusoidalPositionalEmbedding(nn.Embedding):
             self.make_weight(max_pos, self.embedding_dim, self.padding_idx)
         positions = self.make_positions(input, self.padding_idx)
         return super().forward(positions)
+
+
+__all__ = ["PretrainedFSMTModel", "FSMTModel", "FSMTForConditionalGeneration"]

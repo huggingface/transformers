@@ -1409,3 +1409,14 @@ class GPTNeoForQuestionAnswering(GPTNeoPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "load_tf_weights_in_gpt_neo",
+    "GPTNeoPreTrainedModel",
+    "GPTNeoModel",
+    "GPTNeoForCausalLM",
+    "GPTNeoForSequenceClassification",
+    "GPTNeoForTokenClassification",
+    "GPTNeoForQuestionAnswering",
+]

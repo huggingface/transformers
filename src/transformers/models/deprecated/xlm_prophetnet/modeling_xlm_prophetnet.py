@@ -2334,3 +2334,13 @@ class XLMProphetNetDecoderWrapper(XLMProphetNetPreTrainedModel):
 
     def forward(self, *args, **kwargs):
         return self.decoder(*args, **kwargs)
+
+
+__all__ = [
+    "XLMProphetNetPreTrainedModel",
+    "XLMProphetNetEncoder",
+    "XLMProphetNetDecoder",
+    "XLMProphetNetModel",
+    "XLMProphetNetForConditionalGeneration",
+    "XLMProphetNetForCausalLM",
+]

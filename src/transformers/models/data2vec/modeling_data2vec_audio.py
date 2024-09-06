@@ -1762,3 +1762,13 @@ class Data2VecAudioForXVector(Data2VecAudioPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "Data2VecAudioPreTrainedModel",
+    "Data2VecAudioModel",
+    "Data2VecAudioForCTC",
+    "Data2VecAudioForSequenceClassification",
+    "Data2VecAudioForAudioFrameClassification",
+    "Data2VecAudioForXVector",
+]

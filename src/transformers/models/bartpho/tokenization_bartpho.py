@@ -22,6 +22,7 @@ import sentencepiece as spm
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
+from ...utils.import_utils import export
 
 
 logger = logging.get_logger(__name__)
@@ -31,6 +32,7 @@ SPIECE_UNDERLINE = "▁"
 VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model", "monolingual_vocab_file": "dict.txt"}
 
 
+@export(backends=("sentencepiece",))
 class BartphoTokenizer(PreTrainedTokenizer):
     """
     Adapted from [`XLMRobertaTokenizer`]. Based on [SentencePiece](https://github.com/google/sentencepiece).
@@ -311,3 +313,6 @@ class BartphoTokenizer(PreTrainedTokenizer):
                         fp.write(f"{str(token)} \n")
 
         return out_vocab_file, out_monolingual_vocab_file
+
+
+__all__ = ["BartphoTokenizer"]

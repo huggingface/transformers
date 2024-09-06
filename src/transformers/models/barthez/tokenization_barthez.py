@@ -22,6 +22,7 @@ import sentencepiece as spm
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
+from ...utils.import_utils import export
 
 
 logger = logging.get_logger(__name__)
@@ -34,6 +35,7 @@ SPIECE_UNDERLINE = "▁"
 # TODO this class is useless. This is the most standard sentencpiece model. Let's find which one is closest and nuke this.
 
 
+@export(backends=("sentencepiece",))
 class BarthezTokenizer(PreTrainedTokenizer):
     """
     Adapted from [`CamembertTokenizer`] and [`BartTokenizer`]. Construct a BARThez tokenizer. Based on
@@ -284,3 +286,6 @@ class BarthezTokenizer(PreTrainedTokenizer):
                 fi.write(content_spiece_model)
 
         return (out_vocab_file,)
+
+
+__all__ = ["BarthezTokenizer"]

@@ -17,12 +17,14 @@
 import warnings
 
 from ...utils import logging
+from ...utils.import_utils import export
 from .image_processing_convnext import ConvNextImageProcessor
 
 
 logger = logging.get_logger(__name__)
 
 
+@export(backends=("vision",))
 class ConvNextFeatureExtractor(ConvNextImageProcessor):
     def __init__(self, *args, **kwargs) -> None:
         warnings.warn(
@@ -31,3 +33,6 @@ class ConvNextFeatureExtractor(ConvNextImageProcessor):
             FutureWarning,
         )
         super().__init__(*args, **kwargs)
+
+
+__all__ = ["ConvNextFeatureExtractor"]

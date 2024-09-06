@@ -2761,3 +2761,6 @@ def add_numeric_table_values(table, min_consolidation_fraction=0.7, debug_info=N
             table.iloc[row_index, col_index].numeric_value = numeric_value
 
     return table
+
+
+__all__ = ["TapasTokenizer"]

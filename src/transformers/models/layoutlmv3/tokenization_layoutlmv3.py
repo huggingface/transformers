@@ -1459,3 +1459,6 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
                 raise ValueError("Invalid padding strategy:" + str(self.padding_side))
 
         return encoded_inputs
+
+
+__all__ = ["LayoutLMv3Tokenizer"]

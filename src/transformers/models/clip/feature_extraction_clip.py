@@ -17,12 +17,14 @@
 import warnings
 
 from ...utils import logging
+from ...utils.import_utils import export
 from .image_processing_clip import CLIPImageProcessor
 
 
 logger = logging.get_logger(__name__)
 
 
+@export(backends=("vision",))
 class CLIPFeatureExtractor(CLIPImageProcessor):
     def __init__(self, *args, **kwargs) -> None:
         warnings.warn(
@@ -31,3 +33,6 @@ class CLIPFeatureExtractor(CLIPImageProcessor):
             FutureWarning,
         )
         super().__init__(*args, **kwargs)
+
+
+__all__ = ["CLIPFeatureExtractor"]

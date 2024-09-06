@@ -53,6 +53,7 @@ from ...utils import (
     logging,
 )
 from ...utils.deprecation import deprecate_kwarg
+from ...utils.import_utils import export
 
 
 logger = logging.get_logger(__name__)
@@ -372,6 +373,7 @@ def load_metadata(repo_id, class_info_file):
     return class_info
 
 
+@export(backends=("vision",))
 class OneFormerImageProcessor(BaseImageProcessor):
     r"""
     Constructs a OneFormer image processor. The image processor can be used to prepare image(s), task input(s) and
@@ -1351,3 +1353,6 @@ class OneFormerImageProcessor(BaseImageProcessor):
 
             results.append({"segmentation": segmentation, "segments_info": segments})
         return results
+
+
+__all__ = ["OneFormerImageProcessor"]

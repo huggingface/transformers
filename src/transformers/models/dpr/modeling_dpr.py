@@ -655,3 +655,15 @@ class DPRReader(DPRPretrainedReader):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
+
+
+__all__ = [
+    "DPRPreTrainedModel",
+    "DPRPretrainedContextEncoder",
+    "DPRPretrainedQuestionEncoder",
+    "DPRPretrainedReader",
+    "DPRContextEncoder",
+    "DPRQuestionEncoder",
+    "DPRReader",
+    "DPRReaderOutput",
+]

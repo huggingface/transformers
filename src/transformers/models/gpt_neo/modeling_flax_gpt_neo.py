@@ -682,3 +682,5 @@ class FlaxGPTNeoForCausalLM(FlaxGPTNeoPreTrainedModel):
 
 
 append_call_sample_docstring(FlaxGPTNeoForCausalLM, _CHECKPOINT_FOR_DOC, FlaxCausalLMOutput, _CONFIG_FOR_DOC)
+
+__all__ = ["FlaxGPTNeoPreTrainedModel", "FlaxGPTNeoModel", "FlaxGPTNeoForCausalLM"]

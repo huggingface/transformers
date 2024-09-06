@@ -18,10 +18,10 @@ import warnings
 from collections import OrderedDict
 from typing import Any, Mapping, Optional
 
-from ... import PreTrainedTokenizer
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig, OnnxConfigWithPast, OnnxSeq2SeqConfigWithPast
 from ...onnx.utils import compute_effective_axis_dimension
+from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import TensorType, is_torch_available, logging
 
 
@@ -400,3 +400,6 @@ class BartOnnxConfig(OnnxSeq2SeqConfigWithPast):
             flattened_output = super(OnnxSeq2SeqConfigWithPast, self)._flatten_past_key_values_(
                 flattened_output, name, idx, t
             )
+
+
+__all__ = ["BartConfig", "BartOnnxConfig"]

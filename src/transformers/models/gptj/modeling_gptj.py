@@ -1468,3 +1468,12 @@ class GPTJForQuestionAnswering(GPTJPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "GPTJPreTrainedModel",
+    "GPTJModel",
+    "GPTJForCausalLM",
+    "GPTJForSequenceClassification",
+    "GPTJForQuestionAnswering",
+]

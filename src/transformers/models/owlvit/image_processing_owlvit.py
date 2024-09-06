@@ -41,6 +41,7 @@ from ...image_utils import (
     validate_preprocess_arguments,
 )
 from ...utils import TensorType, filter_out_non_signature_kwargs, is_torch_available, logging
+from ...utils.import_utils import export
 
 
 if is_torch_available():
@@ -89,6 +90,7 @@ def box_iou(boxes1, boxes2):
     return iou, union
 
 
+@export(backends=("vision",))
 class OwlViTImageProcessor(BaseImageProcessor):
     r"""
     Constructs an OWL-ViT image processor.
@@ -596,3 +598,6 @@ class OwlViTImageProcessor(BaseImageProcessor):
             results.append({"scores": box_scores, "labels": None, "boxes": boxes})
 
         return results
+
+
+__all__ = ["OwlViTImageProcessor"]

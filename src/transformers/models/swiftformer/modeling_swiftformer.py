@@ -602,3 +602,6 @@ class SwiftFormerForImageClassification(SwiftFormerPreTrainedModel):
             logits=logits,
             hidden_states=outputs.hidden_states,
         )
+
+
+__all__ = ["SwiftFormerModel", "SwiftFormerForImageClassification", "SwiftFormerPreTrainedModel"]

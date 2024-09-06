@@ -1413,3 +1413,12 @@ class SwinBackbone(SwinPreTrainedModel, BackboneMixin):
             hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "SwinPreTrainedModel",
+    "SwinModel",
+    "SwinForMaskedImageModeling",
+    "SwinForImageClassification",
+    "SwinBackbone",
+]
