@@ -16,7 +16,7 @@ Zamba-7B-v1 is a hybrid between state-space models (Specifically [Mamba](https:/
 
 Zamba requires you use `transformers` version 4.45.0 or higher:
 ```bash
-pip install transformers>=4.39.0
+pip install transformers>=4.45.0
 ```
 
 In order to run optimized Mamba implementations, you first need to install `mamba-ssm` and `causal-conv1d`:
