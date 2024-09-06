@@ -535,14 +535,14 @@ class ProPainterP3DBlock(nn.Module):
         )
         self.use_residual = use_residual
 
-    def forward(self, hidden_states):
-        features1 = self.conv1(hidden_states)
+    def forward(self, hidden_state):
+        features1 = self.conv1(hidden_state)
         features2 = self.conv2(features1)
         if self.use_residual:
-            hidden_states = hidden_states + features2
+            hidden_state = hidden_state + features2
         else:
-            hidden_states = features2
-        return hidden_states
+            hidden_state = features2
+        return hidden_state
 
 
 class ProPainterEdgeDetection(nn.Module):
@@ -605,16 +605,16 @@ class ProPainterBidirectionalPropagationFlowComplete(nn.Module):
 
         self.fusion = nn.Conv2d(2 * config.num_channels, config.num_channels, 1, 1, 0)
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_state):
         """
-        hidden_states shape : [batch_size, timesteps, num_channels, height, width]
+        hidden_state shape : [batch_size, timesteps, num_channels, height, width]
         return [batch_size, timesteps, num_channels, height, width]
         """
 
-        batch_size, timesteps, _, height, width = hidden_states.shape
+        batch_size, timesteps, _, height, width = hidden_state.shape
         features = {}
         features["spatial"] = [
-            hidden_states[:, i, :, :, :] for i in range(0, timesteps)
+            hidden_state[:, i, :, :, :] for i in range(0, timesteps)
         ]
 
         for module_name in ["backward_", "forward_"]:
@@ -627,7 +627,7 @@ class ProPainterBidirectionalPropagationFlowComplete(nn.Module):
             if "backward" in module_name:
                 frame_idx = frame_idx[::-1]
 
-            feature_propagation = hidden_states.new_zeros(
+            feature_propagation = hidden_state.new_zeros(
                 batch_size, self.config.num_channels, height, width
             )
             for i, idx in enumerate(frame_idx):
@@ -678,9 +678,9 @@ class ProPainterBidirectionalPropagationFlowComplete(nn.Module):
             align_feats = torch.cat(align_feats, dim=1)
             outputs.append(self.fusion(align_feats))
 
-        hidden_states = torch.stack(outputs, dim=1) + hidden_states
+        hidden_state = torch.stack(outputs, dim=1) + hidden_state
 
-        return hidden_states
+        return hidden_state
 
 
 def flow_warp(
@@ -1349,24 +1349,24 @@ class ProPainterSoftComp(nn.Module):
             config.num_channels, config.num_channels, kernel_size=3, stride=1, padding=1
         )
 
-    def forward(self, hidden_states, timestep, output_size):
-        num_batch_, _, _, _, channel_ = hidden_states.shape
-        hidden_states = hidden_states.view(num_batch_, -1, channel_)
-        hidden_states = self.embedding(hidden_states)
-        batch_size, _, num_channels = hidden_states.size()
-        hidden_states = hidden_states.view(
+    def forward(self, hidden_state, timestep, output_size):
+        num_batch_, _, _, _, channel_ = hidden_state.shape
+        hidden_state = hidden_state.view(num_batch_, -1, channel_)
+        hidden_state = self.embedding(hidden_state)
+        batch_size, _, num_channels = hidden_state.size()
+        hidden_state = hidden_state.view(
             batch_size * timestep, -1, num_channels
         ).permute(0, 2, 1)
-        hidden_states = F.fold(
-            hidden_states,
+        hidden_state = F.fold(
+            hidden_state,
             output_size=output_size,
             kernel_size=self.kernel_size,
             stride=self.stride,
             padding=self.padding,
         )
-        hidden_states = self.bias_conv(hidden_states)
+        hidden_state = self.bias_conv(hidden_state)
 
-        return hidden_states
+        return hidden_state
 
 
 def window_partition(input_feature, window_size, num_attention_heads):
@@ -1814,7 +1814,7 @@ class ProPainterFusionFeedForward(nn.Module):
             (lambda x, y: x * y), token_to_token_params["kernel_size"]
         )  # 49
 
-    def forward(self, hidden_states, output_size):
+    def forward(self, hidden_state, output_size):
         num_vecs = 1
         for i, d in enumerate(self.token_to_token_params["kernel_size"]):
             num_vecs *= int(
@@ -1828,10 +1828,10 @@ class ProPainterFusionFeedForward(nn.Module):
                 + 1
             )
 
-        hidden_states = self.fc1(hidden_states)
-        batch_size, timestep, num_channel = hidden_states.size()
+        hidden_state = self.fc1(hidden_state)
+        batch_size, timestep, num_channel = hidden_state.size()
         normalizer = (
-            hidden_states.new_ones(batch_size, timestep, self.kernel_shape)
+            hidden_state.new_ones(batch_size, timestep, self.kernel_shape)
             .view(-1, num_vecs, self.kernel_shape)
             .permute(0, 2, 1)
         )
@@ -1843,16 +1843,16 @@ class ProPainterFusionFeedForward(nn.Module):
             stride=self.token_to_token_params["stride"],
         )
 
-        hidden_states = F.fold(
-            hidden_states.view(-1, num_vecs, num_channel).permute(0, 2, 1),
+        hidden_state = F.fold(
+            hidden_state.view(-1, num_vecs, num_channel).permute(0, 2, 1),
             output_size=output_size,
             kernel_size=self.token_to_token_params["kernel_size"],
             padding=self.token_to_token_params["padding"],
             stride=self.token_to_token_params["stride"],
         )
-        hidden_states = (
+        hidden_state = (
             F.unfold(
-                hidden_states / normalizer,
+                hidden_state / normalizer,
                 kernel_size=self.token_to_token_params["kernel_size"],
                 padding=self.token_to_token_params["padding"],
                 stride=self.token_to_token_params["stride"],
@@ -1861,9 +1861,9 @@ class ProPainterFusionFeedForward(nn.Module):
             .contiguous()
             .view(batch_size, timestep, num_channel)
         )
-        hidden_states = self.fc2(hidden_states)
+        hidden_state = self.fc2(hidden_state)
 
-        return hidden_states
+        return hidden_state
 
 
 class ProPainterTemporalSparseTransformerBlock(nn.Module):
