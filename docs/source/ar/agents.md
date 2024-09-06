@@ -109,7 +109,7 @@ def llm_engine(messages, stop_sequences=["Task"]) -> str:
 
 أنت بحاجة أيضًا إلى معامل "الأدوات" الذي يقبل قائمة من "الأدوات". يمكنك توفير قائمة فارغة لـ "الأدوات"، ولكن استخدم صندوق الأدوات الافتراضي مع معامل اختياري `add_base_tools=True`.
 
-الآن يمكنك إنشاء وكيل، مثل [`CodeAgent`], وتشغيله. وللراحة، نقدم أيضًا فئة [`HfEngine`] التي تستخدم `huggingface_hub.InferenceClient` تحت الغطاء.
+الآن يمكنك إنشاء وكيل، مثل [`CodeAgent`], وتشغيله. ولتسهيل الأمر، نقدم أيضًا فئة [`HfEngine`] التي تستخدم `huggingface_hub.InferenceClient` بشكل مخفى.
 
 ```python
 from transformers import CodeAgent, HfEngine
