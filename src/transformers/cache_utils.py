@@ -71,7 +71,8 @@ class Cache(torch.nn.Module):
         Returns the maximum sequence length of the cache object. The method is deprecated,so use
         `get_max_cache_shape` instead
         """
-        raise NotImplementedError("Make sure to implement `get_max_length` in a subclass.")
+        <add the warning here>
+        return self.get_max_cache_shape()
 
     def get_max_cache_shape(self) -> Optional[int]:
         """Returns the maximum sequence length of the cache object"""
