@@ -587,11 +587,20 @@ class WhisperTokenizer(PreTrainedTokenizer):
             consecutive = np.append(consecutive, np.where(timestamp_tokens)[0][-1] + 1)
 
         last_slice = np.where(timestamp_tokens)[0][0]
+        cur_max_timestamp = 0
+        prev_segments_len = 0
         for current_slice in consecutive:
             sliced_tokens = token_ids[last_slice:current_slice]
             if len(sliced_tokens) > 1:
                 start_timestamp_position = sliced_tokens[0].item() - timestamp_begin
                 end_timestamp_position = sliced_tokens[-1].item() - timestamp_begin
+
+                if start_timestamp_position < cur_max_timestamp:
+                    # next segment has started
+                    prev_segments_len += cur_max_timestamp
+
+                cur_max_timestamp = end_timestamp_position
+
                 # strip timestamp tokens from the text output
                 sliced_tokens = self._preprocess_token_ids(sliced_tokens)
                 text = self._decode(sliced_tokens)
@@ -600,8 +609,8 @@ class WhisperTokenizer(PreTrainedTokenizer):
                     {
                         "text": text,
                         "timestamp": (
-                            start_timestamp_position * time_precision,
-                            end_timestamp_position * time_precision,
+                            (start_timestamp_position + prev_segments_len) * time_precision,
+                            (end_timestamp_position + prev_segments_len) * time_precision,
                         ),
                     }
                 )
