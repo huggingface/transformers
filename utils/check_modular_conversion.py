@@ -5,7 +5,7 @@ import logging
 from io import StringIO
 
 # Console for rich printing
-from diff_model_converter import convert_diff_file
+from modular_model_converter import convert_diff_file
 from rich.console import Console
 from rich.syntax import Syntax
 
