@@ -146,7 +146,7 @@ def extrapolation(
         - Flow Masks: Creates masks indicating the missing regions in the expanded FOV. These masks are used for flow-based propagation.
         - Dilated Masks: Generates additional masks with dilated borders to account for edge effects and improve the robustness of the process.
     (e) Format Conversion: Converts the images and masks to the specified channel dimension format, if needed.
-    
+
     Args:
         images (Image):
             The video frames to convert.
