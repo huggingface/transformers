@@ -26,8 +26,7 @@ Idefics3 is an adaptation of the Idefics2 model with three main differences:
 - It uses an updated processing logic for the images.
 - It removes the perceiver.
 
-Input images are either upsampled such that the longest side is 4*364 (if `do_resize` is set `True`) or processed in their original resolution.
-In any case, the image processors decomposes images in patches of 364x364 pixels.
+Input images are either upsampled such that the longest side is 4*364 (if `do_resize` is set `True`) or processed in their original resolution. In both cases, the image processor then decomposes images into patches of 364x364 pixels.
 
 The abstract from the paper is the following:
 
