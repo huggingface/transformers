@@ -493,11 +493,8 @@ class GGUFPhi3Converter(LlamaConverter):
 GGUF_TO_FAST_CONVERTERS = {
     "llama": GGUFLlamaConverter,
     "qwen2": GGUFQwen2Converter,
-<<<<<<< HEAD
     "qwen2_moe": GGUFQwen2Converter,
-=======
     "phi3": GGUFPhi3Converter,
->>>>>>> 64bbec9e1 (Add tensor mappings and define class GGUFPhi3Converter)
 }
 
 

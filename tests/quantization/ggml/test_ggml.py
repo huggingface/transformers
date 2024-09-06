@@ -334,7 +334,6 @@ class GgufIntegrationTests(unittest.TestCase):
         EXPECTED_TEXT = "Hello.jsoup\n\nI am a beginner"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
-
     def test_qwen2_moe_q4_0(self):
         tokenizer = AutoTokenizer.from_pretrained(self.qwen2_moe_model_id, gguf_file=self.q4_0_qwen2_moe_model_id)
         model = AutoModelForCausalLM.from_pretrained(
@@ -342,6 +341,13 @@ class GgufIntegrationTests(unittest.TestCase):
             gguf_file=self.q4_0_qwen2_moe_model_id,
             device_map="auto",
             torch_dtype=torch.float16,
+        )
+
+        text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
+        out = model.generate(**text, max_new_tokens=10)
+
+        EXPECTED_TEXT = "Hello everyone, I'm a newbie here and would like"
+        self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
     def test_phi3_q4_0(self):
         tokenizer = AutoTokenizer.from_pretrained(self.phi3_model_id, gguf_file=self.q4_0_phi3_model_id)
@@ -351,7 +357,6 @@ class GgufIntegrationTests(unittest.TestCase):
 
         text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
         out = model.generate(**text, max_new_tokens=10)
-
 
         EXPECTED_TEXT = "Hello, I've been reading about the impact of"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
