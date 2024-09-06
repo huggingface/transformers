@@ -42,17 +42,6 @@ _CONFIG_FOR_DOC = "MllamaConfig"
 
 
 
-
-def get_negative_inf_value(dtype):
-    return torch.finfo(dtype).min
-
-
-def to_tuple(x) -> Tuple[int, int]:
-    if isinstance(x, collections.abc.Iterable):
-        return x
-    return (x, x)
-
-
 def _prepare_4d_causal_attention_mask_with_cache_position(
     attention_mask: torch.Tensor,
     sequence_length: int,
@@ -105,98 +94,6 @@ def _prepare_4d_causal_attention_mask_with_cache_position(
 
     return causal_mask
 
-def get_full_row_masked_out_mask(
-    attn_bias,
-    negative_inf_value,
-):
-    """
-    attn_bias should be a 4D tensor of shape [B, H, S1, S2]
-    where B is the batch size, H is the number of heads,
-    and S1/S2 are the sequence lengths. This returns
-    a 4D tensor of shape [B, H, S1, 1] which stores boolean
-    values which are 0 if the a full row in the last dimension
-    contains negative infinity values, otherwise it's 1.
-    """
-    return (attn_bias != negative_inf_value).any(dim=-1).type_as(attn_bias)[..., None]
-
-
-def convert_sparse_cross_attention_mask_to_dense(
-    cross_attention_token_mask: List[List[List[int]]],
-    num_tiles: List[List[int]],
-    max_num_tiles: int,
-    total_len: int,
-    device: torch.device,
-    dtype: torch.dtype,
-) -> torch.Tensor:
-
-    inf_value = get_negative_inf_value(dtype)
-
-    batch_size = len(cross_attention_token_mask)
-    max_num_images = max([len(masks) for masks in cross_attention_token_mask])
-
-    out_masks = torch.full(
-        size=(batch_size, total_len, max_num_images, max_num_tiles),
-        fill_value=inf_value,
-        dtype=dtype,
-        device=device,
-    )
-
-    for idx, (mask_i, num_tiles_i) in enumerate(zip(cross_attention_token_mask, num_tiles)):
-        for mask_idx, (token_locations, mask_num_chunks) in enumerate(zip(mask_i, num_tiles_i)):
-            if len(token_locations) == 2:
-                start, end = token_locations
-                end = min(end, total_len)
-                if end == -1:
-                    end = total_len
-                out_masks[idx, start:end, mask_idx, :mask_num_chunks].fill_(0.0)
-
-    return out_masks
-
-
-def prepare_cross_attention_mask(
-    cross_attention_mask: torch.Tensor,
-    num_vision_tokens: int,
-) -> Tuple[Tensor, Tensor]:
-
-    batch_size, text_total_length, _, _ = cross_attention_mask.shape
-
-    cross_attention_mask = cross_attention_mask.repeat_interleave(num_vision_tokens, dim=2)
-    cross_attention_mask = cross_attention_mask.view(batch_size, text_total_length, -1)
-    cross_attention_mask = cross_attention_mask.unsqueeze(1)
-
-    inf_value = get_negative_inf_value(cross_attention_mask.dtype)
-    full_text_row_masked_out_mask = get_full_row_masked_out_mask(cross_attention_mask, inf_value)
-
-    cross_attention_mask *= full_text_row_masked_out_mask
-
-    return cross_attention_mask, full_text_row_masked_out_mask
-
-
-
-# vision encoder utils
-# --------------------
-
-def build_encoder_attention_mask(
-    x: torch.Tensor,
-    ar: torch.Tensor,
-    ntok: int,
-    num_chunks: int,
-    n_heads: int,
-):
-    """
-    Build vision encoder attention mask that omits padding tokens.
-    """
-    masks = []
-    for arx in ar:
-        mask_i = torch.ones((num_chunks, x.shape[2], 1), dtype=x.dtype)
-        mask_i[: arx[0] * arx[1], :ntok] = 0
-        mask_i = mask_i.view(num_chunks * x.shape[2], -1)
-        mask_i = mask_i @ mask_i.T * get_negative_inf_value(x.dtype)
-        mask_i = mask_i.unsqueeze(0)
-        masks.append(mask_i)
-    masks = torch.stack(masks).to(x.device).expand(-1, n_heads, -1, -1)
-    return masks
-
 def expand_num_tokens_to_mult8(x):
     num_pad_tokens = (8 - (x.shape[-2] % 8))
     if num_pad_tokens == 0:
@@ -236,62 +133,6 @@ class RMSNorm(torch.nn.Module):
         output = self._norm(x.float()).type_as(x)
         return output * self.weight
 
-def apply_scaling(freqs: torch.Tensor):
-    # Values obtained from grid search
-    scale_factor = 8
-    low_freq_factor = 1
-    high_freq_factor = 4
-    old_context_len = 8192  # original llama3 length
-
-    low_freq_wavelen = old_context_len / low_freq_factor
-    high_freq_wavelen = old_context_len / high_freq_factor
-    new_freqs = []
-    for freq in freqs:
-        wavelen = 2 * math.pi / freq
-        if wavelen < high_freq_wavelen:
-            new_freqs.append(freq)
-        elif wavelen > low_freq_wavelen:
-            new_freqs.append(freq / scale_factor)
-        else:
-            assert low_freq_wavelen != high_freq_wavelen
-            smooth = (old_context_len / wavelen - low_freq_factor) / (
-                high_freq_factor - low_freq_factor
-            )
-            new_freqs.append((1 - smooth) * freq / scale_factor + smooth * freq)
-    return torch.tensor(new_freqs, dtype=freqs.dtype, device=freqs.device)
-
-
-def precompute_freqs_cis(
-    dim: int, end: int, theta: float = 10000.0, use_scaled: bool = False
-):
-    freqs = 1.0 / (theta ** (torch.arange(0, dim, 2)[: (dim // 2)].float() / dim))
-    t = torch.arange(end, device=freqs.device, dtype=torch.float32)
-    if use_scaled:
-        freqs = apply_scaling(freqs)
-    freqs = torch.outer(t, freqs)
-    freqs_cis = torch.polar(torch.ones_like(freqs), freqs)  # complex64
-    return freqs_cis
-
-
-def reshape_for_broadcast(freqs_cis: torch.Tensor, x: torch.Tensor):
-    ndim = x.ndim
-    assert 0 <= 1 < ndim
-    assert freqs_cis.shape == (x.shape[1], x.shape[-1])
-    shape = [d if i == 1 or i == ndim - 1 else 1 for i, d in enumerate(x.shape)]
-    return freqs_cis.view(*shape)
-
-
-def apply_rotary_emb(
-    xq: torch.Tensor,
-    xk: torch.Tensor,
-    freqs_cis: torch.Tensor,
-) -> Tuple[torch.Tensor, torch.Tensor]:
-    xq_ = torch.view_as_complex(xq.float().reshape(*xq.shape[:-1], -1, 2))
-    xk_ = torch.view_as_complex(xk.float().reshape(*xk.shape[:-1], -1, 2))
-    freqs_cis = reshape_for_broadcast(freqs_cis, xq_)
-    xq_out = torch.view_as_real(xq_ * freqs_cis).flatten(3)
-    xk_out = torch.view_as_real(xk_ * freqs_cis).flatten(3)
-    return xq_out.type_as(xq), xk_out.type_as(xk)
 
 
 @dataclass
@@ -1224,39 +1065,6 @@ class MllamaCrossAttentionTextModel(PreTrainedModel):
             cross_attention_layer = MllamaCrossAttentionLayer(config, layer_id=i + self.n_layers)
             self.cross_attention_layers.append(cross_attention_layer)
 
-        freqs_cis = precompute_freqs_cis(
-            self.dim // self.n_heads,
-            self.max_seq_len * 2,
-            self.rope_theta,
-            self.use_scaled_rope,
-        )
-        self.register_buffer("freqs_cis", freqs_cis, persistent=False)
-
-    def _init_fusion_schedule(
-        self,
-        num_layers: int,
-    ) -> List[int]:
-        llama_layers = list(range(self.n_llama_layers))
-
-        # uniformly spread the layers
-        k = math.ceil(len(llama_layers) / num_layers)
-        return llama_layers[::-1][::k][:num_layers][::-1]
-
-    def get_partially_trainable_embedding(self, x):
-        xz = torch.zeros_like(x, device=x.device)
-        oz = torch.ones_like(x, device=x.device)
-        x_orig = torch.minimum(x, torch.tensor(self._thresh, device=x.device))
-        x_new = (
-            torch.maximum(x, torch.tensor(self._thresh + 1, device=x.device))
-            - self.num_frozen_embeddings
-        )
-
-        mask_orig = torch.where(x >= self.num_frozen_embeddings, xz, oz).unsqueeze(-1)
-        mask_new = torch.where(x < self.num_frozen_embeddings, xz, oz).unsqueeze(-1)
-
-        x_orig = self.embed_tokens(x_orig)
-        x_new = self.learnable_embedding(x_new).type_as(x_orig)
-        return x_orig * mask_orig.type_as(x_orig) + x_new * mask_new.type_as(x_new)
 
     def forward(
         self,
