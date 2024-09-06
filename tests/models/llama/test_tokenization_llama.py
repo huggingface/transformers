@@ -20,6 +20,7 @@ import tempfile
 import unittest
 
 from datasets import load_dataset
+from huggingface_hub import hf_hub_download
 
 from transformers import (
     SPIECE_UNDERLINE,
@@ -329,6 +330,15 @@ class LlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             slow_.decode(EXPECTED_WITH_SPACE, skip_special_tokens=True),
             fast_.decode(EXPECTED_WITH_SPACE, skip_special_tokens=True),
         )
+
+    def test_load_tokenizer_with_model_file_only(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            hf_hub_download(repo_id="huggyllama/llama-7b", filename="tokenizer.model", local_dir=tmp_dir)
+            tokenizer_fast = self.rust_tokenizer_class.from_pretrained(tmp_dir)
+            self.assertEqual(tokenizer_fast.encode("This is a test"), [1, 910, 338, 263, 1243])
+
+            tokenizer_slow = self.tokenizer_class.from_pretrained(tmp_dir)
+            self.assertEqual(tokenizer_slow.encode("This is a test"), [1, 910, 338, 263, 1243])
 
 
 @require_torch

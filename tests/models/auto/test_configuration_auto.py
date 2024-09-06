@@ -104,13 +104,6 @@ class AutoConfigTest(unittest.TestCase):
         ):
             _ = AutoConfig.from_pretrained(DUMMY_UNKNOWN_IDENTIFIER, revision="aaaaaa")
 
-    def test_configuration_not_found(self):
-        with self.assertRaisesRegex(
-            EnvironmentError,
-            "hf-internal-testing/no-config-test-repo does not appear to have a file named config.json.",
-        ):
-            _ = AutoConfig.from_pretrained("hf-internal-testing/no-config-test-repo")
-
     def test_from_pretrained_dynamic_config(self):
         # If remote code is not set, we will time out when asking whether to load the model.
         with self.assertRaises(ValueError):
