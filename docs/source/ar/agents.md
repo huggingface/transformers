@@ -28,7 +28,7 @@
 
 نقوم بتنفيذ إصدارين من ReactJsonAgent: 
 - [`ReactJsonAgent`] يقوم بتوليد استدعاءات الأدوات كـ JSON في إخراجها.
-- [`ReactCodeAgent`] هو نوع جديد من ReactJsonAgent يقوم بتوليد استدعاءات أدواته كمقاطع من التعليمات البرمجية، والتي تعمل بشكل جيد حقًا مع LLMs التي تتمتع بأداء ترميز قوي.
+- [`ReactCodeAgent`] هو نوع جديد من ReactJsonAgent يقوم بتوليد استدعاءات أدواته كمقاطع من التعليمات البرمجية، والتي تعمل بشكل جيد حقًا مع LLMs التي تتمتع بأداء  قوي في البرمجة.
 
 > [!TIP]
 > اقرأ منشور المدونة [Open-source LLMs as LangChain Agents](https://huggingface.co/blog/open-source-llms-as-agents) لمعرفة المزيد عن وكيل ReAct.
