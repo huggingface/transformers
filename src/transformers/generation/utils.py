@@ -1769,7 +1769,7 @@ class GenerationMixin:
                 model_kwargs["past_key_values"] = cache_class(cache_config)
         # Use DynamicCache() instance by default. This will avoid back and forth from legacy format that
         # keeps copying the cache thus using much more memory
-        elif generation_config.cache_implementation is None and self._supports_default_dynamic_cache():
+        elif generation_config.cache_implementation is None and self._supports_default_dynamic_cache:
             past = model_kwargs.get("past_key_values", None)
             if past is None:
                 model_kwargs["past_key_values"] = DynamicCache()
@@ -2655,10 +2655,12 @@ class GenerationMixin:
 
             # Clone is needed to avoid keeping a hanging ref to outputs.logits which may be very large for first iteration
             # (the clone itself is always small)
-            next_token_logits = outputs.logits[:, -1, :].clone()
+            # TODO: remove small change here so that we get full logits from generate
+            # the gold logist for comparison are full logits
+            next_token_logits = outputs.logits.clone()
 
             # pre-process distribution
-            next_token_scores = logits_processor(input_ids, next_token_logits)
+            next_token_scores = logits_processor(input_ids, next_token_logits[:, -1, :])
             if do_sample:
                 next_token_scores = logits_warper(input_ids, next_token_scores)
 

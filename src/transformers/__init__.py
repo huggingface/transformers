@@ -5112,10 +5112,6 @@ if TYPE_CHECKING:
         LlavaConfig,
         LlavaProcessor,
     )
-    from .models.mllama import (
-        MllamaConfig,
-        MllamaProcessor,
-    )
     from .models.llava_next import (
         LlavaNextConfig,
         LlavaNextProcessor,
@@ -5160,6 +5156,10 @@ if TYPE_CHECKING:
     )
     from .models.mistral import MistralConfig
     from .models.mixtral import MixtralConfig
+    from .models.mllama import (
+        MllamaConfig,
+        MllamaProcessor,
+    )
     from .models.mobilebert import (
         MobileBertConfig,
         MobileBertTokenizer,
@@ -6841,10 +6841,6 @@ if TYPE_CHECKING:
             LlavaForConditionalGeneration,
             LlavaPreTrainedModel,
         )
-        from .models.mllama import (
-            MllamaForConditionalGeneration,
-            MllamaPreTrainedModel,
-        )
         from .models.llava_next import (
             LlavaNextForConditionalGeneration,
             LlavaNextPreTrainedModel,
@@ -6953,6 +6949,10 @@ if TYPE_CHECKING:
             MixtralForTokenClassification,
             MixtralModel,
             MixtralPreTrainedModel,
+        )
+        from .models.mllama import (
+            MllamaForConditionalGeneration,
+            MllamaPreTrainedModel,
         )
         from .models.mobilebert import (
             MobileBertForMaskedLM,

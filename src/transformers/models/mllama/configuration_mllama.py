@@ -13,13 +13,13 @@
 # limitations under the License.
 """Mllama model configuration"""
 
-import warnings
+
+import os
+from typing import Union
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
-from ..auto import CONFIG_MAPPING
-import os
-from typing import Union
+
 
 logger = logging.get_logger(__name__)
 
@@ -106,9 +106,9 @@ class MllamaCrossAttentionVisionConfig(PretrainedConfig):
         self.norm_eps = norm_eps
         self.ffn_dim_multiplier = ffn_dim_multiplier
         self.multiple_of = multiple_of
-        
 
-    
+
+
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
         cls._set_token_in_kwargs(kwargs)
@@ -125,7 +125,7 @@ class MllamaCrossAttentionVisionConfig(PretrainedConfig):
             )
 
         return cls.from_dict(config_dict, **kwargs)
-    
+
 
 
 
@@ -199,6 +199,13 @@ class MllamaCrossAttentionTextConfig(PretrainedConfig):
         self.vocab_size = vocab_size
         self.n_layers = n_layers
         self.dim = dim
+
+        # FOR STATIC CACHE, TEMP SOLUTION UNTIL STANDARDIZING VAR NAMES
+        self.hidden_size = dim
+        self.num_attention_heads = n_heads
+        self.num_key_value_heads = n_kv_heads
+        self.num_hidden_layers = n_layers
+
         self.n_heads = n_heads
         self.n_kv_heads = n_kv_heads
         self.max_seq_len = max_seq_len
@@ -213,7 +220,7 @@ class MllamaCrossAttentionTextConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
 
-    
+
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
         cls._set_token_in_kwargs(kwargs)

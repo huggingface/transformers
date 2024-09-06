@@ -14,16 +14,17 @@
 # limitations under the License.
 
 import math
-import numpy as np
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
-from typing import Any, Dict, List, Optional, Tuple, Union, Any, Tuple, Set, Dict, List
+import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
 from ...image_transforms import (
     PaddingMode,
     get_image_size,
+    pad,
+    resize,
 )
-from ...image_transforms import pad, resize
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -553,7 +554,7 @@ class MllamaImageProcessor(BaseImageProcessor):
         # num_tiles: (batch_size, num_images)  - real number of tiles for each image
 
         encoded_inputs = BatchFeature(
-            data=dict(pixel_values=images, aspect_ratios=aspect_ratios),
+            data={"pixel_values": images, "aspect_ratios": aspect_ratios},
             tensor_type=return_tensors,
         )
         encoded_inputs["num_tiles"] = num_tiles

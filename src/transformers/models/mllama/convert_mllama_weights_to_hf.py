@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import argparse
 import gc
 import json
 import os
@@ -21,9 +20,9 @@ import warnings
 
 import torch
 
-from transformers import MllamaConfig, PreTrainedTokenizerFast, MllamaForConditionalGeneration
+from transformers import MllamaConfig, MllamaForConditionalGeneration, MllamaImageProcessor, PreTrainedTokenizerFast
 from transformers.convert_slow_tokenizer import TikTokenConverter
-from transformers import MllamaImageProcessor
+
 
 try:
     from transformers import LlamaTokenizerFast
@@ -58,12 +57,12 @@ def split_wqkv_to_query_key_value(wqkv, n_heads, n_kv_heads):
 def apply_load_hooks_(state_dict):
 
     keys = list(state_dict.keys())
-    
+
     for param_name in keys:
 
         # text model cross attention layers
         if "text_model.cross_attention_layers." in param_name:
-            
+
             # CrossAttention load_hook
             if "inner_attention.q_norm.weight" in param_name:
                 q_weight = state_dict.pop(param_name)
@@ -153,14 +152,14 @@ def write_model(
     patch_size = 14
     num_channels = 3
 
-    
+
     base = params.get("rope_theta", 10000.0)
     inv_freq = 1.0 / (base ** (torch.arange(0, dims_per_head, 2).float() / dims_per_head))
 
     # vision parameters
     n_layers_vision_transformer = 32 # vision model 1st transformer layers
     n_layers_global_transformer = 8 # global transformer vision layers
-    n_heads_vision = 16 
+    n_heads_vision = 16
     n_vision_heads_per_shard = n_heads_vision // num_shards
     vision_hidden_dim = 1280 # width of vision transformers
     vision_dims_per_head = vision_hidden_dim // n_heads_vision
@@ -349,7 +348,7 @@ def write_model(
             f"model.language_model.cross_attention_layers.{xattn_layer_i}.post_attention_layernorm.weight": loaded[0].pop(
                 f"text_model.cross_attention_layers.{xattn_layer_i}.ffn_norm.weight"
             ).clone(),
-        }        
+        }
 
         # projections
 
@@ -425,7 +424,7 @@ def write_model(
 
         if model_size == "11B":
             q_weight = loaded[0].pop(f"text_model.cross_attention_layers.{xattn_layer_i}.attention.q_norm.weight")
-            k_weight = loaded[0].pop(f"text_model.cross_attention_layers.{xattn_layer_i}.attention.k_norm.weight")            
+            k_weight = loaded[0].pop(f"text_model.cross_attention_layers.{xattn_layer_i}.attention.k_norm.weight")
         else:
             # q and k normalization weights (for cross-attention stability in training) are not sharded
             q_weight = loaded[0].pop(f"text_model.cross_attention_layers.{xattn_layer_i}.attention.inner_attention.q_norm.weight")
@@ -484,7 +483,7 @@ def write_model(
             state_dict[f"model.vision_model.vision_encoder.global_transformer.layers.{global_vision_layer_i}.self_attn.v_proj.weight"] = loaded[0].pop(
                 f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.attn.wv.weight'
             ).clone()
-        
+
         else:
             # attention weights and biases are sharded
             state_dict[f"model.vision_model.vision_encoder.global_transformer.layers.{global_vision_layer_i}.self_attn.q_proj.weight"] = permute(
@@ -546,7 +545,7 @@ def write_model(
         )
 
         # o_proj bias is not sharded (RowParallelLinear does not shard bias across devices)
-        state_dict[f'model.vision_model.vision_encoder.global_transformer.layers.{global_vision_layer_i}.self_attn.o_proj.bias'] = loaded[0].pop(f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.attn.wo.bias') 
+        state_dict[f'model.vision_model.vision_encoder.global_transformer.layers.{global_vision_layer_i}.self_attn.o_proj.bias'] = loaded[0].pop(f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.attn.wo.bias')
 
         # mlp layers
 
@@ -572,14 +571,14 @@ def write_model(
 
         print(f"Saving {global_vision_filename} in {tmp_model_path}...")
         torch.save(state_dict, os.path.join(tmp_model_path, global_vision_filename))
-        
+
 
     # the normal transformer - 32 layers for 90B, a CLIP model except with additional tile position embeddings
     # vision encoder embedding parameters
 
     encoder_embeddings_params_filename = "pytorch_embedding_params.bin"
 
-    # patch embedding conv weights are sharded and based on _unfold so 
+    # patch embedding conv weights are sharded and based on _unfold so
     # they require to be reshaped properly
 
     linear_patch_weights = torch.cat(
@@ -598,8 +597,8 @@ def write_model(
         'model.vision_model.vision_encoder.gated_positional_embedding_gate': loaded[0].pop('vision_model.vision_encoder.gated_positional_embedding_gate'),
         'model.vision_model.vision_encoder.patch_embedding.weight': linear_patch_weights,
         # layer norms are not sharded
-        'model.vision_model.vision_encoder.ln_post.weight': loaded[0].pop('vision_model.vision_encoder.ln_post.weight'),   
-        'model.vision_model.vision_encoder.ln_post.bias': loaded[0].pop('vision_model.vision_encoder.ln_post.bias'),     
+        'model.vision_model.vision_encoder.ln_post.weight': loaded[0].pop('vision_model.vision_encoder.ln_post.weight'),
+        'model.vision_model.vision_encoder.ln_post.bias': loaded[0].pop('vision_model.vision_encoder.ln_post.bias'),
         'model.vision_model.vision_encoder.ln_pre.weight': loaded[0].pop('vision_model.vision_encoder.ln_pre.weight'),
         'model.vision_model.vision_encoder.ln_pre.bias': loaded[0].pop('vision_model.vision_encoder.ln_pre.bias'),
         # tile pos embeddings (specific to mllama) are not sharded
@@ -616,7 +615,7 @@ def write_model(
 
     # vision transformer layer parameters
 
-    
+
     for vision_layer_i in range(n_layers_vision_transformer):
         state_dict = {}
         encoder_layer_parameters_filename = f"pytorch_vision_transformer-{vision_layer_i}-of-{n_layers_vision_transformer + 1}.bin"
@@ -716,7 +715,7 @@ def write_model(
 
         print(f"Saving {encoder_layer_parameters_filename} in {tmp_model_path}...")
         torch.save(state_dict, os.path.join(tmp_model_path, encoder_layer_parameters_filename))
-           
+
 
 
 
@@ -799,7 +798,7 @@ class MllamaConverter(TikTokenConverter):
             "<|eot_id|>",  # end of turn
             "<|python_tag|>",
             "<|image|>",
-        ] 
+        ]
         special_tokens += [
             f"<|reserved_special_token_{i + 2}|>"
             for i in range(num_reserved_special_tokens - len(special_tokens))

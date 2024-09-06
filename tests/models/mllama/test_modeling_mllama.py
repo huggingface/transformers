@@ -17,11 +17,8 @@
 import gc
 import unittest
 
-import requests
-
 from transformers import (
     AutoProcessor,
-    AutoTokenizer,
     MllamaConfig,
     MllamaForConditionalGeneration,
     is_torch_available,
@@ -30,8 +27,6 @@ from transformers import (
 from transformers.testing_utils import (
     require_bitsandbytes,
     require_torch,
-    require_torch_gpu,
-    require_vision,
     slow,
     torch_device,
 )
@@ -46,7 +41,7 @@ else:
     is_torch_greater_or_equal_than_2_0 = False
 
 if is_vision_available():
-    from PIL import Image
+    pass
 
 
 class MllamaVisionText2TextModelTester:
