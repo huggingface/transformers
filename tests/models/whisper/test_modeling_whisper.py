@@ -1676,6 +1676,63 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                     past_key_values=past_key_values,
                 )
 
+    def test_labels_sequence_max_length_correct(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_generative_model_classes:
+            input_features = input_dict["input_features"]
+
+            labels_length = config.max_target_positions
+            labels = torch.ones(1, labels_length, dtype=torch.int64)
+
+            model = model_class(config)
+            model(input_features=input_features, labels=labels)
+
+    def test_labels_sequence_max_length_correct_after_changing_config(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_generative_model_classes:
+            input_features = input_dict["input_features"]
+
+            config.max_target_positions += 100
+
+            labels_length = config.max_target_positions
+            labels = torch.ones(1, labels_length, dtype=torch.int64)
+
+            model = model_class(config)
+            model(input_features=input_features, labels=labels)
+
+    def test_labels_sequence_max_length_error(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_generative_model_classes:
+            input_features = input_dict["input_features"]
+
+            labels_length = config.max_target_positions + 1
+            labels = torch.ones(1, labels_length, dtype=torch.int64)
+
+            model = model_class(config)
+            with self.assertRaises(ValueError):
+                model(input_features=input_features, labels=labels)
+
+    def test_labels_sequence_max_length_error_after_changing_config(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_generative_model_classes:
+            model = model_class(config)
+            input_features = input_dict["input_features"]
+
+            labels_length = config.max_target_positions + 1
+            labels = torch.ones(1, labels_length, dtype=torch.int64)
+
+            new_max_length = config.max_target_positions + 100
+            model.config.max_length = new_max_length
+            model.generation_config.max_length = new_max_length
+            config.max_target_positions = new_max_length
+
+            with self.assertRaises(ValueError):
+                model(input_features=input_features, labels=labels)
+
 
 @require_torch
 @require_torchaudio
