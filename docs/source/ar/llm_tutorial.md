@@ -41,7 +41,7 @@ pip install transformers bitsandbytes>=0.39.0 -q
         autoplay loop muted playsinline
         src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/blog/assisted-generation/gif_2_1080p.mov"
     ></video>
-    <figcaption>"Autoregressive generation iteratively selects the next token from a probability distribution to generate text"</figcaption>
+    <figcaption>"التوليد التلقائي المتسلسل"</figcaption>
 </figure>
 
 تتكرر العملية الموضحة أعلاه بشكل تكراري حتى يتم الوصول إلى شرط التوقف. في الوضع المثالي، يحدد النموذج شرط التوقف، والذي يجب أن يتعلم عند إخراج رمز نهاية التسلسل (`EOS`). إذا لم يكن الأمر كذلك، يتوقف التوليد عند الوصول إلى طول أقصى محدد مسبقًا.
