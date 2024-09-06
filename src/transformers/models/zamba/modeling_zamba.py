@@ -391,7 +391,7 @@ class ZambaFlashAttention2(ZambaAttention):
         value_states = value_states.transpose(1, 2)
         softmax_scale = 1 / (query_states.shape[-1] / 2) ** 0.5
 
-        attn_output = self._flash_attention_forward(
+        attn_output =_flash_attention_forward(
             query_states,
             key_states,
             value_states,
