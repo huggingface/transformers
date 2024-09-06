@@ -487,10 +487,11 @@ def _validate_longrope_parameters(config: PretrainedConfig):
             logger.warning(f"`rope_scaling`'s factor field must be a float >= 1, got {factor}")
 
         attention_factor = rope_scaling.get("attention_factor")
-        if attention_factor is not None and not isinstance(attention_factor, float) or attention_factor < 0:
-            logger.warning(
-                f"`rope_scaling`'s attention_factor field must be a float greater than 0, got {attention_factor}"
-            )
+        if attention_factor is not None:
+            if not isinstance(attention_factor, float) or attention_factor < 0.0:
+                logger.warning(
+                    f"`rope_scaling`'s attention_factor field must be a float greater than 0, got {attention_factor}"
+                )
 
 
 def _validate_llama3_parameters(config: PretrainedConfig):
