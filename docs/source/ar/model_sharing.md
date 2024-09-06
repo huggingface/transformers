@@ -9,7 +9,7 @@
 - قم بسحب وإفلات ملفاتك إلى Hub باستخدام الواجهة web.
 
 <iframe width="560" height="315" src="https://www.youtube.com/embed/XvSGPZFEjDY" title="مشغل فيديو YouTube"
-frameborder="0" allow="accelerometer; تشغيل تلقائي; لوحة مفاتيح افتراضية; جيروسكوب;
+frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope;
 picture-in-picture" allowfullscreen></iframe>
 
 <Tip>
