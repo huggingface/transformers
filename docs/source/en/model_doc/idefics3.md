@@ -26,7 +26,17 @@ Idefics3 is an adaptation of the Idefics2 model with three main differences:
 - It uses an updated processing logic for the images.
 - It removes the perceiver.
 
-Input images are either upsampled such that the longest side is 4*364 (if `do_resize` is set `True`) or processed in their original resolution. In both cases, the image processor then decomposes images into patches of 364x364 pixels.
+Input images are processed either by upsampling (if resizing is enabled) or at their original resolution. The resizing behavior depends on two parameters: do_resize and size.
+
+If `do_resize` is set to `True`, the model resizes images so that the longest edge is 4*364 pixels by default.
+The default resizing behavior can be customized by passing a dictionary to the `size` parameter. For example, `{"longest_edge": 4 * 364}` is the default, but you can change it to a different value if needed.
+
+Here’s how to control resizing and set a custom size:
+```python
+image_processor = Idefics3ImageProcessor(do_resize=True, size={"longest_edge": 2 * 364}, max_image_size=364)
+```
+
+Additionally, the `max_image_size` parameter, which controls the size of each square patch the image is decomposed into, is set to 364 by default but can be adjusted as needed. After resizing (if applicable), the image processor decomposes the images into square patches based on the `max_image_size` parameter.
 
 The abstract from the paper is the following:
 
