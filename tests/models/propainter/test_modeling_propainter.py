@@ -94,13 +94,6 @@ class ProPainterModelTester:
         pixel_values_videos = floats_tensor(
             [self.batch_size, self.num_frames, 3, self.image_size, self.image_size]
         )
-
-        pixel_values_inp = pixel_values_videos.cpu().numpy().astype(np.uint8)[0]
-        pixel_values_inp = [
-            pixel_values_inp[t].transpose(1, 2, 0)
-            for t in range(pixel_values_inp.shape[0])
-        ]
-
         masks = ids_tensor(
             [self.batch_size, self.num_frames, 1, self.image_size, self.image_size],
             vocab_size=2,
@@ -108,7 +101,7 @@ class ProPainterModelTester:
         flow_masks = masks_dilated = masks
         config = self.get_config()
 
-        return config, pixel_values_videos, pixel_values_inp, flow_masks, masks_dilated
+        return config, pixel_values_videos, flow_masks, masks_dilated
 
     def get_config(self):
         return ProPainterConfig(
@@ -125,12 +118,12 @@ class ProPainterModelTester:
         return window_size[0] * window_size[1]
 
     def create_and_check_model(
-        self, config, pixel_values_videos, pixel_values_inp, flow_masks, masks_dilated
+        self, config, pixel_values_videos, flow_masks, masks_dilated
     ):
         model = ProPainterModel(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(pixel_values_videos, pixel_values_inp, flow_masks, masks_dilated)
+        result = model(pixel_values_videos, flow_masks, masks_dilated)
         self.parent.assertEqual(
             torch.tensor(result.reconstruction).shape,
             (self.num_frames, self.image_size, self.image_size, 3),
@@ -141,13 +134,11 @@ class ProPainterModelTester:
         (
             config,
             pixel_values_videos,
-            pixel_values_inp,
             flow_masks,
             masks_dilated,
         ) = config_and_inputs
         inputs_dict = {
             "pixel_values_videos": pixel_values_videos,
-            "pixel_values_inp": pixel_values_inp,
             "flow_masks": flow_masks,
             "masks_dilated": masks_dilated,
         }

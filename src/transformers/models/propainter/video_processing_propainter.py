@@ -217,22 +217,6 @@ def extrapolation(
 
     return images, flow_masks, masks_dilated
 
-# Adapted from transformers.image_transforms.NumpyToTensor
-class NumpyToTensor:
-    """
-    Convert a numpy array to a PyTorch tensor.
-    Converts a numpy.ndarray (H x W x C) in the range [0, 255]
-    to a torch.FloatTensor of shape (C x H x W) in the range [0.0, 1.0]
-    """
-
-    def __call__(self, image: np.ndarray):
-        # Same as in PyTorch, we assume incoming numpy images are in HWC format
-
-        image = np.stack(image, axis=2)
-        image = torch.from_numpy(image).permute(2, 0, 1, 3).contiguous()
-        image = image.float().div(255)
-        return image
-
 
 class ProPainterVideoProcessor(BaseImageProcessor):
     r"""
@@ -543,8 +527,6 @@ class ProPainterVideoProcessor(BaseImageProcessor):
         if video_painting_mode == "video_outpainting":
             assert scale_hw is not None, 'Please provide a outpainting scale (s_h, s_w).'
 
-        to_tensors = NumpyToTensor()
-
         if not valid_images(videos):
             raise ValueError(
                 "Invalid video type. Must be of type PIL.Image.Image, numpy.ndarray, "
@@ -634,18 +616,8 @@ class ProPainterVideoProcessor(BaseImageProcessor):
             # masks is for both flow_masks, masks_dilated, just add the same data to both variables in case of inpainting
             flow_masks = masks_dilated = pixel_values_masks
 
-        # This input kwarg is only utilised during inference on a single batch or one video for predictions
-        if len(pixel_values) == 1:
-            videos_inp = [
-                [np.array(frame).transpose(1, 2, 0).astype(np.uint8) for frame in video]
-                for video in pixel_values
-            ][0]
-        else:
-            videos_inp = torch.empty(0)
-
         data = {
             "pixel_values_videos": pixel_values,
-            "pixel_values_inp": videos_inp,
             "flow_masks": flow_masks,
             "masks_dilated": masks_dilated,
         }
