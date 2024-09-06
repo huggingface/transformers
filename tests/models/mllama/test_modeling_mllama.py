@@ -208,7 +208,6 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCas
 @require_torch
 class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.device = "cuda"
         self.small_model_checkpoint = "s0409/model-1"
         self.processor = AutoProcessor.from_pretrained(self.small_model_checkpoint)
 
@@ -229,24 +228,24 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
         inputs = self.processor(prompt, raw_image, return_tensors="pt")
         for k, v in inputs.items():
             if isinstance(v, torch.Tensor):
-                inputs[k] = v.to(self.device)
+                inputs[k] = v.to(torch_device)
 
         input_ids = inputs["input_ids"]
         input_ids[input_ids == 128011] = 128256  # TODO: remove when tokenizer corrected
 
         # Check inputs ids
-        expected_input_ids = torch.tensor([[128256, 128000, 2746, 358, 1047, 311, 3350, 264, 6520, 39342, 369, 420, 832]], device=self.device)  # fmt: skip
+        expected_input_ids = torch.tensor([[128256, 128000, 2746, 358, 1047, 311, 3350, 264, 6520, 39342, 369, 420, 832]], device=torch_device)  # fmt: skip
         self.assertTrue(torch.equal(input_ids, expected_input_ids))
 
         # Prepare model
         torch_dtype = torch.bfloat16
         model = MllamaForConditionalGeneration.from_pretrained(
-            self.small_model_checkpoint, torch_dtype=torch_dtype, device_map=self.device
+            self.small_model_checkpoint, torch_dtype=torch_dtype, device_map=torch_device
         )
         model.setup_cache(1, torch_dtype)  # TODO: remove when native cache is supported
 
         # Run generate
-        position_ids = torch.arange(0, input_ids.shape[1]).to(self.device)
+        position_ids = torch.arange(0, input_ids.shape[1]).to(torch_device)
         model_kwargs = {
             "position_ids": position_ids,
             "pixel_values": inputs["pixel_values"],
@@ -275,24 +274,24 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
         inputs = self.processor(prompt, raw_image, return_tensors="pt")
         for k, v in inputs.items():
             if isinstance(v, torch.Tensor):
-                inputs[k] = v.to(self.device)
+                inputs[k] = v.to(torch_device)
 
         input_ids = inputs["input_ids"]
         input_ids[input_ids == 128011] = 128256  # TODO: remove when tokenizer corrected
 
         # Check inputs ids
-        expected_input_ids = torch.tensor([[128256, 128000, 2746, 358, 1047, 311, 3350, 264, 6520, 39342, 369, 420, 832]], device=self.device)  # fmt: skip
+        expected_input_ids = torch.tensor([[128256, 128000, 2746, 358, 1047, 311, 3350, 264, 6520, 39342, 369, 420, 832]], device=torch_device)  # fmt: skip
         self.assertTrue(torch.equal(input_ids, expected_input_ids))
 
         # Prepare model
         torch_dtype = torch.bfloat16
         model = MllamaForConditionalGeneration.from_pretrained(
-            self.small_model_checkpoint, torch_dtype=torch_dtype, device_map=self.device
+            self.small_model_checkpoint, torch_dtype=torch_dtype, device_map=torch_device
         )
         model.setup_cache(1, torch_dtype)  # TODO: remove when native cache is supported
 
         # Run generate
-        position_ids = torch.arange(0, input_ids.shape[1]).to(self.device)
+        position_ids = torch.arange(0, input_ids.shape[1]).to(torch_device)
         model_kwargs = {
             "position_ids": position_ids,
             "input_ids": input_ids,
