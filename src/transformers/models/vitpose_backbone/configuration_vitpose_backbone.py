@@ -102,7 +102,7 @@ class VitPoseBackboneConfig(BackboneConfigMixin, PretrainedConfig):
         num_attention_heads=12,
         mlp_ratio=4,
         num_experts=1,
-        part_features=None,
+        part_features=256,
         hidden_act="gelu",
         hidden_dropout_prob=0.0,
         attention_probs_dropout_prob=0.0,

@@ -26,8 +26,20 @@ The original code can be found [here](https://github.com/ViTAE-Transformer/ViTPo
 
 ## Usage Tips
 
-- To enable MoE (Mixture of Experts) function in the backbone, the user has to give appropriate input indices to the backbone model. 
-  However, it is not used in default parameters.
+- To enable MoE (Mixture of Experts) function in the backbone, user has to give appropriate configuration such as `num_experts` and input value `dataset_index` to the backbone model. 
+  However, it is not used in default parameters. Below is the code snippet for usage of MoE function.
+```py
+>>> from transformers import VitPoseBackboneConfig, VitPoseBackbone
+>>> import torch
+
+>>> config = VitPoseBackboneConfig(num_experts=3, out_indices=[-1])
+>>> model = VitPoseBackbone(config)
+
+>>> pixel_values = torch.randn(3, 3, 256, 192)
+>>> dataset_index = torch.tensor([1, 2, 3])
+>>> outputs = model(pixel_values, dataset_index)
+```
+
 - The current model utilizes a 2-step inference pipeline. The first step involves placing a bounding box around the region corresponding to the person.
   After that, the second step uses VitPose to predict the keypoints.
 
