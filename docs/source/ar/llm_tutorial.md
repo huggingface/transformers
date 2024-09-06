@@ -29,7 +29,7 @@ pip install transformers bitsandbytes>=0.39.0 -q
         autoplay loop muted playsinline
         src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/blog/assisted-generation/gif_1_1080p.mov"
     ></video>
-    <figcaption>"Forward pass of an LLM"</figcaption>
+    <figcaption>"التنبؤ بالكلمة التالية لنموذج اللغة (LLM)"</figcaption>
 </figure>
 
 هناك جانب بالغ الأهمية في التوليد التلقائي باستخدام LLMs وهو كيفية اختيار الرمز التالي من توزيع الاحتمالية هذا. كل شيء مسموح به في هذه الخطوة طالما أنك تنتهي برمز للتكرار التالي. وهذا يعني أنه يمكن أن يكون بسيطًا مثل اختيار الرمز الأكثر احتمالًا من توزيع الاحتمالية أو معقدًا مثل تطبيق عشرات التحولات قبل أخذ العينات من التوزيع الناتج.
