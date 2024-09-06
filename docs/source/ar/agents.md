@@ -371,7 +371,7 @@ print(f"The most downloaded model for the 'text-to-video' task is {most_download
 
 إذا كنت قد قمت بتهيئة وكيل، فمن غير الملائم إعادة تهيئته من البداية لإضافة أداة جديدة ترغب في استخدامها. باستخدام مكتبة Transformers، يمكنك إدارة صندوق أدوات الوكيل بإضافة أو استبدال أداة موجودة.
 
-دعنا نضيف `model_download_tool` إلى وكيل موجود تمت تهيئته بصندوق الأدوات الافتراضي فقط.
+دعنا نضيف الأداة `model_download_tool` إلى وكيل تم تهيئته مسبقًا باستخدام صندوق الأدوات الافتراضي.
 
 ```python
 from transformers import CodeAgent
