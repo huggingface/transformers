@@ -57,7 +57,7 @@ _import_structure = {
     "agents": [
         "Agent",
         "CodeAgent",
-        "HfEngine",
+        "HfApiEngine",
         "PipelineTool",
         "ReactAgent",
         "ReactCodeAgent",
@@ -65,6 +65,7 @@ _import_structure = {
         "Tool",
         "Toolbox",
         "ToolCollection",
+        "TransformersEngine",
         "launch_gradio_demo",
         "load_tool",
         "stream_to_gradio",
@@ -532,6 +533,7 @@ _import_structure = {
         "LlavaNextVideoConfig",
         "LlavaNextVideoProcessor",
     ],
+    "models.llava_onevision": ["LlavaOnevisionConfig", "LlavaOnevisionProcessor"],
     "models.longformer": [
         "LongformerConfig",
         "LongformerTokenizer",
@@ -602,6 +604,7 @@ _import_structure = {
     "models.nougat": ["NougatProcessor"],
     "models.nystromformer": ["NystromformerConfig"],
     "models.olmo": ["OlmoConfig"],
+    "models.olmoe": ["OlmoeConfig"],
     "models.oneformer": [
         "OneFormerConfig",
         "OneFormerProcessor",
@@ -1181,6 +1184,9 @@ else:
     _import_structure["models.levit"].extend(["LevitFeatureExtractor", "LevitImageProcessor"])
     _import_structure["models.llava_next"].append("LlavaNextImageProcessor")
     _import_structure["models.llava_next_video"].append("LlavaNextVideoImageProcessor")
+    _import_structure["models.llava_onevision"].extend(
+        ["LlavaOnevisionImageProcessor", "LlavaOnevisionVideoProcessor"]
+    )
     _import_structure["models.mask2former"].append("Mask2FormerImageProcessor")
     _import_structure["models.maskformer"].extend(["MaskFormerFeatureExtractor", "MaskFormerImageProcessor"])
     _import_structure["models.mobilenet_v1"].extend(["MobileNetV1FeatureExtractor", "MobileNetV1ImageProcessor"])
@@ -2530,6 +2536,12 @@ else:
             "LlavaNextVideoPreTrainedModel",
         ]
     )
+    _import_structure["models.llava_onevision"].extend(
+        [
+            "LlavaOnevisionForConditionalGeneration",
+            "LlavaOnevisionPreTrainedModel",
+        ]
+    )
     _import_structure["models.longformer"].extend(
         [
             "LongformerForMaskedLM",
@@ -2825,6 +2837,13 @@ else:
             "OlmoForCausalLM",
             "OlmoModel",
             "OlmoPreTrainedModel",
+        ]
+    )
+    _import_structure["models.olmoe"].extend(
+        [
+            "OlmoeForCausalLM",
+            "OlmoeModel",
+            "OlmoePreTrainedModel",
         ]
     )
     _import_structure["models.oneformer"].extend(
@@ -4806,7 +4825,7 @@ if TYPE_CHECKING:
     from .agents import (
         Agent,
         CodeAgent,
-        HfEngine,
+        HfApiEngine,
         PipelineTool,
         ReactAgent,
         ReactCodeAgent,
@@ -4814,6 +4833,7 @@ if TYPE_CHECKING:
         Tool,
         Toolbox,
         ToolCollection,
+        TransformersEngine,
         launch_gradio_demo,
         load_tool,
         stream_to_gradio,
@@ -5298,6 +5318,10 @@ if TYPE_CHECKING:
         LlavaNextVideoConfig,
         LlavaNextVideoProcessor,
     )
+    from .models.llava_onevision import (
+        LlavaOnevisionConfig,
+        LlavaOnevisionProcessor,
+    )
     from .models.longformer import (
         LongformerConfig,
         LongformerTokenizer,
@@ -5378,6 +5402,7 @@ if TYPE_CHECKING:
         NystromformerConfig,
     )
     from .models.olmo import OlmoConfig
+    from .models.olmoe import OlmoeConfig
     from .models.oneformer import (
         OneFormerConfig,
         OneFormerProcessor,
@@ -5982,6 +6007,7 @@ if TYPE_CHECKING:
         from .models.levit import LevitFeatureExtractor, LevitImageProcessor
         from .models.llava_next import LlavaNextImageProcessor
         from .models.llava_next_video import LlavaNextVideoImageProcessor
+        from .models.llava_onevision import LlavaOnevisionImageProcessor, LlavaOnevisionVideoProcessor
         from .models.mask2former import Mask2FormerImageProcessor
         from .models.maskformer import (
             MaskFormerFeatureExtractor,
@@ -7102,6 +7128,10 @@ if TYPE_CHECKING:
             LlavaNextVideoForConditionalGeneration,
             LlavaNextVideoPreTrainedModel,
         )
+        from .models.llava_onevision import (
+            LlavaOnevisionForConditionalGeneration,
+            LlavaOnevisionPreTrainedModel,
+        )
         from .models.longformer import (
             LongformerForMaskedLM,
             LongformerForMultipleChoice,
@@ -7336,6 +7366,11 @@ if TYPE_CHECKING:
             OlmoForCausalLM,
             OlmoModel,
             OlmoPreTrainedModel,
+        )
+        from .models.olmoe import (
+            OlmoeForCausalLM,
+            OlmoeModel,
+            OlmoePreTrainedModel,
         )
         from .models.oneformer import (
             OneFormerForUniversalSegmentation,
