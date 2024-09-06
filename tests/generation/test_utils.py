@@ -491,6 +491,7 @@ class GenerationTesterMixin:
                 self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + 1)
             else:
                 self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + input_ids.shape[-1])
+
             self._check_outputs(output_generate, input_ids, model.config, use_cache=True)
 
     @pytest.mark.generate
@@ -630,6 +631,7 @@ class GenerationTesterMixin:
                 self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + 1)
             else:
                 self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + input_ids.shape[-1])
+
             self._check_outputs(
                 output_generate, input_ids, model.config, use_cache=True, num_return_sequences=beam_kwargs["num_beams"]
             )
@@ -831,7 +833,7 @@ class GenerationTesterMixin:
 
             # Sample constraints
             min_id = 3
-            max_id = config.vocab_size
+            max_id = config.get_text_config(decoder=True).vocab_size
 
             force_tokens = torch.randint(min_id, max_id, (1, 2)).tolist()[0]
             constraints = [
@@ -889,7 +891,7 @@ class GenerationTesterMixin:
 
             # Sample constraints
             min_id = 3
-            max_id = model.config.vocab_size
+            max_id = model.config.get_text_config(decoder=True).vocab_size
             force_tokens = torch.randint(min_id, max_id, (1, 2)).tolist()[0]
             constraints = [
                 PhrasalConstraint(force_tokens),
@@ -986,6 +988,7 @@ class GenerationTesterMixin:
                 self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + 1)
             else:
                 self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + input_ids.shape[-1])
+
             self._check_outputs(output_generate, input_ids, model.config, use_cache=True)
 
     @pytest.mark.generate
@@ -1152,6 +1155,7 @@ class GenerationTesterMixin:
             output_assisted = model.generate(input_ids, attention_mask=attention_mask, **generation_kwargs)
 
             # The two outputs must match and their shape must be as expected
+
             self.assertListEqual(output_greedy.sequences.tolist(), output_assisted.sequences.tolist())
             for output in (output_greedy, output_assisted):
                 self._check_outputs(output, input_ids, model.config, use_cache=True)
@@ -1216,6 +1220,7 @@ class GenerationTesterMixin:
             output_prompt_lookup = model.generate(input_ids, attention_mask=attention_mask, **generation_kwargs)
 
             # The two outputs must match and their shape must be as expected
+
             self.assertListEqual(output_greedy.sequences.tolist(), output_prompt_lookup.sequences.tolist())
             for output in (output_greedy, output_prompt_lookup):
                 self._check_outputs(output, input_ids, model.config, use_cache=True)
@@ -1456,8 +1461,10 @@ class GenerationTesterMixin:
             next_logits_wo_padding = model(**model_kwargs).logits[:, -1, :]
 
             # With left-padding (length 32)
+            # can hardcode pad_token to be 0 as we'll do attn masking anyway
+            pad_token_id = config.pad_token_id if getattr(config, "pad_token_id") is not None else 0
             pad_size = (input_ids.shape[0], 32)
-            padding = torch.ones(pad_size, dtype=input_ids.dtype, device=torch_device) * config.pad_token_id
+            padding = torch.ones(pad_size, dtype=input_ids.dtype, device=torch_device) * pad_token_id
             padded_input_ids = torch.cat((padding, input_ids), dim=1)
             padded_attention_mask = torch.cat((torch.zeros_like(padding), attention_mask), dim=1)
             model_kwargs = _prepare_model_kwargs(padded_input_ids, padded_attention_mask, signature)
@@ -1821,15 +1828,14 @@ class GenerationTesterMixin:
             }
 
             max_cache_len = seq_length + max_new_tokens
+            config = config.text_config if hasattr(config, "text_config") else config
             head_dim = (
-                model.config.head_dim
-                if hasattr(model.config, "head_dim")
-                else model.config.hidden_size // model.config.num_attention_heads
+                config.head_dim if hasattr(config, "head_dim") else config.hidden_size // config.num_attention_heads
             )
             num_key_value_heads = (
-                model.config.num_attention_heads
+                config.num_attention_heads
                 if getattr(config, "num_key_value_heads", None) is None
-                else model.config.num_key_value_heads
+                else config.num_key_value_heads
             )
             num_hidden_layers = config.num_hidden_layers
             results = model.generate(input_ids, attention_mask=attention_mask, **generation_kwargs)
@@ -1978,6 +1984,7 @@ class GenerationTesterMixin:
 
     def _check_outputs(self, output, input_ids, config, use_cache=False, num_return_sequences=1):
         batch_size, seq_length = input_ids.shape
+        config = config.text_config if hasattr(config, "text_config") else config
         num_sequences_in_output = batch_size * num_return_sequences
 
         gen_len = (
@@ -2068,18 +2075,20 @@ class GenerationTesterMixin:
                 self.assertTrue(output.past_key_values is None)
 
     def _check_scores(self, batch_size, scores, length, config):
-        expected_shape = (batch_size, config.vocab_size)
+        vocab_size = config.get_text_config(decoder=True).vocab_size
+        expected_shape = (batch_size, vocab_size)
         self.assertIsInstance(scores, tuple)
         self.assertEqual(len(scores), length)
         self.assertListEqual([iter_scores.shape for iter_scores in scores], [expected_shape] * len(scores))
 
     def _check_logits(self, batch_size, scores, config):
+        vocab_size = config.get_text_config(decoder=True).vocab_size
         self.assertIsInstance(scores, tuple)
         self.assertListEqual([iter_scores.shape[0] for iter_scores in scores], [batch_size] * len(scores))
         # vocabulary difference equal to one (imagegptmodel?) or zero (all other models)
-        vocab_diff = config.vocab_size - scores[0].shape[-1]
+        vocab_diff = vocab_size - scores[0].shape[-1]
         self.assertTrue(vocab_diff in [0, 1])
-        self.assertListEqual([config.vocab_size - score.shape[-1] for score in scores], [vocab_diff] * len(scores))
+        self.assertListEqual([vocab_size - score.shape[-1] for score in scores], [vocab_diff] * len(scores))
 
     def _check_attentions_for_generate(
         self, batch_size, attentions, min_length, max_length, config, use_cache=False, num_beam_groups=1
@@ -3379,7 +3388,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
 
     @slow
     @require_torch_gpu
-    def test_assisted_decoding_in_gpu_cpu(self):
+    def test_assisted_decoding_model_in_gpu_assistant_in_cpu(self):
         # PT-only test: TF doesn't support assisted decoding yet.
         model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM").to("cuda")
         assistant = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM").to(
