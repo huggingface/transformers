@@ -138,7 +138,7 @@ pip install huggingface_hub
 شارك نموذجًا على Hub باستخدام [`PushToHubCallback`]. في دالة [`PushToHubCallback`], أضف:
 
 - دليل إخراج لنموذجك.
-- رموز.
+- مُجزّئ اللغوي.
 - `hub_model_id`، والذي هو اسم مستخدم Hub واسم النموذج الخاص بك.
 
 ```py
