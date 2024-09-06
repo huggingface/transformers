@@ -1335,7 +1335,6 @@ class MllamaPreTrainedModel(PreTrainedModel):
     config_class = MllamaConfig
     base_model_prefix = "model"
     _no_split_modules = []
-    _supports_default_dynamic_cache = True
     _supports_cache_class = True
     _supports_static_cache = True
     _supports_sdpa = True
