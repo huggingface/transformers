@@ -436,7 +436,7 @@ gradio_prompt_generator_tool = StableDiffusionPromptGeneratorTool()
 prompt_generator_tool = Tool.from_gradio(gradio_prompt_generator_tool)
 ```
 
-الآن يمكنك استخدامه مثل أي أداة أخرى. على سبيل المثال، دعنا نحسن المطالبة `a rabbit wearing a space suit`.
+الآن يمكنك استخدامه مثل أي أداة أخرى. على سبيل المثال، دعنا نحسن الموجه `a rabbit wearing a space suit`.
 
 ```python
 image_generation_tool = load_tool('huggingface-tools/text-to-image')
