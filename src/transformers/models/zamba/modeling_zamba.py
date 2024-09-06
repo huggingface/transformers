@@ -157,7 +157,7 @@ class HybridMambaAttentionDynamicCache(DynamicCache):
                     dtype=dtype,
                 )
             ]
-            if self.layers_block_type[i] == "attention+mamba":
+            if self.layers_block_type[i] == "hybrid":
                 self.transformer_layers.append(i)
 
         self.key_cache = [torch.tensor([[]] * batch_size, device=device) for _ in range(config.num_hidden_layers)]
@@ -1076,7 +1076,7 @@ class ZambaModel(ZambaPreTrainedModel):
         for i in range(config.num_hidden_layers):
             if config.layers_block_type[i] == "mamba":
                 mamba_layers.append(ZambaMambaDecoderLayer(config, layer_idx=i))
-            elif config.layers_block_type[i] == "attention+mamba":
+            elif config.layers_block_type[i] == "hybrid":
                 linear_layers.append(nn.Linear(self.config.hidden_size, self.config.hidden_size, bias=False))
                 mamba_layers.append(ZambaMambaDecoderLayer(config, layer_idx=i))
         self.mamba_layers = nn.ModuleList(mamba_layers)
@@ -1159,7 +1159,7 @@ class ZambaModel(ZambaPreTrainedModel):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            if layer_type == "attention+mamba":
+            if layer_type == "hybrid":
                 if self.gradient_checkpointing and self.training:
                     layer_outputs = self._gradient_checkpointing_func(
                         self.block.__call__,
