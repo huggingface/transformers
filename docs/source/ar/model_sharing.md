@@ -110,7 +110,7 @@ pip install huggingface_hub
 <pt>
 <Youtube id="Z1-XMy-GNLQ"/>
 
-مشاركة نموذج على Hub بسيطة مثل إضافة معلمة أو استدعاء رد اتصال إضافي. تذكر من درس [التدريب الدقيق](training)، أن فئة [`TrainingArguments`] هي المكان الذي تحدد فيه فرط المعلمات وخيارات التدريب الإضافية. تشمل إحدى خيارات التدريب هذه القدرة على دفع نموذج مباشرة إلى Hub. قم بتعيين `push_to_hub=True` في [`TrainingArguments`]:
+مشاركة نموذجك على Hub مر بسيط للغاية كل ما عليك هو إضافة معلمة أو استدعاء رد إضافي. كما تذكر من درس [التدريب الدقيق](training)، فإن فئة [`TrainingArguments`] هي المكان الذي تحدد فيه المعلمات الفائقة وخيارات التدريب الإضافية. تشمل إحدى خيارات التدريب هذه القدرة على دفع النموذج مباشرة إلى المنصة Hub. قم بتعيين `push_to_hub=True` في [`TrainingArguments`]:
 
 ```py
 >>> training_args = TrainingArguments(output_dir="my-awesome-model", push_to_hub=True)
