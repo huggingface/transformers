@@ -805,9 +805,6 @@ class MllamaTextSdpaAttention(nn.Module):
             cache_kwargs = {"cache_position": cache_position}
             key, value = past_key_value.update(key, value, self.layer_idx, cache_kwargs)
 
-        # if self.layer_idx == 0:
-        #     print(attention_mask[0, 0, 0, :30])
-
         key = key.repeat_interleave(self.n_rep, dim=1)
         value = value.repeat_interleave(self.n_rep, dim=1)
 
@@ -1483,6 +1480,9 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
+        # temp workaround for rope, for some reason it expects a 1d tensor
+        position_ids = position_ids.squeeze(0)
+
         hidden_states = inputs_embeds
 
         causal_mask = self._update_causal_mask(
@@ -1675,19 +1675,12 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
         return model_inputs
 
     def _update_model_kwargs_for_generation(self, outputs, model_kwargs, is_encoder_decoder, **kwargs):
-
-        position_ids = model_kwargs["position_ids"]
-
         model_kwargs = super()._update_model_kwargs_for_generation(
             outputs=outputs,
             model_kwargs=model_kwargs,
             is_encoder_decoder=is_encoder_decoder,
             **kwargs,
         )
-
-        # temp workaround cause we can't infer position ids from attention mask yet (only cross-attn-mask available)
-        # assume we always generate with cache until we start using our cache objects
-        model_kwargs["position_ids"] = position_ids[-1:] + 1
 
         # Get the precomputed image_hidden_states
         model_kwargs["cross_attention_key_value"] = outputs.cross_attention_key_value

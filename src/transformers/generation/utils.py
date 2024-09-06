@@ -1450,7 +1450,7 @@ class GenerationMixin:
                     cache_dtype = self.get_output_embeddings().weight.dtype
 
             cache_kwargs = {
-                "config": self.config if hasattr(self.config, "text_config") else self.config,
+                "config": self.config.get_text_config(decoder=True),
                 "max_batch_size": batch_size,
                 "max_cache_len": max_cache_len,
                 "device": device,
@@ -2363,11 +2363,7 @@ class GenerationMixin:
         this_peer_finished = False
 
         # prepare layers for DoLa decoding
-        final_layer = (
-            self.config.text_config.num_hidden_layers
-            if hasattr(self.config, "text_config")
-            else self.config.num_hidden_layers
-        )
+        final_layer = self.config.get_text_config().num_hidden_layers
         # if the model has tied word embeddings, we skip the word embeddings (0-th) layer and start from the 2nd layer,
         # as the early exit from word embeddings will become identity function
         # if the model is really shallow (<=2 layers), we use the 1st layer if it's not the final layer and the 0-th
