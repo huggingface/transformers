@@ -21,14 +21,14 @@
     title: إعداد تدريب موزع باستخدام 🤗 Accelerate
   - local: peft
     title: تحميل النماذج المخصصة وتدريبها باستخدام 🤗 PEFT
-  # - local: model_sharing
-  #   title: مشاركة نموذجك
-  # - local: agents
-  #   title: الوكلاء
-  # - local: llm_tutorial
-  #   title: التوليد باستخدام LLMs
-  # - local: conversations
-  #   title: الدردشة مع المحولات
+  - local: model_sharing
+    title: مشاركة نموذجك
+  - local: agents
+    title: الوكلاء
+  - local: llm_tutorial
+    title: التوليد باستخدام LLMs
+  - local: conversations
+    title: الدردشة مع المحولات
   title: البرامج التعليمية
 # - sections:
 #   - isExpanded: false
