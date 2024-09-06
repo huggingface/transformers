@@ -67,7 +67,7 @@ pip install transformers bitsandbytes>=0.39.0 -q
 ... )
 ```
 
-ستلاحظ وجود علمين في مكالمة `from_pretrained`:
+ستلاحظ وجود معاملين في الاستدعاء `from_pretrained`:
 
  - `device_map` يضمن انتقال النموذج إلى وحدة معالجة الرسومات (GPU) الخاصة بك
  - `load_in_4bit` يطبق [4-bit dynamic quantization](main_classes/quantization) لخفض متطلبات الموارد بشكل كبير
