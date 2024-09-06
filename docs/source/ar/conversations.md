@@ -99,9 +99,9 @@ print(response[0]['generated_text'][-1]['content'])
 
 ### ولكن ما هو أفضل نموذج للدردشة؟
 حتى بعد معرفة حجم نموذج الدردشة الذي يمكنك تشغيله، لا يزال هناك الكثير من الخيارات المتاحة. إحدى الطرق للتنقل في
-كل هذا هو استشارة **لوحات القيادة**. اثنان من أكثر لوحات القيادة شهرة هما [OpenLLM Leaderboard](https://huggingface.co/spaces/HuggingFaceH4/open_llm_leaderboard)
-و [LMSys Chatbot Arena Leaderboard](https://chat.lmsys.org/?leaderboard). لاحظ أن لوحة قيادة LMSys
-تشمل أيضًا النماذج المملوكة - انظر إلى عمود `licence` لتحديد النماذج مفتوحة المصدر التي يمكنك تنزيلها، ثم
+كل هذا هو استشارة **لوحات الصدارة**. اثنان من أكثر لوحات الصدارة شهرة هما [OpenLLM Leaderboard](https://huggingface.co/spaces/HuggingFaceH4/open_llm_leaderboard)
+و [LMSys Chatbot Arena Leaderboard](https://chat.lmsys.org/?leaderboard). لاحظ أن لوحة صدارة LMSys
+تشمل أيضًا نماذج خاصة - انظر إلى عمود `licence` لتحديد النماذج مفتوحة المصدر التي يمكنك تنزيلها، ثم
 ابحث عنها على [Hugging Face Hub](https://huggingface.co/models?pipeline_tag=text-generation&sort=trending).
 
 ### المجالات المتخصصة
