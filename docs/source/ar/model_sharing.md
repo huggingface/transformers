@@ -116,7 +116,7 @@ pip install huggingface_hub
 >>> training_args = TrainingArguments(output_dir="my-awesome-model", push_to_hub=True)
 ```
 
-مرر حجج التدريب كالمعتاد إلى [`Trainer`]:
+مرر معامﻻت التدريب كالمعتاد إلى [`Trainer`]:
 
 ```py
 >>> trainer = Trainer(
