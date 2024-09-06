@@ -45,6 +45,7 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
             },
         }
         self.assertEqual(schema["function"], expected_schema)
+        raise ValueError("Test that this test is run, and fails!")
 
     def test_no_arguments(self):
         def fn():
