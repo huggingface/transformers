@@ -139,9 +139,9 @@ class ProPainterConfig(PretrainedConfig):
         window_size=[5, 9],
         pool_size=[4, 4],
         no_dis=0,
-        in_channels = [64, 64, 96],
-        channels = [64, 96, 128],
-        strides = [1, 2, 2],
+        in_channels=[64, 64, 96],
+        channels=[64, 96, 128],
+        strides=[1, 2, 2],
         **kwargs,
     ):
         super().__init__(**kwargs)
