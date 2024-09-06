@@ -14,10 +14,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from .tools import Tool
 import re
+
 import requests
 from requests.exceptions import RequestException
+
+from .tools import Tool
 
 
 class DuckDuckGoSearchTool(Tool):
