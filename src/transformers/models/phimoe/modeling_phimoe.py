@@ -1562,7 +1562,15 @@ class PhiMoEForCausalLM(PhiMoEPreTrainedModel):
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
         ```"""
-
+        if (
+            use_cache
+            and self.config.rope_scaling
+            and cache_position is not None
+            and cache_position[0] == self.config.rope_scaling["original_max_position_embeddings"]
+        ):
+            logger.warning(
+                f"If you are not using the generate method, you may encounter nonsensical outputs after the {self.config.rope_scaling['original_max_position_embeddings']}th token, as the KV cache needs to be recomputed."
+            )
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_router_logits = (
             output_router_logits if output_router_logits is not None else self.config.output_router_logits
