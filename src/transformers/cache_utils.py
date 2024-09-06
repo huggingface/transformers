@@ -1100,14 +1100,14 @@ class StaticCache(Cache):
 
         for state_str, state_device, self_state_device in [
             ("key_states", key_states.device, self.key_cache[layer_idx].device),
-            ("value_states", value_states.device, self.value_states[layer_idx].device),
+            ("value_states", value_states.device, self.value_cache[layer_idx].device),
         ]:
             if state_device != self_state_device:
                 raise ValueError(
-                    f"computed {state_str} from layer {layer_idx} is on device {state_device} "
+                    f"Computed {state_str} from layer {layer_idx} is on device {state_device} "
                     f"whereas stored {state_str} is on device {self_state_device}. "
                     f"If you are manually initializing the cache, make sure to pass the argument `layer_device_map` if you are using multi-gpu. "
-                    " Otherwise, you can just pass `cache_implementation` in `model.generate()` to correclty initialize the cache."
+                    " Otherwise, you can just pass `cache_implementation` in `model.generate()` to correctly initialize the cache."
                 )
 
         cache_position = cache_kwargs.get("cache_position")
@@ -1242,14 +1242,14 @@ class SlidingWindowCache(StaticCache):
     ) -> Tuple[torch.Tensor]:
         for state_str, state_device, self_state_device in [
             ("key_states", key_states.device, self.key_cache[layer_idx].device),
-            ("value_states", value_states.device, self.value_states[layer_idx].device),
+            ("value_states", value_states.device, self.value_cache[layer_idx].device),
         ]:
             if state_device != self_state_device:
                 raise ValueError(
-                    f"computed {state_str} from layer {layer_idx} is on device {state_device} "
+                    f"Computed {state_str} from layer {layer_idx} is on device {state_device} "
                     f"whereas stored {state_str} is on device {self_state_device}. "
                     f"If you are manually initializing the cache, make sure to pass the argument `layer_device_map` if you are using multi-gpu. "
-                    " Otherwise, you can just pass `cache_implementation` in `model.generate()` to correclty initialize the cache."
+                    " Otherwise, you can just pass `cache_implementation` in `model.generate()` to correctly initialize the cache."
                 )
 
         cache_position = cache_kwargs.get("cache_position")
@@ -1620,14 +1620,14 @@ class HybridCache(Cache):
     ) -> Tuple[torch.Tensor]:
         for state_str, state_device, self_state_device in [
             ("key_states", key_states.device, self.key_cache[layer_idx].device),
-            ("value_states", value_states.device, self.value_states[layer_idx].device),
+            ("value_states", value_states.device, self.value_cache[layer_idx].device),
         ]:
             if state_device != self_state_device:
                 raise ValueError(
-                    f"computed {state_str} from layer {layer_idx} is on device {state_device} "
+                    f"Computed {state_str} from layer {layer_idx} is on device {state_device} "
                     f"whereas stored {state_str} is on device {self_state_device}. "
                     f"If you are manually initializing the cache, make sure to pass the argument `layer_device_map` if you are using multi-gpu. "
-                    " Otherwise, you can just pass `cache_implementation` in `model.generate()` to correclty initialize the cache."
+                    " Otherwise, you can just pass `cache_implementation` in `model.generate()` to correctly initialize the cache."
                 )
 
         cache_position = cache_kwargs.get("cache_position")
