@@ -67,7 +67,6 @@ _import_structure = {
         "Toolbox",
         "ToolCollection",
         "TransformersEngine",
-        "TransformersEngine",
         "launch_gradio_demo",
         "load_tool",
         "stream_to_gradio",
