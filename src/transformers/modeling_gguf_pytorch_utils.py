@@ -96,6 +96,9 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
     else:
         updated_architecture = architecture
 
+    if "qwen2moe" in architecture:
+        updated_architecture = "qwen2_moe"
+
     if architecture not in GGUF_SUPPORTED_ARCHITECTURES:
         raise ValueError(f"Architecture {architecture} not supported")
 

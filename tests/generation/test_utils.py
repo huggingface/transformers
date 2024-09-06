@@ -491,6 +491,7 @@ class GenerationTesterMixin:
                 self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + 1)
             else:
                 self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + input_ids.shape[-1])
+
             self._check_outputs(output_generate, input_ids, model.config, use_cache=True)
 
     @pytest.mark.generate
@@ -630,6 +631,7 @@ class GenerationTesterMixin:
                 self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + 1)
             else:
                 self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + input_ids.shape[-1])
+
             self._check_outputs(
                 output_generate, input_ids, model.config, use_cache=True, num_return_sequences=beam_kwargs["num_beams"]
             )
@@ -986,6 +988,7 @@ class GenerationTesterMixin:
                 self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + 1)
             else:
                 self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + input_ids.shape[-1])
+
             self._check_outputs(output_generate, input_ids, model.config, use_cache=True)
 
     @pytest.mark.generate
@@ -1152,6 +1155,7 @@ class GenerationTesterMixin:
             output_assisted = model.generate(input_ids, attention_mask=attention_mask, **generation_kwargs)
 
             # The two outputs must match and their shape must be as expected
+
             self.assertListEqual(output_greedy.sequences.tolist(), output_assisted.sequences.tolist())
             for output in (output_greedy, output_assisted):
                 self._check_outputs(output, input_ids, model.config, use_cache=True)
@@ -1216,6 +1220,7 @@ class GenerationTesterMixin:
             output_prompt_lookup = model.generate(input_ids, attention_mask=attention_mask, **generation_kwargs)
 
             # The two outputs must match and their shape must be as expected
+
             self.assertListEqual(output_greedy.sequences.tolist(), output_prompt_lookup.sequences.tolist())
             for output in (output_greedy, output_prompt_lookup):
                 self._check_outputs(output, input_ids, model.config, use_cache=True)
@@ -1448,13 +1453,18 @@ class GenerationTesterMixin:
             model = model_class(config).to(torch_device).eval()
             signature = inspect.signature(model.forward).parameters.keys()
 
+            # no cache as some models require special cache classes to be init outside forward
+            model.generation_config.use_cache = False
+
             # Without padding
             model_kwargs = _prepare_model_kwargs(input_ids, attention_mask, signature)
             next_logits_wo_padding = model(**model_kwargs).logits[:, -1, :]
 
             # With left-padding (length 32)
+            # can hardcode pad_token to be 0 as we'll do attn masking anyway
+            pad_token_id = config.pad_token_id if getattr(config, "pad_token_id") is not None else 0
             pad_size = (input_ids.shape[0], 32)
-            padding = torch.ones(pad_size, dtype=input_ids.dtype, device=torch_device) * config.pad_token_id
+            padding = torch.ones(pad_size, dtype=input_ids.dtype, device=torch_device) * pad_token_id
             padded_input_ids = torch.cat((padding, input_ids), dim=1)
             padded_attention_mask = torch.cat((torch.zeros_like(padding), attention_mask), dim=1)
             model_kwargs = _prepare_model_kwargs(padded_input_ids, padded_attention_mask, signature)
@@ -1585,6 +1595,59 @@ class GenerationTesterMixin:
                 outputs_from_embeds[:, inputs_embeds.shape[1] :].tolist(),
                 outputs_from_embeds_wo_ids.tolist(),
             )
+
+    @pytest.mark.generate
+    def test_generate_from_inputs_embeds_with_static_cache(self):
+        """
+        Test that StaticCache can generate from inputs_embeds and calculates max_cache_length
+        correctly in `generate()`. We force the model to not stop generation until max-length is reached
+        to verify that the cache length is indeed set correctly and we don't run out of index when slicing the cache.
+        """
+        for model_class in self.all_generative_model_classes:
+            if not model_class._supports_static_cache:
+                self.skipTest(reason="This model does not support the static cache format")
+
+            config, input_ids, attention_mask = self._get_input_ids_and_config()
+            if config.is_encoder_decoder:
+                self.skipTest(reason="This model is encoder-decoder and has Encoder-Decoder Cache")
+
+            model = model_class(config).to(torch_device).eval()
+            if "inputs_embeds" not in inspect.signature(model.prepare_inputs_for_generation).parameters.keys():
+                self.skipTest(reason="This model does not support `inputs_embeds` in generation")
+
+            model.config.use_cache = True
+            model.config.is_decoder = True
+            batch_size, seq_length = input_ids.shape
+            max_cache_len = 30
+
+            # here we force to not stop at eos and go until max-length
+            model.generation_config.eos_token_id = model.config.eos_token_id = -1
+            generation_kwargs = {
+                "max_length": max_cache_len,
+                "cache_implementation": "static",
+                "return_dict_in_generate": True,  # Required to return `past_key_values`
+            }
+
+            head_dim = (
+                model.config.head_dim
+                if hasattr(model.config, "head_dim")
+                else model.config.hidden_size // model.config.num_attention_heads
+            )
+            num_key_value_heads = (
+                model.config.num_attention_heads
+                if getattr(config, "num_key_value_heads", None) is None
+                else model.config.num_key_value_heads
+            )
+            num_hidden_layers = config.num_hidden_layers
+
+            inputs_embeds = model.get_input_embeddings()(input_ids)
+            outputs = model.generate(inputs_embeds=inputs_embeds, attention_mask=attention_mask, **generation_kwargs)
+
+            # we should get `max_length` in shape, not `max_length - embeds_length`
+            cache_shape = (batch_size, num_key_value_heads, max_cache_len, head_dim)
+            self.assertTrue(isinstance(outputs.past_key_values, StaticCache))
+            self.assertTrue(len(outputs.past_key_values.key_cache) == num_hidden_layers)
+            self.assertTrue(outputs.past_key_values.key_cache[0].shape == cache_shape)
 
     @pytest.mark.generate
     def test_generate_continue_from_past_key_values(self):
@@ -1765,15 +1828,14 @@ class GenerationTesterMixin:
             }
 
             max_cache_len = seq_length + max_new_tokens
+            config = config.text_config if hasattr(config, "text_config") else config
             head_dim = (
-                model.config.head_dim
-                if hasattr(model.config, "head_dim")
-                else model.config.hidden_size // model.config.num_attention_heads
+                config.head_dim if hasattr(config, "head_dim") else config.hidden_size // config.num_attention_heads
             )
             num_key_value_heads = (
-                model.config.num_attention_heads
+                config.num_attention_heads
                 if getattr(config, "num_key_value_heads", None) is None
-                else model.config.num_key_value_heads
+                else config.num_key_value_heads
             )
             num_hidden_layers = config.num_hidden_layers
             results = model.generate(input_ids, attention_mask=attention_mask, **generation_kwargs)
@@ -1922,6 +1984,7 @@ class GenerationTesterMixin:
 
     def _check_outputs(self, output, input_ids, config, use_cache=False, num_return_sequences=1):
         batch_size, seq_length = input_ids.shape
+        config = config.text_config if hasattr(config, "text_config") else config
         num_sequences_in_output = batch_size * num_return_sequences
 
         gen_len = (

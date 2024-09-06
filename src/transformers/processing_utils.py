@@ -390,6 +390,8 @@ class ProcessorMixin(PushToHubMixin):
             del output["image_processor"]
         if "feature_extractor" in output:
             del output["feature_extractor"]
+        if "chat_template" in output:
+            del output["chat_template"]
 
         # Some attributes have different names but containing objects that are not simple strings
         output = {
