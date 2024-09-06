@@ -210,7 +210,7 @@ class SuperGlueModelTest(ModelTesterMixin, unittest.TestCase):
             for i, hidden_states_size in enumerate(hidden_states_sizes):
                 self.assertListEqual(
                     list(hidden_states[i].shape[-2:]),
-                    [maximum_num_matches, hidden_states_size],
+                    [hidden_states_size, maximum_num_matches],
                 )
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -286,7 +286,7 @@ def prepare_imgs():
     image1 = dataset[0]["image"]
     image2 = dataset[1]["image"]
     image3 = dataset[2]["image"]
-    return [[image3, image1], [image3, image2]]
+    return [[image1, image2], [image3, image2]]
 
 
 @require_torch
@@ -300,21 +300,14 @@ class SuperGlueModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference(self):
-        model = SuperGlueForKeypointMatching.from_pretrained(
-            "stevenbucaille/superglue_outdoor", matching_threshold=0.2
-        ).to(torch_device)
+        model = SuperGlueForKeypointMatching.from_pretrained("stevenbucaille/superglue_outdoor").to(torch_device)
         preprocessor = self.default_image_processor
         images = prepare_imgs()
         inputs = preprocessor(images=images, return_tensors="pt").to(torch_device)
         with torch.no_grad():
             outputs = model(**inputs, output_hidden_states=True, output_attentions=True)
 
-        expected_number_keypoints_image0 = 559
-        expected_number_keypoints_image1 = 592
-        expected_number_keypoints_image2 = 865
-        expected_max_number_keypoints = max(
-            [expected_number_keypoints_image0, expected_number_keypoints_image1, expected_number_keypoints_image2]
-        )
+        expected_max_number_keypoints = 866
         expected_matches_shape = torch.Size((len(images), 2, expected_max_number_keypoints))
         expected_matching_scores_shape = torch.Size((len(images), 2, expected_max_number_keypoints))
 
@@ -322,18 +315,19 @@ class SuperGlueModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.matches.shape, expected_matches_shape)
         self.assertEqual(outputs.matching_scores.shape, expected_matching_scores_shape)
 
-        expected_matches_values = torch.tensor([-1, 0, 2, 4, -1, 3, 6, -1, -1, -1], dtype=torch.int32).to(torch_device)
+        expected_matches_values = torch.tensor([125, -1, 137, 138, 136, -1, 135, -1, 160, 153], dtype=torch.int32).to(
+            torch_device
+        )
         expected_matching_scores_values = torch.tensor(
-            [1.1161e-5, 9.8031e-1, 8.8953e-1, 9.6738e-1, 0, 9.767e-1, 8.1111e-1, 2.1811e-2, 9.7602e-4, 1.0968e-3]
+            [0.7587, 0.0683, 0.8099, 0.9201, 0.5221, 0, 0.7391, 0, 0.7475, 0.7291]
         ).to(torch_device)
 
         predicted_matches_values = outputs.matches[0, 0, :10]
         predicted_matching_scores_values = outputs.matching_scores[0, 0, :10]
 
         self.assertTrue(torch.allclose(predicted_matches_values, expected_matches_values, atol=1e-4))
-
         self.assertTrue(torch.allclose(predicted_matching_scores_values, expected_matching_scores_values, atol=1e-4))
 
-        expected_number_of_matches = 144
+        expected_number_of_matches = 195
         predicted_number_of_matches = torch.sum(outputs.matches[0][0] != -1).item()
         self.assertEqual(predicted_number_of_matches, expected_number_of_matches)

@@ -301,9 +301,8 @@ class SuperGlueMultiLayerPerceptron(nn.Module):
         num_layers = len(channels)
         layers = []
         for i in range(1, num_layers):
-            layers.append(nn.Conv1d(channels[i - 1], channels[i], kernel_size=1))
+            layers.append(nn.Linear(channels[i - 1], channels[i]))
             if i < (num_layers - 1):
-                layers.append(nn.BatchNorm1d(channels[i]))
                 layers.append(nn.ReLU())
         self.layers = nn.Sequential(*layers)
 
@@ -313,7 +312,7 @@ class SuperGlueMultiLayerPerceptron(nn.Module):
         all_hidden_states = () if output_hidden_states else None
         for layer in self.layers:
             hidden_state = layer(hidden_state)
-            if output_hidden_states and isinstance(layer, nn.Conv1d):
+            if output_hidden_states and isinstance(layer, nn.Linear):
                 all_hidden_states = all_hidden_states + (hidden_state,)
         return hidden_state, all_hidden_states
 
@@ -333,9 +332,8 @@ class SuperGlueKeypointEncoder(nn.Module):
         scores: torch.Tensor,
         output_hidden_states: Optional[bool] = False,
     ) -> Tuple[torch.Tensor, Optional[Tuple[torch.Tensor]]]:
-        keypoints = keypoints.transpose(1, 2)
-        scores = scores.unsqueeze(1)
-        inputs = torch.cat([keypoints, scores], dim=1)
+        scores = scores.unsqueeze(2)
+        inputs = torch.cat([keypoints, scores], dim=2)
         return self.encoder(inputs, output_hidden_states=output_hidden_states)
 
 
@@ -346,25 +344,24 @@ class SuperGlueMultiHeadAttention(nn.Module):
         self.num_heads = config.num_heads
         self.head_dim = feature_dim // self.num_heads
 
-        self.query = nn.Conv1d(feature_dim, feature_dim, kernel_size=1)
-        self.key = nn.Conv1d(feature_dim, feature_dim, kernel_size=1)
-        self.value = nn.Conv1d(feature_dim, feature_dim, kernel_size=1)
-        self.merge = nn.Conv1d(feature_dim, feature_dim, kernel_size=1)
+        self.query = nn.Linear(feature_dim, feature_dim)
+        self.key = nn.Linear(feature_dim, feature_dim)
+        self.value = nn.Linear(feature_dim, feature_dim)
+        self.merge = nn.Linear(feature_dim, feature_dim)
 
     def forward(
         self, query: torch.Tensor, key: torch.Tensor, value: torch.Tensor, output_attentions: bool = False
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
-        batch_dim = query.size(0)
+        batch_dim, seq_len, _ = query.size()
 
-        query = self.query(query).view(batch_dim, self.head_dim, self.num_heads, -1)
-        key = self.key(key).view(batch_dim, self.head_dim, self.num_heads, -1)
-        value = self.value(value).view(batch_dim, self.head_dim, self.num_heads, -1)
+        query = self.query(query).view(batch_dim, -1, self.num_heads, self.head_dim).transpose(1, 2)
+        key = self.key(key).view(batch_dim, -1, self.num_heads, self.head_dim).transpose(1, 2)
+        value = self.value(value).view(batch_dim, -1, self.num_heads, self.head_dim).transpose(1, 2)
 
-        query_dim = query.shape[1]
-        scores = torch.einsum("bdhn,bdhm->bhnm", query, key) / query_dim**0.5
+        scores = torch.matmul(query, key.transpose(-2, -1)) / (self.head_dim**0.5)
         attention_probs = torch.nn.functional.softmax(scores, dim=-1)
-        output = torch.einsum("bhnm,bdhm->bdhn", attention_probs, value)
-        output = output.contiguous().view(batch_dim, self.head_dim * self.num_heads, -1)
+        output = torch.matmul(attention_probs, value)
+        output = output.transpose(1, 2).contiguous().view(batch_dim, seq_len, -1)
         output = self.merge(output)
 
         output = (output, attention_probs) if output_attentions else (output,)
@@ -391,7 +388,7 @@ class SuperGlueAttentionalPropagation(nn.Module):
         output = attention_outputs[0]
         attention = attention_outputs[1:]
 
-        output = torch.cat([x, output], dim=1)
+        output = torch.cat([x, output], dim=2)
         layer_outputs = self.mlp(output, output_hidden_states=output_hidden_states)
 
         last_hidden_state = layer_outputs[0]
@@ -453,7 +450,7 @@ class SuperGlueFinalProjection(nn.Module):
     def __init__(self, config: SuperGlueConfig) -> None:
         super().__init__()
         descriptor_dim = config.descriptor_dim
-        self.final_proj = nn.Conv1d(descriptor_dim, descriptor_dim, kernel_size=1, bias=True)
+        self.final_proj = nn.Linear(descriptor_dim, descriptor_dim, bias=True)
 
     def forward(self, descriptors: torch.Tensor) -> torch.Tensor:
         return self.final_proj(descriptors)
@@ -625,9 +622,6 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
         last_hidden_state0 = encoded_keypoints0[0]
         last_hidden_state1 = encoded_keypoints1[0]
 
-        image0_descriptors = torch.transpose(image0_descriptors, -1, -2)
-        image1_descriptors = torch.transpose(image1_descriptors, -1, -2)
-
         # Keypoint MLP encoder.
         descriptors0 = image0_descriptors + last_hidden_state0
         descriptors1 = image1_descriptors + last_hidden_state1
@@ -646,7 +640,7 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
         projected_descriptors1 = self.final_projection(descriptors1)
 
         # Compute matching descriptor distance.
-        scores = torch.einsum("bdn,bdm->bnm", projected_descriptors0, projected_descriptors1)
+        scores = torch.einsum("bnd,bmd->bnm", projected_descriptors0, projected_descriptors1)
         scores = scores / self.config.descriptor_dim**0.5
 
         # Run the optimal transport.
