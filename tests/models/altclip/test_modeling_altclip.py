@@ -178,9 +178,11 @@ class AltCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    @unittest.skip
     def test_training(self):
         pass
 
+    @unittest.skip
     def test_training_gradient_checkpointing(self):
         pass
 
@@ -309,7 +311,7 @@ class AltCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
     test_head_masking = False
 
     # TODO (@SunMarc): Fix me
-    @unittest.skip("It's broken.")
+    @unittest.skip(reason="It's broken.")
     def test_resize_tokens_embeddings(self):
         super().test_resize_tokens_embeddings()
 
@@ -324,9 +326,11 @@ class AltCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    @unittest.skip
     def test_training(self):
         pass
 
+    @unittest.skip
     def test_training_gradient_checkpointing(self):
         pass
 
@@ -487,7 +491,7 @@ class AltCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:
-            return
+            self.skipTest(reason="test_torchscript is set to False")
 
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
         configs_no_init.torchscript = True

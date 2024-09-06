@@ -61,3 +61,8 @@ class BaseImageProcessorFast(BaseImageProcessor):
     def get_transforms(self, **kwargs) -> "Compose":
         self._validate_params(**kwargs)
         return self._build_transforms(**kwargs)
+
+    def to_dict(self):
+        encoder_dict = super().to_dict()
+        encoder_dict.pop("_transform_params", None)
+        return encoder_dict

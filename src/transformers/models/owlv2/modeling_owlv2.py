@@ -459,7 +459,7 @@ class Owlv2MLP(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPEncoderLayer with CLIP->Owlv2
+# Copied from transformers.models.altclip.modeling_altclip.AltCLIPEncoderLayer with AltCLIP->Owlv2
 class Owlv2EncoderLayer(nn.Module):
     def __init__(self, config: Owlv2Config):
         super().__init__()
@@ -1015,13 +1015,13 @@ class Owlv2Model(Owlv2PreTrainedModel):
         super().__init__(config)
 
         if not isinstance(config.text_config, Owlv2TextConfig):
-            raise ValueError(
+            raise TypeError(
                 "config.text_config is expected to be of type Owlv2TextConfig but is of type"
                 f" {type(config.text_config)}."
             )
 
         if not isinstance(config.vision_config, Owlv2VisionConfig):
-            raise ValueError(
+            raise TypeError(
                 "config.vision_config is expected to be of type Owlv2VisionConfig but is of type"
                 f" {type(config.vision_config)}."
             )
@@ -1276,7 +1276,7 @@ class Owlv2ClassPredictionHead(nn.Module):
             if query_mask.ndim > 1:
                 query_mask = torch.unsqueeze(query_mask, dim=-2)
 
-            pred_logits = torch.where(query_mask == 0, -1e6, pred_logits)
+            pred_logits = torch.where(query_mask == 0, torch.finfo(pred_logits.dtype).min, pred_logits)
             pred_logits = pred_logits.to(torch.float32)
 
         return (pred_logits, image_class_embeds)

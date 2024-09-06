@@ -61,9 +61,13 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase):
 
     @require_pytesseract
     @require_vision
-    def get_test_pipeline(self, model, tokenizer, processor):
+    def get_test_pipeline(self, model, tokenizer, processor, torch_dtype="float32"):
         dqa_pipeline = pipeline(
-            "document-question-answering", model=model, tokenizer=tokenizer, image_processor=processor
+            "document-question-answering",
+            model=model,
+            tokenizer=tokenizer,
+            image_processor=processor,
+            torch_dtype=torch_dtype,
         )
 
         image = INVOICE_URL
@@ -366,6 +370,6 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase):
         self.assertEqual(nested_simplify(outputs, decimals=4), [{"answer": "us-001"}])
 
     @require_tf
-    @unittest.skip("Document question answering not implemented in TF")
+    @unittest.skip(reason="Document question answering not implemented in TF")
     def test_small_model_tf(self):
         pass

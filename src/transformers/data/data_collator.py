@@ -153,7 +153,7 @@ def torch_default_data_collator(features: List[InputDataClass]) -> Dict[str, Any
             if isinstance(v, torch.Tensor):
                 batch[k] = torch.stack([f[k] for f in features])
             elif isinstance(v, np.ndarray):
-                batch[k] = torch.tensor(np.stack([f[k] for f in features]))
+                batch[k] = torch.from_numpy(np.stack([f[k] for f in features]))
             else:
                 batch[k] = torch.tensor([f[k] for f in features])
 
@@ -751,7 +751,7 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
         inputs = tf.where(indices_replaced, mask_token_id, inputs)
 
         # 10% of the time, we replace masked input tokens with random word
-        indices_random = self.tf_bernoulli(input_shape, 0.1) & masked_indices & ~indices_replaced
+        indices_random = self.tf_bernoulli(input_shape, 0.5) & masked_indices & ~indices_replaced
         random_words = tf.random.uniform(input_shape, maxval=vocab_size, dtype=inputs.dtype)
 
         inputs = tf.where(indices_random, random_words, inputs)
@@ -1611,3 +1611,42 @@ class DataCollatorForPermutationLanguageModeling(DataCollatorMixin):
             ) & masked_indices[i]
 
         return inputs.astype(np.int64), perm_mask, target_mapping, labels.astype(np.int64)
+
+
+@dataclass
+class DataCollatorWithFlattening(DefaultDataCollator):
+    """
+    Data collator used for padding free approach. Does the following:
+
+    - concatate the entire mini batch into single long sequence [1, total_tokens]
+    - uses `separator_id` to separate sequences within the concatenated `labels`, default value is -100
+    - no padding will be added, returns `input_ids`, `labels` and `position_ids`
+    """
+
+    def __init__(self, *args, return_position_ids=True, separator_id=-100, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.return_position_ids = return_position_ids
+        self.separator_id = separator_id
+        warnings.warn(
+            "Using `DataCollatorWithFlattening` will flatten the entire mini batch into single long sequence."
+            "Make sure your attention computation is able to handle it!"
+        )
+
+    def __call__(self, features, return_tensors=None, separator_id=None):
+        if return_tensors is None:
+            return_tensors = self.return_tensors
+        if separator_id is None:
+            separator_id = self.separator_id
+        is_labels_provided = "labels" in features[0]
+        ret = {"input_ids": [], "labels": []}
+        if self.return_position_ids:
+            ret.update({"position_ids": []})
+        for idx in range(0, len(features)):
+            ret["input_ids"] += features[idx]["input_ids"]
+            if is_labels_provided:
+                ret["labels"] += [separator_id] + features[idx]["labels"][1:]
+            else:
+                ret["labels"] += [separator_id] + features[idx]["input_ids"][1:]
+            if self.return_position_ids:
+                ret["position_ids"] += list(range(len(features[idx]["input_ids"])))
+        return default_data_collator([ret], return_tensors)

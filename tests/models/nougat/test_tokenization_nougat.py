@@ -102,19 +102,19 @@ class NougatTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     padding="max_length",
                 )
 
-    @unittest.skip("NougatTokenizerFast does not have tokenizer_file in its signature")
+    @unittest.skip(reason="NougatTokenizerFast does not have tokenizer_file in its signature")
     def test_rust_tokenizer_signature(self):
         pass
 
-    @unittest.skip("NougatTokenizerFast does not support pretokenized inputs")
+    @unittest.skip(reason="NougatTokenizerFast does not support pretokenized inputs")
     def test_pretokenized_inputs(self):
         pass
 
-    @unittest.skip("NougatTokenizerFast directly inherits from PreTrainedTokenizerFast")
+    @unittest.skip(reason="NougatTokenizerFast directly inherits from PreTrainedTokenizerFast")
     def test_prepare_for_model(self):
         pass
 
-    @unittest.skip("This needs a slow tokenizer. Nougat does not have one!")
+    @unittest.skip(reason="This needs a slow tokenizer. Nougat does not have one!")
     def test_encode_decode_with_spaces(self):
         pass
 

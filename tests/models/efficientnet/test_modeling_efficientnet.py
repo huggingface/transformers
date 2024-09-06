@@ -83,6 +83,7 @@ class EfficientNetModelTester:
 
     def get_config(self):
         return EfficientNetConfig(
+            image_size=self.image_size,
             num_channels=self.num_channels,
             kernel_sizes=self.kernel_sizes,
             in_channels=self.in_channels,
@@ -214,6 +215,12 @@ class EfficientNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     @slow
     def test_pipeline_image_feature_extraction(self):
         super().test_pipeline_image_feature_extraction()
+
+    @is_pipeline_test
+    @require_vision
+    @slow
+    def test_pipeline_image_feature_extraction_fp16(self):
+        super().test_pipeline_image_feature_extraction_fp16()
 
     @is_pipeline_test
     @require_vision

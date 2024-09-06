@@ -21,6 +21,7 @@ from collections import OrderedDict
 from pathlib import Path
 
 import pytest
+from huggingface_hub import Repository
 
 import transformers
 from transformers import BertConfig, GPT2Model, is_safetensors_available, is_torch_available
@@ -529,3 +530,12 @@ class AutoModelTest(unittest.TestCase):
         _MODEL_MAPPING_NAMES = OrderedDict([("bert", "GPT2Model")])
         _MODEL_MAPPING = _LazyAutoMapping(_CONFIG_MAPPING_NAMES, _MODEL_MAPPING_NAMES)
         self.assertEqual(_MODEL_MAPPING[BertConfig], GPT2Model)
+
+    def test_dynamic_saving_from_local_repo(self):
+        with tempfile.TemporaryDirectory() as tmp_dir, tempfile.TemporaryDirectory() as tmp_dir_out:
+            _ = Repository(local_dir=tmp_dir, clone_from="hf-internal-testing/tiny-random-custom-architecture")
+            model = AutoModelForCausalLM.from_pretrained(tmp_dir, trust_remote_code=True)
+            model.save_pretrained(tmp_dir_out)
+            _ = AutoModelForCausalLM.from_pretrained(tmp_dir_out, trust_remote_code=True)
+            self.assertTrue((Path(tmp_dir_out) / "modeling_fake_custom.py").is_file())
+            self.assertTrue((Path(tmp_dir_out) / "configuration_fake_custom.py").is_file())

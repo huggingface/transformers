@@ -142,7 +142,7 @@ class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     # Copied from tests.models.t5.test_tokenization_t5.T5TokenizationTest.test_rust_and_python_full_tokenizers with T5->Siglip
     def test_rust_and_python_full_tokenizers(self):
         if not self.test_rust_tokenizer:
-            return
+            self.skipTest(reason="test_rust_tokenizer is set to False")
 
         tokenizer = self.get_tokenizer()
         rust_tokenizer = self.get_rust_tokenizer()
@@ -317,7 +317,7 @@ class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_sentencepiece_tokenize_and_convert_tokens_to_string(self):
         """Test ``_tokenize`` and ``convert_tokens_to_string``."""
         if not self.test_sentencepiece:
-            return
+            self.skipTest(reason="test_sentencepiece is set to False")
 
         tokenizer = self.get_tokenizer()
         text = "This is text to test the tokenizer."

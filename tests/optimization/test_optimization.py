@@ -209,5 +209,5 @@ class LambdaScheduleWrapper:
         return self.fn(*args, **kwargs)
 
     @classmethod
-    def wrap_scheduler(self, scheduler):
-        scheduler.lr_lambdas = list(map(self, scheduler.lr_lambdas))
+    def wrap_scheduler(cls, scheduler):
+        scheduler.lr_lambdas = list(map(cls, scheduler.lr_lambdas))

@@ -181,7 +181,7 @@ PARALLELIZE_DOCSTRING = r"""
     it will evenly distribute blocks across all devices.
 
     Args:
-        device_map (`Dict[int, list]`, optional, defaults to None):
+        device_map (`Dict[int, list]`, *optional*):
             A dictionary that maps attention modules to devices. Note that the embedding module and LMHead are always
             automatically mapped to the first device (for esoteric reasons). That means that the first device should
             have fewer attention modules mapped to it than other devices. For reference, the t5 models have the

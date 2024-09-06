@@ -25,11 +25,11 @@ A backbone is a model used for feature extraction for higher level computer visi
 
 Backbones are supported for the following models:
 
-* [BEiT](..model_doc/beit)
+* [BEiT](../model_doc/beit)
 * [BiT](../model_doc/bit)
-* [ConvNet](../model_doc/convnext)
+* [ConvNext](../model_doc/convnext)
 * [ConvNextV2](../model_doc/convnextv2)
-* [DiNAT](..model_doc/dinat)
+* [DiNAT](../model_doc/dinat)
 * [DINOV2](../model_doc/dinov2)
 * [FocalNet](../model_doc/focalnet)
 * [MaskFormer](../model_doc/maskformer)
