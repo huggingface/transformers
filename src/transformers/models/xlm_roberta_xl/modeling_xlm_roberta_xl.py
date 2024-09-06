@@ -839,7 +839,7 @@ class XLMRobertaXLModel(XLMRobertaXLPreTrainedModel):
         encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
             the model is configured as a decoder.
-        encoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+        encoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)` or `(batch_size, sequence_length, target_length)`, *optional*):
             Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
             the cross-attention if the model is configured as a decoder. Mask values selected in `[0, 1]`:
 
@@ -909,7 +909,7 @@ class XLMRobertaXLModel(XLMRobertaXLPreTrainedModel):
         )
 
         # Expand the attention mask
-        if use_sdpa_attention_masks:
+        if use_sdpa_attention_masks and attention_mask.dim() == 2:
             # Expand the attention mask for SDPA.
             # [bsz, seq_len] -> [bsz, 1, seq_len, seq_len]
             if self.config.is_decoder:
@@ -936,7 +936,7 @@ class XLMRobertaXLModel(XLMRobertaXLPreTrainedModel):
             if encoder_attention_mask is None:
                 encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device)
 
-            if use_sdpa_attention_masks:
+            if use_sdpa_attention_masks and encoder_attention_mask.dim() == 2:
                 # Expand the attention mask for SDPA.
                 # [bsz, seq_len] -> [bsz, 1, seq_len, seq_len]
                 encoder_extended_attention_mask = _prepare_4d_attention_mask_for_sdpa(
