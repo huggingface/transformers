@@ -74,7 +74,7 @@ pip install transformers bitsandbytes>=0.39.0 -q
 
 هناك طرق أخرى لتهيئة نموذج، ولكن هذا خط أساس جيد للبدء باستخدام LLM.
 
-بعد ذلك، تحتاج إلى معالجة إدخال النص الخاص بك باستخدام [مصنف الرموز](tokenizer_summary).
+بعد ذلك، تحتاج إلى معالجة إدخال النص الخاص بك باستخدام [مُجزّئ اللغوي](tokenizer_summary).
 
 ```py
 >>> from transformers import AutoTokenizer
