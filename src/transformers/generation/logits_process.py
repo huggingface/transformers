@@ -1180,11 +1180,19 @@ class SequenceBiasLogitsProcessor(LogitsProcessor):
     def _validate_arguments(self):
         sequence_bias = self.sequence_bias
         if not isinstance(sequence_bias, dict) and not isinstance(sequence_bias, list) or len(sequence_bias) == 0:
-            raise ValueError(f"`sequence_bias` has to be a non-empty dictionary, or non-empty list of lists but is {sequence_bias}.")
-        if isinstance(sequence_bias, dict) and any(not isinstance(sequence_ids, tuple) for sequence_ids in sequence_bias.keys()):
+            raise ValueError(
+                f"`sequence_bias` has to be a non-empty dictionary, or non-empty list of lists but is {sequence_bias}."
+            )
+        if isinstance(sequence_bias, dict) and any(
+            not isinstance(sequence_ids, tuple) for sequence_ids in sequence_bias.keys()
+        ):
             raise ValueError(f"`sequence_bias` has to be a dict with tuples as keys, but is {sequence_bias}.")
-        if isinstance(sequence_bias, list) and any(not isinstance(sequence_ids, list) for sequence_ids in sequence_bias):
-            raise ValueError(f"`sequence_bias` has to be a list with lists of sequences and biases, but is {sequence_bias}.")
+        if isinstance(sequence_bias, list) and any(
+            not isinstance(sequence_ids, list) for sequence_ids in sequence_bias
+        ):
+            raise ValueError(
+                f"`sequence_bias` has to be a list with lists of sequences and biases, but is {sequence_bias}."
+            )
         if isinstance(sequence_bias, dict) and any(
             any((not isinstance(token_id, (int, np.integer)) or token_id < 0) for token_id in sequence_ids)
             or len(sequence_ids) == 0
@@ -1195,9 +1203,14 @@ class SequenceBiasLogitsProcessor(LogitsProcessor):
                 f"{sequence_bias}."
             )
         if isinstance(sequence_bias, list) and any(
-            any(not (isinstance(token_bias_pair, list) and all(isinstance(token_id, int) and token_id > 0 for token_id in token_bias_pair) or 
-                     isinstance(token_bias_pair, float))
-                for token_bias_pair in sequence)
+            any(
+                not (
+                    isinstance(token_bias_pair, list)
+                    and all(isinstance(token_id, int) and token_id > 0 for token_id in token_bias_pair)
+                    or isinstance(token_bias_pair, float)
+                )
+                for token_bias_pair in sequence
+            )
             or len(sequence) == 0
             for sequence in sequence_bias
         ):
@@ -1211,10 +1224,7 @@ class SequenceBiasLogitsProcessor(LogitsProcessor):
     def _convert_list_arguments_into_dict(self):
         if isinstance(self.sequence_bias, list):
             temp_sequence = self.sequence_bias
-            self.sequence_bias = {
-                tuple(sublist[0]): sublist[1]
-                for sublist in temp_sequence }
-
+            self.sequence_bias = {tuple(sublist[0]): sublist[1] for sublist in temp_sequence}
 
 
 class NoBadWordsLogitsProcessor(SequenceBiasLogitsProcessor):
