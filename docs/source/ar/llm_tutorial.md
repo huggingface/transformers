@@ -83,7 +83,7 @@ pip install transformers bitsandbytes>=0.39.0 -q
 >>> model_inputs = tokenizer(["A list of colors: red, blue"], return_tensors="pt").to("cuda")
 ```
 
-يحتوي متغير `model_inputs` على إدخال النص المعالج، بالإضافة إلى قناع الاهتمام. في حين أن [`~generation.GenerationMixin.generate`] تبذل قصارى جهدها لاستنتاج قناع الاهتمام عندما لا يتم تمريره، نوصي بتمريره كلما أمكن ذلك للحصول على نتائج مثالية.
+يحتوي متغير `model_inputs` على النص المدخل بعد تقسيمه إلى وحدات لغوية (tokens)، بالإضافة إلى قناع الانتباه. في حين أن [`~generation.GenerationMixin.generate`] تبذل قصارى جهدها لاستنتاج قناع الانتباه عندما لا يتم تمريره، نوصي بتمريره كلما أمكن ذلك للحصول على نتائج مثالية.
 
 بعد توكين المدخلات، يمكنك استدعاء طريقة [`~generation.GenerationMixin.generate`] لإرجاع الرموز المولدة. يجب بعد ذلك تحويل الرموز المولدة إلى نص قبل الطباعة.
 
