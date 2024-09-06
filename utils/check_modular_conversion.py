@@ -24,8 +24,8 @@ def process_file(generated_modeling_content, file_type="modeling_", fix_and_over
     output_buffer.seek(0)
     output_content = output_buffer.read()
     diff = difflib.unified_diff(
-        content.splitlines(),
         output_content.splitlines(),
+        content.splitlines(),
         fromfile=f"{file_path}_generated",
         tofile=f"{file_path}",
         lineterm="",
