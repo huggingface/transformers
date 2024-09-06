@@ -1,17 +1,9 @@
 name: SSH into our runners
 
 on:
-  workflow_dispatch:
-    inputs:
-      runner_type:
-        description: 'Type of runner to test (a10 or t4)'
-        required: true 
-      docker_image:
-        description: 'Name of the Docker image'
-        required: true
-      num_gpus:
-        description: 'Type of the number of gpus to use (`single` or `multi`)'
-        required: true
+  push:
+    branches:
+      - ssh_new_cluster
 
 env:
   HF_HUB_READ_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
@@ -28,9 +20,9 @@ env:
 jobs:
   ssh_runner:
     name: "SSH"
-    runs-on: ["${{ github.event.inputs.num_gpus }}-gpu", nvidia-gpu, "${{ github.event.inputs.runner_type }}", ci]
+    runs-on: aws-g4dn-2xlarge-cache-test
     container:
-      image: ${{ github.event.inputs.docker_image }}
+      image: huggingface/transformers-all-latest-gpu
       options: --gpus all --privileged --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
 
     steps:
@@ -61,4 +53,4 @@ jobs:
           slackChannel: ${{ secrets.SLACK_CIFEEDBACK_CHANNEL }}
           slackToken: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
           waitForSSH: true
-          sshTimeout: 15m
+          sshTimeout: 30m
