@@ -1858,7 +1858,7 @@ class GenerationTesterMixin:
             model = model_class(config).to(torch_device).eval()
             generation_kwargs = {
                 "max_new_tokens": 5,
-                "cache_implementation": "quant0",
+                "cache_implementation": "quantized",
                 # careful with group size, should be divisor of model's hidden size
                 "cache_config": {"backend": "quanto", "nbits": 2, "q_group_size": 8, "residual_length": 128},
                 "return_dict_in_generate": True,  # Required to return `past_key_values`
