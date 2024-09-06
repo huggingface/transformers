@@ -29,15 +29,8 @@ from ..cache_utils import (
     Cache,
     DynamicCache,
     EncoderDecoderCache,
-    HQQQuantizedCache,
-    HybridCache,
-    MambaCache,
     OffloadedCache,
-    OffloadedStaticCache,
     QuantizedCacheConfig,
-    QuantoQuantizedCache,
-    SlidingWindowCache,
-    StaticCache,
 )
 from ..integrations.deepspeed import is_deepspeed_zero3_enabled
 from ..modeling_outputs import CausalLMOutputWithPast, Seq2SeqLMOutput
@@ -68,7 +61,12 @@ from .candidate_generator import (
     _prepare_attention_mask,
     _prepare_token_type_ids,
 )
-from .configuration_utils import GenerationConfig, GenerationMode
+from .configuration_utils import (
+    NEED_SETUP_CACHE_CLASSES_MAPPING,
+    QUANT_BACKEND_CLASSES_MAPPING,
+    GenerationConfig,
+    GenerationMode,
+)
 from .logits_process import (
     EncoderNoRepeatNGramLogitsProcessor,
     EncoderRepetitionPenaltyLogitsProcessor,
@@ -117,15 +115,6 @@ logger = logging.get_logger(__name__)
 
 if is_accelerate_available():
     from accelerate.hooks import AlignDevicesHook, add_hook_to_module
-
-NEED_SETUP_CACHE_CLASSES_MAPPING = {
-    "static": StaticCache,
-    "offloaded_static": OffloadedStaticCache,
-    "sliding_window": SlidingWindowCache,
-    "hybrid": HybridCache,
-    "mamba": MambaCache,
-}
-QUANT_BACKEND_CLASSES_MAPPING = {"quanto": QuantoQuantizedCache, "HQQ": HQQQuantizedCache}
 
 
 @dataclass
