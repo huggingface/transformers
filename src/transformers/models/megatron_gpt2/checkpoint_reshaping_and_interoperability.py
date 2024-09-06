@@ -607,7 +607,7 @@ def convert_checkpoint_from_transformers_to_megatron(args):
         sys.path.insert(0, args.megatron_path)
 
     try:
-        from megatron.tokenizer.tokenizer import _vocab_size_with_padding
+        from megatron.training.tokenizer.tokenizer import _vocab_size_with_padding
     except ModuleNotFoundError:
         print("Unable to import Megatron, please specify the path to Megatron using --megatron-path. Exiting.")
         exit(1)
