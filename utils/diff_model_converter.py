@@ -256,7 +256,7 @@ def merge_docstrings(original_docstring, updated_docstring):
             updated_docstring = "".join(
                 [
                     parts[0] + doc,
-                    "```",
+                    "\n        ```",
                     parts[1],
                     "```",
                     parts[2],
