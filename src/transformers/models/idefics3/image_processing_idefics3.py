@@ -30,10 +30,7 @@ from ...image_utils import (
     PILImageResampling,
     get_image_size,
     infer_channel_dimension_format,
-    is_jax_tensor,
     is_scaled_image,
-    is_tf_tensor,
-    is_torch_tensor,
     is_valid_image,
     to_numpy_array,
     valid_images,
@@ -265,6 +262,8 @@ def to_pil_image(
             and `False` otherwise.
         input_data_format (`ChannelDimension`, *optional*):
             The channel dimension format of the input image. If unset, will use the inferred format from the input.
+        image_mode (`str`, *optional*):
+            The mode of the image.
 
     Returns:
         `PIL.Image.Image`: The converted image.
@@ -272,12 +271,7 @@ def to_pil_image(
     if isinstance(image, PIL.Image.Image):
         return image
     # Convert all tensors to numpy arrays before converting to PIL image
-    if is_torch_tensor(image) or is_tf_tensor(image):
-        image = image.numpy()
-    elif is_jax_tensor(image):
-        image = np.array(image)
-    elif not isinstance(image, np.ndarray):
-        raise ValueError("Input image type not supported: {}".format(type(image)))
+    image = to_numpy_array(image)
 
     # If the channel has been moved to first dim, we put it back at the end.
     image = to_channel_dimension_format(image, ChannelDimension.LAST, input_data_format)
@@ -451,19 +445,21 @@ class Idefics3ImageProcessor(BaseImageProcessor):
             size = (size["height"], size["width"])
         else:
             raise ValueError("size must be a dictionary with key 'longest_edge' or 'height' and 'width'.")
-        if isinstance(image, Image.Image):
-            return image.resize((size[1], size[0]), resample=resample)
-        else:
-            image_mode = None
-            if image.ndim == 2 or image.shape[-1] == 1:
-                image_mode = "P"
-            # Custom to_pil_image function to support image_mode
-            image = to_pil_image(image, input_data_format=input_data_format, image_mode=image_mode)
+        image_mode = None
+        if image.ndim == 2 or image.shape[-1] == 1:
+            image_mode = "P"
+        # Custom to_pil_image function to support image_mode
+        image = to_pil_image(image, input_data_format=input_data_format, image_mode=image_mode)
 
         resized_image = image.resize((size[1], size[0]), resample=resample)
         resized_array = np.array(resized_image)
+        if resized_array.ndim == 3 and input_data_format == ChannelDimension.FIRST:
+            resized_array = np.moveaxis(resized_array, -1, 0)
         if resized_array.ndim == 2:
-            resized_array = np.expand_dims(resized_array, axis=-1)
+            if input_data_format == ChannelDimension.FIRST:
+                resized_array = np.expand_dims(resized_array, axis=0)
+            elif input_data_format == ChannelDimension.LAST:
+                resized_array = np.expand_dims(resized_array, axis=-1)
         return resized_array
 
     def split_image(
@@ -705,7 +701,6 @@ class Idefics3ImageProcessor(BaseImageProcessor):
         return_row_col_info: bool = False,
         input_data_format: Optional[ChannelDimension] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
-        crop_size: Optional[Dict[str, int]] = None,
     ):
         """
         Preprocess a batch of images.
@@ -761,12 +756,7 @@ class Idefics3ImageProcessor(BaseImageProcessor):
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
-            crop_size (`Dict[str, int]`, *optional*):
-                This parameter is not used in this method. It is only present for compatibility.
         """
-        if crop_size is not None:
-            logger.warning("crop_size is not used in Idefics3ImageProcessor.preprocess.")
-
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = size if size is not None else self.size
         resample = resample if resample is not None else self.resample
@@ -817,6 +807,12 @@ class Idefics3ImageProcessor(BaseImageProcessor):
         if input_data_format is None:
             # We assume that all images have the same channel dimension format.
             input_data_format = infer_channel_dimension_format(images_list[0][0], num_channels=(1, 3, 4))
+            if input_data_format is ChannelDimension.FIRST:
+                images_list = [
+                    [to_channel_dimension_format(image, ChannelDimension.LAST, input_data_format) for image in images]
+                    for images in images_list
+                ]
+                input_data_format = ChannelDimension.LAST
 
         validate_preprocess_arguments(
             do_rescale=do_rescale,
@@ -838,13 +834,10 @@ class Idefics3ImageProcessor(BaseImageProcessor):
                 for images in images_list
             ]
 
-        # Resize might already change the channel dimension, so we will recompute it
-        input_data_format = infer_channel_dimension_format(images_list[0][0], num_channels=(1, 3, 4))
-
         if do_image_splitting:
-            # We first resize both height and width of each image to the nearest 364 multiple, disregarding the aspect ratio
-            # for size=(10, 364) -> rescaled_size=(364, 364)
-            # for size=(11, 365) -> rescaled_size=(364, 364*2)
+            # We first resize both height and width of each image to the nearest max_image_size multiple, disregarding the aspect ratio
+            # for size=(10, max_image_size) -> rescaled_size=(max_image_size, max_image_size)
+            # for size=(11, max_image_size+1) -> rescaled_size=(max_image_size, max_image_size*2)
             images_list = [
                 [
                     self.resize_for_vision_encoder(
@@ -892,7 +885,9 @@ class Idefics3ImageProcessor(BaseImageProcessor):
         if do_rescale:
             rescaled_images_array = []
             for image in images_list:
-                rescaled_images_array.append([rescale(img, rescale_factor) for img in image])
+                rescaled_images_array.append(
+                    [rescale(img, rescale_factor, input_data_format=input_data_format) for img in image]
+                )
             images_list = rescaled_images_array
 
         if do_normalize:

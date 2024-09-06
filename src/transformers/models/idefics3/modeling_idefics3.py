@@ -100,24 +100,20 @@ class Idefics3CausalLMOutputWithPast(ModelOutput):
         past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
             `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
-
             Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
             `past_key_values` input) to speed up sequential decoding.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
             Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
         attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
-
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
         image_hidden_states (`tuple(torch.FloatTensor)`, *optional*):
             Tuple of `torch.FloatTensor` (one for the output of the image embeddings, `(batch_size, num_images,
             sequence_length, hidden_size)`.
-
             image_hidden_states of the model produced by the vision encoder
     """
 
@@ -400,6 +396,7 @@ class Idefics3SimpleMLP(nn.Module):
         return self.proj(x)
 
 
+# Copied from transformers.models.idefics2.modeling_idefics2.Idefics2EncoderLayer with Idefics2->Idefics3
 class Idefics3EncoderLayer(nn.Module):
     def __init__(self, config: Idefics3Config):
         super().__init__()
@@ -625,6 +622,7 @@ class Idefics3PreTrainedModel(PreTrainedModel):
     _supports_flash_attn_2 = True
     _supports_cache_class = True
 
+    # Copied from transformers.models.idefics2.modeling_idefics2.Idefics2PreTrainedModel._init_weights
     def _init_weights(self, module):
         std = (
             self.config.text_config.initializer_range
@@ -681,12 +679,15 @@ class Idefics3VisionTransformer(Idefics3PreTrainedModel):
 
         self.embeddings = Idefics3VisionEmbeddings(config)
         self.encoder = Idefics3Encoder(config)
+        self.patch_size = config.patch_size
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
 
+    # Copied from transformers.models.idefics2.modeling_idefics2.Idefics2VisionTransformer.get_input_embeddings
     def get_input_embeddings(self):
         return self.embeddings
 
+    # Copied from transformers.models.idefics2.modeling_idefics2.Idefics2VisionTransformer.set_input_embeddings
     def set_input_embeddings(self, value):
         self.embeddings = value
 
@@ -706,7 +707,7 @@ class Idefics3VisionTransformer(Idefics3PreTrainedModel):
 
         batch_size = pixel_values.size(0)
         if patch_attention_mask is None:
-            patch_size = self.config.patch_size
+            patch_size = self.patch_size
             patch_attention_mask = torch.ones(
                 (
                     batch_size,
@@ -843,6 +844,7 @@ class Idefics3Model(Idefics3PreTrainedModel):
 
         self.post_init()
 
+    # Copied from transformers.models.idefics2.modeling_idefics2.Idefics2Model.enable_input_require_grads
     def enable_input_require_grads(self):
         """
         Enables the gradients for the input embeddings.
@@ -869,9 +871,11 @@ class Idefics3Model(Idefics3PreTrainedModel):
             make_inputs_require_grads
         )
 
+    # Copied from transformers.models.idefics2.modeling_idefics2.Idefics2Model.get_input_embeddings
     def get_input_embeddings(self):
         return self.text_model.get_input_embeddings()
 
+    # Copied from transformers.models.idefics2.modeling_idefics2.Idefics2Model.set_input_embeddings
     def set_input_embeddings(self, value):
         self.text_model.set_input_embeddings(value)
 
@@ -1038,6 +1042,7 @@ class Idefics3Model(Idefics3PreTrainedModel):
 class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
+    # Copied from transformers.models.idefics2.modeling_idefics2.Idefics2ForConditionalGeneration.__init__ with Idefics2->Idefics3
     def __init__(self, config):
         super().__init__(config)
         self.model = Idefics3Model(config)
@@ -1049,6 +1054,7 @@ class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    # Copied from transformers.models.idefics2.modeling_idefics2.Idefics2ForConditionalGeneration.enable_input_require_grads
     def enable_input_require_grads(self):
         """
         Enables the gradients for the input embeddings. This is useful for fine-tuning adapter weights while keeping
@@ -1063,18 +1069,23 @@ class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel):
             make_inputs_require_grads
         )
 
+    # Copied from transformers.models.idefics2.modeling_idefics2.Idefics2ForConditionalGeneration.get_input_embeddings
     def get_input_embeddings(self):
         return self.model.text_model.get_input_embeddings()
 
+    # Copied from transformers.models.idefics2.modeling_idefics2.Idefics2ForConditionalGeneration.set_input_embeddings
     def set_input_embeddings(self, value):
         self.model.text_model.set_input_embeddings(value)
 
+    # Copied from transformers.models.idefics2.modeling_idefics2.Idefics2ForConditionalGeneration.get_output_embeddings
     def get_output_embeddings(self):
         return self.lm_head
 
+    # Copied from transformers.models.idefics2.modeling_idefics2.Idefics2ForConditionalGeneration.set_output_embeddings
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
+    # Copied from transformers.models.idefics2.modeling_idefics2.Idefics2ForConditionalGeneration.tie_weights
     def tie_weights(self):
         """
         Overwrite `transformers.modeling_utils.PreTrainedModel.tie_weights` to handle the case of DecoupledLinear and DecoupledEmbedding.
@@ -1133,25 +1144,23 @@ class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel):
 
         >>> # Create inputs
         >>> messages = [
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "image"},
-                        {"type": "text", "text": "In this image, we can see the city of New York, and more specifically the Statue of Liberty."},
-                        {"type": "image"},
-                        {"type": "text", "text": "What can we see in this image?"},
-                    ]
-                },
-                {
-                "role": "user",
-                "content": [
-                    {"type": "image"},
-                    {"type": "text", "text": "In which city is that bridge located?"},
-                ]
-            }
-
-            ]
-
+        ...     {
+        ...         "role": "user",
+        ...         "content": [
+        ...             {"type": "image"},
+        ...             {"type": "text", "text": "In this image, we can see the city of New York, and more specifically the Statue of Liberty."},
+        ...             {"type": "image"},
+        ...             {"type": "text", "text": "What can we see in this image?"},
+        ...         ]
+        ...     },
+        ...     {
+        ...         "role": "user",
+        ...         "content": [
+        ...             {"type": "image"},
+        ...             {"type": "text", "text": "In which city is that bridge located?"},
+        ...         ]
+        ...     }
+        ... ]
 
         >>> prompts = [processor.apply_chat_template([message], add_generation_prompt=True) for message in messages]
         >>> images = [[image1, image2], [image3]]
@@ -1221,6 +1230,7 @@ class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel):
             image_hidden_states=outputs.image_hidden_states,
         )
 
+    # Copied from transformers.models.idefics2.modeling_idefics2.Idefics2ForConditionalGeneration.prepare_inputs_for_generation
     def prepare_inputs_for_generation(
         self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
     ):
@@ -1285,6 +1295,7 @@ class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel):
         )
         return model_inputs
 
+    # Copied from transformers.models.idefics2.modeling_idefics2.Idefics2ForConditionalGeneration._update_model_kwargs_for_generation
     def _update_model_kwargs_for_generation(self, outputs, model_kwargs, is_encoder_decoder, **kwargs):
         model_kwargs = super()._update_model_kwargs_for_generation(
             outputs=outputs,

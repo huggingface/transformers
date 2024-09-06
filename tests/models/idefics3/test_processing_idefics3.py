@@ -285,13 +285,12 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         self.assertEqual(rendered, expected_rendered)
 
-    # We need to overwrite this test to adapt it to our processor.
     @require_torch
     @require_vision
     def test_image_processor_defaults_preserved_by_image_kwargs(self):
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-        image_processor = self.get_component("image_processor", crop_size=(234, 234))
+        image_processor = self.get_component("image_processor")
         tokenizer = self.get_component("tokenizer", max_length=117)
 
         processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
@@ -304,7 +303,6 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(len(inputs["pixel_values"][0][0]), 3)
         self.assertEqual(len(inputs["pixel_values"][0][0][0]), 364)  # crop size doesn't affect our image processor
 
-    # We need to overwrite this test to adapt it to our processor.
     @require_torch
     @require_vision
     def test_kwargs_overrides_default_image_processor_kwargs(self):
@@ -326,7 +324,6 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(len(inputs["pixel_values"][0][0][0]), 32)
         self.assertEqual(len(inputs["input_ids"][0]), 117)
 
-    # We need to overwrite this test to adapt it to our processor.
     @require_vision
     @require_torch
     def test_kwargs_overrides_default_tokenizer_kwargs(self):
@@ -343,7 +340,6 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         inputs = processor(text=input_str, images=image_input, return_tensors="pt", max_length=30)
         self.assertEqual(len(inputs["input_ids"][0]), 30)
 
-    # We need to overwrite this test to adapt it to our processor.
     @require_torch
     @require_vision
     def test_structured_kwargs_nested(self):
@@ -372,7 +368,6 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertEqual(len(inputs["input_ids"][0]), 120)
 
-    # We need to overwrite this test to adapt it to our processor.
     @require_torch
     @require_vision
     def test_structured_kwargs_nested_from_dict(self):
@@ -398,7 +393,6 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(inputs["pixel_values"].shape[3], 32)
         self.assertEqual(len(inputs["input_ids"][0]), 120)
 
-    # We need to overwrite this test to adapt it to our processor.
     @require_vision
     @require_torch
     def test_tokenizer_defaults_preserved_by_kwargs(self):
@@ -415,7 +409,6 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         inputs = processor(text=input_str, images=image_input, return_tensors="pt")
         self.assertEqual(len(inputs["input_ids"][0]), 30)
 
-    # We need to overwrite this test to adapt it to our processor.
     @require_torch
     @require_vision
     def test_unstructured_kwargs_batched(self):
@@ -443,7 +436,6 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(inputs["pixel_values"].shape[3], 30)
         self.assertEqual(len(inputs["input_ids"][0]), 76)
 
-    # We need to overwrite this test to adapt it to our processor.
     @require_torch
     @require_vision
     def test_unstructured_kwargs(self):

@@ -223,7 +223,6 @@ class Idefics3Processor(ProcessorMixin):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-
                 Wherever an image token, `<image>` is encountered it is expanded to
                 `<fake_token_around_image>` + `<row_x_col_y>` + `<image>` * `image_seq_len` * <fake_token_around_image>`.
             image_seq_len (`int`, *optional*):
