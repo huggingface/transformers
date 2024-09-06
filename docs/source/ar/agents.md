@@ -149,7 +149,7 @@ agent.run("Why does Mike not know many people in New York?", audio="https://hugg
 ```
 
 
-تم تحديد موجه النظام ومحلل الإخراج تلقائيًا، ولكن يمكنك فحصهما بسهولة عن طريق استدعاء `system_prompt_template` على وكيلك.
+تم تحديد موجه النظام ومحلل المخرجات تلقائيًا، ولكن يمكنك فحصهما بسهولة عن طريق استدعاء `system_prompt_template` على وكيلك.
 
 ```python
 print(agent.system_prompt_template)
