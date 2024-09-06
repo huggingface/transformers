@@ -1174,7 +1174,7 @@ class FalconModel(FalconPreTrainedModel):
         min_dtype = torch.finfo(dtype).min
         batch_size, sequence_length, _ = input_tensor.shape
         if using_static_cache:
-            target_length = past_key_values.get_max_length()
+            target_length = past_key_values.get_max_cache_shape()
         else:
             target_length = (
                 attention_mask.shape[-1]
@@ -1290,7 +1290,7 @@ class FalconForCausalLM(FalconPreTrainedModel):
             attention_mask = _prepare_4d_causal_attention_mask_with_cache_position(
                 attention_mask,
                 sequence_length=sequence_length,
-                target_length=past_key_values.get_max_length(),
+                target_length=past_key_values.get_max_cache_shape(),
                 dtype=dtype,
                 device=device,
                 min_dtype=min_dtype,
