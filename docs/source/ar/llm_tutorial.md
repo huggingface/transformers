@@ -231,3 +231,18 @@ LLMs هي [معماريات فك التشفير فقط](https://huggingface.co/l
 3.[قوالب موجهات للدردشة LLMs](chat_
 4. [دليل تصميم الموجه](tasks/prompting);
 5. مرجع واجهة برمجة التطبيقات (API)  [`~generation.GenerationConfig`], [`~generation.GenerationMixin.generate`], و  [generate-related classes](internal/generation_utils). والعديد من الفئات الأخرى المرتبطة بعملية التوليد.!
+
+### لوحات صدارة نماذج اللغات الكبيرة
+1. لوحة صدارة نماذج اللغات الكبيرة المفتوحة المصدر (Open LLM Leaderboard): تركز على جودة النماذج مفتوحة المصدر [رابط لوحة الصدارة](https://huggingface.co/spaces/HuggingFaceH4/open_llm_leaderboard).
+2. لوحة صدارة أداء نماذج اللغات الكبيرة المفتوحة المصدر (Open LLM-Perf Leaderboard): تركز على إنتاجية نماذج اللغات الكبيرة [رابط لوحة الصدارة](https://huggingface.co/spaces/optimum/llm-perf-leaderboard).
+
+### زمن الاستجابة والإنتاجية واستهلاك الذاكرة
+1. دليل تحسين نماذج اللغات الكبيرة من حيث السرعة والذاكرة: دليل تحسين نماذج اللغات الكبيرة.
+2. التكميم (Quantization): دليل حول تقنية التكميم التكميم مثل تقنيتي bitsandbytes و autogptq، والتي توضح كيفية تقليل متطلبات الذاكرة بشكل كبير.
+
+### مكتبات مرتبطة
+1. [`optimum`](https://github.com/huggingface/optimum), امتداد لمكتبة Transformers يعمل على تحسين الأداء لأجهزة معينة.
+2. [`outlines`](https://github.com/outlines-dev/outlines), مكتبة للتحكم في توليد النصوص (على سبيل المثال، لتوليد ملفات JSON).
+3. [`SynCode`](https://github.com/uiuc-focal-lab/syncode), مكتبة للتوليد الموجه بقواعد اللغة الخالية من السياق (على سبيل المثال، JSON، SQL، Python).
+4. [`text-generation-inference`](https://github.com/huggingface/text-generation-inference), خادم جاهز للإنتاج لنماذج اللغات الكبيرة.
+5. [`text-generation-webui`](https://github.com/oobabooga/text-generation-webui), واجهة مستخدم لتوليد النصوص.   
