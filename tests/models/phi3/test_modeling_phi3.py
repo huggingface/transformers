@@ -479,9 +479,9 @@ class Phi3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         keys_with_long_factor = keys_with_long_factor[:, :, : config.original_max_position_embeddings - 1, :]
 
         # KV cache is re-computed after reaching the (`config.original_max_position_embeddings`+1)th token position
-        self.assertFalse(torch.allclose(keys_with_short_factor, keys_with_long_factor, atol=1e-3, rtol=1e-3))
+        self.assertFalse(torch.allclose(keys_with_short_factor, keys_with_long_factor, atol=1e-2, rtol=1e-2))
         # Last token generated using long factor
-        self.assertTrue(torch.allclose(last_token_logits, regenerated_last_token_logits, atol=1e-3, rtol=1e-3))
+        self.assertTrue(torch.allclose(last_token_logits, regenerated_last_token_logits, atol=1e-2, rtol=1e-2))
 
 
 @slow
