@@ -777,4 +777,5 @@ class ChatTemplateTest(unittest.TestCase):
         # Assert that the serialized list is correctly reconstructed as a single dict
         self.assertEqual(new_tokenizer.chat_template, tokenizer.chat_template)
 
+
 # TODO Why aren't tests running?
