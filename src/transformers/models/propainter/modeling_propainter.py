@@ -3567,10 +3567,15 @@ PROPAINTER_START_DOCSTRING = r"""
 
 PROPAINTER_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`ProPainterImageProcessor.__call__`]
+        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_frames, num_channels, height, width)`):
+            Pixel values for videos. Pixel values for videos can be obtained using [`AutoImageProcessor`]. See [`ProPainterVideoProcessor.__call__`]
             for details.
-
+        flow_masks: (`torch.FloatTensor` of shape `(batch_size, num_frames, num_channels, height, width)`):
+            Pixel values for flow masks. Pixel values for flow masks can be obtained using [`AutoImageProcessor`]. See [`ProPainterVideoProcessor.__call__`]
+            for details.
+        masks_dilated: (`torch.FloatTensor` of shape `(batch_size, num_frames, num_channels, height, width)`):
+            Pixel values for dilated masks. Pixel values for dilated masks can be obtained using [`AutoImageProcessor`]. See [`ProPainterVideoProcessor.__call__`]
+            for details.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -3987,7 +3992,125 @@ class ProPainterModel(ProPainterPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, MaskedImageModelingOutput]:
-        r""" """
+        r"""
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> import av
+        >>> import cv2
+        >>> import imageio
+        >>> import numpy as np
+        >>> import os
+        >>> import torch
+
+        >>> from datasets import load_dataset
+        >>> from huggingface_hub import hf_hub_download
+        >>> from PIL import Image
+        >>> from transformers import ProPainterVideoProcessor, ProPainterModel
+
+        >>> np.random.seed(0)
+
+        >>> def read_video_pyav(container, indices):
+        ...    '''
+        ...    Decode the video with PyAV decoder.
+        ...    Args:
+        ...        container (`av.container.input.InputContainer`): PyAV container.
+        ...        indices (`List[int]`): List of frame indices to decode.
+        ...    Returns:
+        ...        result (np.ndarray): np array of decoded frames of shape (num_frames, height, width, 3).
+        ...    '''
+        ...    frames = []
+        ...    container.seek(0)
+        ...    start_index = indices[0]
+        ...    end_index = indices[-1]
+        ...    for i, frame in enumerate(container.decode(video=0)):
+        ...        if i > end_index:
+        ...            break
+        ...        if i >= start_index and i in indices:
+        ...            frames.append(frame)
+        ...    return np.stack([x.to_ndarray(format="rgb24") for x in frames])
+
+
+        >>> def sample_frame_indices(clip_len, frame_sample_rate, seg_len):
+        ...    '''
+        ...    Sample a given number of frame indices from the video.
+        ...    Args:
+        ...        clip_len (`int`): Total number of frames to sample.
+        ...        frame_sample_rate (`int`): Sample every n-th frame.
+        ...        seg_len (`int`): Maximum allowed index of sample's last frame.
+        ...    Returns:
+        ...        indices (`List[int]`): List of sampled frame indices
+        ...    '''
+        ...    converted_len = int(clip_len * frame_sample_rate)
+        ...    end_idx = np.random.randint(converted_len, seg_len)
+        ...    start_idx = end_idx - converted_len
+        ...    indices = np.linspace(start_idx, end_idx, num=clip_len)
+        ...    indices = np.clip(indices, start_idx, end_idx - 1).astype(np.int64)
+        ...    return indices
+
+
+        >>> # Using .mp4 files for data:
+
+        >>> # video clip consists of 80 frames(both masks and original video) (3 seconds at 24 FPS)
+        >>> video_file_path = hf_hub_download(
+        ...    repo_id="ruffy369/propainter-object-removal", filename="object_removal_bmx/bmx.mp4", repo_type="dataset"
+        ... )
+        >>> masks_file_path = hf_hub_download(
+        ...    repo_id="ruffy369/propainter-object-removal", filename="object_removal_bmx/bmx_masks.mp4", repo_type="dataset"
+        ... )
+        >>> container_video = av.open(video_file_path)
+        >>> container_masks = av.open(masks_file_path)
+
+        >>> # sample 32 frames
+        >>> indices = sample_frame_indices(clip_len=32, frame_sample_rate=1, seg_len=container_video.streams.video[0].frames)
+        >>> video = read_video_pyav(container=container_video, indices=indices)
+
+        >>> masks = read_video_pyav(container=container_masks, indices=indices)
+        >>> video = list(video)
+        >>> masks = list(masks)
+
+        >>> # Forward pass:
+
+        >>> device = "cuda" if torch.cuda.is_available() else "cpu"
+        >>> video_processor = ProPainterVideoProcessor()
+        >>> inputs = video_processor(video, masks = masks).to(device)
+
+        >>> model = ProPainterModel.from_pretrained("ruffy369/ProPainter").to(device)
+
+        >>> # The first input in this always has a value for inference as its not utilised during training
+        >>> with torch.no_grad():
+        ...    outputs = model(**inputs)
+
+        >>> # To visualize the reconstructed frames with object removal video inpainting:
+        >>> reconstructed_frames = outputs["reconstruction"]
+        >>> reconstructed_frames = [cv2.resize(frame, (240,423)) for frame in reconstructed_frames]
+        >>> imageio.mimwrite(os.path.join(<PATH_TO_THE_FOLDER>, 'inpaint_out.mp4'), reconstructed_frames, fps=24, quality=7)
+
+        >>> # Using .jpg files for data:
+
+        >>> ds = load_dataset("ruffy369/propainter-object-removal")
+        >>> ds_images = ds['train']["image"]
+        >>> num_frames = 80
+        >>> video = [np.array(ds_images[i]) for i in range(num_frames)]
+        >>> #stack to convert H,W mask frame to compatible H,W,C frame as they are already in grayscale
+        >>> masks = [np.stack([np.array(ds_images[i])], axis=-1) for i in range(num_frames, 2*num_frames)]
+
+        >>> # Forward pass:
+
+        >>> inputs = video_processor(video, masks = masks).to(device)
+
+        >>> # The first input in this always has a value for inference as its not utilised during training
+        >>> with torch.no_grad():
+        ...    outputs = model(**inputs)
+
+        >>> # To visualize the reconstructed frames with object removal video inpainting:
+        >>> reconstructed_frames = outputs["reconstruction"]
+        >>> reconstructed_frames = [cv2.resize(frame, (240,423)) for frame in reconstructed_frames]
+        >>> imageio.mimwrite(os.path.join(<PATH_TO_THE_FOLDER>, 'inpaint_out.mp4'), reconstructed_frames, fps=24, quality=7)
+        ```"""
+
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states

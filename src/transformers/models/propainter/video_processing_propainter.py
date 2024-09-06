@@ -95,6 +95,8 @@ def convert_to_grayscale_and_dilation(
             The image to convert.
         input_data_format (`ChannelDimension` or `str`, *optional*):
             The channel dimension format for the input image.
+        mask_dilation (`int`, *optional*, defaults to `4`):
+            The number of iterations for binary dilation the mask used in video processing tasks.
     """
     requires_backends(convert_to_grayscale_and_dilation, ["vision"])
     if isinstance(image, np.ndarray):
@@ -131,7 +133,37 @@ def extrapolation(
     data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
     input_data_format: Optional[Union[str, ChannelDimension]] = None,
 ):
-    """Prepares the data for video outpainting."""
+    """
+    Prepares video frames for the outpainting process by extrapolating the field of view (FOV) and generating masks.
+
+    This function performs the following tasks:
+    (a) Scaling: If the `scale` parameter is provided(necesaary to provide for outpainting), it resizes the dimensions of the video frames based on
+        the scaling factors for height  and width. This step is crucial for `"video_outpainting"` mode. If `scale` is `None`, no resizing is applied.
+    (b) Field of View Expansion: The function calculates new dimensions for the frames to accommodate the expanded FOV.
+        The new dimensions are adjusted to be divisible by 8 to meet processing requirements.
+    (c) Frame Adjustment: The original frames are placed at the center of the new, larger frames. The rest of the frame is filled with zeros.
+    (d) Mask Generation:
+        - Flow Masks: Creates masks indicating the missing regions in the expanded FOV. These masks are used for flow-based propagation.
+        - Dilated Masks: Generates additional masks with dilated borders to account for edge effects and improve the robustness of the process.
+    (e) Format Conversion: Converts the images and masks to the specified channel dimension format, if needed.
+    
+    Args:
+        images (Image):
+            The video frames to convert.
+        scale (`tuple[float, float]`, *optional*, defaults to `None`):
+            Tuple containing scaling factors for the video's height and width dimensions during `"video_outpainting"` mode.
+            It is only applicable during `"video_outpainting"` mode. If `None`, no scaling is applied and code execution will end.
+        num_frames (`int`, *optional*, defaults to `None`):
+            The number of frames in a video.
+        data_format (`str` or `ChannelDimension`, *optional*):
+            The channel dimension format of the image. If not provided, it will be the same as the input image.
+        input_data_format (`str` or `ChannelDimension`, *optional*):
+            The channel dimension format of the input image. If not provided, it will be inferred.
+    Returns:
+        images (`List[Image]`): A list of video frames with expanded FOV, adjusted to the specified channel dimension format.
+        flow_masks (`List[Image]`): A list of masks for the missing regions, intended for flow-based applications. Each mask is scaled to fit the expanded FOV.
+        masks_dilated (`List[Image]`): A list of dilated masks for the missing regions, also scaled to fit the expanded FOV.
+    """
     if input_data_format is None:
         input_data_format = infer_channel_dimension_format(images[0])
 
@@ -239,6 +271,14 @@ class ProPainterVideoProcessor(BaseImageProcessor):
         image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
             Standard deviation to use if normalizing the video. This is a float or list of floats the length of the
             number of channels in the video. Can be overridden by the `image_std` parameter in the `preprocess` method.
+        video_painting_mode (`str`, *optional*, defaults to `"video_inpainting"`):
+            Specifies the mode for video reconstruction tasks, such as object removal, video completion, video outpainting.
+            choices=['video_inpainting', 'video_outpainting']
+        scale_hw (`tuple[float, float]`, *optional*, defaults to `None`):
+            Tuple containing scaling factors for the video's height and width dimensions during `"video_outpainting"` mode.
+            It is only applicable during `"video_outpainting"` mode. If `None`, no scaling is applied and code execution will end.
+        mask_dilation (`int`, *optional*, defaults to `4`):
+            The number of iterations for binary dilation the mask used in video processing tasks.
     """
 
     model_input_names = ["pixel_values_videos"]
@@ -495,6 +535,14 @@ class ProPainterVideoProcessor(BaseImageProcessor):
                 - `"channels_first"` or `ChannelDimension.FIRST`: video in (num_channels, height, width) format.
                 - `"channels_last"` or `ChannelDimension.LAST`: video in (height, width, num_channels) format.
                 - `"none"` or `ChannelDimension.NONE`: video in (height, width) format.
+            video_painting_mode (`str`, *optional*, defaults to `"video_inpainting"`):
+                Specifies the mode for video reconstruction tasks, such as object removal, video completion, video outpainting.
+                choices=['video_inpainting', 'video_outpainting']
+            scale_hw (`tuple[float, float]`, *optional*, defaults to `None`):
+                Tuple containing scaling factors for the video's height and width dimensions during `"video_outpainting"` mode.
+                It is only applicable during `"video_outpainting"` mode. If `None`, no scaling is applied and code execution will end.
+            mask_dilation (`int`, *optional*, defaults to `4`):
+                The number of iterations for binary dilation the mask used in video processing tasks.
         """
         do_resize = do_resize if do_resize is not None else self.do_resize
         resample = resample if resample is not None else self.resample
