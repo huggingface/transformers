@@ -1628,8 +1628,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Directly inherits `GenerationMixin` -> can generate
         if "GenerationMixin" in str(cls.__bases__):
             return True
-        # Model class overwrites `generate` -> can generate
-        if str(cls.__class__.__name__) in str(cls.generate):
+        # Model class overwrites `generate` (e.g. time series models) -> can generate
+        if str(cls.__name__) in str(cls.generate):
             return True
         # BC: Detects whether `prepare_inputs_for_generation` has been overwritten in the model. Prior to v4.45, this
         # was how we detected whether a model could generate.

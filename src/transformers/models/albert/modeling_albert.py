@@ -937,7 +937,7 @@ class AlbertForPreTraining(AlbertPreTrainedModel):
         )
 
 
-class AlbertMLMHead(nn.Module, GenerationMixin):
+class AlbertMLMHead(nn.Module):
     def __init__(self, config: AlbertConfig):
         super().__init__()
 
@@ -984,7 +984,7 @@ class AlbertSOPHead(nn.Module):
     "Albert Model with a `language modeling` head on top.",
     ALBERT_START_DOCSTRING,
 )
-class AlbertForMaskedLM(AlbertPreTrainedModel):
+class AlbertForMaskedLM(AlbertPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["predictions.decoder.bias", "predictions.decoder.weight"]
 
     def __init__(self, config):
