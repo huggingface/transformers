@@ -32,7 +32,7 @@ picture-in-picture" allowfullscreen></iframe>
 ... )
 ```
 
-من السهل أيضًا تحرير الملفات في مستودع، ويمكنك عرض سجل الالتزام بالإضافة إلى الاختلاف:
+من السهل أيضًا تعديل الملفات  الموجودة داخل مستودع، ويمكنك عرض سجل التغييرات التي طرأت على هذه الملفات ومعاينة الاختلافات بين الإصدارات المختلفة:
 
 ![vis_diff](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/vis_diff.png)
 
