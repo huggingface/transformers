@@ -52,7 +52,7 @@ class ViTPoseConfig(PretrainedConfig):
         scale_factor (`int`, *optional*, defaults to 4):
             Factor to upscale the feature maps coming from the ViT backbone.
         use_simple_decoder (`bool`, *optional*, defaults to `True`):
-            Whether to use a simple decoder to decode the feature maps from the backbone into heatmaps.
+            Whether to use a `VitPoseSimpleDecoder` to decode the feature maps from the backbone into heatmaps. Otherwise it uses `VitPoseClassicDecoder`.
 
     Example:
 
