@@ -2227,31 +2227,25 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 import deepspeed
 
                 with deepspeed.zero.GatheredParameters(old_embeddings.weight, modifier_rank=None):
-                    mean_embedding = torch.mean(old_embeddings.weight.data, axis=0)
+                    mean_embedding = torch.mean(old_embeddings.weight.data.to(torch.float32), axis=0)
                     covariance = (
-                        (old_embeddings.weight.data - mean_embedding).T
-                        @ (old_embeddings.weight.data - mean_embedding)
+                        (old_embeddings.weight.data.to(torch.float32) - mean_embedding).T
+                        @ (old_embeddings.weight.data.to(torch.float32) - mean_embedding)
                         / old_num_tokens
                     )
-                    distribution = torch.distributions.multivariate_normal.MultivariateNormal(
-                        mean_embedding, covariance_matrix=1e-5 * covariance
-                    )
-                    new_embeddings.weight.data[-1 * added_num_tokens :, :] = distribution.sample(
-                        sample_shape=(added_num_tokens,)
-                    )
             else:
-                mean_embedding = torch.mean(old_embeddings.weight.data, axis=0)
+                mean_embedding = torch.mean(old_embeddings.weight.data.to(torch.float32), axis=0)
                 covariance = (
-                    (old_embeddings.weight.data - mean_embedding).T
-                    @ (old_embeddings.weight.data - mean_embedding)
+                    (old_embeddings.weight.data.to(torch.float32) - mean_embedding).T
+                    @ (old_embeddings.weight.data.to(torch.float32) - mean_embedding)
                     / old_num_tokens
                 )
-                distribution = torch.distributions.multivariate_normal.MultivariateNormal(
-                    mean_embedding, covariance_matrix=1e-5 * covariance
-                )
-                new_embeddings.weight.data[-1 * added_num_tokens :, :] = distribution.sample(
-                    sample_shape=(added_num_tokens,)
-                )
+            distribution = torch.distributions.multivariate_normal.MultivariateNormal(
+                mean_embedding, covariance_matrix=1e-5 * covariance
+            )
+            new_embeddings.weight.data[-1 * added_num_tokens :, :] = distribution.sample(
+                sample_shape=(added_num_tokens,)
+            ).to(old_embeddings.weight.dtype)
 
         # Copy token embeddings from the previous weights
 
