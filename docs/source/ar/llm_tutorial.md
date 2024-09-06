@@ -50,8 +50,6 @@ pip install transformers bitsandbytes>=0.39.0 -q
 
 دعنا نتحدث عن الكود!
 
-<Tip>
-دعنا نتحدث عن الكود!
 
 <Tip>
 
