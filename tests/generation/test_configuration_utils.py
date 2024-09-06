@@ -24,7 +24,7 @@ from huggingface_hub import HfFolder, delete_repo
 from parameterized import parameterized
 
 from transformers import AutoConfig, GenerationConfig
-from transformers.generation import GenerationMode
+from transformers.generation import GenerationMode, SequenceBiasLogitsProcessor
 from transformers.testing_utils import TOKEN, USER, is_staging_test
 
 
@@ -223,6 +223,18 @@ class GenerationConfigTest(unittest.TestCase):
 
         config = GenerationConfig()
         self.assertEqual(config.get_generation_mode(assistant_model="foo"), GenerationMode.ASSISTED_GENERATION)
+
+    def test_serialize_generation_sequence_bias(self):
+        generation_config = GenerationConfig()
+        sequence_bias = [[[45, 67], -0.6], [[89], 1.2]]
+        generation_config.sequence_bias = sequence_bias
+        with tempfile.TemporaryDirectory("test-generation-config") as tmp_dir:
+            generation_config.save_pretrained(tmp_dir)
+            new_config = GenerationConfig.from_pretrained(tmp_dir)
+        self.assertSequenceEqual(new_config.sequence_bias, sequence_bias)
+
+        processor = SequenceBiasLogitsProcessor(new_config.sequence_bias)
+        self.assertIsNotNone(processor.sequence_bias)
 
 
 @is_staging_test
