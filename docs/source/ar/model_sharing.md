@@ -4,7 +4,8 @@
 
 في هذا الدرس، ستتعلم طريقتين لمشاركة نموذجك المدرب أو مضبوط على منصة [Model Hub](https://huggingface.co/models):
 
-- قم بالدفع البرمجي لملفاتك إلى Hub.
+- رفع ملفاتك إلى منصة Hub مباشرة باستخدام الكود البرمجي.
+
 - قم بسحب وإفلات ملفاتك إلى Hub باستخدام الواجهة web.
 
 <iframe width="560" height="315" src="https://www.youtube.com/embed/XvSGPZFEjDY" title="مشغل فيديو YouTube"
