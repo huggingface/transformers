@@ -214,17 +214,18 @@ class HybridMambaAttentionDynamicCache(DynamicCache):
         raise NotImplementedError("HybridMambaAttentionDynamicCache does not have a legacy cache equivalent.")
 
 
-# Adapted from transformers.models.mistral.modeling_mistral.MistralAttention:
-# The input dimension here is twice the hidden_size, and head_dim = 2 * hidden_size // num_heads.
-# The extra factor of 2 comes from the input being the concatenation of original_hidden_states with the output of the previous (mamba) layer
-# (see fig. 2 in https://arxiv.org/pdf/2405.16712).
-# Additionally, replaced
-# attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim) with
-# attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim/2)
 class ZambaAttention(nn.Module):
     """
     Multi-headed attention from 'Attention Is All You Need' paper. Modified to use sliding window attention: Longformer
     and "Generating Long Sequences with Sparse Transformers".
+
+    Adapted from transformers.models.mistral.modeling_mistral.MistralAttention:
+    The input dimension here is twice the hidden_size, and head_dim = 2 * hidden_size // num_heads.
+    The extra factor of 2 comes from the input being the concatenation of original_hidden_states with the output of the previous (mamba) layer
+    (see fig. 2 in https://arxiv.org/pdf/2405.16712).
+    Additionally, replaced
+    attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim) with
+    attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim/2)
     """
 
     def __init__(self, config: ZambaConfig, layer_idx: Optional[int] = None):
