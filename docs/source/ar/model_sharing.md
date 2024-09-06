@@ -58,11 +58,6 @@ pip install huggingface_hub
 >>> notebook_login()
 ```
 
-```py
->>> from huggingface_hub import notebook_login
-
->>> notebook_login()
-```
 
 ## تحويل نموذج لجميع الأطر
 
