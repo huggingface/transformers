@@ -65,6 +65,7 @@ class Qwen2VLVisionText2TextModelTester:
         image_size=28,
         bos_token_id=0,
         eos_token_id=1,
+        pad_token_id=2,
         vision_start_token_id=151652,
         image_token_id=151655,
         video_token_id=151656,
@@ -76,7 +77,7 @@ class Qwen2VLVisionText2TextModelTester:
         max_window_layers=3,
         model_type="qwen2_vl",
         num_attention_heads=4,
-        num_hidden_layers=3,
+        num_hidden_layers=4,
         num_key_value_heads=2,
         rope_theta=10000,
         tie_word_embeddings=True,
@@ -98,6 +99,7 @@ class Qwen2VLVisionText2TextModelTester:
         self.ignore_index = ignore_index
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
+        self.pad_token_id = pad_token_id
         self.vision_start_token_id = vision_start_token_id
         self.image_token_id = image_token_id
         self.video_token_id = video_token_id
@@ -137,6 +139,7 @@ class Qwen2VLVisionText2TextModelTester:
             tie_word_embeddings=self.tie_word_embeddings,
             bos_token_id=self.bos_token_id,
             eos_token_id=self.eos_token_id,
+            pad_token_id=self.pad_token_id,
             vision_start_token_id=self.vision_start_token_id,
             image_token_id=self.image_token_id,
             video_token_id=self.video_token_id,
@@ -162,6 +165,8 @@ class Qwen2VLVisionText2TextModelTester:
         vision_seqlen = pixel_values.shape[0] // self.batch_size // (self.vision_config["spatial_merge_size"] ** 2)
         input_ids = ids_tensor([self.batch_size, self.seq_length - 1 + vision_seqlen], self.vocab_size)
         attention_mask = torch.ones(input_ids.shape, dtype=torch.long, device=torch_device)
+
+        input_ids[input_ids == self.image_token_id] = self.pad_token_id
         input_ids[:, torch.arange(vision_seqlen, device=torch_device) + 1] = self.image_token_id
         labels = torch.zeros(
             (self.batch_size, self.seq_length - 1 + vision_seqlen), dtype=torch.long, device=torch_device
@@ -219,6 +224,7 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
     """
 
     all_model_classes = (Qwen2VLForConditionalGeneration,) if is_torch_available() else ()
+    all_generative_model_classes = (Qwen2VLForConditionalGeneration,) if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
 
@@ -296,6 +302,12 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
 
     @unittest.skip(reason="We cannot configure to output a smaller model.")
     def test_model_is_small(self):
+        pass
+
+    @unittest.skip(
+        reason="Qwen2-VL can't do low-memory geenration because position IDs have extra dimension and split function doesn't work for that"
+    )
+    def test_beam_search_low_memory(self):
         pass
 
 
