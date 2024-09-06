@@ -193,9 +193,9 @@ class ZambaConfig(PretrainedConfig):
         layers = [
             "mamba",
             "mamba",
-            "attention+mamba",
+            "hybrid",
         ] + [
-            "attention+mamba" if i % attn_layer_period == attn_layer_offset else "mamba"
+            "hybrid" if i % attn_layer_period == attn_layer_offset else "mamba"
             for i in range(num_hidden_layers - 3)
         ]
         return layers
