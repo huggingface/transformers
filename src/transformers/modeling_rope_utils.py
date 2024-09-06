@@ -362,10 +362,10 @@ ROPE_INIT_FUNCTIONS = {
 
 def _check_received_keys(rope_type: str, received_keys: set, required_keys: set, optional_keys: Optional[set] = None):
     """Compare the received keys in `config.rope_scaling` against the expected and optional keys"""
-    # BC: "rope_type" was originally "type" -- let's gracefully handle it
-    if "rope_type" not in received_keys and "type" in received_keys:
+    # BC: "rope_type" was originally "type" -- let's check for "rope_type" when "type" is present
+    if "type" in received_keys:
         received_keys -= {"type"}
-        received_keys.add("rope_type")
+        required_keys.add("rope_type")
 
     missing_keys = required_keys - received_keys
     if missing_keys:
