@@ -1298,24 +1298,23 @@ class MllamaCrossAttentionTextModel(PreTrainedModel):
                     full_text_row_masked_out_mask=full_text_row_masked_out_mask,
                 )
 
-            else:
-                layer_outputs = layer(
-                    hidden_states=hidden_states,
-                    attention_mask=attention_mask,
-                    freqs_cis=freqs_cis,
-                    position_ids=position_ids,
-                    use_cache=use_cache,
-                    past_key_value=past_key_values,
-                    output_attentions=output_attentions,
-                    cache_position=cache_position,
-                )
-                hidden_states = layer_outputs[0]
+            layer_outputs = layer(
+                hidden_states=hidden_states,
+                attention_mask=attention_mask,
+                freqs_cis=freqs_cis,
+                position_ids=position_ids,
+                use_cache=use_cache,
+                past_key_value=past_key_values,
+                output_attentions=output_attentions,
+                cache_position=cache_position,
+            )
+            hidden_states = layer_outputs[0]
 
-                if use_cache:
-                    next_decoder_cache = layer_outputs[2 if output_attentions else 1]
+            if use_cache:
+                next_decoder_cache = layer_outputs[2 if output_attentions else 1]
 
-                if output_attentions:
-                    all_self_attns += (layer_outputs[1],)
+            if output_attentions:
+                all_self_attns += (layer_outputs[1],)
 
         hidden_states = self.norm(hidden_states)
 
@@ -1561,7 +1560,6 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
                 else past_seen_tokens + sequence_length + 1
             )
 
-        print(sequence_length, target_length, type(past_key_values))
         # In case the provided `attention` mask is 2D, we generate a causal mask here (4D).
         causal_mask = _prepare_4d_causal_attention_mask_with_cache_position(
             attention_mask,
