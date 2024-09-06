@@ -88,7 +88,7 @@ Final answer: 6
 pip install transformers[agents]
 ```
 
-قم ببناء محرك LLM الخاص بك من خلال تعريف طريقة `llm_engine` التي تقبل قائمة من [الرسائل](./chat_templating.) وتعيد النص. يجب أن تقبل هذه الدالة القابلة للاستدعاء أيضًا وسيط `stop` يشير إلى متى يجب التوقف عن التوليد.
+قم ببناء محرك LLM الخاص بك من خلال تعريف طريقة `llm_engine` التي تقبل قائمة من [الرسائل](./chat_templating.) وتعيد النص. يجب أن تقبل هذه الدالة القابلة للاستدعاء أيضًا معامل `stop` يشير إلى متى يجب التوقف عن التوليد.
 
 ```python
 from huggingface_hub import login, InferenceClient
