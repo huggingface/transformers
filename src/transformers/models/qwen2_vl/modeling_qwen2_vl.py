@@ -103,7 +103,6 @@ class Qwen2VLCausalLMOutputWithPast(ModelOutput):
     rope_deltas: Optional[torch.LongTensor] = None
 
 
-# Copied from transformers.models.qwen2.modeling_qwen2.Qwen2RotaryEmbedding with Qwen2->Qwen2VL
 class Qwen2VLRotaryEmbedding(nn.Module):
     def __init__(
         self,
