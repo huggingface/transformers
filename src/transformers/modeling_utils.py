@@ -2233,6 +2233,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         @ (old_embeddings.weight.data - mean_embedding)
                         / old_num_tokens
                     )
+                    distribution = torch.distributions.multivariate_normal.MultivariateNormal(
+                        mean_embedding, covariance_matrix=1e-5 * covariance
+                    )
+                    new_embeddings.weight.data[-1 * added_num_tokens :, :] = distribution.sample(
+                        sample_shape=(added_num_tokens,)
+                    )
             else:
                 mean_embedding = torch.mean(old_embeddings.weight.data, axis=0)
                 covariance = (
@@ -2240,12 +2246,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     @ (old_embeddings.weight.data - mean_embedding)
                     / old_num_tokens
                 )
-            distribution = torch.distributions.multivariate_normal.MultivariateNormal(
-                mean_embedding, covariance_matrix=1e-5 * covariance
-            )
-            new_embeddings.weight.data[-1 * added_num_tokens :, :] = distribution.sample(
-                sample_shape=(added_num_tokens,)
-            )
+                distribution = torch.distributions.multivariate_normal.MultivariateNormal(
+                    mean_embedding, covariance_matrix=1e-5 * covariance
+                )
+                new_embeddings.weight.data[-1 * added_num_tokens :, :] = distribution.sample(
+                    sample_shape=(added_num_tokens,)
+                )
 
         # Copy token embeddings from the previous weights
 
