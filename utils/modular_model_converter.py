@@ -148,7 +148,16 @@ class ClassFinder(CSTVisitor):
     def leave_Decorator(self, node):
         if hasattr(node.decorator, "args"):
             for k in node.decorator.args:
-                if k.value.value in self.assignments:
+                if m.matches(k.value, m.Call(func=m.Attribute(value=m.Name()))):  # and k.value.func.value.value:
+                    if k.value.func.value.value not in self.assignments:
+                        raise ValueError(
+                            f"We detected a call to {k.value.func.value.value}, but it was not assigned. See the list of assigments {self.assignments.keys()}"
+                        )
+                    parent = self.get_metadata(cst.metadata.ParentNodeProvider, node)
+                    scope = self.get_metadata(cst.metadata.ScopeProvider, node)
+                    name = scope._name_prefix.split(".")[0] if scope._name_prefix != "" else parent.name.value
+                    self._update_class_dependency(name, k.value.func.value.value)
+                elif m.matches(k, m.Arg(value=m.Name())) and k.value.value in self.assignments:
                     parent = self.get_metadata(cst.metadata.ParentNodeProvider, node)
                     scope = self.get_metadata(cst.metadata.ScopeProvider, node)
                     name = scope._name_prefix.split(".")[0] if scope._name_prefix != "" else parent.name.value
@@ -696,7 +705,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--files_to_parse",
-        default=["all"],
+        default=["examples/diff-conversion/modular_dummy_bert.py"],
         nargs="+",
         help="A list of `diff_xxxx` files that should be converted to single model file",
     )
