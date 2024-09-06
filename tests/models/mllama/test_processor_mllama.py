@@ -28,10 +28,8 @@ if is_vision_available():
 @require_vision
 class MllamaProcessorTest(unittest.TestCase):
     def setUp(self):
-        # self.processor = MllamaProcessor.from_pretrained("HuggingFaceM4/Mllama-8b")
-        tokenizer = AutoTokenizer.from_pretrained("mllama")
-        image_processor = AutoImageProcessor.from_pretrained("mllama")
-        self.processor = MllamaProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        self.checkpoint = "s0409/model-1"
+        self.processor = MllamaProcessor.from_pretrained(self.checkpoint)
         self.image1 = Image.new("RGB", (224, 220))
         self.image2 = Image.new("RGB", (512, 128))
         self.image_token = self.processor.image_token
@@ -52,7 +50,7 @@ class MllamaProcessorTest(unittest.TestCase):
         expected_ids = [128000, 2028, 374, 264, 1296, 11914, 13, 128001]
         self.assertEqual(inputs["input_ids"][0], expected_ids)
         self.assertEqual(inputs["attention_mask"][0], [1] * len(expected_ids))
-        self.assertEqual(inputs["vision_mask"], [[]])
+        self.assertEqual(inputs["cross_attention_token_mask"], [[]])
 
         # Test a single sample with image and text
         image_str = "<|image|>"
@@ -74,12 +72,13 @@ class MllamaProcessorTest(unittest.TestCase):
         self.assertEqual(inputs["input_ids"][0], expected_ids)
         self.assertEqual(inputs["attention_mask"][0], [1] * len(expected_ids))
 
-        # TODO: len(expected_ids) or -1 ?
-        self.assertEqual(inputs["vision_mask"], [[[0, len(expected_ids)]]])
+        # Note: in original implementation if number of image tokens is 1,
+        # then the last image unmasked in until "-1" token
+        self.assertEqual(inputs["cross_attention_token_mask"], [[[0, -1]]])
 
         # Test batch
         text = [
-            "<|image|>" + "This is a test sentence.",
+            "<|image|>This is a test sentence.",
             "This is a test sentence.<|image|><|image|>This is a test sentence.",
         ]
         # fmt: off
@@ -102,12 +101,13 @@ class MllamaProcessorTest(unittest.TestCase):
             self.assertEqual(input_ids, expected_ids_i)
             self.assertEqual(pad_ids, [self.pad_token_id] * len(pad_ids))
 
-        # TODO: len(expected_ids) or -1 ?
-        self.assertEqual(inputs["vision_mask"], [[[0, len(expected_ids[0])]], [[6, len(expected_ids[1])], [7, len(expected_ids[1])]]])
+        # Note: in the original implementation if the number of image tokens is MORE than 1,
+        # then the last image unmasked until len(tokens) instead of "-1". Probably, it should be also to "-1"?
+        self.assertEqual(inputs["cross_attention_token_mask"], [[[0, -1]], [[6, len(expected_ids[1])], [7, len(expected_ids[1])]]])
 
     def test_apply_chat_template(self):
         # Message contains content which a mix of lists with images and image urls and string
-        messages = messages = [
+        messages = [
             {"role": "user", "content": "<|image|><|image|>What do these images show?"},
             {
                 "role": "assistant",
@@ -116,16 +116,56 @@ class MllamaProcessorTest(unittest.TestCase):
             {"role": "user", "content": "And who is that?"},
         ]
 
-        # TODO: make sure processor also work with this chat template, not ony tokenizer
+        # TODO: make sure processor also work with this chat template, not only tokenizer
         rendered = self.processor.tokenizer.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
 
         expected_rendered = (
-            "<|begin_of_text|><|start_header_id|>user<|end_header_id|>\n\n"
-            "<|image|><|image|>What do these images show?<|eot_id|>"
-            "<|start_header_id|>assistant<|end_header_id|>\n\n"
-            "The first image shows the statue of Liberty in New York.<|eot_id|>"
+            "<|begin_of_text|>"
             "<|start_header_id|>user<|end_header_id|>\n\n"
-            "And who is that?<|eot_id|>"
+            "<|image|><|image|>What do these images show?"
+            "<|eot_id|>"
+            "<|start_header_id|>assistant<|end_header_id|>\n\n"
+            "The first image shows the statue of Liberty in New York."
+            "<|eot_id|>"
+            "<|start_header_id|>user<|end_header_id|>\n\n"
+            "And who is that?"
+            "<|eot_id|>"
             "<|start_header_id|>assistant<|end_header_id|>\n\n"
         )
         self.assertEqual(rendered, expected_rendered)
+
+        messages = [
+            {"role": "system", "content": "This is a test sentence."},
+            {"role": "user", "content": "This is a response."},
+        ]
+        input_ids = self.processor.tokenizer.apply_chat_template(messages, add_generation_prompt=True, tokenize=True)
+        expected_ids = [
+            128000,  # <|begin_of_text|>
+            128006,  # <|start_header_id|>
+            9125,  # "system"
+            128007,  # <|end_of_header|>
+            271,  # "\n\n"
+            2028,
+            374,
+            264,
+            1296,
+            11914,
+            13,  # "This is a test sentence."
+            128009,  # <|eot_id|>
+            128006,  # <|start_header_id|>
+            882,  # "user"
+            128007,  # <|end_of_header|>
+            271,  # "\n\n"
+            2028,
+            374,
+            264,
+            2077,
+            13,  # "This is a response.",
+            128009,  # <|eot_id|>
+            128006,  # <|start_header_id|>
+            78191,  # "assistant"
+            128007,  # <|end_of_header|>
+            271,  # "\n\n"
+        ]
+
+        self.assertEqual(input_ids, expected_ids)
