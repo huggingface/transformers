@@ -1387,7 +1387,8 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipVideoPreTrainedModel
 
         Examples:
 
-                ```python
+
+        ```python
         >>> from transformers import InstructBlipVideoProcessor, InstructBlipVideoForConditionalGeneration
         >>> import torch
         >>> from huggingface_hub import hf_hub_download

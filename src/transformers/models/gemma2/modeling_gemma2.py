@@ -1025,7 +1025,8 @@ class Gemma2ForCausalLM(Gemma2PreTrainedModel):
 
         Example:
 
-                ```python
+
+        ```python
         >>> from transformers import AutoTokenizer, GemmaForCausalLM
 
         >>> model = GemmaForCausalLM.from_pretrained("google/gemma-2-9b")
