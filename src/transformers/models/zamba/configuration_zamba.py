@@ -158,10 +158,6 @@ class ZambaConfig(PretrainedConfig):
         self.max_position_embeddings = max_position_embeddings
         self.attention_dropout = attention_dropout
 
-        # for backward compatibility
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
-
         self.num_key_value_heads = num_key_value_heads
         self.n_mamba_heads = n_mamba_heads
         self.hidden_act = hidden_act
