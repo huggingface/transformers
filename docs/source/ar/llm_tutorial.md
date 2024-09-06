@@ -124,7 +124,7 @@ pip install transformers bitsandbytes>=0.39.0 -q
 
 ### الإخراج المولد قصير جدًا/طويل جدًا
 
-إذا لم يتم تحديده في [`~generation.GenerationConfig`] الملف، `generate` يعيد ما يصل إلى 20 رمزًا بشكل افتراضي. نوصي بشدة بتعيين `max_new_tokens` يدويًا في مكالمة `generate` للتحكم في العدد الأقصى من الرموز الجديدة التي يمكن أن يعيدها. ضع في اعتبارك أن LLMs (بشكل أكثر دقة، [نماذج فك التشفير فقط](https://huggingface.co/learn/nlp-course/chapter1/6؟fw=pt)) تعيد أيضًا موجه الإدخال كجزء من الإخراج.
+إذا لم يتم تحديد العدد الأقصى للرموز في [`~generation.GenerationConfig`] الملف، `generate` يعيد ما يصل إلى 20 رمزًا بشكل افتراضي. نوصي بشدة بتعيين `max_new_tokens` يدويًا في مكالمة `generate` للتحكم في العدد الأقصى من الرموز الجديدة التي يمكن أن يعيدها. ضع في اعتبارك أن LLMs (بشكل أكثر دقة، [نماذج فك التشفير فقط](https://huggingface.co/learn/nlp-course/chapter1/6؟fw=pt)) تعيد أيضًا المدخلات الأصلية كجزء من الناتج.
 ```py
 >>> model_inputs = tokenizer(["A sequence of numbers: 1, 2"], return_tensors="pt").to("cuda")
 
