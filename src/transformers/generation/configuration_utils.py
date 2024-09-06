@@ -43,11 +43,34 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 METADATA_FIELDS = ("_from_model_config", "_commit_hash", "_original_object_hash", "transformers_version")
 NEEDS_CACHE_CONFIG = {}
+NEED_SETUP_CACHE_CLASSES_MAPPING = {}
+QUANT_BACKEND_CLASSES_MAPPING = {}
+ALL_CACHE_IMPLEMENTATIONS = []
 
 if is_torch_available():
-    from ..cache_utils import QuantizedCacheConfig
+    from ..cache_utils import (
+        HQQQuantizedCache,
+        HybridCache,
+        MambaCache,
+        OffloadedStaticCache,
+        QuantizedCacheConfig,
+        QuantoQuantizedCache,
+        SlidingWindowCache,
+        StaticCache,
+    )
 
     NEEDS_CACHE_CONFIG["quantized"] = QuantizedCacheConfig
+    NEED_SETUP_CACHE_CLASSES_MAPPING = {
+        "static": StaticCache,
+        "offloaded_static": OffloadedStaticCache,
+        "sliding_window": SlidingWindowCache,
+        "hybrid": HybridCache,
+        "mamba": MambaCache,
+    }
+    QUANT_BACKEND_CLASSES_MAPPING = {"quanto": QuantoQuantizedCache, "HQQ": HQQQuantizedCache}
+    ALL_CACHE_IMPLEMENTATIONS = list(NEED_SETUP_CACHE_CLASSES_MAPPING.keys()) + list(
+        QUANT_BACKEND_CLASSES_MAPPING.keys()
+    )
 
 
 class GenerationMode(ExplicitEnum):
@@ -70,7 +93,7 @@ class GenerationMode(ExplicitEnum):
 
 class GenerationConfig(PushToHubMixin):
     # no-format
-    r"""
+    rf"""
     Class that holds a configuration for a generation task. A `generate` call supports the following generation methods
     for text-decoder, text-to-text, speech-to-text, and vision-to-text models:
 
@@ -146,7 +169,10 @@ class GenerationConfig(PushToHubMixin):
             Whether or not the model should use the past last key/values attentions (if applicable to the model) to
             speed up decoding.
         cache_implementation (`str`, *optional*, default to `None`):
-            Cache class that should be used when generating.
+            Name of the cache class that will be instantiated in `generate`, for faster decoding. Possible values are:
+            {ALL_CACHE_IMPLEMENTATIONS}. We support other cache types, but they must be manually instantiated and
+            passed to `generate` through the `past_key_values` argument. See our
+            [cache documentation](https://huggingface.co/docs/transformers/en/kv_cache) for further information.
         cache_config (`CacheConfig` or `dict`, *optional*, default to `None`):
             Arguments used in the key-value cache class can be passed in `cache_config`. Can be passed as a `Dict` and
             it will be converted to its repsective `CacheConfig` internally.
@@ -699,6 +725,11 @@ class GenerationConfig(PushToHubMixin):
                 )
 
         # 5. check cache-related arguments
+        if self.cache_implementation is not None and self.cache_implementation not in ALL_CACHE_IMPLEMENTATIONS:
+            raise ValueError(
+                f"Invalid `cache_implementation` ({self.cache_implementation}). Choose one of: "
+                f"{ALL_CACHE_IMPLEMENTATIONS}"
+            )
         if self.cache_config is not None:
             cache_class = NEEDS_CACHE_CONFIG.get(self.cache_implementation)
             if cache_class is None:
