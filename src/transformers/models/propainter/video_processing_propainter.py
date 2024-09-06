@@ -83,51 +83,58 @@ def make_batched(videos) -> List[List[VideoInput]]:
 
 
 def convert_to_grayscale_and_dilation(
-    images: ImageInput,
+    image: ImageInput,
     input_data_format: Optional[Union[str, ChannelDimension]] = None,
     mask_dilation: int = 4,
 ) -> ImageInput:
     """
-    Converts images(video frames) to grayscale format using the NTSC formula and performs binary dilation on an images. Only support numpy and PIL images. TODO support torch
+    Converts image(video frame) to grayscale format using the NTSC formula and performs binary dilation on an image. Only support numpy and PIL image. TODO support torch
     and tensorflow grayscale conversion
 
-    This function is supposed to return a 1-channel images, but it returns a 3-channel images with the same value in each
+    This function is supposed to return a 1-channel image, but it returns a 3-channel image with the same value in each
     channel, because of an issue that is discussed in :
     https://github.com/huggingface/transformers/pull/25786#issuecomment-1730176446
 
     Args:
-        images (Image):
-            The images to convert.
+        image (Image):
+            The image to convert.
         input_data_format (`ChannelDimension` or `str`, *optional*):
             The channel dimension format for the input image.
     """
     requires_backends(convert_to_grayscale_and_dilation, ["vision"])
-    if isinstance(images, np.ndarray):
+    if isinstance(image, np.ndarray):
         if input_data_format == ChannelDimension.FIRST:
-            gray_image = (
-                images[0, ...] * 0.2989 + images[1, ...] * 0.5870 + images[2, ...] * 0.1140
-            )
-            gray_image = np.stack([gray_image] * 1, axis=0)
+            if image.shape[0] == 1:
+                gray_image = image
+            else:
+                gray_image = (
+                    image[0, ...] * 0.2989 + image[1, ...] * 0.5870 + image[2, ...] * 0.1140
+                )
+                gray_image = np.stack([gray_image] * 1, axis=0)
             gray_dilated_image = binary_dilation(
                 gray_image, iterations=mask_dilation
-            ).astype(np.uint8)
+            ).astype(np.float32)
         elif input_data_format == ChannelDimension.LAST:
-            gray_image = (
-                images[..., 0] * 0.2989 + images[..., 1] * 0.5870 + images[..., 2] * 0.1140
-            )
-            gray_image = np.stack([gray_image] * 1, axis=-1)
+            if image.shape[-1] == 1:
+                gray_image = image
+            else:
+                gray_image = (
+                    image[..., 0] * 0.2989 + image[..., 1] * 0.5870 + image[..., 2] * 0.1140
+                )
+                gray_image = np.stack([gray_image] * 1, axis=-1)
             gray_dilated_image = binary_dilation(
                 gray_image, iterations=mask_dilation
-            ).astype(np.uint8)
+            ).astype(np.float32)
         return gray_dilated_image
 
-    if not isinstance(images, PIL.Image.Image):
-        return images
+    if not isinstance(image, PIL.Image.Image):
+        return image
 
-    images = np.array(images.convert("L"))
-    images = binary_dilation(images, iterations=mask_dilation).astype(np.uint8)
+    image = np.array(image.convert("L"))
+    image = np.stack([image] * 1, axis=0)
+    image = binary_dilation(image, iterations=mask_dilation).astype(np.float32)
 
-    return images
+    return image
 
 
 def extrapolation(
@@ -409,7 +416,10 @@ class ProPainterVideoProcessor(BaseImageProcessor):
             ]
 
         if is_mask_frame:
-            images = convert_to_grayscale_and_dilation(images, input_data_format=input_data_format, mask_dilation=mask_dilation)
+            images = [
+                convert_to_grayscale_and_dilation(image, input_data_format=input_data_format, mask_dilation=mask_dilation)
+                for image in images
+            ]
 
         if do_center_crop:
             images = [
@@ -419,7 +429,7 @@ class ProPainterVideoProcessor(BaseImageProcessor):
 
         if do_rescale:
             images = [
-                self.rescale(image=image, scale=rescale_factor, dtype=np.uint8, input_data_format=input_data_format)
+                self.rescale(image=image, scale=rescale_factor, dtype=np.float32, input_data_format=input_data_format)
                 for image in images
             ]
 
@@ -575,7 +585,7 @@ class ProPainterVideoProcessor(BaseImageProcessor):
             for video in videos
         ]
 
-        if video_painting_mode is "video_inpainting":
+        if video_painting_mode == "video_inpainting":
             pixel_values_masks = [
                 self._preprocess(
                     images=mask,
@@ -584,8 +594,6 @@ class ProPainterVideoProcessor(BaseImageProcessor):
                     resample=resample,
                     do_center_crop=do_center_crop,
                     crop_size=crop_size,
-                    do_rescale=do_rescale,
-                    rescale_factor=rescale_factor,
                     do_normalize=do_normalize,
                     image_mean=image_mean,
                     image_std=image_std,
@@ -594,7 +602,7 @@ class ProPainterVideoProcessor(BaseImageProcessor):
                     is_mask_frame=True,
                     mask_dilation=mask_dilation,
                 ) * len(pixel_values[0])
-                if len(masks) == 1
+                if len(mask) == 1
                 else
                 self._preprocess(
                     images=mask,
@@ -603,8 +611,6 @@ class ProPainterVideoProcessor(BaseImageProcessor):
                     resample=resample,
                     do_center_crop=do_center_crop,
                     crop_size=crop_size,
-                    do_rescale=do_rescale,
-                    rescale_factor=rescale_factor,
                     do_normalize=do_normalize,
                     image_mean=image_mean,
                     image_std=image_std,
@@ -615,7 +621,7 @@ class ProPainterVideoProcessor(BaseImageProcessor):
                 )
                 for mask in masks
             ]
-        elif video_painting_mode is "video_outpainting":
+        elif video_painting_mode == "video_outpainting":
             # for outpainting of videos
             pixel_values, flow_masks, masks_dilated = [
                 extrapolation(video, scale=scale_hw, num_frames=len(video), input_data_format=input_data_format)
@@ -624,18 +630,9 @@ class ProPainterVideoProcessor(BaseImageProcessor):
         else:
             raise ValueError(f"Unsupported video painting mode: {video_painting_mode}")
 
-        if video_painting_mode is "video_inpainting":
+        if video_painting_mode == "video_inpainting":
             # masks is for both flow_masks, masks_dilated, just add the same data to both variables in case of inpainting
-            flow_masks = masks_dilated = torch.stack(
-                [to_tensors(mask) for mask in pixel_values_masks], dim=0
-            )
-        else:
-            (flow_masks,) = torch.stack(
-                [to_tensors(mask) for mask in flow_masks], dim=0
-            )
-            masks_dilated = torch.stack(
-                [to_tensors(mask) for mask in masks_dilated], dim=0
-            )
+            flow_masks = masks_dilated = pixel_values_masks
 
         # This input kwarg is only utilised during inference on a single batch or one video for predictions
         if len(pixel_values) == 1:
@@ -645,8 +642,6 @@ class ProPainterVideoProcessor(BaseImageProcessor):
             ][0]
         else:
             videos_inp = torch.empty(0)
-
-        pixel_values = torch.stack([to_tensors(video) * 2 - 1 for video in pixel_values], dim=0)
 
         data = {
             "pixel_values_videos": pixel_values,

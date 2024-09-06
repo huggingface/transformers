@@ -37,7 +37,9 @@ The model can accept videos frames and their corresponding masks frame(s) as inp
 ```python
 import av
 import cv2
+import imageio
 import numpy as np
+import os
 import torch
 
 from datasets import load_dataset
@@ -111,7 +113,7 @@ masks = list(masks)
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 video_processor = ProPainterVideoProcessor()
-inputs = video_processor(videos = video, masks = masks).to(device)
+inputs = video_processor(video, masks = masks).to(device)
 
 model = ProPainterModel.from_pretrained("ruffy369/ProPainter").to(device)
 
@@ -119,22 +121,32 @@ model = ProPainterModel.from_pretrained("ruffy369/ProPainter").to(device)
 with torch.no_grad():
     outputs = model(**inputs)
 
+# To visualize the reconstructed frames with object removal video inpainting:
+reconstructed_frames = outputs["reconstruction"]
+reconstructed_frames = [cv2.resize(frame, (240,423)) for frame in reconstructed_frames]
+imageio.mimwrite(os.path.join(<PATH_TO_THE_FOLDER>, 'inpaint_out.mp4'), reconstructed_frames, fps=24, quality=7)
+
 # Using .jpg files for data:
 
 ds = load_dataset("ruffy369/propainter-object-removal")
 ds_images = ds['train']["image"]
 num_frames = 80
 video = [np.array(ds_images[i]) for i in range(num_frames)]
-#stack to convert H,W mask frame to compatible H,W,C frame
-masks = [np.stack([np.array(ds_images[i])] * 3, axis=-1) for i in range(num_frames, 2*num_frames)]
+#stack to convert H,W mask frame to compatible H,W,C frame as they are already in grayscale
+masks = [np.stack([np.array(ds_images[i])], axis=-1) for i in range(num_frames, 2*num_frames)]
 
 # Forward pass:
 
-inputs = video_processor(videos = video, masks = masks).to(device)
+inputs = video_processor(video, masks = masks).to(device)
 
 # The first input in this always has a value for inference as its not utilised during training
 with torch.no_grad():
     outputs = model(**inputs)
+
+# To visualize the reconstructed frames with object removal video inpainting:
+reconstructed_frames = outputs["reconstruction"]
+reconstructed_frames = [cv2.resize(frame, (240,423)) for frame in reconstructed_frames]
+imageio.mimwrite(os.path.join(<PATH_TO_THE_FOLDER>, 'inpaint_out.mp4'), reconstructed_frames, fps=24, quality=7)
 
 ```
 

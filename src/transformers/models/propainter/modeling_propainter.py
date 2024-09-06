@@ -3834,7 +3834,7 @@ class ProPainterPreTrainedModel(PreTrainedModel):
 
     config_class = ProPainterConfig
     base_model_prefix = "propainter"
-    main_input_name = "pixel_values"
+    main_input_name = "pixel_values_videos"
     supports_gradient_checkpointing = True
 
     def _init_weights(
@@ -3918,7 +3918,7 @@ PROPAINTER_START_DOCSTRING = r"""
 
 PROPAINTER_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`ProPainterImageProcessor.__call__`]
             for details.
 
@@ -3993,9 +3993,9 @@ class ProPainterModel(ProPainterPreTrainedModel):
         modality="vision",
         expected_output=_EXPECTED_OUTPUT_SHAPE,
     )
-    def compute_flow(self, pixel_values):
+    def compute_flow(self, pixel_values_videos):
         if self.training:
-            gt_local_frames = pixel_values[
+            gt_local_frames = pixel_values_videos[
                 :, : self.config.num_local_frames_propainter, ...
             ]  # batch_size, temporal_length, num_channels, height, width (before slicing)
             # get gt optical flow
@@ -4010,18 +4010,18 @@ class ProPainterModel(ProPainterPreTrainedModel):
                     gt_local_frames, iters=self.config.raft_iter
                 )
         else:
-            short_clip_len = self._get_short_clip_len(pixel_values.size(-1))
-            if pixel_values.size(1) > short_clip_len:
+            short_clip_len = self._get_short_clip_len(pixel_values_videos.size(-1))
+            if pixel_values_videos.size(1) > short_clip_len:
                 gt_flows_f_list, gt_flows_b_list = [], []
                 for f in range(0, self.video_length, short_clip_len):
                     end_f = min(self.video_length, f + short_clip_len)
                     if f == 0:
                         flows_f, flows_b = self.optical_flow_model(
-                            pixel_values[:, f:end_f], iters=self.config.raft_iter
+                            pixel_values_videos[:, f:end_f], iters=self.config.raft_iter
                         )
                     else:
                         flows_f, flows_b = self.optical_flow_model(
-                            pixel_values[:, f - 1 : end_f], iters=self.config.raft_iter
+                            pixel_values_videos[:, f - 1 : end_f], iters=self.config.raft_iter
                         )
                     gt_flows_f_list.append(flows_f)
                     gt_flows_b_list.append(flows_b)
@@ -4032,7 +4032,7 @@ class ProPainterModel(ProPainterPreTrainedModel):
                 gt_flows_bi = (gt_flows_f, gt_flows_b)
             else:
                 gt_flows_bi = self.optical_flow_model(
-                    pixel_values, iters=self.config.raft_iter
+                    pixel_values_videos, iters=self.config.raft_iter
                 )
                 torch.cuda.empty_cache()
         return gt_flows_bi
@@ -4117,16 +4117,16 @@ class ProPainterModel(ProPainterPreTrainedModel):
 
         return pred_flows_bi, pred_flows_bi_loss, pred_edges_bi
 
-    def image_propagation(self, pixel_values, masks_dilated, pred_flows_bi):
+    def image_propagation(self, pixel_values_videos, masks_dilated, pred_flows_bi):
         if self.training:
             batch_size, height, width = self.size[0], self.size[3], self.size[4]
-            gt_local_frames = pixel_values[
+            gt_local_frames = pixel_values_videos[
                 :, : self.config.num_local_frames_propainter, ...
             ]
             local_masks = masks_dilated[
                 :, : self.config.num_local_frames_propainter, ...
             ].contiguous()
-            masked_frames = pixel_values * (1 - masks_dilated)
+            masked_frames = pixel_values_videos * (1 - masks_dilated)
             masked_local_frames = masked_frames[
                 :, : self.config.num_local_frames_propainter, ...
             ]
@@ -4175,7 +4175,7 @@ class ProPainterModel(ProPainterPreTrainedModel):
 
         else:
             height, width = self.size[3], self.size[4]
-            masked_frames = pixel_values * (1 - masks_dilated)
+            masked_frames = pixel_values_videos * (1 - masks_dilated)
             subvideo_length_img_prop = min(
                 100, self.config.subvideo_length
             )  # ensure a minimum of 100 frames for image propagation
@@ -4204,7 +4204,7 @@ class ProPainterModel(ProPainterPreTrainedModel):
                         )
                     )
                     updated_frames_sub = (
-                        pixel_values[:, s_f:e_f] * (1 - masks_dilated[:, s_f:e_f])
+                        pixel_values_videos[:, s_f:e_f] * (1 - masks_dilated[:, s_f:e_f])
                         + prop_imgs_sub.view(batch_size, timesteps, 3, height, width)
                         * masks_dilated[:, s_f:e_f]
                     )
@@ -4228,7 +4228,7 @@ class ProPainterModel(ProPainterPreTrainedModel):
                     masked_frames, pred_flows_bi, masks_dilated, "nearest"
                 )
                 updated_frames = (
-                    pixel_values * (1 - masks_dilated)
+                    pixel_values_videos * (1 - masks_dilated)
                     + prop_imgs.view(batch_size, timesteps, 3, height, width)
                     * masks_dilated
                 )
@@ -4241,7 +4241,7 @@ class ProPainterModel(ProPainterPreTrainedModel):
 
     def feature_propagation(
         self,
-        pixel_values,
+        pixel_values_videos,
         updated_frames,
         updated_masks,
         masks_dilated,
@@ -4309,7 +4309,7 @@ class ProPainterModel(ProPainterPreTrainedModel):
             pred_imgs_loss = pred_imgs
             # get the local frames
             comp_frames = (
-                pixel_values * (1.0 - masks_dilated) + pred_imgs * masks_dilated
+                pixel_values_videos * (1.0 - masks_dilated) + pred_imgs * masks_dilated
             )
 
         else:
@@ -4404,7 +4404,7 @@ class ProPainterModel(ProPainterPreTrainedModel):
 
     def forward(
         self,
-        pixel_values: Optional[torch.Tensor] = None,
+        pixel_values_videos: Optional[torch.Tensor] = None,
         pixel_values_inp: Optional[List[np.ndarray]] = None,
         flow_masks: Optional[torch.BoolTensor] = None,
         masks_dilated: Optional[torch.Tensor] = None,
@@ -4430,27 +4430,30 @@ class ProPainterModel(ProPainterPreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
-        if pixel_values is None:
-            raise ValueError("You have to specify pixel_values")
+        if pixel_values_videos is None:
+            raise ValueError("You have to specify pixel_values_videos")
+
+        if not self.training:
+            pixel_values_videos = pixel_values_videos * 2 - 1
 
         losses = ProPainterLosses(self.config)
 
-        self.size = pixel_values.size()
-        self.video_length = pixel_values.size(1)
+        self.size = pixel_values_videos.size()
+        self.video_length = pixel_values_videos.size(1)
 
-        gt_flows_bi = self.compute_flow(pixel_values)
+        gt_flows_bi = self.compute_flow(pixel_values_videos)
 
         pred_flows_bi, pred_flows_bi_loss, pred_edges_bi = self.complete_flow(
             gt_flows_bi, flow_masks
         )
 
         updated_frames, updated_masks = self.image_propagation(
-            pixel_values, masks_dilated, pred_flows_bi
+            pixel_values_videos, masks_dilated, pred_flows_bi
         )
 
         comp_frames, pred_imgs_loss, all_hidden_states, all_self_attentions = (
             self.feature_propagation(
-                pixel_values,
+                pixel_values_videos,
                 updated_frames,
                 updated_masks,
                 masks_dilated,
@@ -4480,7 +4483,7 @@ class ProPainterModel(ProPainterPreTrainedModel):
         gen_loss, dis_loss, flow_complete_loss = losses.calculate_losses(
             pred_imgs_loss,
             masks_dilated,
-            pixel_values,
+            pixel_values_videos,
             comp_frames_loss,
             self.discriminator,
             pred_flows_bi_loss,
