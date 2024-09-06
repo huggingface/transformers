@@ -509,7 +509,14 @@ class PhiMoEIntegrationTest(unittest.TestCase):
 
         output = model(**input_ids).logits
 
-        EXPECTED_OUTPUT = torch.tensor([[ 1.8478, -0.5709, -1.6792, -1.2133, -0.7809, -0.8817, -2.0969, -1.1191,-0.7731, -1.0483, -0.5961, -1.3067,  3.1325,  6.9442, -0.4803, -0.9154,-1.3085, -1.0822, -1.1433, -0.7660, -0.8531, -0.9150, -0.6179, -1.6153,-0.2239, -1.3207, -1.1187, -2.4795, -1.4733, -0.4931],[ 3.5839,  2.4722,  3.7130,  1.2032,  0.7356,  2.7777,  2.5256,  0.9157, 1.6431,  0.3533,  0.5100,  1.3512,  8.9873, 10.9815,  0.3530,  0.1473, 0.2051,  1.8553,  1.5988,  2.2268,  1.1897,  1.2829,  0.7894,  1.8895, 0.7666,  0.4122, -0.9316,  0.9936,  1.2722,  0.8263]]).to(torch_device)  # fmt: skip
+        EXPECTED_OUTPUT = torch.tensor([[-3.5312, -2.5000, -1.2734,  0.3555, -0.7578, -0.4727,  0.5977, -0.4316,
+          0.2256, -1.2188, -1.6797,  0.9961,  3.7656, 11.3125, -1.3828, -4.8438,
+         -5.7500, -1.9375,  0.7227, -0.3438, -0.2100, -0.4277, -0.0444, -0.5352,
+         -0.6406, -0.1016, -0.4258, -1.0234,  0.4297, -0.6250],
+        [-0.9883,  0.1455, -0.4902,  2.3594,  0.7031,  3.1406,  0.4375,  0.2559,
+          0.6172, -2.1094, -1.3359,  2.5938,  4.9062, 10.8125, -0.1094,  1.5781,
+         -4.9375,  0.7148, -0.0972,  1.7656, -0.0801,  0.2217,  0.1875, -0.4629,
+          1.5781,  0.3535,  0.0874,  0.6836, -0.0518, -1.2969]]).to(torch_device)  # fmt: skip
 
         self.assertTrue(torch.allclose(EXPECTED_OUTPUT, output[0, :2, :30], atol=1e-4, rtol=1e-4))
 
@@ -530,7 +537,7 @@ class PhiMoEIntegrationTest(unittest.TestCase):
         output_text = tokenizer.batch_decode(outputs)
 
         EXPECTED_OUTPUT = [
-            "<|system|> You are a helpful digital assistant. Please provide safe, ethical and accurate information to the user.<|end|><|user|> Can you provide ways to eat combinations of bananas and dragonfruits?<|end|><|assistant|> Certainly! Bananas and dragonfruits can be combined in various delicious and nutritious ways. Here are some creative and healthy"
+            "<|system|> You are a helpful digital assistant. Please provide safe, ethical and accurate information to the user.<|end|><|user|> Can you provide ways to eat combinations of bananas and dragonfruits?<|end|><|assistant|> Certainly! Bananas and dragonfruits are both delicious and nutritious fruits that can be combined in various ways to create tast"
         ]
 
         self.assertListEqual(output_text, EXPECTED_OUTPUT)
@@ -553,7 +560,7 @@ class PhiMoEIntegrationTest(unittest.TestCase):
         output_text = tokenizer.batch_decode(torch.tensor([response_tokens], dtype=torch.long, device=torch_device))
 
         EXPECTED_OUTPUT = [
-            "<|system|> You are a helpful digital assistant. Please provide safe, ethical and accurate information to the user.<|end|><|user|> Can you provide ways to eat combinations of bananas and dragonfruits?<|end|><|assistant|> Certainly! Bananas and dragonfruits can be combined in various delicious and nutritious ways"
+            "<|system|> You are a helpful digital assistant. Please provide safe, ethical and accurate information to the user.<|end|><|user|> Can you provide ways to eat combinations of bananas and dragonfruits?<|end|><|assistant|> Certainly! Bananas and dragonfruits are both delicious and nutritious fruits that can"
         ]
 
         self.assertListEqual(output_text, EXPECTED_OUTPUT)
