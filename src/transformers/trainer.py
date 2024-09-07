@@ -1498,6 +1498,8 @@ class Trainer:
                     "You need to install `schedulefree` in order to use schedulefree optimizers"
                     " install it with `pip install schedulefree`"
                 )
+            if not is_accelerate_available("0.30.0"):
+                raise ImportError("You need to have `accelerate>=0.30.0` to be able to use schedulefree optimizers")
             from schedulefree import AdamWScheduleFree, SGDScheduleFree
 
             additional_optim_kwargs = {}
