@@ -549,7 +549,15 @@ class MllamaVisionModel(PreTrainedModel):
 
         # apply encoder
         hidden_state = self.ln_pre(hidden_state)
-        hidden_state, num_padding_patches = expand_num_tokens_to_mult8(hidden_state)
+
+        # Compute the number of tokens to pad
+        num_padding_patches = (8 - (hidden_state.shape[-2] % 8)) % 8
+        # Compute padding tuple for pad function
+        padding = (0, 0, 0, num_padding_patches)  # (pad_left, pad_right, pad_left for dim -2, pad_right for dim -2)
+        # Pad the tensor
+        hidden_state = F.pad(hidden_state, padding, mode="constant", value=0)
+        slice_index = -num_padding_patches if num_padding_patches > 0 else None
+
 
         # Now we want to mask out padding tokens, depending on the aspect ratios
         # if we pre-computed the ratios then this can be vectorized
@@ -568,12 +576,12 @@ class MllamaVisionModel(PreTrainedModel):
         hidden_state = hidden_state.reshape(batch_size * num_concurrent_media, num_tiles * (num_patches + num_padding_patches), dim)
         hidden_state = self.global_transformer(hidden_state, attention_mask=attention_mask)
         hidden_state = hidden_state.reshape(batch_size * num_concurrent_media, num_tiles, num_patches + num_padding_patches, dim)
-        hidden_state = contract_num_tokens_from_mult8(hidden_state, num_padding_patches)
+        hidden_state = hidden_state[:, :, slice_index]
 
         # adding intermediate layer outputs
         hidden_state = hidden_state.reshape(batch_size, num_concurrent_media, num_tiles, num_tokens, dim)
         intermediate_hidden_state = intermediate_hidden_state.reshape(batch_size * num_concurrent_media, num_tiles, num_tokens + num_padding_patches, -1)
-        intermediate_hidden_state = contract_num_tokens_from_mult8(intermediate_hidden_state, num_padding_patches)
+        intermediate_hidden_state = intermediate_hidden_state[:, :, slice_index]
         intermediate_hidden_state = intermediate_hidden_state.reshape(batch_size, num_concurrent_media, num_tiles, num_tokens, -1)
         hidden_state = torch.cat([hidden_state, intermediate_hidden_state], dim=-1)
 
