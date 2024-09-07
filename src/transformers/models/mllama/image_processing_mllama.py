@@ -274,12 +274,94 @@ def split_to_tiles(image: np.ndarray, ncw: int, nch: int) -> np.ndarray:
 
 
 def fit_image_to_canvas(num_tiles: int, img_width: int, img_height: int, tile_size: int) -> Any:
+    # fmt: off
+    r"""
+    Finds the best canvas (grid of tiles) to fit an image without resizing the image smaller.
+    Given the number of tiles, the function explores different grid arrangements (width x height)
+    and determines the one that best fits the image. The image must fit without downscaling,
+    and the function returns the grid with the smallest gap between the canvas size and image size.
+
+    Example of canvases made from tiles:
+    
+    To visualize how the image can fit onto different tile grids, let's try fitting an ASCII cat into the tiles.
+
+    Here's an ASCII cat image you want to fit into the tiles:
+
+       /\_/\  
+      ( o.o ) 
+       > ^ <  
+
+    If `num_tiles=6`, possible tile grids would look like this:
+
+    **2x3 Canvas (2 tiles wide, 3 tiles tall)**: -> total of 6 tiles
+    +-------+-------+
+    | /\_/\ |   0   |   <- Cat image split across two tiles horizontally
+    +-------+-------+
+    | > ^ < |   0   |   <- Remaining part of the cat occupies the left tile
+    +-------+-------+
+    |( o.o )|   0   | 
+    +-------+-------+ 
+
+    **3x2 Canvas (3 tiles wide, 2 tiles tall)**: -> total of 6 tiles
+    +-------+-------+-------+
+    | /\_/\ |( o.o )|   0   |   <- Cat image occupies the first two tiles, 1 tile remains empty
+    +-------+-------+-------+
+    | > ^ < |   0   |   0   |   <- Remaining part of the cat occupies the left tile
+    +-------+-------+-------+
+
+    **1x6 Canvas (1 tile wide, 6 tiles tall)**: -> total of 6 tiles
+    +-------+
+    | /\_/\ |   <- Top part of the cat
+    +-------+
+    |( o.o )|   <- Middle part of the cat
+    +-------+
+    | > ^ < |   <- Bottom part of the cat
+    +-------+
+    |   0   |
+    +-------+
+    |   0   |
+    +-------+
+    |   0   |
+    +-------+
+
+
+    The function tests these arrangements to find the smallest canvas where the image fits.
+    If multiple canvases fit, it selects the one where the dimensions are closest to the image size.
+
+    In this case the first canvas is the closest to the original image.
+
+    You then feed all of the tiles to the model: 
+
+        +-------+-------+-------+-------+-------+-------+
+    -   | /\_/\ |( o.o )| > ^ < |   0   |   0   |   0   |  <- Last canvas
+        +-------+-------+-------+-------+-------+-------+
+
+        +-------+-------+-------+-------+-------+-------+
+    -   | /\_/\ | 0     |( o.o )|   0   | > ^ < |   0   | <- First canvas
+        +-------+-------+-------+-------+-------+-------+
+        
+        +-------+-------+-------+-------+-------+-------+
+    -   | /\_/\ |( o.o )|   0   | > ^ < |   0   |   0   | <- second canvas
+        +-------+-------+-------+-------+-------+-------+
+
+    For each tile, you have num_channels (usually RGB so 3), tile_width, tile_height
+    Given that the tiles you get depend on the chosen aspect ratio, you have to add
+    embedding in the modeling code to help it know if it got a 3x2 or a 1x6 or a 2x3 
+    aspect ratio.
+
+    
+    Parameters:
+    - num_tiles: Total number of tiles available for the grid.
+    - img_width: The width of the image to fit into the canvas.
+    - img_height: The height of the image to fit into the canvas.
+    - tile_size: The size (side length) of each square tile.
+
+    Returns:
+    - The best-fitting canvas as a tuple (n_w, n_h), where n_w is the number of tiles in width 
+      and n_h is the number of tiles in height.
+    - Returns None if no canvas can fit the image.
     """
-    Given an image width, height and target number of tiles this function will see if the image
-    can be fit into any of the canvases that can be build from arranging the tiles in a grid.
-    If the image can be fit onto several canvases, it will return the canvas where the shorter edge
-    of the image will be largest.
-    """
+    # fmt: on
     # Initialize the optimal canvas to None. If no canvas is found where image fits, function returns None.
     optimal_canvas = None
 
