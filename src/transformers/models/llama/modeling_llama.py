@@ -1211,7 +1211,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
 
     def minis_processing(self, hidden_states, labels):
         bsz, q_len, hidden_size = hidden_states.size()
-        chunk_size = q_len // self.mini_s
+        chunk_size = max(q_len // self.mini_s, 512)
 
         if labels is None:
             hidden_states = hidden_states[..., -1:, :]
