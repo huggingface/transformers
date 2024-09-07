@@ -501,7 +501,7 @@ ZAMBA_ATTENTION_CLASSES = {
     "sdpa": ZambaSdpaAttention,
 }
 
-
+# fmt: off
 class ZambaMambaMixer(nn.Module):
     """
     Compute ∆, A, B, C, and D the state space parameters and compute the `contextualized_states`.
@@ -590,7 +590,7 @@ class ZambaMambaMixer(nn.Module):
         hidden_states, gate = projected_states.view(batch_size, -1, 2, seq_len).chunk(2, dim=2)
         hidden_states = hidden_states.squeeze(2).contiguous()
         gate = gate.squeeze(2)
-        gate = gate.reshape(batch_size, self.n_mamba_heads, -1, seq_len).transpose(0, 1)  # (h b d l)
+        gate = gate.reshape(batch_size, self.n_mamba_heads, -1, seq_len).transpose(0, 1)
 
         # 2. Convolution sequence transformation
         conv_weights = self.conv1d.weight.view(self.conv1d.weight.size(0), self.conv1d.weight.size(2))
@@ -618,14 +618,14 @@ class ZambaMambaMixer(nn.Module):
 
         hidden_states = hidden_states.reshape(
             -1, self.n_mamba_heads, self.intermediate_size // self.n_mamba_heads, seq_len
-        ).transpose(0, 1)  # (h b d l)
-        ssm_parameters = (self.x_proj_weight[:, None, :, :] @ hidden_states).transpose(-1, -2)  # (h b l d)
+        ).transpose(0, 1)
+        ssm_parameters = (self.x_proj_weight[:, None, :, :] @ hidden_states).transpose(-1, -2)
 
         time_step, B, C = torch.split(
             ssm_parameters, [self.time_step_rank, self.ssm_state_size, self.ssm_state_size], dim=-1
-        )  # (h b l d)
+        )
 
-        discrete_time_step = self.dt_proj_weight[:, None] @ time_step.transpose(-1, -2)  # (h b d l)
+        discrete_time_step = self.dt_proj_weight[:, None] @ time_step.transpose(-1, -2)
 
         A = -torch.exp(self.A_log.float())
 
@@ -681,12 +681,12 @@ class ZambaMambaMixer(nn.Module):
         batch_size, seq_len, _ = input_states.shape
         dtype = input_states.dtype
         # 1. Gated linear projection
-        projected_states = self.in_proj(input_states).transpose(1, 2)  # (b d l)
+        projected_states = self.in_proj(input_states).transpose(1, 2)  # [batch, 2 * intermediate_size, seq_len]
 
         hidden_states, gate = projected_states.view(batch_size, -1, 2, seq_len).chunk(2, dim=2)
         hidden_states = hidden_states.squeeze(2).contiguous()
         gate = gate.squeeze(2)
-        gate = gate.reshape(batch_size, self.n_mamba_heads, -1, seq_len).transpose(0, 1)  # (h b d l)
+        gate = gate.reshape(batch_size, self.n_mamba_heads, -1, seq_len).transpose(0, 1)  # [n_mamba_heads, batch, intermediate_size / n_mamba_heads, seq_len]
 
         use_cache = isinstance(cache_params, HybridMambaAttentionDynamicCache)
         # 2. Convolution sequence transformation
@@ -704,20 +704,20 @@ class ZambaMambaMixer(nn.Module):
                 and seq_len == 1
                 and cache_params.conv_states[self.layer_idx].shape[0] == batch_size
             ):
-                conv_state = cache_params.conv_states[self.layer_idx]  # (b d conv_size)
+                conv_state = cache_params.conv_states[self.layer_idx]  # [batch, intermediate_size, conv_kernel_size]
                 conv_state = torch.roll(conv_state, shifts=-1, dims=-1)
                 conv_state[:, :, -1] = hidden_states[:, :, 0]
                 cache_params.conv_states[self.layer_idx] = conv_state
                 hidden_states = torch.sum(conv_state * self.conv1d.weight[:, 0, :], dim=-1)
                 if self.use_conv_bias:
                     hidden_states += self.conv1d.bias
-                hidden_states = self.act(hidden_states).to(dtype).unsqueeze(-1)  # (b d 1) : decoding
+                hidden_states = self.act(hidden_states).to(dtype).unsqueeze(-1)  # [batch, intermediate_size, 1] : decoding
             else:
                 if attention_mask is not None and not torch.all(attention_mask == 1):
                     hidden_states = hidden_states * attention_mask[:, -hidden_states.shape[-1] :].unsqueeze(1)
                 conv_state = nn.functional.pad(hidden_states, (self.conv_kernel_size - hidden_states.shape[-1], 0))
                 cache_params.conv_states[self.layer_idx] = conv_state
-                hidden_states = self.act(self.conv1d(hidden_states)[..., :seq_len])  # (b d l)
+                hidden_states = self.act(self.conv1d(hidden_states)[..., :seq_len])  # [batch, intermediate_size, seq_len]
                 if attention_mask is not None and not torch.all(attention_mask == 1):
                     hidden_states = hidden_states * attention_mask[:, -hidden_states.shape[-1] :].unsqueeze(1)
         else:
@@ -725,10 +725,10 @@ class ZambaMambaMixer(nn.Module):
                 (batch_size, self.n_mamba_heads, self.intermediate_size // self.n_mamba_heads, self.ssm_state_size),
                 device=hidden_states.device,
                 dtype=dtype,
-            )  # (b h d l)
+            )
             if attention_mask is not None and not torch.all(attention_mask == 1):
                 hidden_states = hidden_states * attention_mask.unsqueeze(1)
-            hidden_states = self.act(self.conv1d(hidden_states)[..., :seq_len])  # (b d l)
+            hidden_states = self.act(self.conv1d(hidden_states)[..., :seq_len])  # [batch, intermediate_size, seq_len]
             if attention_mask is not None and not torch.all(attention_mask == 1):
                 hidden_states = hidden_states * attention_mask.unsqueeze(1)
 
@@ -736,33 +736,33 @@ class ZambaMambaMixer(nn.Module):
         # 3.a. Selection:  [batch, seq_len, self.time_step_rank + self.ssm_state_size * 2]
         hidden_states = hidden_states.reshape(
             -1, self.n_mamba_heads, self.intermediate_size // self.n_mamba_heads, seq_len
-        ).transpose(0, 1)  # (h b d l)
-        ssm_parameters = (self.x_proj_weight[:, None, :, :] @ hidden_states).transpose(-1, -2)  # (h b l d)
+        ).transpose(0, 1)
+        ssm_parameters = (self.x_proj_weight[:, None, :, :] @ hidden_states).transpose(-1, -2)
 
         time_step, B, C = torch.split(
             ssm_parameters, [self.time_step_rank, self.ssm_state_size, self.ssm_state_size], dim=-1
-        )  # (h b l d)
+        ) 
         discrete_time_step = (self.dt_proj_weight[:, None] @ time_step.transpose(-1, -2)) + self.dt_proj_bias[
             :, None, :, None
-        ]  # (h b d l)
+        ]
 
         discrete_time_step = nn.functional.softplus(discrete_time_step)
 
         # 3.b. Discretization: B and C to [batch, seq_len, intermediate_size, ssm_state_size] (SRAM)
         A = -torch.exp(self.A_log.float())
-        discrete_A = torch.exp(A[:, None, :, None, :] * discrete_time_step[:, :, :, :, None])  # (h b d l state)
-        discrete_B = discrete_time_step[:, :, :, :, None] * B[:, :, None, :, :].float()  # (h b d l state)
-        deltaB_u = discrete_B * hidden_states[:, :, :, :, None].float()  # (h b d l state)
+        discrete_A = torch.exp(A[:, None, :, None, :] * discrete_time_step[:, :, :, :, None])  # [n_mamba_heads, batch, intermediate_size / n_mamba_heads, seq_len, ssm_state_size]
+        discrete_B = discrete_time_step[:, :, :, :, None] * B[:, :, None, :, :].float()  # [n_mamba_heads, batch, intermediate_size / n_mamba_heads, seq_len, ssm_state_size]
+        deltaB_u = discrete_B * hidden_states[:, :, :, :, None].float()  # [n_mamba_heads, batch, intermediate_size / n_mamba_heads, seq_len, ssm_state_size]
         # 3.c perform the recurrence y ← SSM(A, B, C)(x)
         scan_outputs = []
         for i in range(seq_len):
             ssm_state = discrete_A[:, :, :, i, :].transpose(0, 1) * ssm_state + deltaB_u[:, :, :, i, :].transpose(
                 0, 1
-            )  # (h b d state)
-            scan_output = torch.matmul(ssm_state.transpose(0, 1).to(dtype), C[:, :, i, :].unsqueeze(-1))  # (h b d 1)
+            )  # [batch, n_mamba_heads, intermediate_size / n_mamba_heads, ssm_state_size]
+            scan_output = torch.matmul(ssm_state.transpose(0, 1).to(dtype), C[:, :, i, :].unsqueeze(-1))  # [n_mamba_heads, batch, intermediate_size / n_mamba_heads, 1]
             scan_outputs.append(scan_output[:, :, :, 0])
-        scan_output = torch.stack(scan_outputs, dim=-1)  # (h b d l)
-        scan_output = scan_output + (hidden_states * self.D[:, None, :, None])  # (h b d l)
+        scan_output = torch.stack(scan_outputs, dim=-1)  # [n_mamba_heads, batch, intermediate_size / n_mamba_heads, seq_len]
+        scan_output = scan_output + (hidden_states * self.D[:, None, :, None])  # [n_mamba_heads, batch, intermediate_size / n_mamba_heads, seq_len]
         scan_output = scan_output * self.act(gate)
 
         if use_cache:
@@ -771,7 +771,7 @@ class ZambaMambaMixer(nn.Module):
         # 4. Final linear projection
         contextualized_states = self.out_proj(
             scan_output.transpose(0, 1).reshape(batch_size, -1, seq_len).transpose(1, 2)
-        )  # (b l d)
+        )  # [batch, seq_len, hidden_size]
         return contextualized_states
 
     def forward(self, hidden_states, cache_params: HybridMambaAttentionDynamicCache = None, attention_mask=None):
@@ -784,7 +784,7 @@ class ZambaMambaMixer(nn.Module):
                 )
             return self.cuda_kernels_forward(hidden_states, cache_params, attention_mask=attention_mask)
         return self.slow_forward(hidden_states, cache_params, attention_mask=attention_mask)
-
+# fmt: on
 
 class ZambaMLP(nn.Module):
     def __init__(self, config):
