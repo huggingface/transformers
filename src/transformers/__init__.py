@@ -1324,9 +1324,10 @@ else:
     )
 
     # PyTorch domain libraries integration
-    _import_structure["integrations.executorch"] = []
-    _import_structure["integrations.executorch"].append("TorchExportableModuleWithStaticCache")
-    _import_structure["integrations.executorch"].append("convert_and_export_with_cache")
+    _import_structure["integrations.executorch"] = [
+        "TorchExportableModuleWithStaticCache",
+        "convert_and_export_with_cache",
+    ]
 
     _import_structure["modeling_flash_attention_utils"] = []
     _import_structure["modeling_outputs"] = []
