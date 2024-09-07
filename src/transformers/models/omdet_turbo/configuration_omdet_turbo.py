@@ -25,8 +25,8 @@ logger = logging.get_logger(__name__)
 
 class OmDetTurboConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`OmDetTurboForObjectDetection`].
-    It is used to instantiate a OmDet-Turbo model for object detection according to the specified arguments, defining the model architecture
+    This is the configuration class to store the configuration of a [`OmDetTurboModel`].
+    It is used to instantiate a OmDet-Turbo model according to the specified arguments, defining the model architecture
     Instantiating a configuration with the defaults will yield a similar configuration to that of the OmDet-Turbo
     [yonigozlan/omdet-turbo-tiny](https://huggingface.co/yonigozlan/omdet-turbo-tiny) architecture.
 
@@ -132,13 +132,13 @@ class OmDetTurboConfig(PretrainedConfig):
     Examples:
 
     ```python
-    >>> from transformers import OmDetTurboConfig, OmDetTurboForObjectDetection
+    >>> from transformers import OmDetTurboConfig, OmDetTurboModel
 
     >>> # Initializing a OmDet-Turbo omlab/omdet-turbo-tiny style configuration
     >>> configuration = OmDetTurboConfig()
 
     >>> # Initializing a model (with random weights) from the omlab/omdet-turbo-tiny style configuration
-    >>> model = OmDetTurboForObjectDetection(configuration)
+    >>> model = OmDetTurboModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config

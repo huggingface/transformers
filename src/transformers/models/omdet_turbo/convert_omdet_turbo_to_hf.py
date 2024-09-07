@@ -293,6 +293,9 @@ def convert_omdet_turbo_checkpoint(args):
     read_in_q_k_v_text(new_state_dict, config)
     read_in_q_k_v_encoder(new_state_dict, config)
     read_in_q_k_v_decoder(new_state_dict, config)
+    # add "model" prefix to all keys
+    new_state_dict = {f"model.{k}": v for k, v in new_state_dict.items()}
+
     # Load HF model
     model = OmDetTurboForObjectDetection(config)
     model.eval()

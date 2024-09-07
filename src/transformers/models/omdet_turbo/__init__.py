@@ -30,6 +30,7 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_omdet_turbo"] = [
         "OmDetTurboForObjectDetection",
+        "OmDetTurboModel",
         "OmDetTurboPreTrainedModel",
     ]
 
@@ -47,6 +48,7 @@ if TYPE_CHECKING:
     else:
         from .modeling_omdet_turbo import (
             OmDetTurboForObjectDetection,
+            OmDetTurboModel,
             OmDetTurboPreTrainedModel,
         )
 
