@@ -325,14 +325,14 @@ class OmDetTurboLRUCache:
         Move the key to the end of the cache to show that it was recently used.
         If the cache is full, remove the first key (least recently used).
         """
+        if key not in self.cache:
+            self.current_load += 1
+            if self.current_load > self.capacity:
+                self.cache.popitem(last=False)
+                self.current_load -= 1
+
         self.cache[key] = value
         self.cache.move_to_end(key)
-        if key in self.cache:
-            return
-        self.current_load += 1
-        if self.current_load > self.capacity:
-            self.cache.popitem(last=False)
-            self.current_load -= 1
 
 
 class OmDetTurboLanguageBackbone(nn.Module):
