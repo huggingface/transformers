@@ -212,4 +212,4 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     @require_bitsandbytes
     def test_small_model_integration_test(self):
-        pass # TODO if possible
+        pass  # TODO if possible

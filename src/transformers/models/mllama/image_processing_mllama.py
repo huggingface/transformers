@@ -31,7 +31,6 @@ from ...image_utils import (
     ChannelDimension,
     ImageInput,
     PILImageResampling,
-    get_image_size,
     infer_channel_dimension_format,
     is_valid_image,
     to_numpy_array,
@@ -98,7 +97,7 @@ def find_closest_aspect_ratio(num_tiles: int, img_width: int, img_height: int, t
     """
     tgt_ar = img_width / img_height
     asp_dict = find_supported_aspect_ratios(num_tiles)
-    cl_d, cl_p = 1e23, None
+    _, cl_p = 1e23, None
     if tgt_ar >= 1:
         cl_p = min(
             [k for k in asp_dict.keys() if k <= tgt_ar],
@@ -254,9 +253,7 @@ def validate_mllama_preprocess_arguments(do_resize, size, do_pad, max_image_tile
     if not do_resize:
         raise ValueError("MllamaImageProcessor doesn't support `do_resize=False` mode.")
     if max_image_tiles is None or max_image_tiles <= 0:
-        raise ValueError(
-            f"MllamaImageProcessor `max_image_tiles` must be a positive integer, got {max_image_tiles}."
-        )
+        raise ValueError(f"MllamaImageProcessor `max_image_tiles` must be a positive integer, got {max_image_tiles}.")
     validate_size(size)
 
 
@@ -282,14 +279,14 @@ def fit_image_to_canvas(num_tiles: int, img_width: int, img_height: int, tile_si
     and the function returns the grid with the smallest gap between the canvas size and image size.
 
     Example of canvases made from tiles:
-    
+
     To visualize how the image can fit onto different tile grids, let's try fitting an ASCII cat into the tiles.
 
     Here's an ASCII cat image you want to fit into the tiles:
 
-       /\_/\  
-      ( o.o ) 
-       > ^ <  
+       /\_/\
+      ( o.o )
+       > ^ <
 
     If `num_tiles=6`, possible tile grids would look like this:
 
@@ -299,8 +296,8 @@ def fit_image_to_canvas(num_tiles: int, img_width: int, img_height: int, tile_si
     +-------+-------+
     | > ^ < |   0   |   <- Remaining part of the cat occupies the left tile
     +-------+-------+
-    |( o.o )|   0   | 
-    +-------+-------+ 
+    |( o.o )|   0   |
+    +-------+-------+
 
     **3x2 Canvas (3 tiles wide, 2 tiles tall)**: -> total of 6 tiles
     +-------+-------+-------+
@@ -330,7 +327,7 @@ def fit_image_to_canvas(num_tiles: int, img_width: int, img_height: int, tile_si
 
     In this case the first canvas is the closest to the original image.
 
-    You then feed all of the tiles to the model: 
+    You then feed all of the tiles to the model:
 
         +-------+-------+-------+-------+-------+-------+
     -   | /\_/\ |( o.o )| > ^ < |   0   |   0   |   0   |  <- Last canvas
@@ -339,17 +336,17 @@ def fit_image_to_canvas(num_tiles: int, img_width: int, img_height: int, tile_si
         +-------+-------+-------+-------+-------+-------+
     -   | /\_/\ | 0     |( o.o )|   0   | > ^ < |   0   | <- First canvas
         +-------+-------+-------+-------+-------+-------+
-        
+
         +-------+-------+-------+-------+-------+-------+
     -   | /\_/\ |( o.o )|   0   | > ^ < |   0   |   0   | <- second canvas
         +-------+-------+-------+-------+-------+-------+
 
     For each tile, you have num_channels (usually RGB so 3), tile_width, tile_height
     Given that the tiles you get depend on the chosen aspect ratio, you have to add
-    embedding in the modeling code to help it know if it got a 3x2 or a 1x6 or a 2x3 
+    embedding in the modeling code to help it know if it got a 3x2 or a 1x6 or a 2x3
     aspect ratio.
 
-    
+
     Parameters:
     - num_tiles: Total number of tiles available for the grid.
     - img_width: The width of the image to fit into the canvas.
@@ -357,7 +354,7 @@ def fit_image_to_canvas(num_tiles: int, img_width: int, img_height: int, tile_si
     - tile_size: The size (side length) of each square tile.
 
     Returns:
-    - The best-fitting canvas as a tuple (n_w, n_h), where n_w is the number of tiles in width 
+    - The best-fitting canvas as a tuple (n_w, n_h), where n_w is the number of tiles in width
       and n_h is the number of tiles in height.
     - Returns None if no canvas can fit the image.
     """
@@ -366,9 +363,7 @@ def fit_image_to_canvas(num_tiles: int, img_width: int, img_height: int, tile_si
     optimal_canvas = None
 
     # Gather all potential supported image resolutions and iterate through them to find best match
-    potential_arrangements = [
-        item for sublist in find_supported_aspect_ratios(num_tiles).values() for item in sublist
-    ]
+    potential_arrangements = [item for sublist in find_supported_aspect_ratios(num_tiles).values() for item in sublist]
 
     current_gap = 1e23
     for n_w, n_h in potential_arrangements:
@@ -455,8 +450,10 @@ def stack_aspect_ratios(aspect_ratios: List[List[Tuple[int, int]]], pad_value: i
             aspect_ratios_stacked[i, : len(row)] = np.array(row)
     return aspect_ratios_stacked
 
+
 def is_valid_list_of_images(images: List):
-    return images and all([is_valid_image(image) for image in images])
+    return images and all(is_valid_image(image) for image in images)
+
 
 # Inspired by IDEFICS2
 def make_list_of_images(images: ImageInput) -> List[List[Optional[np.ndarray]]]:
@@ -474,16 +471,13 @@ def make_list_of_images(images: ImageInput) -> List[List[Optional[np.ndarray]]]:
     if is_valid_image(images):
         output_images = [[images]]
     # If it's a list of images, it's a single batch, so convert it to a list of lists
-    elif (
-        isinstance(images, (list, tuple))
-        and is_valid_list_of_images(images)
-    ):
+    elif isinstance(images, (list, tuple)) and is_valid_list_of_images(images):
         output_images = [images]
     # If it's a list of batches, it's already in the right format
     elif (
         isinstance(images, (list, tuple))
         and all(isinstance(images_i, (list, tuple)) for images_i in images)
-        and any([is_valid_list_of_images(images_i) for images_i in images])
+        and any(is_valid_list_of_images(images_i) for images_i in images)
     ):
         output_images = images
     else:
@@ -522,9 +516,7 @@ class MllamaImageProcessor(BaseImageProcessor):
         self.do_pad = do_pad
         self.max_image_tiles = max_image_tiles
 
-        validate_mllama_preprocess_arguments(
-            self.do_resize, self.size, self.do_pad, self.max_image_tiles
-        )
+        validate_mllama_preprocess_arguments(self.do_resize, self.size, self.do_pad, self.max_image_tiles)
 
     def preprocess(
         self,
@@ -624,7 +616,10 @@ class MllamaImageProcessor(BaseImageProcessor):
 
         # Split each image to tiles
         images_list = [
-            [split_to_tiles(image, aspect_ratio[0], aspect_ratio[1]) for image, aspect_ratio in zip(images, aspect_ratios)]
+            [
+                split_to_tiles(image, aspect_ratio[0], aspect_ratio[1])
+                for image, aspect_ratio in zip(images, aspect_ratios)
+            ]
             for images, aspect_ratios in zip(images_list, aspect_ratio_list)
         ]
 

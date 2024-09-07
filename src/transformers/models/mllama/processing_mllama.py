@@ -160,13 +160,10 @@ class MllamaProcessor(ProcessorMixin):
         not_tensor_data = {}
 
         if text is not None:
-
             if isinstance(text, str):
                 text = [text]
             elif not (isinstance(text, (list, tuple)) and all(isinstance(t, str) for t in text)):
-                raise ValueError(
-                    "Invalid input text. Please provide a string, or a list of strings"
-                )
+                raise ValueError("Invalid input text. Please provide a string, or a list of strings")
             n_images_in_text = [t.count(self.image_token) for t in text]
             encoding = self.tokenizer(text, **text_kwargs)
             data.update(encoding)
@@ -176,7 +173,6 @@ class MllamaProcessor(ProcessorMixin):
             not_tensor_data["cross_attention_token_mask"] = cross_attention_token_mask
 
         if images is not None:
-
             images = make_list_of_images(images)
             n_images_in_images = [len(sample) for sample in images]
 

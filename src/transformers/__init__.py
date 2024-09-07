@@ -525,10 +525,6 @@ _import_structure = {
         "LlavaConfig",
         "LlavaProcessor",
     ],
-    "models.mllama": [
-        "MllamaConfig",
-        "MllamaProcessor",
-    ],
     "models.llava_next": [
         "LlavaNextConfig",
         "LlavaNextProcessor",
@@ -577,6 +573,10 @@ _import_structure = {
     ],
     "models.mistral": ["MistralConfig"],
     "models.mixtral": ["MixtralConfig"],
+    "models.mllama": [
+        "MllamaConfig",
+        "MllamaProcessor",
+    ],
     "models.mluke": [],
     "models.mobilebert": [
         "MobileBertConfig",
@@ -2529,12 +2529,6 @@ else:
             "LlavaPreTrainedModel",
         ]
     )
-    _import_structure["models.mllama"].extend(
-        [
-            "MllamaForConditionalGeneration",
-            "MllamaPreTrainedModel",
-        ]
-    )
     _import_structure["models.llava_next"].extend(
         [
             "LlavaNextForConditionalGeneration",
@@ -2691,6 +2685,12 @@ else:
             "MixtralForTokenClassification",
             "MixtralModel",
             "MixtralPreTrainedModel",
+        ]
+    )
+    _import_structure["models.mllama"].extend(
+        [
+            "MllamaForConditionalGeneration",
+            "MllamaPreTrainedModel",
         ]
     )
     _import_structure["models.mobilebert"].extend(
