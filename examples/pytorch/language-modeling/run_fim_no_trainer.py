@@ -52,9 +52,9 @@ from transformers import (
     SchedulerType,
     default_data_collator,
     get_scheduler,
-    is_deepspeed_zero3_enabled,
     is_torch_tpu_available,
 )
+from transformers.integrations import is_deepspeed_zero3_enabled
 from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
 

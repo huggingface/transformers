@@ -386,9 +386,6 @@ def _prepare_4d_causal_attention_mask_for_sdpa(
         )
     else:
         if attention_mask.dim() == 4:
-            # in this case we assume that the mask comes already in inverted form and requires no inversion or slicing
-            if attention_mask.max() != 0:
-                raise ValueError("Custom 4D attention mask should be passed in inverted form with max==0`")
             expanded_4d_mask = attention_mask
         else:
             expanded_4d_mask = attn_mask_converter.to_4d(
