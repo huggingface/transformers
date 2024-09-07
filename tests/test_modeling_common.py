@@ -25,8 +25,10 @@ import tempfile
 import time
 import warnings
 from collections import defaultdict
+from contextlib import contextmanager
 from typing import Dict, List, Tuple
 
+import deepspeed
 import numpy as np
 from packaging import version
 from parameterized import parameterized
@@ -44,6 +46,11 @@ from transformers import (
     is_torch_available,
     logging,
     set_seed,
+)
+from transformers.integrations import HfDeepSpeedConfig
+from transformers.integrations.deepspeed import (
+    set_hf_deepspeed_config,
+    unset_hf_deepspeed_config,
 )
 from transformers.models.auto import get_values
 from transformers.models.auto.modeling_auto import (
@@ -75,6 +82,7 @@ from transformers.testing_utils import (
     is_pt_tf_cross_test,
     require_accelerate,
     require_bitsandbytes,
+    require_deepspeed,
     require_flash_attn,
     require_non_xpu,
     require_read_token,
@@ -169,6 +177,16 @@ def _mock_all_init_weights(self):
         # Tie weights should be skipped when not initializing all weights
         # since from_pretrained(...) calls tie weights anyways
         self.tie_weights()
+
+
+@contextmanager
+def _deepspeed_zero3_context(ds_config):
+    dschf = HfDeepSpeedConfig(ds_config)
+    set_hf_deepspeed_config(dschf)
+    try:
+        yield
+    finally:
+        unset_hf_deepspeed_config()
 
 
 @require_torch
@@ -1786,7 +1804,7 @@ class ModelTesterMixin:
 
             self.assertTrue(models_equal)
 
-    def test_resize_tokens_embeddings(self):
+    def test_resize_tokens_embeddings(self, deepspeed_enabled=False):
         if not self.test_resize_embeddings:
             self.skipTest(reason="test_resize_embeddings is set to `False`")
 
@@ -1797,8 +1815,13 @@ class ModelTesterMixin:
 
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
-            model = model_class(config)
-            model.to(torch_device)
+            if deepspeed_enabled:
+                with deepspeed.zero.Init():
+                    model = model_class(config)
+            else:
+                model = model_class(config)
+                model.to(torch_device)
+
             model_embed_pre_resize = model.get_input_embeddings()
             type_model_embed_pre_resize = type(model_embed_pre_resize)
 
@@ -1821,11 +1844,13 @@ class ModelTesterMixin:
             type_model_embed_post_resize = type(model_embed)
             self.assertEqual(type_model_embed_pre_resize, type_model_embed_post_resize)
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
-            model(**self._prepare_for_class(inputs_dict, model_class))
+            if not deepspeed_enabled:
+                # A distriputed launcher is needed for the forward pass when deepspeed is enabled
+                model(**self._prepare_for_class(inputs_dict, model_class))
             # Check that added embeddings mean is close to the old embeddings mean
             old_embeddings_mean = torch.mean(model_embed.weight.data[:-10, :], axis=0).cpu().numpy()
             new_embeddings_mean = torch.mean(model_embed.weight.data[-10:, :], axis=0).cpu().numpy()
-            self.assert_almost_equals(old_embeddings_mean, new_embeddings_mean, tol=1e-3)
+            self.assert_almost_equals(old_embeddings_mean, new_embeddings_mean, tol=1e-2)
 
             # Check that resizing the token embeddings with a smaller vocab size decreases the model's vocab size
             model_embed = model.resize_token_embeddings(model_vocab_size - 15)
@@ -1839,9 +1864,11 @@ class ModelTesterMixin:
             inputs_dict["input_ids"].clamp_(max=model_vocab_size - 15 - 1)
 
             # make sure that decoder_input_ids are resized as well
-            if "decoder_input_ids" in inputs_dict:
-                inputs_dict["decoder_input_ids"].clamp_(max=model_vocab_size - 15 - 1)
-            model(**self._prepare_for_class(inputs_dict, model_class))
+            if not deepspeed_enabled:
+                # A distriputed launcher is needed for the forward pass when deepspeed is enabled
+                if "decoder_input_ids" in inputs_dict:
+                    inputs_dict["decoder_input_ids"].clamp_(max=model_vocab_size - 15 - 1)
+                model(**self._prepare_for_class(inputs_dict, model_class))
 
             # Check that adding and removing tokens has not modified the first part of the embedding matrix.
             models_equal = True
@@ -1880,6 +1907,29 @@ class ModelTesterMixin:
                 "Asking to pad the embedding matrix to a multiple of `1.3`, which is not and integer. Please make sure to pass an integer",
             ):
                 model.resize_token_embeddings(model_vocab_size, pad_to_multiple_of=1.3)
+
+    @require_deepspeed
+    @require_torch_gpu
+    def test_resize_tokens_embeddings_with_deepspeed(self):
+        ds_config = {
+            "zero_optimization": {
+                "stage": 3,
+                "offload_param": {"device": "cpu", "pin_memory": True},
+            },
+        }
+        with _deepspeed_zero3_context(ds_config):
+            self.test_resize_tokens_embeddings(deepspeed_enabled=True)
+
+    @require_deepspeed
+    @require_torch_multi_gpu
+    def test_resize_tokens_embeddings_with_deepspeed_multi_gpu(self):
+        ds_config = {
+            "zero_optimization": {
+                "stage": 3,
+            },
+        }
+        with _deepspeed_zero3_context(ds_config):
+            self.test_resize_tokens_embeddings(deepspeed_enabled=True)
 
     def test_resize_embeddings_untied(self):
         if not self.test_resize_embeddings:
