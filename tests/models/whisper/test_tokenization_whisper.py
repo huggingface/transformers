@@ -21,20 +21,15 @@ from transformers.models.whisper.tokenization_whisper import (
     _combine_tokens_into_words,
     _find_longest_common_sequence,
 )
-from transformers.testing_utils import slow
-from transformers.utils import is_flax_available, is_tf_available, is_torch_available
+from transformers.testing_utils import (
+    require_flax,
+    require_tf,
+    require_torch,
+    slow,
+)
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
-
-if is_flax_available():
-    import jax.numpy as jnp
-
-if is_tf_available():
-    import tensorflow as tf
-
-if is_torch_available():
-    import torch
 
 ES_CODE = 50262
 EN_CODE = 50259
@@ -621,35 +616,38 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
     def test_convert_to_list_np(self):
         test_list = [[1, 2, 3], [4, 5, 6]]
 
-        # Test with an already converted list  
+        # Test with an already converted list
         self.assertListEqual(WhisperTokenizer._convert_to_list(test_list), test_list)
         self.assertListEqual(WhisperTokenizerFast._convert_to_list(test_list), test_list)
 
-        # Test with an already converted list  
+        # Test with a numpy array
         np_array = np.array(test_list)
-        self.assertListEqual(WhisperTokenizer._convert_to_list(test_list), test_list)
-        self.assertListEqual(WhisperTokenizerFast._convert_to_list(test_list), test_list)
+        self.assertListEqual(WhisperTokenizer._convert_to_list(np_array), test_list)
+        self.assertListEqual(WhisperTokenizerFast._convert_to_list(np_array), test_list)
 
     @require_tf
     def test_convert_to_list_tf(self):
-        test_list = [[1, 2, 3], [4, 5, 6]]
+        import tensorflow as tf
 
+        test_list = [[1, 2, 3], [4, 5, 6]]
         tf_tensor = tf.constant(test_list)
-        self.assertListEqual(WhisperTokenizer._convert_to_list(test_list), test_list)
-        self.assertListEqual(WhisperTokenizerFast._convert_to_list(test_list), test_list)
+        self.assertListEqual(WhisperTokenizer._convert_to_list(tf_tensor), test_list)
+        self.assertListEqual(WhisperTokenizerFast._convert_to_list(tf_tensor), test_list)
 
     @require_flax
     def test_convert_to_list_jax(self):
-        test_list = [[1, 2, 3], [4, 5, 6]]
+        import jax.numpy as jnp
 
-        jax_array = jnp.array(test_list) 
-        self.assertListEqual(WhisperTokenizer._convert_to_list(test_list), test_list)
-        self.assertListEqual(WhisperTokenizerFast._convert_to_list(test_list), test_list)
+        test_list = [[1, 2, 3], [4, 5, 6]]
+        jax_array = jnp.array(test_list)
+        self.assertListEqual(WhisperTokenizer._convert_to_list(jax_array), test_list)
+        self.assertListEqual(WhisperTokenizerFast._convert_to_list(jax_array), test_list)
 
     @require_torch
     def test_convert_to_list_pt(self):
-        test_list = [[1, 2, 3], [4, 5, 6]]
+        import torch
 
+        test_list = [[1, 2, 3], [4, 5, 6]]
         torch_tensor = torch.tensor(test_list)
-        self.assertListEqual(WhisperTokenizer._convert_to_list(test_list), test_list)
-        self.assertListEqual(WhisperTokenizerFast._convert_to_list(test_list), test_list)
+        self.assertListEqual(WhisperTokenizer._convert_to_list(torch_tensor), test_list)
+        self.assertListEqual(WhisperTokenizerFast._convert_to_list(torch_tensor), test_list)
