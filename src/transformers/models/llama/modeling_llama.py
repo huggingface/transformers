@@ -1105,14 +1105,13 @@ class LlamaModel(LlamaPreTrainedModel):
         return causal_mask
 
 
-
 import torch.nn.functional as F
 
 class _LM_head(torch.autograd.Function):
 
     @classmethod
     def forward(cls, ctx, hidden_states, indices, weights):
-        logits = F.linear(hidden_states.to(weights.dtype), weights).float()
+        logits = F.linear(hidden_states, weights).float()
         loss_fct = torch.nn.CrossEntropyLoss(reduction="sum")
         loss_i = loss_fct(logits, indices)
 
@@ -1130,12 +1129,15 @@ class _LM_head(torch.autograd.Function):
         # load saved tensors
         hidden_states, indices, weights = ctx.saved_tensors
 
-        cur_hidden_states = hidden_states.to(weights.dtype)
-        logits = F.linear(cur_hidden_states, weights).float()
-
         ignore_index = -100
         mask = indices != ignore_index
         reverse_mask = indices == ignore_index
+
+        if not mask.any():
+            # If all indices are -100, return zero gradients
+            return torch.zeros_like(hidden_states), None, None
+
+        logits = F.linear(hidden_states, weights).float()
         
         batch_size = torch.sum(indices != ignore_index)
 
@@ -1143,22 +1145,22 @@ class _LM_head(torch.autograd.Function):
         grad_input[mask, indices[mask]] -= 1
         # grad_input[mask] /= batch_size
         grad_input[reverse_mask] = 0
-        grad_input = grad_input.to(weights.dtype)
         grad_input *= dneg_logprobs
+        grad_input = grad_input.to(hidden_states.dtype)
+        
         if hasattr(weights, 'grad') and weights.grad != None:
             torch.addmm(
                     weights.grad,
                     grad_input.T,
-                    cur_hidden_states,
+                    hidden_states,
                     out=weights.grad,
                 )
         else:
-            weights.grad = grad_input.T @ cur_hidden_states
+            weights.grad = grad_input.T @ hidden_states
             
         grad_input = grad_input @ weights
         
         return grad_input, None, None
-
 
 class LMheadWarpper(nn.Module):
     def __init__(
@@ -1209,7 +1211,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
 
     def minis_processing(self, hidden_states, labels):
         bsz, q_len, hidden_size = hidden_states.size()
-        tmp = q_len // self.mini_s
+        chunk_size = q_len // self.mini_s
 
         if labels is None:
             hidden_states = hidden_states[..., -1:, :]
@@ -1223,14 +1225,17 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
         labels = labels.to(hidden_states.device)
 
         LMhead = LMheadWarpper(self.lm_head.weight)
+
+        hidden_states_list = list(hidden_states.split(chunk_size, dim=1))
+        labels_list = list(labels.split(chunk_size, dim=1))
         
         loss = None
-        for i in range(self.mini_s):
+        for i in range(len(hidden_states_list)):
 
 
-            shift_hidden_states = hidden_states[..., i * tmp : (i+1)*tmp, :].contiguous()
+            shift_hidden_states = hidden_states_list[i].contiguous()
             shift_hidden_states = shift_hidden_states.view(-1, hidden_size)
-            shift_labels = labels[..., i * tmp : (i+1)*tmp ].contiguous()
+            shift_labels = labels_list[i].contiguous()
             shift_labels = shift_labels.view(-1)
 
             loss_i = LMhead(shift_hidden_states, shift_labels)
@@ -1240,7 +1245,6 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
                     loss = loss_i
                 else:
                     loss = loss + loss_i
-            # print(i, loss_i, loss)
 
         loss = loss / torch.sum(torch.ne(labels, -100))
         return None, loss
