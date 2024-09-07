@@ -618,32 +618,38 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
         output = multilingual_tokenizer.decode(INPUT_TOKENS, output_offsets=True)["offsets"]
         self.assertEqual(output, [])
 
-    def test_convert_to_list(self):
+    def test_convert_to_list_np(self):
         test_list = [[1, 2, 3], [4, 5, 6]]
 
-        # Test with an already converted list
-        assert WhisperTokenizer._convert_to_list(test_list) == test_list
-        assert WhisperTokenizerFast._convert_to_list(test_list) == test_list
+        # Test with an already converted list  
+        self.assertListEqual(WhisperTokenizer._convert_to_list(test_list), test_list)
+        self.assertListEqual(WhisperTokenizerFast._convert_to_list(test_list), test_list)
 
-        # Test with a numpy array
+        # Test with an already converted list  
         np_array = np.array(test_list)
-        assert WhisperTokenizer._convert_to_list(np_array) == test_list
-        assert WhisperTokenizerFast._convert_to_list(np_array) == test_list
+        self.assertListEqual(WhisperTokenizer._convert_to_list(test_list), test_list)
+        self.assertListEqual(WhisperTokenizerFast._convert_to_list(test_list), test_list)
 
-        if is_torch_available():
-            # Test with a PyTorch tensor
-            torch_tensor = torch.tensor(test_list)
-            assert WhisperTokenizer._convert_to_list(torch_tensor) == test_list
-            assert WhisperTokenizerFast._convert_to_list(torch_tensor) == test_list
+    @require_tf
+    def test_convert_to_list_tf(self):
+        test_list = [[1, 2, 3], [4, 5, 6]]
 
-        if is_tf_available():
-            # Test with a TensorFlow tensor
-            tf_tensor = tf.constant(test_list)
-            assert WhisperTokenizer._convert_to_list(tf_tensor) == test_list
-            assert WhisperTokenizerFast._convert_to_list(tf_tensor) == test_list
+        tf_tensor = tf.constant(test_list)
+        self.assertListEqual(WhisperTokenizer._convert_to_list(test_list), test_list)
+        self.assertListEqual(WhisperTokenizerFast._convert_to_list(test_list), test_list)
 
-        if is_flax_available():
-            # Test with a JAX array
-            jax_array = jnp.array(test_list)
-            assert WhisperTokenizer._convert_to_list(jax_array) == test_list
-            assert WhisperTokenizerFast._convert_to_list(jax_array) == test_list
+    @require_flax
+    def test_convert_to_list_jax(self):
+        test_list = [[1, 2, 3], [4, 5, 6]]
+
+        jax_array = jnp.array(test_list) 
+        self.assertListEqual(WhisperTokenizer._convert_to_list(test_list), test_list)
+        self.assertListEqual(WhisperTokenizerFast._convert_to_list(test_list), test_list)
+
+    @require_torch
+    def test_convert_to_list_pt(self):
+        test_list = [[1, 2, 3], [4, 5, 6]]
+
+        torch_tensor = torch.tensor(test_list)
+        self.assertListEqual(WhisperTokenizer._convert_to_list(test_list), test_list)
+        self.assertListEqual(WhisperTokenizerFast._convert_to_list(test_list), test_list)
