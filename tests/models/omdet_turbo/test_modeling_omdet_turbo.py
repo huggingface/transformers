@@ -202,7 +202,7 @@ class OmDetTurboModelTester:
 
 @require_torch
 class OmDetTurboModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (OmDetTurboForObjectDetection,) if is_torch_available() else ()
+    all_model_classes = (OmDetTurboModel, OmDetTurboForObjectDetection) if is_torch_available() else ()
     is_encoder_decoder = True
     test_pruning = False
     test_head_masking = False
@@ -346,7 +346,7 @@ class OmDetTurboModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             self.assertTrue(model_embed.weight.shape[0] // 64, 0)
 
             self.assertTrue(model_embed.weight.shape[0], new_model_vocab_size)
-            self.assertTrue(new_model_vocab_size, model.model.language_backbone.model)
+            self.assertTrue(new_model_vocab_size, model.vocab_size)
 
             model_embed = model.resize_token_embeddings(model_vocab_size + 13, pad_to_multiple_of=64)
             self.assertTrue(model_embed.weight.shape[0] // 64, 0)
@@ -451,7 +451,7 @@ class OmDetTurboModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
                 if hasattr(self, "zero_init_hidden_state") and "decoder_hidden_states" in key:
                     model_batched_output[key] = model_batched_output[key][1:]
                     model_row_output[key] = model_row_output[key][1:]
-                if key == "decoder_class_logits" or key == "encoder_class_logits":
+                if key == "decoder_class_logits" or key == "encoder_class_logits" or key == "decoder_classes":
                     # check if all elements are close to 0, if so skip the test as the test strugles with comparing
                     # tensors with all elements close to 0
                     if torch.allclose(

@@ -1696,6 +1696,7 @@ class OmDetTurboModel(OmDetTurboPreTrainedModel):
 
         self.language_cache_class = OmDetTurboLRUCache(config.cache_size)
         self.language_cache_prompt = OmDetTurboLRUCache(config.cache_size)
+        self.vocab_size = config.text_config.vocab_size
         self.post_init()
 
     def get_input_embeddings(self):
@@ -1709,6 +1710,7 @@ class OmDetTurboModel(OmDetTurboPreTrainedModel):
             new_num_tokens=new_num_tokens, pad_to_multiple_of=pad_to_multiple_of
         )
         self.config.text_config.vocab_size = model_embeds.num_embeddings
+        self.vocab_size = model_embeds.num_embeddings
         return model_embeds
 
     @add_start_docstrings_to_model_forward(OMDET_TURBO_INPUTS_DOCSTRING)
@@ -1834,7 +1836,22 @@ class OmDetTurboForObjectDetection(OmDetTurboPreTrainedModel):
     def __init__(self, config: OmDetTurboConfig):
         super().__init__(config)
         self.model = OmDetTurboModel(config)
+        self.vocab_size = config.text_config.vocab_size
         self.post_init()
+
+    def get_input_embeddings(self):
+        return self.model.language_backbone.model.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.model.language_backbone.model.set_input_embeddings(value)
+
+    def resize_token_embeddings(self, new_num_tokens: Optional[int] = None, pad_to_multiple_of=None) -> nn.Embedding:
+        model_embeds = self.model.language_backbone.model.resize_token_embeddings(
+            new_num_tokens=new_num_tokens, pad_to_multiple_of=pad_to_multiple_of
+        )
+        self.config.text_config.vocab_size = model_embeds.num_embeddings
+        self.vocab_size = model_embeds.num_embeddings
+        return model_embeds
 
     @add_start_docstrings_to_model_forward(OMDET_TURBO_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=OmDetTurboObjectDetectionOutput, config_class=_CONFIG_FOR_DOC)
