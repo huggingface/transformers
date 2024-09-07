@@ -99,7 +99,7 @@ OmDet-Turbo can perform batched multi-image inference, with support for differen
 >>> url2 = "http://images.cocodataset.org/train2017/000000257813.jpg"
 >>> image2 = Image.open(BytesIO(requests.get(url2).content)).convert("RGB")
 >>> classes2 = ["boat"]
->>> task2 = "Detect all the boat in the image."
+>>> task2 = "Detect everything that looks like a boat."
 
 >>> url3 = "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
 >>> image3 = Image.open(BytesIO(requests.get(url3).content)).convert("RGB")
@@ -138,9 +138,10 @@ Detected remote with confidence 0.77 at location [39.9, 70.4, 176.7, 118.0] in i
 Detected cat with confidence 0.72 at location [11.6, 54.2, 314.8, 474.0] in image 0
 Detected remote with confidence 0.56 at location [333.4, 75.8, 370.7, 187.0] in image 0
 Detected cat with confidence 0.55 at location [345.2, 24.0, 639.8, 371.7] in image 0
-Detected boat with confidence 0.3 at location [146.5, 219.7, 209.7, 251.0] in image 1
-Detected boat with confidence 0.27 at location [319.1, 222.1, 403.3, 239.2] in image 1
-Detected boat with confidence 0.21 at location [37.7, 220.2, 84.0, 236.1] in image 1
+Detected boat with confidence 0.32 at location [146.9, 219.8, 209.6, 250.7] in image 1
+Detected boat with confidence 0.3 at location [319.1, 223.2, 403.2, 238.4] in image 1
+Detected boat with confidence 0.27 at location [37.7, 220.3, 84.0, 235.9] in image 1
+Detected boat with confidence 0.22 at location [407.9, 207.0, 441.7, 220.2] in image 1
 Detected statue with confidence 0.73 at location [544.7, 210.2, 651.9, 502.8] in image 2
 Detected trees with confidence 0.25 at location [3.9, 584.3, 391.4, 785.6] in image 2
 Detected trees with confidence 0.25 at location [1.4, 621.2, 118.2, 787.8] in image 2
