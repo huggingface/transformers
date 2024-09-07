@@ -24,7 +24,7 @@ from huggingface_hub import hf_hub_download
 from PIL import Image
 from torchvision import transforms
 
-from transformers import RTDetrV2Config, RTDetrV2ForObjectDetection, RTDetrImageProcessor
+from transformers import RTDetrImageProcessor, RTDetrV2Config, RTDetrV2ForObjectDetection
 from transformers.utils import logging
 
 
@@ -615,47 +615,31 @@ def convert_rt_detr_v2_checkpoint(model_name, pytorch_dump_folder_path, push_to_
         )
     elif model_name == "rtdetr_v2_r34vd":
         expected_slice_logits = torch.tensor(
-            [[-4.6110, -5.9455, -3.8502], 
-            [-3.8702, -6.1135, -5.5675], 
-            [-3.7788, -6.4537, -5.9451]]
+            [[-4.6110, -5.9455, -3.8502], [-3.8702, -6.1135, -5.5675], [-3.7788, -6.4537, -5.9451]]
         )
         expected_slice_boxes = torch.tensor(
-            [[0.1691, 0.1984, 0.2118],
-            [0.2594, 0.5506, 0.4736],
-            [0.7669, 0.4136, 0.4654]]
+            [[0.1691, 0.1984, 0.2118], [0.2594, 0.5506, 0.4736], [0.7669, 0.4136, 0.4654]]
         )
     elif model_name == "rtdetr_v2_r50vd_m":
         expected_slice_logits = torch.tensor(
-            [[-2.7453, -5.4595, -7.3702],
-            [-3.1858, -5.3803, -7.9838],
-            [-5.0293, -7.0083, -4.2888]]
+            [[-2.7453, -5.4595, -7.3702], [-3.1858, -5.3803, -7.9838], [-5.0293, -7.0083, -4.2888]]
         )
         expected_slice_boxes = torch.tensor(
-            [[0.7711, 0.4135, 0.4577],
-            [0.2570, 0.5480, 0.4755],
-            [0.1694, 0.1992, 0.2127]]
+            [[0.7711, 0.4135, 0.4577], [0.2570, 0.5480, 0.4755], [0.1694, 0.1992, 0.2127]]
         )
     elif model_name == "rtdetr_v2_r50vd":
         expected_slice_logits = torch.tensor(
-            [[-4.7881, -4.6754, -6.1624],
-            [-5.4441, -6.6486, -4.3840],
-            [-3.5455, -4.9318, -6.3544]]
+            [[-4.7881, -4.6754, -6.1624], [-5.4441, -6.6486, -4.3840], [-3.5455, -4.9318, -6.3544]]
         )
         expected_slice_boxes = torch.tensor(
-            [[0.2588, 0.5487, 0.4747],
-            [0.5497, 0.2760, 0.0573],
-            [0.7688, 0.4133, 0.4634]]
+            [[0.2588, 0.5487, 0.4747], [0.5497, 0.2760, 0.0573], [0.7688, 0.4133, 0.4634]]
         )
     elif model_name == "rtdetr_v2_r101vd":
         expected_slice_logits = torch.tensor(
-            [[-4.6162, -4.9189, -4.6656],
-          [-4.4701, -4.4997, -4.9659],
-          [-5.6641, -7.9000, -5.0725]]
+            [[-4.6162, -4.9189, -4.6656], [-4.4701, -4.4997, -4.9659], [-5.6641, -7.9000, -5.0725]]
         )
         expected_slice_boxes = torch.tensor(
-            [[0.7707, 0.4124, 0.4585],
-          [0.2589, 0.5492, 0.4735],
-          [0.1688, 0.1993, 0.2108]]
+            [[0.7707, 0.4124, 0.4585], [0.2589, 0.5492, 0.4735], [0.1688, 0.1993, 0.2108]]
         )
     else:
         raise ValueError(f"Unknown rt_detr_v2_name: {model_name}")
@@ -674,10 +658,12 @@ def convert_rt_detr_v2_checkpoint(model_name, pytorch_dump_folder_path, push_to_
         # Upload model, image processor and config to the hub
         logger.info("Uploading PyTorch model and image processor to the hub...")
         config.push_to_hub(
-            repo_id=repo_id, commit_message="Add config from convert_rt_detr_v2_original_pytorch_checkpoint_to_pytorch.py"
+            repo_id=repo_id,
+            commit_message="Add config from convert_rt_detr_v2_original_pytorch_checkpoint_to_pytorch.py",
         )
         model.push_to_hub(
-            repo_id=repo_id, commit_message="Add model from convert_rt_detr_v2_original_pytorch_checkpoint_to_pytorch.py"
+            repo_id=repo_id,
+            commit_message="Add model from convert_rt_detr_v2_original_pytorch_checkpoint_to_pytorch.py",
         )
         image_processor.push_to_hub(
             repo_id=repo_id,

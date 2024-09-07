@@ -184,8 +184,8 @@ class RTDetrDecoderOutput(ModelOutput):
 
 
 @dataclass
-# Copied from transformers.models.rt_detr.modeling_rt_detr.RTDetrModelOutput with R->R
-class RTDetrModelOutput(ModelOutput):
+# Copied from transformers.models.rt_detr.modeling_rt_detr.RTDetrV2ModelOutput with R->R
+class RTDetrV2ModelOutput(ModelOutput):
     """
     Base class for outputs of the RT-DETR encoder-decoder model.
 
@@ -1212,7 +1212,7 @@ class RTDetrPreTrainedModel(PreTrainedModel):
                     nn.init.constant_(layer.layers[-1].weight, 0)
                     nn.init.constant_(layer.layers[-1].bias, 0)
 
-        if isinstance(module, RTDetrModel):
+        if isinstance(module, RTDetrV2Model):
             prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
             bias = float(-math.log((1 - prior_prob) / prior_prob))
             nn.init.xavier_uniform_(module.enc_score_head.weight)
@@ -1751,7 +1751,7 @@ class RTDetrV2Model(RTDetrPreTrainedModel):
         return anchors, valid_mask
 
     @add_start_docstrings_to_model_forward(RTDETR_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=RTDetrModelOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=RTDetrV2ModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -1763,14 +1763,14 @@ class RTDetrV2Model(RTDetrPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.FloatTensor], RTDetrModelOutput]:
+    ) -> Union[Tuple[torch.FloatTensor], RTDetrV2ModelOutput]:
         r"""
         Returns:
 
         Examples:
 
         ```python
-        >>> from transformers import AutoImageProcessor, RTDetrModel
+        >>> from transformers import AutoImageProcessor, RTDetrV2Model
         >>> from PIL import Image
         >>> import requests
 
@@ -1778,7 +1778,7 @@ class RTDetrV2Model(RTDetrPreTrainedModel):
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> image_processor = AutoImageProcessor.from_pretrained("")
-        >>> model = RTDetrModel.from_pretrained("")
+        >>> model = RTDetrV2Model.from_pretrained("")
 
         >>> inputs = image_processor(images=image, return_tensors="pt")
 
@@ -1941,7 +1941,7 @@ class RTDetrV2Model(RTDetrPreTrainedModel):
 
             return tuple_outputs
 
-        return RTDetrModelOutput(
+        return RTDetrV2ModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
             intermediate_hidden_states=decoder_outputs.intermediate_hidden_states,
             intermediate_logits=decoder_outputs.intermediate_logits,
