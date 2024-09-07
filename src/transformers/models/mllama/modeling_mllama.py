@@ -209,6 +209,7 @@ class MllamaTilePositionEmbedding(nn.Module):
         out_tile_embedding = torch.zeros(
             batch_size, num_tiles, 1, self.hidden_size, device=hidden_state.device, dtype=hidden_state.dtype
         )
+        # TODO again here if we have aspect_ratio_ids, we can directly store the embeddings.
         for idx, aspect_ratio_i in enumerate(aspect_ratios):
             height, width = aspect_ratio_i
             tile_embedding_i = self.embedding[:height, :width]
@@ -237,8 +238,6 @@ class MllamaVisionMLP(nn.Module):
         return hidden_states
 
 class MllamaVisionSdpaAttention(nn.Module):
-    # originally ImageAttention
-
     def __init__(
         self,
         hidden_size: int,
@@ -288,22 +287,13 @@ class MllamaVisionSdpaAttention(nn.Module):
 
 
 class MllamaVisionEncoderLayer(nn.Module):
-    # originally ImageTransformerBlock
-
-    def __init__(
-        self,
-        hidden_size: int,
-        num_attention_heads: int,
-        intermediate_size: int,
-        is_gated: bool = False,
-    ):
+    def __init__(self, config, is_gated: bool = False):
         super().__init__()
-        assert hidden_size % num_attention_heads == 0
 
-        self.hidden_size = hidden_size
-        self.num_attention_heads = num_attention_heads
+        self.hidden_size = config.hidden_size
+        self.num_attention_heads = config.attention_heads
         self.is_gated = is_gated
-        self.intermediate_size = intermediate_size
+        self.intermediate_size = config.intermediate_size
 
         self.self_attn = MllamaVisionSdpaAttention(self.hidden_size, self.num_attention_heads)
         self.mlp = MllamaVisionMLP(self.hidden_size, self.intermediate_size)
@@ -427,32 +417,23 @@ class MllamaVisionEncoder(nn.Module):
 
 
 class MllamaVisionModel(PreTrainedModel):
-    # originally VisionEncoder
-
+    base_model_prefix = "vision_model"
     def __init__(
         self,
         config,
-        max_num_tiles: int,
-        image_size: Tuple[int, int] = (224, 224),
-        patch_size: Tuple[int, int] = (14, 14),
-        hidden_size: int = 1280,
-        num_layers: int = 32,
-        heads: int = 16,
-        in_channels: int = 3,
-        n_global_layers: int = 2,
         return_intermediate: Optional[List[int]] = None,
     ):
         super().__init__()
-        self.max_num_tiles = max_num_tiles
-        self.hidden_size = hidden_size
-        self.in_channels = in_channels
+        self.max_num_tiles = config.max_num_tiles
+        self.hidden_size = config.hidden_size
+        self.in_channels = config.in_channels
         self.return_intermediate = return_intermediate
         self.image_size = config.image_size
         self.patch_size = config.patch_size
         self.num_patches_height = self.image_size[0] // self.patch_size[0]
         self.num_patches_width = self.image_size[1] // self.patch_size[1]
         self.num_patches = self.num_patches_height * self.num_patches_width + 1
-        self.scale = hidden_size ** -0.5
+        self.scale = config.hidden_size ** -0.5
 
         self.patch_embedding = nn.Conv2d(
             in_channels=config.num_channels,
@@ -470,16 +451,20 @@ class MllamaVisionModel(PreTrainedModel):
 
         gated_positional_embedding = torch.randn(self.max_num_tiles, self.max_num_tiles, self.num_patches, self.hidden_size)
         self.gated_positional_embedding = nn.Parameter(self.scale * gated_positional_embedding)
-        self.gated_positional_embedding_gate = nn.Parameter(torch.zeros(1))
 
+        # We replace the original embedding by storing the full embedding
+        self.gated_positional_embedding = nn.Embedding(self.max_num_tiles * self.max_num_tiles, self.hidden_size)
+        self.gated_positional_embedding_gate = nn.Parameter(torch.zeros(1))
+        # TODO support properly initializing this depending on the number of tiles
+        self.cached_attention_mask = nn.Embedding(self.max_num_tiles * self.max_num_tiles, self.hidden_size)
         # pre and post tile position embedding
         self.pre_tile_pos_embed = MllamaTilePositionEmbedding(
-            max_num_tiles=max_num_tiles,
+            max_num_tiles=config.max_num_tiles,
             hidden_size=self.hidden_size,
             is_gated=True,
         )
         self.post_tile_pos_embed = MllamaTilePositionEmbedding(
-            max_num_tiles=max_num_tiles,
+            max_num_tiles=config.max_num_tiles,
             hidden_size=self.hidden_size,
             is_gated=True,
         )
@@ -489,8 +474,8 @@ class MllamaVisionModel(PreTrainedModel):
         self.ln_pre = nn.LayerNorm(self.hidden_size)
 
         # encoders
-        self.transformer = MllamaVisionEncoder(self.hidden_size, num_layers, heads, is_gated=False)
-        self.global_transformer = MllamaVisionEncoder(self.hidden_size, n_global_layers, heads, is_gated=True)
+        self.transformer = MllamaVisionEncoder(self.hidden_size, config.num_layers, config.heads, is_gated=False)
+        self.global_transformer = MllamaVisionEncoder(self.hidden_size, config.n_global_layers, config.heads, is_gated=True)
 
     def apply_positional_embedding(self, hidden_state: torch.Tensor, aspect_ratios: torch.Tensor) -> torch.Tensor:
 
@@ -563,7 +548,9 @@ class MllamaVisionModel(PreTrainedModel):
         # if we pre-computed the ratios then this can be vectorized
         # aspect ratios can be like input ids, and we can call embedding layer on them
 
-        attention_mask = build_encoder_attention_mask(hidden_state, aspect_ratios, num_patches, num_tiles, 1)
+        # Let's cache the mask per aspect_ratios. Not sure I 100% got how they do it but alright
+
+        attention_mask = self.cached_attention_mask(aspect_ratios)
         hidden_state = hidden_state.view(batch_size * num_concurrent_media, -1, dim)
         hidden_state, intermediate_hidden_state = self.transformer(
             hidden_state, return_intermediate=self.return_intermediate, attention_mask=attention_mask
@@ -579,10 +566,10 @@ class MllamaVisionModel(PreTrainedModel):
         hidden_state = hidden_state[:, :, slice_index]
 
         # adding intermediate layer outputs
-        hidden_state = hidden_state.reshape(batch_size, num_concurrent_media, num_tiles, num_tokens, dim)
-        intermediate_hidden_state = intermediate_hidden_state.reshape(batch_size * num_concurrent_media, num_tiles, num_tokens + num_padding_patches, -1)
+        hidden_state = hidden_state.reshape(batch_size, num_concurrent_media, num_tiles, num_patches, dim)
+        intermediate_hidden_state = intermediate_hidden_state.reshape(batch_size * num_concurrent_media, num_tiles, num_patches + num_padding_patches, -1)
         intermediate_hidden_state = intermediate_hidden_state[:, :, slice_index]
-        intermediate_hidden_state = intermediate_hidden_state.reshape(batch_size, num_concurrent_media, num_tiles, num_tokens, -1)
+        intermediate_hidden_state = intermediate_hidden_state.reshape(batch_size, num_concurrent_media, num_tiles, num_patches, -1)
         hidden_state = torch.cat([hidden_state, intermediate_hidden_state], dim=-1)
 
         return hidden_state.view(batch_size, -1, dim)
@@ -892,13 +879,6 @@ class MllamaCrossAttentionDecoderLayer(torch.nn.Module):
     def __init__(self, config: MllamaCrossAttentionTextConfig, layer_id: int) -> None:
         super().__init__()
         self.layer_id = layer_id
-        self.n_heads = config.n_heads
-        self.n_kv_heads = config.n_heads if config.n_kv_heads is None else config.n_kv_heads
-        self.dim = config.dim
-        self.head_dim = config.dim // config.n_heads
-        self.norm_eps = config.norm_eps
-        self.ffn_dim_multiplier = config.ffn_dim_multiplier
-        self.multiple_of = config.multiple_of
         self.cross_attn = MLLAMA_TEXT_ATTENTION_CLASSES[config._attn_implementation](config)
 
         self.input_layernorm = MllamaRMSNorm(self.dim,eps=self.norm_eps,)
@@ -1012,6 +992,8 @@ class MllamaRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 class MllamaTextModel(PreTrainedModel):
+    base_model_prefix = "language_model"
+
     def __init__(self, config: MllamaConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
@@ -1220,24 +1202,6 @@ class MllamaPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_quantized_cache = True
 
-
-class MllamaModel(MllamaPreTrainedModel):
-    def __init__(self, config: MllamaConfig):
-        super().__init__(config)
-        self.vision_model = MllamaVisionModel(config.vision_config)
-        self.multi_modal_projector = nn.Linear(
-            self.vision_input_dim,
-            config.projection_dim,
-            #! originally bias=True, but bias was not used in original forward pass
-            bias=False,
-        )
-        self.language_model = MllamaTextModel(config.text_config)
-        self.post_init()
-
-    def forward(**kwargs):
-        # TODO
-        pass
-
 MLLAMA_START_DOCSTRING = "" # TODO add docstring to MLLAMA start and other classes
 
 @add_start_docstrings(
@@ -1249,7 +1213,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
 
     def __init__(self, config):
         super().__init__(config)
-        self.vision_tower = AutoModel.from_config(config.vision_config)
+        self.vision_model = MllamaVisionModel.from_config(config.vision_config)
         self.multi_modal_projector = nn.Linear(
             self.vision_input_dim,
             config.projection_dim,
@@ -1271,22 +1235,22 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
         return self.model.language_model.get_input_embeddings()
 
     def set_input_embeddings(self, value):
-        self.model.language_model.set_input_embeddings(value)
+        self.language_model.set_input_embeddings(value)
 
     def get_output_embeddings(self):
-        return self.model.language_model.get_output_embeddings()
+        return self.language_model.get_output_embeddings()
 
     def set_output_embeddings(self, new_embeddings):
-        self.model.language_model.set_output_embeddings(new_embeddings)
+        self.language_model.set_output_embeddings(new_embeddings)
 
     def set_decoder(self, decoder):
-        self.model.language_model.set_decoder(decoder)
+        self.language_model.set_decoder(decoder)
 
     def get_decoder(self):
-        return self.model.language_model.get_decoder()
+        return self.language_model.get_decoder()
 
     def tie_weights(self):
-        return self.model.language_model.tie_weights()
+        return self.language_model.tie_weights()
 
     def forward(
         self,
