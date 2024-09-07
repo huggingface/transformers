@@ -787,6 +787,10 @@ class ZambaMambaMixer(nn.Module):
 # fmt: on
 
 class ZambaMLP(nn.Module):
+    """
+    Adapted from transformers.models.gemma.modeling_gemma.GemmaMLP, with the flipped convention:
+    `up_proj` <-> `gate_proj`.
+    """
     def __init__(self, config):
         super().__init__()
         self.config = config
