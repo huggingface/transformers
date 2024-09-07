@@ -93,16 +93,16 @@ def _prepare_4d_causal_attention_mask_with_cache_position(
 
 def expand_num_tokens_to_mult8(x):
     # Compute the number of tokens to pad
-    num_pad_tokens = (8 - (x.shape[-2] % 8)) % 8
+    num_padding_patches = (8 - (x.shape[-2] % 8)) % 8
     # Compute padding tuple for pad function
-    padding = (0, 0, 0, num_pad_tokens)  # (pad_left, pad_right, pad_left for dim -2, pad_right for dim -2)
+    padding = (0, 0, 0, num_padding_patches)  # (pad_left, pad_right, pad_left for dim -2, pad_right for dim -2)
     # Pad the tensor
     x_padded = F.pad(x, padding, mode="constant", value=0)
-    return x_padded, num_pad_tokens
+    return x_padded, num_padding_patches
 
-def contract_num_tokens_from_mult8(x, num_pad_tokens):
+def contract_num_tokens_from_mult8(x, num_padding_patches):
     # Calculate the index to slice the tensor up to
-    slice_index = -num_pad_tokens if num_pad_tokens > 0 else None
+    slice_index = -num_padding_patches if num_padding_patches > 0 else None
     return x[:, :, slice_index]
 
 
@@ -534,28 +534,28 @@ class MllamaVisionModel(PreTrainedModel):
         hidden_state = patch_embeds.flatten(2).transpose(1, 2)
 
         # tile embeddings
-        _, num_tokens, dim = hidden_state.shape
+        _, num_patches, dim = hidden_state.shape
         hidden_state = hidden_state.reshape(batch_size * num_concurrent_media, num_tiles, -1, dim)
         hidden_state = self.pre_tile_pos_embed(hidden_state, aspect_ratios)
 
         # apply cls token
-        hidden_state = hidden_state.reshape(batch_size * num_concurrent_media * num_tiles, num_tokens, dim)
+        hidden_state = hidden_state.reshape(batch_size * num_concurrent_media * num_tiles, num_patches, dim)
         hidden_state = self.apply_class_embedding(hidden_state)
-        num_tokens += 1
+        num_patches += 1
 
         # apply position embeddings
-        hidden_state = hidden_state.reshape(batch_size * num_concurrent_media, num_tiles, num_tokens, dim)
+        hidden_state = hidden_state.reshape(batch_size * num_concurrent_media, num_tiles, num_patches, dim)
         hidden_state = self.apply_positional_embedding(hidden_state, aspect_ratios)
 
         # apply encoder
         hidden_state = self.ln_pre(hidden_state)
-        hidden_state, num_pad_tokens = expand_num_tokens_to_mult8(hidden_state)
+        hidden_state, num_padding_patches = expand_num_tokens_to_mult8(hidden_state)
 
         # Now we want to mask out padding tokens, depending on the aspect ratios
         # if we pre-computed the ratios then this can be vectorized
         # aspect ratios can be like input ids, and we can call embedding layer on them
 
-        attention_mask = build_encoder_attention_mask(hidden_state, aspect_ratios, num_tokens, num_tiles, 1)
+        attention_mask = build_encoder_attention_mask(hidden_state, aspect_ratios, num_patches, num_tiles, 1)
         hidden_state = hidden_state.view(batch_size * num_concurrent_media, -1, dim)
         hidden_state, intermediate_hidden_state = self.transformer(
             hidden_state, return_intermediate=self.return_intermediate, attention_mask=attention_mask
@@ -563,17 +563,17 @@ class MllamaVisionModel(PreTrainedModel):
 
         # apply global encoder
         hidden_state = self.ln_post(hidden_state)
-        hidden_state = hidden_state.reshape(batch_size * num_concurrent_media, num_tiles, num_tokens + num_pad_tokens, dim)
+        hidden_state = hidden_state.reshape(batch_size * num_concurrent_media, num_tiles, num_patches + num_padding_patches, dim)
         hidden_state = self.post_tile_pos_embed(hidden_state, aspect_ratios)
-        hidden_state = hidden_state.reshape(batch_size * num_concurrent_media, num_tiles * (num_tokens + num_pad_tokens), dim)
+        hidden_state = hidden_state.reshape(batch_size * num_concurrent_media, num_tiles * (num_patches + num_padding_patches), dim)
         hidden_state = self.global_transformer(hidden_state, attention_mask=attention_mask)
-        hidden_state = hidden_state.reshape(batch_size * num_concurrent_media, num_tiles, num_tokens + num_pad_tokens, dim)
-        hidden_state = contract_num_tokens_from_mult8(hidden_state, num_pad_tokens)
+        hidden_state = hidden_state.reshape(batch_size * num_concurrent_media, num_tiles, num_patches + num_padding_patches, dim)
+        hidden_state = contract_num_tokens_from_mult8(hidden_state, num_padding_patches)
 
         # adding intermediate layer outputs
         hidden_state = hidden_state.reshape(batch_size, num_concurrent_media, num_tiles, num_tokens, dim)
-        intermediate_hidden_state = intermediate_hidden_state.reshape(batch_size * num_concurrent_media, num_tiles, num_tokens + num_pad_tokens, -1)
-        intermediate_hidden_state = contract_num_tokens_from_mult8(intermediate_hidden_state, num_pad_tokens)
+        intermediate_hidden_state = intermediate_hidden_state.reshape(batch_size * num_concurrent_media, num_tiles, num_tokens + num_padding_patches, -1)
+        intermediate_hidden_state = contract_num_tokens_from_mult8(intermediate_hidden_state, num_padding_patches)
         intermediate_hidden_state = intermediate_hidden_state.reshape(batch_size, num_concurrent_media, num_tiles, num_tokens, -1)
         hidden_state = torch.cat([hidden_state, intermediate_hidden_state], dim=-1)
 
@@ -647,6 +647,8 @@ class MllamaTextCrossAttention(nn.Module):
 
             key_states = self.k_norm(key_states)
             if past_key_value is not None:
+                # if we have a new image + new tokens, we only computed key_states on that new image
+                # we still update the cross key states, past_image, new_image. And use it!
                 key_states, value_states = past_key_value.update(
                     key_states, value_states, self.layer_idx, {"cache_position": cache_position}
                 )
@@ -1286,6 +1288,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
         num_tiles: Optional[List[List[int]]] = None,  # shape: [batch_size, num_images]; num tiles per image
         attention_mask: Optional[List[List[List[int]]]] = None,  # shape: [batch_size, num_images, 2]; start token, end token
         cross_attention_mask: Optional[torch.Tensor] = None,
+        cross_attention_states: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
@@ -1313,7 +1316,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
             if aspect_ratios is None:
                 raise ValueError("`aspect_ratios` must be provided if `pixel_values` is provided")
             # get vision tokens from vision model
-            vision_tokens = self.vision_model(pixel_values, aspect_ratios)
+            cross_attention_states = self.vision_model(pixel_values, aspect_ratios)
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -1327,15 +1330,11 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
         # temp workaround for rope, for some reason it expects a 1d tensor
         position_ids = position_ids.squeeze(0)
 
-        causal_mask = self._update_causal_mask(
-            attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
-        )
-
         outputs = self.language_model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
             position_ids=position_ids,
-            hidden_states=hidden_states,
-            attention_mask=causal_mask,
-            cross_attention_states=vision_tokens,
+            cross_attention_states=cross_attention_states,
             cross_attention_mask=cross_attention_mask[:, :, position_ids],
             past_key_values=past_key_values,
             use_cache=use_cache,
@@ -1346,54 +1345,6 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
         )
 
         return outputs
-
-    def _update_causal_mask(
-        self,
-        attention_mask: torch.Tensor,
-        input_tensor: torch.Tensor,
-        cache_position: torch.Tensor,
-        past_key_values: Cache,
-        output_attentions: bool,
-    ):
-        using_static_cache = isinstance(past_key_values, StaticCache)
-        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-
-        dtype, device = input_tensor.dtype, input_tensor.device
-        min_dtype = torch.finfo(dtype).min
-        sequence_length = input_tensor.shape[1]
-        if using_static_cache:
-            target_length = past_key_values.get_max_length()
-        else:
-            target_length = (
-                attention_mask.shape[-1]
-                if isinstance(attention_mask, torch.Tensor)
-                else past_seen_tokens + sequence_length + 1
-            )
-
-        # In case the provided `attention` mask is 2D, we generate a causal mask here (4D).
-        causal_mask = _prepare_4d_causal_attention_mask_with_cache_position(
-            attention_mask,
-            sequence_length=sequence_length,
-            target_length=target_length,
-            dtype=dtype,
-            device=device,
-            min_dtype=min_dtype,
-            cache_position=cache_position,
-            batch_size=input_tensor.shape[0],
-        )
-
-        if (
-            self.config._attn_implementation == "sdpa"
-            and attention_mask is not None
-            and attention_mask.device.type == "cuda"
-            and not output_attentions
-        ):
-            # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
-            # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
-            # Details: https://github.com/pytorch/pytorch/issues/110213
-            causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
-
-        return causal_mask
 
     def prepare_inputs_for_generation(
         self,
