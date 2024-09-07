@@ -1363,12 +1363,9 @@ class OmDetTurboDecoder(OmDetTurboPreTrainedModel):
         self.post_init()
 
     @lru_cache(maxsize=32)
-    def generate_anchors(self, spatial_shapes=None, grid_size=0.05):
+    def generate_anchors(self, spatial_shapes=None, grid_size=0.05, device="cpu", dtype=torch.float32):
         # We always generate anchors in float32 to preserve equivalence between
         # dynamic and static anchor inference
-        dtype = torch.float32
-        device = spatial_shapes.device
-
         # Ignore copy
         if spatial_shapes is None:
             raise ValueError("spatial_shapes must be provided")
@@ -1383,7 +1380,7 @@ class OmDetTurboDecoder(OmDetTurboPreTrainedModel):
             grid_xy = torch.stack([grid_x, grid_y], -1)
             valid_wh = torch.tensor([width, height], dtype=dtype, device=device)
             grid_xy = (grid_xy.unsqueeze(0) + 0.5) / valid_wh
-            wh = torch.ones_like(grid_xy) * grid_size * (2.0**level)
+            wh = torch.ones_like(grid_xy, dtype=dtype, device=device) * grid_size * (2.0**level)
             anchors.append(torch.concat([grid_xy, wh], -1).reshape(-1, height * width, 4))
         # define the valid range for anchor coordinates
         eps = 1e-2
@@ -1417,9 +1414,13 @@ class OmDetTurboDecoder(OmDetTurboPreTrainedModel):
     ):
         batch_size = len(vision_features)
         # prepare input for decoder
-        anchors, valid_mask = self.generate_anchors(vision_shapes)
+        anchors, valid_mask = self.generate_anchors(
+            vision_shapes, device=vision_features.device, dtype=vision_features.dtype
+        )
         predicted_class_features = self.encoder_vision_features(
-            torch.where(valid_mask, vision_features, torch.tensor(0.0, dtype=torch.float32))
+            torch.where(
+                valid_mask, vision_features, torch.tensor(0.0, dtype=vision_features.dtype).to(vision_features.device)
+            )
         )
 
         original_class_projected = self.encoder_class_head(class_features).permute(1, 2, 0)
@@ -1436,7 +1437,10 @@ class OmDetTurboDecoder(OmDetTurboPreTrainedModel):
         topk_ind = torch.topk(encoder_class_similarity.max(-1).values, self.num_queries, dim=1).indices.view(-1)
         # (batch_size, num_queries)
         batch_ind = (
-            torch.arange(end=batch_size, dtype=topk_ind.dtype).unsqueeze(-1).repeat(1, self.num_queries).view(-1)
+            torch.arange(end=batch_size, dtype=topk_ind.dtype, device=topk_ind.device)
+            .unsqueeze(-1)
+            .repeat(1, self.num_queries)
+            .view(-1)
         )
 
         reference_points = encoder_outputs_bboxes[batch_ind, topk_ind].view(batch_size, self.num_queries, -1)

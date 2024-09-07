@@ -712,6 +712,52 @@ class OmDetTurboModelIntegrationTests(unittest.TestCase):
         expected_classes = ["remote", "cat", "remote", "cat"]
         self.assertListEqual(results["classes"], expected_classes)
 
+    def test_inference_object_detection_head_fp16(self):
+        model = OmDetTurboForObjectDetection.from_pretrained("yonigozlan/omdet-turbo-tiny").to(
+            torch_device, dtype=torch.float16
+        )
+
+        processor = self.default_processor
+        image = prepare_img()
+        classes, task = prepare_text()
+        encoding = processor(images=image, text=classes, task=task, return_tensors="pt").to(
+            torch_device, dtype=torch.float16
+        )
+
+        with torch.no_grad():
+            outputs = model(**encoding)
+
+        expected_shape_coord_logits = torch.Size((1, model.config.num_queries, 4))
+        expected_shape_class_logits = torch.Size((1, model.config.num_queries, 2))
+        self.assertEqual(outputs.decoder_coord_logits.shape, expected_shape_coord_logits)
+        self.assertEqual(outputs.decoder_class_logits.shape, expected_shape_class_logits)
+
+        expected_class_logits = torch.tensor([[[0.9427, -2.5958], [0.2105, -3.4569], [-2.6364, -4.1610]]]).to(
+            torch_device, dtype=torch.float16
+        )
+        expected_coord_logits = torch.tensor(
+            [[[0.2550, 0.5501, 0.4738, 0.8745], [0.7695, 0.4121, 0.4603, 0.7244], [0.7691, 0.4117, 0.4603, 0.7214]]]
+        ).to(torch_device, dtype=torch.float16)
+
+        self.assertTrue(torch.allclose(outputs.decoder_class_logits[:3, :3], expected_class_logits, atol=1e-1))
+        self.assertTrue(torch.allclose(outputs.decoder_coord_logits[:3, :3], expected_coord_logits, atol=1e-3))
+
+        # verify grounded postprocessing
+        results = processor.post_process_grounded_object_detection(
+            outputs, classes=[classes], target_sizes=[image.size[::-1]]
+        )[0]
+        expected_scores = torch.tensor([0.7675, 0.7196, 0.5634, 0.5524]).to(torch_device, dtype=torch.float16)
+        expected_slice_boxes = torch.tensor([39.8870, 70.3522, 176.7424, 118.0354]).to(
+            torch_device, dtype=torch.float16
+        )
+
+        self.assertEqual(len(results["scores"]), 4)
+        self.assertTrue(torch.allclose(results["scores"], expected_scores, atol=1e-2))
+        self.assertTrue(torch.allclose(results["boxes"][0, :], expected_slice_boxes, atol=1e-1))
+
+        expected_classes = ["remote", "cat", "remote", "cat"]
+        self.assertListEqual(results["classes"], expected_classes)
+
     def test_inference_object_detection_head_no_task(self):
         model = OmDetTurboForObjectDetection.from_pretrained("yonigozlan/omdet-turbo-tiny").to(torch_device)
 
