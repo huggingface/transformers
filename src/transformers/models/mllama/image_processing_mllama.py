@@ -410,8 +410,38 @@ def make_list_of_images(images: ImageInput) -> List[List[Optional[np.ndarray]]]:
     return output_images
 
 
+def convert_aspect_ratios_to_ids(aspect_ratios: List[List[Tuple[int, int]]], mux_num_tiles: int) -> np.ndarray:
+    """
+    Convert aspect ratio tuples to unique ids with the following encoding:
+
+        id = (num_tiles_h - 1) * max_num_tiles + num_tiles_w
+        
+    For max_num_tiles = 4, we have the following encoding:
+        
+        - aspect ratio (1, 1) -> id = 1
+        - aspect ratio (1, 2) -> id = 2
+        - aspect ratio (1, 3) -> id = 3
+        - aspect ratio (1, 4) -> id = 4
+        - aspect ratio (2, 1) -> id = 5
+        - aspect ratio (2, 2) -> id = 6
+        - aspect ratio (3, 1) -> id = 9
+        - aspect ratio (4, 1) -> id = 13
+
+    For batch padding we use 0, because there might be different number of images in each batch.
+    """
+
+    batch_size = len(aspect_ratios)
+    max_num_images = max([len(row) for row in aspect_ratios])
+
+    aspect_ratios_ids = np.zeros((batch_size, max_num_images), dtype=np.int64)
+    for i, sample_aspect_ratios in enumerate(aspect_ratios):
+        for j, (num_tiles_h, num_tiles_w) in enumerate(sample_aspect_ratios):
+            aspect_ratios_ids[i, j] = (num_tiles_h - 1) * mux_num_tiles + num_tiles_w
+    return aspect_ratios_ids
+
+
 class MllamaImageProcessor(BaseImageProcessor):
-    model_input_names = ["pixel_values", "num_tiles", "aspect_ratios"]
+    model_input_names = ["pixel_values", "num_tiles", "aspect_ratios", "aspect_ratio_ids"]
 
     def __init__(
         self,
@@ -547,13 +577,14 @@ class MllamaImageProcessor(BaseImageProcessor):
 
         images, num_tiles = stack_images(images_list, max_image_tiles)
         aspect_ratios = stack_aspect_ratios(aspect_ratio_list, pad_value=1)
+        aspect_ratio_ids = convert_aspect_ratios_to_ids(aspect_ratio_list, mux_num_tiles=max_image_tiles)
 
         # images: (batch_size, num_images, MAX_num_tiles, channels, tile_height, tile_width) - padded to max num tiles
         # aspect_ratios: (batch_size, num_images, 2) - aspect ratios for each image, padded to max num images
         # num_tiles: (batch_size, num_images)  - real number of tiles for each image
 
         encoded_inputs = BatchFeature(
-            data=dict(pixel_values=images, aspect_ratios=aspect_ratios),
+            data=dict(pixel_values=images, aspect_ratios=aspect_ratios, aspect_ratio_ids=aspect_ratio_ids),
             tensor_type=return_tensors,
         )
         encoded_inputs["num_tiles"] = num_tiles
