@@ -605,6 +605,7 @@ class ProPainterVideoProcessor(BaseImageProcessor):
 
         if video_painting_mode == "video_inpainting":
             pixel_values_masks = [
+                (
                     self._preprocess(
                         images=mask,
                         do_resize=do_resize,
@@ -637,6 +638,7 @@ class ProPainterVideoProcessor(BaseImageProcessor):
                         is_mask_frame=True,
                         mask_dilation=mask_dilation,
                     )
+                )
                 for mask in masks
             ]
         elif video_painting_mode == "video_outpainting":
