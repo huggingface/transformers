@@ -1197,7 +1197,7 @@ class ProPainterSoftSplit(nn.Module):
         self.stride = config.stride
         self.padding = config.padding
         self.unfold = nn.Unfold(kernel_size=config.kernel_size, stride=config.stride, padding=config.padding)
-        input_features = reduce((lambda x, y: x * y), config.kernel_size) * config.num_channels
+        input_features = (reduce((lambda x, y: x * y), config.kernel_size) * config.num_channels)
         self.embedding = nn.Linear(input_features, config.hidden_size)
 
     def forward(self, hidden_states, batch_size, output_size):
@@ -1221,7 +1221,7 @@ class ProPainterSoftComp(nn.Module):
         super().__init__()
         self.config = config
         self.relu = nn.LeakyReLU(0.2, inplace=True)
-        output_features = reduce((lambda x, y: x * y), config.kernel_size) * config.num_channels
+        output_features = (reduce((lambda x, y: x * y), config.kernel_size) * config.num_channels)
         self.embedding = nn.Linear(config.hidden_size, output_features)
         self.kernel_size = config.kernel_size
         self.stride = config.stride
@@ -3902,15 +3902,6 @@ class ProPainterModel(ProPainterPreTrainedModel):
             comp_frames = pixel_values_videos * (1.0 - masks_dilated) + pred_imgs * masks_dilated
 
         else:
-            # original_frames are used for inference part only
-            original_frames = [
-                frame.permute(1, 2, 0)
-                .to(torch.uint8)
-                .cpu()
-                .numpy()  # Convert to [height, width, channels] and numpy array
-                for frame in pixel_values_videos[0]  # Take the first video from the tensor
-            ]
-
             height, width = self.size[3], self.size[4]
             comp_frames = [None] * self.video_length
 
@@ -3972,7 +3963,7 @@ class ProPainterModel(ProPainterPreTrainedModel):
 
                 for i in range(len(neighbor_ids)):
                     idx = neighbor_ids[i]
-                    img = np.array(pred_img[i]).astype(np.uint8) * binary_masks[i] + original_frames[idx] * (
+                    img = np.array(pred_img[i]).astype(np.uint8) * binary_masks[i] + self.original_frames[idx] * (
                         1 - binary_masks[i]
                     )
                     if comp_frames[idx] is None:
@@ -4124,6 +4115,14 @@ class ProPainterModel(ProPainterPreTrainedModel):
             raise ValueError("You have to specify pixel_values_videos")
 
         if not self.training:
+            # original_frames are used for inference part only
+            self.original_frames = pixel_values_videos
+            self.original_frames = (self.original_frames*255.0).to(torch.uint8).cpu().numpy()
+            self.original_frames = [
+                [frame.transpose(1, 2, 0) for frame in video]
+                for video in self.original_frames
+            ][0]
+
             pixel_values_videos = pixel_values_videos * 2 - 1
 
         losses = ProPainterLosses(self.config)

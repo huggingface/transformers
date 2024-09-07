@@ -291,7 +291,7 @@ class ProPainterVideoProcessor(BaseImageProcessor):
         do_center_crop: bool = False,
         crop_size: Dict[str, int] = None,
         do_rescale: bool = True,
-        rescale_factor: Union[int, float] = 1 / 255,
+        rescale_factor: Union[int, float] = 1 / 255.0,
         do_normalize: bool = False,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
@@ -605,7 +605,6 @@ class ProPainterVideoProcessor(BaseImageProcessor):
 
         if video_painting_mode == "video_inpainting":
             pixel_values_masks = [
-                (
                     self._preprocess(
                         images=mask,
                         do_resize=do_resize,
@@ -638,7 +637,6 @@ class ProPainterVideoProcessor(BaseImageProcessor):
                         is_mask_frame=True,
                         mask_dilation=mask_dilation,
                     )
-                )
                 for mask in masks
             ]
         elif video_painting_mode == "video_outpainting":
