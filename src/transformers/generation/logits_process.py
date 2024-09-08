@@ -1198,7 +1198,7 @@ class SequenceBiasLogitsProcessor(LogitsProcessor):
             )
 
         def all_token_bias_pairs_are_valid(sequence):
-            (
+            return (
                 isinstance(token_bias_pair, list)
                 and all(isinstance(token_id, (int, np.integer)) and token_id > 0 for token_id in token_bias_pair)
                 or isinstance(token_bias_pair, float)
