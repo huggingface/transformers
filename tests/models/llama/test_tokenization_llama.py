@@ -828,7 +828,9 @@ class CommonSpmIntegrationTests(unittest.TestCase):
     @require_read_token
     def test_bos_eos_tokens(self):
         new_eos_token = "<new_eos>"
-        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/llama-3-8b-internal", add_bos_token=False, add_eos_token=True)
+        tokenizer = AutoTokenizer.from_pretrained(
+            "hf-internal-testing/llama-3-8b-internal", add_bos_token=False, add_eos_token=True
+        )
         self.assertNotEqual(tokenizer("hello")["input_ids"][0], tokenizer.bos_token_id)  # no bos token
         self.assertEqual(tokenizer("hello")["input_ids"][-1], tokenizer.eos_token_id)  # eos token
 
