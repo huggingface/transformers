@@ -180,7 +180,7 @@ def _mock_all_init_weights(self):
 
 
 @contextmanager
-def _deepspeed_zero3_context(ds_config):
+def _deepspeed_zero3(ds_config):
     dschf = HfDeepSpeedConfig(ds_config)
     set_hf_deepspeed_config(dschf)
     try:
@@ -1843,14 +1843,14 @@ class ModelTesterMixin:
             # Check to make sure the type of embeddings returned post resizing is same as type of input
             type_model_embed_post_resize = type(model_embed)
             self.assertEqual(type_model_embed_pre_resize, type_model_embed_post_resize)
-            # Check that the model can still do a forward pass successfully (every parameter should be resized)
-            if not deepspeed_enabled:
-                # A distriputed launcher is needed for the forward pass when deepspeed is enabled
-                model(**self._prepare_for_class(inputs_dict, model_class))
             # Check that added embeddings mean is close to the old embeddings mean
             old_embeddings_mean = torch.mean(model_embed.weight.data[:-10, :], axis=0).cpu().numpy()
             new_embeddings_mean = torch.mean(model_embed.weight.data[-10:, :], axis=0).cpu().numpy()
             self.assert_almost_equals(old_embeddings_mean, new_embeddings_mean, tol=1e-2)
+            # Check that the model can still do a forward pass successfully (every parameter should be resized)
+            if not deepspeed_enabled:
+                # A distriputed launcher is needed for the forward pass when deepspeed is enabled
+                model(**self._prepare_for_class(inputs_dict, model_class))
 
             # Check that resizing the token embeddings with a smaller vocab size decreases the model's vocab size
             model_embed = model.resize_token_embeddings(model_vocab_size - 15)
@@ -1917,7 +1917,7 @@ class ModelTesterMixin:
                 "offload_param": {"device": "cpu", "pin_memory": True},
             },
         }
-        with _deepspeed_zero3_context(ds_config):
+        with _deepspeed_zero3(ds_config):
             self.test_resize_tokens_embeddings(deepspeed_enabled=True)
 
     @require_deepspeed
@@ -1928,7 +1928,7 @@ class ModelTesterMixin:
                 "stage": 3,
             },
         }
-        with _deepspeed_zero3_context(ds_config):
+        with _deepspeed_zero3(ds_config):
             self.test_resize_tokens_embeddings(deepspeed_enabled=True)
 
     def test_resize_embeddings_untied(self):
