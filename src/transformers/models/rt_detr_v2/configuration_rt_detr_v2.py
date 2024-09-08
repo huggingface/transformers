@@ -106,6 +106,8 @@ class RTDetrV2Config(PretrainedConfig):
             The number of input feature levels.
         decoder_n_points (`int`, *optional*, defaults to 4):
             The number of sampled keys in each feature level for each attention head in the decoder.
+        decoder_n_levels (`int`, *optional*, defaults to 3):
+            The number of level for each attention head in the decoder.
         decoder_offset_scale (`float`, *optional*, defaults to 0.5):
             The number of offset scale in the decoder.
         decoder_layers (`int`, *optional*, defaults to 6):
@@ -219,6 +221,7 @@ class RTDetrV2Config(PretrainedConfig):
         decoder_ffn_dim=1024,
         num_feature_levels=3,
         decoder_n_points=4,
+        decoder_n_levels=3,
         decoder_offset_scale=0.5,
         decoder_layers=6,
         decoder_attention_heads=8,
@@ -311,6 +314,7 @@ class RTDetrV2Config(PretrainedConfig):
         self.decoder_in_channels = decoder_in_channels
         self.num_feature_levels = num_feature_levels
         self.decoder_n_points = decoder_n_points
+        self.decoder_n_levels = decoder_n_levels
         self.decoder_offset_scale = decoder_offset_scale
         self.decoder_layers = decoder_layers
         self.decoder_attention_heads = decoder_attention_heads

@@ -814,7 +814,7 @@ class RTDetrV2MultiscaleDeformableAttention(nn.Module):
     Multiscale deformable attention as proposed in RTDETRV2.
     """
 
-    def __init__(self, config: RTDetrV2Config, num_heads: int, n_points: int, offset_scale: float):
+    def __init__(self, config: RTDetrV2Config):
         super().__init__()
 
         kernel_loaded = MultiScaleDeformableAttention is not None
@@ -824,11 +824,11 @@ class RTDetrV2MultiscaleDeformableAttention(nn.Module):
             except Exception as e:
                 logger.warning(f"Could not load the custom kernel for multi-scale deformable attention: {e}")
 
-        if config.d_model % num_heads != 0:
+        if config.d_model % config.decoder_attention_heads != 0:
             raise ValueError(
-                f"embed_dim (d_model) must be divisible by num_heads, but got {config.d_model} and {num_heads}"
+                f"embed_dim (d_model) must be divisible by num_heads, but got {config.d_model} and {config.decoder_attention_heads}"
             )
-        dim_per_head = config.d_model // num_heads
+        dim_per_head = config.d_model // config.decoder_attention_heads
         # check if dim_per_head is power of 2
         if not ((dim_per_head & (dim_per_head - 1) == 0) and dim_per_head != 0):
             warnings.warn(
@@ -840,18 +840,18 @@ class RTDetrV2MultiscaleDeformableAttention(nn.Module):
         self.im2col_step = 64
 
         self.d_model = config.d_model
-        self.n_levels = config.num_feature_levels
-        self.n_heads = num_heads
-        self.offset_scale = offset_scale
-        self.n_points = n_points
+        self.n_levels = config.decoder_n_levels
+        self.n_heads = config.decoder_attention_heads
+        self.offset_scale = config.decoder_offset_scale
+        self.n_points = config.decoder_n_points
 
-        n_points_list = [n_points for _ in range(self.n_levels)]
+        n_points_list = [self.n_points for _ in range(self.n_levels)]
         self.n_points_list = n_points_list
         n_points_scale = [1 / n for n in n_points_list for _ in range(n)]
         self.register_buffer("n_points_scale", torch.tensor(n_points_scale, dtype=torch.float32))
 
-        self.sampling_offsets = nn.Linear(config.d_model, num_heads * self.n_levels * n_points * 2)
-        self.attention_weights = nn.Linear(config.d_model, num_heads * self.n_levels * n_points)
+        self.sampling_offsets = nn.Linear(config.d_model, self.n_heads * self.n_levels * self.n_points * 2)
+        self.attention_weights = nn.Linear(config.d_model, self.n_heads * self.n_levels * self.n_points)
         self.value_proj = nn.Linear(config.d_model, config.d_model)
         self.output_proj = nn.Linear(config.d_model, config.d_model)
 
@@ -1094,12 +1094,7 @@ class RTDetrV2DecoderLayer(nn.Module):
 
         self.self_attn_layer_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
         # cross-attention
-        self.encoder_attn = RTDetrV2MultiscaleDeformableAttention(
-            config,
-            num_heads=config.decoder_attention_heads,
-            n_points=config.decoder_n_points,
-            offset_scale=config.decoder_offset_scale,
-        )
+        self.encoder_attn = RTDetrV2MultiscaleDeformableAttention(config)
         self.encoder_attn_layer_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
         # feedforward neural networks
         self.fc1 = nn.Linear(config.d_model, config.decoder_ffn_dim)
@@ -1153,7 +1148,6 @@ class RTDetrV2DecoderLayer(nn.Module):
         hidden_states = self.self_attn_layer_norm(hidden_states)
 
         second_residual = hidden_states
-
         # Cross-Attention
         cross_attn_weights = None
         hidden_states, cross_attn_weights = self.encoder_attn(
@@ -1553,7 +1547,6 @@ class RTDetrV2Decoder(RTDetrPreTrainedModel):
         for idx, decoder_layer in enumerate(self.layers):
             reference_points_input = reference_points.unsqueeze(2)
             position_embeddings = self.query_pos_head(reference_points)
-
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
