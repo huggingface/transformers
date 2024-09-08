@@ -15,7 +15,8 @@
 
 import math
 import numpy as np
-
+from functools import lru_cache
+from collections import defaultdict
 from typing import Any, Dict, List, Optional, Tuple, Union, Any, Tuple, Set, Dict, List
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
@@ -39,104 +40,158 @@ from ...image_utils import (
 from ...utils import TensorType, logging
 
 
-# TODO: update aspect ratio stack for different shapes
 # TODO: update docs
 # TODO: update copied from statements
 
 logger = logging.get_logger(__name__)
 
 
-def get_all_number_factors(n: int) -> Set[int]:
-    """Return all factors of a number."""
-    factors = set()
-    for i in range(1, int(n**0.5) + 1):
-        if n % i == 0:
-            factors.add(i)
-            factors.add(n // i)
-    return factors
-
-
-def find_supported_aspect_ratios(num_tiles: int) -> Dict[float, List[Tuple[int, int]]]:
+@lru_cache(maxsize=10)
+def get_all_number_factors(number: int) -> List[int]:
     """
-    This function computes all the allowed aspect ratios for a fixed
-    number of input tiles.
-    For example, with `num_tiles=5`, it will return:
-    {
-        0.2: [(1, 5)],
-        5.0: [(5, 1)],
-        0.25: [(1, 4)],
-        1.0: [(2, 2), (1, 1)],
-        4.0: [(4, 1)],
-        0.3333333333333333: [(1, 3)],
-        3.0: [(3, 1)],
-        0.5: [(1, 2)],
-        2.0: [(2, 1)]
-    }
-    """
-    asp_dict = {}
-    for tile_size in range(num_tiles, 0, -1):
-        _factors = sorted(get_all_number_factors(tile_size))
-        _asp_ratios = [(x, tile_size // x) for x in _factors]
-        for ratio in _asp_ratios:
-            k = ratio[0] / ratio[1]
-            if k not in asp_dict:
-                asp_dict[k] = [ratio]
-            else:
-                asp_dict[k].append(ratio)
-    return asp_dict
+    Return a sorted list of all unique factors of a given number.
 
-
-def find_closest_aspect_ratio(num_tiles: int, img_width: int, img_height: int, tile_size: int) -> Tuple:
-    """
-    Given an image width, height and target number of tiles
-    this function will find the closest supported aspect ratio.
+    This function calculates and returns all positive integers that evenly divide the input number,
+    including 1 and the number itself. The factors are returned in ascending order.
 
     Args:
-        tile_size: tile size
+        number (int): The positive integer for which to find factors.
 
+    Returns:
+        List[int]: A sorted list of all unique factors of the input number.
+
+    Examples:
+        >>> get_all_number_factors(4)
+        [1, 2, 4]
+        >>> get_all_number_factors(6)
+        [1, 2, 3, 6]
+        >>> get_all_number_factors(12)
+        [1, 2, 3, 4, 6, 12]
+
+    Note:
+        - The function uses an optimized algorithm that only checks up to the square root of the input number.
+        - The result is cached using the @lru_cache decorator for improved performance on repeated calls.
     """
-    tgt_ar = img_width / img_height
-    asp_dict = find_supported_aspect_ratios(num_tiles)
-    cl_d, cl_p = 1e23, None
-    if tgt_ar >= 1:
-        cl_p = min(
-            [k for k in asp_dict.keys() if k <= tgt_ar],
-            key=lambda x: abs(x - tgt_ar),
-        )
-        v = asp_dict[cl_p]
-        # select width
-        widths = [(idx, tile_size * vv[0]) for idx, vv in enumerate(v)]
-        tgt_idx = max(widths, key=lambda x: x[1])[0]
+    factors = set()
+    max_possible_factor = int(number**0.5) + 1
+    for factor in range(1, max_possible_factor):
+        if number % factor == 0:
+            factors.add(factor)
+            factors.add(number // factor)
+    return sorted(factors)
+
+
+@lru_cache(maxsize=10)
+def find_supported_aspect_ratios(max_num_tiles: int) -> Dict[float, List[Tuple[int, int]]]:
+    """
+    Computes all allowed aspect ratios for a given maximum number of input tiles.
+
+    This function calculates all possible arrangements of tiles that can be formed
+    within the constraint of the maximum number of tiles. Each arrangement is 
+    represented by its aspect ratio (width/height) and the corresponding tile configuration.
+
+    Args:
+        max_num_tiles (int): The maximum number of tiles allowed.
+
+    Returns:
+        Dict[float, List[Tuple[int, int]]]: A dictionary where:
+            - Keys are aspect ratios (float)
+            - Values are lists of tuples, each tuple representing a valid (width, height) 
+              configuration in terms of number of tiles.
+
+    Example:
+        For max_num_tiles=5, the function returns:
+        {
+            0.2: [(1, 5)],   # 1 tile wide, 5 tiles high
+            5.0: [(5, 1)],   # 5 tiles wide, 1 tile high
+            0.25: [(1, 4)],  # 1 tile wide, 4 tiles high
+            1.0: [(2, 2), (1, 1)],  # Square configurations
+            4.0: [(4, 1)],   # 4 tiles wide, 1 tile high
+            0.3333333333333333: [(1, 3)],  # 1 tile wide, 3 tiles high
+            3.0: [(3, 1)],   # 3 tiles wide, 1 tile high
+            0.5: [(1, 2)],   # 1 tile wide, 2 tiles high
+            2.0: [(2, 1)]    # 2 tiles wide, 1 tile high
+        }
+
+    Note:
+        - The aspect ratio is calculated as width/height.
+        - Multiple configurations can have the same aspect ratio (e.g., 2x2 and 1x1).
+        - The function considers all divisors of numbers up to max_num_tiles.
+    """
+    aspect_ratios_dict = defaultdict(list)
+    for num_tiles in range(max_num_tiles, 0, -1):
+        factors = get_all_number_factors(num_tiles)
+        for num_tiles_width in factors:
+            num_tiles_height = num_tiles // num_tiles_width
+            ratio = num_tiles_width / num_tiles_height
+            aspect_ratios_dict[ratio].append((num_tiles_width, num_tiles_height))
+    return aspect_ratios_dict
+
+
+@lru_cache(maxsize=100)
+def find_closest_aspect_ratio(max_num_tiles: int, image_width: int, image_height: int) -> Tuple:
+    """
+    Find the closest supported aspect ratio for an image given its dimensions and maximum number of tiles.
+
+    This function determines the most suitable aspect ratio for an image, considering the constraints
+    of a maximum number of tiles. It aims to find a tile configuration that closely matches the
+    original image's aspect ratio while staying within the tile limit.
+
+    Args:
+        max_num_tiles (int): The maximum number of tiles allowed for the image.
+        image_width (int): The width of the input image.
+        image_height (int): The height of the input image.
+
+    Returns:
+        Tuple[int, int]: A tuple representing the number of tiles in width and height
+        for the closest supported aspect ratio.
+
+    Note:
+        The function uses the `find_supported_aspect_ratios` to get all possible tile configurations,
+        then selects the one that best matches the input image's aspect ratio.
+    """
+    target_aspect_ratio = image_width / image_height
+    aspect_ratio_dict = find_supported_aspect_ratios(max_num_tiles)
+    
+    if target_aspect_ratio >= 1:
+        # Search closest aspect ratio
+        ratios = [ratio for ratio in aspect_ratio_dict if ratio <= target_aspect_ratio]
+        closest_aspect_ratio = min(ratios, key=lambda ratio: abs(ratio - target_aspect_ratio))
+        aspect_ratio_factors = aspect_ratio_dict[closest_aspect_ratio]
+        # Find the aspect ratio factor with the maxium width
+        widths = [num_tiles_width for num_tiles_width, num_tiles_height in aspect_ratio_factors]
+        index = widths.index(max(widths))
+        aspect_ratio = aspect_ratio_factors[index]
     else:
-        cl_p = min(
-            [k for k in asp_dict.keys() if k > tgt_ar],
-            key=lambda x: abs(1 / x - 1 / tgt_ar),
-        )
-        v = asp_dict[cl_p]
-        # select height
-        heights = [(idx, tile_size * vv[1]) for idx, vv in enumerate(v)]
-        tgt_idx = max(heights, key=lambda x: x[1])[0]
-    out = v[tgt_idx]
-    return out
+        # Search closest aspect ratio
+        ratios = [ratio for ratio in aspect_ratio_dict if ratio > target_aspect_ratio]
+        closest_aspect_ratio = min(ratios, key=lambda ratio: abs(1 / ratio - 1 / target_aspect_ratio))
+        aspect_ratio_factors = aspect_ratio_dict[closest_aspect_ratio]
+        # Find the aspect ratio factor with the maxium height
+        heights = [num_tiles_height for num_tiles_width, num_tiles_height in aspect_ratio_factors]
+        index = heights.index(max(heights))
+        aspect_ratio = aspect_ratio_factors[index]
+    return aspect_ratio
 
 
 def get_size_for_image_fitted_to_canvas(
     image_height: int,
     image_width: int,
     tile_size: int,
-):
+) -> Tuple[int, int]:
+    """
+    Get the size for an image fitted to a canvas.
+    """
     scale = image_width / image_height
 
-    if scale > 1.0:
-        # width > height
-        new_w = max(tile_size, image_width)
-        new_h = math.floor(new_w / scale)
+    if image_width > image_height:
+        new_image_width = max(tile_size, image_width)
+        new_image_height = math.floor(new_image_width / scale)
     else:
-        # height >= width
-        new_h = max(tile_size, image_height)
-        new_w = math.floor(new_h * scale)
+        new_image_height = max(tile_size, image_height)
+        new_image_width = math.floor(new_image_height * scale)
 
-    return new_h, new_w
+    return new_image_height, new_image_width
 
 
 def get_size_for_image_not_fitted_to_canvas(
@@ -144,19 +199,20 @@ def get_size_for_image_not_fitted_to_canvas(
     image_width: int,
     canvas_height: int,
     canvas_width: int,
-):
+) -> Tuple[int, int]:
+    """
+    Get the size for an image not fitted to a canvas.
+    """
     scale = image_width / image_height
 
-    if scale > 1.0:
-        # width > height
-        new_w = canvas_width
-        new_h = math.floor(new_w / scale)
+    if image_width > image_height:
+        new_image_width = canvas_width
+        new_image_height = math.floor(new_image_width / scale)
     else:
-        # height >= width
-        new_h = canvas_height
-        new_w = math.floor(new_h * scale)
+        new_image_height = canvas_height
+        new_image_width = math.floor(new_image_height * scale)
 
-    return new_h, new_w
+    return new_image_height, new_image_width
 
 
 def get_target_image_size_and_aspect_ratio(
@@ -183,10 +239,9 @@ def get_target_image_size_and_aspect_ratio(
     # If we did not find a canvas, we have to find the closest aspect ratio and downsample the image
     else:
         aspect_ratio = find_closest_aspect_ratio(
-            num_tiles=max_image_tiles,
-            img_width=image_width,
-            img_height=image_height,
-            tile_size=tile_size,
+            max_num_tiles=max_image_tiles,
+            image_width=image_width,
+            image_height=image_height,
         )
         canvas_width = aspect_ratio[0] * tile_size
         canvas_height = aspect_ratio[1] * tile_size
