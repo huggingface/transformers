@@ -167,8 +167,3 @@ tags
 
 # ruff
 .ruff_cache
-slurm-*.out
-run*.py
-run*.sh
-dataset.py
-prompts.py
