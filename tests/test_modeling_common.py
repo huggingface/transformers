@@ -1920,7 +1920,7 @@ class ModelTesterMixin:
             else:
                 model = model_class(config)
                 model.to(torch_device)
-            
+
             model_vocab_size = config.get_text_config().vocab_size
             # Retrieve the embeddings and clone theme
             model_embed = model.resize_token_embeddings(model_vocab_size)
