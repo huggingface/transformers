@@ -122,6 +122,7 @@ def get_full_row_masked_out_mask(
 
 def convert_sparse_cross_attention_mask_to_dense(
     cross_attention_token_mask: List[List[List[int]]],
+    attention_mask: torch.Tensor,
     num_tiles: List[List[int]],
     max_num_tiles: int,
     total_len: int,
@@ -141,14 +142,17 @@ def convert_sparse_cross_attention_mask_to_dense(
         device=device,
     )
 
-    for idx, (mask_i, num_tiles_i) in enumerate(zip(cross_attention_token_mask, num_tiles)):
+    for batch_idx, (mask_i, num_tiles_i, text_attn_mask) in enumerate(zip(cross_attention_token_mask, num_tiles, attention_mask)):
         for mask_idx, (token_locations, mask_num_chunks) in enumerate(zip(mask_i, num_tiles_i)):
             if len(token_locations) == 2:
                 start, end = token_locations
                 end = min(end, total_len)
                 if end == -1:
                     end = total_len
-                out_masks[idx, start:end, mask_idx, :mask_num_chunks].fill_(0.0)
+                out_masks[batch_idx, start:end, mask_idx, :mask_num_chunks].fill_(0.0)
+        curr_attn_mask = text_attn_mask[-(out_masks.shape[1] - 100): ]
+        masked_locations = torch.where(curr_attn_mask == 0)[0]
+        out_masks[batch_idx, masked_locations]  = inf_value # text_attn_mask is 1D of total_len-100 length
 
     return out_masks
 
@@ -158,7 +162,7 @@ def prepare_cross_attention_mask(
     num_vision_tokens: int,
 ) -> Tuple[Tensor, Tensor]:
 
-    batch_size, text_total_length, _, _ = cross_attention_mask.shape
+    batch_size, text_total_length, _, _ = cross_attention_mask.shape # 2, 109, 1, 4
 
     cross_attention_mask = cross_attention_mask.repeat_interleave(num_vision_tokens, dim=2)
     cross_attention_mask = cross_attention_mask.view(batch_size, text_total_length, -1)
@@ -272,12 +276,14 @@ def precompute_freqs_cis(
     freqs_cis = torch.polar(torch.ones_like(freqs), freqs)  # complex64
     return freqs_cis
 
-
 def reshape_for_broadcast(freqs_cis: torch.Tensor, x: torch.Tensor):
     ndim = x.ndim
     assert 0 <= 1 < ndim
-    assert freqs_cis.shape == (x.shape[1], x.shape[-1])
-    shape = [d if i == 1 or i == ndim - 1 else 1 for i, d in enumerate(x.shape)]
+    # assert freqs_cis.shape == (x.shape[1], x.shape[-1])
+    if x.shape[0] == 1: # if batch-size = 1
+        shape = [d if i == 1 or i == ndim - 1 else 1 for i, d in enumerate(x.shape)]
+    else: # if batchsize > 1
+        shape = [*freqs_cis.shape[:2], 1, freqs_cis.shape[-1]]
     return freqs_cis.view(*shape)
 
 
@@ -1456,6 +1462,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
         # create masks for cross-attention based on image token locations
         cross_attention_mask = convert_sparse_cross_attention_mask_to_dense(
             cross_attention_token_mask=cross_attention_token_mask,
+            attention_mask=attention_mask,
             num_tiles=num_tiles,
             total_len=input_ids.shape[-1] + 100,
             max_num_tiles=self.vision_max_num_chunks,
@@ -1463,6 +1470,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
             dtype=self.dtype,
         )
 
+        print(cross_attention_mask.shape, cross_attention_token_mask)
         cross_attention_mask, full_text_row_masked_out_mask = prepare_cross_attention_mask(
             cross_attention_mask=cross_attention_mask,
             num_vision_tokens=self.model.vision_model.vision_encoder.num_patches,
@@ -1493,8 +1501,8 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
             position_ids=position_ids,
             hidden_states=hidden_states,
             cross_attention_key_value=cross_attention_key_value,
-            cross_attention_mask=cross_attention_mask[:, :, position_ids],
-            full_text_row_masked_out_mask=full_text_row_masked_out_mask[:, :, position_ids],
+            cross_attention_mask=cross_attention_mask[:, :, :position_ids.shape[-1]],
+            full_text_row_masked_out_mask=full_text_row_masked_out_mask[:, :, :position_ids.shape[-1]],
             attention_mask=causal_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,

@@ -168,6 +168,7 @@ class MllamaProcessor(ProcessorMixin):
                     "Invalid input text. Please provide a string, or a list of strings"
                 )
             n_images_in_text = [t.count(self.image_token) for t in text]
+            _ = text_kwargs.pop("padding_side", None) # hack until padding-side is an accepted kwarg by tokenizers
             encoding = self.tokenizer(text, **text_kwargs)
             data.update(encoding)
 
