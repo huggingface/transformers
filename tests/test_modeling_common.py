@@ -1942,7 +1942,6 @@ class ModelTesterMixin:
     @require_torch_gpu
     def test_resize_tokens_embeddings_with_deepspeed(self):
         ds_config = {
-            "train_batch_size": 1,
             "zero_optimization": {
                 "stage": 3,
                 "offload_param": {"device": "cpu", "pin_memory": True},
@@ -1955,7 +1954,6 @@ class ModelTesterMixin:
     @require_torch_multi_gpu
     def test_resize_tokens_embeddings_with_deepspeed_multi_gpu(self):
         ds_config = {
-            "train_batch_size": 1,
             "zero_optimization": {
                 "stage": 3,
             },
