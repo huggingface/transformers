@@ -49,7 +49,6 @@ from transformers import (
 )
 from transformers.integrations import HfDeepSpeedConfig
 from transformers.integrations.deepspeed import (
-    set_hf_deepspeed_config,
     unset_hf_deepspeed_config,
 )
 from transformers.models.auto import get_values
@@ -182,9 +181,8 @@ def _mock_all_init_weights(self):
 @contextmanager
 def _deepspeed_zero3(ds_config):
     dschf = HfDeepSpeedConfig(ds_config)
-    set_hf_deepspeed_config(dschf)
     try:
-        yield
+        yield dschf
     finally:
         unset_hf_deepspeed_config()
 
@@ -1944,6 +1942,7 @@ class ModelTesterMixin:
     @require_torch_gpu
     def test_resize_tokens_embeddings_with_deepspeed(self):
         ds_config = {
+            "train_batch_size": 1,
             "zero_optimization": {
                 "stage": 3,
                 "offload_param": {"device": "cpu", "pin_memory": True},
@@ -1956,6 +1955,7 @@ class ModelTesterMixin:
     @require_torch_multi_gpu
     def test_resize_tokens_embeddings_with_deepspeed_multi_gpu(self):
         ds_config = {
+            "train_batch_size": 1,
             "zero_optimization": {
                 "stage": 3,
             },
