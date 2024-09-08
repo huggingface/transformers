@@ -174,13 +174,26 @@ def find_closest_aspect_ratio(max_num_tiles: int, image_width: int, image_height
     return aspect_ratio
 
 
-def get_size_for_image_fitted_to_canvas(
+def get_size_for_image_fitted_to_tile_size(
     image_height: int,
     image_width: int,
     tile_size: int,
 ) -> Tuple[int, int]:
     """
-    Get the size for an image fitted to a canvas.
+    Calculate the size of an image when fitted to a tile of a specific size while maintaining aspect ratio.
+
+    This function determines the new dimensions of an image when it's scaled to fit
+    a tile of specified size. The scaling ensures that:
+    1. The larger dimension of the image is at least as large as the tile size.
+    2. The smaller dimension is scaled proportionally to maintain the original aspect ratio.
+
+    Args:
+        image_height (int): The height of the original image.
+        image_width (int): The width of the original image.
+        tile_size (int): The size of the tile to fit the image into.
+
+    Returns:
+        Tuple[int, int]: A tuple containing the new (height, width) of the fitted image.
     """
     scale = image_width / image_height
 
@@ -194,14 +207,28 @@ def get_size_for_image_fitted_to_canvas(
     return new_image_height, new_image_width
 
 
-def get_size_for_image_not_fitted_to_canvas(
+def get_size_for_image_fitted_to_canvas(
     image_height: int,
     image_width: int,
     canvas_height: int,
     canvas_width: int,
 ) -> Tuple[int, int]:
     """
-    Get the size for an image not fitted to a canvas.
+    Calculate the size of an image when fitted to a canvas while maintaining aspect ratio.
+
+    This function determines the new dimensions of an image when it's scaled to fit
+    a canvas of specified height and width. The scaling ensures that:
+    1. The larger dimension of the image matches the corresponding dimension of the canvas.
+    2. The smaller dimension is scaled proportionally to maintain the original aspect ratio.
+
+    Args:
+        image_height (int): The height of the original image.
+        image_width (int): The width of the original image.
+        canvas_height (int): The height of the target canvas.
+        canvas_width (int): The width of the target canvas.
+
+    Returns:
+        Tuple[int, int]: A tuple containing the new (height, width) of the fitted image.
     """
     scale = image_width / image_height
 
@@ -215,44 +242,122 @@ def get_size_for_image_not_fitted_to_canvas(
     return new_image_height, new_image_width
 
 
+def get_aspect_ratio_of_optimal_canvas_larger_than_image(max_num_tiles: int, image_width: int, image_height: int, tile_size: int) -> Optional[Tuple[int, int]]:
+    """
+    Determines the optimal canvas size for an image given a maximum number of tiles.
+
+    This function attempts to fit an image without downsampling into various canvas sizes that can be constructed
+    from a grid of tiles. It aims to find the best fit that minimizes unused space while
+    maximizing the image's shorter edge.
+
+    Args:
+        max_num_tiles (int): The maximum number of tiles available to construct the canvas.
+        image_width (int): The width of the input image.
+        image_height (int): The height of the input image.
+        tile_size (int): The size of each square tile (width and height are equal).
+
+    Returns:
+        Optional[Tuple[int, int]]: A tuple containing the number of tiles in width and height
+        for the optimal canvas, or None if no suitable canvas is found.
+    """
+    # Initialize the optimal canvas to None. If no canvas is found where image fits, function returns None.
+    optimal_canvas = None
+
+    # Gather all potential supported canvas arrangements
+    potential_arrangements = []
+    aspect_ratios_dict = find_supported_aspect_ratios(max_num_tiles)
+    for aspect_ratios in aspect_ratios_dict.values():
+        potential_arrangements.extend(aspect_ratios)
+
+    best_gap = float("inf")
+
+    for num_tiles_width, num_tiles_height in potential_arrangements:
+        
+        # Compute the canvas size
+        canvas_width = num_tiles_width * tile_size
+        canvas_height = num_tiles_height * tile_size
+
+        # Check if image can fit into the canvas without downsampling
+        if canvas_width >= image_width and canvas_height >= image_height:
+            # If we did not find a good canvas yet, we will use the current one
+            if optimal_canvas is None:
+                optimal_canvas = (num_tiles_width, num_tiles_height)
+            
+            # Compute the gap between the canvas and the image and update the best gap
+            current_gap = (canvas_width - image_width) + (canvas_height - image_height)
+            if current_gap < best_gap:
+                optimal_canvas = (num_tiles_width, num_tiles_height)
+                best_gap = current_gap
+
+    return optimal_canvas
+
+
 def get_target_image_size_and_aspect_ratio(
     image_height: int,
     image_width: int,
     max_image_tiles: int,
     tile_size: int,
-):
-    aspect_ratio = fit_image_to_canvas(
-        num_tiles=max_image_tiles,
-        img_width=image_width,
-        img_height=image_height,
+) -> Tuple[Tuple[int, int], Optional[Tuple[int, int]]]:
+    """
+    Get the target image size and aspect ratio for an image to fit optimally within a tiled canvas.
+
+    This function determines the best size to resize an image and the optimal aspect ratio of the canvas
+    it should be placed on, given constraints on the maximum number of tiles and tile size.
+
+    The function follows these steps:
+    1. Attempt to find an optimal canvas larger than the image.
+    2. If a larger canvas is found, resize the image to better fit the tile size.
+    3. If no larger canvas is found, find the closest possible aspect ratio and downscale the image.
+
+    Args:
+        image_height (int): The height of the original image.
+        image_width (int): The width of the original image.
+        max_image_tiles (int): The maximum number of tiles allowed in the canvas.
+        tile_size (int): The size of each tile (assumed to be square).
+
+    Returns:
+        Tuple[Tuple[int, int], Tuple[int, int]]: A tuple containing:
+            - The new dimensions (height, width) for the resized image.
+            - The aspect ratio of the canvas as (num_tiles_width, num_tiles_height)
+    """
+
+    # Get the aspect ratio of the optimal canvas larger than the image
+    # if no canvas larger than image can be found with given parameters,
+    # aspect_ratio will be None
+    aspect_ratio = get_aspect_ratio_of_optimal_canvas_larger_than_image(
+        max_num_tiles=max_image_tiles,
+        image_width=image_width,
+        image_height=image_height,
         tile_size=tile_size,
     )
-    is_fit_to_canvas = aspect_ratio is not None
-
-    if is_fit_to_canvas:
-        size = get_size_for_image_fitted_to_canvas(
+    
+    # If we found a canvas, we get the optimal size for the image to better fit the tile size
+    if aspect_ratio is not None:
+        new_image_height, new_image_width = get_size_for_image_fitted_to_tile_size(
             image_height=image_height,
             image_width=image_width,
             tile_size=tile_size,
         )
 
-    # If we did not find a canvas, we have to find the closest aspect ratio and downsample the image
+    # If we did not find a canvas larger than the image, 
+    # we have to find the closest aspect ratio and downsample the image
     else:
         aspect_ratio = find_closest_aspect_ratio(
             max_num_tiles=max_image_tiles,
             image_width=image_width,
             image_height=image_height,
         )
-        canvas_width = aspect_ratio[0] * tile_size
-        canvas_height = aspect_ratio[1] * tile_size
-        size = get_size_for_image_not_fitted_to_canvas(
+        num_tiles_width, num_tiles_height = aspect_ratio
+        canvas_width = num_tiles_width * tile_size
+        canvas_height = num_tiles_height * tile_size
+        new_image_height, new_image_width = get_size_for_image_fitted_to_canvas(
             image_height=image_height,
             image_width=image_width,
             canvas_height=canvas_height,
             canvas_width=canvas_width,
         )
 
-    return size, aspect_ratio
+    return (new_image_height, new_image_width), aspect_ratio
 
 
 # Copied from IDEFICS2
@@ -314,54 +419,31 @@ def validate_mllama_preprocess_arguments(do_resize, size, do_pad, max_image_tile
     validate_size(size)
 
 
-def split_to_tiles(image: np.ndarray, ncw: int, nch: int) -> np.ndarray:
-    # Split image into number of required tiles (width x height)
+def split_to_tiles(image: np.ndarray, num_tiles_width: int, num_tiles_height: int) -> np.ndarray:
+    """
+    Split an image into a specified number of tiles along its width and height dimensions.
+
+    Args:
+        image (np.ndarray): Input image with shape (num_channels, height, width).
+        num_tiles_width (int): Number of tiles to split the image into along its width.
+        num_tiles_height (int): Number of tiles to split the image into along its height.
+
+    Returns:
+        np.ndarray: Array of image tiles with shape (num_tiles_width * num_tiles_height, num_channels, tile_height, tile_width).
+    """
     num_channels, height, width = image.shape
-    image = image.reshape(num_channels, nch, height // nch, ncw, width // ncw)
-    # Permute dimensions to reorder the axes
+    tile_height = height // num_tiles_height
+    tile_width = width // num_tiles_width
+
+    image = image.reshape(num_channels, num_tiles_height, tile_height, num_tiles_width, tile_width)
+
+    # Permute to (num_tiles_height, num_tiles_width, num_channels, tile_height, tile_width)
     image = image.transpose(1, 3, 0, 2, 4)
-    # Reshape into the desired output shape (batch_size * 4, num_channels, width/2, height/2)
-    image = image.reshape(ncw * nch, num_channels, height // nch, width // ncw)
-    # Make contiguous
-    image = np.ascontiguousarray(image)
-    return image
 
-
-def fit_image_to_canvas(num_tiles: int, img_width: int, img_height: int, tile_size: int) -> Any:
-    """
-    Given an image width, height and target number of tiles this function will see if the image
-    can be fit into any of the canvases that can be build from arranging the tiles in a grid.
-    If the image can be fit onto several canvases, it will return the canvas where the shorter edge
-    of the image will be largest.
-    """
-    # Initialize the optimal canvas to None. If no canvas is found where image fits, function returns None.
-    optimal_canvas = None
-
-    # Gather all potential supported image resolutions and iterate through them to find best match
-    potential_arrangements = [
-        item for sublist in find_supported_aspect_ratios(num_tiles).values() for item in sublist
-    ]
-
-    current_gap = 1e23
-    for n_w, n_h in potential_arrangements:
-        # Compute the canvas size
-        canvas_width, canvas_height = n_w * tile_size, n_h * tile_size
-
-        # Check if image can fit into the canvas without downsampling
-        if canvas_width >= img_width and canvas_height >= img_height:
-            # If we did not find a good canvas yet, we will use the current one
-            if optimal_canvas is None:
-                # Set optimal canvas and determine the actual image height and width in the canvas with aspect ratio preserving resampling
-                optimal_canvas = (n_w, n_h)
-            else:
-                # Find closest fit based on gap
-                image_width_height = (n_w * tile_size, n_h * tile_size)
-                gap = abs(img_width - image_width_height[0]) + abs(img_height - image_width_height[1])
-                if gap < current_gap:
-                    # If the gap is smaller than the previous one, we will update our optimal canvas and image width height
-                    optimal_canvas = (n_w, n_h)
-                    current_gap = gap
-    return optimal_canvas
+    # Reshape into the desired output shape (num_tiles_width * num_tiles_height, num_channels, tile_height, tile_width)
+    image = image.reshape(num_tiles_width * num_tiles_height, num_channels, tile_height, tile_width)
+    
+    return np.ascontiguousarray(image)
 
 
 def stack_images(
