@@ -598,6 +598,11 @@ class GenerationMixin:
                     and isinstance(dict_to_expand[key], torch.Tensor)
                 ):
                     dict_to_expand[key] = dict_to_expand[key].repeat_interleave(expand_size, dim=0)
+                elif isinstance(dict_to_expand[key], list):
+                    temp_list = []
+                    for sublist in dict_to_expand[key]:
+                        temp_list.extend([sublist] * expand_size)
+                    dict_to_expand[key] = temp_list
             return dict_to_expand
 
         if input_ids is not None:

@@ -1470,7 +1470,6 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
             dtype=self.dtype,
         )
 
-        print(cross_attention_mask.shape, cross_attention_token_mask)
         cross_attention_mask, full_text_row_masked_out_mask = prepare_cross_attention_mask(
             cross_attention_mask=cross_attention_mask,
             num_vision_tokens=self.model.vision_model.vision_encoder.num_patches,
