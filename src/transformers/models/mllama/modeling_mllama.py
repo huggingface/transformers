@@ -496,10 +496,8 @@ class MllamaVisionModel(PreTrainedModel):
         for idx, (aspect_ratio_h, aspect_ratio_w) in enumerate(aspect_ratios):
             num_tiles = aspect_ratio_h * aspect_ratio_w
             gated_positional_embedding = self.gated_positional_embedding[:aspect_ratio_h, :aspect_ratio_w]
-            embedding_height, embedding_width = gated_positional_embedding.shape[2:]
-            gated_positional_embedding = gated_positional_embedding.reshape(
-                num_tiles, embedding_height, embedding_width
-            )
+            embedding_height, embedding_width = gated_positional_embedding.shape[2:] # this is just num patches, hidden_size
+            gated_positional_embedding = gated_positional_embedding.reshape(num_tiles, embedding_height, embedding_width)
             gate = self.gated_positional_embedding_gate.tanh()
             gated_positional_embedding_with_gate = gate * gated_positional_embedding
             hidden_state[idx, :num_tiles] += gated_positional_embedding_with_gate
@@ -871,13 +869,13 @@ class MllamaSelfAttentionDecoderLayer(torch.nn.Module):
             cache_position=cache_position,
             position_embeddings=position_embeddings,
         )
-        hidden_states = residual + hidden_states
+        hidden_states = residual + hidden_states.to(residual.device)
 
         # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + hidden_states
+        hidden_states = residual + hidden_states.to(residual.device)
 
         outputs = (hidden_states,)
 
@@ -1220,7 +1218,7 @@ class MllamaTextModel(PreTrainedModel):
 class MllamaPreTrainedModel(PreTrainedModel):
     config_class = MllamaConfig
     base_model_prefix = "model"
-    _no_split_modules = []
+    _no_split_modules = ["MllamaSdpaCrossAttention"]
     _supports_cache_class = True
     _supports_static_cache = True
     _supports_sdpa = True
@@ -1236,7 +1234,6 @@ MLLAMA_START_DOCSTRING = ""  # TODO add docstring to MLLAMA start and other clas
 )
 class MllamaForConditionalGeneration(MllamaPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
-
     def __init__(self, config):
         super().__init__(config)
         self.vision_model = MllamaVisionModel.from_config(config.vision_config)
