@@ -468,6 +468,15 @@ class EosTokenCriteria(StoppingCriteria):
 
 
 class ConfidenceCriteria(StoppingCriteria):
+    """
+    This class can be used to stop generation whenever assistant model's confidence in its prediction for the current token is lower than the threshold 
+    `model.generation_config.assistant_confidence_threshold` even if the number of speculative tokens (defined by `num_assistant_tokens`) is not yet reached.
+
+    Args:
+        assistant_confidence_threshold (`float`):
+            The value of the threshold.
+    """
+    
     def __init__(self, assistant_confidence_threshold):
         self.assistant_confidence_threshold = assistant_confidence_threshold
 
