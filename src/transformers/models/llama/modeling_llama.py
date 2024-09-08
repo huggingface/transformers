@@ -1115,6 +1115,8 @@ class _LM_head(torch.autograd.Function):
         loss_fct = torch.nn.CrossEntropyLoss(reduction="sum")
         loss_i = loss_fct(logits, indices)
 
+        weights.count += 1
+
         ctx.save_for_backward(hidden_states, indices, weights)
         
         return loss_i
@@ -1159,8 +1161,12 @@ class _LM_head(torch.autograd.Function):
             weights.grad = grad_input.T @ hidden_states
             
         grad_input = grad_input @ weights
-        
-        return grad_input, None, None
+
+        weights.count -= 1
+        if weights.count == 0:
+            return grad_input, None, weights.grad
+        else:
+            return grad_input, None, None
 
 class LMheadWarpper(nn.Module):
     def __init__(
@@ -1173,6 +1179,7 @@ class LMheadWarpper(nn.Module):
         else:
             self.LM_head_weight = original_weight
         self.LM_head = _LM_head.apply
+        self.LM_head_weight.count = 0
 
     def forward(self, hidden_states, labels):
         ignore_index = -100
