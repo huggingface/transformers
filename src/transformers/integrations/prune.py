@@ -14,6 +14,7 @@ logger = logging.get_logger(__name__)
 PRUNING_TENSOR_MAPPING = {
     "llama": {
         "token_embd": "embed_tokens",
+        "layers": "model.layers",
         "ffn_up": "mlp.up_proj",
         "ffn_down": "mlp.down_proj",
         "ffn_gate": "mlp.gate_proj",
@@ -28,6 +29,7 @@ PRUNING_TENSOR_MAPPING = {
     },
     "mistral": {
         "token_embd": "embed_tokens",
+        "layers": "model.layers",
         "ffn_up": "mlp.up_proj",
         "ffn_down": "mlp.down_proj",
         "ffn_gate": "mlp.gate_proj",
@@ -42,6 +44,7 @@ PRUNING_TENSOR_MAPPING = {
     },
     "qwen2": {
         "token_embd": "embed_tokens",
+        "layers": "model.layers",
         "ffn_up": "mlp.up_proj",
         "ffn_down": "mlp.down_proj",
         "ffn_gate": "mlp.gate_proj",
@@ -51,7 +54,7 @@ PRUNING_TENSOR_MAPPING = {
         "attn_v": "self_attn.v_proj",
         "attn_k": "self_attn.k_proj",
         "attn_output": "self_attn.o_proj",
-        "output.weight": "weight",
+        "output.weight": "lm_head",
         "output_norm": "norm",
     },
 }
@@ -197,6 +200,32 @@ class PrunerMixin:
 
         self.config.num_key_value_heads -= len(heads)
         self.config.num_attention_heads -= len(heads)
+        
+    def prune_layers(self, layers_to_keep: List[int]) -> None:
+        """
+        Perform depth pruning by removing layers not in layers_to_keep.
+
+        Args:
+            layers_to_keep (List[int]): Indices of the layers to keep.
+        """
+        if self.config.model_type not in PRUNING_TENSOR_MAPPING:
+            raise ValueError(f"Model type {self.config.model_type} not found in PRUNING_TENSOR_MAPPING.")
+
+        layers_path = PRUNING_TENSOR_MAPPING[self.config.model_type]["layers"]
+        layers = self.get_submodule(layers_path)
+
+        layers_to_keep = sorted(set(layers_to_keep))
+        if any(0 <= i for i in layers_to_keep):
+            raise ValueError("layers_to_keep contains negative layer indices")
+        if any(len(layers) <= i for i in layers_to_keep):
+            raise ValueError(
+                "layers_to_keep contains layer indices larger than the number of layers of the current model."
+            )
+
+        new_layers = nn.ModuleList([layers[i] for i in layers_to_keep])
+        setattr(self, layers_path, new_layers)
+
+        self.config.num_hidden_layers = len(layers_to_keep)
 
     def _prune_linear_layers(self, index: torch.LongTensor, layers_to_prune, tensor_mapping, pruning_mapping) -> None:
         # Iterate over the model layers and apply pruning where necessary
