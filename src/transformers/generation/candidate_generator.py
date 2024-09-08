@@ -17,6 +17,7 @@ import copy
 from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 
 import torch
+import numpy as np
 
 from ..cache_utils import DynamicCache
 from ..pytorch_utils import isin_mps_friendly
@@ -95,184 +96,6 @@ def get_tokens_diag(prompt, prompt_plus_new_tokens):
     return replace_tokens_from_prompt, disrep_length, new_tokens_with_disrep, new_tokens_only, discrep_only
 
 
-class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
-    def __init__(
-        self,
-        input_ids: torch.LongTensor,
-        assistant_model: "PreTrainedModel",
-        generation_config: "GenerationConfig",
-        model_kwargs: Dict,
-        inputs_tensor: Optional[torch.Tensor] = None,
-        logits_processor: "LogitsProcessorList" = None,
-        assistant_tokenizer = None,
-        target_tokenizer = None,
-        target_lookbehind: int = 20,
-        draft_lookbehind: int = 2,
-    ):
-        super().__init__(input_ids, assistant_model, generation_config, model_kwargs, inputs_tensor, logits_processor)
-
-        self.assistant_tokenizer = assistant_tokenizer
-        self.target_tokenizer = target_tokenizer
-        self.target_lookbehind = target_lookbehind
-        self.draft_lookbehind = draft_lookbehind
-
-        self.prev_tokens = None
-
-    def convert_token_ids(
-        self,
-        input_ids,
-        src,
-        dest,
-    ):
-        text = src.batch_decode(input_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
-        dest_ids = dest(text, add_special_tokens=True, return_tensors="pt")["input_ids"]
-
-        return dest_ids.to(input_ids.device)
-
-    def get_candidates(self, input_ids: torch.LongTensor, stopping_criteria) -> Tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
-        optimized = True
-        if hasattr(self.assistant_model.config, "optimized"):
-            optimized = self.assistant_model.config.optimized
-
-        input_ids = input_ids.to(self.assistant_model.device)
-        convert_kwargs = {"src": self.target_tokenizer, "dest": self.assistant_tokenizer}
-        remove_from_pkv = 0
-
-        if self.prev_tokens is None:
-            draft_input_ids = self.convert_token_ids(input_ids, **convert_kwargs)
-            self.prev_target_ids = input_ids
-            self.prev_draft_ids = draft_input_ids
-            new_cur_len = draft_input_ids.shape[-1]
-        else:                
-            # input_ids contains all target prompt input ids and some new target input ids
-            if optimized and self.prev_target_ids.shape[1] > self.target_lookbehind:
-                start_index_in_target_window = self.prev_target_ids.shape[1] - self.target_lookbehind
-
-                new_draft_ids = self.convert_token_ids(
-                    input_ids[:,  start_index_in_target_window:], **convert_kwargs
-                )
-                prompt_use_length = new_draft_ids.shape[1]
-                prompt_use = self.prev_draft_ids[:,-prompt_use_length:]
-
-                replace_tokens_from_prompt, disrep_length, new_tokens_with_disrep, new_tokens_only, discrep_only = get_tokens_diag(prompt_use, new_draft_ids)
-                draft_input_ids = self.prev_draft_ids
-
-                if new_tokens_only is not None:
-                    if disrep_length > 0 and discrep_only.shape[1] > 0:
-                        if disrep_length == discrep_only.shape[1]:
-                            draft_input_ids[:, -disrep_length:] = discrep_only
-
-                        elif disrep_length > discrep_only.shape[1]:
-                            disrep_length_diff = disrep_length - discrep_only.shape[1]
-                            draft_input_ids = draft_input_ids[:, :-disrep_length_diff]
-                            draft_input_ids[:, -discrep_only.shape[1]:] = discrep_only
-
-                        remove_from_pkv = disrep_length
-
-                    if new_tokens_only.shape[1] > 0:
-                        draft_input_ids = torch.cat([draft_input_ids, new_tokens_only], dim=-1)
-                else:
-                    # edge case: in case of no intersection between prompt and new_draft_ids
-                    draft_input_ids = torch.cat([draft_input_ids, new_draft_ids], dim=-1)
-
-
-                self.prev_draft_ids = draft_input_ids
-            else:
-                draft_input_ids = self.convert_token_ids(input_ids, **convert_kwargs)
-                draft_input_ids = torch.cat([self.prev_draft_ids, draft_input_ids[:, self.prev_draft_ids.shape[1]:]], dim=1)
-
-            new_cur_len = draft_input_ids.shape[-1]
-            
-        max_new_tokens = int(self.num_assistant_tokens)
-
-        min_new_tokens = max(min(max_new_tokens, self.main_model_min_length - new_cur_len), 0)
-        if max_new_tokens == 0:
-            return input_ids, None
-
-        # 1. If it is not the first round of candidate generation, prepare the inputs based on the input_ids length
-        # (which implicitly contains the number of accepted candidates from the previous round)
-        has_past_key_values = self.assistant_kwargs.get("past_key_values", None) is not None
-        if has_past_key_values:
-            new_cache_size = new_cur_len - 1 - remove_from_pkv
-            self.assistant_kwargs["past_key_values"] = _crop_past_key_values(
-                self.assistant_model, self.assistant_kwargs["past_key_values"], new_cache_size - 1
-            )  # the assistant does not have the token after the last match, hence the -1
-
-            self.assistant_kwargs = _prepare_attention_mask(
-                self.assistant_kwargs, new_cur_len, self.assistant_model.config.is_encoder_decoder
-            )
-            self.assistant_kwargs = _prepare_token_type_ids(self.assistant_kwargs, new_cur_len)
-
-        # 2. Forecast next N tokens using the assistant model.
-        assistant_generation_kwargs = {
-            self.input_ids_key: draft_input_ids,
-            "min_new_tokens": min_new_tokens,
-            "max_new_tokens": max_new_tokens,
-            "generation_config": self.generation_config,
-            "logits_processor": self.logits_processor,
-        }
-
-        self.assistant_kwargs.pop("attention_mask", None)
-
-        assistant_output = self.assistant_model.generate(**assistant_generation_kwargs, **self.assistant_kwargs)
-
-        num_prev_draft = self.prev_draft_ids.shape[1]
-        start_draft_look_index = num_prev_draft - self.draft_lookbehind
-        run_optimized = optimized and start_draft_look_index > 0
-        if run_optimized:
-            new_target_ids_from_window = self.convert_token_ids(
-                assistant_output.sequences[:, start_draft_look_index:],
-                src=self.assistant_tokenizer,
-                dest=self.target_tokenizer,
-            )
-            target_prompt_use_length = new_target_ids_from_window.shape[1]
-
-            target_prompt_use = input_ids[:,-target_prompt_use_length:]
-
-            tar_replace_tokens_from_prompt, tar_disrep_length, tar_new_tokens_with_disrep, tar_new_tokens_only, tar_discrep_only = get_tokens_diag(target_prompt_use, new_target_ids_from_window)
-
-            # if DEBUG:
-            #     log(f"TARGET {target_prompt_use=}, {new_target_ids_from_window=}")
-            #     log(f"TARGET new tokens {tar_new_tokens_only=}")
-
-            new_target_ids = input_ids
-
-            if tar_new_tokens_only is not None:  
-                if tar_new_tokens_only.shape[1] > 0:
-                    new_target_ids = torch.cat([new_target_ids, tar_new_tokens_only], dim=-1)
-            else:
-                # edge case: in case of no intersection between prompt and new_target_ids
-                new_target_ids = torch.cat([new_target_ids, new_target_ids_from_window], dim=-1)
-
-            self.prev_target_ids = input_ids
-        else:
-            new_target_ids = self.convert_token_ids(
-                assistant_output.sequences,
-                src=self.assistant_tokenizer,
-                dest=self.target_tokenizer,
-            )
-            new_target_ids = torch.cat([input_ids, new_target_ids[:, input_ids.shape[1]:]], dim=1)
-
-        for stopping_criterion in stopping_criteria:
-            if hasattr(stopping_criterion, "max_length"):
-                new_target_ids = new_target_ids[:, :stopping_criteria.max_length]
-
-        # 3. Update variables for the next round of candidate generation
-        self.assistant_kwargs["past_key_values"] = assistant_output.past_key_values
-        self.prev_tokens = assistant_output.sequences
-
-
-        # 4. Prepare variables for output
-        # candidate_logits = torch.stack(assistant_output.scores, dim=1)
-        # assert (new_target_ids[:,:input_ids.shape[1]] == input_ids).all()
-
-        if input_ids.shape[1] >= new_target_ids.shape[1]:
-            some_suffix = torch.tensor([[0,1,2,3,4]], device=new_target_ids.device)
-            new_target_ids = torch.cat([new_target_ids, some_suffix], dim=1)
-
-        return new_target_ids, None
-
-
 class CandidateGenerator:
     """Abstract base class for all candidate generators that can be applied during assisted generation."""
 
@@ -310,8 +133,8 @@ class CandidateGenerator:
             f"{self.__class__} is an abstract class. Only classes inheriting this class can call "
             "`update_candidate_strategy`."
         )
-
-
+        
+        
 class AssistedCandidateGenerator(CandidateGenerator):
     """
     `CandidateGenerator` class to be used for assisted generation and speculative decoding. This class generates
@@ -503,6 +326,184 @@ class AssistedCandidateGenerator(CandidateGenerator):
                 self.num_assistant_tokens += 2.0
             else:
                 self.num_assistant_tokens = max(1.0, self.num_assistant_tokens - 1.0)
+
+
+class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
+    def __init__(
+        self,
+        input_ids: torch.LongTensor,
+        assistant_model: "PreTrainedModel",
+        generation_config: "GenerationConfig",
+        model_kwargs: Dict,
+        inputs_tensor: Optional[torch.Tensor] = None,
+        logits_processor: "LogitsProcessorList" = None,
+        assistant_tokenizer = None,
+        target_tokenizer = None,
+        target_lookbehind: int = 20,
+        assistant_lookbehind: int = 2,
+    ):
+        super().__init__(input_ids, assistant_model, generation_config, model_kwargs, inputs_tensor, logits_processor)
+
+        self.assistant_tokenizer = assistant_tokenizer
+        self.target_tokenizer = target_tokenizer
+        self.target_lookbehind = target_lookbehind
+        self.assistant_lookbehind = assistant_lookbehind
+
+        self.prev_tokens = None
+
+    def convert_token_ids(
+        self,
+        input_ids,
+        src,
+        dest,
+    ):
+        text = src.batch_decode(input_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
+        dest_ids = dest(text, add_special_tokens=True, return_tensors="pt")["input_ids"]
+
+        return dest_ids.to(input_ids.device)
+
+    def get_candidates(self, input_ids: torch.LongTensor, stopping_criteria) -> Tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
+        optimized = True
+        if hasattr(self.assistant_model.config, "optimized"):
+            optimized = self.assistant_model.config.optimized
+
+        input_ids = input_ids.to(self.assistant_model.device)
+        convert_kwargs = {"src": self.target_tokenizer, "dest": self.assistant_tokenizer}
+        remove_from_pkv = 0
+
+        if self.prev_tokens is None:
+            assistant_input_ids = self.convert_token_ids(input_ids, **convert_kwargs)
+            self.prev_target_ids = input_ids
+            self.prev_assistant_ids = assistant_input_ids
+            new_cur_len = assistant_input_ids.shape[-1]
+        else:                
+            # input_ids contains all target prompt input ids and some new target input ids
+            if optimized and self.prev_target_ids.shape[1] > self.target_lookbehind:
+                start_index_in_target_window = self.prev_target_ids.shape[1] - self.target_lookbehind
+
+                new_assistant_ids = self.convert_token_ids(
+                    input_ids[:,  start_index_in_target_window:], **convert_kwargs
+                )
+                prompt_use_length = new_assistant_ids.shape[1]
+                prompt_use = self.prev_assistant_ids[:,-prompt_use_length:]
+
+                replace_tokens_from_prompt, disrep_length, new_tokens_with_disrep, new_tokens_only, discrep_only = get_tokens_diag(prompt_use, new_assistant_ids)
+                assistant_input_ids = self.prev_assistant_ids
+
+                if new_tokens_only is not None:
+                    if disrep_length > 0 and discrep_only.shape[1] > 0:
+                        if disrep_length == discrep_only.shape[1]:
+                            assistant_input_ids[:, -disrep_length:] = discrep_only
+
+                        elif disrep_length > discrep_only.shape[1]:
+                            disrep_length_diff = disrep_length - discrep_only.shape[1]
+                            assistant_input_ids = assistant_input_ids[:, :-disrep_length_diff]
+                            assistant_input_ids[:, -discrep_only.shape[1]:] = discrep_only
+
+                        remove_from_pkv = disrep_length
+
+                    if new_tokens_only.shape[1] > 0:
+                        assistant_input_ids = torch.cat([assistant_input_ids, new_tokens_only], dim=-1)
+                else:
+                    # edge case: in case of no intersection between prompt and new_assistant_ids
+                    assistant_input_ids = torch.cat([assistant_input_ids, new_assistant_ids], dim=-1)
+
+
+                self.prev_assistant_ids = assistant_input_ids
+            else:
+                assistant_input_ids = self.convert_token_ids(input_ids, **convert_kwargs)
+                assistant_input_ids = torch.cat([self.prev_assistant_ids, assistant_input_ids[:, self.prev_assistant_ids.shape[1]:]], dim=1)
+
+            new_cur_len = assistant_input_ids.shape[-1]
+            
+        max_new_tokens = int(self.num_assistant_tokens)
+
+        min_new_tokens = max(min(max_new_tokens, self.main_model_min_length - new_cur_len), 0)
+        if max_new_tokens == 0:
+            return input_ids, None
+
+        # 1. If it is not the first round of candidate generation, prepare the inputs based on the input_ids length
+        # (which implicitly contains the number of accepted candidates from the previous round)
+        has_past_key_values = self.assistant_kwargs.get("past_key_values", None) is not None
+        if has_past_key_values:
+            new_cache_size = new_cur_len - 1 - remove_from_pkv
+            self.assistant_kwargs["past_key_values"] = _crop_past_key_values(
+                self.assistant_model, self.assistant_kwargs["past_key_values"], new_cache_size - 1
+            )  # the assistant does not have the token after the last match, hence the -1
+
+            self.assistant_kwargs = _prepare_attention_mask(
+                self.assistant_kwargs, new_cur_len, self.assistant_model.config.is_encoder_decoder
+            )
+            self.assistant_kwargs = _prepare_token_type_ids(self.assistant_kwargs, new_cur_len)
+
+        # 2. Forecast next N tokens using the assistant model.
+        assistant_generation_kwargs = {
+            self.input_ids_key: assistant_input_ids,
+            "min_new_tokens": min_new_tokens,
+            "max_new_tokens": max_new_tokens,
+            "generation_config": self.generation_config,
+            "logits_processor": self.logits_processor,
+        }
+
+        self.assistant_kwargs.pop("attention_mask", None)
+
+        assistant_output = self.assistant_model.generate(**assistant_generation_kwargs, **self.assistant_kwargs)
+
+        num_prev_assistant = self.prev_assistant_ids.shape[1]
+        start_assistant_look_index = num_prev_assistant - self.assistant_lookbehind
+        run_optimized = optimized and start_assistant_look_index > 0
+        if run_optimized:
+            new_target_ids_from_window = self.convert_token_ids(
+                assistant_output.sequences[:, start_assistant_look_index:],
+                src=self.assistant_tokenizer,
+                dest=self.target_tokenizer,
+            )
+            target_prompt_use_length = new_target_ids_from_window.shape[1]
+
+            target_prompt_use = input_ids[:,-target_prompt_use_length:]
+
+            tar_replace_tokens_from_prompt, tar_disrep_length, tar_new_tokens_with_disrep, tar_new_tokens_only, tar_discrep_only = get_tokens_diag(target_prompt_use, new_target_ids_from_window)
+
+            # if DEBUG:
+            #     log(f"TARGET {target_prompt_use=}, {new_target_ids_from_window=}")
+            #     log(f"TARGET new tokens {tar_new_tokens_only=}")
+
+            new_target_ids = input_ids
+
+            if tar_new_tokens_only is not None:  
+                if tar_new_tokens_only.shape[1] > 0:
+                    new_target_ids = torch.cat([new_target_ids, tar_new_tokens_only], dim=-1)
+            else:
+                # edge case: in case of no intersection between prompt and new_target_ids
+                new_target_ids = torch.cat([new_target_ids, new_target_ids_from_window], dim=-1)
+
+            self.prev_target_ids = input_ids
+        else:
+            new_target_ids = self.convert_token_ids(
+                assistant_output.sequences,
+                src=self.assistant_tokenizer,
+                dest=self.target_tokenizer,
+            )
+            new_target_ids = torch.cat([input_ids, new_target_ids[:, input_ids.shape[1]:]], dim=1)
+
+        for stopping_criterion in stopping_criteria:
+            if hasattr(stopping_criterion, "max_length"):
+                new_target_ids = new_target_ids[:, :stopping_criteria.max_length]
+
+        # 3. Update variables for the next round of candidate generation
+        self.assistant_kwargs["past_key_values"] = assistant_output.past_key_values
+        self.prev_tokens = assistant_output.sequences
+
+
+        # 4. Prepare variables for output
+        # candidate_logits = torch.stack(assistant_output.scores, dim=1)
+        # assert (new_target_ids[:,:input_ids.shape[1]] == input_ids).all()
+
+        if input_ids.shape[1] >= new_target_ids.shape[1]:
+            some_suffix = torch.tensor([[0,1,2,3,4]], device=new_target_ids.device)
+            new_target_ids = torch.cat([new_target_ids, some_suffix], dim=1)
+
+        return new_target_ids, None
 
 
 class PromptLookupCandidateGenerator(CandidateGenerator):

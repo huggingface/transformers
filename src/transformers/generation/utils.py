@@ -688,6 +688,8 @@ class GenerationMixin:
         logits_processor: LogitsProcessorList,
         target_tokenizer: AutoTokenizer,
         assistant_tokenizer: AutoTokenizer,
+        target_lookbehind: int,
+        assistant_lookbehind: int,
         model_kwargs: Dict,
     ) -> CandidateGenerator:
         """
@@ -713,7 +715,7 @@ class GenerationMixin:
                 assistant_tokenizer = assistant_tokenizer,
                 target_tokenizer = target_tokenizer,
                 target_lookbehind = target_lookbehind,
-                draft_lookbehind = assistant_lookbehind,
+                assistant_lookbehind = assistant_lookbehind,
             )
         else:
             candidate_generator = AssistedCandidateGenerator(
@@ -1149,7 +1151,7 @@ class GenerationMixin:
                 exception_message += f" Please use one of the following classes instead: {generate_compatible_classes}"
             raise TypeError(exception_message)
 
-    def _validate_assistant(self, assistant_model):
+    def _validate_assistant(self, assistant_model, assistant_tokenizer):
         if assistant_model is None:
             return
 
@@ -1165,7 +1167,7 @@ class GenerationMixin:
                     "Ensure you load the assistant with the correct encoder-decoder class, e.g. `AutoModelForSpeechSeq2Seq` for Whisper."
                 )
 
-        if not self.config.vocab_size == assistant_model.config.vocab_size:
+        if assistant_tokenizer is None and not self.config.vocab_size == assistant_model.config.vocab_size:
             raise ValueError("Make sure the main and assistant model use the same tokenizer")
 
     def _validate_model_kwargs(self, model_kwargs: Dict[str, Any]):
@@ -1796,7 +1798,7 @@ class GenerationMixin:
         tokenizer = kwargs.pop("tokenizer", None)  # Pull this out first, we only use it for stopping criteria
         generation_config, model_kwargs = self._prepare_generation_config(generation_config, **kwargs)
         self._validate_model_kwargs(model_kwargs.copy())
-        self._validate_assistant(assistant_model)
+        self._validate_assistant(assistant_model, assistant_tokenizer)
 
         # 2. Set generation parameters if not already defined
         if synced_gpus is None:
