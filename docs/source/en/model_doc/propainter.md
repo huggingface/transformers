@@ -42,7 +42,7 @@ This model was contributed by [ruffy369](https://huggingface.co/ruffy369). The o
 
 ```bash
 python src/transformers/models/propainter/convert_propainter_to_hf.py \
-    --pytorch_dump_folder /output/path
+    --pytorch-dump-folder-path /output/path --verify-logits
 ```
 
 ## Usage example
