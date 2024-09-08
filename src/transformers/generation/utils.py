@@ -696,7 +696,7 @@ class GenerationMixin:
         Returns the candidate generator to be used in `assisted_generation`
         """
         different_tokenizers = self.config.vocab_size != assistant_model.config.vocab_size
-        
+
         if generation_config.prompt_lookup_num_tokens is not None:
             candidate_generator = PromptLookupCandidateGenerator(
                 eos_token_id=generation_config._eos_token_tensor,
@@ -712,10 +712,10 @@ class GenerationMixin:
                 model_kwargs=model_kwargs,
                 inputs_tensor=inputs_tensor,
                 logits_processor=logits_processor,
-                assistant_tokenizer = assistant_tokenizer,
-                target_tokenizer = target_tokenizer,
-                target_lookbehind = target_lookbehind,
-                assistant_lookbehind = assistant_lookbehind,
+                assistant_tokenizer=assistant_tokenizer,
+                target_tokenizer=target_tokenizer,
+                target_lookbehind=target_lookbehind,
+                assistant_lookbehind=assistant_lookbehind,
             )
         else:
             candidate_generator = AssistedCandidateGenerator(
@@ -1976,10 +1976,10 @@ class GenerationMixin:
                 inputs_tensor=inputs_tensor,
                 assistant_model=assistant_model,
                 logits_processor=logits_processor,
-                target_tokenizer = target_tokenizer,
-                assistant_tokenizer = assistant_tokenizer,
-                target_lookbehind = target_lookbehind,
-                assistant_lookbehind = assistant_lookbehind,
+                target_tokenizer=target_tokenizer,
+                assistant_tokenizer=assistant_tokenizer,
+                target_lookbehind=target_lookbehind,
+                assistant_lookbehind=assistant_lookbehind,
                 model_kwargs=model_kwargs,
             )
 
@@ -3996,10 +3996,12 @@ class GenerationMixin:
 
             #  1. Fetch candidate sequences from a `CandidateGenerator`
             if isinstance(candidate_generator, AssistedCandidateGeneratorDifferentTokenizers):
-                candidate_input_ids, candidate_logits = candidate_generator.get_candidates(input_ids, stopping_criteria)
+                candidate_input_ids, candidate_logits = candidate_generator.get_candidates(
+                    input_ids, stopping_criteria
+                )
             else:
                 candidate_input_ids, candidate_logits = candidate_generator.get_candidates(input_ids)
-        
+
             if candidate_logits is not None:
                 candidate_logits = candidate_logits.to(self.device)
 

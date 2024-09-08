@@ -16,8 +16,8 @@
 import copy
 from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 
-import torch
 import numpy as np
+import torch
 
 from ..cache_utils import DynamicCache
 from ..pytorch_utils import isin_mps_friendly
@@ -46,7 +46,7 @@ def get_longest_diag_dict(some, some_nonzero):
             tuple_start_idx = tuple(start_idx.tolist())
             visited.add(tuple_start_idx)
 
-            if some[start_idx[0],start_idx[1]] == 1:
+            if some[start_idx[0], start_idx[1]] == 1:
                 cur_diag_len += 1
                 start_idx += 1
             else:
@@ -57,18 +57,18 @@ def get_longest_diag_dict(some, some_nonzero):
 
 
 def get_longest_diag_index(some):
-    diags = get_longest_diag_dict(some, some.nonzero())    
+    diags = get_longest_diag_dict(some, some.nonzero())
     diags_values = list(diags.values())
     diags_keys = list(diags.keys())
     best_diag = np.argmax(diags_values)
-    diag_start_index =  diags_keys[best_diag]
-    diag_start_length =  diags_values[best_diag]
+    diag_start_index = diags_keys[best_diag]
+    diag_start_length = diags_values[best_diag]
     return diag_start_index, diag_start_length
 
 
 def get_tokens_diag(prompt, prompt_plus_new_tokens):
     """
-    Input: 
+    Input:
         prompt: 2D array of shape (batch_size, prompt_length), represents the original prompt tokens
         prompt_plus_new_tokens: 2D array of shape (batch_size, prompt_length), represents the suffix of the original prompt, with additional new tokens.
     Output:
@@ -86,13 +86,13 @@ def get_tokens_diag(prompt, prompt_plus_new_tokens):
         return None, None, None, None, None
 
     longest_location, longest_diag_length = get_longest_diag_index(compare_mat_int)
-    new_token_start_index = longest_location[0]+longest_diag_length
-    discrep_with_old = longest_location[1]+longest_diag_length
-    replace_tokens_from_prompt = prompt[:,discrep_with_old:]
+    new_token_start_index = longest_location[0] + longest_diag_length
+    discrep_with_old = longest_location[1] + longest_diag_length
+    replace_tokens_from_prompt = prompt[:, discrep_with_old:]
     disrep_length = (prompt.shape[1] - discrep_with_old).item()
-    new_tokens_with_disrep = prompt_plus_new_tokens[:,new_token_start_index:]
-    new_tokens_only = prompt_plus_new_tokens[:,new_token_start_index+disrep_length:]
-    discrep_only = prompt_plus_new_tokens[:,new_token_start_index:new_token_start_index+disrep_length]
+    new_tokens_with_disrep = prompt_plus_new_tokens[:, new_token_start_index:]
+    new_tokens_only = prompt_plus_new_tokens[:, new_token_start_index + disrep_length :]
+    discrep_only = prompt_plus_new_tokens[:, new_token_start_index : new_token_start_index + disrep_length]
     return replace_tokens_from_prompt, disrep_length, new_tokens_with_disrep, new_tokens_only, discrep_only
 
 
@@ -133,8 +133,8 @@ class CandidateGenerator:
             f"{self.__class__} is an abstract class. Only classes inheriting this class can call "
             "`update_candidate_strategy`."
         )
-        
-        
+
+
 class AssistedCandidateGenerator(CandidateGenerator):
     """
     `CandidateGenerator` class to be used for assisted generation and speculative decoding. This class generates
@@ -337,8 +337,8 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
         model_kwargs: Dict,
         inputs_tensor: Optional[torch.Tensor] = None,
         logits_processor: "LogitsProcessorList" = None,
-        assistant_tokenizer = None,
-        target_tokenizer = None,
+        assistant_tokenizer=None,
+        target_tokenizer=None,
         target_lookbehind: int = 20,
         assistant_lookbehind: int = 2,
     ):
@@ -362,7 +362,9 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
 
         return dest_ids.to(input_ids.device)
 
-    def get_candidates(self, input_ids: torch.LongTensor, stopping_criteria) -> Tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
+    def get_candidates(
+        self, input_ids: torch.LongTensor, stopping_criteria
+    ) -> Tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
         optimized = True
         if hasattr(self.assistant_model.config, "optimized"):
             optimized = self.assistant_model.config.optimized
@@ -376,18 +378,20 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
             self.prev_target_ids = input_ids
             self.prev_assistant_ids = assistant_input_ids
             new_cur_len = assistant_input_ids.shape[-1]
-        else:                
+        else:
             # input_ids contains all target prompt input ids and some new target input ids
             if optimized and self.prev_target_ids.shape[1] > self.target_lookbehind:
                 start_index_in_target_window = self.prev_target_ids.shape[1] - self.target_lookbehind
 
                 new_assistant_ids = self.convert_token_ids(
-                    input_ids[:,  start_index_in_target_window:], **convert_kwargs
+                    input_ids[:, start_index_in_target_window:], **convert_kwargs
                 )
                 prompt_use_length = new_assistant_ids.shape[1]
-                prompt_use = self.prev_assistant_ids[:,-prompt_use_length:]
+                prompt_use = self.prev_assistant_ids[:, -prompt_use_length:]
 
-                replace_tokens_from_prompt, disrep_length, new_tokens_with_disrep, new_tokens_only, discrep_only = get_tokens_diag(prompt_use, new_assistant_ids)
+                replace_tokens_from_prompt, disrep_length, new_tokens_with_disrep, new_tokens_only, discrep_only = (
+                    get_tokens_diag(prompt_use, new_assistant_ids)
+                )
                 assistant_input_ids = self.prev_assistant_ids
 
                 if new_tokens_only is not None:
@@ -398,7 +402,7 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
                         elif disrep_length > discrep_only.shape[1]:
                             disrep_length_diff = disrep_length - discrep_only.shape[1]
                             assistant_input_ids = assistant_input_ids[:, :-disrep_length_diff]
-                            assistant_input_ids[:, -discrep_only.shape[1]:] = discrep_only
+                            assistant_input_ids[:, -discrep_only.shape[1] :] = discrep_only
 
                         remove_from_pkv = disrep_length
 
@@ -408,14 +412,15 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
                     # edge case: in case of no intersection between prompt and new_assistant_ids
                     assistant_input_ids = torch.cat([assistant_input_ids, new_assistant_ids], dim=-1)
 
-
                 self.prev_assistant_ids = assistant_input_ids
             else:
                 assistant_input_ids = self.convert_token_ids(input_ids, **convert_kwargs)
-                assistant_input_ids = torch.cat([self.prev_assistant_ids, assistant_input_ids[:, self.prev_assistant_ids.shape[1]:]], dim=1)
+                assistant_input_ids = torch.cat(
+                    [self.prev_assistant_ids, assistant_input_ids[:, self.prev_assistant_ids.shape[1] :]], dim=1
+                )
 
             new_cur_len = assistant_input_ids.shape[-1]
-            
+
         max_new_tokens = int(self.num_assistant_tokens)
 
         min_new_tokens = max(min(max_new_tokens, self.main_model_min_length - new_cur_len), 0)
@@ -460,9 +465,15 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
             )
             target_prompt_use_length = new_target_ids_from_window.shape[1]
 
-            target_prompt_use = input_ids[:,-target_prompt_use_length:]
+            target_prompt_use = input_ids[:, -target_prompt_use_length:]
 
-            tar_replace_tokens_from_prompt, tar_disrep_length, tar_new_tokens_with_disrep, tar_new_tokens_only, tar_discrep_only = get_tokens_diag(target_prompt_use, new_target_ids_from_window)
+            (
+                tar_replace_tokens_from_prompt,
+                tar_disrep_length,
+                tar_new_tokens_with_disrep,
+                tar_new_tokens_only,
+                tar_discrep_only,
+            ) = get_tokens_diag(target_prompt_use, new_target_ids_from_window)
 
             # if DEBUG:
             #     log(f"TARGET {target_prompt_use=}, {new_target_ids_from_window=}")
@@ -470,7 +481,7 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
 
             new_target_ids = input_ids
 
-            if tar_new_tokens_only is not None:  
+            if tar_new_tokens_only is not None:
                 if tar_new_tokens_only.shape[1] > 0:
                     new_target_ids = torch.cat([new_target_ids, tar_new_tokens_only], dim=-1)
             else:
@@ -484,23 +495,22 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
                 src=self.assistant_tokenizer,
                 dest=self.target_tokenizer,
             )
-            new_target_ids = torch.cat([input_ids, new_target_ids[:, input_ids.shape[1]:]], dim=1)
+            new_target_ids = torch.cat([input_ids, new_target_ids[:, input_ids.shape[1] :]], dim=1)
 
         for stopping_criterion in stopping_criteria:
             if hasattr(stopping_criterion, "max_length"):
-                new_target_ids = new_target_ids[:, :stopping_criteria.max_length]
+                new_target_ids = new_target_ids[:, : stopping_criteria.max_length]
 
         # 3. Update variables for the next round of candidate generation
         self.assistant_kwargs["past_key_values"] = assistant_output.past_key_values
         self.prev_tokens = assistant_output.sequences
-
 
         # 4. Prepare variables for output
         # candidate_logits = torch.stack(assistant_output.scores, dim=1)
         # assert (new_target_ids[:,:input_ids.shape[1]] == input_ids).all()
 
         if input_ids.shape[1] >= new_target_ids.shape[1]:
-            some_suffix = torch.tensor([[0,1,2,3,4]], device=new_target_ids.device)
+            some_suffix = torch.tensor([[0, 1, 2, 3, 4]], device=new_target_ids.device)
             new_target_ids = torch.cat([new_target_ids, some_suffix], dim=1)
 
         return new_target_ids, None
