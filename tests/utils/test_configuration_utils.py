@@ -247,12 +247,10 @@ class ConfigTestUtils(unittest.TestCase):
         self.assertEqual(config.text_config.__class__.__name__, "CLIPTextConfig")
 
     def test_from_pretrained_subfolder(self):
-        with self.assertRaises(OSError):
-            # config is in subfolder, the following should not work without specifying the subfolder
-            _ = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert-subfolder")
+        config = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert-subfolder")
+        self.assertIsNotNone(config)
 
         config = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert-subfolder", subfolder="bert")
-
         self.assertIsNotNone(config)
 
     def test_cached_files_are_used_when_internet_is_down(self):

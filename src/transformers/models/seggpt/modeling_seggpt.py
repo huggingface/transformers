@@ -15,7 +15,6 @@
 """PyTorch SegGpt model."""
 
 import collections.abc
-import math
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -32,6 +31,7 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     logging,
     replace_return_docstrings,
+    torch_int,
 )
 from .configuration_seggpt import SegGptConfig
 
@@ -155,9 +155,10 @@ class SegGptEmbeddings(nn.Module):
     def interpolate_pos_encoding(self, height: int, width: int) -> torch.Tensor:
         patch_pos_embed = self.position_embeddings[:, 1:]
         num_patches = patch_pos_embed.shape[1]
-        pretrain_patch_size = int(math.sqrt(num_patches))
+        pretrain_patch_size = torch_int(num_patches**0.5)
 
-        if pretrain_patch_size != height or pretrain_patch_size != width:
+        # always interpolate when tracing to ensure the exported model works for dynamic input shapes
+        if torch.jit.is_tracing() or pretrain_patch_size != height or pretrain_patch_size != width:
             patch_pos_embed = F.interpolate(
                 patch_pos_embed.reshape(1, pretrain_patch_size, pretrain_patch_size, -1).permute(0, 3, 1, 2),
                 size=(height, width),
