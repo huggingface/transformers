@@ -12,134 +12,224 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# # Adapted weights from original model code at https://github.com/sczhou/ProPainter
-# EPILOG_TXT = """Example:
-#     python transformers/src/transformers/models/propainter/convert_propainter_to_hf.py --text_model_id lmsys/vicuna-7b-v1.5 --vision_model_id openai/clip-vit-large-patch14 --output_hub_path org/video_llava-7b --old_state_dict_id LanguageBind/Video-LLaVA-7B
+# Adapted weights from original model code at https://github.com/sczhou/ProPainter
 
-# Example for creating the old state dict file with Python:
+# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the S-Lab License, Version 1.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://github.com/sczhou/ProPainter/blob/main/LICENSE
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
-#     import torch
-#     from propainter.model import ProPainterModel
+# Adapted weights from original model code at https://github.com/sczhou/ProPainter
 
-#     # load model
-#     kwargs = {"device_map": "auto", "torch_dtype": torch.float16}
-#     model = ProPainterModel.from_pretrained("ruffy369/ProPainter", low_cpu_mem_usage=True, **kwargs)
+import torch
+import requests
+import io
+import os
+import argparse
 
-#     # load model
-#     model.load_model()
+def rename_optical_flow(old_key, network_mapping):
+  new_key = ""
+  for old_prefix, new_prefix in network_mapping.items():
+    if old_prefix in old_key:
+      # Replace old prefix with new prefix
+      new_key = old_key.replace(f"module.{old_prefix}", f"optical_flow_model.{new_prefix}")
+    # Handle layer and block transformations
+      if 'layer' in new_key:
+        parts = new_key.split('.')
+        layer_x = int(parts[2][5])  # Extract the number after 'layer'
+        layer_y = int(parts[3])  # The sub-layer number
+        
+        # Compute the corresponding resblock number
+        resblock_z = layer_x * 2 + layer_y  # Example: layer1.0 -> resblock 0, layer1.1 -> resblock 1, etc.
+        
+        # Replace 'layerX.Y' with 'resblocks.Z'
+        new_key = new_key.replace(f"layer{layer_x}.{layer_y}", f"resblocks.{resblock_z}")
+        
+      if 'convc' in new_key:
+        # Transform `layerX.Y` to `resblocks.X`
+        new_key = new_key.replace(f'convc', f'conv_corr')
+      if 'convf' in new_key:
+        # Transform `layerX.Y` to `resblocks.X`
+        new_key = new_key.replace(f'convf', f'conv_flow')
 
-#     # Save state dict
-#     torch.save(model.state_dict(), "tmp/hf_models/propainter/model_state_dict.bin")
-# """
-# #########################################################TODO Change to add Propainter conversion of weights to hf#####################################
-# KEYS_TO_MODIFY_MAPPING = {
-#     "model.video_tower.video_tower": "video_tower",
-#     "model.image_tower.image_tower": "image_tower",
-#     "model.mm_projector": "multi_modal_projector",
-#     "model": "language_model.model",
-#     "lm_head": "language_model.lm_head",
-#     "video_tower": "video_tower.vision_model",
-#     "image_tower": "image_tower.vision_model",
-#     "multi_modal_projector.0": "multi_modal_projector.linear_1",
-#     "multi_modal_projector.2": "multi_modal_projector.linear_2",
-# }
+  return new_key
+
+def rename_flow_completion(old_key, network_mapping):
+  new_key = ""
+  for old_prefix, new_prefix in network_mapping.items():
+    if old_prefix in old_key:
+      new_key = old_key.replace(f"{old_prefix}", f"{new_prefix}")
+    # Handle specific layer/block transformations
+      if 'mid_dilation' in new_key:
+        new_key = new_key.replace(f'mid_dilation', f'intermediate_dilation')
+      if 'feat_prop_module' in new_key:
+        new_key = new_key.replace(f'feat_prop_module', f'feature_propagation_module')
+      if 'edgeDetector.mid_layer' in new_key:
+        new_key = new_key.replace(f'edgeDetector.mid_layer', f'edgeDetector.intermediate_layer')
+
+  return new_key
+
+def rename_inpaint_generator(old_key, network_mapping):
+  new_key = ""
+  for old_prefix, new_prefix in network_mapping.items():
+    if old_prefix in old_key:
+      # Replace old prefix with new prefix
+      new_key = old_key.replace(f"{old_prefix}", f"{new_prefix}")
+
+  return new_key
+
+def map_keys(old_keys, module):
+  key_mapping = {}
+
+  # Define network type and layer/block mappings
+  network_mapping_optical_flow = {
+    'fnet': 'feature_network',
+    'cnet': 'context_network',
+    'update_block': 'update_block'
+  }
+
+  network_mapping_flow_completion = {
+    'downsample': 'flow_completion_net.downsample',
+    'encoder1': 'flow_completion_net.encoder1',
+    'encoder2': 'flow_completion_net.encoder2',
+    'decoder1': 'flow_completion_net.decoder1',
+    'decoder2': 'flow_completion_net.decoder2',
+    'upsample': 'flow_completion_net.upsample',
+    'mid_dilation': 'flow_completion_net.intermediate_dilation',
+    'feat_prop_module.deform_align.backward_': 'flow_completion_net.feature_propagation_module.deform_align.backward_',
+    'feat_prop_module.deform_align.forward_': 'flow_completion_net.feature_propagation_module.deform_align.forward_',
+    'feat_prop_module.backbone.backward_': 'flow_completion_net.feature_propagation_module.backbone.backward_',
+    'feat_prop_module.backbone.forward_': 'flow_completion_net.feature_propagation_module.backbone.forward_',
+    'feat_prop_module.fusion': 'flow_completion_net.feature_propagation_module.fusion',
+    'edgeDetector.projection': 'flow_completion_net.edgeDetector.projection',
+    'edgeDetector.mid_layer': 'flow_completion_net.edgeDetector.intermediate_layer',
+    'edgeDetector.out_layer': 'flow_completion_net.edgeDetector.out_layer'
+  }
+  network_mapping_inpaint_generator = {
+    'encoder': 'inpaint_generator.encoder',
+    'decoder': 'inpaint_generator.decoder',
+    'ss': 'inpaint_generator.soft_split',
+    'sc': 'inpaint_generator.soft_comp',
+    'feat_prop_module.': 'inpaint_generator.feature_propagation_module.',
+    'norm': 'layer_norm',
+    'transformers.transformer.': 'inpaint_generator.transformers.transformer.'
+  }
+
+  if module == "optical_flow":
+    network_mapping = network_mapping_optical_flow
+    for old_key in old_keys:
+      # Transform the old key to new key format
+      new_key = rename_optical_flow(old_key, network_mapping)
+      key_mapping[new_key] = old_key
+
+  elif module == "flow_completion":
+    network_mapping = network_mapping_flow_completion
+    for old_key in old_keys:
+      # Transform the old key to new key format
+      new_key = rename_flow_completion(old_key, network_mapping)
+      key_mapping[new_key] = old_key
+
+  else:
+    network_mapping = network_mapping_inpaint_generator
+    for old_key in old_keys:
+      # Transform the old key to new key format
+      new_key = rename_inpaint_generator(old_key, network_mapping)
+      key_mapping[new_key] = old_key
+
+  return key_mapping
+
+def rename_key(state_dict, old_key, new_key):
+  if old_key in state_dict:
+    state_dict[new_key] = state_dict.pop(old_key)
+
+def create_new_state_dict(combined_state_dict,original_state_dict, key_mapping):
+  for new_key, old_key in key_mapping.items():
+    rename_key(original_state_dict, old_key, new_key)
+    combined_state_dict[new_key] = original_state_dict[new_key]
+
+def convert_propainter_checkpoint(args):
+    combined_state_dict = {}
+
+    # Download the original checkpoint
+    original_state_dict_optical_flow = torch.hub.load_state_dict_from_url(args.optical_flow_checkpoint_url, map_location="cpu")
+    original_state_dict_flow_completion = torch.hub.load_state_dict_from_url(args.flow_completion_checkpoint_url, map_location="cpu")
+    original_state_dict_inpaint_generator = torch.hub.load_state_dict_from_url(args.inpaint_generator_checkpoint_url, map_location="cpu")
+
+    key_mapping_optical_flow = map_keys(list(original_state_dict_optical_flow.keys()), "optical_flow")
+
+    key_mapping_flow_completion = map_keys(list(original_state_dict_flow_completion.keys()), "flow_completion")
+
+    key_mapping_inpaint_generator = map_keys(list(original_state_dict_inpaint_generator.keys()), "inpaint_generator")
+
+    # Create new state dict with updated keys for optical flow model
+    create_new_state_dict(combined_state_dict,original_state_dict_optical_flow,key_mapping_optical_flow)
+
+    # Create new state dict with updated keys for flow completion network
+    create_new_state_dict(combined_state_dict,original_state_dict_flow_completion,key_mapping_flow_completion)
+
+    # Create new state dict with updated keys for propainter inpaint generator
+    create_new_state_dict(combined_state_dict,original_state_dict_inpaint_generator,key_mapping_inpaint_generator)
 
 
-# def convert_state_dict_to_hf(state_dict):
-#     new_state_dict = {}
-#     for key, value in state_dict.items():
-#         if key.endswith(".inv_freq"):
-#             continue
-#         for key_to_modify, new_key in KEYS_TO_MODIFY_MAPPING.items():
-#             if key_to_modify in key:
-#                 key = key.replace(key_to_modify, new_key)
+    # Save the combined state dict
+    os.makedirs(args.pytorch_dump_folder_path, exist_ok=True)
+    new_checkpoint_path = os.path.join(args.pytorch_dump_folder_path, f'{args.model_name}_combined.pth')
+    torch.save(combined_state_dict, new_checkpoint_path)
 
-#         new_state_dict[key] = value
-#     return new_state_dict
+    print(f"Combined checkpoint saved to: {new_checkpoint_path}")
 
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    # Required parameters
+    parser.add_argument(
+        "--model-name",
+        default="propainter",
+        type=str,
+        choices=["propainter"],
+        help="Name of the ProPainter model you'd like to convert.",
+    )
+    parser.add_argument(
+        "--optical-flow-checkpoint-url",
+        default="https://github.com/sczhou/ProPainter/releases/download/v0.1.0/raft-things.pth",
+        type=str,
+        help="List of urls for the ProPainter model components' weights.",
+    )
+    parser.add_argument(
+        "--flow-completion-checkpoint-url",
+        default="https://github.com/sczhou/ProPainter/releases/download/v0.1.0/recurrent_flow_completion.pth",
+        type=str,
+        help="List of urls for the ProPainter model components' weights.",
+    )
+    parser.add_argument(
+        "--inpaint-generator-checkpoint-url",
+        default="https://github.com/sczhou/ProPainter/releases/download/v0.1.0/ProPainter.pth",
+        type=str,
+        help="List of urls for the ProPainter model components' weights.",
+    )
+    parser.add_argument(
+        "--pytorch-dump-folder-path", default="/content", type=str, help="Path to the output PyTorch model directory."
+    )
+    parser.add_argument(
+        "--verify-logits",
+        action="store_true",
+        help="Whether or not to verify the logits against the original implementation.",
+    )
+    parser.add_argument(
+        "--verify-inputs",
+        action="store_true",
+        help="Whether or not to verify the inputs against the original implementation.",
+    )
+    parser.add_argument(
+        "--push-to-hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+    )
 
-# def convert_video_llava_llama_to_hf(text_model_id, vision_model_id, output_hub_path, old_state_dict_id):
-#     torch.set_default_dtype(torch.float16)
-#     text_config = AutoConfig.from_pretrained(text_model_id)
-
-#     tokenizer = AutoTokenizer.from_pretrained(text_model_id)
-#     tokenizer.add_tokens(AddedToken("<image>", special=True, normalized=False), special_tokens=True)
-#     tokenizer.add_tokens(AddedToken("<video>", special=True, normalized=False), special_tokens=True)
-#     tokenizer.add_special_tokens({"pad_token": "<pad>"})
-#     tokenizer.padding_side = "left"
-
-#     image_processor = ProPainterImageProcessor.from_pretrained(vision_model_id)
-
-#     processor = ProPainterProcessor(tokenizer=tokenizer, image_processor=image_processor)
-
-#     config = ProPainterConfig(text_config=text_config)
-#     config.pad_token_id = 32002
-
-#     with torch.device("meta"):
-#         model = ProPainterForConditionalGeneration(config)
-
-#     model_state_dict = set(model.state_dict().keys())
-
-#     # Pad to 64 for performance reasons
-#     pad_shape = 64
-#     state_dict_temp = "pytorch_model-0000{i}-of-00002.bin"
-#     for shard in range(1, 3):
-#         state_dict_path = hf_hub_download(old_state_dict_id, state_dict_temp.format(i=shard))
-#         state_dict = torch.load(state_dict_path, map_location="cpu")
-#         state_dict = convert_state_dict_to_hf(state_dict)
-#         model.load_state_dict(state_dict, strict=False, assign=True)
-#         model_state_dict -= set(state_dict.keys())
-
-#     if len(model_state_dict) > 0:
-#         raise RuntimeError(f"Missing keys in state dict: {model_state_dict}")
-
-#     pre_expansion_embeddings = model.language_model.model.embed_tokens.weight.data
-#     mu = torch.mean(pre_expansion_embeddings, dim=0).float()
-#     n = pre_expansion_embeddings.size()[0]
-#     sigma = ((pre_expansion_embeddings - mu).T @ (pre_expansion_embeddings - mu)) / n
-#     dist = torch.distributions.multivariate_normal.MultivariateNormal(mu, covariance_matrix=1e-5 * sigma)
-
-#     # We add an image and video token so we resize the model
-#     model.resize_token_embeddings(config.text_config.vocab_size + 3, pad_shape)
-#     model.language_model.model.embed_tokens.weight.data[32000:] = torch.stack(
-#         tuple((dist.sample() for _ in range(model.language_model.model.embed_tokens.weight.data[32000:].shape[0]))),
-#         dim=0,
-#     )
-#     model.language_model.lm_head.weight.data[32000:] = torch.stack(
-#         tuple((dist.sample() for _ in range(model.language_model.lm_head.weight.data[32000:].shape[0]))),
-#         dim=0,
-#     )
-
-#     model.push_to_hub(output_hub_path)
-#     processor.push_to_hub(output_hub_path)
-
-
-# def main():
-#     parser = argparse.ArgumentParser(
-#         epilog=EPILOG_TXT,
-#         formatter_class=argparse.RawDescriptionHelpFormatter,
-#     )
-#     parser.add_argument(
-#         "--text_model_id",
-#         help="Hub location of the text model",
-#     )
-#     parser.add_argument(
-#         "--vision_model_id",
-#         help="Hub location of the vision model",
-#     )
-#     parser.add_argument(
-#         "--output_hub_path",
-#         help="Location on the hub of the converted model",
-#     )
-#     parser.add_argument(
-#         "--old_state_dict_id",
-#         help="Location on the hub of the raw state dict of the original model. The filename needs to be `model_state_dict.bin`",
-#     )
-#     args = parser.parse_args()
-#     convert_video_llava_llama_to_hf(
-#         args.text_model_id, args.vision_model_id, args.output_hub_path, args.old_state_dict_id
-#     )
-
-
-# if __name__ == "__main__":
-#     main()
+    args = parser.parse_args()
