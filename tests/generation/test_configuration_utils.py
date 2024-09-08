@@ -23,36 +23,37 @@ from pathlib import Path
 from huggingface_hub import HfFolder, delete_repo
 from parameterized import parameterized
 
-from transformers import AutoConfig, GenerationConfig, is_torch_available, WatermarkingConfig
+from transformers import AutoConfig, GenerationConfig, WatermarkingConfig, is_torch_available
+
 
 if is_torch_available():
     import torch
 
 from transformers.generation import (
-    GenerationMode,
-    SequenceBiasLogitsProcessor,
-    MinLengthLogitsProcessor,
-    MinNewTokensLengthLogitsProcessor,
-    TemperatureLogitsWarper,
-    RepetitionPenaltyLogitsProcessor,
+    ClassifierFreeGuidanceLogitsProcessor,
+    EncoderNoRepeatNGramLogitsProcessor,
     EncoderRepetitionPenaltyLogitsProcessor,
-    TopPLogitsWarper,
-    TopKLogitsWarper,
-    MinPLogitsWarper,
-    TypicalLogitsWarper,
     EpsilonLogitsWarper,
     EtaLogitsWarper,
-    NoRepeatNGramLogitsProcessor,
-    EncoderNoRepeatNGramLogitsProcessor,
-    NoBadWordsLogitsProcessor,
-    PrefixConstrainedLogitsProcessor,
-    HammingDiversityLogitsProcessor,
+    ExponentialDecayLengthPenalty,
     ForcedBOSTokenLogitsProcessor,
     ForcedEOSTokenLogitsProcessor,
-    ExponentialDecayLengthPenalty,
+    GenerationMode,
+    HammingDiversityLogitsProcessor,
+    MinLengthLogitsProcessor,
+    MinNewTokensLengthLogitsProcessor,
+    MinPLogitsWarper,
+    NoBadWordsLogitsProcessor,
+    NoRepeatNGramLogitsProcessor,
+    PrefixConstrainedLogitsProcessor,
+    RepetitionPenaltyLogitsProcessor,
+    SequenceBiasLogitsProcessor,
     SuppressTokensAtBeginLogitsProcessor,
     SuppressTokensLogitsProcessor,
-    ClassifierFreeGuidanceLogitsProcessor,
+    TemperatureLogitsWarper,
+    TopKLogitsWarper,
+    TopPLogitsWarper,
+    TypicalLogitsWarper,
     UnbatchedClassifierFreeGuidanceLogitsProcessor,
     WatermarkLogitsProcessor,
 )
@@ -607,15 +608,6 @@ class GenerationConfigTest(unittest.TestCase):
         """Tests that GenerationConfig is serialized and UnbatchedClassifierFreeGuidanceLogitsProcessor is initialized with guidance_scale"""
         guidance_scale = 2.0
 
-        class Namespace(dict):
-            pass
-
-        def dummy_model(input_ids, attention_mask, use_cache=True, past_key_values=None):
-            out = Namespace()
-            out.logits = logits_uncond
-            out.past_key_values = None
-            return out
-
         input_ids = torch.LongTensor([[0]])
 
         generation_config = GenerationConfig(guidance_scale=guidance_scale)
@@ -624,7 +616,7 @@ class GenerationConfigTest(unittest.TestCase):
             new_config = GenerationConfig.from_pretrained(tmp_dir)
         self.assertEqual(new_config.guidance_scale, guidance_scale)
 
-        cfg = UnbatchedClassifierFreeGuidanceLogitsProcessor(new_config.guidance_scale, dummy_model, input_ids)
+        cfg = UnbatchedClassifierFreeGuidanceLogitsProcessor(new_config.guidance_scale, {}, input_ids)
         self.assertIsNotNone(cfg.guidance_scale)
 
     def test_serialize_generation_watermarking_config(self):

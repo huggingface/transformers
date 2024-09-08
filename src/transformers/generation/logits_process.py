@@ -15,7 +15,7 @@
 
 import inspect
 import math
-from typing import Callable, Dict, Iterable, List, Optional, Tuple, Union
+from typing import Callable, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -1197,14 +1197,16 @@ class SequenceBiasLogitsProcessor(LogitsProcessor):
                 f"{sequence_bias}."
             )
 
-        all_token_bias_pairs_are_valid = lambda token_bias_pair: (
-            isinstance(token_bias_pair, list)
-            and all(isinstance(token_id, (int, np.integer)) and token_id > 0 for token_id in token_bias_pair)
-            or isinstance(token_bias_pair, float)
-        )
+        def all_token_bias_pairs_are_valid(sequence):
+            (
+                isinstance(token_bias_pair, list)
+                and all(isinstance(token_id, (int, np.integer)) and token_id > 0 for token_id in token_bias_pair)
+                or isinstance(token_bias_pair, float)
+                for token_bias_pair in sequence
+            )
+
         if isinstance(sequence_bias, list) and any(
-            (not all_token_bias_pairs_are_valid(token_bias_pair) for token_bias_pair in sequence) or len(sequence) == 0
-            for sequence in sequence_bias
+            (not all_token_bias_pairs_are_valid(sequence)) or len(sequence) == 0 for sequence in sequence_bias
         ):
             raise ValueError(
                 f"Each element in `sequence_bias` has to be a non-empty list of lists of positive integers and float, but is "
