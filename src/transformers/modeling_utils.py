@@ -44,7 +44,7 @@ from .activations import get_activation
 from .configuration_utils import PretrainedConfig
 from .dynamic_module_utils import custom_object_save
 from .generation import GenerationConfig, GenerationMixin
-from .integrations import PeftAdapterMixin, deepspeed_config, is_deepspeed_zero3_enabled
+from .integrations import PeftAdapterMixin, PrunerMixin, deepspeed_config, is_deepspeed_zero3_enabled
 from .pytorch_utils import (  # noqa: F401
     Conv1D,
     apply_chunking_to_forward,
@@ -1301,7 +1301,7 @@ class ModuleUtilsMixin:
         return 6 * self.estimate_tokens(input_dict) * self.num_parameters(exclude_embeddings=exclude_embeddings)
 
 
-class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMixin, PeftAdapterMixin):
+class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMixin, PeftAdapterMixin, PrunerMixin):
     r"""
     Base class for all models.
 

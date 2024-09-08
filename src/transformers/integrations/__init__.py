@@ -95,6 +95,7 @@ _import_structure = {
         "run_hp_search_wandb",
     ],
     "peft": ["PeftAdapterMixin"],
+    "prune": ["PrunerMixin"],
     "quanto": ["replace_with_quanto_layers"],
 }
 
@@ -177,6 +178,7 @@ if TYPE_CHECKING:
         run_hp_search_wandb,
     )
     from .peft import PeftAdapterMixin
+    from .prune import PrunerMixin
     from .quanto import replace_with_quanto_layers
 else:
     import sys
