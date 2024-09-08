@@ -13,15 +13,15 @@
 # limitations under the License.
 """Mllama model configuration"""
 
-import os
-from typing import Union
+import warnings
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
-
+from ..auto import CONFIG_MAPPING
+import os
+from typing import Union
 
 logger = logging.get_logger(__name__)
-
 
 def compute_intermediate_size(n, ffn_dim_multiplier=1.3, multiple_of=4096):
     return multiple_of * ((int(ffn_dim_multiplier * int(8 * n / 3)) + multiple_of - 1) // multiple_of)
@@ -76,9 +76,7 @@ class MllamaCrossAttentionVisionConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
-
     model_type = "mllama"
-
     def __init__(
         self,
         n_heads=16,
@@ -89,14 +87,14 @@ class MllamaCrossAttentionVisionConfig(PretrainedConfig):
         vision_input_dim=1280,
         return_intermediate="3,7,15,23,30",
         global_vision_layers=8,
-        max_num_tiles=4,  # same as vision max num chunks?
-        norm_eps=1.0e-5,
+        max_num_tiles=4, # same as vision max num chunks?
+        norm_eps= 1.0e-5,
         ffn_dim_multiplier=1.3,
         multiple_of=4096,
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self.n_heads = n_heads
+        self.n_heads=n_heads
         self.vision_chunk_size = vision_chunk_size
         self.vision_max_num_chunks = vision_max_num_chunks
         self.patch_size = patch_size
@@ -108,7 +106,9 @@ class MllamaCrossAttentionVisionConfig(PretrainedConfig):
         self.norm_eps = norm_eps
         self.ffn_dim_multiplier = ffn_dim_multiplier
         self.multiple_of = multiple_of
+        
 
+    
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
         cls._set_token_in_kwargs(kwargs)
@@ -125,6 +125,8 @@ class MllamaCrossAttentionVisionConfig(PretrainedConfig):
             )
 
         return cls.from_dict(config_dict, **kwargs)
+    
+
 
 
 class MllamaCrossAttentionTextConfig(PretrainedConfig):
@@ -176,9 +178,7 @@ class MllamaCrossAttentionTextConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
-
     model_type = "mllama"
-
     def __init__(
         self,
         vocab_size=128256,
@@ -187,25 +187,18 @@ class MllamaCrossAttentionTextConfig(PretrainedConfig):
         n_heads=64,
         n_kv_heads=8,
         max_seq_len=512,
-        ffn_dim_multiplier=1.3,
-        norm_eps=1.0e-5,
-        rope_theta=500000,
+        ffn_dim_multiplier= 1.3,
+        norm_eps= 1.0e-5,
+        rope_theta= 500000,
         use_scaled_rope=True,
-        vision_num_cross_attention_layers=20,  # TODO comon
-        multiple_of=4096,  # TODO common
-        vision_input_dim=1280,  # TODO common
+        vision_num_cross_attention_layers=20, # TODO comon
+        multiple_of=4096, # TODO common
+        vision_input_dim=1280, # TODO common
         **kwargs,
     ):
         self.vocab_size = vocab_size
         self.n_layers = n_layers
         self.dim = dim
-
-        # FOR STATIC CACHE, TEMP SOLUTION UNTIL STANDARDIZING VAR NAMES
-        self.hidden_size = dim
-        self.num_attention_heads = n_heads
-        self.num_key_value_heads = n_kv_heads
-        self.num_hidden_layers = n_layers
-
         self.n_heads = n_heads
         self.n_kv_heads = n_kv_heads
         self.max_seq_len = max_seq_len
@@ -214,11 +207,13 @@ class MllamaCrossAttentionTextConfig(PretrainedConfig):
         self.use_scaled_rope = use_scaled_rope
         self.norm_eps = norm_eps
         self.multiple_of = multiple_of
-        self.ffn_dim_multiplier = ffn_dim_multiplier
+        self.ffn_dim_multiplier= ffn_dim_multiplier
         self.intermediate_size = compute_intermediate_size(dim, ffn_dim_multiplier, multiple_of)
         self.vision_input_dim = vision_input_dim
         super().__init__(**kwargs)
 
+
+    
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
         cls._set_token_in_kwargs(kwargs)
@@ -295,6 +290,7 @@ class MllamaConfig(PretrainedConfig):
         text_config=None,
         **kwargs,
     ):
+
         if vision_config is None:
             self.vision_config = MllamaCrossAttentionVisionConfig()
             logger.info("vision_config is None, using default mllama vision config")
@@ -302,6 +298,7 @@ class MllamaConfig(PretrainedConfig):
             self.vision_config = MllamaCrossAttentionVisionConfig(**vision_config)
         elif isinstance(vision_config, MllamaCrossAttentionVisionConfig):
             self.vision_config = vision_config
+
 
         if text_config is None:
             self.text_config = MllamaCrossAttentionTextConfig()

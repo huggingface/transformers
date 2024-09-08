@@ -17,8 +17,11 @@
 import gc
 import unittest
 
+import requests
+
 from transformers import (
     AutoProcessor,
+    AutoTokenizer,
     MllamaConfig,
     MllamaForConditionalGeneration,
     is_torch_available,
@@ -27,6 +30,8 @@ from transformers import (
 from transformers.testing_utils import (
     require_bitsandbytes,
     require_torch,
+    require_torch_gpu,
+    require_vision,
     slow,
     torch_device,
 )
@@ -41,7 +46,7 @@ else:
     is_torch_greater_or_equal_than_2_0 = False
 
 if is_vision_available():
-    pass
+    from PIL import Image
 
 
 class MllamaVisionText2TextModelTester:
@@ -203,13 +208,106 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCas
 @require_torch
 class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.processor = AutoProcessor.from_pretrained("mllama-hf/bakMllama-v1-hf")
+        self.small_model_checkpoint = "s0409/model-1"
+        self.processor = AutoProcessor.from_pretrained(self.small_model_checkpoint)
 
     def tearDown(self):
         gc.collect()
         torch.cuda.empty_cache()
 
     @slow
-    @require_bitsandbytes
-    def test_small_model_integration_test(self):
-        pass  # TODO if possible
+    @require_torch_gpu
+    def test_11b_model_integration_generate(self):
+        
+        # Prepare inputs
+        prompt = "<|image|><|begin_of_text|>If I had to write a haiku for this one"
+
+        url = "https://llava-vl.github.io/static/images/view.jpg"
+        raw_image = Image.open(requests.get(url, stream=True).raw)
+
+        inputs = self.processor(prompt, raw_image, return_tensors="pt")
+        for k, v in inputs.items():
+            if isinstance(v, torch.Tensor):
+                inputs[k] = v.to(torch_device)
+
+        input_ids = inputs["input_ids"]
+        input_ids[input_ids == 128011] = 128256  # TODO: remove when tokenizer corrected
+
+        # Check inputs ids
+        expected_input_ids = torch.tensor([[128256, 128000, 2746, 358, 1047, 311, 3350, 264, 6520, 39342, 369, 420, 832]], device=torch_device)  # fmt: skip
+        self.assertTrue(torch.equal(input_ids, expected_input_ids))
+
+        # Prepare model
+        torch_dtype = torch.bfloat16
+        model = MllamaForConditionalGeneration.from_pretrained(
+            self.small_model_checkpoint, torch_dtype=torch_dtype, device_map=torch_device
+        )
+        model.setup_cache(1, torch_dtype)  # TODO: remove when native cache is supported
+
+        # Run generate
+        position_ids = torch.arange(0, input_ids.shape[1]).to(torch_device)
+        model_kwargs = {
+            "position_ids": position_ids,
+            "pixel_values": inputs["pixel_values"],
+            "aspect_ratios": inputs["aspect_ratios"],
+            "num_tiles": inputs["num_tiles"],
+            "cross_attention_token_mask": inputs["cross_attention_token_mask"],
+            "use_cache": False,
+        }
+        output = model.generate(input_ids, **model_kwargs, do_sample=False, max_new_tokens=25)
+
+        decoded_output = self.processor.decode(output[0], skip_special_tokens=True)
+        expected_output = "If I had to write a haiku for this one, it would be:.\\nA dock on a lake.\\nA mountain in the distance.\\nA long exposure."  # fmt: skip
+        
+        self.assertEqual(decoded_output, expected_output)
+
+    @slow
+    @require_torch_gpu
+    def test_11b_model_integration_forward(self):
+        
+        # Prepare inputs
+        prompt = "<|image|><|begin_of_text|>If I had to write a haiku for this one"
+
+        url = "https://llava-vl.github.io/static/images/view.jpg"
+        raw_image = Image.open(requests.get(url, stream=True).raw)
+
+        inputs = self.processor(prompt, raw_image, return_tensors="pt")
+        for k, v in inputs.items():
+            if isinstance(v, torch.Tensor):
+                inputs[k] = v.to(torch_device)
+
+        input_ids = inputs["input_ids"]
+        input_ids[input_ids == 128011] = 128256  # TODO: remove when tokenizer corrected
+
+        # Check inputs ids
+        expected_input_ids = torch.tensor([[128256, 128000, 2746, 358, 1047, 311, 3350, 264, 6520, 39342, 369, 420, 832]], device=torch_device)  # fmt: skip
+        self.assertTrue(torch.equal(input_ids, expected_input_ids))
+
+        # Prepare model
+        torch_dtype = torch.bfloat16
+        model = MllamaForConditionalGeneration.from_pretrained(
+            self.small_model_checkpoint, torch_dtype=torch_dtype, device_map=torch_device
+        )
+        model.setup_cache(1, torch_dtype)  # TODO: remove when native cache is supported
+
+        # Run generate
+        position_ids = torch.arange(0, input_ids.shape[1]).to(torch_device)
+        model_kwargs = {
+            "position_ids": position_ids,
+            "input_ids": input_ids,
+            "pixel_values": inputs["pixel_values"],
+            "aspect_ratios": inputs["aspect_ratios"],
+            "num_tiles": inputs["num_tiles"],
+            "cross_attention_token_mask": inputs["cross_attention_token_mask"],
+            "use_cache": False,
+        }
+        with torch.inference_mode():
+            output = model(**model_kwargs)
+
+        actual_cross_attention_key_value = output.cross_attention_key_value[0, 0, 0, 0, :5, 64].cpu()
+        expected_cross_attention_key_value = torch.tensor([-0.0933, 0.2930, 1.2656, -0.9883, -0.2100], dtype=torch_dtype)
+        self.assertTrue(torch.allclose(actual_cross_attention_key_value, expected_cross_attention_key_value, atol=1e-4))
+
+        actual_logits = output.logits[0, -1, :5].cpu()
+        expected_logits = torch.tensor([8.5000, 7.8750, 4.2812, 0.5000, 3.0312], dtype=torch_dtype)
+        self.assertTrue(torch.allclose(actual_logits, expected_logits, atol=1e-4))

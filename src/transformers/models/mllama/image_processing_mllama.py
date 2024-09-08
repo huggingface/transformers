@@ -14,23 +14,23 @@
 # limitations under the License.
 
 import math
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
-
 import numpy as np
+
+from typing import Any, Dict, List, Optional, Tuple, Union, Any, Tuple, Set, Dict, List
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
 from ...image_transforms import (
     PaddingMode,
     get_image_size,
-    pad,
-    resize,
 )
+from ...image_transforms import pad, resize
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
     ChannelDimension,
     ImageInput,
     PILImageResampling,
+    get_image_size,
     infer_channel_dimension_format,
     is_valid_image,
     to_numpy_array,
@@ -97,7 +97,7 @@ def find_closest_aspect_ratio(num_tiles: int, img_width: int, img_height: int, t
     """
     tgt_ar = img_width / img_height
     asp_dict = find_supported_aspect_ratios(num_tiles)
-    _, cl_p = 1e23, None
+    cl_d, cl_p = 1e23, None
     if tgt_ar >= 1:
         cl_p = min(
             [k for k in asp_dict.keys() if k <= tgt_ar],
@@ -253,7 +253,9 @@ def validate_mllama_preprocess_arguments(do_resize, size, do_pad, max_image_tile
     if not do_resize:
         raise ValueError("MllamaImageProcessor doesn't support `do_resize=False` mode.")
     if max_image_tiles is None or max_image_tiles <= 0:
-        raise ValueError(f"MllamaImageProcessor `max_image_tiles` must be a positive integer, got {max_image_tiles}.")
+        raise ValueError(
+            f"MllamaImageProcessor `max_image_tiles` must be a positive integer, got {max_image_tiles}."
+        )
     validate_size(size)
 
 
@@ -363,7 +365,9 @@ def fit_image_to_canvas(num_tiles: int, img_width: int, img_height: int, tile_si
     optimal_canvas = None
 
     # Gather all potential supported image resolutions and iterate through them to find best match
-    potential_arrangements = [item for sublist in find_supported_aspect_ratios(num_tiles).values() for item in sublist]
+    potential_arrangements = [
+        item for sublist in find_supported_aspect_ratios(num_tiles).values() for item in sublist
+    ]
 
     current_gap = 1e23
     for n_w, n_h in potential_arrangements:
@@ -450,10 +454,8 @@ def stack_aspect_ratios(aspect_ratios: List[List[Tuple[int, int]]], pad_value: i
             aspect_ratios_stacked[i, : len(row)] = np.array(row)
     return aspect_ratios_stacked
 
-
 def is_valid_list_of_images(images: List):
-    return images and all(is_valid_image(image) for image in images)
-
+    return images and all([is_valid_image(image) for image in images])
 
 # Inspired by IDEFICS2
 def make_list_of_images(images: ImageInput) -> List[List[Optional[np.ndarray]]]:
@@ -471,13 +473,16 @@ def make_list_of_images(images: ImageInput) -> List[List[Optional[np.ndarray]]]:
     if is_valid_image(images):
         output_images = [[images]]
     # If it's a list of images, it's a single batch, so convert it to a list of lists
-    elif isinstance(images, (list, tuple)) and is_valid_list_of_images(images):
+    elif (
+        isinstance(images, (list, tuple))
+        and is_valid_list_of_images(images)
+    ):
         output_images = [images]
     # If it's a list of batches, it's already in the right format
     elif (
         isinstance(images, (list, tuple))
         and all(isinstance(images_i, (list, tuple)) for images_i in images)
-        and any(is_valid_list_of_images(images_i) for images_i in images)
+        and any([is_valid_list_of_images(images_i) for images_i in images])
     ):
         output_images = images
     else:
@@ -487,8 +492,38 @@ def make_list_of_images(images: ImageInput) -> List[List[Optional[np.ndarray]]]:
     return output_images
 
 
+def convert_aspect_ratios_to_ids(aspect_ratios: List[List[Tuple[int, int]]], mux_num_tiles: int) -> np.ndarray:
+    """
+    Convert aspect ratio tuples to unique ids with the following encoding:
+
+        id = (num_tiles_h - 1) * max_num_tiles + num_tiles_w
+        
+    For max_num_tiles = 4, we have the following encoding:
+        
+        - aspect ratio (1, 1) -> id = 1
+        - aspect ratio (1, 2) -> id = 2
+        - aspect ratio (1, 3) -> id = 3
+        - aspect ratio (1, 4) -> id = 4
+        - aspect ratio (2, 1) -> id = 5
+        - aspect ratio (2, 2) -> id = 6
+        - aspect ratio (3, 1) -> id = 9
+        - aspect ratio (4, 1) -> id = 13
+
+    For batch padding we use 0, because there might be different number of images in each batch.
+    """
+
+    batch_size = len(aspect_ratios)
+    max_num_images = max([len(row) for row in aspect_ratios])
+
+    aspect_ratios_ids = np.zeros((batch_size, max_num_images), dtype=np.int64)
+    for i, sample_aspect_ratios in enumerate(aspect_ratios):
+        for j, (num_tiles_h, num_tiles_w) in enumerate(sample_aspect_ratios):
+            aspect_ratios_ids[i, j] = (num_tiles_h - 1) * mux_num_tiles + num_tiles_w
+    return aspect_ratios_ids
+
+
 class MllamaImageProcessor(BaseImageProcessor):
-    model_input_names = ["pixel_values", "num_tiles", "aspect_ratios"]
+    model_input_names = ["pixel_values", "num_tiles", "aspect_ratios", "aspect_ratio_ids"]
 
     def __init__(
         self,
@@ -516,7 +551,9 @@ class MllamaImageProcessor(BaseImageProcessor):
         self.do_pad = do_pad
         self.max_image_tiles = max_image_tiles
 
-        validate_mllama_preprocess_arguments(self.do_resize, self.size, self.do_pad, self.max_image_tiles)
+        validate_mllama_preprocess_arguments(
+            self.do_resize, self.size, self.do_pad, self.max_image_tiles
+        )
 
     def preprocess(
         self,
@@ -616,22 +653,20 @@ class MllamaImageProcessor(BaseImageProcessor):
 
         # Split each image to tiles
         images_list = [
-            [
-                split_to_tiles(image, aspect_ratio[0], aspect_ratio[1])
-                for image, aspect_ratio in zip(images, aspect_ratios)
-            ]
+            [split_to_tiles(image, aspect_ratio[0], aspect_ratio[1]) for image, aspect_ratio in zip(images, aspect_ratios)]
             for images, aspect_ratios in zip(images_list, aspect_ratio_list)
         ]
 
         images, num_tiles = stack_images(images_list, max_image_tiles)
         aspect_ratios = stack_aspect_ratios(aspect_ratio_list, pad_value=1)
+        aspect_ratio_ids = convert_aspect_ratios_to_ids(aspect_ratio_list, mux_num_tiles=max_image_tiles)
 
         # images: (batch_size, num_images, MAX_num_tiles, channels, tile_height, tile_width) - padded to max num tiles
         # aspect_ratios: (batch_size, num_images, 2) - aspect ratios for each image, padded to max num images
         # num_tiles: (batch_size, num_images)  - real number of tiles for each image
 
         encoded_inputs = BatchFeature(
-            data={"pixel_values": images, "aspect_ratios": aspect_ratios},
+            data=dict(pixel_values=images, aspect_ratios=aspect_ratios, aspect_ratio_ids=aspect_ratio_ids),
             tensor_type=return_tensors,
         )
         encoded_inputs["num_tiles"] = num_tiles

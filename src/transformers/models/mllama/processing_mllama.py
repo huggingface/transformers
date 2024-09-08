@@ -18,7 +18,7 @@ Processor class for Mllama.
 
 # TODO: update all docs
 
-from typing import List, Optional, Union
+from typing import Dict, List, Optional, Union
 
 # TODO: uncomment
 # try:
@@ -48,7 +48,7 @@ class MllamaImagesKwargs(ImagesKwargs, total=False):
 
 class MllamaProcessorKwargs(ProcessingKwargs, total=False):
     images_kwargs: MllamaImagesKwargs
-
+    
     _defaults = {
         "image_kwargs": {
             "max_image_tiles": 4,
@@ -160,10 +160,13 @@ class MllamaProcessor(ProcessorMixin):
         not_tensor_data = {}
 
         if text is not None:
+
             if isinstance(text, str):
                 text = [text]
             elif not (isinstance(text, (list, tuple)) and all(isinstance(t, str) for t in text)):
-                raise ValueError("Invalid input text. Please provide a string, or a list of strings")
+                raise ValueError(
+                    "Invalid input text. Please provide a string, or a list of strings"
+                )
             n_images_in_text = [t.count(self.image_token) for t in text]
             encoding = self.tokenizer(text, **text_kwargs)
             data.update(encoding)
@@ -173,6 +176,7 @@ class MllamaProcessor(ProcessorMixin):
             not_tensor_data["cross_attention_token_mask"] = cross_attention_token_mask
 
         if images is not None:
+
             images = make_list_of_images(images)
             n_images_in_images = [len(sample) for sample in images]
 
@@ -223,10 +227,10 @@ class MllamaProcessor(ProcessorMixin):
             return [self.cross_attention_token_mask(t) for t in input_ids]
 
         image_token_locations = [i for i, token in enumerate(input_ids) if token == self.image_token_id]
-
+        
         if len(image_token_locations) == 0:
             return []
-
+        
         # only one image present, unmask until end of sequence
         if len(image_token_locations) == 1:
             return [[image_token_locations[0], -1]]
