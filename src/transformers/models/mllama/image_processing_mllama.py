@@ -52,10 +52,10 @@ def get_all_number_factors(number: int) -> List[int]:
     including 1 and the number itself. The factors are returned in ascending order.
 
     Args:
-        number (int): The positive integer for which to find factors.
+        number (`int`): The positive integer for which to find factors.
 
     Returns:
-        List[int]: A sorted list of all unique factors of the input number.
+        `List[int]`: A sorted list of all unique factors of the input number.
 
     Examples:
         >>> get_all_number_factors(4)
@@ -91,8 +91,8 @@ def find_supported_aspect_ratios(max_num_tiles: int) -> Dict[float, List[Tuple[i
         max_num_tiles (int): The maximum number of tiles allowed.
 
     Returns:
-        Dict[float, List[Tuple[int, int]]]: A dictionary where:
-            - Keys are aspect ratios (float)
+        `Dict[float, List[Tuple[int, int]]]`: A dictionary where:
+            - Keys are aspect ratios (`float`)
             - Values are lists of tuples, each tuple representing a valid (width, height) 
               configuration in terms of number of tiles.
 
@@ -135,12 +135,12 @@ def find_closest_aspect_ratio(max_num_tiles: int, image_width: int, image_height
     original image's aspect ratio while staying within the tile limit.
 
     Args:
-        max_num_tiles (int): The maximum number of tiles allowed for the image.
-        image_width (int): The width of the input image.
-        image_height (int): The height of the input image.
+        max_num_tiles (`int`): The maximum number of tiles allowed for the image.
+        image_width (`int`): The width of the input image.
+        image_height (`int`): The height of the input image.
 
     Returns:
-        Tuple[int, int]: A tuple representing the number of tiles in width and height
+        `Tuple[int, int]`: A tuple representing the number of tiles in width and height
         for the closest supported aspect ratio.
 
     Note:
@@ -185,12 +185,12 @@ def get_size_for_image_fitted_to_tile_size(
     2. The smaller dimension is scaled proportionally to maintain the original aspect ratio.
 
     Args:
-        image_height (int): The height of the original image.
-        image_width (int): The width of the original image.
-        tile_size (int): The size of the tile to fit the image into.
+        image_height (`int`): The height of the original image.
+        image_width (`int`): The width of the original image.
+        tile_size (`int`): The size of the tile to fit the image into.
 
     Returns:
-        Tuple[int, int]: A tuple containing the new (height, width) of the fitted image.
+        `Tuple[int, int]`: A tuple containing the new (height, width) of the fitted image.
     """
     scale = image_width / image_height
 
@@ -219,13 +219,13 @@ def get_size_for_image_fitted_to_canvas(
     2. The smaller dimension is scaled proportionally to maintain the original aspect ratio.
 
     Args:
-        image_height (int): The height of the original image.
-        image_width (int): The width of the original image.
-        canvas_height (int): The height of the target canvas.
-        canvas_width (int): The width of the target canvas.
+        image_height (`int`): The height of the original image.
+        image_width (`int`): The width of the original image.
+        canvas_height (`int`): The height of the target canvas.
+        canvas_width (`int`): The width of the target canvas.
 
     Returns:
-        Tuple[int, int]: A tuple containing the new (height, width) of the fitted image.
+        `Tuple[int, int]`: A tuple containing the new (height, width) of the fitted image.
     """
     scale = image_width / image_height
 
@@ -248,13 +248,13 @@ def get_aspect_ratio_of_optimal_canvas_larger_than_image(max_num_tiles: int, ima
     maximizing the image's shorter edge.
 
     Args:
-        max_num_tiles (int): The maximum number of tiles available to construct the canvas.
-        image_width (int): The width of the input image.
-        image_height (int): The height of the input image.
-        tile_size (int): The size of each square tile (width and height are equal).
+        max_num_tiles (`int`): The maximum number of tiles available to construct the canvas.
+        image_width (`int`): The width of the input image.
+        image_height (`int`): The height of the input image.
+        tile_size (`int`): The size of each square tile (width and height are equal).
 
     Returns:
-        Optional[Tuple[int, int]]: A tuple containing the number of tiles in width and height
+        `Optional[Tuple[int, int]]`: A tuple containing the number of tiles in width and height
         for the optimal canvas, or None if no suitable canvas is found.
     """
     # Initialize the optimal canvas to None. If no canvas is found where image fits, function returns None.
@@ -307,13 +307,13 @@ def get_target_image_size_and_aspect_ratio(
     3. If no larger canvas is found, find the closest possible aspect ratio and downscale the image.
 
     Args:
-        image_height (int): The height of the original image.
-        image_width (int): The width of the original image.
-        max_image_tiles (int): The maximum number of tiles allowed in the canvas.
-        tile_size (int): The size of each tile (assumed to be square).
+        image_height (`int`): The height of the original image.
+        image_width (`int`): The width of the original image.
+        max_image_tiles (`int`): The maximum number of tiles allowed in the canvas.
+        tile_size (`int`): The size of each tile (assumed to be square).
 
     Returns:
-        Tuple[Tuple[int, int], Tuple[int, int]]: A tuple containing:
+        `Tuple[Tuple[int, int], Tuple[int, int]]`: A tuple containing:
             - The new dimensions (height, width) for the resized image.
             - The aspect ratio of the canvas as (num_tiles_width, num_tiles_height)
     """
@@ -421,12 +421,12 @@ def split_to_tiles(image: np.ndarray, num_tiles_width: int, num_tiles_height: in
     Split an image into a specified number of tiles along its width and height dimensions.
 
     Args:
-        image (np.ndarray): Input image with shape (num_channels, height, width).
-        num_tiles_width (int): Number of tiles to split the image into along its width.
-        num_tiles_height (int): Number of tiles to split the image into along its height.
+        image (`np.ndarray`): Input image with shape (num_channels, height, width).
+        num_tiles_width (`int`): Number of tiles to split the image into along its width.
+        num_tiles_height (`int`): Number of tiles to split the image into along its height.
 
     Returns:
-        np.ndarray: Array of image tiles with shape (num_tiles_width * num_tiles_height, num_channels, tile_height, tile_width).
+        `np.ndarray`: Array of image tiles with shape (num_tiles_width * num_tiles_height, num_channels, tile_height, tile_width).
     """
     num_channels, height, width = image.shape
     tile_height = height // num_tiles_height
@@ -453,16 +453,16 @@ def pack_images(
     pre-split into tiles. The resulting array will have a shape of
     (batch_size, max_num_images, max_num_tiles, channels, tile_height, tile_width).
     Args:
-        batch_images (List[List[np.ndarray]]): A list of lists of image tiles. Each inner list represents
+        batch_images (`List[List[np.ndarray]]`): A list of lists of image tiles. Each inner list represents
             a batch sample containing multiple images, where each image is pre-split into tiles.
             The shape of each tile array is (num_tiles, channels, tile_height, tile_width).
         max_num_tiles (int): The maximum number of tiles any image was potantially split.
 
     Returns:
-        Tuple[np.ndarray, List[List[int]]]: A tuple containing:
-            - stacked_images (np.ndarray): A numpy array of stacked images with shape
+        `Tuple[np.ndarray, List[List[int]]]`: A tuple containing:
+            - stacked_images (`np.ndarray`): A numpy array of stacked images with shape
               (batch_size, max_num_images, max_num_tiles, channels, tile_height, tile_width).
-            - all_num_tiles (List[List[int]]): A list of lists containing the number of tiles
+            - all_num_tiles (`List[List[int]]`): A list of lists containing the number of tiles
               for each image in each batch sample.
     """
 
