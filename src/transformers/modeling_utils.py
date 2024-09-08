@@ -2240,6 +2240,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     @ (old_embeddings.weight.data.to(torch.float32) - mean_embedding)
                     / old_num_tokens
                 )
+            if old_embedding_dim >= old_num_tokens:
+                # Covarince matrix must be positive definite. For edge cases, when `vocab_size` is
+                # smaller than `embedding_size`, covarince matrix won't be positive definite so we
+                # must add the eye matrix to the covarince matrix to convert it to be positive definite.
+                covariance = covariance + torch.eye(old_embedding_dim, device=old_embeddings.weight.device)*1e-3
             distribution = torch.distributions.multivariate_normal.MultivariateNormal(
                 mean_embedding, covariance_matrix=1e-5 * covariance
             )
