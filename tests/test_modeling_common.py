@@ -1836,7 +1836,6 @@ class ModelTesterMixin:
             # Check that resizing the token embeddings with a larger vocab size increases the model's vocab size
             model_embed = model.resize_token_embeddings(model_vocab_size + 10)
             new_model_vocab_size = model.config.get_text_config().vocab_size
-
             self.assertEqual(new_model_vocab_size, model_vocab_size + 10)
             # Check that it actually resizes the embeddings matrix
             self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] + 10)
@@ -1878,9 +1877,13 @@ class ModelTesterMixin:
 
             self.assertTrue(models_equal)
 
-            config = copy.deepcopy(original_config)
-            model = model_class(config)
-            model.to(torch_device)
+            del model
+            if deepspeed_enabled:
+                with deepspeed.zero.Init():
+                    model = model_class(config)
+            else:
+                model = model_class(config)
+                model.to(torch_device)
 
             model_vocab_size = config.get_text_config().vocab_size
             model.resize_token_embeddings(model_vocab_size + 10, pad_to_multiple_of=1)
@@ -1907,6 +1910,35 @@ class ModelTesterMixin:
                 "Asking to pad the embedding matrix to a multiple of `1.3`, which is not and integer. Please make sure to pass an integer",
             ):
                 model.resize_token_embeddings(model_vocab_size, pad_to_multiple_of=1.3)
+
+            # Test when `vocab_size` is smaller than `hidden_size`
+            del model
+            config.vocab_size = 1
+            if deepspeed_enabled:
+                with deepspeed.zero.Init():
+                    model = model_class(config)
+            else:
+                model = model_class(config)
+                model.to(torch_device)
+            
+            model_vocab_size = config.get_text_config().vocab_size
+            # Retrieve the embeddings and clone theme
+            model_embed = model.resize_token_embeddings(model_vocab_size)
+            cloned_embeddings = model_embed.weight.clone()
+
+            # Check that resizing the token embeddings with a larger vocab size increases the model's vocab size
+            model_embed = model.resize_token_embeddings(model_vocab_size + 10)
+            new_model_vocab_size = model.config.get_text_config().vocab_size
+            self.assertEqual(new_model_vocab_size, model_vocab_size + 10)
+            # Check that it actually resizes the embeddings matrix
+            self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] + 10)
+            # Check to make sure the type of embeddings returned post resizing is same as type of input
+            type_model_embed_post_resize = type(model_embed)
+            self.assertEqual(type_model_embed_pre_resize, type_model_embed_post_resize)
+            # Check that added embeddings mean is close to the old embeddings mean
+            old_embeddings_mean = torch.mean(model_embed.weight.data[:-10, :], axis=0).cpu().numpy()
+            new_embeddings_mean = torch.mean(model_embed.weight.data[-10:, :], axis=0).cpu().numpy()
+            self.assert_almost_equals(old_embeddings_mean, new_embeddings_mean, tol=1e-2)
 
     @require_deepspeed
     @require_torch_gpu
