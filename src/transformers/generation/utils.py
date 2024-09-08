@@ -2964,14 +2964,10 @@ class GenerationMixin:
 
             # Clone is needed to avoid keeping a hanging ref to outputs.logits which may be very large for first iteration
             # (the clone itself is always small)
-            # TODO: remove small change here so that we get full logits from generate
-            # the gold logist for comparison are full logits
-            next_token_logits = outputs.logits.clone()
+            next_token_logits = outputs.logits.clone()[:, -1, :]
 
             # pre-process distribution
-            next_token_scores = logits_processor(input_ids, next_token_logits[:, -1, :])
-            if do_sample:
-                next_token_scores = logits_warper(input_ids, next_token_scores)
+            next_token_scores = logits_processor(input_ids, next_token_logits)
 
             # Store scores, attentions and hidden_states when required
             if return_dict_in_generate:
