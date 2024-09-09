@@ -37,6 +37,9 @@ class RTDetrConfig(PretrainedConfig):
     Args:
         initializer_range (`float`, *optional*, defaults to 0.01):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        initializer_bias_prior_prob (`float`, *optional*):
+            The prior probability used by the bias initializer to initialize biases for `enc_score_head` and `class_embed`.
+            If `None`, `prior_prob` computed as `prior_prob = 1 / (num_labels + 1)` while initializing model weights.
         layer_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the layer normalization layers.
         batch_norm_eps (`float`, *optional*, defaults to 1e-05):
@@ -52,6 +55,8 @@ class RTDetrConfig(PretrainedConfig):
         use_timm_backbone (`bool`, *optional*, defaults to `False`):
             Whether to load `backbone` from the timm library. If `False`, the backbone is loaded from the transformers
             library.
+        freeze_backbone_batch_norms (`bool`, *optional*, defaults to `True`):
+            Whether to freeze the batch normalization layers in the backbone.
         backbone_kwargs (`dict`, *optional*):
             Keyword arguments to be passed to AutoBackbone when loading from a checkpoint
             e.g. `{'out_indices': (0, 1, 2, 3)}`. Cannot be specified if `backbone_config` is set.
@@ -118,8 +123,8 @@ class RTDetrConfig(PretrainedConfig):
             Scale or magnitude of noise to be added to the bounding boxes.
         learn_initial_query (`bool`, *optional*, defaults to `False`):
             Indicates whether the initial query embeddings for the decoder should be learned during training
-        anchor_image_size (`Tuple[int, int]`, *optional*, defaults to `[640, 640]`):
-            Height and width of the input image used during evaluation to generate the bounding box anchors.
+        anchor_image_size (`Tuple[int, int]`, *optional*):
+            Height and width of the input image used during evaluation to generate the bounding box anchors. If None, automatic generate anchor is applied.
         disable_custom_kernels (`bool`, *optional*, defaults to `True`):
             Whether to disable custom kernels.
         with_box_refine (`bool`, *optional*, defaults to `True`):
@@ -179,6 +184,7 @@ class RTDetrConfig(PretrainedConfig):
     def __init__(
         self,
         initializer_range=0.01,
+        initializer_bias_prior_prob=None,
         layer_norm_eps=1e-5,
         batch_norm_eps=1e-5,
         # backbone
@@ -186,6 +192,7 @@ class RTDetrConfig(PretrainedConfig):
         backbone=None,
         use_pretrained_backbone=False,
         use_timm_backbone=False,
+        freeze_backbone_batch_norms=True,
         backbone_kwargs=None,
         # encoder HybridEncoder
         encoder_hidden_dim=256,
@@ -218,7 +225,7 @@ class RTDetrConfig(PretrainedConfig):
         label_noise_ratio=0.5,
         box_noise_scale=1.0,
         learn_initial_query=False,
-        anchor_image_size=[640, 640],
+        anchor_image_size=None,
         disable_custom_kernels=True,
         with_box_refine=True,
         is_encoder_decoder=True,
@@ -239,6 +246,7 @@ class RTDetrConfig(PretrainedConfig):
         **kwargs,
     ):
         self.initializer_range = initializer_range
+        self.initializer_bias_prior_prob = initializer_bias_prior_prob
         self.layer_norm_eps = layer_norm_eps
         self.batch_norm_eps = batch_norm_eps
         # backbone
@@ -275,6 +283,7 @@ class RTDetrConfig(PretrainedConfig):
         self.backbone = backbone
         self.use_pretrained_backbone = use_pretrained_backbone
         self.use_timm_backbone = use_timm_backbone
+        self.freeze_backbone_batch_norms = freeze_backbone_batch_norms
         self.backbone_kwargs = backbone_kwargs
         # encoder
         self.encoder_hidden_dim = encoder_hidden_dim

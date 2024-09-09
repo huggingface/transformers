@@ -15,7 +15,6 @@
 """PyTorch SAM model."""
 
 import collections
-import math
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -232,7 +231,7 @@ class SamAttention(nn.Module):
         # SamAttention
         _, _, _, c_per_head = query.shape
         attn = query @ key.permute(0, 1, 3, 2)  # batch_size * point_batch_size  x N_heads x N_tokens x N_tokens
-        attn = attn / math.sqrt(c_per_head)
+        attn = attn / (c_per_head**0.5)
         attn = torch.softmax(attn, dim=-1)
 
         if attention_similarity is not None:

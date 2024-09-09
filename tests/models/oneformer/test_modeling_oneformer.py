@@ -377,7 +377,7 @@ class OneFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 
     def test_training(self):
         if not self.model_tester.is_training:
-            return
+            self.skipTest(reason="model_tester.is_training is set to False")
         # only OneFormerForUniversalSegmentation has the loss
         model_class = self.all_model_classes[1]
         (

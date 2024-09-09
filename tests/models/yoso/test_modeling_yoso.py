@@ -353,6 +353,7 @@ class YosoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         model = YosoModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
+    @unittest.skip(reason="This model does not output attentions")
     def test_attention_outputs(self):
         return
 

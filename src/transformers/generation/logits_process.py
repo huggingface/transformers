@@ -15,12 +15,12 @@
 
 import inspect
 import math
-import warnings
 from typing import Callable, Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
 
+from ..pytorch_utils import isin_mps_friendly
 from ..utils import add_start_docstrings
 from ..utils.logging import get_logger
 
@@ -55,6 +55,12 @@ class LogitsProcessor:
 class LogitsWarper:
     """Abstract base class for all logit warpers that can be applied during generation with multinomial sampling."""
 
+    def __init__(self):
+        logger.warning_once(
+            "`LogitsWarper` is deprecated and will be removed in v4.48. Your class should inherit `LogitsProcessor` "
+            "instead, which has the same properties and interface."
+        )
+
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         raise NotImplementedError(
@@ -64,9 +70,9 @@ class LogitsWarper:
 
 class LogitsProcessorList(list):
     """
-    This class can be used to create a list of [`LogitsProcessor`] or [`LogitsWarper`] to subsequently process a
-    `scores` input tensor. This class inherits from list and adds a specific *__call__* method to apply each
-    [`LogitsProcessor`] or [`LogitsWarper`] to the inputs.
+    This class can be used to create a list of [`LogitsProcessor`] to subsequently process a `scores` input tensor.
+    This class inherits from list and adds a specific *__call__* method to apply each [`LogitsProcessor`] to the
+    inputs.
     """
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> torch.FloatTensor:
@@ -154,7 +160,7 @@ class MinLengthLogitsProcessor(LogitsProcessor):
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         vocab_tensor = torch.arange(scores.shape[-1], device=scores.device)
-        eos_token_mask = torch.isin(vocab_tensor, self.eos_token_id)
+        eos_token_mask = isin_mps_friendly(vocab_tensor, self.eos_token_id)
         scores_processed = scores.clone()
         if input_ids.shape[-1] < self.min_length:
             scores_processed = torch.where(eos_token_mask, -math.inf, scores)
@@ -226,16 +232,16 @@ class MinNewTokensLengthLogitsProcessor(LogitsProcessor):
         new_tokens_length = input_ids.shape[-1] - self.prompt_length_to_skip
         scores_processed = scores.clone()
         vocab_tensor = torch.arange(scores.shape[-1], device=scores.device)
-        eos_token_mask = torch.isin(vocab_tensor, self.eos_token_id)
+        eos_token_mask = isin_mps_friendly(vocab_tensor, self.eos_token_id)
         if new_tokens_length < self.min_new_tokens:
             scores_processed = torch.where(eos_token_mask, -math.inf, scores)
 
         return scores_processed
 
 
-class TemperatureLogitsWarper(LogitsWarper):
+class TemperatureLogitsWarper(LogitsProcessor):
     r"""
-    [`LogitsWarper`] for temperature (exponential scaling output probability distribution), which effectively means
+    [`LogitsProcessor`] for temperature (exponential scaling output probability distribution), which effectively means
     that it can control the randomness of the predicted tokens. Often used together with [`TopPLogitsWarper`] and
     [`TopKLogitsWarper`].
 
@@ -408,10 +414,10 @@ class EncoderRepetitionPenaltyLogitsProcessor(LogitsProcessor):
         return scores_processed
 
 
-class TopPLogitsWarper(LogitsWarper):
+class TopPLogitsWarper(LogitsProcessor):
     """
-    [`LogitsWarper`] that performs top-p, i.e. restricting to top tokens summing to prob_cut_off <= prob_cut_off. Often
-    used together with [`TemperatureLogitsWarper`] and [`TopKLogitsWarper`].
+    [`LogitsProcessor`] that performs top-p, i.e. restricting to top tokens summing to prob_cut_off <= prob_cut_off.
+    Often used together with [`TemperatureLogitsWarper`] and [`TopKLogitsWarper`].
 
     Args:
         top_p (`float`):
@@ -475,10 +481,10 @@ class TopPLogitsWarper(LogitsWarper):
         return scores_processed
 
 
-class TopKLogitsWarper(LogitsWarper):
+class TopKLogitsWarper(LogitsProcessor):
     r"""
-    [`LogitsWarper`] that performs top-k, i.e. restricting to the k highest probability elements. Often used together
-    with [`TemperatureLogitsWarper`] and [`TopPLogitsWarper`].
+    [`LogitsProcessor`] that performs top-k, i.e. restricting to the k highest probability elements. Often used
+    together with [`TemperatureLogitsWarper`] and [`TopPLogitsWarper`].
 
     Args:
         top_k (`int`):
@@ -528,9 +534,9 @@ class TopKLogitsWarper(LogitsWarper):
         return scores_processed
 
 
-class MinPLogitsWarper(LogitsWarper):
+class MinPLogitsWarper(LogitsProcessor):
     """
-    [`LogitsWarper`] that performs min-p, i.e. keeps all tokens that are above a minimum probability, scaled by the
+    [`LogitsProcessor`] that performs min-p, i.e. keeps all tokens that are above a minimum probability, scaled by the
     probability of the most likely token. As a result, the filter becomes more agressive in the presence of
     high-probability tokens, which is a sign of a confident output that we shouldn't deviate from.
 
@@ -605,11 +611,11 @@ class MinPLogitsWarper(LogitsWarper):
         return scores_processed
 
 
-class TypicalLogitsWarper(LogitsWarper):
+class TypicalLogitsWarper(LogitsProcessor):
     r"""
-    [`LogitsWarper`] that performs typical decoding. Inspired on how humans use language, it prioritizes tokens whose
-    log probability is close to the entropy of the token probability distribution. This means that the most likely
-    tokens may be discarded in the process.
+    [`LogitsProcessor`] that performs typical decoding. Inspired on how humans use language, it prioritizes tokens
+    whose log probability is close to the entropy of the token probability distribution. This means that the most
+    likely tokens may be discarded in the process.
 
     See [Typical Decoding for Natural Language Generation](https://arxiv.org/abs/2202.00666) for more information.
 
@@ -693,9 +699,9 @@ class TypicalLogitsWarper(LogitsWarper):
         return scores_processed
 
 
-class EpsilonLogitsWarper(LogitsWarper):
+class EpsilonLogitsWarper(LogitsProcessor):
     r"""
-    [`LogitsWarper`] that performs epsilon-sampling, i.e. restricting to tokens with `prob >= epsilon`. Takes the
+    [`LogitsProcessor`] that performs epsilon-sampling, i.e. restricting to tokens with `prob >= epsilon`. Takes the
     largest min_tokens_to_keep tokens if no tokens satisfy this constraint. See [Truncation Sampling as Language Model
     Desmoothing](https://arxiv.org/abs/2210.15191) for more information.
 
@@ -762,15 +768,15 @@ class EpsilonLogitsWarper(LogitsWarper):
         return scores_processed
 
 
-class EtaLogitsWarper(LogitsWarper):
+class EtaLogitsWarper(LogitsProcessor):
     r"""
-    [`LogitsWarper`] that performs eta-sampling, a technique to filter out tokens with probabilities below a dynamic
+    [`LogitsProcessor`] that performs eta-sampling, a technique to filter out tokens with probabilities below a dynamic
     cutoff value, `eta`, which is calculated based on a combination of the hyperparameter `epsilon` and the entropy of
     the token probabilities, i.e. `eta := min(epsilon, sqrt(epsilon * e^-entropy(probabilities)))`. Takes the largest
     min_tokens_to_keep tokens if no tokens satisfy this constraint. It addresses the issue of poor quality in long
     samples of text generated by neural language models leading to more coherent and fluent text. See [Truncation
     Sampling as Language Model Desmoothing](https://arxiv.org/abs/2210.15191) for more information. Note: `do_sample`
-    must be set to `True` for this `LogitsWarper` to work.
+    must be set to `True` for this `LogitsProcessor` to work.
 
 
     Args:
@@ -1708,9 +1714,9 @@ class ExponentialDecayLengthPenalty(LogitsProcessor):
         return scores_processed
 
 
-class LogitNormalization(LogitsProcessor, LogitsWarper):
+class LogitNormalization(LogitsProcessor):
     r"""
-    [`LogitsWarper`] and [`LogitsProcessor`] for normalizing the scores using log-softmax. It's important to normalize
+    [`LogitsProcessor`] for normalizing the scores using log-softmax. It's important to normalize
     the scores during beam search, after applying the logits processors or warpers, since the search algorithm used in
     this library doesn't do it (it only does it before, but they may need re-normalization) but it still supposes that
     the scores are normalized when comparing the hypotheses.
@@ -1760,7 +1766,7 @@ class SuppressTokensAtBeginLogitsProcessor(LogitsProcessor):
 
     >>> processor = AutoProcessor.from_pretrained("openai/whisper-tiny.en")
     >>> model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
-    >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True)
+    >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
     >>> inputs = processor(ds[0]["audio"]["array"], return_tensors="pt")
 
     >>> # Whisper has `begin_suppress_tokens` set by default (= `[220, 50256]`). 50256 is the EOS token, so this means
@@ -1790,7 +1796,7 @@ class SuppressTokensAtBeginLogitsProcessor(LogitsProcessor):
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         vocab_tensor = torch.arange(scores.shape[-1], device=scores.device)
-        suppress_token_mask = torch.isin(vocab_tensor, self.begin_suppress_tokens)
+        suppress_token_mask = isin_mps_friendly(vocab_tensor, self.begin_suppress_tokens)
         scores_processed = scores
         if input_ids.shape[-1] == self.begin_index:
             scores_processed = torch.where(suppress_token_mask, -float("inf"), scores)
@@ -1812,7 +1818,7 @@ class SuppressTokensLogitsProcessor(LogitsProcessor):
 
     >>> processor = AutoProcessor.from_pretrained("openai/whisper-tiny.en")
     >>> model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
-    >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True)
+    >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
     >>> inputs = processor(ds[0]["audio"]["array"], return_tensors="pt")
 
     >>> # Whisper has a long list of suppressed tokens. For instance, in this case, the token 1 is suppressed by default.
@@ -1833,37 +1839,9 @@ class SuppressTokensLogitsProcessor(LogitsProcessor):
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         vocab_tensor = torch.arange(scores.shape[-1], device=scores.device)
-        suppress_token_mask = torch.isin(vocab_tensor, self.suppress_tokens)
+        suppress_token_mask = isin_mps_friendly(vocab_tensor, self.suppress_tokens)
         scores = torch.where(suppress_token_mask, -float("inf"), scores)
         return scores
-
-
-class ForceTokensLogitsProcessor(LogitsProcessor):
-    r"""
-    This processor takes a list of pairs of integers which indicates a mapping from generation indices to token
-    indices that will be forced before generation. The processor will set their log probs to `inf` so that they are
-    sampled at their corresponding index. Originally created for
-    [Whisper](https://huggingface.co/docs/transformers/model_doc/whisper).
-    """
-
-    def __init__(self, force_token_map: List[List[int]], _has_warned: Optional[bool] = False):
-        self.force_token_map = dict(force_token_map)
-        if not _has_warned:
-            # TODO(Sanchit): remove this processor entirely in v4.40
-            warnings.warn(
-                "This `ForceTokensLogitsProcessor` has been deprecated and will be removed in v4.40. Should you need to provide prompt ids for generation, specify `input_ids` to the generate method for decoder-only models, or `decoder_input_ids` for encoder-decoder models.",
-                FutureWarning,
-            )
-
-    @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        generation_idx = input_ids.shape[-1]
-        current_token = self.force_token_map.get(generation_idx, None)
-        scores_processed = scores
-        if current_token is not None:
-            scores_processed = torch.full_like(scores, -float("inf"))
-            scores_processed[:, current_token] = 0
-        return scores_processed
 
 
 class WhisperTimeStampLogitsProcessor(LogitsProcessor):
@@ -1901,7 +1879,7 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
 
     >>> processor = AutoProcessor.from_pretrained("openai/whisper-tiny.en")
     >>> model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
-    >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True)
+    >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
     >>> inputs = processor(ds[3]["audio"]["array"], return_tensors="pt")
     >>> input_features = inputs.input_features
 

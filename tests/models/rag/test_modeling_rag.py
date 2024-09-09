@@ -91,7 +91,7 @@ def require_retrieval(test_case):
 
     """
     if not (is_torch_available() and is_datasets_available() and is_faiss_available()):
-        test_case = unittest.skip("test requires PyTorch, datasets and faiss")(test_case)
+        test_case = unittest.skip(reason="test requires PyTorch, datasets and faiss")(test_case)
     return test_case
 
 

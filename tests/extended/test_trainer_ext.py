@@ -80,7 +80,7 @@ class TestTrainerExt(TestCasePlus):
         logs = TrainerState.load_from_json(os.path.join(output_dir, "trainer_state.json")).log_history
 
         if not do_eval:
-            return
+            self.skipTest(reason="do_eval is False")
 
         eval_metrics = [log for log in logs if "eval_loss" in log.keys()]
 

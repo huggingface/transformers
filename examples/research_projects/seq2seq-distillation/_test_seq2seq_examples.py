@@ -418,7 +418,7 @@ class TestTheRest(TestCasePlus):
             with CaptureStdout() as cs:
                 args = parser.parse_args(args)
             assert False, "--help is expected to sys.exit"
-        assert excinfo.type == SystemExit
+        assert excinfo.type is SystemExit
         expected = lightning_base.arg_to_scheduler_metavar
         assert expected in cs.out, "--help is expected to list the supported schedulers"
 
@@ -429,7 +429,7 @@ class TestTheRest(TestCasePlus):
             with CaptureStderr() as cs:
                 args = parser.parse_args(args)
             assert False, "invalid argument is expected to sys.exit"
-        assert excinfo.type == SystemExit
+        assert excinfo.type is SystemExit
         expected = f"invalid choice: '{unsupported_param}'"
         assert expected in cs.err, f"should have bailed on invalid choice of scheduler {unsupported_param}"
 

@@ -256,7 +256,7 @@ class DinatModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             self.assertTrue(x is None or isinstance(x, nn.Linear))
 
     def test_attention_outputs(self):
-        self.skipTest("Dinat's attention operation is handled entirely by NATTEN.")
+        self.skipTest(reason="Dinat's attention operation is handled entirely by NATTEN.")
 
     def check_hidden_states_output(self, inputs_dict, config, model_class, image_size):
         model = model_class(config)

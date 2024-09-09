@@ -374,7 +374,7 @@ def main():
                 label_to_id = label_name_to_id  # Use the model's labels
             else:
                 logger.warning(
-                    "Your model seems to have been trained with labels, but they don't match the dataset: ",
+                    "Your model seems to have been trained with labels, but they don't match the dataset: "
                     f"model labels: {sorted(label_name_to_id.keys())}, dataset labels:"
                     f" {sorted(label_list)}.\nIgnoring the model labels as a result.",
                 )

@@ -322,10 +322,11 @@ class FuyuProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
+    valid_kwargs = []
     image_processor_class = "FuyuImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
-    def __init__(self, image_processor, tokenizer):
+    def __init__(self, image_processor, tokenizer, **kwargs):
         super().__init__(image_processor=image_processor, tokenizer=tokenizer)
         self.image_processor = image_processor
         self.tokenizer = tokenizer

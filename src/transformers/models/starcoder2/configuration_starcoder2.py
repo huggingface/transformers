@@ -25,7 +25,7 @@ class Starcoder2Config(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Starcoder2Model`]. It is used to instantiate a
     Starcoder2 model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the [bigcode/starcoder2-7b_16k](https://huggingface.co/bigcode/starcoder2-7b_16k) model.
+    with the defaults will yield a similar configuration to that of the [bigcode/starcoder2-7b](https://huggingface.co/bigcode/starcoder2-7b) model.
 
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the

@@ -171,16 +171,16 @@ pytest -k "test and ada" tests/test_optimization.py
 時々、モデルに対して `accelerate` テストを実行する必要があります。たとえば、`OPT` 実行に対してこれらのテストを実行したい場合、コマンドに `-m accelerate_tests` を追加するだけで済みます：
 
 ```bash
-RUN_SLOW=1 pytest -m accelerate_tests tests/models/opt/test_modeling_opt.py 
+RUN_SLOW=1 pytest -m accelerate_tests tests/models/opt/test_modeling_opt.py
 ```
 
-### Run documentation tests 
+### Run documentation tests
 
 ドキュメンテーションの例が正しいかどうかをテストするには、`doctests` が合格しているかを確認する必要があります。
 例として、[`WhisperModel.forward` のドックストリング](https://github.com/huggingface/transformers/blob/main/src/transformers/models/whisper/modeling_whisper.py#L1017-L1035)を使用しましょう。
 
 
-```python 
+```python
 r"""
 Returns:
 
@@ -205,7 +205,7 @@ Example:
 
 指定したファイル内のすべてのドックストリング例を自動的にテストするために、以下の行を実行してください：
 
-```bash 
+```bash
 pytest --doctest-modules <path_to_file_or_dir>
 ```
 
@@ -809,7 +809,7 @@ with ExtendSysPath(f"{bindir}/.."):
 
 
 ```python no-style
-@unittest.skip("this bug needs to be fixed")
+@unittest.skip(reason="this bug needs to be fixed")
 def test_feature_x():
 ```
 
@@ -1211,4 +1211,3 @@ cmd_that_may_fail || true
 
 - [Github Actions:](https://github.com/actions/toolkit/issues/399)
 - [CircleCI:](https://ideas.circleci.com/ideas/CCI-I-344)
-

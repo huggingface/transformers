@@ -389,11 +389,11 @@ class Starcoder2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
             (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_labels),
         )
 
-    @unittest.skip("Starcoder2 buffers include complex numbers, which breaks this test")
+    @unittest.skip(reason="Starcoder2 buffers include complex numbers, which breaks this test")
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @unittest.skip("Starcoder2 uses GQA on all models so the KV cache is a non standard format")
+    @unittest.skip(reason="Starcoder2 uses GQA on all models so the KV cache is a non standard format")
     def test_past_key_values_format(self):
         pass
 
@@ -481,7 +481,7 @@ class Starcoder2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     @pytest.mark.flash_attn_test
     @slow
     def test_flash_attn_2_inference_equivalence_right_padding(self):
-        self.skipTest("Starcoder2 flash attention does not support right padding")
+        self.skipTest(reason="Starcoder2 flash attention does not support right padding")
 
 
 @slow
@@ -528,6 +528,7 @@ class Starcoder2IntegrationTest(unittest.TestCase):
         self.assertEqual(EXPECTED_TEXT, output_text)
 
     @require_flash_attn
+    @pytest.mark.flash_attn_test
     def test_starcoder2_batched_generation_fa2(self):
         EXPECTED_TEXT = [
             "Hello my name is Younes and I am a student at the University of Liverpool. I am currently studying for my MSc in Computer Science. I am interested in the field of Machine Learning and I am currently working on",

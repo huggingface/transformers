@@ -663,7 +663,7 @@ def spectrogram_batch(
             Specifies log scaling strategy; options are None, "log", "log10", "dB".
         reference (`float`, *optional*, defaults to 1.0):
             Reference value for dB conversion in log_mel.
-        min_value (`float`, °optional*, defaults to 1e-10):
+        min_value (`float`, *optional*, defaults to 1e-10):
             Minimum floor value for log scale conversions.
         db_range (`float`, *optional*):
             Dynamic range for dB scale spectrograms.
@@ -1074,7 +1074,7 @@ def stft(frames: np.array, windowing_function: np.array, fft_window_size: int = 
         frames (`np.array` of dimension `(num_frames, fft_window_size)`):
             A framed audio signal obtained using `audio_utils.fram_wav`.
         windowing_function (`np.array` of dimension `(nb_frequency_bins, nb_mel_filters)`:
-            A array reprensenting the function that will be used to reduces the amplitude of the discontinuities at the
+            A array representing the function that will be used to reduces the amplitude of the discontinuities at the
             boundaries of each frame when computing the STFT. Each frame will be multiplied by the windowing_function.
             For more information on the discontinuities, called *Spectral leakage*, refer to [this
             tutorial]https://download.ni.com/evaluation/pxi/Understanding%20FFTs%20and%20Windowing.pdf

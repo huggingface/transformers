@@ -1005,6 +1005,7 @@ class GPT2EncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
             "google-bert/bert-base-cased", "openai-community/gpt2"
         )
 
+    @unittest.skip
     def test_encoder_decoder_model_shared_weights(self):
         pass
 
@@ -1079,6 +1080,7 @@ class ProphetNetEncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
             "google-bert/bert-large-uncased", "microsoft/prophetnet-large-uncased"
         )
 
+    @unittest.skip
     def test_encoder_decoder_model_shared_weights(self):
         pass
 
@@ -1135,6 +1137,7 @@ class BartEncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
             "google-bert/bert-large-uncased", "facebook/bart-large"
         )
 
+    @unittest.skip
     def test_encoder_decoder_model_shared_weights(self):
         pass
 
