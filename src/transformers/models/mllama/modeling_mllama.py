@@ -836,9 +836,9 @@ class MllamaSelfAttentionDecoderLayer(torch.nn.Module):
         super().__init__()
         self.layer_id = layer_id
         self.self_attn = MLLAMA_TEXT_ATTENTION_CLASSES[config._attn_implementation](config)
-        self.input_layernorm = MllamaRMSNorm(config.dim, eps=config.norm_eps)
+        self.input_layernorm = MllamaRMSNorm(config.hidden_size, eps=config.norm_eps)
         self.mlp = MllamaTextMLP(config)
-        self.post_attention_layernorm = MllamaRMSNorm(config.dim, eps=config.norm_eps)
+        self.post_attention_layernorm = MllamaRMSNorm(config.hidden_size, eps=config.norm_eps)
 
     def forward(
         self,
