@@ -488,10 +488,10 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertListEqual(outputs.attention_mask.numpy().tolist()[-1], EXPECTED_MASK_BATCH[-1])
         self.assertListEqual(outputs.image_embeds_position_mask.numpy().tolist()[-1], EXPECTED_IMG_POS_MASK_BATCH[-1])
 
+    # Rewrite as Kosmos-2 supports custom padding only when image is None.
     @require_vision
     @require_torch
     def test_kwargs_overrides_default_tokenizer_kwargs(self):
-        # Rewrite as Kosmos-2 supports custom padding only when image is None.
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor")
@@ -513,10 +513,10 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertEqual(len(inputs["input_ids"][0]), 112)
 
+    # Rewrite to test only image_processor kwargs
     @require_torch
     @require_vision
     def test_structured_kwargs_nested(self):
-        # Rewrite to test only image_processor kwargs
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor")
@@ -539,10 +539,10 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertEqual(inputs["pixel_values"].shape[2], 214)
 
+    # Rewrite to test only image_processor kwargs
     @require_torch
     @require_vision
     def test_structured_kwargs_nested_from_dict(self):
-        # Rewrite to test only image_processor kwargs
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
 
@@ -563,10 +563,10 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         inputs = processor(text=input_str, images=image_input, **all_kwargs)
         self.assertEqual(inputs["pixel_values"].shape[2], 214)
 
+    # Rewrite as Kosmos-2 supports custom padding only when image is None.
     @require_vision
     @require_torch
     def test_tokenizer_defaults_preserved_by_kwargs(self):
-        # Rewrite as Kosmos-2 supports custom padding only when image is None.
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor")
@@ -581,10 +581,10 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         inputs = processor(text=input_str, images=image_input, return_tensors="pt")
         self.assertEqual(len(inputs["input_ids"][0]), 117)
 
+    # Rewrite as Kosmos-2 supports custom padding only when image is None.
     @require_torch
     @require_vision
     def test_unstructured_kwargs(self):
-        # Rewrite as Kosmos-2 supports custom padding only when image is None.
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor")
@@ -606,10 +606,10 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertEqual(len(inputs["input_ids"][0]), 76)
 
+    # Rewrite as Kosmos-2 supports custom padding only when image is None.
     @require_torch
     @require_vision
     def test_unstructured_kwargs_batched(self):
-        # Rewrite as Kosmos-2 supports custom padding only when image is None.
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor")

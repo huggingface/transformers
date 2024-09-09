@@ -18,12 +18,13 @@ Image/Text processor class for GIT
 
 import re
 import sys
-import warnings
 from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
-from ...processing_utils import ProcessorMixin
+from ...image_utils import ImageInput
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, _validate_images_text_input_order
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import is_torch_available, logging, requires_backends
 
 
@@ -31,11 +32,6 @@ if sys.version_info >= (3, 11):
     from typing import Unpack
 else:
     from typing_extensions import Unpack
-
-
-from ...image_utils import ImageInput
-from ...processing_utils import ProcessingKwargs
-from ...tokenization_utils_base import PreTokenizedInput, TextInput
 
 
 if is_torch_available():
@@ -519,17 +515,7 @@ class FuyuProcessor(ProcessorMixin):
         if text is None and images is None:
             raise ValueError("You have to specify either text or images. Both cannot be None.")
         # check if images and text inputs are reversed for BC
-        if (
-            text is not None
-            and not isinstance(text[0], str)
-            or images is not None
-            and (isinstance(images, str) or (isinstance(images, (list, tuple)) and isinstance(images[0], str)))
-        ):
-            warnings.warn(
-                "It looks like you are passing the inputs in the wrong order. You should pass the images input first and the text input second."
-                "Images and text inputs will be swapped."
-            )
-            images, text = text, images
+        images, text = _validate_images_text_input_order(images, text)
 
         output_kwargs = self._merge_kwargs(
             FuyuProcessorKwargs,

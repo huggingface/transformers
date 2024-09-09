@@ -37,6 +37,7 @@ if is_vision_available():
 @require_torch
 class Pix2StructProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Pix2StructProcessor
+    text_data_arg_name = "decoder_input_ids"
 
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
@@ -181,27 +182,10 @@ class Pix2StructProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # For now the processor supports only ["flattened_patches", "input_ids", "attention_mask", "decoder_attention_mask"]
         self.assertListEqual(list(inputs.keys()), ["input_ids", "attention_mask"])
 
-    @require_vision
-    @require_torch
-    def test_tokenizer_defaults_preserved_by_kwargs(self):
-        # Rewrite as pix2struct processor return "decoder_input_ids" and not "input_ids"
-        if "image_processor" not in self.processor_class.attributes:
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-        image_processor = self.get_component("image_processor")
-        tokenizer = self.get_component("tokenizer", max_length=117, padding="max_length")
-
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
-        self.skip_processor_without_typed_kwargs(processor)
-        input_str = "lower newer"
-        image_input = self.prepare_image_inputs()
-
-        inputs = processor(text=input_str, images=image_input, return_tensors="pt")
-        self.assertEqual(len(inputs["decoder_input_ids"][0]), 117)
-
+    # Rewrite as pix2struct processor return "flattened_patches" and not "pixel_values"
     @require_torch
     @require_vision
     def test_image_processor_defaults_preserved_by_image_kwargs(self):
-        # Rewrite as pix2struct processor return "flattened_patches" and not "pixel_values"
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor", max_patches=1024, patch_size={"height": 8, "width": 8})
@@ -216,29 +200,10 @@ class Pix2StructProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         inputs = processor(text=input_str, images=image_input)
         self.assertEqual(len(inputs["flattened_patches"][0][0]), 194)
 
-    @require_vision
-    @require_torch
-    def test_kwargs_overrides_default_tokenizer_kwargs(self):
-        # Rewrite as pix2struct processor return "decoder_input_ids" and not "input_ids"
-        if "image_processor" not in self.processor_class.attributes:
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-        image_processor = self.get_component("image_processor")
-        tokenizer = self.get_component("tokenizer", padding="longest")
-
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
-        self.skip_processor_without_typed_kwargs(processor)
-        input_str = "lower newer"
-        image_input = self.prepare_image_inputs()
-
-        inputs = processor(
-            text=input_str, images=image_input, return_tensors="pt", max_length=112, padding="max_length"
-        )
-        self.assertEqual(len(inputs["decoder_input_ids"][0]), 112)
-
+    # Rewrite as pix2struct processor return "flattened_patches" and not "pixel_values"
     @require_torch
     @require_vision
     def test_kwargs_overrides_default_image_processor_kwargs(self):
-        # Rewrite as pix2struct processor return "flattened_patches" and not "pixel_values"
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor", max_patches=4096)
@@ -253,10 +218,10 @@ class Pix2StructProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         inputs = processor(text=input_str, images=image_input, max_patches=1024)
         self.assertEqual(len(inputs["flattened_patches"][0]), 1024)
 
+    # Rewrite as pix2struct processor return "flattened_patches" and not "pixel_values"
     @require_torch
     @require_vision
     def test_unstructured_kwargs(self):
-        # Rewrite as pix2struct processor return "decoder_input_ids" and not "input_ids"
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor")
@@ -279,10 +244,10 @@ class Pix2StructProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(inputs["flattened_patches"].shape[1], 1024)
         self.assertEqual(len(inputs["decoder_input_ids"][0]), 76)
 
+    # Rewrite as pix2struct processor return "flattened_patches" and not "pixel_values"
     @require_torch
     @require_vision
     def test_unstructured_kwargs_batched(self):
-        # Rewrite as pix2struct processor return "decoder_input_ids" and not "input_ids"
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor")
@@ -306,10 +271,10 @@ class Pix2StructProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertEqual(len(inputs["decoder_input_ids"][0]), 5)
 
+    # Rewrite as pix2struct processor return "flattened_patches" and not "pixel_values"
     @require_torch
     @require_vision
     def test_structured_kwargs_nested(self):
-        # Rewrite as pix2struct processor return "decoder_input_ids" and not "input_ids"
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor")
@@ -335,10 +300,10 @@ class Pix2StructProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertEqual(len(inputs["decoder_input_ids"][0]), 76)
 
+    # Rewrite as pix2struct processor return "flattened_patches" and not "pixel_values"
     @require_torch
     @require_vision
     def test_structured_kwargs_nested_from_dict(self):
-        # Rewrite as pix2struct processor return "decoder_input_ids" and not "input_ids"
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
 

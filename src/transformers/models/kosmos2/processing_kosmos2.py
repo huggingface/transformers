@@ -22,7 +22,7 @@ from typing import List, Optional, Tuple, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput, is_batched
-from ...processing_utils import ProcessorMixin
+from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, TextKwargs
 from ...tokenization_utils import AddedToken
 from ...tokenization_utils_base import BatchEncoding, TextInput
 
@@ -31,8 +31,6 @@ if sys.version_info >= (3, 11):
     from typing import Unpack
 else:
     from typing_extensions import Unpack
-
-from ...processing_utils import ImagesKwargs, ProcessingKwargs, TextKwargs
 
 
 BboxInput = Union[

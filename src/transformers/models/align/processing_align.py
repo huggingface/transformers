@@ -16,15 +16,10 @@
 Image/Text processor class for ALIGN
 """
 
-import warnings
 from typing import List, Union
 
 from ...image_utils import ImageInput
-from ...processing_utils import (
-    ProcessingKwargs,
-    ProcessorMixin,
-    Unpack,
-)
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, _validate_images_text_input_order
 from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
 
 
@@ -116,17 +111,7 @@ class AlignProcessor(ProcessorMixin):
         if text is None and images is None:
             raise ValueError("You must specify either text or images.")
         # check if images and text inputs are reversed for BC
-        if (
-            text is not None
-            and not isinstance(text[0], str)
-            or images is not None
-            and (isinstance(images, str) or (isinstance(images, (list, tuple)) and isinstance(images[0], str)))
-        ):
-            warnings.warn(
-                "It looks like you are passing the inputs in the wrong order. You should pass the images input first and the text input second."
-                "Images and text inputs will be swapped."
-            )
-            images, text = text, images
+        images, text = _validate_images_text_input_order(images, text)
 
         output_kwargs = self._merge_kwargs(
             AlignProcessorKwargs,

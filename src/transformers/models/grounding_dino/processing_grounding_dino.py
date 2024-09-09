@@ -24,15 +24,14 @@ from ...image_processing_utils import BatchFeature
 from ...image_transforms import center_to_corners_format
 from ...image_utils import AnnotationFormat, ImageInput
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin
+from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
+from ...utils import TensorType, is_torch_available
 
 
 if sys.version_info >= (3, 11):
     from typing import Unpack
 else:
     from typing_extensions import Unpack
-
-from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
-from ...utils import TensorType, is_torch_available
 
 
 if is_torch_available():
