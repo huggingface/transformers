@@ -51,8 +51,8 @@ class Mask2FormerImageProcessingTester(unittest.TestCase):
         size=None,
         do_resize=True,
         do_normalize=True,
-        image_mean=0.5,
-        image_std=0.5,
+        image_mean=[0.5, 0.5, 0.5],
+        image_std=[0.5, 0.5, 0.5],
         num_labels=10,
         do_reduce_labels=True,
         ignore_index=255,
@@ -244,6 +244,8 @@ class Mask2FormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         ):
             self.image_processor_tester.num_channels = num_channels
             self.image_processor_tester.do_resize = do_resize
+            self.image_processor_tester.image_mean = [0.5] * num_channels
+            self.image_processor_tester.image_std = [0.5] * num_channels
 
             inputs = self.comm_get_image_processing_inputs(
                 with_segmentation_maps=True,
