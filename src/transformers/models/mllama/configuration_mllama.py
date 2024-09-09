@@ -250,6 +250,7 @@ class MllamaTextConfig(PretrainedConfig):
         self.cross_attention_freq = 4
         self.dropout=dropout
         self.hidden_activation=hidden_activation
+        self.attention_bias = attention_bias
         rope_config_validation(self)
 
         super().__init__(
