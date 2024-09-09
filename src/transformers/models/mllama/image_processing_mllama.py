@@ -662,6 +662,7 @@ class MllamaImageProcessor(BaseImageProcessor):
 
         images_list = make_list_of_images(images)
         images_list = [[to_numpy_array(image) for image in images] for images in images_list]
+        images_list = [[to_channel_dimension_format(image, ChannelDimension.LAST) for image in images] for images in images_list]
 
         batch_images = []
         batch_aspect_ratios = []
