@@ -1737,11 +1737,11 @@ class ModelUtilsTest(TestCasePlus):
         ]
         new_keys = update_key_name(original_keys)
         expected_new_keys = [
-            "model.language_model.{0, 1, 2, 3}.self_attn.{0, 1}.mlp.layer.{1}.weight",
-            "model.language_model.{0, 1, 2, 3}.self_attn.{0, 1}.mlp.conv{1}.weight",
-            "model.language_model.{0, 1, 2, 3}.self_attn.{0, 1}.mlp{0}",
-            "model.language_model.{0, 1, 2, 3}.self_attn.{0, 1}.conv{1}.weight",
-            "model.language_model.{0, 1, 2, 3}.self_attn.{0, 1}.mlp.layer.conv{1}.weight",
+            "model.language_model.{0, 1, 2, 3}.self_attn.{0, 1}.conv1.weight",
+            "model.language_model.{0, 1, 2, 3}.self_attn.{0, 1}.mlp.layer.1.weight",
+            "model.language_model.{0, 1, 2, 3}.self_attn.{0, 1}.mlp0",
+            "model.language_model.{0, 1, 2, 3}.self_attn.{0, 1}.mlp.conv1.weight",
+            "model.language_model.{0, 1, 2, 3}.self_attn.{0, 1}.mlp.layer.conv1.weight",
         ]
         self.assertListEqual(list(new_keys), expected_new_keys)
 

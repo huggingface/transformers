@@ -999,7 +999,7 @@ def update_key_name(keys):
     for key in keys:
         modified_key = r""
         for char in key:
-            if char.isdigit():
+            if char.isdigit() and modified_key[-1] == ".":
                 if modified_key != "":
                     modified_key += r"(\d+)"
                     modified_key = modified_key.replace(".", r"\.")
@@ -1011,7 +1011,8 @@ def update_key_name(keys):
     for key in keys:
         text = key
         for pattern, values in key_dict.items():
-            text = re.sub(pattern, lambda match: match.group(0)[: -len(match.group(1))] + str(values), text)
+            if len(values) > 1:
+                text = re.sub(pattern, lambda match: match.group(0)[: -len(match.group(1))] + str(values), text)
         final_keys.add(text)
     return final_keys
 
