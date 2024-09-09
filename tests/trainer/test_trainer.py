@@ -1059,14 +1059,14 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 max_steps=10,
                 use_cpu=True,
             )
-            trainer = Trainer(tiny_model, args, tokenizer=tokenizer, train_dataset=train_dataset)
+            trainer = Trainer(tiny_model, args, processing_class=tokenizer, train_dataset=train_dataset)
 
             trainer.train()
             parameters = dict(tiny_model.named_parameters())
             state = dataclasses.asdict(trainer.state)
 
             # Reinitialize trainer
-            trainer = Trainer(tiny_model, args, tokenizer=tokenizer, train_dataset=train_dataset)
+            trainer = Trainer(tiny_model, args, processing_class=tokenizer, train_dataset=train_dataset)
 
             checkpoint = os.path.join(tmpdir, "checkpoint-5")
 

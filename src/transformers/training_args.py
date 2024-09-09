@@ -683,9 +683,9 @@ class TrainingArguments:
         hub_strategy (`str` or [`~trainer_utils.HubStrategy`], *optional*, defaults to `"every_save"`):
             Defines the scope of what is pushed to the Hub and when. Possible values are:
 
-            - `"end"`: push the model, its configuration, the tokenizer (if passed along to the [`Trainer`]) and a
+            - `"end"`: push the model, its configuration, the processing class e.g. tokenizer (if passed along to the [`Trainer`]) and a
               draft of a model card when the [`~Trainer.save_model`] method is called.
-            - `"every_save"`: push the model, its configuration, the tokenizer (if passed along to the [`Trainer`]) and
+            - `"every_save"`: push the model, its configuration, the processing class e.g. tokenizer (if passed along to the [`Trainer`]) and
               a draft of a model card each time there is a model save. The pushes are asynchronous to not block
               training, and in case the save are very frequent, a new push is only attempted if the previous one is
               finished. A last push is made with the final model at the end of training.
@@ -2834,9 +2834,9 @@ class TrainingArguments:
             strategy (`str` or [`~trainer_utils.HubStrategy`], *optional*, defaults to `"every_save"`):
                 Defines the scope of what is pushed to the Hub and when. Possible values are:
 
-                - `"end"`: push the model, its configuration, the tokenizer (if passed along to the [`Trainer`]) and a
+                - `"end"`: push the model, its configuration, the processing_class e.g. tokenizer (if passed along to the [`Trainer`]) and a
                 draft of a model card when the [`~Trainer.save_model`] method is called.
-                - `"every_save"`: push the model, its configuration, the tokenizer (if passed along to the [`Trainer`])
+                - `"every_save"`: push the model, its configuration, the processing_class e.g. tokenizer (if passed along to the [`Trainer`])
                   and
                 a draft of a model card each time there is a model save. The pushes are asynchronous to not block
                 training, and in case the save are very frequent, a new push is only attempted if the previous one is
