@@ -50,43 +50,6 @@ logger = logging.get_logger(__name__)
 
 
 @lru_cache(maxsize=10)
-def get_all_number_factors(number: int) -> List[int]:
-    """
-    Return a sorted list of all unique factors of a given number.
-
-    This function calculates and returns all positive integers that evenly divide the input number,
-    including 1 and the number itself. The factors are returned in ascending order.
-
-    Args:
-        number (`int`):
-            The positive integer for which to find factors.
-
-    Returns:
-        `List[int]`:
-            A sorted list of all unique factors of the input number.
-
-    Examples:
-        >>> get_all_number_factors(4)
-        [1, 2, 4]
-        >>> get_all_number_factors(6)
-        [1, 2, 3, 6]
-        >>> get_all_number_factors(12)
-        [1, 2, 3, 4, 6, 12]
-
-    Note:
-        - The function uses an optimized algorithm that only checks up to the square root of the input number.
-        - The result is cached using the @lru_cache decorator for improved performance on repeated calls.
-    """
-    factors = set()
-    max_possible_factor = int(number**0.5) + 1
-    for factor in range(1, max_possible_factor):
-        if number % factor == 0:
-            factors.add(factor)
-            factors.add(number // factor)
-    return sorted(factors)
-
-
-@lru_cache(maxsize=10)
 def find_supported_aspect_ratios(max_image_tiles: int) -> Dict[float, List[Tuple[int, int]]]:
     """
     Computes all allowed aspect ratios for a given maximum number of input tiles.
@@ -106,31 +69,26 @@ def find_supported_aspect_ratios(max_image_tiles: int) -> Dict[float, List[Tuple
               configuration in terms of number of tiles.
 
     Example:
-        For max_image_tiles=5, the function returns:
+        For max_image_tiles=4, the function returns:
         {
-            0.2: [(1, 5)],   # 1 tile wide, 5 tiles high
-            5.0: [(5, 1)],   # 5 tiles wide, 1 tile high
-            0.25: [(1, 4)],  # 1 tile wide, 4 tiles high
-            1.0: [(2, 2), (1, 1)],  # Square configurations
-            4.0: [(4, 1)],   # 4 tiles wide, 1 tile high
-            0.3333333333333333: [(1, 3)],  # 1 tile wide, 3 tiles high
-            3.0: [(3, 1)],   # 3 tiles wide, 1 tile high
-            0.5: [(1, 2)],   # 1 tile wide, 2 tiles high
-            2.0: [(2, 1)]    # 2 tiles wide, 1 tile high
+            0.25: [(1, 4)],
+            0.33: [(1, 3)],
+            0.5: [(1, 2)],
+            1.0: [(1, 1), (2, 2)],  # Multiple arrangements
+            2.0: [(2, 1)],
+            3.0: [(3, 1)],
+            4.0: [(4, 1)],
         }
 
     Note:
         - The aspect ratio is calculated as width/height.
         - Multiple configurations can have the same aspect ratio (e.g., 2x2 and 1x1).
-        - The function considers all divisors of numbers up to max_image_tiles.
     """
     aspect_ratios_dict = defaultdict(list)
-    for num_tiles in range(max_image_tiles, 0, -1):
-        factors = get_all_number_factors(num_tiles)
-        for num_tiles_width in factors:
-            num_tiles_height = num_tiles // num_tiles_width
-            ratio = num_tiles_width / num_tiles_height
-            aspect_ratios_dict[ratio].append((num_tiles_width, num_tiles_height))
+    for width in range(1, max_image_tiles + 1):
+        for height in range(1, max_image_tiles + 1):
+            if width * height <= max_image_tiles:
+                aspect_ratios_dict[width / height].append((width, height))
     return aspect_ratios_dict
 
 
