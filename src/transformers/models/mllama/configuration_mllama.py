@@ -91,9 +91,9 @@ class MllamaVisionConfig(PretrainedConfig):
         n_heads=16,
         n_global_layers=8,
         num_layers=32,
-        vision_chunk_size=560,
+        vision_chunk_size=448,
         vision_max_num_chunks=4,
-        projection_dim=8192,
+        projection_dim=4096,
         vision_input_dim=1280,
         return_intermediate="3,7,15,23,30",
         global_vision_layers=8,
@@ -202,7 +202,7 @@ class MllamaTextConfig(PretrainedConfig):
     def __init__(
         self,
         vocab_size=128256,
-        num_hidden_layers=80,
+        num_hidden_layers=32,
         hidden_size=4096,
         num_attention_heads=32,
         num_key_value_heads=8,
@@ -213,7 +213,7 @@ class MllamaTextConfig(PretrainedConfig):
         vision_num_cross_attention_layers=20, # TODO comon
         multiple_of=4096, # TODO common
         vision_input_dim=1280, # TODO common
-        intermediate_size=11008,
+        intermediate_size=14336,
         hidden_act="silu",
         max_position_embeddings=2048,
         initializer_range=0.02,

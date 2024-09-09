@@ -171,10 +171,6 @@ class MllamaProcessor(ProcessorMixin):
             encoding = self.tokenizer(text, **text_kwargs)
             data.update(encoding)
 
-            # create mask for vision tokens
-            cross_attention_token_mask = self.cross_attention_token_mask(encoding["input_ids"])
-            not_tensor_data["cross_attention_token_mask"] = cross_attention_token_mask
-
         if images is not None:
 
             images = make_list_of_images(images)
