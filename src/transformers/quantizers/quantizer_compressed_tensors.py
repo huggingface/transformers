@@ -29,7 +29,7 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
     quantized state with compressed_tensors
     """
 
-    requires_calibration = False
+    requires_calibration = True
     required_packages = ["compressed_tensors"]
 
     def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
