@@ -47,7 +47,7 @@ body:
           - generate: @zucchini-nlp (visual-language models) or @gante (all others)
           - pipelines: @Rocketknight1
           - tensorflow: @gante and @Rocketknight1
-          - tokenizers: @ArthurZucker
+          - tokenizers: @ArthurZucker and @itazap
           - trainer: @muellerzr @SunMarc
 
         Integrations:
