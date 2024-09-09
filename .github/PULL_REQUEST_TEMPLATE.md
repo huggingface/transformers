@@ -40,18 +40,19 @@ members/contributors who may be interested in your PR.
 Models:
 
 - text models: @ArthurZucker
-- vision models: @amyeroberts
-- speech models: @sanchit-gandhi
+- vision models: @amyeroberts, @qubvel
+- speech models: @ylacombe, @eustlb
 - graph models: @clefourrier
 
 Library:
 
 - flax: @sanchit-gandhi
 - generate: @zucchini-nlp (visual-language models) or @gante (all others)
-- pipelines: @Narsil
+- pipelines: @Rocketknight1
 - tensorflow: @gante and @Rocketknight1
 - tokenizers: @ArthurZucker
 - trainer: @muellerzr and @SunMarc
+- chat templates: @Rocketknight1
 
 Integrations:
 
