@@ -26,6 +26,7 @@ import re
 import shutil
 import tempfile
 import warnings
+from collections import defaultdict
 from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import partial, wraps
@@ -988,6 +989,31 @@ def _add_variant(weights_name: str, variant: Optional[str] = None) -> str:
         weights_name = ".".join(splits)
 
     return weights_name
+
+
+def update_key_name(keys):
+    """
+    Updates a dictionary of keys to pack layers together as layer.{0, 1, 4} instead of layers.0, layers.1, layers.4.
+    """
+    key_dict = defaultdict(set)
+    for key in keys:
+        modified_key = r""
+        for char in key:
+            if char.isdigit():
+                if modified_key != "":
+                    modified_key += r"(\d+)"
+                    modified_key = modified_key.replace(".", r"\.")
+                    key_dict[modified_key].add(int(char))
+                    modified_key = r""
+            else:
+                modified_key += char
+    final_keys = set()
+    for key in keys:
+        text = key
+        for pattern, values in key_dict.items():
+            text = re.sub(pattern, lambda match: match.group(0)[: -len(match.group(1))] + str(values), text)
+        final_keys.add(text)
+    return final_keys
 
 
 class ModuleUtilsMixin:
@@ -4505,6 +4531,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     "\n\tYou may consider adding `ignore_mismatched_sizes=True` in the model `from_pretrained` method."
                 )
             raise RuntimeError(f"Error(s) in loading state_dict for {model.__class__.__name__}:\n\t{error_msg}")
+
+        missing_keys = update_key_name(missing_keys)
+        unexpected_keys = update_key_name(unexpected_keys)
 
         if len(unexpected_keys) > 0:
             archs = [] if model.config.architectures is None else model.config.architectures
