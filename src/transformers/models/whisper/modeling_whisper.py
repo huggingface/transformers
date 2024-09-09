@@ -1873,7 +1873,7 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
             decoder_attention_mask = _prepare_4d_causal_attention_mask_with_cache_position(
                 decoder_attention_mask,
                 sequence_length=sequence_length,
-                target_length=past_key_values.self_attention_cache.get_max_length(),
+                target_length=past_key_values.self_attention_cache.get_max_cache_shape(),
                 dtype=dtype,
                 device=device,
                 min_dtype=min_dtype,
