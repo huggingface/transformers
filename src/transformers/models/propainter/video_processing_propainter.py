@@ -219,11 +219,23 @@ def extrapolation(
         flow_mask = np.expand_dims(flow_mask, axis=-1)
         mask_dilated = np.expand_dims(mask_dilated, axis=-1)
 
-    image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) if data_format is not None else image
+    image = (
+        to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
+        if data_format is not None
+        else image
+    )
 
-    flow_mask = to_channel_dimension_format(flow_mask, data_format, input_channel_dim=input_data_format) if data_format is not None else image
+    flow_mask = (
+        to_channel_dimension_format(flow_mask, data_format, input_channel_dim=input_data_format)
+        if data_format is not None
+        else image
+    )
 
-    mask_dilated = to_channel_dimension_format(mask_dilated, data_format, input_channel_dim=input_data_format) if data_format is not None else image
+    mask_dilated = (
+        to_channel_dimension_format(mask_dilated, data_format, input_channel_dim=input_data_format)
+        if data_format is not None
+        else image
+    )
 
     return image, flow_mask, mask_dilated
 
@@ -385,26 +397,30 @@ class ProPainterVideoProcessor(BaseImageProcessor):
             # We assume that all images have the same channel dimension format.
             input_data_format = infer_channel_dimension_format(images[0])
 
-        images, flow_masks, masks_dilated = zip(*[
-            extrapolation(
-                image=image,
-                scale=scale,
-                data_format=data_format,
-                input_data_format=input_data_format,
-            )
-            for image in images
-        ])
+        images, flow_masks, masks_dilated = zip(
+            *[
+                extrapolation(
+                    image=image,
+                    scale=scale,
+                    data_format=data_format,
+                    input_data_format=input_data_format,
+                )
+                for image in images
+            ]
+        )
 
         images = [
             to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
         ]
 
         flow_masks = [
-            to_channel_dimension_format(flow_mask, data_format, input_channel_dim=input_data_format) for flow_mask in flow_masks
+            to_channel_dimension_format(flow_mask, data_format, input_channel_dim=input_data_format)
+            for flow_mask in flow_masks
         ]
 
         masks_dilated = [
-            to_channel_dimension_format(mask_dilated, data_format, input_channel_dim=input_data_format) for mask_dilated in masks_dilated
+            to_channel_dimension_format(mask_dilated, data_format, input_channel_dim=input_data_format)
+            for mask_dilated in masks_dilated
         ]
 
         return images, flow_masks, masks_dilated
@@ -688,7 +704,9 @@ class ProPainterVideoProcessor(BaseImageProcessor):
         elif video_painting_mode == "video_outpainting":
             # for outpainting of videos
             pixel_values, flow_masks, masks_dilated = [
-                    list(pixels) for pixels in zip(*[
+                list(pixels)
+                for pixels in zip(
+                    *[
                         self._extrapolation(
                             video,
                             scale=scale_hw,
@@ -696,8 +714,9 @@ class ProPainterVideoProcessor(BaseImageProcessor):
                             input_data_format=input_data_format,
                         )
                         for video in pixel_values
-                    ])
-                ]
+                    ]
+                )
+            ]
         else:
             raise ValueError(f"Unsupported video painting mode: {video_painting_mode}")
 
