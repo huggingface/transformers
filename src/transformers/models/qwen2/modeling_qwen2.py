@@ -175,7 +175,6 @@ class Qwen2RotaryEmbedding(nn.Module):
             self._set_cos_sin_cache(seq_len=seq_len, device=x.device, dtype=x.dtype)
         print(f"x device after: {x.device}")
         device_type = x.device.type
-        # with torch.autocast(device_type=device_type, enabled=False):
         cos_emb = self.cos_cached[:seq_len].to(dtype=x.dtype).to(device=device_type)
         sin_emb = self.sin_cached[:seq_len].to(dtype=x.dtype).to(device=device_type)
         print(f"cos_emb device: {cos_emb.device}")
@@ -213,17 +212,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
     Returns:
         `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
     """
-    # Sanity check before applying rotary embeddings
-    print(f"cos device: {cos.device}")
-    print(f"sin device: {sin.device}")
-    print(f"position_ids device: {position_ids.device}")
-    # # Ensure cos and sin are on the same device as position_ids
-    # cos = cos.to(position_ids.device)
-    # sin = sin.to(position_ids.device)
-
-    # # Sanity check after moving cos and sin
-    # print(f"cos device after: {cos.device}")
-    # print(f"sin device after: {sin.device}")
+    print(f"cos device: {cos.device}; sin device: {sin.device}; position_ids device: {position_ids.device}")
     cos = cos[position_ids].unsqueeze(unsqueeze_dim)
     sin = sin[position_ids].unsqueeze(unsqueeze_dim)
     q_embed = (q * cos) + (rotate_half(q) * sin)
@@ -331,8 +320,7 @@ class Qwen2Attention(nn.Module):
                     "with a layer index."
                 )
             kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
-        with torch.autocast(device_type=hidden_states.device.type, enabled=False):
-            cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
+        cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
         print(f"cos device after autocast: {cos.device}")
         print(f"sin device after autocast: {sin.device}")
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
@@ -432,8 +420,7 @@ class Qwen2FlashAttention2(Qwen2Attention):
             max(kv_seq_len, position_ids[:, -1].max().item() + 1) if position_ids is not None else kv_seq_len
         )
 
-        with torch.autocast(device_type=hidden_states.device.type, enabled=False):
-            cos, sin = self.rotary_emb(value_states, seq_len=rotary_seq_len)
+        cos, sin = self.rotary_emb(value_states, seq_len=rotary_seq_len)
         print(f"flash cos device after autocast: {cos.device}")
         print(f"flash sin device after autocast: {sin.device}")
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
