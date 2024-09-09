@@ -29,7 +29,7 @@ if TYPE_CHECKING:
     from .configuration_utils import GenerationConfig
 
 
-def get_longest_diag_dict(some, some_nonzero):
+def _get_longest_diag_dict(some, some_nonzero):
     visited = set()
     diags = {}
     for idx in some_nonzero:
@@ -56,8 +56,8 @@ def get_longest_diag_dict(some, some_nonzero):
     return diags
 
 
-def get_longest_diag_index(some):
-    diags = get_longest_diag_dict(some, some.nonzero())
+def _get_longest_diag_index(some):
+    diags = _get_longest_diag_dict(some, some.nonzero())
     diags_values = list(diags.values())
     diags_keys = list(diags.keys())
     best_diag = np.argmax(diags_values)
@@ -66,7 +66,7 @@ def get_longest_diag_index(some):
     return diag_start_index, diag_start_length
 
 
-def get_tokens_diag(prompt, prompt_plus_new_tokens):
+def _get_tokens_diag(prompt, prompt_plus_new_tokens):
     """
     Input:
         prompt: 2D array of shape (batch_size, prompt_length), represents the original prompt tokens
@@ -85,7 +85,7 @@ def get_tokens_diag(prompt, prompt_plus_new_tokens):
         # empty intersection between prompt and prompt_plus_new_tokens
         return None, None, None, None, None
 
-    longest_location, longest_diag_length = get_longest_diag_index(compare_mat_int)
+    longest_location, longest_diag_length = _get_longest_diag_index(compare_mat_int)
     new_token_start_index = longest_location[0] + longest_diag_length
     discrep_with_old = longest_location[1] + longest_diag_length
     replace_tokens_from_prompt = prompt[:, discrep_with_old:]
@@ -359,7 +359,6 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
     ):
         text = src.batch_decode(input_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
         dest_ids = dest(text, add_special_tokens=True, return_tensors="pt")["input_ids"]
-
         return dest_ids.to(input_ids.device)
 
     def get_candidates(
@@ -390,7 +389,7 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
                 prompt_use = self.prev_assistant_ids[:, -prompt_use_length:]
 
                 replace_tokens_from_prompt, disrep_length, new_tokens_with_disrep, new_tokens_only, discrep_only = (
-                    get_tokens_diag(prompt_use, new_assistant_ids)
+                    _get_tokens_diag(prompt_use, new_assistant_ids)
                 )
                 assistant_input_ids = self.prev_assistant_ids
 
@@ -473,7 +472,7 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
                 tar_new_tokens_with_disrep,
                 tar_new_tokens_only,
                 tar_discrep_only,
-            ) = get_tokens_diag(target_prompt_use, new_target_ids_from_window)
+            ) = _get_tokens_diag(target_prompt_use, new_target_ids_from_window)
 
             # if DEBUG:
             #     log(f"TARGET {target_prompt_use=}, {new_target_ids_from_window=}")
