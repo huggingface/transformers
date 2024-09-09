@@ -416,6 +416,7 @@ class MllamaVisionEncoder(nn.Module):
 
 class MllamaVisionModel(PreTrainedModel):
     base_model_prefix = "vision_model"
+    _no_split_modules = ["MllamaVisionSdpaAttention"]
 
     def __init__(
         self,
