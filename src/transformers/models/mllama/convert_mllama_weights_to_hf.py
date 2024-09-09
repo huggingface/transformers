@@ -51,15 +51,17 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"text_model.cross_attention_layers.(\d+).gate_attn":               r"language_model.model.layers.\1.gate_attn",
     r"text_model.cross_attention_layers.(\d+).gate_ffwd":               r"language_model.model.layers.\1.ffn_gate",
     # special key, wqkv needs to be split afterwards
-    r"text_model.cross_attention_layers.(\d+).attention.wqkv":          r"language_model.model.layers.\1.cross_attn.q|k|v_proj",
-    r"text_model.cross_attention_layers.(\d+).attention.wo":                r"language_model.model.layers.\1.cross_attn.o_proj",
-    r"text_model.cross_attention_layers.(\d+).attention.wq.layer_norm_weight": r"language_model.model.layers.\1.cross_attn.q_norm",
-    r"text_model.cross_attention_layers.(\d+).attention.wk.layer_norm_weight": r"language_model.model.layers.\1.cross_attn.k_norm",
-    r"text_model.cross_attention_layers.(\d+).feed_forward.mlp.fc1":      r"language_model.model.layers.\1.mlp.down_proj.weight",
-    r"text_model.cross_attention_layers.(\d+).feed_forward.mlp.fc2":      r"language_model.model.layers.\1.mlp.up|gate_proj.weight",
+    r"text_model.cross_attention_layers.(\d+).attention.wq":                    r"language_model.model.layers.\1.cross_attn.q_proj",
+    r"text_model.cross_attention_layers.(\d+).attention.wkv":                   r"language_model.model.layers.\1.cross_attn.k|v_proj",
+    r"text_model.cross_attention_layers.(\d+).attention.wo":                    r"language_model.model.layers.\1.cross_attn.o_proj",
+    r"text_model.cross_attention_layers.(\d+).attention.wq.layer_norm_weight":  r"language_model.model.layers.\1.cross_attn.q_norm",
+    r"text_model.cross_attention_layers.(\d+).attention.wk.layer_norm_weight":  r"language_model.model.layers.\1.cross_attn.k_norm",
+    r"text_model.cross_attention_layers.(\d+).feed_forward.mlp.fc1.weight":            r"language_model.model.layers.\1.mlp.down_proj.weight",
+    r"text_model.cross_attention_layers.(\d+).feed_forward.mlp.fc2":            r"language_model.model.layers.\1.mlp.up|gate_proj",
+    r"text_model.cross_attention_layers.(\d+).feed_forward.mlp.layer_norm_weight": r"language_model.model.layers.\1.post_attention_layernorm.weight",
     r"text_model.cross_attention_layers.(\d+).attention.inner_attention.(q|k)_norm": r"language_model.model.layers.\1.cross_attn.\2_norm",
 
-    r"text_model.layers.(\d+).attention.wqkv":                          r"language_model.model.layers.\1.self_attn.q|k|v_proj",
+    r"text_model.layers.(\d+).attention.wqkv.weight":                          r"language_model.model.layers.\1.self_attn.q|k|v|_proj.weight",
     r"text_model.layers.(\d+).attention.wo":                            r"language_model.model.layers.\1.self_attn.o_proj",
     r"text_model.layers.(\d+).attention.wqkv.layer_norm_weight":        r"language_model.model.layers.\1.input_layernorm.weight",
     r"text_model.layers.(\d+).feed_forward.mlp.layer_norm_weight":      r"language_model.model.layers.\1.post_attention_layernorm.weight",
@@ -150,7 +152,7 @@ def write_model(
     if params.get("n_kv_heads", None) is not None:
         num_key_value_heads = params["n_kv_heads"]  # for GQA / MQA
         num_local_key_value_heads = n_heads_per_shard // num_key_value_heads
-        key_value_dim = dim // num_key_value_heads
+        key_value_dim = dim // num_local_key_value_heads
     else:  # compatibility with other checkpoints
         num_key_value_heads = n_heads
         num_local_key_value_heads = n_heads_per_shard
@@ -176,16 +178,49 @@ def write_model(
     all_keys = list(loaded[0].keys())
     new_keys = convert_old_keys_to_new_keys(all_keys)
 
+    cross_layer_shift = [3, 7, 11, 15, 19, 23, 27, 31]
+    attn_layer_shift = [0, 1, 2, 4, 5, 6, 8, 9, 10, 12, 13, 14, 16, 17, 18, 20, 21, 22, 24, 25, 26, 28, 29, 30, 33, 33, 34, 35, 36, 37, 38, 39]
     for idx, key in enumerate(all_keys):
         filename = f"pytorch_model-{idx + 1}-of-{total_layers + 1}.bin"
         # Sharded
         # Note that attention.w{q,k,v,o}, feed_fordward.w[1,2,3], attention_norm.weight and ffn_norm.weight share
         # the same storage object, saving attention_norm and ffn_norm will save other weights too, which is
         # redundant as other weights will be stitched from multiple shards. To avoid that, they are cloned.
+        new_key = new_keys[key]
+        if "cross_attn" in new_key and "language_model" in new_key:
+            new_key = re.sub("layers.(\d+).", lambda _match: f"layers.{cross_layer_shift[int(_match.groups()[0])]}.", new_key)
+        elif "self_attn" in new_key and "language_model" in new_key:
+            new_key = re.sub("layers.(\d+).", lambda _match: f"layers.{attn_layer_shift[int(_match.groups()[0])]}.", new_key)
 
-        state_dict = {
-            new_keys[key]  : torch.cat([chunk.pop(key) for chunk in loaded], dim=0)
-        }
+        if "self_attn.q|k|v|_proj" in new_key and "language_model" in new_key:
+            weight = torch.cat([chunk.pop(key) for chunk in loaded], dim=0)
+            q, k, v = torch.split(weight, [dim, key_value_dim, key_value_dim])
+            # TODO PERMUTE FOR ROPE
+            state_dict[new_key.replace("q|k|v|", "q")] = q 
+            state_dict[new_key.replace("q|k|v|", "k")] = k
+            state_dict[new_key.replace("q|k|v|", "v")] = v
+        
+        elif "mlp.up|gate" in new_key:
+            weight = torch.cat([chunk.pop(key) for chunk in loaded], dim=0)
+            up, down = weight.chunk(2, dim=0)
+            state_dict[new_key.replace("up|gate", "up")] = up
+            state_dict[new_key.replace("up|gate", "down")] = down 
+        
+        elif "cross_attn.k|v_proj" in new_key and "language_model" in new_key:
+            weight = torch.cat([chunk.pop(key) for chunk in loaded], dim=0)
+            k, v = weight.chunk(2, dim=0)
+            state_dict[new_key.replace("k|v", "k")] = k
+            state_dict[new_key.replace("k|v", "v")] = v 
+
+        elif "layernorm" in new_key:
+            state_dict = {
+                new_keys[key]  : [chunk.pop(key) for chunk in loaded][0]
+            }
+
+        else:
+            state_dict = {
+                new_keys[key]  : torch.cat([chunk.pop(key) for chunk in loaded], dim=0)
+            }
 
         for k, v in state_dict.items():
             index_dict["weight_map"][k] = filename

@@ -1018,11 +1018,11 @@ class MllamaTextModel(PreTrainedModel):
 
         # TODO do we really need this?
         self.learnable_embedding = nn.Embedding(8, config.hidden_size, self.padding_idx)
-
+        self.fusion_schedule = [3, 7, 11, 15, 19, 23, 27, 31] # one cross each 4 layers
 
         layers = []
-        for layer_idx in range(config.num_hidden_layers):
-            if layer_idx % config.cross_attention_freq:
+        for layer_idx in range(config.num_hidden_layers+len(self.fusion_schedule)):
+            if layer_idx in self.fusion_schedule :
                 layers.append(MllamaCrossAttentionDecoderLayer(config, layer_idx))
             else:
                 layers.append(MllamaSelfAttentionDecoderLayer(config, layer_idx))
