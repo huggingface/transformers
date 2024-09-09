@@ -41,12 +41,6 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "MllamaConfig"
 
 
-
-
-def get_negative_inf_value(dtype):
-    return torch.finfo(dtype).min
-
-
 def to_tuple(x) -> Tuple[int, int]:
     if isinstance(x, collections.abc.Iterable):
         return x
@@ -120,57 +114,34 @@ def get_full_row_masked_out_mask(
     return (attn_bias != negative_inf_value).any(dim=-1).type_as(attn_bias)[..., None]
 
 
-def convert_sparse_cross_attention_mask_to_dense(
-    cross_attention_token_mask: List[List[List[int]]],
-    attention_mask: torch.Tensor,
-    num_tiles: List[List[int]],
-    max_num_tiles: int,
-    total_len: int,
-    device: torch.device,
-    dtype: torch.dtype,
-) -> torch.Tensor:
-
-    inf_value = get_negative_inf_value(dtype)
-
-    batch_size = len(cross_attention_token_mask)
-    max_num_images = max([len(masks) for masks in cross_attention_token_mask])
-
-    out_masks = torch.full(
-        size=(batch_size, total_len, max_num_images, max_num_tiles),
-        fill_value=inf_value,
-        dtype=dtype,
-        device=device,
-    )
-
-    for batch_idx, (mask_i, num_tiles_i, text_attn_mask) in enumerate(zip(cross_attention_token_mask, num_tiles, attention_mask)):
-        for mask_idx, (token_locations, mask_num_chunks) in enumerate(zip(mask_i, num_tiles_i)):
-            if len(token_locations) == 2:
-                start, end = token_locations
-                end = min(end, total_len)
-                if end == -1 or mask_idx == len(mask_i) - 1:
-                    end = total_len
-                out_masks[batch_idx, start:end, mask_idx, :mask_num_chunks].fill_(0.0)
-        curr_attn_mask = text_attn_mask[-(out_masks.shape[1] - 100): ]
-        masked_locations = torch.where(curr_attn_mask == 0)[0]
-        out_masks[batch_idx, masked_locations]  = inf_value # text_attn_mask is 1D of total_len-100 length
-
-    return out_masks
-
-
 def prepare_cross_attention_mask(
     cross_attention_mask: torch.Tensor,
+    inputs_tensor: torch.Tensor,
+    past_key_values: Cache,
+    image_seq_length: int,
     num_vision_tokens: int,
 ) -> Tuple[Tensor, Tensor]:
 
-    batch_size, text_total_length, _, _ = cross_attention_mask.shape # 2, 109, 1, 4
+    dtype, device = inputs_tensor.dtype, inputs_tensor.device
+    batch_size, sequence_length, _ = inputs_tensor.shape
 
-    cross_attention_mask = cross_attention_mask.repeat_interleave(num_vision_tokens, dim=2)
-    cross_attention_mask = cross_attention_mask.view(batch_size, text_total_length, -1)
-    cross_attention_mask = cross_attention_mask.unsqueeze(1)
+    if cross_attention_mask is None:
+        cross_attention_mask = torch.zeros((batch_size, 1, sequence_length, image_seq_length), dtype=dtype, device=device)
+    else:
+        # reshape so it can be used by attn module
+        batch_size, text_total_length, *_ = cross_attention_mask.shape
+        cross_attention_mask = cross_attention_mask.repeat_interleave(num_vision_tokens, dim=2)
+        cross_attention_mask = cross_attention_mask.view(batch_size, text_total_length, -1)
+        cross_attention_mask = cross_attention_mask.unsqueeze(1)
 
-    inf_value = get_negative_inf_value(cross_attention_mask.dtype)
-    full_text_row_masked_out_mask = get_full_row_masked_out_mask(cross_attention_mask, inf_value)
+    # invert the mask
+    inverted_cross_attn_mask = 1.0 - cross_attention_mask
+    cross_attention_mask = inverted_cross_attn_mask.masked_fill(inverted_cross_attn_mask.to(torch.bool), torch.finfo(torch.bfloat16).min)
 
+    # apply full-row bias, which return 4D tensor of shape [B, H, S1, 1] where value is 0 if the a full row in cross attn mask's
+    #  last dimension contains negative infinity values, otherwise it's 1
+    negative_inf_value = torch.finfo(dtype).min
+    full_text_row_masked_out_mask = (cross_attention_mask != negative_inf_value).any(dim=-1).type_as(cross_attention_mask)[..., None]
     cross_attention_mask *= full_text_row_masked_out_mask
 
     return cross_attention_mask, full_text_row_masked_out_mask
@@ -195,7 +166,7 @@ def build_encoder_attention_mask(
         mask_i = torch.ones((num_chunks, x.shape[2], 1), dtype=x.dtype)
         mask_i[: arx[0] * arx[1], :ntok] = 0
         mask_i = mask_i.view(num_chunks * x.shape[2], -1)
-        mask_i = mask_i @ mask_i.T * get_negative_inf_value(x.dtype)
+        mask_i = mask_i @ mask_i.T * torch.finfo(x.dtype).min
         mask_i = mask_i.unsqueeze(0)
         masks.append(mask_i)
     masks = torch.stack(masks).to(x.device).expand(-1, n_heads, -1, -1)
@@ -352,6 +323,7 @@ class MllamaPatchEmbedding(nn.Module):
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
         hidden_state = self.unfold(hidden_state)
         hidden_state = hidden_state.permute(0, 2, 1)
+        hidden_state = hidden_state.to(self.weight.data.device)
         hidden_state = F.linear(hidden_state, self.weight.view(self.out_channels, -1))
         return hidden_state
 
@@ -1057,7 +1029,6 @@ class MllamaSdpaCrossAttention(nn.Module):
         query = self.q_norm(query)
         query = query.transpose(1, 2)
 
-        # FIXME shape issue here (?)
         attn_output = F.scaled_dot_product_attention(
             query, key, value, attn_mask=cross_attention_mask, dropout_p=0.0
         )
@@ -1438,9 +1409,6 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
                 "`pixel_values` and `cross_attention_key_value` cannot be provided simultaneously"
             )
 
-        if cross_attention_token_mask is None or num_tiles is None:
-            raise ValueError("`cross_attention_token_mask` and `num_tiles` must be provided!")
-
         if pixel_values is not None:
             if aspect_ratios is None:
                 raise ValueError("`aspect_ratios` must be provided if `pixel_values` is provided")
@@ -1457,19 +1425,6 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
                 cross_attention_key_value.append(layer_cross_attention_key_value)
             cross_attention_key_value = torch.stack(cross_attention_key_value)
 
-        # @raushan: can we prepare the dense attn in processing code so we dont't have to convert here?
-        # or probably this is somewhat similar to `update_causal_mask`, have to see where and how it's used
-        # create masks for cross-attention based on image token locations
-        cross_attention_mask = convert_sparse_cross_attention_mask_to_dense(
-            cross_attention_token_mask=cross_attention_token_mask,
-            attention_mask=attention_mask,
-            num_tiles=num_tiles,
-            total_len=attention_mask.shape[-1],
-            max_num_tiles=self.vision_max_num_chunks,
-            device=self.device,
-            dtype=self.dtype,
-        )
-
         if inputs_embeds is None:
             inputs_embeds = self.model.language_model.get_partially_trainable_embedding(input_ids)
 
@@ -1482,11 +1437,6 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        cross_attention_mask, full_text_row_masked_out_mask = prepare_cross_attention_mask(
-            cross_attention_mask=cross_attention_mask,
-            num_vision_tokens=self.model.vision_model.vision_encoder.num_patches,
-        )
-
         # temp workaround for rope, for some reason it expects a 1d tensor
         position_ids = position_ids.squeeze(0)
 
@@ -1494,6 +1444,14 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
 
         causal_mask = self._update_causal_mask(
             attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
+        )
+
+        cross_attention_mask, full_text_row_masked_out_mask = prepare_cross_attention_mask(
+            cross_attention_mask,
+            inputs_tensor=inputs_embeds,
+            past_key_values=past_key_values,
+            image_seq_length=cross_attention_key_value.shape[4], # shape (bs*max_images, 2 for kv, num_tiles, heads, seq_length, head_dim)
+            num_vision_tokens=self.model.vision_model.vision_encoder.num_patches
         )
 
         outputs = self.model.language_model(
@@ -1599,7 +1557,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
         position_ids=None,
         pixel_values=None,
         aspect_ratios=None,
-        num_tiles=None,
+        cross_attention_mask=None,
         past_key_values=None,
         use_cache=False,
         cache_position=None,
@@ -1666,8 +1624,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
                 "past_key_values": past_key_values,
                 "use_cache": use_cache,
                 "attention_mask": attention_mask,
-                "num_tiles": num_tiles,
-                "cross_attention_token_mask": kwargs.get("cross_attention_token_mask"),
+                "cross_attention_mask": cross_attention_mask,
             }
         )
 
@@ -1682,6 +1639,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
         return model_inputs
 
     def _update_model_kwargs_for_generation(self, outputs, model_kwargs, is_encoder_decoder, **kwargs):
+        cross_attention_mask_prev = model_kwargs.get("cross_attention_mask", None)
         model_kwargs = super()._update_model_kwargs_for_generation(
             outputs=outputs,
             model_kwargs=model_kwargs,
@@ -1691,4 +1649,8 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
 
         # Get the precomputed image_hidden_states
         model_kwargs["cross_attention_key_value"] = outputs.cross_attention_key_value
+
+        # add cross-attn mask for new token
+        if cross_attention_mask_prev is not None:
+            model_kwargs["cross_attention_mask"] = torch.cat([cross_attention_mask_prev, cross_attention_mask_prev[:, -1:, ...]], dim=1)
         return model_kwargs

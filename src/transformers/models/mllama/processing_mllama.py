@@ -17,8 +17,9 @@ Processor class for Mllama.
 """
 
 # TODO: update all docs
+from typing import List, Optional, Union
+
 import numpy as np
-from typing import Dict, List, Optional, Union
 
 # TODO: uncomment
 # try:
@@ -79,18 +80,18 @@ def get_cross_attention_token_mask(input_ids: List[int], image_token_id: int) ->
     """
 
     image_token_locations = [i for i, token in enumerate(input_ids) if token == image_token_id]
-    
+
     if len(image_token_locations) == 0:
         return []
-    
+
     # only one image present, unmask until end of sequence
     if len(image_token_locations) == 1:
         return [[image_token_locations[0], -1]]
 
     vision_masks = [[loc1, loc2] for loc1, loc2 in zip(image_token_locations[:-1], image_token_locations[1:])]
 
-    # last image will attend to all subsequent text
-    vision_masks.append([image_token_locations[-1], len(input_ids)])
+    # last image will attend to all subsequent text, including generated text
+    vision_masks.append([image_token_locations[-1], -1])
 
     # if there are two or more consecutive vision tokens,
     # they should all attend to all subsequent
@@ -132,7 +133,7 @@ def convert_sparse_cross_attention_mask_to_dense(
     Note:
         - Special handling is done for cases where the end token is -1, which is interpreted as attending to the end of the sequence.
     """
-    
+
     batch_size = len(cross_attention_token_mask)
     max_num_images = max([len(masks) for masks in cross_attention_token_mask])
 
@@ -149,7 +150,6 @@ def convert_sparse_cross_attention_mask_to_dense(
                 if end == -1:
                     end = length
                 cross_attention_mask[sample_idx, start:end, mask_idx, :mask_num_tiles] = 1
-
     return cross_attention_mask
 
 
@@ -282,7 +282,7 @@ class MllamaProcessor(ProcessorMixin):
 
         # Create cross attention mask
         if images is not None and text is not None:
-        
+
             cross_attention_token_mask = [
                 get_cross_attention_token_mask(token_ids, self.image_token_id)
                 for token_ids in encoding["input_ids"]
@@ -294,7 +294,7 @@ class MllamaProcessor(ProcessorMixin):
                 length=max(len(input_ids) for input_ids in encoding["input_ids"]),
             )
             data["cross_attention_mask"] = cross_attention_mask
-            
+
             # TODO: remove when modeling is updated
             additional_not_tensor_data["cross_attention_token_mask"] = cross_attention_token_mask
 
