@@ -3538,3 +3538,36 @@ class TestGetTokensDiag(unittest.TestCase):
         np.testing.assert_array_equal(new_tokens_with_disrep, np.array([[]]))
         np.testing.assert_array_equal(new_tokens_only, np.array([[]]))
         np.testing.assert_array_equal(discrep_only, np.array([[]]))
+
+class TestAnyTokenizerGenerationCorrectness(unittest.TestCase):
+    def test_speculative_decoding_equals_regular_decoding(self):
+        draft_name = "double7/vicuna-68m"
+        target_name = "Qwen/Qwen2-0.5B-Instruct"
+        
+        draft_model = AutoModelForCausalLM.from_pretrained(draft_name)
+        target_model = AutoModelForCausalLM.from_pretrained(target_name)
+        
+        assistant_tokenizer = AutoTokenizer.from_pretrained(draft_name)
+        target_tokenizer = AutoTokenizer.from_pretrained(target_name)
+        
+        prompt_size = torch.randint(low=20, high=100, size=(1,))
+        max_new_tokens = torch.randint(low=10, high=50, size=(1,))
+        input_ids = (torch.rand(1,prompt_size[0]) * 100).to(int) + 50
+        
+        max_new_tokens_item = max_new_tokens[0].item()
+        expected_out = target_model.generate(
+            input_ids, 
+            do_sample=False, 
+            max_new_tokens=max_new_tokens_item
+        )
+        predicted_out = target_model.generate(
+            input_ids, 
+            do_sample=False, 
+            max_new_tokens=max_new_tokens_item, 
+            assistant_model=draft_model,
+            target_tokenizer=target_tokenizer,
+            assistant_tokenizer=assistant_tokenizer
+        )
+        
+        assert expected_out.shape == predicted_out.shape
+        assert (expected_out == predicted_out).all().item()
