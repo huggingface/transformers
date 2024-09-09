@@ -52,7 +52,7 @@ class MllamaProcessorTest(unittest.TestCase):
         expected_ids = [128000, 2028, 374, 264, 1296, 11914, 13, 128001]
         self.assertEqual(inputs["input_ids"][0], expected_ids)
         self.assertEqual(inputs["attention_mask"][0], [1] * len(expected_ids))
-        self.assertEqual(inputs["vision_mask"], [[]])
+        self.assertEqual(inputs["cross_attention_token_mask"], None)
 
         # Test a single sample with image and text
         image_str = "<|image|>"
