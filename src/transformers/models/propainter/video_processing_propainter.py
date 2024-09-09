@@ -28,8 +28,8 @@ from ...image_transforms import (
     to_channel_dimension_format,
 )
 from ...image_utils import (
-    OPENAI_CLIP_MEAN,
-    OPENAI_CLIP_STD,
+    IMAGENET_STANDARD_MEAN,
+    IMAGENET_STANDARD_STD,
     ChannelDimension,
     ImageInput,
     PILImageResampling,
@@ -248,14 +248,14 @@ class ProPainterVideoProcessor(BaseImageProcessor):
     Constructs a ProPainter video processor.
 
     Args:
-        do_resize (`bool`, *optional*, defaults to `True`):
+        do_resize (`bool`, *optional*, defaults to `False`):
             Whether to resize the video's (height, width) dimensions to the specified `size`. Can be overridden by the
             `do_resize` parameter in the `preprocess` method.
         size (`Dict[str, int]` *optional*, defaults to `{"shortest_edge": 256}`):
             Size of the output video after resizing. The shortest edge of the video will be resized to
             `size["shortest_edge"]` while maintaining the aspect ratio of the original video. Can be overriden by
             `size` in the `preprocess` method.
-        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
+        resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.NEAREST`):
             Resampling filter to use if resizing the video. Can be overridden by the `resample` parameter in the
             `preprocess` method.
         do_center_crop (`bool`, *optional*, defaults to `False`):
@@ -264,10 +264,10 @@ class ProPainterVideoProcessor(BaseImageProcessor):
         crop_size (`Dict[str, int]`, *optional*, defaults to `{"height": 224, "width": 224}`):
             Size of the video after applying the center crop. Can be overridden by the `crop_size` parameter in the
             `preprocess` method.
-        do_rescale (`bool`, *optional*, defaults to `False`):
+        do_rescale (`bool`, *optional*, defaults to `True`):
             Whether to rescale the video by the specified scale `rescale_factor`. Can be overridden by the `do_rescale`
             parameter in the `preprocess` method.
-        rescale_factor (`int` or `float`, *optional*, defaults to `1/127.5`):
+        rescale_factor (`int` or `float`, *optional*, defaults to `1/255.0`):
             Defines the scale factor to use if rescaling the video. Can be overridden by the `rescale_factor` parameter
             in the `preprocess` method.
         do_normalize (`bool`, *optional*, defaults to `False`):
@@ -322,8 +322,8 @@ class ProPainterVideoProcessor(BaseImageProcessor):
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
         self.do_normalize = do_normalize
-        self.image_mean = image_mean if image_mean is not None else OPENAI_CLIP_MEAN
-        self.image_std = image_std if image_std is not None else OPENAI_CLIP_STD
+        self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
+        self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
         self.video_painting_mode = video_painting_mode
         self.scale_hw = scale_hw
         self.mask_dilation = mask_dilation
