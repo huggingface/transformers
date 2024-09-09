@@ -828,9 +828,8 @@ class CommonSpmIntegrationTests(unittest.TestCase):
     @require_read_token
     def test_bos_eos_tokens(self):
         new_eos_token = "<new_eos>"
-        tokenizer = AutoTokenizer.from_pretrained(
-            "hf-internal-testing/llama-3-8b-internal", add_bos_token=False, add_eos_token=True
-        )
+        model_path = "hf-internal-testing/llama-3-8b-internal"
+        tokenizer = AutoTokenizer.from_pretrained(model_path, add_bos_token=False, add_eos_token=True)
         self.assertNotEqual(tokenizer("hello")["input_ids"][0], tokenizer.bos_token_id)  # no bos token
         self.assertEqual(tokenizer("hello")["input_ids"][-1], tokenizer.eos_token_id)  # eos token
 
@@ -838,9 +837,7 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         tokens = tokenizer.tokenize("hello", add_special_tokens=True)
         self.assertEqual(tokens[-1], new_eos_token)
 
-        tokenizer_pretrained_fast = AutoTokenizer.from_pretrained(
-            "meta-llama/Meta-Llama-3-8B", add_bos_token=True, add_eos_token=True
-        )
+        tokenizer_pretrained_fast = AutoTokenizer.from_pretrained(model_path, add_bos_token=True, add_eos_token=True)
         self.assertEqual(tokenizer_pretrained_fast("hello")["input_ids"][0], tokenizer_pretrained_fast.bos_token_id)
         self.assertEqual(tokenizer_pretrained_fast("hello")["input_ids"][-1], tokenizer_pretrained_fast.eos_token_id)
 
