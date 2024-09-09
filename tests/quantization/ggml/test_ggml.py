@@ -15,7 +15,7 @@
 import tempfile
 import unittest
 
-from transformers import AddedToken, AutoModelForCausalLM, AutoTokenizer
+from transformers import AddedToken, AutoModelForCausalLM, AutoModelForSeq2SeqLM, AutoTokenizer
 from transformers.testing_utils import require_gguf, require_torch_gpu, slow, torch_device
 from transformers.utils import is_torch_available
 
@@ -35,6 +35,7 @@ class GgufIntegrationTests(unittest.TestCase):
     qwen2_model_id = "Qwen/Qwen1.5-0.5B-Chat-GGUF"
     llama3_model_id = "NousResearch/Meta-Llama-3-8B-GGUF"
     tinyllama_model_id = "PenutChen/TinyLlama-1.1B-Chat-v1.0-GGUF"
+    t5_model_id = "repetitio/flan-t5-small"
 
     # standard quants
     q4_0_gguf_model_id = "tinyllama-1.1b-chat-v1.0.Q4_0.gguf"
@@ -61,6 +62,7 @@ class GgufIntegrationTests(unittest.TestCase):
     q4_0_qwen2_model_id = "qwen1_5-0_5b-chat-q4_0.gguf"
     q4_llama3_model_id = "Meta-Llama-3-8B-Q4_K_M.gguf"
     f16_tinyllama_model_id = "TinyLlama-1.1B-Chat-v1.0.FP16.gguf"
+    q8_0_t5_model_id = "flan-t5-small-q8_0.gguf"
 
     example_text = "Hello"
 
@@ -338,6 +340,20 @@ class GgufIntegrationTests(unittest.TestCase):
         out = model.generate(**text, max_new_tokens=10)
 
         EXPECTED_TEXT = "Hello, I am interested in [The Park]\nThe"
+        self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
+
+    def test_t5_q8_0(self):
+        tokenizer = AutoTokenizer.from_pretrained(self.t5_model_id, gguf_file=self.q8_0_t5_model_id)
+        model = AutoModelForSeq2SeqLM.from_pretrained(
+            self.t5_model_id, gguf_file=self.q8_0_t5_model_id, device_map="auto", torch_dtype=torch.float16
+        )
+
+        T5_EXAMPLE_TEXT = "translate English to German: How old are you?"
+
+        text = tokenizer(T5_EXAMPLE_TEXT, return_tensors="pt").to(torch_device)
+        out = model.generate(**text, max_new_tokens=10)
+
+        EXPECTED_TEXT = "Wie ich er?"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
     def test_tokenization_xnli(self):

@@ -78,6 +78,7 @@ For now the supported model architectures are the architectures that have been v
 - LLaMa
 - Mistral
 - Qwen2
+- T5
 
 ## Example usage
 
