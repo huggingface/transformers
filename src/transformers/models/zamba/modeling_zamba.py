@@ -508,6 +508,13 @@ class ZambaMambaMixer(nn.Module):
     A, D are input independent (see Mamba paper [1] Section 3.5.2 "Interpretation of A" for why A isn't selective)
     ∆, B, C are input-dependent (this is a key difference between Mamba and the linear time invariant S4,
     and is why Mamba is called **selective** state spaces)
+
+    This module differs from `transformers.models.mamba.modeling_mamba.MambaMixer` in two ways:
+    - Added multi-head: the output of `self.in_proj` is split into `self.n_mamba_heads` heads, and each head
+    undergoes an independent forward pass, identical to the original `MambaMixer`, up until the pre-activations of
+    `self.out_proj`. The pre-activations, coming from different mamba heads, are then concatenated and fed into `self.out_proj`.
+    - Added `attention_mask` for batched inference: this tensor multiplies input and output of the convolution layer, setting 
+    to zero embeddings associated with `attention_mask == 0` thus preventing the layer to attend to such tokens.
     """
 
     def __init__(self, config: ZambaConfig, layer_idx):
