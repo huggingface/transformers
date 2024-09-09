@@ -33,7 +33,7 @@ from ...utils import (
     add_start_docstrings,
     logging,
 )
-from .configuration_mllama import MllamaConfig, MllamaCrossAttentionTextConfig
+from .configuration_mllama import MllamaConfig, MllamaTextConfig, MllamaVisionConfig
 
 
 logger = logging.get_logger(__name__)
@@ -297,14 +297,14 @@ class MllamaVisionEncoderLayer(nn.Module):
         self.intermediate_size = config.intermediate_size
 
         self.self_attn = MllamaVisionSdpaAttention(self.hidden_size, self.num_attention_heads)
-        self.mlp = MllamaVisionMLP(self.hidden_size, self.intermediate_size)
+        self.mlp = MllamaVisionMLP(config)
 
         self.layer_norm1 = nn.LayerNorm(self.hidden_size)
         self.layer_norm2 = nn.LayerNorm(self.hidden_size)
 
-        if self.is_gated:
-            self.gate_attn = nn.Parameter(torch.zeros(1))
-            self.gate_ffn = nn.Parameter(torch.zeros(1))
+
+        self.gate_attn = nn.Parameter(torch.ones(1) * math.pi/4)
+        self.gate_ffn = nn.Parameter(torch.ones(1)* math.pi/4)
 
     def forward(
         self,
@@ -328,7 +328,6 @@ class MllamaVisionEncoderLayer(nn.Module):
         return hidden_state
 
 
-# Copied from transformers.models.altclip.modeling_altclip.AltCLIPEncoder with AltCLIP->Mllama
 class MllamaVisionEncoder(nn.Module):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
@@ -338,10 +337,9 @@ class MllamaVisionEncoder(nn.Module):
         config: MllamaConfig
     """
 
-    def __init__(self, config: MllamaConfig):
+    def __init__(self, config: MllamaVisionConfig, num_layers=32, is_gated=False):
         super().__init__()
-        self.config = config
-        self.layers = nn.ModuleList([MllamaVisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList([MllamaVisionEncoderLayer(config, is_gated) for _ in range(num_layers)])
         self.gradient_checkpointing = False
 
     def forward(
@@ -421,23 +419,23 @@ class MllamaVisionModel(PreTrainedModel):
 
     def __init__(
         self,
-        config,
+        config: MllamaVisionConfig,
         return_intermediate: Optional[List[int]] = None,
     ):
-        super().__init__()
+        super().__init__(config)
         self.max_num_tiles = config.max_num_tiles
-        self.hidden_size = config.hidden_size
+        self.hidden_size = config.projection_dim
         self.in_channels = config.in_channels
         self.return_intermediate = return_intermediate
-        self.image_size = config.image_size
-        self.patch_size = config.patch_size
+        self.image_size = (224, 224)
+        self.patch_size = (14, 14)
         self.num_patches_height = self.image_size[0] // self.patch_size[0]
         self.num_patches_width = self.image_size[1] // self.patch_size[1]
         self.num_patches = self.num_patches_height * self.num_patches_width + 1
-        self.scale = config.hidden_size**-0.5
+        self.scale = config.projection_dim**-0.5
 
         self.patch_embedding = nn.Conv2d(
-            in_channels=config.num_channels,
+            in_channels=config.in_channels,
             out_channels=self.hidden_size,
             kernel_size=self.patch_size,
             stride=self.patch_size,
@@ -451,12 +449,12 @@ class MllamaVisionModel(PreTrainedModel):
         self.positional_embedding = nn.Parameter(self.scale * positional_embedding)
 
         gated_positional_embedding = torch.randn(
-            self.max_num_tiles, self.max_num_tiles, self.num_patches, self.hidden_size
+            self.max_num_tiles * self.max_num_tiles, self.num_patches, self.hidden_size
         )
         self.gated_positional_embedding = nn.Parameter(self.scale * gated_positional_embedding)
 
         # We replace the original embedding by storing the full embedding
-        self.gated_positional_embedding = nn.Embedding(self.max_num_tiles * self.max_num_tiles, self.hidden_size)
+        # self.gated_positional_embedding = nn.Embedding(self.max_num_tiles * self.max_num_tiles, self.hidden_size)
         self.gated_positional_embedding_gate = nn.Parameter(torch.zeros(1))
         # TODO support properly initializing this depending on the number of tiles
         self.cached_attention_mask = nn.Embedding(self.max_num_tiles * self.max_num_tiles, self.hidden_size)
@@ -477,10 +475,8 @@ class MllamaVisionModel(PreTrainedModel):
         self.ln_pre = nn.LayerNorm(self.hidden_size)
 
         # encoders
-        self.transformer = MllamaVisionEncoder(self.hidden_size, config.num_layers, config.heads, is_gated=False)
-        self.global_transformer = MllamaVisionEncoder(
-            self.hidden_size, config.n_global_layers, config.heads, is_gated=True
-        )
+        self.transformer = MllamaVisionEncoder(config, config.num_layers, is_gated=False)
+        self.global_transformer = MllamaVisionEncoder(config, config.n_global_layers, is_gated=True)
 
     def apply_positional_embedding(self, hidden_state: torch.Tensor, aspect_ratios: torch.Tensor) -> torch.Tensor:
         bsz, num_chunks, num_tokens, dim = hidden_state.shape
@@ -613,7 +609,7 @@ class MllamaTextCrossAttention(nn.Module):
 
     def __init__(
         self,
-        config: Optional[MllamaConfig] = None,
+        config: Optional[MllamaTextConfig] = None,
         layer_idx: Optional[int] = None,
     ):
         super().__init__()
@@ -734,15 +730,16 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
 class MllamaTextSelfAttention(nn.Module):
     def __init__(
         self,
-        config: Optional[MllamaConfig] = None,
+        config: Optional[MllamaTextConfig] = None,
         layer_idx: Optional[int] = None,
     ):
         super().__init__()
         self.config = config
-        self.num_heads = self.config.num_heads
-        self.dropout = self.config.dropout
-        self.head_dim = self.config.embed_dim // self.config.num_heads
-        self.config = config
+        self.num_heads = config.num_attention_heads
+        self.dropout = config.dropout
+        self.hidden_size = config.hidden_size
+        self.num_key_value_heads = config.num_key_value_heads
+        self.head_dim = config.hidden_size // self.num_heads
         self.layer_idx = layer_idx
 
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=True)
@@ -834,7 +831,7 @@ class MllamaTextMLP(nn.Module):
 
 # Copied from LlamaDecoderLayer
 class MllamaSelfAttentionDecoderLayer(torch.nn.Module):
-    def __init__(self, config: MllamaCrossAttentionTextConfig, layer_id: int) -> None:
+    def __init__(self, config: MllamaTextConfig, layer_id: int) -> None:
         super().__init__()
         self.layer_id = layer_id
         self.self_attn = MLLAMA_TEXT_ATTENTION_CLASSES[config._attn_implementation](config)
@@ -893,20 +890,17 @@ class MllamaCrossAttentionDecoderLayer(torch.nn.Module):
 
     # originally CrossAttentionTransformerBlock
 
-    def __init__(self, config: MllamaCrossAttentionTextConfig, layer_id: int) -> None:
+    def __init__(self, config: MllamaTextConfig, layer_id: int) -> None:
         super().__init__()
         self.layer_id = layer_id
         self.cross_attn = MLLAMA_TEXT_ATTENTION_CLASSES[config._attn_implementation](config)
 
-        self.input_layernorm = MllamaRMSNorm(
-            self.dim,
-            eps=self.norm_eps,
-        )
-        self.gate_attn = torch.nn.Parameter(torch.zeros(1))  # 1 for self attention as it's not gated
+        self.input_layernorm = MllamaRMSNorm(config.hidden_size,eps=config.norm_eps,)
+        self.gate_attn = torch.nn.Parameter(torch.zeros(1))
 
         self.mlp = MllamaTextMLP(config)
-        self.post_attention_layernorm = MllamaRMSNorm(self.dim, eps=self.norm_eps)
-        self.ffn_gate = torch.nn.Parameter(torch.zeros(1))  # one for self attention as it's not gated
+        self.post_attention_layernorm = MllamaRMSNorm(config.hidden_size, eps=config.norm_eps)
+        self.ffn_gate = torch.nn.Parameter(torch.zeros(1))
 
     def forward(
         self,
@@ -959,14 +953,14 @@ class MllamaCrossAttentionDecoderLayer(torch.nn.Module):
 class MllamaRotaryEmbedding(nn.Module):
     def __init__(
         self,
-        config: Optional[MllamaConfig] = None,
+        config: Optional[MllamaTextConfig] = None,
         device=None,
         rope_type="default",
     ):
         super().__init__()
         self.config = config
         self.rope_init_fn = ROPE_INIT_FUNCTIONS[rope_type]
-        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device, **self.rope_kwargs)
+        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.original_inv_freq = self.inv_freq
 
@@ -978,9 +972,7 @@ class MllamaRotaryEmbedding(nn.Module):
         """
         seq_len = torch.max(position_ids) + 1
         if seq_len > self.max_seq_len_cached:  # growth
-            inv_freq, self.attention_scaling = self.rope_init_fn(
-                self.config, device, seq_len=seq_len, **self.rope_kwargs
-            )
+            inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device, seq_len=seq_len)
             self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: may break with compilation
             self.max_seq_len_cached = seq_len
 
@@ -1014,8 +1006,8 @@ class MllamaRotaryEmbedding(nn.Module):
 
 class MllamaTextModel(PreTrainedModel):
     base_model_prefix = "language_model"
-
-    def __init__(self, config: MllamaConfig):
+    _no_split_modules = ["MllamaCrossAttentionDecoderLayer", "MllamaSelfAttentionDecoderLayer"]
+    def __init__(self, config: MllamaTextConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
@@ -1236,17 +1228,15 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
     def __init__(self, config):
         super().__init__(config)
-        self.vision_model = MllamaVisionModel.from_config(config.vision_config)
+        self.vision_model = MllamaVisionModel(config.vision_config)
         self.multi_modal_projector = nn.Linear(
-            self.vision_input_dim,
-            config.projection_dim,
+            config.vision_config.vision_chunk_size,
+            config.text_config.hidden_size,
             #! originally bias=True, but bias was not used in original forward pass
             bias=False,
         )
         self.vocab_size = config.text_config.vocab_size
-        self.language_model = MllamaTextModel.from_config(
-            config.text_config, attn_implementation=config._attn_implementation
-        )
+        self.language_model = MllamaTextModel(config.text_config)
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self.post_init()
         self.vision_max_num_chunks = config.vision_config.vision_max_num_chunks
