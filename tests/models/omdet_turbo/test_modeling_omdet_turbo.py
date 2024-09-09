@@ -451,7 +451,7 @@ class OmDetTurboModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
                 if hasattr(self, "zero_init_hidden_state") and "decoder_hidden_states" in key:
                     model_batched_output[key] = model_batched_output[key][1:]
                     model_row_output[key] = model_row_output[key][1:]
-                if key == "decoder_class_logits" or key == "encoder_class_logits" or key == "decoder_classes":
+                if key in ("decoder_class_logits", "decoder_classes", "encoder_class_logits"):
                     # check if all elements are close to 0, if so skip the test as the test strugles with comparing
                     # tensors with all elements close to 0
                     if torch.allclose(
