@@ -56,6 +56,7 @@ class SamProcessorTest(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
 
+    # Processor tester class can't use ProcessorTesterMixin atm because the processor is atypical e.g. only contains an image processor
     def prepare_image_inputs(self):
         """This function prepares a list of PIL images."""
         return prepare_image_inputs()
@@ -164,6 +165,7 @@ class TFSamProcessorTest(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
 
+    # Processor tester class can't use ProcessorTesterMixin as processor is atypical e.g. only contains an image processor and it assumes torch
     def prepare_image_inputs(self):
         """This function prepares a list of PIL images."""
         return prepare_image_inputs()
@@ -246,6 +248,7 @@ class SamProcessorEquivalenceTest(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
 
+    # Processor tester class can't use ProcessorTesterMixin atm because the processor is atypical e.g. only contains an image processor
     def prepare_image_inputs(self):
         """This function prepares a list of PIL images."""
         return prepare_image_inputs()

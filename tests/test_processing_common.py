@@ -88,9 +88,7 @@ class ProcessorTesterMixin:
 
     @require_vision
     def prepare_image_inputs(self):
-        """This function prepares a list of PIL images, or a list of numpy arrays if one specifies numpify=True,
-        or a list of PyTorch tensors if one specifies torchify=True.
-        """
+        """This function prepares a list of PIL images for testing"""
         return prepare_image_inputs()
 
     def test_processor_to_json_string(self):
