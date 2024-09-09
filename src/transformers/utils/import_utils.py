@@ -89,6 +89,7 @@ TORCH_FX_REQUIRED_VERSION = version.parse("1.10")
 
 ACCELERATE_MIN_VERSION = "0.26.0"
 FSDP_MIN_VERSION = "1.12.0"
+GGUF_MIN_VERSION = "0.10.0"
 XLA_FSDPV2_MIN_VERSION = "2.2.0"
 
 
@@ -102,6 +103,7 @@ _fbgemm_gpu_available = _is_package_available("fbgemm_gpu")
 _galore_torch_available = _is_package_available("galore_torch")
 _lomo_available = _is_package_available("lomo_optim")
 _grokadamw_available = _is_package_available("grokadamw")
+_schedulefree_available = _is_package_available("schedulefree")
 # `importlib.metadata.version` doesn't work with `bs4` but `beautifulsoup4`. For `importlib.util.find_spec`, reversed.
 _bs4_available = importlib.util.find_spec("bs4") is not None
 _coloredlogs_available = _is_package_available("coloredlogs")
@@ -156,7 +158,7 @@ _safetensors_available = _is_package_available("safetensors")
 _scipy_available = _is_package_available("scipy")
 _sentencepiece_available = _is_package_available("sentencepiece")
 _is_seqio_available = _is_package_available("seqio")
-_is_gguf_available = _is_package_available("gguf")
+_is_gguf_available, _gguf_version = _is_package_available("gguf", return_version=True)
 _sklearn_available = importlib.util.find_spec("sklearn") is not None
 if _sklearn_available:
     try:
@@ -178,6 +180,8 @@ _torchdistx_available = _is_package_available("torchdistx")
 _torchvision_available = _is_package_available("torchvision")
 _mlx_available = _is_package_available("mlx")
 _hqq_available = _is_package_available("hqq")
+_tiktoken_available = _is_package_available("tiktoken")
+_blobfile_available = _is_package_available("blobfile")
 _liger_kernel_available = _is_package_available("liger_kernel")
 
 
@@ -359,6 +363,10 @@ def is_lomo_available():
 
 def is_grokadamw_available():
     return _grokadamw_available
+
+
+def is_schedulefree_available():
+    return _schedulefree_available
 
 
 def is_pyctcdecode_available():
@@ -914,8 +922,8 @@ def is_seqio_available():
     return _is_seqio_available
 
 
-def is_gguf_available():
-    return _is_gguf_available
+def is_gguf_available(min_version: str = GGUF_MIN_VERSION):
+    return _is_gguf_available and version.parse(_gguf_version) >= version.parse(min_version)
 
 
 def is_protobuf_available():
@@ -1168,6 +1176,10 @@ def is_jinja_available():
 
 def is_mlx_available():
     return _mlx_available
+
+
+def is_tiktoken_available():
+    return _tiktoken_available and _blobfile_available
 
 
 def is_liger_kernel_available():
