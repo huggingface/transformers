@@ -30,6 +30,15 @@ if TYPE_CHECKING:
 
 
 def _get_longest_diag_dict(some, some_nonzero):
+    """
+    Calculates the length of the longest diagonal sequence in a given matrix.
+    Args:
+        some (torch.Tensor): The input matrix.
+        some_nonzero (torch.Tensor): The indices of the non-zero elements in the matrix.
+    Returns:
+        dict: A dictionary where the keys are the indices of the non-zero elements and the values are the lengths of the longest diagonal sequences starting from those indices.
+    """
+    
     visited = set()
     diags = {}
     for idx in some_nonzero:
@@ -57,6 +66,14 @@ def _get_longest_diag_dict(some, some_nonzero):
 
 
 def _get_longest_diag_index(some):
+    """
+    Returns the start index and length of the longest diagonal in the given input.
+    Args:
+        some (numpy.ndarray): The input array.
+    Returns:
+        tuple: A tuple containing the start index and length of the longest diagonal.
+    """
+    
     diags = _get_longest_diag_dict(some, some.nonzero())
     diags_values = list(diags.values())
     diags_keys = list(diags.keys())
@@ -329,6 +346,42 @@ class AssistedCandidateGenerator(CandidateGenerator):
 
 
 class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
+    """
+    `CandidateGenerator` class to be used for assisted generation and speculative decoding. This class generates
+    candidates through the use of a smaller model. Read the following blog post for more information:
+    https://huggingface.co/blog/assisted-generation
+
+    Args:
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. [What are input IDs?](../glossary#input-ids)
+        assistant_model (`PreTrainedModel`):
+            The model to be used for generating candidates. This model should be smaller than the main model.
+        generation_config (`~generation.GenerationConfig`, *optional*):
+            The generation configuration to be used as base parametrization for the generation call.
+        logits_processor (`LogitsProcessorList`):
+            An instance of [`LogitsProcessorList`]. List of instances of class derived from [`LogitsProcessor`]
+            used to modify the prediction scores of the language modeling head applied at each generation step.
+        model_kwargs (`Dict`):
+            The keyword arguments that will be passed to the main model, and are used as base inputs for the assistant
+            model as well.
+        inputs_tensor (`torch.Tensor`, *optional*):
+            The model input tensor. In encoder-decoder models, this is the encoder input.
+    """
+    
+    # """
+    # AssistedCandidateGeneratorDifferentTokenizers is a class that generates candidate tokens using different tokenizers for the assistant and target models.
+    # Args:
+    #     input_ids (torch.LongTensor): The input tensor of token IDs.
+    #     assistant_model (PreTrainedModel): The pre-trained model used as the assistant.
+    #     generation_config (GenerationConfig): The configuration for generation.
+    #     model_kwargs (Dict): Additional keyword arguments for the model.
+    #     inputs_tensor (Optional[torch.Tensor]): Optional input tensor.
+    #     logits_processor (LogitsProcessorList): The logits processor list.
+    #     assistant_tokenizer: The tokenizer used for the assistant model.
+    #     target_tokenizer: The tokenizer used for the target model.
+    #     target_lookbehind (int): The number of tokens to look behind in the target model.
+    #     assistant_lookbehind (int): The number of tokens to look behind in the assistant model.
+    # """    
     def __init__(
         self,
         input_ids: torch.LongTensor,
@@ -357,6 +410,15 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
         src,
         dest,
     ):
+        """
+        Convert token IDs from one tokenizer to another.
+        Args:
+            input_ids: The input token IDs.
+            src: The source tokenizer.
+            dest: The destination tokenizer.
+        Returns:
+            The converted token IDs.
+        """
         text = src.batch_decode(input_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
         dest_ids = dest(text, add_special_tokens=True, return_tensors="pt")["input_ids"]
         return dest_ids.to(input_ids.device)
@@ -474,10 +536,6 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
                 tar_discrep_only,
             ) = _get_tokens_diag(target_prompt_use, new_target_ids_from_window)
 
-            # if DEBUG:
-            #     log(f"TARGET {target_prompt_use=}, {new_target_ids_from_window=}")
-            #     log(f"TARGET new tokens {tar_new_tokens_only=}")
-
             new_target_ids = input_ids
 
             if tar_new_tokens_only is not None:
@@ -505,9 +563,6 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
         self.prev_tokens = assistant_output.sequences
 
         # 4. Prepare variables for output
-        # candidate_logits = torch.stack(assistant_output.scores, dim=1)
-        # assert (new_target_ids[:,:input_ids.shape[1]] == input_ids).all()
-
         if input_ids.shape[1] >= new_target_ids.shape[1]:
             some_suffix = torch.tensor([[0, 1, 2, 3, 4]], device=new_target_ids.device)
             new_target_ids = torch.cat([new_target_ids, some_suffix], dim=1)
