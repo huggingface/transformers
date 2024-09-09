@@ -695,7 +695,10 @@ class GenerationMixin:
         """
         Returns the candidate generator to be used in `assisted_generation`
         """
-        different_tokenizers = self.config.vocab_size != assistant_model.config.vocab_size
+        different_tokenizers = (
+            all(v is not None for v in (assistant_model, target_tokenizer, assistant_tokenizer))
+            and self.config.vocab_size != assistant_model.config.vocab_size
+        )
 
         if generation_config.prompt_lookup_num_tokens is not None:
             candidate_generator = PromptLookupCandidateGenerator(
