@@ -514,6 +514,10 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
         self.assertListEqual(generated_text, EXPECTED_GENERATIONS)
 
+    @unittest.skip("Bloom needs a 2D attention for alibi")
+    def test_custom_4d_attention_mask(self):
+        pass
+
 
 @require_torch
 class BloomEmbeddingTest(unittest.TestCase):

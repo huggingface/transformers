@@ -222,7 +222,7 @@ class OlmoeRotaryEmbedding(nn.Module):
         if config is None:
             logger.warning_once(
                 "`OlmoeRotaryEmbedding` can now be fully parameterized by passing the model config through the "
-                "`config` argument. All other arguments will be removed in v4.45"
+                "`config` argument. All other arguments will be removed in v4.46"
             )
             self.rope_kwargs = {
                 "rope_type": rope_type,
