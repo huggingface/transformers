@@ -129,27 +129,27 @@ class ProPainterConfig(PretrainedConfig):
             The number of channels in the feature maps.
         hidden_size (`int`, *optional*, defaults to 512):
             The dimensionality of hidden layers.
-        kernel_size (`List[int]`, *optional*, defaults to `[7, 7]`):
+        kernel_size (`List[int, int]`, *optional*, defaults to `[7, 7]`):
             The size of the convolution kernels.
-        padding (`List[int]`, *optional*, defaults to `[3, 3]`):
+        padding (`List[int, int]`, *optional*, defaults to `[3, 3]`):
             The padding size for the convolution kernels.
-        stride (`List[int]`, *optional*, defaults to `[3, 3]`):
+        stride (`List[int, int]`, *optional*, defaults to `[3, 3]`):
             The stride for the convolution kernels.
         num_hidden_layers (`int`, *optional*, defaults to 8):
             The number of hidden layers in the model.
         num_attention_heads (`int`, *optional*, defaults to 4):
             The number of attention heads for each attention layer in the model.
-        window_size (`List[int]`, *optional*, defaults to `[5, 9]`):
+        window_size (`List[int, int]`, *optional*, defaults to `[5, 9]`):
             The size of the sliding window for attention operations.
-        pool_size (`List[int]`, *optional*, defaults to `[4, 4]`):
+        pool_size (`List[int, int]`, *optional*, defaults to `[4, 4]`):
             The size of the pooling layers in the model.
         no_dis (`bool`, *optional*, defaults to `False`):
             Whether to disable discriminator.
-        in_channels (`List[int]`, *optional*, defaults to `[64, 64, 96]`):
+        in_channels (`List[int, int, int]`, *optional*, defaults to `[64, 64, 96]`):
             The number of input channels at different levels of the model.
-        channels (`List[int]`, *optional*, defaults to `[64, 96, 128]`):
+        channels (`List[int, int, int]`, *optional*, defaults to `[64, 96, 128]`):
             The number of channels at different levels of the model.
-        strides (`List[int]`, *optional*, defaults to `[1, 2, 2]`):
+        strides (`List[int, int, int]`, *optional*, defaults to `[1, 2, 2]`):
             The stride values for the convolution layers at different levels of the model.
 
     Example:
@@ -157,10 +157,10 @@ class ProPainterConfig(PretrainedConfig):
     ```python
     >>> from transformers import ProPainterConfig, ProPainterModel
 
-    >>> # Initializing a ProPainter propainter-base-patch16-224 style configuration
+    >>> # Initializing a ProPainter style configuration
     >>> configuration = ProPainterConfig()
 
-    >>> # Initializing a model (with random weights) from the propainter-base-patch16-224 style configuration
+    >>> # Initializing a model (with random weights) from the propainter style configuration
     >>> model = ProPainterModel(configuration)
 
     >>> # Accessing the model configuration

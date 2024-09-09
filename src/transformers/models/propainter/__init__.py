@@ -51,7 +51,6 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .feature_extraction_propainter import ProPainterFeatureExtractor
         from .video_processing_propainter import ProPainterVideoProcessor
 
     try:
