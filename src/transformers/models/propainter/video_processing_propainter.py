@@ -127,9 +127,8 @@ def convert_to_grayscale_and_dilation(
 
 
 def extrapolation(
-    images: ImageInput,
+    image: ImageInput,
     scale: Optional[tuple[float, float]] = None,
-    num_frames: int = None,
     data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
     input_data_format: Optional[Union[str, ChannelDimension]] = None,
 ):
@@ -145,10 +144,10 @@ def extrapolation(
     (d) Mask Generation:
         - Flow Masks: Creates masks indicating the missing regions in the expanded FOV. These masks are used for flow-based propagation.
         - Dilated Masks: Generates additional masks with dilated borders to account for edge effects and improve the robustness of the process.
-    (e) Format Conversion: Converts the images and masks to the specified channel dimension format, if needed.
+    (e) Format Conversion: Converts the image and masks to the specified channel dimension format, if needed.
 
     Args:
-        images (Image):
+        image (Image):
             The video frames to convert.
         scale (`tuple[float, float]`, *optional*, defaults to `None`):
             Tuple containing scaling factors for the video's height and width dimensions during `"video_outpainting"` mode.
@@ -160,14 +159,14 @@ def extrapolation(
         input_data_format (`str` or `ChannelDimension`, *optional*):
             The channel dimension format of the input image. If not provided, it will be inferred.
     Returns:
-        images (`List[Image]`): A list of video frames with expanded FOV, adjusted to the specified channel dimension format.
-        flow_masks (`List[Image]`): A list of masks for the missing regions, intended for flow-based applications. Each mask is scaled to fit the expanded FOV.
-        masks_dilated (`List[Image]`): A list of dilated masks for the missing regions, also scaled to fit the expanded FOV.
+        image (`Image`): A list of video frames with expanded FOV, adjusted to the specified channel dimension format.
+        flow_masks (`Image`): A list of masks for the missing regions, intended for flow-based applications. Each mask is scaled to fit the expanded FOV.
+        masks_dilated (`Image`): A list of dilated masks for the missing regions, also scaled to fit the expanded FOV.
     """
     if input_data_format is None:
-        input_data_format = infer_channel_dimension_format(images[0])
+        input_data_format = infer_channel_dimension_format(image)
 
-    height, width = get_image_size(images, input_data_format)
+    height, width = get_image_size(image, input_data_format)
 
     # Defines new FOV.
     height_extr = int(scale[0] * height)
@@ -178,61 +177,55 @@ def extrapolation(
     width_start = int((width_extr - width) / 2)
 
     # Extrapolates the FOV for video.
-    images = []
-    if input_data_format == ChannelDimension.LAST:
-        for v in images:
-            frame = np.zeros(((height_extr, width_extr, 3)), dtype=np.uint8)
-            frame[
-                height_start : height_start + height,
-                width_start : width_start + width,
-                :,
-            ] = v
-            images.append(frame)
-    elif input_data_format == ChannelDimension.FIRST:
-        for v in images:
-            frame = np.zeros((3, height_extr, width_extr), dtype=np.uint8)  # Adjusted shape
-            frame[
-                :,
-                height_start : height_start + height,
-                width_start : width_start + width,
-            ] = v
 
-            # Transpose to (height_extr, width_extr, num_channels)
-            images.append(np.transpose(frame, (1, 2, 0)))  # Adjusted transpose
+    if input_data_format == ChannelDimension.LAST:
+        frame = np.zeros(((height_extr, width_extr, 3)), dtype=np.float32)
+        frame[
+            height_start : height_start + height,
+            width_start : width_start + width,
+            :,
+        ] = image
+        image = frame
+    elif input_data_format == ChannelDimension.FIRST:
+        frame = np.zeros((3, height_extr, width_extr), dtype=np.float32)  # Adjusted shape
+        frame[
+            :,
+            height_start : height_start + height,
+            width_start : width_start + width,
+        ] = image
+        image = frame
 
     # Generates the mask for missing region.
-    masks_dilated = []
-    flow_masks = []
 
     dilate_h = 4 if height_start > 10 else 0
     dilate_w = 4 if width_start > 10 else 0
-    mask = np.ones(((height_extr, width_extr)), dtype=np.uint8)
+    mask = np.ones(((height_extr, width_extr)), dtype=np.float32)
 
     mask[
         height_start + dilate_h : height_start + height - dilate_h,
         width_start + dilate_w : width_start + width - dilate_w,
     ] = 0
-    flow_masks.append((mask * 255))
+    flow_mask = mask
 
     mask[height_start : height_start + height, width_start : width_start + width] = 0
-    masks_dilated.append((mask * 255))
+    mask_dilated = mask
 
-    flow_masks = flow_masks * num_frames
-    masks_dilated = masks_dilated * num_frames
+    if input_data_format == ChannelDimension.FIRST:
+        # Expand dimensions as (1, height, width)
+        flow_mask = np.expand_dims(flow_mask, axis=0)
+        mask_dilated = np.expand_dims(mask_dilated, axis=0)
+    elif input_data_format == ChannelDimension.LAST:
+        # Expand dimensions as (height, width, 1)
+        flow_mask = np.expand_dims(flow_mask, axis=-1)
+        mask_dilated = np.expand_dims(mask_dilated, axis=-1)
 
-    images = [to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images]
+    image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) if data_format is not None else image
 
-    flow_masks = [
-        to_channel_dimension_format(flow_mask, data_format, input_channel_dim=input_data_format)
-        for flow_mask in flow_masks
-    ]
+    flow_mask = to_channel_dimension_format(flow_mask, data_format, input_channel_dim=input_data_format) if data_format is not None else image
 
-    masks_dilated = [
-        to_channel_dimension_format(mask_dilated, data_format, input_channel_dim=input_data_format)
-        for mask_dilated in masks_dilated
-    ]
+    mask_dilated = to_channel_dimension_format(mask_dilated, data_format, input_channel_dim=input_data_format) if data_format is not None else image
 
-    return images, flow_masks, masks_dilated
+    return image, flow_mask, mask_dilated
 
 
 class ProPainterVideoProcessor(BaseImageProcessor):
@@ -364,6 +357,57 @@ class ProPainterVideoProcessor(BaseImageProcessor):
             input_data_format=input_data_format,
             **kwargs,
         )
+
+    def _extrapolation(
+        self,
+        images: ImageInput,
+        scale: Optional[tuple[float, float]] = None,
+        data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    ) -> np.ndarray:
+        """
+        Preprocess the video for `video_outpainting` mode.
+
+        Args:
+        images (Image):
+            The video frames to convert.
+        scale (`tuple[float, float]`, *optional*, defaults to `None`):
+            Tuple containing scaling factors for the video's height and width dimensions during `"video_outpainting"` mode.
+            It is only applicable during `"video_outpainting"` mode. If `None`, no scaling is applied and code execution will end.
+        num_frames (`int`, *optional*, defaults to `None`):
+            The number of frames in a video.
+        data_format (`str` or `ChannelDimension`, *optional*):
+            The channel dimension format of the image. If not provided, it will be the same as the input image.
+        input_data_format (`str` or `ChannelDimension`, *optional*):
+            The channel dimension format of the input image. If not provided, it will be inferred.
+        """
+        if input_data_format is None:
+            # We assume that all images have the same channel dimension format.
+            input_data_format = infer_channel_dimension_format(images[0])
+
+        images, flow_masks, masks_dilated = zip(*[
+            extrapolation(
+                image=image,
+                scale=scale,
+                data_format=data_format,
+                input_data_format=input_data_format,
+            )
+            for image in images
+        ])
+
+        images = [
+            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
+        ]
+
+        flow_masks = [
+            to_channel_dimension_format(flow_mask, data_format, input_channel_dim=input_data_format) for flow_mask in flow_masks
+        ]
+
+        masks_dilated = [
+            to_channel_dimension_format(mask_dilated, data_format, input_channel_dim=input_data_format) for mask_dilated in masks_dilated
+        ]
+
+        return images, flow_masks, masks_dilated
 
     def _preprocess(
         self,
@@ -644,14 +688,16 @@ class ProPainterVideoProcessor(BaseImageProcessor):
         elif video_painting_mode == "video_outpainting":
             # for outpainting of videos
             pixel_values, flow_masks, masks_dilated = [
-                extrapolation(
-                    video,
-                    scale=scale_hw,
-                    num_frames=len(video),
-                    input_data_format=input_data_format,
-                )
-                for video in videos
-            ]
+                    list(pixels) for pixels in zip(*[
+                        self._extrapolation(
+                            video,
+                            scale=scale_hw,
+                            data_format=data_format,
+                            input_data_format=input_data_format,
+                        )
+                        for video in pixel_values
+                    ])
+                ]
         else:
             raise ValueError(f"Unsupported video painting mode: {video_painting_mode}")
 
