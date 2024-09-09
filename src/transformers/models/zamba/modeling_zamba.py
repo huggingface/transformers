@@ -541,19 +541,16 @@ class ZambaMambaMixer(nn.Module):
         # selective projection used to make dt, B and C input dependent
         self.x_proj_weight = nn.Parameter(
             (
-                torch.rand(
+                torch.zeros(
                     self.n_mamba_heads,
                     self.time_step_rank + self.ssm_state_size * 2,
                     self.intermediate_size // self.n_mamba_heads,
                 )
-                - 0.5
             )
-            * 2
-            / self.intermediate_size**0.5
         )
         # time step projection (discretization)
         self.dt_proj_weight = nn.Parameter(
-            (torch.rand(self.n_mamba_heads, self.intermediate_size // self.n_mamba_heads, self.time_step_rank) - 0.5)
+            (torch.zeros(self.n_mamba_heads, self.intermediate_size // self.n_mamba_heads, self.time_step_rank) - 0.5)
             * 2
             / self.time_step_rank**0.5
         )  # (h d dt_rank)
@@ -1056,6 +1053,24 @@ class ZambaPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, ZambaMambaMixer):
+            module.A_log._no_weight_decay = True
+            module.D._no_weight_decay = True
+
+            module.x_proj_weight.data.normal_(mean=0.0, std=std)
+            dt_init_std = self.config.mamba_dt_rank**-0.5
+            nn.init.uniform_(module.dt_proj_weight, -dt_init_std, dt_init_std)
+
+            dt = torch.exp(
+                torch.rand(self.config.n_mamba_heads, self.config.intermediate_size // self.config.n_mamba_heads)
+                * (math.log(self.config.time_step_max) - math.log(self.config.time_step_min))
+                + math.log(self.config.time_step_min)
+            ).clamp(min=self.config.time_step_floor)
+            # # Inverse of softplus: https://github.com/pytorch/pytorch/issues/72759
+            inv_dt = dt + torch.log(-torch.expm1(-dt))
+            with torch.no_grad():
+                module.dt_proj_bias.copy_(inv_dt)
+            module.dt_proj_bias._no_reinit = True
 
 
 ZAMBA_INPUTS_DOCSTRING = r"""

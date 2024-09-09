@@ -105,6 +105,12 @@ class ZambaConfig(PretrainedConfig):
             Expanding factor (relative to hidden_size) used to determine the mamba intermediate size
         mamba_dt_rank (`Union[int,str]`, *optional*, defaults to `"auto"`):
             Rank of the the mamba discretization projection matrix. `"auto"` means that it will default to `math.ceil(self.hidden_size / 16)`
+        time_step_min (`float`, *optional*, defaults to 0.001):
+            Minimum `time_step` used to bound `dt_proj_bias`.
+        time_step_max (`float`, *optional*, defaults to 0.1):
+            Maximum `time_step` used to bound `dt_proj_bias`.
+        time_step_floor (`float`, *optional*, defaults to 0.0001):
+            Minimum clamping value of the `dt_proj.bias` layer initialization.
         mamba_conv_bias (`bool`, *optional*, defaults to `True`):
             Flag indicating whether or not to use bias in the convolution layer of the mamba mixer block.
         mamba_proj_bias (`bool`, *optional*, defaults to `False`):
@@ -144,6 +150,9 @@ class ZambaConfig(PretrainedConfig):
         mamba_d_conv=4,
         mamba_expand=2,
         mamba_dt_rank="auto",
+        time_step_min=0.001,
+        time_step_max=0.1,
+        time_step_floor=1e-4,
         mamba_conv_bias=True,
         mamba_proj_bias=False,
         **kwargs,
@@ -176,6 +185,9 @@ class ZambaConfig(PretrainedConfig):
         self.mamba_d_conv = mamba_d_conv
         self.mamba_expand = mamba_expand
         self.mamba_dt_rank = math.ceil(self.hidden_size / 16) if mamba_dt_rank == "auto" else mamba_dt_rank
+        self.time_step_min = time_step_min
+        self.time_step_max = time_step_max
+        self.time_step_floor = time_step_floor
         self.mamba_conv_bias = mamba_conv_bias
         self.mamba_proj_bias = mamba_proj_bias
 
