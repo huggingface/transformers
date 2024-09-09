@@ -356,8 +356,9 @@ class MyT5Tokenizer(PreTrainedTokenizer):
                 out_tokens.append(token)
 
         out_tokens = self.morphological_decode(out_tokens)
+        _added_tokens = set(self.added_tokens_decoder.values()) | set(self.added_tokens_encoder)
         for token in out_tokens:
-            if token in set(self.added_tokens_decoder.values()) | set(self.added_tokens_encoder):
+            if token in _added_tokens:
                 bstring += bytes(token, "utf-8")
             else:
                 bstring += bytes.fromhex(token)

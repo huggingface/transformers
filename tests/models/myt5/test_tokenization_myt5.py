@@ -16,13 +16,10 @@ import binascii
 import unittest
 
 from transformers import MyT5Tokenizer
-from transformers.testing_utils import get_tests_dir
-from transformers.utils import cached_property, is_tf_available, is_torch_available
+from transformers.utils import is_tf_available, is_torch_available
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
-
-SAMPLE_VOCAB = get_tests_dir("fixtures/byte_maps.json")
 
 if is_torch_available():
     FRAMEWORK = "pt"
@@ -41,7 +38,7 @@ def str_to_hex(line: str, sep: str = " ") -> str:
 
 
 class TestByteRewriter(unittest.TestCase):
-    tokenizer = MyT5Tokenizer(SAMPLE_VOCAB)
+    tokenizer = MyT5Tokenizer.from_pretrained("Tomlim/myt5-base")
 
     def test_simple_decompose(self):
         decompose_rewriter = self.tokenizer.decompose_rewriter
@@ -94,15 +91,9 @@ class MyT5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def setUp(self):
         super().setUp()
-        tokenizer = MyT5Tokenizer(SAMPLE_VOCAB)
-        tokenizer.save_pretrained(self.tmpdirname)
-
-    @cached_property
-    def myt5_base_tokenizer(self):
-        return MyT5Tokenizer.from_pretrained("Tomlim/myt5-base")
 
     def get_tokenizer(self, **kwargs) -> MyT5Tokenizer:
-        return self.tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
+        return self.tokenizer_class.from_pretrained("Tomlim/myt5-base", **kwargs)
 
     @unittest.skip(reason="inputs cannot be pretokenized as ids depend on whole input string")
     def test_pretokenized_inputs(self):
