@@ -15,7 +15,6 @@ import shutil
 import tempfile
 import unittest
 
-import numpy as np
 import pytest
 
 from transformers.testing_utils import require_torch, require_vision
@@ -25,8 +24,6 @@ from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
-    from PIL import Image
-
     from transformers import (
         AutoProcessor,
         BertTokenizerFast,
@@ -64,16 +61,6 @@ class InstructBlipVideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
-
-    # Ignore copy
-    def prepare_image_inputs(self):
-        """This function prepares a list of list of PIL images"""
-
-        video_inputs = [
-            [Image.fromarray(np.random.randint(255, size=(30, 400, 3), dtype=np.uint8)) for _ in range(5)]
-            for _ in range(2)
-        ]
-        return video_inputs
 
     def test_save_load_pretrained_additional_features(self):
         processor = InstructBlipVideoProcessor(
@@ -203,7 +190,8 @@ class InstructBlipVideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_processor = self.get_component("image_processor")
         tokenizer = self.get_component("tokenizer", max_length=117, padding="max_length")
         qformer_tokenizer = self.get_component("qformer_tokenizer", max_length=117, padding="max_length")
-
+        if not qformer_tokenizer.pad_token:
+            qformer_tokenizer.pad_token = "[TEST_PAD]"
         processor = self.processor_class(
             tokenizer=tokenizer, image_processor=image_processor, qformer_tokenizer=qformer_tokenizer
         )
@@ -223,7 +211,8 @@ class InstructBlipVideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_processor = self.get_component("image_processor", size=(234, 234))
         tokenizer = self.get_component("tokenizer", max_length=117, padding="max_length")
         qformer_tokenizer = self.get_component("qformer_tokenizer", max_length=117, padding="max_length")
-
+        if not qformer_tokenizer.pad_token:
+            qformer_tokenizer.pad_token = "[TEST_PAD]"
         processor = self.processor_class(
             tokenizer=tokenizer, image_processor=image_processor, qformer_tokenizer=qformer_tokenizer
         )
@@ -244,7 +233,8 @@ class InstructBlipVideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_processor = self.get_component("image_processor")
         tokenizer = self.get_component("tokenizer", padding="longest")
         qformer_tokenizer = self.get_component("qformer_tokenizer", padding="longest")
-
+        if not qformer_tokenizer.pad_token:
+            qformer_tokenizer.pad_token = "[TEST_PAD]"
         processor = self.processor_class(
             tokenizer=tokenizer, image_processor=image_processor, qformer_tokenizer=qformer_tokenizer
         )
@@ -266,7 +256,8 @@ class InstructBlipVideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_processor = self.get_component("image_processor", size=(234, 234))
         tokenizer = self.get_component("tokenizer", max_length=117, padding="max_length")
         qformer_tokenizer = self.get_component("qformer_tokenizer", max_length=117, padding="max_length")
-
+        if not qformer_tokenizer.pad_token:
+            qformer_tokenizer.pad_token = "[TEST_PAD]"
         processor = self.processor_class(
             tokenizer=tokenizer, image_processor=image_processor, qformer_tokenizer=qformer_tokenizer
         )
@@ -287,7 +278,8 @@ class InstructBlipVideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_processor = self.get_component("image_processor")
         tokenizer = self.get_component("tokenizer")
         qformer_tokenizer = self.get_component("qformer_tokenizer")
-
+        if not qformer_tokenizer.pad_token:
+            qformer_tokenizer.pad_token = "[TEST_PAD]"
         processor = self.processor_class(
             tokenizer=tokenizer, image_processor=image_processor, qformer_tokenizer=qformer_tokenizer
         )
@@ -316,7 +308,8 @@ class InstructBlipVideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_processor = self.get_component("image_processor")
         tokenizer = self.get_component("tokenizer")
         qformer_tokenizer = self.get_component("qformer_tokenizer")
-
+        if not qformer_tokenizer.pad_token:
+            qformer_tokenizer.pad_token = "[TEST_PAD]"
         processor = self.processor_class(
             tokenizer=tokenizer, image_processor=image_processor, qformer_tokenizer=qformer_tokenizer
         )
@@ -334,8 +327,7 @@ class InstructBlipVideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
 
         self.assertEqual(inputs["pixel_values"].shape[2], 214)
-
-        self.assertEqual(len(inputs["input_ids"][0]), 6)
+        self.assertEqual(len(inputs["input_ids"][0]), 11)
 
     # Override as InstructBlipVideoProcessor has qformer_tokenizer
     @require_torch
@@ -346,7 +338,8 @@ class InstructBlipVideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_processor = self.get_component("image_processor")
         tokenizer = self.get_component("tokenizer")
         qformer_tokenizer = self.get_component("qformer_tokenizer")
-
+        if not qformer_tokenizer.pad_token:
+            qformer_tokenizer.pad_token = "[TEST_PAD]"
         processor = self.processor_class(
             tokenizer=tokenizer, image_processor=image_processor, qformer_tokenizer=qformer_tokenizer
         )
@@ -371,7 +364,8 @@ class InstructBlipVideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_processor = self.get_component("image_processor")
         tokenizer = self.get_component("tokenizer")
         qformer_tokenizer = self.get_component("qformer_tokenizer")
-
+        if not qformer_tokenizer.pad_token:
+            qformer_tokenizer.pad_token = "[TEST_PAD]"
         processor = self.processor_class(
             tokenizer=tokenizer, image_processor=image_processor, qformer_tokenizer=qformer_tokenizer
         )
@@ -404,7 +398,8 @@ class InstructBlipVideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_processor = self.get_component("image_processor")
         tokenizer = self.get_component("tokenizer")
         qformer_tokenizer = self.get_component("qformer_tokenizer")
-
+        if not qformer_tokenizer.pad_token:
+            qformer_tokenizer.pad_token = "[TEST_PAD]"
         processor = self.processor_class(
             tokenizer=tokenizer, image_processor=image_processor, qformer_tokenizer=qformer_tokenizer
         )
