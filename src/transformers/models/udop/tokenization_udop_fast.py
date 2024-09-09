@@ -898,7 +898,7 @@ class UdopTokenizerFast(PreTrainedTokenizerFast):
             pad_to_multiple_of: (optional) Integer if set will pad the sequence to a multiple of the provided value.
                 This is especially useful to enable the use of Tensor Core on NVIDIA hardware with compute capability
                 `>= 7.5` (Volta).
-            padding_side:
+            padding_side (`str`, *optional*):
                 The side on which the model should have padding applied. Should be selected between ['right', 'left'].
                 Default value is picked from the class attribute of the same name.
             return_attention_mask:

@@ -954,7 +954,7 @@ class MLukeTokenizer(PreTrainedTokenizer):
                 max_entity_length=max_entity_length,
                 stride=stride,
                 pad_to_multiple_of=None,  # we pad in batch afterward
-                padding_side=None,  #  we pad in batch afterward
+                padding_side=None,  # we pad in batch afterward
                 return_attention_mask=False,  # we pad in batch afterward
                 return_token_type_ids=return_token_type_ids,
                 return_overflowing_tokens=return_overflowing_tokens,
