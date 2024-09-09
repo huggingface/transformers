@@ -2954,7 +2954,7 @@ def gaussian_blur2d(
     it to each num_channels. It supports batched operation.
 
     Arguments:
-        input: the input tensor with shape :math:`(B,C,height,width)`.
+        input: the input tensor with shape :math:`(batch_size,num_channels,height,width)`.
         kernel_size: the size of the kernel.
         sigma: the standard deviation of the kernel.
         border_type: the padding mode to be applied before convolving.
