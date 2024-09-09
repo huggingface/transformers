@@ -150,6 +150,8 @@ class Qwen2RotaryEmbedding(nn.Module):
         self._set_cos_sin_cache(
             seq_len=max_position_embeddings, device=self.inv_freq.device, dtype=torch.get_default_dtype()
         )
+        # Sanity check
+        print(f"inv_freq device: {self.inv_freq.device}")
 
     def _set_cos_sin_cache(self, seq_len, device, dtype):
         self.max_seq_len_cached = seq_len
@@ -161,15 +163,24 @@ class Qwen2RotaryEmbedding(nn.Module):
         self.register_buffer("cos_cached", emb.cos().to(dtype), persistent=False)
         self.register_buffer("sin_cached", emb.sin().to(dtype), persistent=False)
 
+        # Sanity check
+        print(f"cos_cached device: {self.cos_cached.device}")
+        print(f"sin_cached device: {self.sin_cached.device}")
+        print(f"t device (position_ids): {t.device}")
+
     def forward(self, x, seq_len=None):
         # x: [bs, num_attention_heads, seq_len, head_size]
+        print(f"x device before: {x.device}")
         if seq_len > self.max_seq_len_cached:
             self._set_cos_sin_cache(seq_len=seq_len, device=x.device, dtype=x.dtype)
-
-        return (
-            self.cos_cached[:seq_len].to(dtype=x.dtype),
-            self.sin_cached[:seq_len].to(dtype=x.dtype),
-        )
+        print(f"x device after: {x.device}")
+        device_type = x.device.type
+        # with torch.autocast(device_type=device_type, enabled=False):
+        cos_emb = self.cos_cached[:seq_len].to(dtype=x.dtype).to(device=device_type)
+        sin_emb = self.sin_cached[:seq_len].to(dtype=x.dtype).to(device=device_type)
+        print(f"cos_emb device: {cos_emb.device}")
+        print(f"sin_emb device: {sin_emb.device}")
+        return cos_emb, sin_emb
 
 
 # Copied from transformers.models.llama.modeling_llama.rotate_half
@@ -202,6 +213,17 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
     Returns:
         `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
     """
+    # Sanity check before applying rotary embeddings
+    print(f"cos device: {cos.device}")
+    print(f"sin device: {sin.device}")
+    print(f"position_ids device: {position_ids.device}")
+    # # Ensure cos and sin are on the same device as position_ids
+    # cos = cos.to(position_ids.device)
+    # sin = sin.to(position_ids.device)
+
+    # # Sanity check after moving cos and sin
+    # print(f"cos device after: {cos.device}")
+    # print(f"sin device after: {sin.device}")
     cos = cos[position_ids].unsqueeze(unsqueeze_dim)
     sin = sin[position_ids].unsqueeze(unsqueeze_dim)
     q_embed = (q * cos) + (rotate_half(q) * sin)
@@ -220,7 +242,7 @@ class Qwen2MLP(nn.Module):
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
         self.act_fn = ACT2FN[config.hidden_act]
 
-    def forward(self, hidden_state):
+    def frwoard(self, hidden_state):
         return self.down_proj(self.act_fn(self.gate_proj(hidden_state)) * self.up_proj(hidden_state))
 
 
@@ -309,7 +331,10 @@ class Qwen2Attention(nn.Module):
                     "with a layer index."
                 )
             kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
-        cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
+        with torch.autocast(device_type=hidden_states.device.type, enabled=False):
+            cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
+        print(f"cos device after autocast: {cos.device}")
+        print(f"sin device after autocast: {sin.device}")
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
         if past_key_value is not None:
@@ -407,8 +432,10 @@ class Qwen2FlashAttention2(Qwen2Attention):
             max(kv_seq_len, position_ids[:, -1].max().item() + 1) if position_ids is not None else kv_seq_len
         )
 
-        cos, sin = self.rotary_emb(value_states, seq_len=rotary_seq_len)
-
+        with torch.autocast(device_type=hidden_states.device.type, enabled=False):
+            cos, sin = self.rotary_emb(value_states, seq_len=rotary_seq_len)
+        print(f"flash cos device after autocast: {cos.device}")
+        print(f"flash sin device after autocast: {sin.device}")
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
         if past_key_value is not None:
