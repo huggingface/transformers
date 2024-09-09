@@ -28,7 +28,6 @@ from collections import defaultdict
 from contextlib import contextmanager
 from typing import Dict, List, Tuple
 
-import deepspeed
 import numpy as np
 from packaging import version
 from parameterized import parameterized
@@ -49,6 +48,7 @@ from transformers import (
 )
 from transformers.integrations import HfDeepSpeedConfig
 from transformers.integrations.deepspeed import (
+    is_deepspeed_available,
     unset_hf_deepspeed_config,
 )
 from transformers.models.auto import get_values
@@ -140,6 +140,9 @@ if is_flax_available():
 
 if is_torch_fx_available():
     from transformers.utils.fx import _FX_SUPPORTED_MODELS_WITH_KV_CACHE, symbolic_trace
+
+if is_deepspeed_available():
+    import deepspeed
 
 
 def _config_zero_init(config):
