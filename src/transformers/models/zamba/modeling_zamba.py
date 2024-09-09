@@ -887,8 +887,11 @@ class ZambaMambaDecoderLayer(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
+        original_hidden_states: Optional[torch.Tensor] = None,
         transformer_hidden_states: Optional[torch.Tensor] = None,
+        layer_idx: int = None,
         attention_mask: Optional[torch.Tensor] = None,
+        causal_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[HybridMambaAttentionDynamicCache] = None,
         output_attentions: Optional[bool] = False,
@@ -940,6 +943,75 @@ class ZambaMambaDecoderLayer(nn.Module):
             outputs += (past_key_value,)
 
         return outputs
+    
+    
+class HybridLayer(nn.Module):
+    def __init__(self, shared_transf: ZambaAttentionDecoderLayer, linear: nn.Linear, mamba: ZambaMambaDecoderLayer):
+        super().__init__()
+        self.shared_transf = shared_transf
+        self.linear = linear
+        self.mamba = mamba
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        original_hidden_states: Optional[torch.Tensor] = None,
+        layer_idx: int = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        causal_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_value: Optional[HybridMambaAttentionDynamicCache] = None,
+        output_attentions: Optional[bool] = False,
+        use_cache: Optional[bool] = False,
+        cache_position: Optional[torch.LongTensor] = None,
+    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+        """
+        Args:
+            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            original_hidden_states (`torch.FloatTensor`): word embedding output that will be concatenated with 
+            hidden activations to form the input of the shared transformer layer.
+            layer_idx (`int`): layer number.
+            attention_mask (`torch.FloatTensor`, *optional*): attention mask of size
+                `(batch, sequence_length)` where padding elements are indicated by 0.
+            past_key_value (`HybridMambaAttentionDynamicCache`, *optional*): cached past key and value projection states
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+                returned tensors for more detail.
+            use_cache (`bool`, *optional*):
+                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
+                (see `past_key_values`).
+            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
+                Indices depicting the position of the input sequence tokens in the sequence.
+        """
+
+        layer_outputs = self.shared_transf(
+                    hidden_states,
+                    original_hidden_states=original_hidden_states,
+                    layer_idx=layer_idx,
+                    attention_mask=causal_mask,
+                    position_ids=position_ids,
+                    past_key_value=past_key_value,
+                    output_attentions=output_attentions,
+                    use_cache=use_cache,
+                    cache_position=cache_position,
+                )
+        
+        transformer_hidden_states = layer_outputs[0]
+                
+        transformer_hidden_states = self.linear(transformer_hidden_states)
+        
+        layer_outputs = self.mamba(
+                    hidden_states,
+                    transformer_hidden_states=transformer_hidden_states,
+                    attention_mask=attention_mask,
+                    position_ids=position_ids,
+                    past_key_value=past_key_value,
+                    output_attentions=output_attentions,
+                    use_cache=use_cache,
+                    cache_position=cache_position,
+                )
+        
+        return layer_outputs
 
 
 ZAMBA_START_DOCSTRING = r"""
@@ -1085,6 +1157,15 @@ class ZambaModel(ZambaPreTrainedModel):
                 mamba_layers.append(ZambaMambaDecoderLayer(config, layer_idx=i))
         self.mamba_layers = nn.ModuleList(mamba_layers)
         self.linear_layers = nn.ModuleList(linear_layers)
+        
+        mamba_layers = iter(self.mamba_layers)
+        linear_layers = iter(self.linear_layers)
+        self.layers = []
+        for layer_type in self.layers_block_type:
+            if layer_type == "hybrid":
+                self.layers.append(HybridLayer(self.block, next(linear_layers), next(mamba_layers)))
+            else:
+                self.layers.append(next(mamba_layers))
 
         self._attn_implementation = config._attn_implementation
         self.final_layernorm = ZambaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -1156,61 +1237,18 @@ class ZambaModel(ZambaPreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
 
-        mamba_layers = iter(self.mamba_layers)
-        linear_layers = iter(self.linear_layers)
-
-        for layer_idx, layer_type in enumerate(self.layers_block_type):
+        for layer_idx, layer in enumerate(self.layers):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            if layer_type == "hybrid":
-                if self.gradient_checkpointing and self.training:
-                    layer_outputs = self._gradient_checkpointing_func(
-                        self.block.__call__,
-                        hidden_states,
-                        original_hidden_states,
-                        layer_idx,
-                        causal_mask,
-                        position_ids,
-                        past_key_values,
-                        output_attentions,
-                        use_cache,
-                        cache_position,
-                    )
-                else:
-                    layer_outputs = self.block(
-                        hidden_states,
-                        original_hidden_states=original_hidden_states,
-                        layer_idx=layer_idx,
-                        attention_mask=causal_mask,
-                        position_ids=position_ids,
-                        past_key_value=past_key_values,
-                        output_attentions=output_attentions,
-                        use_cache=use_cache,
-                        cache_position=cache_position,
-                    )
-                transformer_hidden_states = layer_outputs[0]
-                if output_attentions:
-                    if layer_outputs[1] is not None:
-                        all_self_attns += (layer_outputs[1],)
-                if self.gradient_checkpointing and self.training:
-                    transformer_hidden_states = self._gradient_checkpointing_func(
-                        next(linear_layers).__call__,
-                        transformer_hidden_states,
-                    )
-                else:
-                    transformer_hidden_states = next(linear_layers)(
-                        transformer_hidden_states,
-                    )
-            else:
-                transformer_hidden_states = None
-
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
-                    next(mamba_layers).__call__,
+                    layer.__call__,
                     hidden_states,
-                    transformer_hidden_states,
+                    original_hidden_states,
+                    layer_idx,
                     attention_mask,
+                    causal_mask,
                     position_ids,
                     past_key_values,
                     output_attentions,
@@ -1218,10 +1256,12 @@ class ZambaModel(ZambaPreTrainedModel):
                     cache_position,
                 )
             else:
-                layer_outputs = next(mamba_layers)(
+                layer_outputs = layer(
                     hidden_states,
-                    transformer_hidden_states=transformer_hidden_states,
+                    original_hidden_states=original_hidden_states,
+                    layer_idx=layer_idx,
                     attention_mask=attention_mask,
+                    causal_mask=causal_mask,
                     position_ids=position_ids,
                     past_key_value=past_key_values,
                     output_attentions=output_attentions,
