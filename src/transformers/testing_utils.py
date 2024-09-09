@@ -103,6 +103,7 @@ from .utils import (
     is_rjieba_available,
     is_sacremoses_available,
     is_safetensors_available,
+    is_schedulefree_available,
     is_scipy_available,
     is_sentencepiece_available,
     is_seqio_available,
@@ -114,6 +115,7 @@ from .utils import (
     is_tensorflow_text_available,
     is_tf2onnx_available,
     is_tf_available,
+    is_tiktoken_available,
     is_timm_available,
     is_tokenizers_available,
     is_torch_available,
@@ -367,6 +369,14 @@ def require_grokadamw(test_case):
     Decorator marking a test that requires GrokAdamW. These tests are skipped when GrokAdamW isn't installed.
     """
     return unittest.skipUnless(is_grokadamw_available(), "test requires GrokAdamW")(test_case)
+
+
+def require_schedulefree(test_case):
+    """
+    Decorator marking a test that requires schedulefree. These tests are skipped when schedulefree isn't installed.
+    https://github.com/facebookresearch/schedule_free
+    """
+    return unittest.skipUnless(is_schedulefree_available(), "test requires schedulefree")(test_case)
 
 
 def require_cv2(test_case):
@@ -1226,6 +1236,13 @@ def require_cython(test_case):
     Decorator marking a test that requires jumanpp
     """
     return unittest.skipUnless(is_cython_available(), "test requires cython")(test_case)
+
+
+def require_tiktoken(test_case):
+    """
+    Decorator marking a test that requires TikToken. These tests are skipped when TikToken isn't installed.
+    """
+    return unittest.skipUnless(is_tiktoken_available(), "test requires TikToken")(test_case)
 
 
 def get_gpu_count():

@@ -169,7 +169,9 @@ class Qwen2VLVisionText2TextModelTester:
         input_ids[input_ids == self.image_token_id] = self.pad_token_id
         input_ids[:, torch.arange(vision_seqlen, device=torch_device) + 1] = self.image_token_id
         labels = torch.zeros(
-            (self.batch_size, self.seq_length - 1 + vision_seqlen), dtype=torch.long, device=torch_device
+            (self.batch_size, self.seq_length - 1 + vision_seqlen),
+            dtype=torch.long,
+            device=torch_device,
         )
         patch_size = self.vision_config["patch_size"]
         inputs_dict = {
