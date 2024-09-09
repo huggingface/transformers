@@ -647,7 +647,13 @@ class ProPainterModelIntegrationTest(unittest.TestCase):
 
         video_processor = self.default_video_processor
         video, masks = prepare_video()
-        inputs = video_processor(video, masks=masks, video_painting_mode = "video_outpainting",scale_hw = (1.0,1.2), return_tensors="pt").to(torch_device)
+        inputs = video_processor(
+            video,
+            masks=masks,
+            video_painting_mode="video_outpainting",
+            scale_hw=(1.0, 1.2),
+            return_tensors="pt",
+        ).to(torch_device)
 
         # forward pass
         with torch.no_grad():
