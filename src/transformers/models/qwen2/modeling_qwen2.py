@@ -165,10 +165,11 @@ class Qwen2RotaryEmbedding(nn.Module):
         # x: [bs, num_attention_heads, seq_len, head_size]
         if seq_len > self.max_seq_len_cached:
             self._set_cos_sin_cache(seq_len=seq_len, device=x.device, dtype=x.dtype)
-        device_type = x.device.type
-        cos_emb = self.cos_cached[:seq_len].to(dtype=x.dtype).to(device=device_type)
-        sin_emb = self.sin_cached[:seq_len].to(dtype=x.dtype).to(device=device_type)
-        return cos_emb, sin_emb
+
+        return (
+            self.cos_cached[:seq_len].to(dtype=x.dtype),
+            self.sin_cached[:seq_len].to(dtype=x.dtype),
+        )
 
 
 # Copied from transformers.models.llama.modeling_llama.rotate_half
