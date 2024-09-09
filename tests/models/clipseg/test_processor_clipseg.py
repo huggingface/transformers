@@ -21,20 +21,24 @@ import unittest
 import numpy as np
 import pytest
 
-from transformers import CLIPTokenizer, CLIPTokenizerFast
+from transformers import CLIPSegProcessor, CLIPTokenizer, CLIPTokenizerFast
 from transformers.models.clip.tokenization_clip import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_vision
 from transformers.utils import IMAGE_PROCESSOR_NAME, is_vision_available
+
+from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
     from PIL import Image
 
-    from transformers import CLIPSegProcessor, ViTImageProcessor
+    from transformers import ViTImageProcessor
 
 
 @require_vision
-class CLIPSegProcessorTest(unittest.TestCase):
+class CLIPSegProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    processor_class = CLIPSegProcessor
+
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
 
@@ -183,7 +187,24 @@ class CLIPSegProcessorTest(unittest.TestCase):
 
         inputs = processor(images=image_input, visual_prompt=visual_prompt_input)
 
-        self.assertListEqual(list(inputs.keys()), ["pixel_values", "conditional_pixel_values"])
+        self.assertListEqual(list(inputs.keys()), ["conditional_pixel_values", "pixel_values"])
+
+        # test if it raises when no input is passed
+        with pytest.raises(ValueError):
+            processor()
+
+    def test_processor_visual_prompt_positional(self):
+        image_processor = self.get_image_processor()
+        tokenizer = self.get_tokenizer()
+
+        processor = CLIPSegProcessor(tokenizer=tokenizer, image_processor=image_processor)
+
+        image_input = self.prepare_image_inputs()
+        visual_prompt_input = self.prepare_image_inputs()
+
+        inputs = processor(None, image_input, visual_prompt_input)
+
+        self.assertListEqual(list(inputs.keys()), ["conditional_pixel_values", "pixel_values"])
 
         # test if it raises when no input is passed
         with pytest.raises(ValueError):

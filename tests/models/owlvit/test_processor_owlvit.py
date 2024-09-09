@@ -21,20 +21,24 @@ import unittest
 import numpy as np
 import pytest
 
-from transformers import CLIPTokenizer, CLIPTokenizerFast
+from transformers import CLIPTokenizer, CLIPTokenizerFast, OwlViTProcessor
 from transformers.models.clip.tokenization_clip import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_vision
 from transformers.utils import IMAGE_PROCESSOR_NAME, is_vision_available
+
+from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
     from PIL import Image
 
-    from transformers import OwlViTImageProcessor, OwlViTProcessor
+    from transformers import OwlViTImageProcessor
 
 
 @require_vision
-class OwlViTProcessorTest(unittest.TestCase):
+class OwlViTProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    processor_class = OwlViTProcessor
+
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
 
@@ -254,3 +258,18 @@ class OwlViTProcessorTest(unittest.TestCase):
         decoded_tok = tokenizer.batch_decode(predicted_ids)
 
         self.assertListEqual(decoded_tok, decoded_processor)
+
+    def test_processor_query_images_positional(self):
+        processor_components = self.prepare_components()
+        processor = OwlViTProcessor(**processor_components)
+
+        image_input = self.prepare_image_inputs()
+        query_images = self.prepare_image_inputs()
+
+        inputs = processor(None, image_input, query_images)
+
+        self.assertListEqual(list(inputs.keys()), ["query_pixel_values", "pixel_values"])
+
+        # test if it raises when no input is passed
+        with pytest.raises(ValueError):
+            processor()

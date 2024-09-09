@@ -185,6 +185,7 @@ class SamImageProcessor(BaseImageProcessor):
             input_data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the input image. If not provided, it will be inferred.
         """
+        pad_size = get_size_dict(pad_size)
         output_height, output_width = pad_size["height"], pad_size["width"]
         input_height, input_width = get_image_size(image, channel_dim=input_data_format)
 

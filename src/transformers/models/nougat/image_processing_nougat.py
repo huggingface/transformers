@@ -250,6 +250,7 @@ class NougatImageProcessor(BaseImageProcessor):
             input_data_format (`ChannelDimension` or `str`, *optional*):
                 The channel dimension format of the input image. If not provided, it will be inferred.
         """
+        size = get_size_dict(size)
         output_height, output_width = size["height"], size["width"]
         input_height, input_width = get_image_size(image, channel_dim=input_data_format)
 
@@ -292,6 +293,7 @@ class NougatImageProcessor(BaseImageProcessor):
                 The channel dimension format of the input image. If not provided, it will be inferred.
         """
         input_height, input_width = get_image_size(image, channel_dim=input_data_format)
+        size = get_size_dict(size)
         output_height, output_width = size["height"], size["width"]
 
         # We always resize to the smallest of either the input or output size.
