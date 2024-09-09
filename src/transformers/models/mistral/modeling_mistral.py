@@ -872,7 +872,6 @@ class MistralModel(MistralPreTrainedModel):
 
         # cache_position must be valid here no matter which cache we use
         past_seen_tokens = cache_position[0] if past_key_values is not None else 0
-
         if (
             self.config._attn_implementation == "sdpa"
             and past_key_values is not None
