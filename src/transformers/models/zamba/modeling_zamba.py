@@ -1342,7 +1342,7 @@ class ZambaModel(ZambaPreTrainedModel):
 
         return causal_mask
 
-
+# Copied from transformers.models.jamba.modeling_jamba.JambaForCausalLM with Jamba->Zamba, JAMBA->ZAMBA
 class ZambaForCausalLM(ZambaPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
