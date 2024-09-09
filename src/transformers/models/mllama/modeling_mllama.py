@@ -301,8 +301,8 @@ class MllamaVisionEncoderLayer(nn.Module):
 
         self.input_layernorm = nn.LayerNorm(self.hidden_size)
         self.post_attention_layernorm = nn.LayerNorm(self.hidden_size)
-
-
+        
+        # there used to be an if else here, no code path
         self.gate_attn = nn.Parameter(torch.ones(1) * math.pi/4)
         self.gate_ffn = nn.Parameter(torch.ones(1)* math.pi/4)
 
@@ -1015,6 +1015,11 @@ class MllamaTextModel(PreTrainedModel):
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
+
+        # TODO do we really need this?
+        self.learnable_embedding = nn.Embedding(8, config.hidden_size, self.padding_idx)
+
+
         layers = []
         for layer_idx in range(config.num_hidden_layers):
             if layer_idx % config.cross_attention_freq:
@@ -1434,7 +1439,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
             config.vision_config.vision_chunk_size,
             config.text_config.hidden_size,
             #! originally bias=True, but bias was not used in original forward pass
-            bias=False,
+            bias=True,
         )
         self.vocab_size = config.text_config.vocab_size
         self.language_model = MllamaForCausalLM(config.text_config)

@@ -247,7 +247,7 @@ class MllamaTextConfig(PretrainedConfig):
         self.ffn_dim_multiplier= ffn_dim_multiplier
         self.intermediate_size = intermediate_size
         self.vision_input_dim = vision_input_dim
-        self.cross_attention_freq = 4
+        self.cross_attention_freq = 2
         self.dropout=dropout
         self.hidden_activation=hidden_activation
         self.attention_bias = attention_bias

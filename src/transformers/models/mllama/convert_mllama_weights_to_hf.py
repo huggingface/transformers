@@ -67,7 +67,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"text_model.layers.(\d+).feed_forward.mlp.fc1":                    r"language_model.model.layers.\1.mlp.up|gate_proj",
 
     # Vision encoder mapping
-    r"vision_model.vision_encoder.conv1._linear":                       r"vision_model.patch_emebdding",
+    r"vision_model.vision_encoder.conv1._linear":                       r"vision_model.patch_embedding",
     r'vision_model.vision_projection.':                                 r"multi_modal_projector.",
     r"vision_model.vision_encoder.(global_transformer|transformer).resblocks.(\d+).attn.wq": r"vision_model.\1.layers.\2.self_attn.q_proj",
     r"vision_model.vision_encoder.(global_transformer|transformer).resblocks.(\d+).attn.wk": r"vision_model.\1.layers.\2.self_attn.k_proj",
@@ -77,6 +77,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"vision_model.vision_encoder.(global_transformer|transformer).resblocks.(\d+).mlp.c_proj": r"vision_model.\1.layers.\2.mlp.fc2",
     r"vision_model.vision_encoder.(global_transformer|transformer).resblocks.(\d+).ln_1": r"vision_model.\1.layers.\2.input_layernorm",
     r"vision_model.vision_encoder.(global_transformer|transformer).resblocks.(\d+).ln_2": r"vision_model.\1.layers.\2.post_attention_layernorm",
+    r"vision_model.vision_encoder.global_transformer.resblocks.(\d+).(gate_ffn|gate_attn)": r"vision_model.global_transformer.layers.\1.\2",
     r'vision_model.vision_encoder.ln_(pre|post).(weight|bias)':         r'vision_model.vision_encoder.ln_\1.\2',
     r"vision_model.vision_encoder.(?=\w)":                              r"vision_model.",
 }
