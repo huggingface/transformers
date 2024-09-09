@@ -33,7 +33,7 @@ tokenizer = AutoTokenizer.from_pretrained(model_name)
 input_text = "What are we having for dinner?"
 input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
 
-# compile the quantizd model to get speedup
+# compile the quantized model to get speedup
 import torchao
 torchao.quantization.utils.recommended_inductor_config_setter()
 quantized_model = torch.compile(quantized_model, mode="max-autotune")

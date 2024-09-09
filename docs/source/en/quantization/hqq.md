@@ -64,6 +64,6 @@ model = transformers.AutoModelForCausalLM.from_pretrained(
 
 ## Optimized Runtime
 
-HQQ supports various backends, including pure Pytorch and custom dequantization CUDA kernels. These backends are suitable for older gpus and peft/QLoRA training.
+HQQ supports various backends, including pure PyTorch and custom dequantization CUDA kernels. These backends are suitable for older gpus and peft/QLoRA training.
 For faster inference, HQQ supports 4-bit fused kernels (TorchAO and Marlin), reaching up to 200 tokens/sec on a single 4090.
 For more details on how to use the backends, please refer to https://github.com/mobiusml/hqq/?tab=readme-ov-file#backend

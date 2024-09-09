@@ -110,7 +110,7 @@ Now you can access the `feature_maps` object from the first stage of the backbon
 
 ## AutoFeatureExtractor
 
-For audio tasks, a feature extractor processes the audio signal the correct input format.
+For audio tasks, a feature extractor processes the audio signal into the correct input format.
 
 Load a feature extractor with [`AutoFeatureExtractor.from_pretrained`]:
 

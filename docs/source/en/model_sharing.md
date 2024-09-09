@@ -47,7 +47,7 @@ As a result, you can load a specific model version with the `revision` parameter
 ... )
 ```
 
-Files are also easily edited in a repository, and you can view the commit history as well as the difference:
+Files are also easily edited in a repository, and you can view the commit history as well as the differences:
 
 ![vis_diff](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/vis_diff.png)
 

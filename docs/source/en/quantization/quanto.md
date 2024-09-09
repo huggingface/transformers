@@ -55,7 +55,7 @@ quantized_model = AutoModelForCausalLM.from_pretrained(model_id, device_map="cud
 
 Note that serialization is not supported yet with transformers but it is coming soon! If you want to save the model, you can use quanto library instead.
 
-Quanto library uses linear quantization algorithm for quantization. Even though this is a basic quantization technique, we get very good results! Have a look at the following becnhmark (llama-2-7b on perplexity metric). You can find more benchamarks [here](https://github.com/huggingface/quanto/tree/main/bench/generation)
+Quanto library uses linear quantization algorithm for quantization. Even though this is a basic quantization technique, we get very good results! Have a look at the following benchmark (llama-2-7b on perplexity metric). You can find more benchmarks [here](https://github.com/huggingface/quanto/tree/main/bench/generation)
 
 <div class="flex gap-4">
   <div>
@@ -63,4 +63,4 @@ Quanto library uses linear quantization algorithm for quantization. Even though 
   </div>
 </div>
 
-The library is versatible enough to be compatible with most PTQ optimization algorithms. The plan in the future is to integrate the most popular algorithms in the most seamless possible way (AWQ, Smoothquant).
+The library is versatile enough to be compatible with most PTQ optimization algorithms. The plan in the future is to integrate the most popular algorithms in the most seamless possible way (AWQ, Smoothquant).

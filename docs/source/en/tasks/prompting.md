@@ -290,7 +290,7 @@ Result: Modern tools often used to make gazpacho include
 #### Reasoning
 
 Reasoning is one of the most difficult tasks for LLMs, and achieving good results often requires applying advanced prompting techniques, like 
-[Chain-of-though](#chain-of-thought).
+[Chain-of-thought](#chain-of-thought).
 
 Let's try if we can make a model reason about a simple arithmetics task with a basic prompt: 
 

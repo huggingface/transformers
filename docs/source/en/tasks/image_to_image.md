@@ -36,6 +36,7 @@ We can now initialize the pipeline with a [Swin2SR model](https://huggingface.co
 
 ```python
 from transformers import pipeline
+import torch
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 pipe = pipeline(task="image-to-image", model="caidas/swin2SR-lightweight-x2-64", device=device)

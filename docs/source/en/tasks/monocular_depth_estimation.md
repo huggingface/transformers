@@ -159,7 +159,7 @@ def colorize(value, vmin=None, vmax=None, cmap='gray_r', invalid_val=-99, invali
     """Converts a depth map to a color image.
 
     Args:
-        value (torch.Tensor, numpy.ndarry): Input depth map. Shape: (H, W) or (1, H, W) or (1, 1, H, W). All singular dimensions are squeezed
+        value (torch.Tensor, numpy.ndarray): Input depth map. Shape: (H, W) or (1, H, W) or (1, 1, H, W). All singular dimensions are squeezed
         vmin (float, optional): vmin-valued entries are mapped to start color of cmap. If None, value.min() is used. Defaults to None.
         vmax (float, optional):  vmax-valued entries are mapped to end color of cmap. If None, value.max() is used. Defaults to None.
         cmap (str, optional): matplotlib colormap to use. Defaults to 'magma_r'.
