@@ -267,22 +267,22 @@ class ProPainterVideoProcessor(BaseImageProcessor):
         do_rescale (`bool`, *optional*, defaults to `True`):
             Whether to rescale the video by the specified scale `rescale_factor`. Can be overridden by the `do_rescale`
             parameter in the `preprocess` method.
-        rescale_factor (`int` or `float`, *optional*, defaults to `1/255.0`):
+        rescale_factor (`Union[int, float]`, *optional*, defaults to `1/255.0`):
             Defines the scale factor to use if rescaling the video. Can be overridden by the `rescale_factor` parameter
             in the `preprocess` method.
         do_normalize (`bool`, *optional*, defaults to `False`):
             Whether to normalize the video. Can be overridden by the `do_normalize` parameter in the `preprocess`
             method.
-        image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
+        image_mean (`Optional[Union[float, List[float]]]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
             Mean to use if normalizing the video. This is a float or list of floats the length of the number of
             channels in the video. Can be overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
+        image_std (`Optional[Union[float, List[float]]]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
             Standard deviation to use if normalizing the video. This is a float or list of floats the length of the
             number of channels in the video. Can be overridden by the `image_std` parameter in the `preprocess` method.
         video_painting_mode (`str`, *optional*, defaults to `"video_inpainting"`):
             Specifies the mode for video reconstruction tasks, such as object removal, video completion, video outpainting.
             choices=['video_inpainting', 'video_outpainting']
-        scale_hw (`tuple[float, float]`, *optional*, defaults to `None`):
+        scale_hw (`Optional[tuple[float, float]]`, *optional*, defaults to `None`):
             Tuple containing scaling factors for the video's height and width dimensions during `"video_outpainting"` mode.
             It is only applicable during `"video_outpainting"` mode. If `None`, no scaling is applied and code execution will end.
         mask_dilation (`int`, *optional*, defaults to `4`):
@@ -294,10 +294,10 @@ class ProPainterVideoProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = False,
-        size: Dict[str, int] = None,
+        size: Dict[str, int] = {"shortest_edge": 256},
         resample: PILImageResampling = PILImageResampling.NEAREST,
         do_center_crop: bool = False,
-        crop_size: Dict[str, int] = None,
+        crop_size: Dict[str, int] = {"height": 224, "width": 224},
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255.0,
         do_normalize: bool = False,
@@ -309,9 +309,7 @@ class ProPainterVideoProcessor(BaseImageProcessor):
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
-        size = size if size is not None else {"shortest_edge": 256}
         size = get_size_dict(size, default_to_square=False)
-        crop_size = crop_size if crop_size is not None else {"height": 224, "width": 224}
         crop_size = get_size_dict(crop_size, param_name="crop_size")
 
         self.do_resize = do_resize
@@ -333,8 +331,8 @@ class ProPainterVideoProcessor(BaseImageProcessor):
         self,
         image: np.ndarray,
         size: Dict[str, int],
-        resample: PILImageResampling = PILImageResampling.BILINEAR,
-        data_format: Optional[Union[str, ChannelDimension]] = None,
+        resample: PILImageResampling = PILImageResampling.NEAREST,
+        data_format: Optional[Union[str, ChannelDimension]] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
     ) -> np.ndarray:
@@ -348,9 +346,9 @@ class ProPainterVideoProcessor(BaseImageProcessor):
                 Size of the output image. If `size` is of the form `{"height": h, "width": w}`, the output image will
                 have the size `(h, w)`. If `size` is of the form `{"shortest_edge": s}`, the output image will have its
                 shortest edge of length `s` while keeping the aspect ratio of the original image.
-            resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
+            resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.NEAREST`):
                 Resampling filter to use when resiizing the image.
-            data_format (`str` or `ChannelDimension`, *optional*):
+            data_format (`str` or `ChannelDimension`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
             input_data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the input image. If not provided, it will be inferred.
