@@ -2,7 +2,6 @@ import copy
 import importlib.metadata
 import json
 import os
-import warnings
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -65,14 +64,6 @@ class Cache(torch.nn.Module):
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
         # TODO: deprecate this function in favor of `cache_position`
         raise NotImplementedError("Make sure to implement `get_seq_length` in a subclass.")
-
-    def get_max_length(self) -> Optional[int]:
-        """
-        Returns the maximum sequence length of the cache object. The method is deprecated,so use
-        `get_max_cache_shape` instead
-        """
-        <add the warning here>
-        return self.get_max_cache_shape()
 
     def get_max_cache_shape(self) -> Optional[int]:
         """Returns the maximum sequence length of the cache object"""
@@ -404,15 +395,6 @@ class DynamicCache(Cache):
         if len(self.key_cache) <= layer_idx:
             return 0
         return self.key_cache[layer_idx].shape[-2]
-
-    def get_max_length(self) -> Optional[int]:
-        """Returns the maximum sequence length of the cached states. DynamicCache does not have a maximum length."""
-        warnings.warn(
-            "To get the maximum length of the cache object, use `cache.get_max_cache_shape()`. "
-            "`cache.get_max_length()` is deprecated and will throw an error in v4.48. ",
-            FutureWarning,
-        )
-        return self.get_max_cache_shape()
 
     def get_max_cache_shape(self) -> Optional[int]:
         """Returns the maximum sequence length of the cache object. DynamicCache does not have a maximum length."""
@@ -898,15 +880,6 @@ class SinkCache(Cache):
             return 0
         return self.key_cache[layer_idx].shape[-2]
 
-    def get_max_length(self) -> Optional[int]:
-        """Returns the maximum sequence length of the cache object, in case of SinkCache it is the window length."""
-        warnings.warn(
-            "To get the maximum length of the cache object, use `cache.get_max_cache_shape()`. "
-            "`cache.get_max_length()` is deprecated and will throw an error in v4.48. ",
-            FutureWarning,
-        )
-        return self.get_max_cache_shape()
-
     def get_max_cache_shape(self) -> Optional[int]:
         """Returns the maximum sequence length of the cache object, in case of SinkCache it is the window length."""
         return self.window_length
@@ -1154,14 +1127,6 @@ class StaticCache(Cache):
         # TODO: deprecate this function in favor of `cache_position`
         return (self.key_cache[layer_idx][0, 0].any(dim=-1)).sum()
 
-    def get_max_length(self) -> Optional[int]:
-        warnings.warn(
-            "To get the maximum length of the cache object, use `cache.get_max_cache_shape()`. "
-            "`cache.get_max_length()` is deprecated and will throw an error in v4.48. ",
-            FutureWarning,
-        )
-        return self.get_max_cache_shape()
-
     def get_max_cache_shape(self) -> Optional[int]:
         return self.max_cache_len
 
@@ -1299,14 +1264,6 @@ class SlidingWindowCache(StaticCache):
         self.value_cache[layer_idx] += v_out
 
         return k_out, v_out
-
-    def get_max_length(self) -> Optional[int]:
-        warnings.warn(
-            "To get the maximum length of the cache object, use `cache.get_max_cache_shape()`. ",
-            "`cache.get_max_length()` is deprecated and will throw an error in v4.48. ",
-            FutureWarning,
-        )
-        return self.get_max_cache_shape()
 
     def get_max_cache_shape(self) -> Optional[int]:
         return self.max_cache_len
@@ -1645,14 +1602,6 @@ class HybridCache(Cache):
             v_out,
             k_out.shape[2],
         )
-
-    def get_max_length(self) -> Optional[int]:
-        warnings.warn(
-            "To get the maximum length of the cache object, use `cache.get_max_cache_shape()`. "
-            "`cache.get_max_length()` is deprecated and will throw an error in v4.48. ",
-            FutureWarning,
-        )
-        return self.get_max_cache_shape()
 
     def get_max_cache_shape(self) -> Optional[int]:
         return self.max_cache_len
