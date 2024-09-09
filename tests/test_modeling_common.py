@@ -1912,9 +1912,9 @@ class ModelTesterMixin:
             ):
                 model.resize_token_embeddings(model_vocab_size, pad_to_multiple_of=1.3)
 
-            # Test when `vocab_size` is smaller than `hidden_size`
+            # Test when `vocab_size` is smaller than `hidden_size`.
             del model
-            config.vocab_size = 1
+            config.vocab_size = 4
             if deepspeed_enabled:
                 with deepspeed.zero.Init():
                     model = model_class(config)
