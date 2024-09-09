@@ -176,7 +176,6 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
                     if chunk.isdigit():
                         bid = int(chunk)
                         break
-            
             for tensor_name in tensor_key_mapping:
                 if tensor_name.format(bid=bid) in name:
                     name = name.replace(tensor_name.format(bid=bid), tensor_key_mapping[tensor_name].format(bid=bid))
