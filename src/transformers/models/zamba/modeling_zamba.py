@@ -49,8 +49,8 @@ from ...utils import (
 )
 from ...utils.import_utils import (
     is_causal_conv1d_available,
-    is_flash_attn_2_available,
     is_mamba_ssm_available,
+    is_torchdynamo_compiling,
 )
 from .configuration_zamba import ZambaConfig
 
@@ -1333,10 +1333,10 @@ class ZambaForCausalLM(ZambaPreTrainedModel):
 
     def __init__(self, config: ZambaConfig):
         super().__init__(config)
-
         self.model = ZambaModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -1373,7 +1373,7 @@ class ZambaForCausalLM(ZambaPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        num_logits_to_keep: Optional[Union[int, None]] = None,
+        num_logits_to_keep: int = 0,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
         Args:
@@ -1428,14 +1428,18 @@ class ZambaForCausalLM(ZambaPreTrainedModel):
         )
 
         hidden_states = outputs[0]
-        if num_logits_to_keep is None:
-            logits = self.lm_head(hidden_states)
-        else:
-            logits = self.lm_head(hidden_states[..., -num_logits_to_keep:, :])
-        logits = logits.float()
+        if labels is None and not is_torchdynamo_compiling():
+            logger.warning_once(
+                "Starting from v4.46, the `logits` model output will have the same type as the model (except at train time, where it will always be FP32)"
+            )
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        # TODO: remove the float() operation in v4.46
+        logits = self.lm_head(hidden_states[:, -num_logits_to_keep:, :]).float()
 
         loss = None
         if labels is not None:
+            # Upcast to float if we need to compute the loss to avoid potential precision issues
+            logits = logits.float()
             # Shift so that tokens < n predict n
             shift_logits = logits[..., :-1, :].contiguous()
             shift_labels = labels[..., 1:].contiguous()
@@ -1466,39 +1470,26 @@ class ZambaForCausalLM(ZambaPreTrainedModel):
         attention_mask=None,
         inputs_embeds=None,
         cache_position=None,
+        position_ids=None,
+        use_cache=True,
         **kwargs,
     ):
         empty_past_kv = past_key_values is None
 
         # Omit tokens covered by past_key_values
         if not empty_past_kv:
-            past_length = cache_position[0] if cache_position is not None else attention_mask.shape[1]
-            max_cache_length = self.config.sliding_window
-            # Keep only the unprocessed tokens:
-            # 1 - If the length of the attention_mask exceeds the length of input_ids, then we are in a setting where
-            # some of the inputs are exclusively passed as part of the cache (e.g. when passing input_embeds as
-            # input)
-            if attention_mask is not None and attention_mask.shape[1] > input_ids.shape[1]:
-                input_ids = input_ids[:, -(attention_mask.shape[1] - past_length) :]
-            # 2 - If the past_length is smaller than input_ids', then input_ids holds all input tokens. We can discard
-            # input_ids based on the past_length.
-            elif past_length < input_ids.shape[1]:
-                input_ids = input_ids[:, past_length:]
-            # 3 - Otherwise (past_length >= input_ids.shape[1]), let's assume input_ids only has unprocessed tokens.
-
-            # If we are about to go beyond the maximum cache length, we need to crop the input attention mask.
-            if (
-                max_cache_length is not None
-                and attention_mask is not None
-                and past_length + input_ids.shape[1] > max_cache_length
-            ):
-                attention_mask = attention_mask[:, -max_cache_length:]
+            # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
+            # Exception 1: when passing input_embeds, input_ids may be missing entries
+            # Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
+            if inputs_embeds is not None:  # Exception 1
+                input_ids = input_ids[:, -cache_position.shape[0] :]
+            elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
+                input_ids = input_ids[:, cache_position]
         else:
             past_key_values = HybridMambaAttentionDynamicCache(
                 self.config, input_ids.shape[0], dtype=self.dtype, device=self.device
             )
 
-        position_ids = kwargs.get("position_ids", None)
         if attention_mask is not None and position_ids is None:
             # create position_ids on the fly for batch generation
             position_ids = attention_mask.long().cumsum(-1) - 1
@@ -1510,13 +1501,13 @@ class ZambaForCausalLM(ZambaPreTrainedModel):
         if inputs_embeds is not None and empty_past_kv:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
-            model_inputs = {"input_ids": input_ids}
+            model_inputs = {"input_ids": input_ids.contiguous()}  # `contiguous()` needed for compilation use cases
 
         model_inputs.update(
             {
                 "position_ids": position_ids,
                 "past_key_values": past_key_values,
-                "use_cache": kwargs.get("use_cache"),
+                "use_cache": use_cache,
                 "attention_mask": attention_mask,
                 "num_logits_to_keep": self.config.num_logits_to_keep,
                 "cache_position": cache_position,
