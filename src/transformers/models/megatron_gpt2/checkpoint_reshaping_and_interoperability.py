@@ -608,8 +608,9 @@ def convert_checkpoint_from_transformers_to_megatron(args):
 
     try:
         from megatron.core import package_info
+
         version = package_info.__version__
-        version = tuple(map(int, version.split('.')))
+        version = tuple(map(int, version.split(".")))
         if version < (0, 6):
             from megatron.tokenizer.tokenizer import _vocab_size_with_padding
         else:
