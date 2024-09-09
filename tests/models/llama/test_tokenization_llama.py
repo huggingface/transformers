@@ -857,6 +857,7 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         tokens = tokenizer_pretrained_fast.tokenize("hello", add_special_tokens=True)
         self.assertEqual(tokens[-1], new_eos_token)
 
+
 @require_tiktoken
 @require_read_token
 class TikTokenIntegrationTests(unittest.TestCase):
