@@ -265,5 +265,4 @@ class Qwen2VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         video_input = self.prepare_video_inputs()
 
         inputs = processor(text=input_str, videos=video_input, size=[224, 224])
-        print(inputs["pixel_values_videos"].shape)
         self.assertEqual(inputs["pixel_values_videos"].shape[1], 1176)
