@@ -4100,7 +4100,7 @@ class ProPainterModel(ProPainterPreTrainedModel):
         >>> reconstructed_frames = outputs["reconstruction"]
         >>> reconstructed_frames = [cv2.resize(frame, (240,432)) for frame in reconstructed_frames]
         >>> imageio.mimwrite(os.path.join(<PATH_TO_THE_FOLDER>, 'inpaint_out.mp4'), reconstructed_frames, fps=24, quality=7)
-        
+
         >>> # Performing video outpainting:
 
         >>> # Forward pass:

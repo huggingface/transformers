@@ -35,6 +35,7 @@ from ...image_utils import (
     PILImageResampling,
     VideoInput,
     get_image_size,
+    get_channel_dimension_axis,
     infer_channel_dimension_format,
     is_scaled_image,
     is_valid_image,
@@ -168,6 +169,8 @@ def extrapolation(
 
     height, width = get_image_size(image, input_data_format)
 
+    num_channels = image.shape[get_channel_dimension_axis(image, input_data_format)]
+
     # Defines new FOV.
     height_extr = int(scale[0] * height)
     width_extr = int(scale[1] * width)
@@ -179,7 +182,7 @@ def extrapolation(
     # Extrapolates the FOV for video.
 
     if input_data_format == ChannelDimension.LAST:
-        frame = np.zeros(((height_extr, width_extr, 3)), dtype=np.float32)
+        frame = np.zeros(((height_extr, width_extr, num_channels)), dtype=np.float32)
         frame[
             height_start : height_start + height,
             width_start : width_start + width,
@@ -187,7 +190,7 @@ def extrapolation(
         ] = image
         image = frame
     elif input_data_format == ChannelDimension.FIRST:
-        frame = np.zeros((3, height_extr, width_extr), dtype=np.float32)  # Adjusted shape
+        frame = np.zeros((num_channels, height_extr, width_extr), dtype=np.float32)  # Adjusted shape
         frame[
             :,
             height_start : height_start + height,

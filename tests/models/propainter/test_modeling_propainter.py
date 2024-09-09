@@ -614,12 +614,12 @@ class ProPainterModelIntegrationTest(unittest.TestCase):
         return ProPainterVideoProcessor() if is_vision_available() else None
 
     @slow
-    def test_inference_video_reconstruction(self):
+    def test_inference_video_inpainting(self):
         model = ProPainterModel.from_pretrained("ruffy369/ProPainter").to(torch_device)
 
         video_processor = self.default_video_processor
         video, masks = prepare_video()
-        inputs = video_processor(videos=video, masks=masks, return_tensors="pt").to(torch_device)
+        inputs = video_processor(video, masks=masks, return_tensors="pt").to(torch_device)
 
         # forward pass
         with torch.no_grad():
@@ -641,6 +641,33 @@ class ProPainterModelIntegrationTest(unittest.TestCase):
             )
         )
 
+    @slow
+    def test_inference_video_outpainting(self):
+        model = ProPainterModel.from_pretrained("ruffy369/ProPainter").to(torch_device)
+
+        video_processor = self.default_video_processor
+        video, masks = prepare_video()
+        inputs = video_processor(video, masks=masks, video_painting_mode = "video_outpainting",scale_hw = (1.0,1.2), return_tensors="pt").to(torch_device)
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(**inputs)
+
+        # verify the logits
+        expected_shape = torch.Size((80, 240, 512, 3))
+        self.assertEqual(torch.tensor(outputs.reconstruction).shape, expected_shape)
+
+        expected_slice = torch.tensor([[114, 110, 112], [117, 113, 115], [113, 109, 112]], dtype=torch.uint8).to(
+            torch_device
+        )
+        self.assertTrue(
+            torch.allclose(
+                torch.tensor(outputs.reconstruction)[0, 0, :3, :3].to(torch_device),
+                expected_slice,
+                atol=1e-4,
+            )
+        )
+
     @unittest.skip("Cant do half precision")
     @slow
     @require_accelerate
@@ -654,7 +681,7 @@ class ProPainterModelIntegrationTest(unittest.TestCase):
         video_processor = self.default_video_processor
 
         video, masks = prepare_video()
-        inputs = video_processor(videos=video, masks=masks, return_tensors="pt").to(torch_device)
+        inputs = video_processor(video, masks=masks, return_tensors="pt").to(torch_device)
 
         # forward pass to make sure inference works in fp16
         with torch.no_grad():
