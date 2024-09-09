@@ -34,10 +34,16 @@ from ...image_utils import (
     get_image_size,
     infer_channel_dimension_format,
     is_valid_image,
+    is_vision_available,
     to_numpy_array,
     validate_preprocess_arguments,
 )
 from ...utils import TensorType, logging
+
+
+if is_vision_available():
+    import PIL
+    from PIL import Image
 
 
 logger = logging.get_logger(__name__)
@@ -576,6 +582,30 @@ def to_channel_dimension_format(
     return image
 
 
+# Copied from transformers.models.idefics2.image_processing_idefics2.convert_to_rgb
+def convert_to_rgb(image: ImageInput) -> ImageInput:
+    """
+    Converts an image to RGB format. Only converts if the image is of type PIL.Image.Image, otherwise returns the image
+    as is.
+    Args:
+        image (Image):
+            The image to convert.
+    """
+    if not isinstance(image, PIL.Image.Image):
+        return image
+
+    # `image.convert("RGB")` would only work for .jpg images, as it creates a wrong background
+    # for transparent images. The call to `alpha_composite` handles this case
+    if image.mode == "RGB":
+        return image
+
+    image_rgba = image.convert("RGBA")
+    background = Image.new("RGBA", image_rgba.size, (255, 255, 255))
+    alpha_composite = Image.alpha_composite(background, image_rgba)
+    alpha_composite = alpha_composite.convert("RGB")
+    return alpha_composite
+
+
 # Modified from transformers.models.idefics2.image_processing_idefics2.make_list_of_images
 def make_list_of_images(images: ImageInput) -> List[List[Optional[np.ndarray]]]:
     """
@@ -634,6 +664,9 @@ class MllamaImageProcessor(BaseImageProcessor):
     Constructs a Mllama image processor.
 
     Args:
+        do_convert_rgb (`bool`, *optional*, defaults to `True`):
+            Whether to convert the image to RGB. This is useful if the input image is of a different format e.g. RGBA.
+            Only has an effect if the input image is in the PIL format.
         do_resize (`bool`, *optional*, defaults to `self.do_resize`):
             Whether to resize the image.
         size (`Dict[str, int]`, *optional*, defaults to `self.size`):
@@ -663,6 +696,7 @@ class MllamaImageProcessor(BaseImageProcessor):
 
     def __init__(
         self,
+        do_convert_rgb: bool = True,
         do_resize: bool = True,
         size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
@@ -676,6 +710,7 @@ class MllamaImageProcessor(BaseImageProcessor):
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
+        self.do_convert_rgb = do_convert_rgb
         self.do_resize = do_resize
         self.size = size if size is not None else {"height": 224, "width": 224}
         self.resample = resample
@@ -692,6 +727,7 @@ class MllamaImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
+        do_convert_rgb: Optional[bool] = None,
         do_resize: Optional[bool] = None,
         size: Optional[Dict[str, int]] = None,
         resample: Optional[PILImageResampling] = None,
@@ -711,6 +747,8 @@ class MllamaImageProcessor(BaseImageProcessor):
         Args:
             images (`ImageInput`):
                 A list of images to preprocess.
+            do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
+                Whether to convert the image to RGB.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
             size (`Dict[str, int]`, *optional*, defaults to `self.size`):
@@ -755,6 +793,7 @@ class MllamaImageProcessor(BaseImageProcessor):
                 - **aspect_ratio_ids** (`TensorType`): The aspect ratio ids of the images.
                 - **num_tiles** (`List[List[int]]`): The number of tiles for each image in the batch.
         """
+        do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = size if size is not None else self.size
         resample = resample if resample is not None else self.resample
@@ -792,6 +831,9 @@ class MllamaImageProcessor(BaseImageProcessor):
             ]
             for images in images_list
         ]
+
+        if self.do_convert_rgb:
+            images_list = [[convert_to_rgb(image) for image in images] for images in images_list]
 
         batch_images = []
         batch_aspect_ratios = []
