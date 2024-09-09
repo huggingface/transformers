@@ -25,6 +25,7 @@ FILES_TO_FIND = [
     "kernels/deformable_detr/cuda/ms_deform_im2col_cuda.cuh",
     "kernels/falcon_mamba/selective_scan_with_ln.py",
     "kernels/falcon_mamba/__init__.py",
+    "kernels/__init__.py",
     "kernels/deformable_detr/cuda/ms_deform_im2col_cuda.cuh",
     "models/graphormer/algos_graphormer.pyx",
 ]
