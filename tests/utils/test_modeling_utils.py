@@ -41,6 +41,7 @@ from transformers import (
     is_torch_available,
     logging,
 )
+from transformers.modeling_utils import update_key_name
 from transformers.testing_utils import (
     TOKEN,
     USER,
@@ -72,7 +73,7 @@ from transformers.utils.import_utils import (
     is_torch_sdpa_available,
     is_torchdynamo_available,
 )
-from transformers.modeling_utils import update_key_name
+
 
 sys.path.append(str(Path(__file__).parent.parent.parent / "utils"))
 
@@ -1716,10 +1717,34 @@ class ModelUtilsTest(TestCasePlus):
         )
 
     def test_update_key_name(self):
-        original_keys = ['model.language_model.0.self_attn.0.mlp0', 'model.language_model.0.self_attn.1.mlp.conv1.weight', 'model.language_model.1.self_attn.0.mlp.conv1.weight', 'model.language_model.1.self_attn.1.mlp.conv1.weight', 'model.language_model.2.self_attn.0.mlp.conv1.weight', 'model.language_model.2.self_attn.1.conv1.weight', 'model.language_model.3.self_attn.0.mlp.conv1.weight', 'model.language_model.3.self_attn.1.mlp.conv1.weight', 'model.language_model.0.self_attn.0.mlp.layer.conv1.weight', 'model.language_model.1.self_attn.0.mlp.layer.conv1.weight', 'model.language_model.2.self_attn.0.mlp.layer.conv1.weight', 'model.language_model.3.self_attn.0.mlp.layer.conv1.weight', 'model.language_model.0.self_attn.0.mlp.layer.1.weight', 'model.language_model.1.self_attn.0.mlp.layer.1.weight', 'model.language_model.2.self_attn.0.mlp.layer.1.weight', 'model.language_model.3.self_attn.0.mlp.layer.1.weight']
+        original_keys = [
+            "model.language_model.0.self_attn.0.mlp0",
+            "model.language_model.0.self_attn.1.mlp.conv1.weight",
+            "model.language_model.1.self_attn.0.mlp.conv1.weight",
+            "model.language_model.1.self_attn.1.mlp.conv1.weight",
+            "model.language_model.2.self_attn.0.mlp.conv1.weight",
+            "model.language_model.2.self_attn.1.conv1.weight",
+            "model.language_model.3.self_attn.0.mlp.conv1.weight",
+            "model.language_model.3.self_attn.1.mlp.conv1.weight",
+            "model.language_model.0.self_attn.0.mlp.layer.conv1.weight",
+            "model.language_model.1.self_attn.0.mlp.layer.conv1.weight",
+            "model.language_model.2.self_attn.0.mlp.layer.conv1.weight",
+            "model.language_model.3.self_attn.0.mlp.layer.conv1.weight",
+            "model.language_model.0.self_attn.0.mlp.layer.1.weight",
+            "model.language_model.1.self_attn.0.mlp.layer.1.weight",
+            "model.language_model.2.self_attn.0.mlp.layer.1.weight",
+            "model.language_model.3.self_attn.0.mlp.layer.1.weight",
+        ]
         new_keys = update_key_name(original_keys)
-        expected_new_keys = ['model.language_model.{0, 1, 2, 3}.self_attn.{0, 1}.mlp.layer.{1}.weight', 'model.language_model.{0, 1, 2, 3}.self_attn.{0, 1}.mlp.conv{1}.weight', 'model.language_model.{0, 1, 2, 3}.self_attn.{0, 1}.mlp{0}', 'model.language_model.{0, 1, 2, 3}.self_attn.{0, 1}.conv{1}.weight', 'model.language_model.{0, 1, 2, 3}.self_attn.{0, 1}.mlp.layer.conv{1}.weight']
+        expected_new_keys = [
+            "model.language_model.{0, 1, 2, 3}.self_attn.{0, 1}.mlp.layer.{1}.weight",
+            "model.language_model.{0, 1, 2, 3}.self_attn.{0, 1}.mlp.conv{1}.weight",
+            "model.language_model.{0, 1, 2, 3}.self_attn.{0, 1}.mlp{0}",
+            "model.language_model.{0, 1, 2, 3}.self_attn.{0, 1}.conv{1}.weight",
+            "model.language_model.{0, 1, 2, 3}.self_attn.{0, 1}.mlp.layer.conv{1}.weight",
+        ]
         self.assertListEqual(list(new_keys), expected_new_keys)
+
 
 @slow
 @require_torch
