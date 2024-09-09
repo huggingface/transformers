@@ -135,11 +135,11 @@ def prepare_cross_attention_mask(
         cross_attention_mask = cross_attention_mask.unsqueeze(1)
 
     # invert the mask
-    inverted_cross_attn_mask = 1.0 - cross_attention_mask
-    cross_attention_mask = inverted_cross_attn_mask.masked_fill(inverted_cross_attn_mask.to(torch.bool), torch.finfo(torch.bfloat16).min)
+    inverted_cross_attn_mask = (1.0 - cross_attention_mask).to(dtype)
+    cross_attention_mask = inverted_cross_attn_mask.masked_fill(inverted_cross_attn_mask.to(torch.bool), torch.finfo(dtype).min)
 
     # apply full-row bias, which return 4D tensor of shape [B, H, S1, 1] where value is 0 if the a full row in cross attn mask's
-    #  last dimension contains negative infinity values, otherwise it's 1
+    # last dimension contains negative infinity values, otherwise it's 1
     negative_inf_value = torch.finfo(dtype).min
     full_text_row_masked_out_mask = (cross_attention_mask != negative_inf_value).any(dim=-1).type_as(cross_attention_mask)[..., None]
     cross_attention_mask *= full_text_row_masked_out_mask
@@ -1152,7 +1152,6 @@ class MllamaCrossAttentionVisionModel(torch.nn.Module):
         aspect_ratios: torch.Tensor,
     ) -> torch.Tensor:
 
-        pixel_values = pixel_values.to(dtype=torch.bfloat16)
         hidden_state = self.vision_encoder(pixel_values, aspect_ratios)
         hidden_state = self.vision_projection(hidden_state)
 
@@ -1591,28 +1590,27 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
             # The clone here is for the same reason as for `position_ids`.
             model_inputs = {"input_ids": input_ids.clone(memory_format=torch.contiguous_format), "inputs_embeds": None}
 
-        # TODO @raushan: Uncomment when cache is added
-        # if isinstance(past_key_values, StaticCache) and attention_mask.ndim == 2:
-        #     if model_inputs["inputs_embeds"] is not None:
-        #         batch_size, sequence_length, _ = model_inputs["inputs_embeds"].shape
-        #         device = model_inputs["inputs_embeds"].device
-        #     else:
-        #         batch_size, sequence_length = model_inputs["input_ids"].shape
-        #         device = model_inputs["input_ids"].device
-#
-        #     dtype = self.lm_head.weight.dtype
-        #     min_dtype = torch.finfo(dtype).min
-#
-        #     attention_mask = _prepare_4d_causal_attention_mask_with_cache_position(
-        #         attention_mask,
-        #         sequence_length=sequence_length,
-        #         target_length=past_key_values.get_max_length(),
-        #         dtype=dtype,
-        #         device=device,
-        #         min_dtype=min_dtype,
-        #         cache_position=cache_position,
-        #         batch_size=batch_size,
-        #     )
+        if isinstance(past_key_values, StaticCache) and attention_mask.ndim == 2:
+            if model_inputs["inputs_embeds"] is not None:
+                batch_size, sequence_length, _ = model_inputs["inputs_embeds"].shape
+                device = model_inputs["inputs_embeds"].device
+            else:
+                batch_size, sequence_length = model_inputs["input_ids"].shape
+                device = model_inputs["input_ids"].device
+
+            dtype = self.get_output_embeddings().weight.dtype
+            min_dtype = torch.finfo(dtype).min
+
+            attention_mask = _prepare_4d_causal_attention_mask_with_cache_position(
+                attention_mask,
+                sequence_length=sequence_length,
+                target_length=past_key_values.get_max_length(),
+                dtype=dtype,
+                device=device,
+                min_dtype=min_dtype,
+                cache_position=cache_position,
+                batch_size=batch_size,
+            )
 
         if num_logits_to_keep is not None:
             model_inputs["num_logits_to_keep"] = num_logits_to_keep
