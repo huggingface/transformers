@@ -147,7 +147,7 @@ def convert_sparse_cross_attention_mask_to_dense(
             if len(token_locations) == 2:
                 start, end = token_locations
                 end = min(end, total_len)
-                if end == -1:
+                if end == -1 or mask_idx == len(mask_i) - 1:
                     end = total_len
                 out_masks[batch_idx, start:end, mask_idx, :mask_num_chunks].fill_(0.0)
         curr_attn_mask = text_attn_mask[-(out_masks.shape[1] - 100): ]
@@ -1464,15 +1464,10 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
             cross_attention_token_mask=cross_attention_token_mask,
             attention_mask=attention_mask,
             num_tiles=num_tiles,
-            total_len=input_ids.shape[-1] + 100,
+            total_len=attention_mask.shape[-1],
             max_num_tiles=self.vision_max_num_chunks,
             device=self.device,
             dtype=self.dtype,
-        )
-
-        cross_attention_mask, full_text_row_masked_out_mask = prepare_cross_attention_mask(
-            cross_attention_mask=cross_attention_mask,
-            num_vision_tokens=self.model.vision_model.vision_encoder.num_patches,
         )
 
         if inputs_embeds is None:
@@ -1486,6 +1481,11 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
 
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
+
+        cross_attention_mask, full_text_row_masked_out_mask = prepare_cross_attention_mask(
+            cross_attention_mask=cross_attention_mask,
+            num_vision_tokens=self.model.vision_model.vision_encoder.num_patches,
+        )
 
         # temp workaround for rope, for some reason it expects a 1d tensor
         position_ids = position_ids.squeeze(0)
