@@ -74,6 +74,8 @@ class Qwen2MoeConfig(PretrainedConfig):
             The number of layers that use SWA (Sliding Window Attention). The bottom layers use SWA while the top use full attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
+        attention_qkv_bias (`bool`, *optional*, defaults to `True`):
+            Whether to include bias in the QKV projection.
         decoder_sparse_step (`int`, *optional*, defaults to 1):
             The frequency of the MoE layer.
         moe_intermediate_size (`int`, *optional*, defaults to 1408):
@@ -131,6 +133,7 @@ class Qwen2MoeConfig(PretrainedConfig):
         sliding_window=4096,
         max_window_layers=28,
         attention_dropout=0.0,
+        attention_qkv_bias=True,
         decoder_sparse_step=1,
         moe_intermediate_size=1408,
         shared_expert_intermediate_size=5632,
@@ -159,6 +162,7 @@ class Qwen2MoeConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.rope_theta = rope_theta
         self.attention_dropout = attention_dropout
+        self.attention_qkv_bias = attention_qkv_bias
 
         # MoE arguments
         self.decoder_sparse_step = decoder_sparse_step
