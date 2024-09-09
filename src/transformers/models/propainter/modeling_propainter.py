@@ -4066,7 +4066,7 @@ class ProPainterModel(ProPainterPreTrainedModel):
 
         >>> device = "cuda" if torch.cuda.is_available() else "cpu"
         >>> video_processor = ProPainterVideoProcessor()
-        >>> inputs = video_processor(video, masks = masks).to(device)
+        >>> inputs = video_processor(video, masks = masks, return_tensors="pt").to(device)
 
         >>> model = ProPainterModel.from_pretrained("ruffy369/ProPainter").to(device)
 
@@ -4090,7 +4090,7 @@ class ProPainterModel(ProPainterPreTrainedModel):
 
         >>> # Forward pass:
 
-        >>> inputs = video_processor(video, masks = masks).to(device)
+        >>> inputs = video_processor(video, masks = masks, return_tensors="pt").to(device)
 
         >>> # The first input in this always has a value for inference as its not utilised during training
         >>> with torch.no_grad():
@@ -4100,6 +4100,21 @@ class ProPainterModel(ProPainterPreTrainedModel):
         >>> reconstructed_frames = outputs["reconstruction"]
         >>> reconstructed_frames = [cv2.resize(frame, (240,432)) for frame in reconstructed_frames]
         >>> imageio.mimwrite(os.path.join(<PATH_TO_THE_FOLDER>, 'inpaint_out.mp4'), reconstructed_frames, fps=24, quality=7)
+        
+        >>> # Performing video outpainting:
+
+        >>> # Forward pass:
+
+        >>> inputs = video_processor(video, masks = masks, video_painting_mode = "video_outpainting", scale_hw = (1.0,1.2), return_tensors="pt").to(device)
+
+        >>> # The first input in this always has a value for inference as its not utilised during training
+        >>> with torch.no_grad():
+        ...     outputs = model(**inputs)
+
+        >>> # To visualize the reconstructed frames with object removal video inpainting:
+        >>> reconstructed_frames = outputs["reconstruction"]
+        >>> reconstructed_frames = [cv2.resize(frame, (240,512)) for frame in reconstructed_frames]
+        >>> imageio.mimwrite(os.path.join(<PATH_TO_THE_FOLDER>, 'outpaint_out.mp4'), reconstructed_frames, fps=24, quality=7)
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
