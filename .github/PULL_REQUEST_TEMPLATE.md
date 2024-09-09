@@ -52,6 +52,7 @@ Library:
 - tensorflow: @gante and @Rocketknight1
 - tokenizers: @ArthurZucker
 - trainer: @muellerzr and @SunMarc
+- chat templates: @Rocketknight1
 
 Integrations:
 
