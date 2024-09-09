@@ -17,7 +17,7 @@ Processor class for Mllama.
 """
 
 # TODO: update all docs
-
+import numpy as np
 from typing import Dict, List, Optional, Union
 
 # TODO: uncomment
@@ -54,6 +54,103 @@ class MllamaProcessorKwargs(ProcessingKwargs, total=False):
             "max_image_tiles": 4,
         },
     }
+
+
+def get_cross_attention_token_mask(input_ids: List[int], image_token_id: int) -> List[List[int]]:
+    """
+    Generate a cross-attention token mask for image tokens in the input sequence.
+
+    This function identifies the positions of image tokens in the input sequence and creates
+    a mask that defines which subsequent tokens each image token should attend to.
+
+    Args:
+        input_ids (List[int]): A list of token ids representing the input sequence.
+        image_token_id (int): The id of the token used to represent images in the sequence.
+
+    Returns:
+        List[List[int]]: A list of [start, end] pairs, where each pair represents the range
+        of tokens an image token should attend to.
+
+    Notes:
+        - If no image tokens are present, an empty list is returned.
+        - For a single image token, it attends to all subsequent tokens until the end of the sequence.
+        - For multiple image tokens, each attends to tokens up to the next image token or the end of the sequence.
+        - Consecutive image tokens are treated as a group and attend to all subsequent tokens together.
+    """
+
+    image_token_locations = [i for i, token in enumerate(input_ids) if token == image_token_id]
+    
+    if len(image_token_locations) == 0:
+        return []
+    
+    # only one image present, unmask until end of sequence
+    if len(image_token_locations) == 1:
+        return [[image_token_locations[0], -1]]
+
+    vision_masks = [[loc1, loc2] for loc1, loc2 in zip(image_token_locations[:-1], image_token_locations[1:])]
+
+    # last image will attend to all subsequent text
+    vision_masks.append([image_token_locations[-1], len(input_ids)])
+
+    # if there are two or more consecutive vision tokens,
+    # they should all attend to all subsequent
+    # text present
+    last_mask_end = vision_masks[-1][1]
+    for vision_mask in vision_masks[::-1]:
+        if vision_mask[0] == vision_mask[1] - 1:
+            vision_mask[1] = last_mask_end
+        last_mask_end = vision_mask[1]
+
+    return vision_masks
+
+
+def convert_sparse_cross_attention_mask_to_dense(
+    cross_attention_token_mask: List[List[List[int]]],
+    num_tiles: List[List[int]],
+    max_num_tiles: int,
+    length: int,
+) -> np.ndarray:
+    """
+    Convert the cross attention mask indices to corss attention mask 4D array.
+
+    This function takes a sparse representation of cross attention masks and converts it to a dense 4D numpy array.
+    The sparse representation is a nested list structure that defines attention ranges for each image in each batch item.
+
+    Args:
+        cross_attention_token_mask (List[List[List[int]]]): A nested list structure where:
+            - The outer list represents the batch dimension.
+            - The middle list represents different images within each batch item.
+            - The inner list contains pairs of integers [start, end] representing token ranges for each image.
+        num_tiles (List[List[int]]): A nested list structure specifying the number of tiles for each image in each batch item.
+        max_num_tiles (int): The maximum possible number of tiles.
+        length (int): The total sequence length of the input.
+
+    Returns:
+        np.ndarray: A 4D numpy array of shape (batch_size, length, max_num_images, max_num_tiles)
+            The array contains `1` where attention is allowed and `0` where it is not.
+
+    Note:
+        - Special handling is done for cases where the end token is -1, which is interpreted as attending to the end of the sequence.
+    """
+    
+    batch_size = len(cross_attention_token_mask)
+    max_num_images = max([len(masks) for masks in cross_attention_token_mask])
+
+    cross_attention_mask = np.zeros(
+        shape=(batch_size, length, max_num_images, max_num_tiles),
+        dtype=np.int64,
+    )
+
+    for sample_idx, (sample_masks, sample_num_tiles) in enumerate(zip(cross_attention_token_mask, num_tiles)):
+        for mask_idx, (locations, mask_num_tiles) in enumerate(zip(sample_masks, sample_num_tiles)):
+            if len(locations) == 2:
+                start, end = locations
+                end = min(end, length)
+                if end == -1:
+                    end = length
+                cross_attention_mask[sample_idx, start:end, mask_idx, :mask_num_tiles] = 1
+
+    return cross_attention_mask
 
 
 class MllamaProcessor(ProcessorMixin):
@@ -150,14 +247,10 @@ class MllamaProcessor(ProcessorMixin):
         common_kwargs = output_kwargs["common_kwargs"]
 
         # remove the return_tensors key modality kwargs
-        text_kwargs.pop("return_tensors", None)
         images_kwargs.pop("return_tensors", None)
 
         data = {}
-
-        # for data that can't be represented as tensors,
-        # because it stores nested objects of variable length
-        not_tensor_data = {}
+        additional_not_tensor_data = {}  # TODO: remove when modeling is updated
 
         if text is not None:
 
@@ -171,9 +264,6 @@ class MllamaProcessor(ProcessorMixin):
             encoding = self.tokenizer(text, **text_kwargs)
             data.update(encoding)
 
-            # create mask for vision tokens
-            cross_attention_token_mask = self.cross_attention_token_mask(encoding["input_ids"])
-            not_tensor_data["cross_attention_token_mask"] = cross_attention_token_mask
 
         if images is not None:
 
@@ -186,12 +276,30 @@ class MllamaProcessor(ProcessorMixin):
                 )
 
             image_features = self.image_processor(images, **images_kwargs)
-            not_tensor_data["num_tiles"] = image_features.pop("num_tiles")
+            additional_not_tensor_data["num_tiles"] = image_features.pop("num_tiles")
             data.update(image_features)
+
+        # Create cross attention mask
+        if images is not None and text is not None:
+        
+            cross_attention_token_mask = [
+                get_cross_attention_token_mask(token_ids, self.image_token_id)
+                for token_ids in encoding["input_ids"]
+            ]
+            cross_attention_mask = convert_sparse_cross_attention_mask_to_dense(
+                cross_attention_token_mask,
+                num_tiles=additional_not_tensor_data["num_tiles"],
+                max_num_tiles=self.image_processor.max_image_tiles,
+                length=max(len(input_ids) for input_ids in encoding["input_ids"]),
+            )
+            data["cross_attention_mask"] = cross_attention_mask
+            
+            # TODO: remove when modeling is updated
+            additional_not_tensor_data["cross_attention_token_mask"] = cross_attention_token_mask
 
         return_tensors = common_kwargs.pop("return_tensors", None)
         batch_encoding = BatchEncoding(data=data, tensor_type=return_tensors, **common_kwargs)
-        batch_encoding.update(not_tensor_data)
+        batch_encoding.update(additional_not_tensor_data)
 
         # fill missing keys with None
         for key in self.model_input_names:
@@ -218,35 +326,4 @@ class MllamaProcessor(ProcessorMixin):
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
-        return list(tokenizer_input_names + image_processor_input_names + ["cross_attention_token_mask"])
-
-    def cross_attention_token_mask(
-        self, input_ids: Union[List[int], List[List[int]]]
-    ) -> Union[List[List[int]], List[List[List[int]]]]:
-        if input_ids and isinstance(input_ids[0], list):
-            return [self.cross_attention_token_mask(t) for t in input_ids]
-
-        image_token_locations = [i for i, token in enumerate(input_ids) if token == self.image_token_id]
-        
-        if len(image_token_locations) == 0:
-            return []
-        
-        # only one image present, unmask until end of sequence
-        if len(image_token_locations) == 1:
-            return [[image_token_locations[0], -1]]
-
-        vision_masks = [[loc1, loc2] for loc1, loc2 in zip(image_token_locations[:-1], image_token_locations[1:])]
-
-        # last image will attend to all subsequent text
-        vision_masks.append([image_token_locations[-1], len(input_ids)])
-
-        # if there are two or more consecutive vision tokens,
-        # they should all attend to all subsequent
-        # text present
-        last_mask_end = vision_masks[-1][1]
-        for vision_mask in vision_masks[::-1]:
-            if vision_mask[0] == vision_mask[1] - 1:
-                vision_mask[1] = last_mask_end
-            last_mask_end = vision_mask[1]
-
-        return vision_masks
+        return list(tokenizer_input_names + image_processor_input_names + ["cross_attention_token_mask", "cross_attention_mask"])
