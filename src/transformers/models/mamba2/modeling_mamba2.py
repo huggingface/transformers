@@ -208,7 +208,6 @@ class Mamba2Mixer(nn.Module):
         self.activation = config.hidden_act
         self.act = ACT2FN[config.hidden_act]
 
-        self.norm_before_gate = config.norm_before_gate
         self.layer_norm_epsilon = config.layer_norm_epsilon
         self.rms_norm = config.rms_norm
 
@@ -347,7 +346,7 @@ class Mamba2Mixer(nn.Module):
                     outproj_bias=self.out_proj.bias,
                     headdim=self.head_dim,
                     ngroups=self.n_groups,
-                    norm_before_gate=self.norm_before_gate,
+                    norm_before_gate=False,
                     return_final_states=True,
                     **dt_limit_kwargs,
                 )
@@ -964,8 +963,8 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         **kwargs,
     ):
-        if input_ids.shape[1] == 0:
-            past_len = inputs_embeds.shape[1]
+        if inputs_embeds is not None:
+            past_len = inputs_embeds.shape[1] + input_ids.shape[1]
         else:
             past_len = input_ids.shape[1]
         if use_cache:
