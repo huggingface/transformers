@@ -48,7 +48,7 @@ if is_mamba_ssm_available():
     from mamba_ssm.ops.selective_scan_interface import selective_scan_fn
     from mamba_ssm.ops.triton.selective_state_update import selective_state_update
 
-    from .selective_scan_with_ln import mamba_inner_fn
+    from ...kernels.falcon_mamba import mamba_inner_fn
 else:
     selective_state_update, selective_scan_fn, mamba_inner_fn = None, None, None
 

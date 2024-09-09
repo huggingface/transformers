@@ -23,6 +23,9 @@ FILES_TO_FIND = [
     "kernels/rwkv/wkv_op.cpp",
     "kernels/deformable_detr/ms_deform_attn.h",
     "kernels/deformable_detr/cuda/ms_deform_im2col_cuda.cuh",
+    "kernels/falcon_mamba/cuda/selective_scan_with_ln.py",
+    "kernels/falcon_mamba/cuda/__init__.py",
+    "kernels/deformable_detr/cuda/ms_deform_im2col_cuda.cuh",
     "models/graphormer/algos_graphormer.pyx",
 ]
 
