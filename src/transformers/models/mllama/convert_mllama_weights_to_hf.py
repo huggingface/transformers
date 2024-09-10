@@ -232,7 +232,7 @@ def write_model(
             state_dict  [
                 new_key] =  [chunk.pop(key).contiguous().clone() for chunk in loaded][0][0].view(1)
             
-        else:
+        elif new_key != "":
             state_dict[
                 new_key  ] = torch.cat([chunk.pop(key).contiguous().clone() for chunk in loaded], dim=0)
 
