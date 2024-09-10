@@ -115,7 +115,7 @@ conversation_2 = [
         "content": [
             {"type": "image"},
             {"type": "text", "text": "What is shown in this image?"},
-            ],
+        ],
     },
 ]
 
