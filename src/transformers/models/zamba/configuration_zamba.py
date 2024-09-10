@@ -82,8 +82,6 @@ class ZambaConfig(PretrainedConfig):
             The id of the "beginning-of-sequence" token.
         eos_token_id (`int`, *optional*, defaults to 2):
             The id of the "end-of-sequence" token.
-        sliding_window (`int`, *optional*):
-            Sliding window attention window size. If not specified, will default to `None`.
         max_position_embeddings (`int`, *optional*, defaults to 4096):
             This value doesn't have any real effect. The maximum sequence length that this model is intended to be
             used with. It can be used with longer sequences, but performance may degrade.
@@ -140,7 +138,6 @@ class ZambaConfig(PretrainedConfig):
         pad_token_id=0,
         bos_token_id=1,
         eos_token_id=2,
-        sliding_window=None,
         max_position_embeddings=4096,
         attention_dropout=0.0,
         attn_layer_period=6,
@@ -163,7 +160,6 @@ class ZambaConfig(PretrainedConfig):
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.sliding_window = sliding_window
         self.max_position_embeddings = max_position_embeddings
         self.attention_dropout = attention_dropout
 
