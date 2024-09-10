@@ -28,3 +28,9 @@
     - local: in_translation
       title: Génération avec LLMs
   title: Tutoriels
+-sections:
+  local: task_summary
+    title: Ce que 🤗 Transformers peut faire
+  - local: tasks_explained
+      title: Comment 🤗 Transformers résout ces tâches
+  title: Guides conceptuels
