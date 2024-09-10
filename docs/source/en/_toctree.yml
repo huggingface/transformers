@@ -24,7 +24,9 @@
   - local: model_sharing
     title: Share your model
   - local: agents
-    title: Agents
+    title: Agents 101
+  - local: agents_advanced
+    title: Agents, supercharged - Multi-agents, External tools, and more
   - local: llm_tutorial
     title: Generation with LLMs
   - local: conversations
@@ -143,6 +145,8 @@
     title: Troubleshoot
   - local: gguf
     title: Interoperability with GGUF files
+  - local: tiktoken
+    title: Interoperability with TikToken files
   title: Developer guides
 - sections:
   - local: quantization/overview
@@ -490,6 +494,8 @@
         title: Nyströmformer
       - local: model_doc/olmo
         title: OLMo
+      - local: model_doc/olmoe
+        title: OLMoE
       - local: model_doc/open-llama
         title: Open-Llama
       - local: model_doc/opt
@@ -832,6 +838,8 @@
         title: LLaVA-NeXT
       - local: model_doc/llava_next_video
         title: LLaVa-NeXT-Video
+      - local: model_doc/llava_onevision
+        title: LLaVA-Onevision
       - local: model_doc/lxmert
         title: LXMERT
       - local: model_doc/matcha

@@ -27,7 +27,7 @@ from typing import Any, Dict, List, Optional, Tuple, TypedDict, Union
 import numpy as np
 
 from .dynamic_module_utils import custom_object_save
-from .image_utils import ChannelDimension, is_vision_available
+from .image_utils import ChannelDimension, is_vision_available, valid_images
 
 
 if is_vision_available():
@@ -390,6 +390,8 @@ class ProcessorMixin(PushToHubMixin):
             del output["image_processor"]
         if "feature_extractor" in output:
             del output["feature_extractor"]
+        if "chat_template" in output:
+            del output["chat_template"]
 
         # Some attributes have different names but containing objects that are not simple strings
         output = {
@@ -991,6 +993,50 @@ class ProcessorMixin(PushToHubMixin):
         return self.tokenizer.apply_chat_template(
             conversation, chat_template=chat_template, tokenize=tokenize, **kwargs
         )
+
+
+def _validate_images_text_input_order(images, text):
+    """
+    For backward compatibility: reverse the order of `images` and `text` inputs if they are swapped.
+    This method should only be called for processors where `images` and `text` have been swapped for uniformization purposes.
+    Note that this method assumes that two `None` inputs are valid inputs. If this is not the case, it should be handled
+    in the processor's `__call__` method before calling this method.
+    """
+
+    def _is_valid_text_input_for_processor(t):
+        if isinstance(t, str):
+            # Strings are fine
+            return True
+        elif isinstance(t, (list, tuple)):
+            # List are fine as long as they are...
+            if len(t) == 0:
+                # ... not empty
+                return False
+            for t_s in t:
+                return _is_valid_text_input_for_processor(t_s)
+        return False
+
+    def _is_valid(input, validator):
+        return validator(input) or input is None
+
+    images_is_valid = _is_valid(images, valid_images)
+    images_is_text = _is_valid_text_input_for_processor(images) if not images_is_valid else False
+
+    text_is_valid = _is_valid(text, _is_valid_text_input_for_processor)
+    text_is_images = valid_images(text) if not text_is_valid else False
+    # Handle cases where both inputs are valid
+    if images_is_valid and text_is_valid:
+        return images, text
+
+    # Handle cases where inputs need to and can be swapped
+    if (images is None and text_is_images) or (text is None and images_is_text) or (images_is_text and text_is_images):
+        logger.warning_once(
+            "You may have used the wrong order for inputs. `images` should be passed before `text`. "
+            "The `images` and `text` inputs will be swapped. This behavior will be deprecated in transformers v4.47."
+        )
+        return text, images
+
+    raise ValueError("Invalid input type. Check that `images` and/or `text` are valid inputs.")
 
 
 ProcessorMixin.push_to_hub = copy_func(ProcessorMixin.push_to_hub)
