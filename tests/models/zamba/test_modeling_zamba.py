@@ -658,7 +658,7 @@ class ZambaModelIntegrationTest(unittest.TestCase):
         output_sentence = self.tokenizer.decode(out[0, :])
         self.assertEqual(
             output_sentence,
-            "<|startoftext|>Hey how are you doing on this lovely evening? Canyon rins hugaughter glamour Rutgers Singh Hebrew cases Cats",
+            "<s> Hey how are you doing on this lovely evening? I hope you are all doing well. I am",
         )
 
         with torch.no_grad():
@@ -666,11 +666,11 @@ class ZambaModelIntegrationTest(unittest.TestCase):
 
         EXPECTED_LOGITS_NO_GRAD = torch.tensor(
             [
-                0.0140, -0.2246,  0.0408, -0.1016,  0.0471,  0.2715, -0.1465,  0.1631,
-               -0.2949, -0.0297,  0.0250, -0.5586, -0.2139, -0.1426, -0.1602,  0.1309,
-                0.0703,  0.2236,  0.1729, -0.2285, -0.1152, -0.1177, -0.1367,  0.0289,
-                0.1245,  0.2363,  0.0442,  0.1094, -0.1348, -0.2295,  0.1494, -0.3945,
-                0.1777, -0.4570, -0.0408,  0.2412,  0.1562, -0.1943,  0.2373, -0.0593
+                -7.9375,  8.1875,  1.3984, -6.0000, -7.9375, -7.9375, -7.9375, -7.9375,
+                -7.9375, -7.9375, -7.9375, -7.9375,  2.7500, 13.0625, -7.9375, -7.9375,
+                -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375,
+                -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375,
+                -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375
             ]
             , dtype=torch.float32)  # fmt: skip
 
@@ -679,6 +679,8 @@ class ZambaModelIntegrationTest(unittest.TestCase):
     @slow
     def test_simple_batched_generate_with_padding(self):
         self.model.to(torch_device)
+        self.tokenizer.add_special_tokens({"pad_token": "[PAD]"})
+        self.model.resize_token_embeddings(len(self.tokenizer))
 
         inputs = self.tokenizer(
             ["Hey how are you doing on this lovely evening?", "Tell me a story"], padding=True, return_tensors="pt"
@@ -687,33 +689,33 @@ class ZambaModelIntegrationTest(unittest.TestCase):
         output_sentences = self.tokenizer.batch_decode(out)
         self.assertEqual(
             output_sentences[0],
-            "<|startoftext|>Hey how are you doing on this lovely evening? Canyon rins hugaughter glamour Rutgers Singh Hebrew cases Cats",
+            "<s> Hey how are you doing on this lovely evening? I hope you are all doing well. I am",
         )
         self.assertEqual(
             output_sentences[1],
-            "<|pad|><|pad|><|pad|><|pad|><|pad|><|pad|><|startoftext|>Tell me a storyptus Nets Madison El chamadamodern updximVaparsed",
+            "[PAD][PAD][PAD][PAD][PAD][PAD]<s> Tell me a story about a time when you were in a difficult situation",
         )
 
         with torch.no_grad():
-            logits = self.model(input_ids=inputs["input_ids"]).logits
+            logits = self.model(input_ids=inputs["input_ids"], attention_mask=inputs["attention_mask"]).logits
 
         EXPECTED_LOGITS_NO_GRAD_0 = torch.tensor(
             [
-                0.0140, -0.2246,  0.0408, -0.1016,  0.0471,  0.2715, -0.1465,  0.1631,
-               -0.2949, -0.0297,  0.0250, -0.5586, -0.2139, -0.1426, -0.1602,  0.1309,
-                0.0703,  0.2236,  0.1729, -0.2285, -0.1152, -0.1177, -0.1367,  0.0289,
-                0.1245,  0.2363,  0.0442,  0.1094, -0.1348, -0.2295,  0.1494, -0.3945,
-                0.1777, -0.4570, -0.0408,  0.2412,  0.1562, -0.1943,  0.2373, -0.0593
+                -7.9375,  8.1250,  1.3594, -6.0000, -7.9375, -7.9375, -7.9375, -7.9375,
+                -7.9375, -7.9375, -7.9375, -7.9375,  2.7344, 13.0625, -7.9375, -7.9375,
+                -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375,
+                -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375,
+                -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375
             ]
             , dtype=torch.float32)  # fmt: skip
 
         EXPECTED_LOGITS_NO_GRAD_1 = torch.tensor(
             [
-               -0.1289,  0.2363, -0.4180, -0.0302, -0.0476,  0.0327,  0.2578,  0.0874,
-                0.1484,  0.2305, -0.1152, -0.1396, -0.1494, -0.1113, -0.0021, -0.2832,
-                0.2002, -0.2676,  0.0598, -0.1982, -0.2539, -0.1133, -0.1973,  0.2148,
-                0.0559,  0.1670,  0.1846,  0.1270,  0.1680, -0.1250, -0.2656, -0.2871,
-                0.2344,  0.2637,  0.0510, -0.1855,  0.2158, -0.1289,  0.1758,  0.0074
+               -6.3750,  3.4219,  0.6719, -5.0312, -8.5000, -8.5000, -8.5000, -8.5000,
+               -8.5000, -8.5000, -8.5000, -8.5000,  2.0625, 10.3750, -8.5000, -8.5000,
+               -8.5000, -8.5000, -8.5000, -8.5000, -8.5000, -8.5000, -8.5000, -8.5000,
+               -8.5000, -8.5000, -8.5000, -8.5000, -8.5000, -8.5000, -8.5000, -8.5000,
+               -8.5000, -8.5000, -8.5000, -8.5000, -8.5000, -8.5000, -8.5000, -8.5000
             ]
             , dtype=torch.float32)  # fmt: skip
 

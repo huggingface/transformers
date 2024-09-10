@@ -135,7 +135,7 @@ class ZambaConfig(PretrainedConfig):
         rms_norm_eps=1e-5,
         use_cache=True,
         num_logits_to_keep=1,
-        pad_token_id=0,
+        pad_token_id=None,
         bos_token_id=1,
         eos_token_id=2,
         max_position_embeddings=4096,
