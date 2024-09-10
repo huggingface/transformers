@@ -142,26 +142,6 @@ def contract_num_tokens_from_mult8(x, num_padding_patches):
     return x[:, :, slice_index]
 
 
-def build_encoder_attention_mask(
-    x: torch.Tensor,
-    ar: torch.Tensor,
-    ntok: int,
-    num_chunks: int,
-    n_heads: int,
-):
-    """
-    Build vision encoder attention mask that omits padding tokens.
-    """
-    masks = []
-    for arx in ar:
-        mask_i = torch.ones((num_chunks, x.shape[2], 1), dtype=x.dtype)
-        mask_i[: num_chunks, :ntok] = 0
-        mask_i = mask_i.view(num_chunks * x.shape[2], -1)
-        mask_i = mask_i @ mask_i.T * torch.finfo(x.dtype).min
-        mask_i = mask_i.unsqueeze(0)
-        masks.append(mask_i)
-    masks = torch.stack(masks).to(x.device).expand(-1, n_heads, -1, -1)
-    return masks
 
 
 @dataclass
@@ -655,7 +635,7 @@ class MllamaVisionModel(PreTrainedModel):
         hidden_state = torch.cat([class_embedding, hidden_state], dim=1)
         return hidden_state
 
-    def forward(self, pixel_values: torch.Tensor, aspect_ratio_ids: torch.Tensor) -> torch.Tensor:
+    def forward(self, pixel_values: torch.Tensor, aspect_ratio_ids: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
         batch_size, num_concurrent_media, num_tiles, num_channels, height, width = pixel_values.shape
 
         pixel_values = pixel_values.reshape(batch_size * num_concurrent_media * num_tiles, num_channels, height, width)
@@ -697,7 +677,6 @@ class MllamaVisionModel(PreTrainedModel):
         # Let's cache the mask per aspect_ratio_ids. Not sure I 100% got how they do it but alright
         # TODO: after aspect-ratio-ids can be used fix this place
         # attention_mask = self.cached_attention_mask(aspect_ratio_ids)
-        attention_mask = build_encoder_attention_mask(hidden_state, aspect_ratio_ids, num_patches, num_tiles, 1)
         hidden_state = hidden_state.view(batch_size * num_concurrent_media, -1, dim)
         output = self.transformer(
             hidden_state, attention_mask=attention_mask, output_hidden_states=True,
@@ -1647,7 +1626,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
         self,
         input_ids: torch.LongTensor = None,
         pixel_values: torch.FloatTensor = None,  # shape: [batch_size, num_images, num_tiles, channels, height, width]
-        num_tiles: Optional[List[List[int]]] = None,  # shape: [batch_size, num_images]; num tiles per image
+        vision_attention_mask: Optional[List[List[int]]] = None,  # shape: [batch_size, num_images]; num tiles per image
         aspect_ratio_ids:Optional[torch.Tensor] = None, 
         attention_mask: Optional[
             List[List[List[int]]]
@@ -1684,7 +1663,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
             if aspect_ratio_ids is None:
                 raise ValueError("`aspect_ratio_ids` must be provided if `pixel_values` is provided")
             # get vision tokens from vision model
-            cross_attention_states = self.vision_model(pixel_values, aspect_ratio_ids)
+            cross_attention_states = self.vision_model(pixel_values, aspect_ratio_ids, vision_attention_mask)
 
         cross_attention_mask, full_text_row_masked_out_mask = prepare_cross_attention_mask(
             cross_attention_mask,
