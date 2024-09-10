@@ -295,17 +295,13 @@ class MllamaVisionMLP(nn.Module):
 
 
 class MllamaVisionSdpaAttention(nn.Module):
-    def __init__(
-        self,
-        hidden_size: int,
-        num_attention_heads: int,
-    ):
+    def __init__(self,config):
         super().__init__()
 
-        self.embed_dim = hidden_size
-        self.num_heads = 16 # num_attention_heads
-        self.num_kv_heads = 16 #num_attention_heads
-        self.head_dim = hidden_size // num_attention_heads
+        self.embed_dim = config.hidden_size
+        self.num_heads = config.attention_heads
+        self.num_kv_heads = getattr(config, "num_kv_heads", config.attention_heads)
+        self.head_dim = config.hidden_size // config.attention_heads
 
         self.q_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim, bias=False)
         self.k_proj = nn.Linear(self.embed_dim, self.num_kv_heads * self.head_dim, bias=False)
@@ -352,7 +348,7 @@ class MllamaVisionEncoderLayer(nn.Module):
         self.is_gated = is_gated
         self.intermediate_size = config.intermediate_size
 
-        self.self_attn = MllamaVisionSdpaAttention(self.hidden_size, self.num_attention_heads)
+        self.self_attn = MllamaVisionSdpaAttention(config)
         self.mlp = MllamaVisionMLP(config)
 
         self.input_layernorm = nn.LayerNorm(self.hidden_size)
@@ -484,7 +480,6 @@ class MllamaVisionModel(PreTrainedModel):
         self.hidden_size = config.vision_input_dim
         self.in_channels = config.in_channels
         self.vision_selection_layers = config.return_intermediate
-        self.vision_selection_layers = [int(idx) for idx in self.vision_selection_layers.split(",")]
 
         self.image_size = [config.vision_chunk_size, config.vision_chunk_size]
         self.patch_size = [config.patch_size, config.patch_size]
@@ -1117,7 +1112,6 @@ class MllamaTextModel(PreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor = None,
-        cross_attention_states: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         cross_attention_states: Optional[torch.FloatTensor] = None,
@@ -1334,7 +1328,6 @@ class MllamaForCausalLM(PreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor = None,
-        cross_attention_states: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         cross_attention_states: Optional[torch.LongTensor] = None,
@@ -1392,7 +1385,6 @@ class MllamaForCausalLM(PreTrainedModel):
             cross_attention_states=cross_attention_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            cross_attention_states=cross_attention_states,
             cross_attention_mask=cross_attention_mask,
             full_text_row_masked_out_mask=full_text_row_masked_out_mask,
             past_key_values=past_key_values,
@@ -1570,7 +1562,6 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
         self,
         input_ids: torch.LongTensor = None,
         pixel_values: torch.FloatTensor = None,  # shape: [batch_size, num_images, num_tiles, channels, height, width]
-        aspect_ratio_ids: Optional[torch.Tensor] = None,  # shape: [batch_size, num_images, 2]
         num_tiles: Optional[List[List[int]]] = None,  # shape: [batch_size, num_images]; num tiles per image
         aspect_ratio_ids:Optional[torch.Tensor] = None, 
         attention_mask: Optional[
