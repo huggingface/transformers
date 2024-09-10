@@ -182,7 +182,8 @@ class MllamaProcessor(ProcessorMixin):
                 )
 
             image_features = self.image_processor(images, **images_kwargs)
-            not_tensor_data["num_tiles"] = image_features.pop("num_tiles")
+            import torch
+            not_tensor_data["num_tiles"] = torch.tensor(image_features.pop("num_tiles"), dtype=torch.long)
             data.update(image_features)
 
         return_tensors = common_kwargs.pop("return_tensors", None)

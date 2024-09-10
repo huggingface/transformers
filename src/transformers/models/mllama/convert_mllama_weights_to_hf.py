@@ -231,7 +231,6 @@ def write_model(
         elif "cross_attn_mlp_gate" in key or "cross_attn_attn_gate" in key:
             state_dict  [
                 new_key] =  [chunk.pop(key).contiguous().clone() for chunk in loaded][0][0].view(1)
-            
         elif new_key != "":
             state_dict[
                 new_key  ] = torch.cat([chunk.pop(key).contiguous().clone() for chunk in loaded], dim=0)
@@ -241,7 +240,9 @@ def write_model(
         #     param_count += v.numel()
         # print(f"Saving {filename} in {tmp_model_path}...")
         # torch.save(state_dict, os.path.join(tmp_model_path, filename))
-
+    state_dict["language_model.model.embed_tokens.weight"] = torch.cat(
+        [state_dict["language_model.model.embed_tokens.weight"], state_dict.pop("language_model.model.learnable_embedding.weight")], dim=0
+    )
     # Write configs
     index_dict["metadata"] = {"total_size": param_count * 2}
     write_json(index_dict, os.path.join(tmp_model_path, "pytorch_model.bin.index.json"))

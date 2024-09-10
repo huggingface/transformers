@@ -97,7 +97,7 @@ class MllamaVisionConfig(PretrainedConfig):
         projection_dim=4096,
         vision_input_dim=1280,
         vision_output_dim=7680,
-        return_intermediate="3,7,15,23,30",
+        return_intermediate=None,
         global_vision_layers=8,
         max_num_tiles=4, # same as vision max num chunks? yes ;-)
         norm_eps= 1.0e-5,
@@ -116,6 +116,8 @@ class MllamaVisionConfig(PretrainedConfig):
         self.patch_size = patch_size
         self.projection_dim = projection_dim
         self.vision_input_dim = vision_input_dim
+        if return_intermediate is None:
+            return_intermediate = [3,7,15,23,30]
         self.return_intermediate = return_intermediate
         self.global_vision_layers = global_vision_layers
         self.max_num_tiles = max_num_tiles
@@ -128,7 +130,6 @@ class MllamaVisionConfig(PretrainedConfig):
         self.attention_heads = n_heads
         self.intermediate_size = 4 * vision_input_dim
         self.hidden_act = hidden_act
-
 
 
     @classmethod
@@ -254,6 +255,7 @@ class MllamaTextConfig(PretrainedConfig):
         self.dropout=dropout
         self.hidden_activation=hidden_activation
         self.attention_bias = attention_bias
+        self.rope_type = "default"
         rope_config_validation(self)
 
         super().__init__(
