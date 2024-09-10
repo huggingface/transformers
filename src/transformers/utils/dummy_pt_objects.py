@@ -513,6 +513,17 @@ class WhisperTimeStampLogitsProcessor(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class TorchExportableModuleWithStaticCache(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+def convert_and_export_with_cache(*args, **kwargs):
+    requires_backends(convert_and_export_with_cache, ["torch"])
+
+
 ROPE_INIT_FUNCTIONS = None
 
 

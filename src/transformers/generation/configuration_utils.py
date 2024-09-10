@@ -57,9 +57,11 @@ if is_torch_available():
         QuantoQuantizedCache,
         SlidingWindowCache,
         StaticCache,
+        StaticCacheConfig,
     )
 
     NEEDS_CACHE_CONFIG["quantized"] = QuantizedCacheConfig
+    NEEDS_CACHE_CONFIG["static"] = StaticCacheConfig
     NEED_SETUP_CACHE_CLASSES_MAPPING = {
         "static": StaticCache,
         "offloaded_static": OffloadedStaticCache,
