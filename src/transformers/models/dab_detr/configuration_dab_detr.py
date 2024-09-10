@@ -198,7 +198,7 @@ class DABDETRConfig(PretrainedConfig):
         init_xavier_std=1.0,
         auxiliary_loss=False,
         position_embedding_type="sine",
-        # dilation=False,
+        dilation=False,
         class_cost=2,
         bbox_cost=5,
         giou_cost=2,
@@ -231,7 +231,6 @@ class DABDETRConfig(PretrainedConfig):
         # while keeping the default behavior the same.
         if use_timm_backbone and backbone_kwargs is None:
             backbone_kwargs = {}
-            dilation = False
             if dilation:
                 backbone_kwargs["output_stride"] = 16
             backbone_kwargs["out_indices"] = [1, 2, 3, 4]
