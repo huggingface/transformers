@@ -10,12 +10,13 @@ on:
       - run_amd_scheduled_ci_caller*
 
 jobs:
-  run_amd_ci:
-    name: AMD mi300
-    needs: build-docker-containers
-    if: (cancelled() != true) && ((github.event_name == 'workflow_run') || ((github.event_name == 'push') && (startsWith(github.ref_name, 'run_amd_push_ci_caller') || startsWith(github.ref_name, 'mi300-ci'))))
-    uses: ./.github/workflows/self-scheduled-amd.yml
+  model-ci:
+    name: Model CI
+    uses: ./.github/workflows/self-scheduled-amd-2.yml
     with:
-      gpu_flavor: mi300
+      job: run_models_gpu
       slack_report_channel: "#transformers-ci-daily-amd"
+      runner: mi300
+      docker: huggingface/transformers-pytorch-amd-gpu
+      ci_event: Daily CI
     secrets: inherit
