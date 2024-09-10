@@ -992,7 +992,7 @@ class WhisperGenerationMixin:
         # Stack back seek_outputs tensors after splitting them with the split_by_batch_index method
         outputs = {}
         for key in seek_outputs[0].keys():
-            if key == "sequences":
+            if key in ["sequences", "beam_indices"]:
                 outputs[key] = torch.stack([v[key] for v in seek_outputs], dim=0).to(device)
             elif key in ["scores", "encoder_attentions", "encoder_hidden_states", "logits"]:
                 outputs[key] = tuple(
