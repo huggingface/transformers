@@ -229,7 +229,7 @@ class Dinov2SelfAttention(nn.Module):
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 
         return outputs
-    
+
 
 # Copied from transformers.models.vit.modeling_vit.ViTSdpaSelfAttention with ViT->Dinov2
 class Dinov2SdpaSelfAttention(Dinov2SelfAttention):
@@ -320,12 +320,14 @@ class Dinov2Attention(nn.Module):
 
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
-    
+
+
 # Copied from transformers.models.vit.modeling_vit.ViTSdpaAttention with ViT->Dinov2
 class Dinov2SdpaAttention(Dinov2Attention):
     def __init__(self, config: Dinov2Config) -> None:
         super().__init__(config)
         self.attention = Dinov2SdpaSelfAttention(config)
+
 
 class Dinov2LayerScale(nn.Module):
     def __init__(self, config) -> None:
@@ -407,10 +409,12 @@ class Dinov2SwiGLUFFN(nn.Module):
         hidden = nn.functional.silu(x1) * x2
         return self.weights_out(hidden)
 
+
 DINOV2_ATTENTION_CLASSES = {
     "eager": Dinov2Attention,
     "sdpa": Dinov2SdpaAttention,
 }
+
 
 class Dinov2Layer(nn.Module):
     """This corresponds to the Block class in the original implementation."""
