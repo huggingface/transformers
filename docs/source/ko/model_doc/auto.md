@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # 자동 클래스[[auto-classes]]
 
-많은 경우, 사용하려는 아키텍처는 `from_pretrained()` 메서드에 제공하는 사전 훈련된 모델의 이름이나 경로로부터 유추할 수 있습니다. AutoClasses는 이러한 작업을 대신하여, 사전 훈련된 가중치/구성/어휘에 대한 이름/경로를 제공하면 자동으로 관련 모델을 가져오도록 도와줍니다.
+많은 경우, 사용하려는 아키텍처는 `from_pretrained()` 메소드에서 제공하는 사전 학습된 모델의 이름이나 경로로부터 유추할 수 있습니다. AutoClasses는 이 작업을 위해 존재하며, 사전 학습된 weight/config/vocabulary에 대한 이름/경로를 제공하면 자동으로 관련 모델을 가져오도록 도와줍니다.
 
 [`AutoConfig`], [`AutoModel`], [`AutoTokenizer`] 중 하나를 인스턴스화하면 해당 아키텍처의 클래스를 직접 생성합니다. 예를 들어,
 
@@ -25,13 +25,13 @@ rendered properly in your Markdown viewer.
 model = AutoModel.from_pretrained("google-bert/bert-base-cased")
 ```
 
-[`BertModel`]의 인스턴스인 모델을 생성합니다.
+위 코드는 [`BertModel`]의 인스턴스인 모델을 생성합니다.
 
 각 작업에 대해 하나의 `AutoModel` 클래스가 있으며, 각각의 백엔드(PyTorch, TensorFlow 또는 Flax)에 해당하는 클래스가 존재합니다.
 
-## Auto 클래스 확장[[extending-the-auto-classes]]
+## 자동 클래스 확장[[extending-the-auto-classes]]
 
-각 Auto 클래스는 사용자의 커스텀 클래스로 확장될 수 있는 메서드를 가지고 있습니다. 예를 들어, `NewModel`이라는 커스텀 모델 클래스를 정의했다면, `NewModelConfig`를 준비한 후 다음과 같이 Auto 클래스에 추가할 수 있습니다:
+각 자동 클래스는 사용자의 커스텀 클래스로 확장될 수 있는 메소드를 가지고 있습니다. 예를 들어, `NewModel`이라는 커스텀 모델 클래스를 정의했다면, `NewModelConfig`를 준비한 후 다음과 같이 자동 클래스에 추가할 수 있습니다:
 
 ```python
 from transformers import AutoConfig, AutoModel
@@ -40,7 +40,7 @@ AutoConfig.register("new-model", NewModelConfig)
 AutoModel.register(NewModelConfig, NewModel)
 ```
 
-그 후에는 평소처럼 Auto 클래스를 사용할 수 있게 됩니다!
+그 후에는 평소처럼 자동 클래스를 사용할 수 있게 됩니다!
 
 <Tip warning={true}>
 
@@ -72,7 +72,7 @@ AutoModel.register(NewModelConfig, NewModel)
 
 ## 일반적인 모델 클래스[[generic-model-classes]]
 
-다음 Auto 클래스들은 특정 헤드 없이 기본 모델 클래스를 인스턴스화하는 데 사용할 수 있습니다.
+다음 자동 클래스들은 특정 헤드 없이 기본 모델 클래스를 인스턴스화하는 데 사용할 수 있습니다.
 
 ### AutoModel[[transformers.AutoModel]]
 
@@ -88,7 +88,7 @@ AutoModel.register(NewModelConfig, NewModel)
 
 ## 일반적인 사전 학습 클래스[[generic-pretraining-classes]]
 
-다음 Auto 클래스들은 사전 훈련 헤드가 포함된 모델을 인스턴스화하는 데 사용할 수 있습니다.
+다음 자동 클래스들은 사전 학습 헤드가 포함된 모델을 인스턴스화하는 데 사용할 수 있습니다.
 
 ### AutoModelForPreTraining[[transformers.AutoModelForPreTraining]]
 
@@ -104,7 +104,7 @@ AutoModel.register(NewModelConfig, NewModel)
 
 ## 자연어 처리[[natural-language-processing]]
 
-다음 Auto 클래스들은 아래의 자연어 처리 작업에 사용할 수 있습니다.
+다음 자동 클래스들은 아래의 자연어 처리 작업에 사용할 수 있습니다.
 
 ### AutoModelForCausalLM[[transformers.AutoModelForCausalLM]]
 
@@ -220,7 +220,7 @@ AutoModel.register(NewModelConfig, NewModel)
 
 ## 컴퓨터 비전[[computer-vision]]
 
-다음 Auto 클래스들은 아래의 컴퓨터 비전 작업에 사용할 수 있습니다.
+다음 자동 클래스들은 아래의 컴퓨터 비전 작업에 사용할 수 있습니다.
 
 ### AutoModelForDepthEstimation[[transformers.AutoModelForDepthEstimation]]
 
@@ -296,7 +296,7 @@ AutoModel.register(NewModelConfig, NewModel)
 
 ## 오디오[[audio]]
 
-다음 Auto 클래스들은 아래의 오디오 작업에 사용할 수 있습니다.
+다음 자동 클래스들은 아래의 오디오 작업에 사용할 수 있습니다.
 
 ### AutoModelForAudioClassification[[transformers.AutoModelForAudioClassification]]
 
@@ -340,7 +340,7 @@ AutoModel.register(NewModelConfig, NewModel)
 
 ## 멀티모달[[multimodal]]
 
-다음 Auto 클래스들은 아래의 멀티모달 작업에 사용할 수 있습니다.
+다음 자동 클래스들은 아래의 멀티모달 작업에 사용할 수 있습니다.
 
 ### AutoModelForTableQuestionAnswering[[transformers.AutoModelForTableQuestionAnswering]]
 
