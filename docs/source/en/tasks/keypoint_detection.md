@@ -33,7 +33,7 @@ processor = AutoImageProcessor.from_pretrained("magic-leap-community/superpoint"
 model = SuperPointForKeypointDetection.from_pretrained("magic-leap-community/superpoint")
 ```
 
-Get the images. They look like following. 
+Let's test the model on the images below.
 
 <div style="display: flex; align-items: center;">
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg" 
