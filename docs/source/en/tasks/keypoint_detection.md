@@ -20,7 +20,7 @@ rendered properly in your Markdown viewer.
 
 Keypoint detection identifies and locates specific points of interest within an image. These keypoints, also known as landmarks, represent meaningful features of objects, such as facial features or object parts. These models take an image input and return the following outputs: 
 
-- **Keypoints and Scores**: Points of interest and how confidently they are predicted.
+- **Keypoints and Scores**: Points of interest and their confidence scores.
 - **Descriptors**: A representation of the image region surrounding each keypoint, capturing its texture, gradient, orientation and other properties.
 
 In this guide, we will show how to extract keypoints from images.
