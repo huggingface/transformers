@@ -263,7 +263,7 @@ For now, Transformers supports SDPA inference and training for the following arc
 * [XLM-RoBERTa](https://huggingface.co/docs/transformers/model_doc/xlm-roberta#transformers.XLMRobertaModel)
 * [XLM-RoBERTa-XL](https://huggingface.co/docs/transformers/model_doc/xlm-roberta-xl#transformers.XLMRobertaXLModel)
 * [YOLOS](https://huggingface.co/docs/transformers/model_doc/yolos#transformers.YolosModel)
-
+* [OPT](https://huggingface.co/docs/transformers/en/model_doc/opt)
 
 <Tip>
 
