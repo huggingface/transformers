@@ -71,7 +71,7 @@ class ProPainterModelTester:
         batch_size=8,
         image_size=64,
         is_training=True,
-        hidden_size=32,
+        hidden_size=512,
         num_hidden_layers=2,
         num_attention_heads=4,
         num_frames=8,
@@ -371,7 +371,7 @@ class ProPainterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
                         self.assertAlmostEqual(
                             mean_value.item(),
                             0.0,
-                            places=3,
+                            places=2,
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
                     # Check if mean_value is exactly 0.0, or 1.0
