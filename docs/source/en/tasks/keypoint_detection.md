@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 [[open-in-colab]]
 
-Keypoint Detection is a task used to identify and locate specific points of interest within an image. These keypoints, also known as landmarks, represent meaningful features of objects, such as facial landmarks, or object parts. These models take image input and return following outputs: 
+Keypoint detection identifies and locates specific points of interest within an image. These keypoints, also known as landmarks, represent meaningful features of objects, such as facial features or object parts. These models take an image input and return the following outputs: 
 
 - **Keypoints and Scores**: Points of interest and how confidently they are predicted.
 - **Descriptors**: A representation of the image region surrounding each keypoint, capturing its texture, gradient, orientation and other properties.
