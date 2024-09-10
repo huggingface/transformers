@@ -531,16 +531,16 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
             with torch.no_grad():
                 model(**inputs)[0]
-                
+
     def test_beam_search_output(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs()
         model = WhisperForConditionalGeneration(config).to(torch_device).eval()
 
         input_features = input_dict["input_features"]
-        
+
         # Perform beam search
         output = model.generate(input_features, num_beams=3, num_return_sequences=3, return_dict_in_generate=True, output_scores=True)
-        
+
         # Check if beam_indices and sequences_scores are in the output
         self.assertIn("beam_indices", output, "beam_indices not found in the output")
         self.assertIn("sequences_scores", output, "sequences_scores not found in the output")
