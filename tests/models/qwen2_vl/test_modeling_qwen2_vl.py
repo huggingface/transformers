@@ -307,7 +307,7 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
         pass
 
     @unittest.skip(
-        reason="Qwen2-VL can't do low-memory geenration because position IDs have extra dimension and split function doesn't work for that"
+        reason="Qwen2-VL can't do low-memory generation because position IDs have extra dimension and split function doesn't work for that"
     )
     def test_beam_search_low_memory(self):
         pass

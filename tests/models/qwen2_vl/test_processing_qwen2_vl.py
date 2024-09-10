@@ -36,7 +36,7 @@ class Qwen2VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
-        processor = Qwen2VLProcessor.from_pretrained("Qwen/Qwen2-VL-7B-Instruct")
+        processor = Qwen2VLProcessor.from_pretrained("Qwen/Qwen2-VL-7B-Instruct", patch_size=4)
         processor.save_pretrained(self.tmpdirname)
 
     def get_tokenizer(self, **kwargs):
@@ -110,7 +110,7 @@ class Qwen2VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertListEqual(list(inputs.keys()), processor.model_input_names)
 
     def test_image_processor_defaults_preserved_by_image_kwargs(self):
-        image_processor = self.get_component("image_processor", size=(234, 234))
+        image_processor = self.get_component("image_processor")
         tokenizer = self.get_component("tokenizer", max_length=117, padding="max_length")
 
         processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
@@ -120,12 +120,18 @@ class Qwen2VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_input = self.prepare_image_inputs()
 
         inputs = processor(text=input_str, images=image_input)
-        self.assertEqual(inputs["pixel_values"][0].shape[0], 1176)
+        self.assertEqual(inputs["pixel_values"].shape[0], 800)
 
     def test_kwargs_overrides_default_image_processor_kwargs(self):
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-        image_processor = self.get_component("image_processor", size=(234, 234))
+        image_processor = self.get_component(
+            "image_processor",
+            ize={
+                "min_pixels": 3000,
+                "max_pixels": 7000,
+            },
+        )
         tokenizer = self.get_component("tokenizer", max_length=117, padding="max_length")
 
         processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
@@ -134,8 +140,8 @@ class Qwen2VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()
 
-        inputs = processor(text=input_str, images=image_input, size=[224, 224])
-        self.assertEqual(inputs["pixel_values"][0].shape[0], 1176)
+        inputs = processor(text=input_str, images=image_input, size={"min_pixels": 1000, "max_pixels": 2000})
+        self.assertEqual(inputs["pixel_values"].shape[0], 80)
 
     def test_structured_kwargs_nested(self):
         image_processor = self.get_component("image_processor")
@@ -151,16 +157,18 @@ class Qwen2VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # Define the kwargs for each modality
         all_kwargs = {
             "common_kwargs": {"return_tensors": "pt"},
-            "images_kwargs": {"size": {"height": 214, "width": 214}},
-            "videos_kwargs": {"size": {"height": 214, "width": 214}},
+            "images_kwargs": {"size": {"min_pixels": 2000, "max_pixels": 12_000}},
+            "videos_kwargs": {"size": {"min_pixels": 1000, "max_pixels": 5_000}},
             "text_kwargs": {"padding": "max_length", "max_length": 76},
         }
 
         inputs = processor(text=input_str, images=image_input, videos=video_input, **all_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
 
-        self.assertEqual(inputs["pixel_values"].shape[1], 1176)
-        self.assertEqual(inputs["pixel_values_videos"].shape[1], 1176)
+        # qwen2-vl returns 2D pixel-values where the second dim has fixed size always
+        # which is (channel * self.temporal_patch_size * self.patch_size * self.patch_size)
+        self.assertEqual(inputs["pixel_values"].shape[0], 600)
+        self.assertEqual(inputs["pixel_values_videos"].shape[0], 3072)
         self.assertEqual(len(inputs["input_ids"][0]), 76)
 
     def test_structured_kwargs_nested_from_dict(self):
@@ -179,14 +187,16 @@ class Qwen2VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # Define the kwargs for each modality
         all_kwargs = {
             "common_kwargs": {"return_tensors": "pt"},
-            "images_kwargs": {"size": {"height": 214, "width": 214}},
-            "videos_kwargs": {"size": {"height": 214, "width": 214}},
+            "images_kwargs": {"size": {"min_pixels": 2000, "max_pixels": 12_000}},
+            "videos_kwargs": {"size": {"min_pixels": 1000, "max_pixels": 5_000}},
             "text_kwargs": {"padding": "max_length", "max_length": 76},
         }
 
+        # qwen2-vl returns 2D pixel-values where the second dim has fixed size always
+        # which is (channel * self.temporal_patch_size * self.patch_size * self.patch_size)
         inputs = processor(text=input_str, images=image_input, videos=video_input, **all_kwargs)
-        self.assertEqual(inputs["pixel_values"].shape[1], 1176)
-        self.assertEqual(inputs["pixel_values_videos"].shape[1], 1176)
+        self.assertEqual(inputs["pixel_values"].shape[0], 600)
+        self.assertEqual(inputs["pixel_values_videos"].shape[0], 3072)
         self.assertEqual(len(inputs["input_ids"][0]), 76)
 
     def test_unstructured_kwargs(self):
@@ -200,19 +210,19 @@ class Qwen2VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()
-        video_input = self.prepare_video_inputs() * 2
+        video_input = self.prepare_video_inputs()
         inputs = processor(
             text=input_str,
             images=image_input,
             videos=video_input,
             return_tensors="pt",
-            size={"height": 214, "width": 214},
+            size={"min_pixels": 1000, "max_pixels": 2000},
             padding="max_length",
             max_length=76,
         )
 
-        self.assertEqual(inputs["pixel_values"].shape[1], 1176)
-        self.assertEqual(inputs["pixel_values_videos"].shape[1], 1176)
+        self.assertEqual(inputs["pixel_values"].shape[0], 80)
+        self.assertEqual(inputs["pixel_values_videos"].shape[0], 9600)
         self.assertEqual(inputs["input_ids"].shape[1], 76)
 
     def test_unstructured_kwargs_batched(self):
@@ -232,17 +242,17 @@ class Qwen2VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             images=image_input,
             videos=video_input,
             return_tensors="pt",
-            size={"height": 214, "width": 214},
+            size={"min_pixels": 1000, "max_pixels": 2000},
             padding="longest",
             max_length=76,
         )
 
-        self.assertEqual(inputs["pixel_values"].shape[1], 1176)
-        self.assertEqual(inputs["pixel_values_videos"].shape[1], 1176)
+        self.assertEqual(inputs["pixel_values"].shape[0], 160)
+        self.assertEqual(inputs["pixel_values_videos"].shape[0], 19200)
         self.assertEqual(len(inputs["input_ids"][0]), 4)
 
     def test_image_processor_defaults_preserved_by_video_kwargs(self):
-        image_processor = self.get_component("image_processor", size=(234, 234))
+        image_processor = self.get_component("image_processor")
         tokenizer = self.get_component("tokenizer", max_length=117, padding="max_length")
 
         processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
@@ -252,10 +262,10 @@ class Qwen2VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         video_input = self.prepare_video_inputs()
 
         inputs = processor(text=input_str, videos=video_input)
-        self.assertEqual(inputs["pixel_values_videos"].shape[1], 1176)
+        self.assertEqual(inputs["pixel_values_videos"].shape[0], 9600)
 
     def test_kwargs_overrides_default_image_processor_kwargs_for_video(self):
-        image_processor = self.get_component("image_processor", size=(234, 234))
+        image_processor = self.get_component("image_processor")
         tokenizer = self.get_component("tokenizer", max_length=117, padding="max_length")
 
         processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
@@ -264,5 +274,5 @@ class Qwen2VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         input_str = "lower newer"
         video_input = self.prepare_video_inputs()
 
-        inputs = processor(text=input_str, videos=video_input, size=[224, 224])
-        self.assertEqual(inputs["pixel_values_videos"].shape[1], 1176)
+        inputs = processor(text=input_str, videos=video_input, size={"min_pixels": 1000, "max_pixels": 2000})
+        self.assertEqual(inputs["pixel_values_videos"].shape[0], 9600)

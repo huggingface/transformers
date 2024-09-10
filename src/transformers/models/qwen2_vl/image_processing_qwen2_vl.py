@@ -134,6 +134,9 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the image's (height, width) dimensions.
+        size (`Dict[str, int]`, *optional*, defaults to `self.size`):
+                Size of the image after resizing. Image is resized to contain no less pixels than size["min_pixels"], and
+                no more pixels than size["min_pixels"].
         resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
             Resampling filter to use when resizing the image.
         do_rescale (`bool`, *optional*, defaults to `True`):
@@ -165,6 +168,7 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
+        size: Dict[str, int] = None,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
@@ -192,13 +196,14 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
         self.patch_size = patch_size
         self.temporal_patch_size = temporal_patch_size
         self.merge_size = merge_size
-        self.size = {"min_pixels": min_pixels, "max_pixels": max_pixels}
+        self.size = size if size is not None else {"min_pixels": min_pixels, "max_pixels": max_pixels}
         self.do_convert_rgb = do_convert_rgb
 
     def _preprocess(
         self,
         images: Union[ImageInput, VideoInput],
         do_resize: bool = None,
+        size: Dict[str, int] = None,
         resample: PILImageResampling = None,
         do_rescale: bool = None,
         rescale_factor: float = None,
@@ -219,6 +224,9 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
                 Optional list of dictionaries containing additional information about vision inputs.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
+            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
+                Size of the image after resizing. Image is resized to contain no less pixels than size["min_pixels"], and
+                no more pixels than size["min_pixels"].
             resample (`PILImageResampling`, *optional*, defaults to `self.resample`):
                 Resampling filter to use if resizing the image. This can be one of the `PILImageResampling` enums.
             do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
@@ -266,12 +274,17 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
         processed_images = []
         for image in images:
             if do_resize:
+                # user may pass size as tuple or as dict with "height/width" similar to other models
+                # but qwen2-vl can't resize to given size, and expects a range of possible sizes from `min` to `max`
+                # thus we check if it's a dict and try to get values from user-passed kwargs
+                min_pixels = size.get("min_pixels", self.min_pixels) if isinstance(size, dict) else self.min_pixels
+                max_pixels = size.get("max_pixels", self.max_pixels) if isinstance(size, dict) else self.max_pixels
                 resized_height, resized_width = smart_resize(
                     height,
                     width,
                     factor=self.patch_size * self.merge_size,
-                    min_pixels=self.min_pixels,
-                    max_pixels=self.max_pixels,
+                    min_pixels=min_pixels,
+                    max_pixels=max_pixels,
                 )
                 image = resize(
                     image, size=(resized_height, resized_width), resample=resample, input_data_format=input_data_format
@@ -342,8 +355,8 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
             size (`Dict[str, int]`, *optional*, defaults to `self.size`):
-                Size of the image after resizing. Shortest edge of the image is resized to size["shortest_edge"], with
-                the longest edge resized to keep the input aspect ratio.
+                Size of the image after resizing. Image is resized to contain no less pixels than size["min_pixels"], and
+                no more pixels than size["min_pixels"].
             resample (`int`, *optional*, defaults to `self.resample`):
                 Resampling filter to use if resizing the image. This can be one of the enum `PILImageResampling`. Only
                 has an effect if `do_resize` is set to `True`.
@@ -417,6 +430,7 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
                 patches, image_grid_thw = self._preprocess(
                     image,
                     do_resize=do_resize,
+                    size=size,
                     resample=resample,
                     do_rescale=do_rescale,
                     rescale_factor=rescale_factor,
@@ -439,6 +453,7 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
                 patches, video_grid_thw = self._preprocess(
                     images,
                     do_resize=do_resize,
+                    size=size,
                     resample=resample,
                     do_rescale=do_rescale,
                     rescale_factor=rescale_factor,
