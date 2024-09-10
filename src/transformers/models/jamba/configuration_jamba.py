@@ -23,6 +23,11 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
+def _check_supported_offset(t_: str, period: int, offset: int):
+    if offset >= period:
+        raise ValueError(f"{t_} layer offset ({offset}) must be smaller than {t_} layer period ({period})")
+
+
 class JambaConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`JambaModel`]. It is used to instantiate a
@@ -188,18 +193,13 @@ class JambaConfig(PretrainedConfig):
 
         self.num_experts_per_tok = num_experts_per_tok
         self.num_experts = num_experts
-
-        assert (
-            attn_layer_offset < attn_layer_period
-        ), f"attention layer offset ({attn_layer_offset}) must be smaller than attention layer period ({attn_layer_period})"
-        assert (
-            expert_layer_offset < expert_layer_period
-        ), f"expert layer offset ({expert_layer_offset}) must be smaller than expert layer period ({expert_layer_period})"
-
         self.expert_layer_period = expert_layer_period
         self.expert_layer_offset = expert_layer_offset
         self.attn_layer_period = attn_layer_period
         self.attn_layer_offset = attn_layer_offset
+
+        _check_supported_offset("attention", self.attn_layer_period, self.attn_layer_offset)
+        _check_supported_offset("expert", self.expert_layer_period, self.expert_layer_offset)
 
         self.use_mamba_kernels = use_mamba_kernels
         self.mamba_d_state = mamba_d_state
