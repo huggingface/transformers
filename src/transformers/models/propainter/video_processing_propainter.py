@@ -358,7 +358,10 @@ class ProPainterVideoProcessor(BaseImageProcessor):
         size = get_size_dict(size, default_to_square=False)
         if "shortest_edge" in size:
             output_size = get_resize_output_image_size(
-                image, size["shortest_edge"], default_to_square=False, input_data_format=input_data_format
+                image,
+                size["shortest_edge"],
+                default_to_square=False,
+                input_data_format=input_data_format,
             )
         elif "height" in size and "width" in size:
             output_size = (size["height"], size["width"])

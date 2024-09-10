@@ -59,12 +59,25 @@ _EXPECTED_OUTPUT_SHAPE = ["batch_size", 80, 240, 432, 3]
 
 
 class ProPainterResidualBlock(nn.Module):
-    def __init__(self, config: ProPainterConfig, in_channels: int, channels: int, norm_fn: str = "group", stride: int = 1):
+    def __init__(
+        self,
+        config: ProPainterConfig,
+        in_channels: int,
+        channels: int,
+        norm_fn: str = "group",
+        stride: int = 1,
+    ):
         super().__init__()
 
         self.config = config
 
-        self.conv1 = nn.Conv2d(in_channels, channels, kernel_size=config.patch_size, padding=config.padding, stride=stride)
+        self.conv1 = nn.Conv2d(
+            in_channels,
+            channels,
+            kernel_size=config.patch_size,
+            padding=config.padding,
+            stride=stride,
+        )
         self.conv2 = nn.Conv2d(channels, channels, kernel_size=config.patch_size, padding=config.padding)
         self.relu = nn.ReLU(inplace=True)
 
@@ -138,7 +151,13 @@ class ProPainterBasicEncoder(nn.Module):
         else:
             raise ValueError(f"Unsupported normalization function: {norm_fn}")
 
-        self.conv1 = nn.Conv2d(3, config.in_channels[0], kernel_size=config.kernel_size[0], stride=config.strides[1], padding=3)
+        self.conv1 = nn.Conv2d(
+            3,
+            config.in_channels[0],
+            kernel_size=config.kernel_size[0],
+            stride=config.strides[1],
+            padding=3,
+        )
         self.relu1 = nn.ReLU(inplace=True)
 
         self.resblocks = [
@@ -189,11 +208,21 @@ class ProPainterBasicMotionEncoder(nn.Module):
         self.config = config
 
         corr_planes = config.corr_levels * (2 * config.corr_radius + 1) ** 2
-        self.conv_corr1 = nn.Conv2d(corr_planes, config.num_channels*2, 1, padding=0)
-        self.conv_corr2 = nn.Conv2d(config.num_channels*2, 192, config.patch_size, padding=config.padding)
+        self.conv_corr1 = nn.Conv2d(corr_planes, config.num_channels * 2, 1, padding=0)
+        self.conv_corr2 = nn.Conv2d(config.num_channels * 2, 192, config.patch_size, padding=config.padding)
         self.conv_flow1 = nn.Conv2d(2, config.num_channels, config.kernel_size[0], padding=3)
-        self.conv_flow2 = nn.Conv2d(config.num_channels, config.in_channels[0], config.patch_size, padding=config.padding)
-        self.conv = nn.Conv2d(config.in_channels[0] + 192, config.num_channels - 2, config.patch_size, padding=config.padding)
+        self.conv_flow2 = nn.Conv2d(
+            config.num_channels,
+            config.in_channels[0],
+            config.patch_size,
+            padding=config.padding,
+        )
+        self.conv = nn.Conv2d(
+            config.in_channels[0] + 192,
+            config.num_channels - 2,
+            config.patch_size,
+            padding=config.padding,
+        )
 
     def forward(self, flow, corr):
         hidden_states_corr = F.relu(self.conv_corr1(corr))
@@ -209,7 +238,12 @@ class ProPainterBasicMotionEncoder(nn.Module):
 
 
 class ProPainterSepConvGRU(nn.Module):
-    def __init__(self, config: ProPainterConfig, hidden_dim: int = 128, input_dim: int = 192 + 128):
+    def __init__(
+        self,
+        config: ProPainterConfig,
+        hidden_dim: int = 128,
+        input_dim: int = 192 + 128,
+    ):
         super().__init__()
         self.config = config
 
@@ -260,12 +294,17 @@ class ProPainterBasicUpdateBlock(nn.Module):
         self.config = config
         self.encoder = ProPainterBasicMotionEncoder(config)
         self.gru = ProPainterSepConvGRU(config, hidden_dim=hidden_dim, input_dim=input_dim + hidden_dim)
-        self.flow_head = ProPainterFlowHead(config, input_dim=hidden_dim, hidden_dim=config.num_channels*2)
+        self.flow_head = ProPainterFlowHead(config, input_dim=hidden_dim, hidden_dim=config.num_channels * 2)
 
         self.mask = nn.Sequential(
-            nn.Conv2d(config.num_channels, config.num_channels*2, config.patch_size, padding=config.padding),
+            nn.Conv2d(
+                config.num_channels,
+                config.num_channels * 2,
+                config.patch_size,
+                padding=config.padding,
+            ),
             nn.ReLU(inplace=True),
-            nn.Conv2d(config.num_channels*2, config.in_channels[0] * 9, 1, padding=0),
+            nn.Conv2d(config.num_channels * 2, config.in_channels[0] * 9, 1, padding=0),
         )
 
     def forward(self, net, inp, corr, flow):
@@ -299,7 +338,14 @@ def sample_point(img, coords):
 
 
 class ProPainterCorrBlock:
-    def __init__(self, config: ProPainterConfig, fmap1: torch.tensor, fmap2: torch.tensor, num_levels: int = 4, radius: int = 4):
+    def __init__(
+        self,
+        config: ProPainterConfig,
+        fmap1: torch.tensor,
+        fmap2: torch.tensor,
+        num_levels: int = 4,
+        radius: int = 4,
+    ):
         self.config = config
         self.num_levels = num_levels
         self.radius = radius
@@ -354,11 +400,15 @@ class ProPainterRaftOpticalFlow(nn.Module):
         self.hidden_dim = config.num_channels
         self.context_dim = config.num_channels
 
-        self.feature_network = ProPainterBasicEncoder(config, output_dim=self.hidden_dim + self.context_dim, norm_fn=config.norm_fn[2]) # norm_fn: "instance"
+        self.feature_network = ProPainterBasicEncoder(
+            config,
+            output_dim=self.hidden_dim + self.context_dim,
+            norm_fn=config.norm_fn[2],
+        )  # norm_fn: "instance"
         self.context_network = ProPainterBasicEncoder(
             config,
             output_dim=self.hidden_dim + self.context_dim,
-            norm_fn=config.norm_fn[0], # norm_fn: "batch"
+            norm_fn=config.norm_fn[0],  # norm_fn: "batch"
         )
         self.update_block = ProPainterBasicUpdateBlock(config, hidden_dim=self.hidden_dim)
 
@@ -497,21 +547,47 @@ class ProPainterP3DBlock(nn.Module):
 
 
 class ProPainterEdgeDetection(nn.Module):
-    def __init__(self, config: ProPainterConfig, in_channel: int = 2, out_channel: int = 1, intermediate_channel: int = 16):
+    def __init__(
+        self,
+        config: ProPainterConfig,
+        in_channel: int = 2,
+        out_channel: int = 1,
+        intermediate_channel: int = 16,
+    ):
         super().__init__()
 
         self.config = config
         self.projection = nn.Sequential(
-            nn.Conv2d(in_channel, intermediate_channel, config.patch_size, config.strides[0], config.padding),
+            nn.Conv2d(
+                in_channel,
+                intermediate_channel,
+                config.patch_size,
+                config.strides[0],
+                config.padding,
+            ),
             nn.LeakyReLU(0.2, inplace=True),
         )
 
         self.intermediate_layer_1 = nn.Sequential(
-            nn.Conv2d(intermediate_channel, intermediate_channel, config.patch_size, config.strides[0], config.padding),
+            nn.Conv2d(
+                intermediate_channel,
+                intermediate_channel,
+                config.patch_size,
+                config.strides[0],
+                config.padding,
+            ),
             nn.LeakyReLU(0.2, inplace=True),
         )
 
-        self.intermediate_layer_2 = nn.Sequential(nn.Conv2d(intermediate_channel, intermediate_channel, config.patch_size, config.strides[0], config.padding))
+        self.intermediate_layer_2 = nn.Sequential(
+            nn.Conv2d(
+                intermediate_channel,
+                intermediate_channel,
+                config.patch_size,
+                config.strides[0],
+                config.padding,
+            )
+        )
 
         self.relu = nn.LeakyReLU(0.01, inplace=True)
 
@@ -548,12 +624,30 @@ class ProPainterBidirectionalPropagationFlowComplete(nn.Module):
             )
 
             self.backbone[module] = nn.Sequential(
-                nn.Conv2d((2 + i) * config.num_channels, config.num_channels, config.patch_size, config.strides[0], config.padding),
+                nn.Conv2d(
+                    (2 + i) * config.num_channels,
+                    config.num_channels,
+                    config.patch_size,
+                    config.strides[0],
+                    config.padding,
+                ),
                 nn.LeakyReLU(negative_slope=0.1, inplace=True),
-                nn.Conv2d(config.num_channels, config.num_channels, config.patch_size, config.strides[0], config.padding),
+                nn.Conv2d(
+                    config.num_channels,
+                    config.num_channels,
+                    config.patch_size,
+                    config.strides[0],
+                    config.padding,
+                ),
             )
 
-        self.fusion = nn.Conv2d(2 * config.num_channels, config.num_channels, config.strides[0], config.padding, 0)
+        self.fusion = nn.Conv2d(
+            2 * config.num_channels,
+            config.num_channels,
+            config.strides[0],
+            config.padding,
+            0,
+        )
 
     def forward(self, hidden_state):
         """
@@ -691,19 +785,48 @@ class ProPainterBidirectionalPropagationInPaint(nn.Module):
         if self.learnable:
             for _, module in enumerate(self.propagation_list):
                 self.deform_align[module] = ProPainterDeformableAlignment(
-                    config, num_channels, num_channels, config.patch_size, padding=config.padding, deform_groups=16
+                    config,
+                    num_channels,
+                    num_channels,
+                    config.patch_size,
+                    padding=config.padding,
+                    deform_groups=16,
                 )
 
                 self.backbone[module] = nn.Sequential(
-                    nn.Conv2d(2 * num_channels + 2, num_channels, config.patch_size, config.strides[0], config.padding),
+                    nn.Conv2d(
+                        2 * num_channels + 2,
+                        num_channels,
+                        config.patch_size,
+                        config.strides[0],
+                        config.padding,
+                    ),
                     nn.LeakyReLU(negative_slope=0.2, inplace=True),
-                    nn.Conv2d(num_channels, num_channels, config.patch_size, config.strides[0], config.padding),
+                    nn.Conv2d(
+                        num_channels,
+                        num_channels,
+                        config.patch_size,
+                        config.strides[0],
+                        config.padding,
+                    ),
                 )
 
             self.fuse = nn.Sequential(
-                nn.Conv2d(2 * num_channels + 2, num_channels, config.patch_size, config.strides[0], config.padding),
+                nn.Conv2d(
+                    2 * num_channels + 2,
+                    num_channels,
+                    config.patch_size,
+                    config.strides[0],
+                    config.padding,
+                ),
                 nn.LeakyReLU(negative_slope=0.2, inplace=True),
-                nn.Conv2d(num_channels, num_channels, config.patch_size, config.strides[0], config.padding),
+                nn.Conv2d(
+                    num_channels,
+                    num_channels,
+                    config.patch_size,
+                    config.strides[0],
+                    config.padding,
+                ),
             )
 
     def forward(
@@ -816,7 +939,13 @@ class ProPainterBidirectionalPropagationInPaint(nn.Module):
 
 
 class ProPainterDeconv(nn.Module):
-    def __init__(self, input_channel: int, output_channel: int, kernel_size: int = 3, padding: int = 0):
+    def __init__(
+        self,
+        input_channel: int,
+        output_channel: int,
+        kernel_size: int = 3,
+        padding: int = 0,
+    ):
         super().__init__()
         self.conv = nn.Conv2d(
             input_channel,
@@ -879,13 +1008,37 @@ class ProPainterDeformableAlignment(ProPainterModulatedDeformConv2d):
 
         self.config = config
         self.conv_offset = nn.Sequential(
-            nn.Conv2d(2 * self.out_channels + 2 + 1 + 2, self.out_channels, config.patch_size, config.strides[0], config.padding),
+            nn.Conv2d(
+                2 * self.out_channels + 2 + 1 + 2,
+                self.out_channels,
+                config.patch_size,
+                config.strides[0],
+                config.padding,
+            ),
             nn.LeakyReLU(negative_slope=0.1, inplace=True),
-            nn.Conv2d(self.out_channels, self.out_channels, config.patch_size, config.strides[0], config.padding),
+            nn.Conv2d(
+                self.out_channels,
+                self.out_channels,
+                config.patch_size,
+                config.strides[0],
+                config.padding,
+            ),
             nn.LeakyReLU(negative_slope=0.1, inplace=True),
-            nn.Conv2d(self.out_channels, self.out_channels, config.patch_size, config.strides[0], config.padding),
+            nn.Conv2d(
+                self.out_channels,
+                self.out_channels,
+                config.patch_size,
+                config.strides[0],
+                config.padding,
+            ),
             nn.LeakyReLU(negative_slope=0.1, inplace=True),
-            nn.Conv2d(self.out_channels, 27 * self.deform_groups, config.patch_size, config.strides[0], config.padding),
+            nn.Conv2d(
+                self.out_channels,
+                27 * self.deform_groups,
+                config.patch_size,
+                config.strides[0],
+                config.padding,
+            ),
         )
 
     def forward(self, features_propagation, cond_features, flow):
@@ -921,13 +1074,37 @@ class ProPainterSecondOrderDeformableAlignment(ProPainterModulatedDeformConv2d):
         super().__init__(*args, **kwargs)
 
         self.conv_offset = nn.Sequential(
-            nn.Conv2d(3 * self.out_channels, self.out_channels, config.patch_size, config.strides[0], config.padding),
+            nn.Conv2d(
+                3 * self.out_channels,
+                self.out_channels,
+                config.patch_size,
+                config.strides[0],
+                config.padding,
+            ),
             nn.LeakyReLU(negative_slope=0.1, inplace=True),
-            nn.Conv2d(self.out_channels, self.out_channels, config.patch_size, config.strides[0], config.padding),
+            nn.Conv2d(
+                self.out_channels,
+                self.out_channels,
+                config.patch_size,
+                config.strides[0],
+                config.padding,
+            ),
             nn.LeakyReLU(negative_slope=0.1, inplace=True),
-            nn.Conv2d(self.out_channels, self.out_channels, config.patch_size, config.strides[0], config.padding),
+            nn.Conv2d(
+                self.out_channels,
+                self.out_channels,
+                config.patch_size,
+                config.strides[0],
+                config.padding,
+            ),
             nn.LeakyReLU(negative_slope=0.1, inplace=True),
-            nn.Conv2d(self.out_channels, 27 * self.deform_groups, config.patch_size, config.strides[0], config.padding),
+            nn.Conv2d(
+                self.out_channels,
+                27 * self.deform_groups,
+                config.patch_size,
+                config.strides[0],
+                config.padding,
+            ),
         )
 
     def forward(self, features, extra_features):
@@ -963,7 +1140,7 @@ class ProPainterRecurrentFlowCompleteNet(nn.Module):
         self.downsample = nn.Sequential(
             nn.Conv3d(
                 3,
-                config.num_channels//4,
+                config.num_channels // 4,
                 kernel_size=(1, 5, 5),
                 stride=config.strides,
                 padding=(0, 2, 2),
@@ -973,16 +1150,40 @@ class ProPainterRecurrentFlowCompleteNet(nn.Module):
         )
 
         self.encoder1 = nn.Sequential(
-            ProPainterP3DBlock(config.num_channels//4, config.num_channels//4, config.patch_size, config.strides[0], config.padding),
+            ProPainterP3DBlock(
+                config.num_channels // 4,
+                config.num_channels // 4,
+                config.patch_size,
+                config.strides[0],
+                config.padding,
+            ),
             nn.LeakyReLU(0.2, inplace=True),
-            ProPainterP3DBlock(config.num_channels//4, config.in_channels[0], config.patch_size, config.strides[1], config.padding),
+            ProPainterP3DBlock(
+                config.num_channels // 4,
+                config.in_channels[0],
+                config.patch_size,
+                config.strides[1],
+                config.padding,
+            ),
             nn.LeakyReLU(0.2, inplace=True),
         )  # 4x
 
         self.encoder2 = nn.Sequential(
-            ProPainterP3DBlock(config.in_channels[0], config.in_channels[0], config.patch_size, config.strides[0], config.padding),
+            ProPainterP3DBlock(
+                config.in_channels[0],
+                config.in_channels[0],
+                config.patch_size,
+                config.strides[0],
+                config.padding,
+            ),
             nn.LeakyReLU(0.2, inplace=True),
-            ProPainterP3DBlock(config.in_channels[0], self.config.num_channels, config.patch_size, config.strides[1], config.padding),
+            ProPainterP3DBlock(
+                config.in_channels[0],
+                self.config.num_channels,
+                config.patch_size,
+                config.strides[1],
+                config.padding,
+            ),
             nn.LeakyReLU(0.2, inplace=True),
         )  # 8x
 
@@ -1020,23 +1221,40 @@ class ProPainterRecurrentFlowCompleteNet(nn.Module):
         self.feature_propagation_module = ProPainterBidirectionalPropagationFlowComplete(config)
 
         self.decoder2 = nn.Sequential(
-            nn.Conv2d(self.config.num_channels, self.config.num_channels, config.patch_size, config.strides[0], config.padding),
+            nn.Conv2d(
+                self.config.num_channels,
+                self.config.num_channels,
+                config.patch_size,
+                config.strides[0],
+                config.padding,
+            ),
             nn.LeakyReLU(0.2, inplace=True),
             ProPainterDeconv(self.config.num_channels, config.in_channels[0], config.patch_size, 1),
             nn.LeakyReLU(0.2, inplace=True),
         )  # 4x
 
         self.decoder1 = nn.Sequential(
-            nn.Conv2d(config.in_channels[0], config.in_channels[0], config.patch_size, config.strides[0], config.padding),
+            nn.Conv2d(
+                config.in_channels[0],
+                config.in_channels[0],
+                config.patch_size,
+                config.strides[0],
+                config.padding,
+            ),
             nn.LeakyReLU(0.2, inplace=True),
-            ProPainterDeconv(config.in_channels[0], config.num_channels//4, config.patch_size, 1),
+            ProPainterDeconv(config.in_channels[0], config.num_channels // 4, config.patch_size, 1),
             nn.LeakyReLU(0.2, inplace=True),
         )  # 2x
 
         self.upsample = nn.Sequential(
-            nn.Conv2d(config.num_channels//4, config.num_channels//4, config.patch_size, padding=config.padding),
+            nn.Conv2d(
+                config.num_channels // 4,
+                config.num_channels // 4,
+                config.patch_size,
+                padding=config.padding,
+            ),
             nn.LeakyReLU(0.2, inplace=True),
-            ProPainterDeconv(config.num_channels//4, 2, config.patch_size, 1),
+            ProPainterDeconv(config.num_channels // 4, 2, config.patch_size, 1),
         )
 
         # edge loss
@@ -1133,7 +1351,13 @@ class ProPainterEncoder(nn.Module):
         negative_slope = 0.2
         self.layers = nn.ModuleList(
             [
-                nn.Conv2d(5, config.in_channels[0], kernel_size=config.patch_size, stride=config.strides[1], padding=config.padding),
+                nn.Conv2d(
+                    5,
+                    config.in_channels[0],
+                    kernel_size=config.patch_size,
+                    stride=config.strides[1],
+                    padding=config.padding,
+                ),
                 nn.LeakyReLU(negative_slope, inplace=True),
                 nn.Conv2d(
                     config.in_channels[0],
@@ -1151,15 +1375,49 @@ class ProPainterEncoder(nn.Module):
                     padding=config.padding,
                 ),
                 nn.LeakyReLU(negative_slope, inplace=True),
-                nn.Conv2d(config.num_channels, config.num_channels*2, kernel_size=config.patch_size, stride=1, padding=config.padding),
+                nn.Conv2d(
+                    config.num_channels,
+                    config.num_channels * 2,
+                    kernel_size=config.patch_size,
+                    stride=1,
+                    padding=config.padding,
+                ),
                 nn.LeakyReLU(negative_slope, inplace=True),
-                nn.Conv2d(config.num_channels*2, config.hidden_size-config.num_channels, kernel_size=config.patch_size, stride=1, padding=config.padding, groups=1),
+                nn.Conv2d(
+                    config.num_channels * 2,
+                    config.hidden_size - config.num_channels,
+                    kernel_size=config.patch_size,
+                    stride=1,
+                    padding=config.padding,
+                    groups=1,
+                ),
                 nn.LeakyReLU(negative_slope, inplace=True),
-                nn.Conv2d(config.hidden_size+config.num_channels, config.hidden_size, kernel_size=config.patch_size, stride=1, padding=config.padding, groups=2),
+                nn.Conv2d(
+                    config.hidden_size + config.num_channels,
+                    config.hidden_size,
+                    kernel_size=config.patch_size,
+                    stride=1,
+                    padding=config.padding,
+                    groups=2,
+                ),
                 nn.LeakyReLU(negative_slope, inplace=True),
-                nn.Conv2d(config.hidden_size+config.num_channels*2, config.hidden_size-config.num_channels, kernel_size=config.patch_size, stride=1, padding=config.padding, groups=4),
+                nn.Conv2d(
+                    config.hidden_size + config.num_channels * 2,
+                    config.hidden_size - config.num_channels,
+                    kernel_size=config.patch_size,
+                    stride=1,
+                    padding=config.padding,
+                    groups=4,
+                ),
                 nn.LeakyReLU(negative_slope, inplace=True),
-                nn.Conv2d(config.hidden_size+config.num_channels, config.num_channels*2, kernel_size=config.patch_size, stride=1, padding=config.padding, groups=8),
+                nn.Conv2d(
+                    config.hidden_size + config.num_channels,
+                    config.num_channels * 2,
+                    kernel_size=config.patch_size,
+                    stride=1,
+                    padding=config.padding,
+                    groups=8,
+                ),
                 nn.LeakyReLU(negative_slope, inplace=True),
                 nn.Conv2d(
                     config.hidden_size,
@@ -1198,7 +1456,11 @@ class ProPainterSoftSplit(nn.Module):
         self.kernel_size = config.kernel_size
         self.stride = config.stride
         self.padding = config.padding_inpaint_generator
-        self.unfold = nn.Unfold(kernel_size=config.kernel_size, stride=config.stride, padding=config.padding_inpaint_generator)
+        self.unfold = nn.Unfold(
+            kernel_size=config.kernel_size,
+            stride=config.stride,
+            padding=config.padding_inpaint_generator,
+        )
         input_features = reduce((lambda x, y: x * y), config.kernel_size) * config.num_channels
         self.embedding = nn.Linear(input_features, config.hidden_size)
 
@@ -1228,7 +1490,13 @@ class ProPainterSoftComp(nn.Module):
         self.kernel_size = config.kernel_size
         self.stride = config.stride
         self.padding = config.padding_inpaint_generator
-        self.bias_conv = nn.Conv2d(config.num_channels, config.num_channels, kernel_size=config.patch_size, stride=1, padding=config.padding)
+        self.bias_conv = nn.Conv2d(
+            config.num_channels,
+            config.num_channels,
+            kernel_size=config.patch_size,
+            stride=1,
+            padding=config.padding,
+        )
 
     def forward(self, hidden_state, timestep, output_size):
         num_batch_, _, _, _, channel_ = hidden_state.shape
@@ -1642,7 +1910,12 @@ class ProPainterSparseWindowAttention(nn.Module):
 
 
 class ProPainterFusionFeedForward(nn.Module):
-    def __init__(self, hidden_size: int, hidden_dim: int = 1960, token_to_token_params: Dict = None):
+    def __init__(
+        self,
+        hidden_size: int,
+        hidden_dim: int = 1960,
+        token_to_token_params: Dict = None,
+    ):
         super().__init__()
         # We set hidden_dim as a default to 1960
         self.fc1 = nn.Sequential(nn.Linear(hidden_size, hidden_dim))
@@ -1759,7 +2032,7 @@ class ProPainterTemporalSparseTransformer(nn.Module):
         window_size: Tuple[int, int],
         pool_size: Tuple[int, int],
         num_hidden_layers: int,
-        token_to_token_params: Dict=None,
+        token_to_token_params: Dict = None,
     ):
         super().__init__()
         blocks = []
@@ -1829,7 +2102,12 @@ class ProPainterInpaintGenerator(nn.Module):
 
         # decoder
         self.decoder = nn.Sequential(
-            ProPainterDeconv(config.num_channels, config.num_channels, kernel_size=config.patch_size, padding=config.padding),
+            ProPainterDeconv(
+                config.num_channels,
+                config.num_channels,
+                kernel_size=config.patch_size,
+                padding=config.padding,
+            ),
             nn.LeakyReLU(0.2, inplace=True),
             nn.Conv2d(
                 config.num_channels,
@@ -1839,9 +2117,20 @@ class ProPainterInpaintGenerator(nn.Module):
                 padding=config.padding,
             ),
             nn.LeakyReLU(0.2, inplace=True),
-            ProPainterDeconv(config.in_channels[0], config.in_channels[0], kernel_size=config.patch_size, padding=config.padding),
+            ProPainterDeconv(
+                config.in_channels[0],
+                config.in_channels[0],
+                kernel_size=config.patch_size,
+                padding=config.padding,
+            ),
             nn.LeakyReLU(0.2, inplace=True),
-            nn.Conv2d(config.in_channels[0], out_channels=3, kernel_size=config.patch_size, stride=config.strides[0], padding=config.padding),
+            nn.Conv2d(
+                config.in_channels[0],
+                out_channels=3,
+                kernel_size=config.patch_size,
+                stride=config.strides[0],
+                padding=config.padding,
+            ),
         )
 
         # soft split and soft composition
@@ -2260,7 +2549,7 @@ class ProPainterDiscriminator(nn.Module):
     ):
         super().__init__()
         self.config = config
-        num_features = config.num_channels//4
+        num_features = config.num_channels // 4
 
         self.conv = nn.Sequential(
             spectral_norm(
@@ -2449,7 +2738,13 @@ class ProPainterLpips(nn.Module):
         self.config = config
         self.scaling_layer = ProPainterScalingLayer()
 
-        self.num_channels = [config.num_channels//2, config.num_channels, config.num_channels*2, config.num_channels*4, config.num_channels*4]
+        self.num_channels = [
+            config.num_channels // 2,
+            config.num_channels,
+            config.num_channels * 2,
+            config.num_channels * 4,
+            config.num_channels * 4,
+        ]
         self.length = len(self.num_channels)
 
         self.net = ProPainterVgg16()
@@ -2520,7 +2815,12 @@ class ProPainterAdversarialLoss(nn.Module):
     https://arxiv.org/abs/1711.10337
     """
 
-    def __init__(self, type: str = "nsgan", target_real_label: float = 1.0, target_fake_label: float = 0.0):
+    def __init__(
+        self,
+        type: str = "nsgan",
+        target_real_label: float = 1.0,
+        target_fake_label: float = 0.0,
+    ):
         r"""
         type = nsgan | lsgan | hinge
         """
