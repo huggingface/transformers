@@ -221,7 +221,7 @@ def write_model(
             weight = torch.cat([chunk.pop(key) for chunk in loaded], dim=0)
             k, v = weight.chunk(2, dim=0)
             state_dict[new_key.replace("k|v", "k")] = k.clone()
-            state_dict[new_key.replace("k|v", "v")] = v .clone()
+            state_dict[new_key.replace("k|v", "v")] = v.clone()
         elif "layernorm" in new_key:
             state_dict = {
                 new_key  : [chunk.pop(key) for chunk in loaded][0].clone()
@@ -286,7 +286,7 @@ def write_model(
     gc.collect()
 
 
-    mllama_model = MllamaForConditionalGeneration.from_pretrained(tmp_model_path, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True, ignore_mismatched_sizes=True)
+    mllama_model = MllamaForConditionalGeneration.from_pretrained(tmp_model_path, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True)
     # Avoid saving this as part of the config.
     del mllama_model.config._name_or_path
     mllama_model.config.torch_dtype = torch.float16  # not sure about this.
