@@ -19,12 +19,10 @@
 # limitations under the License.
 """PyTorch Zamba model."""
 
-import inspect
 import math
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
-import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
@@ -34,6 +32,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...modeling_attn_mask_utils import (
     AttentionMaskConverter,
 )
+from ...modeling_flash_attention_utils import _flash_attention_forward
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
@@ -55,9 +54,6 @@ from ...utils.import_utils import (
 from .configuration_zamba import ZambaConfig
 
 
-from ...modeling_flash_attention_utils import _flash_attention_forward
-
-
 if is_mamba_ssm_available():
     from mamba_ssm.ops.selective_scan_interface import mamba_inner_fn, selective_scan_fn
     from mamba_ssm.ops.triton.selective_state_update import selective_state_update
@@ -77,8 +73,6 @@ is_fast_path_available = all(
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "ZambaConfig"
-
-
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->Zamba
@@ -392,7 +386,7 @@ class ZambaFlashAttention2(ZambaAttention):
         value_states = value_states.transpose(1, 2)
         softmax_scale = 1 / (query_states.shape[-1] / 2) ** 0.5
 
-        attn_output =_flash_attention_forward(
+        attn_output = _flash_attention_forward(
             query_states,
             key_states,
             value_states,
@@ -409,7 +403,6 @@ class ZambaFlashAttention2(ZambaAttention):
             attn_weights = None
 
         return attn_output, attn_weights, past_key_value
-
 
 
 # Adapted from transformers.models.mistral.modeling_mistral.MistralAttention:
@@ -501,6 +494,7 @@ ZAMBA_ATTENTION_CLASSES = {
     "sdpa": ZambaSdpaAttention,
 }
 
+
 # fmt: off
 class ZambaMambaMixer(nn.Module):
     """
@@ -513,7 +507,7 @@ class ZambaMambaMixer(nn.Module):
     - Added multi-head: the output of `self.in_proj` is split into `self.n_mamba_heads` heads, and each head
     undergoes an independent forward pass, identical to the original `MambaMixer`, up until the pre-activations of
     `self.out_proj`. The pre-activations, coming from different mamba heads, are then concatenated and fed into `self.out_proj`.
-    - Added `attention_mask` for batched inference: this tensor multiplies input and output of the convolution layer, setting 
+    - Added `attention_mask` for batched inference: this tensor multiplies input and output of the convolution layer, setting
     to zero embeddings associated with `attention_mask == 0` thus preventing the layer to attend to such tokens.
     """
 
@@ -745,7 +739,7 @@ class ZambaMambaMixer(nn.Module):
 
         time_step, B, C = torch.split(
             ssm_parameters, [self.time_step_rank, self.ssm_state_size, self.ssm_state_size], dim=-1
-        ) 
+        )
         discrete_time_step = (self.dt_proj_weight[:, None] @ time_step.transpose(-1, -2)) + self.dt_proj_bias[
             :, None, :, None
         ]
@@ -790,11 +784,13 @@ class ZambaMambaMixer(nn.Module):
         return self.slow_forward(hidden_states, cache_params, attention_mask=attention_mask)
 # fmt: on
 
+
 class ZambaMLP(nn.Module):
     """
     Adapted from transformers.models.gemma.modeling_gemma.GemmaMLP, with the flipped convention:
     `up_proj` <-> `gate_proj`.
     """
+
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -838,8 +834,8 @@ class ZambaAttentionDecoderLayer(nn.Module):
         Args:
             hidden_states (`torch.FloatTensor`): output of previous Mamba layer of shape `(batch, seq_len, embed_dim)`
             original_hidden_states (`torch.FloatTensor`): word embedding output of shape `(batch, seq_len, embed_dim)`.
-                This is concatenated with `hidden_states` (which is the output of the previous (mamba) layer). The 
-                concatenated tensor is then used as input of the pre-attention RMSNorm 
+                This is concatenated with `hidden_states` (which is the output of the previous (mamba) layer). The
+                concatenated tensor is then used as input of the pre-attention RMSNorm
                 (see fig. 2 in https://arxiv.org/pdf/2405.16712).
             attention_mask (`torch.FloatTensor`, *optional*): attention mask of size
                 `(batch, sequence_length)` where padding elements are indicated by 0.
@@ -947,8 +943,8 @@ class ZambaMambaDecoderLayer(nn.Module):
             outputs += (past_key_value,)
 
         return outputs
-    
-    
+
+
 class HybridLayer(nn.Module):
     def __init__(self, shared_transf: ZambaAttentionDecoderLayer, linear: nn.Linear, mamba: ZambaMambaDecoderLayer):
         super().__init__()
@@ -972,7 +968,7 @@ class HybridLayer(nn.Module):
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            original_hidden_states (`torch.FloatTensor`): word embedding output that will be concatenated with 
+            original_hidden_states (`torch.FloatTensor`): word embedding output that will be concatenated with
             hidden activations to form the input of the shared transformer layer.
             layer_idx (`int`): layer number.
             attention_mask (`torch.FloatTensor`, *optional*): attention mask of size
@@ -989,32 +985,32 @@ class HybridLayer(nn.Module):
         """
 
         layer_outputs = self.shared_transf(
-                    hidden_states,
-                    original_hidden_states=original_hidden_states,
-                    layer_idx=layer_idx,
-                    attention_mask=causal_mask,
-                    position_ids=position_ids,
-                    past_key_value=past_key_value,
-                    output_attentions=output_attentions,
-                    use_cache=use_cache,
-                    cache_position=cache_position,
-                )
-        
+            hidden_states,
+            original_hidden_states=original_hidden_states,
+            layer_idx=layer_idx,
+            attention_mask=causal_mask,
+            position_ids=position_ids,
+            past_key_value=past_key_value,
+            output_attentions=output_attentions,
+            use_cache=use_cache,
+            cache_position=cache_position,
+        )
+
         transformer_hidden_states = layer_outputs[0]
-                
+
         transformer_hidden_states = self.linear(transformer_hidden_states)
-        
+
         layer_outputs = self.mamba(
-                    hidden_states,
-                    transformer_hidden_states=transformer_hidden_states,
-                    attention_mask=attention_mask,
-                    position_ids=position_ids,
-                    past_key_value=past_key_value,
-                    output_attentions=output_attentions,
-                    use_cache=use_cache,
-                    cache_position=cache_position,
-                )
-        
+            hidden_states,
+            transformer_hidden_states=transformer_hidden_states,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_value=past_key_value,
+            output_attentions=output_attentions,
+            use_cache=use_cache,
+            cache_position=cache_position,
+        )
+
         return layer_outputs
 
 
@@ -1179,7 +1175,7 @@ class ZambaModel(ZambaPreTrainedModel):
                 mamba_layers.append(ZambaMambaDecoderLayer(config, layer_idx=i))
         self.mamba_layers = nn.ModuleList(mamba_layers)
         self.linear_layers = nn.ModuleList(linear_layers)
-        
+
         mamba_layers = iter(self.mamba_layers)
         linear_layers = iter(self.linear_layers)
         self.layers = []
@@ -1349,7 +1345,8 @@ class ZambaModel(ZambaPreTrainedModel):
 
         return causal_mask
 
-# Copied from transformers.models.jamba.modeling_jamba.JambaForCausalLM with Jamba->Zamba, JAMBA->ZAMBA
+
+# Adapted from transformers.models.jamba.modeling_jamba.JambaForCausalLM with Jamba->Zamba, JAMBA->ZAMBA
 class ZambaForCausalLM(ZambaPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -1358,7 +1355,7 @@ class ZambaForCausalLM(ZambaPreTrainedModel):
         self.model = ZambaModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-        
+
         # Initialize weights and apply final processing
         self.post_init()
 
