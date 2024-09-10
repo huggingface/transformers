@@ -135,8 +135,8 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the image's (height, width) dimensions.
         size (`Dict[str, int]`, *optional*, defaults to `self.size`):
-                Size of the image after resizing. Image is resized to contain no less pixels than size["min_pixels"], and
-                no more pixels than size["min_pixels"].
+            Size of the image after resizing. Image is resized to contain no less pixels than size["min_pixels"], and
+            no more pixels than size["min_pixels"].
         resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
             Resampling filter to use when resizing the image.
         do_rescale (`bool`, *optional*, defaults to `True`):
