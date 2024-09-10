@@ -17,7 +17,6 @@
 import unittest
 
 import numpy as np
-import pytest
 from datasets import load_dataset
 from huggingface_hub import hf_hub_download
 
@@ -183,18 +182,19 @@ class Mask2FormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
 
     def comm_get_image_processing_inputs(
         self,
+        image_processor_tester,
         with_segmentation_maps=False,
         is_instance_map=False,
         segmentation_type="np",
         numpify=False,
         input_data_format=None,
     ):
-        image_processing = self.image_processing_class(**self.image_processor_dict)
+        image_processing = self.image_processing_class(**image_processor_tester.prepare_image_processor_dict())
         # prepare image and target
-        num_labels = self.image_processor_tester.num_labels
+        num_labels = image_processor_tester.num_labels
         annotations = None
         instance_id_to_semantic_id = None
-        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=numpify)
+        image_inputs = image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=numpify)
         if with_segmentation_maps:
             high = num_labels
             if is_instance_map:
@@ -208,6 +208,9 @@ class Mask2FormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
             ]
             if segmentation_type == "pil":
                 annotations = [Image.fromarray(annotation) for annotation in annotations]
+
+        if input_data_format is ChannelDimension.FIRST and numpify:
+            image_inputs = [np.moveaxis(img, -1, 0) for img in image_inputs]
 
         inputs = image_processing(
             image_inputs,
@@ -242,12 +245,16 @@ class Mask2FormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
             input_data_format=None,
             do_resize=True,
         ):
-            self.image_processor_tester.num_channels = num_channels
-            self.image_processor_tester.do_resize = do_resize
-            self.image_processor_tester.image_mean = [0.5] * num_channels
-            self.image_processor_tester.image_std = [0.5] * num_channels
+            image_processor_tester = Mask2FormerImageProcessingTester(
+                self,
+                num_channels=num_channels,
+                do_resize=do_resize,
+                image_mean=[0.5] * num_channels,
+                image_std=[0.5] * num_channels,
+            )
 
             inputs = self.comm_get_image_processing_inputs(
+                image_processor_tester=image_processor_tester,
                 with_segmentation_maps=True,
                 is_instance_map=is_instance_map,
                 segmentation_type=segmentation_type,
@@ -269,14 +276,17 @@ class Mask2FormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         common(is_instance_map=True)
         common(is_instance_map=False, segmentation_type="pil")
         common(is_instance_map=True, segmentation_type="pil")
+
         common(num_channels=1, numpify=True)
+        common(num_channels=1, numpify=True, input_data_format=ChannelDimension.FIRST)
         common(num_channels=2, numpify=True, input_data_format=ChannelDimension.LAST)
         common(num_channels=5, numpify=True, input_data_format=ChannelDimension.LAST, do_resize=False)
+        common(num_channels=5, numpify=True, input_data_format=ChannelDimension.FIRST, do_resize=False)
 
-        with pytest.raises(ValueError, match="Unable to infer channel dimension format"):
+        with self.assertRaisesRegex(ValueError, expected_regex="Unable to infer channel dimension format"):
             common(num_channels=5, numpify=True, do_resize=False)
 
-        with pytest.raises(TypeError, match=r"Cannot handle this data type: .*"):
+        with self.assertRaisesRegex(TypeError, expected_regex=r"Cannot handle this data type: .*"):
             common(num_channels=5, numpify=True, input_data_format=ChannelDimension.LAST)
 
     def test_integration_instance_segmentation(self):
