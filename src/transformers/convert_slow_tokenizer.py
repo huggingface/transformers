@@ -36,6 +36,7 @@ logger = logging.get_logger(__name__)
 def import_protobuf(error_message=""):
     if is_sentencepiece_available():
         from sentencepiece import sentencepiece_model_pb2
+
         return sentencepiece_model_pb2
     if is_protobuf_available():
         import google.protobuf
