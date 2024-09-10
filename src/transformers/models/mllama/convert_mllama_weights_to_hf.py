@@ -56,8 +56,8 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"text_model.cross_attention_layers.(\d+).attention.wo":                                    r"language_model.model.layers.\1.cross_attn.o_proj",
     r"text_model.cross_attention_layers.(\d+).attention.wq.layer_norm_weight":                  r"language_model.model.layers.\1.input_layernorm.weight",
     r"text_model.cross_attention_layers.(\d+).attention.wk.layer_norm_weight":                  r"language_model.model.layers.\1.post_attention_layernorm.weight",
-    r"text_model.cross_attention_layers.(\d+).feed_forward.mlp.fc1.weight":                     r"language_model.model.layers.\1.mlp.down_proj.weight",
-    r"text_model.cross_attention_layers.(\d+).feed_forward.mlp.fc2.weight":                     r"language_model.model.layers.\1.mlp.up|gate_proj.weight",
+    r"text_model.cross_attention_layers.(\d+).feed_forward.mlp.fc1.weight":                     r"language_model.model.layers.\1.mlp.up|gate_proj.weight",
+    r"text_model.cross_attention_layers.(\d+).feed_forward.mlp.fc2.weight":                     r"language_model.model.layers.\1.mlp.down_proj.weight",
     r"text_model.cross_attention_layers.(\d+).feed_forward.mlp.layer_norm_weight":              r"language_model.model.layers.\1.post_attention_layernorm.weight",
     r"text_model.cross_attention_layers.(\d+).attention.inner_attention.(q|k)_norm":            r"language_model.model.layers.\1.cross_attn.\2_norm",
     # self attention layers
@@ -202,10 +202,9 @@ def write_model(
         if "self_attn.q|k|v|_proj" in new_key and "language_model" in new_key:
             weight = torch.cat([chunk.pop(key) for chunk in loaded], dim=0) # TODO maybe a view is needed
             q, k, v = torch.split(weight, [dim, key_value_dim, key_value_dim])
-            # TODO PERMUTE FOR ROPE
-            state_dict[new_key.replace("q|k|v|", "q")] = permute_for_rope(q, n_heads, dim, dim) 
-            state_dict[new_key.replace("q|k|v|", "k")] = permute_for_rope(k, num_key_value_heads, key_value_dim, dim)
-            state_dict[new_key.replace("q|k|v|", "v")] = v
+            state_dict[new_key.replace("q|k|v|", "q")] = permute_for_rope(q, n_heads, dim, dim).clone()
+            state_dict[new_key.replace("q|k|v|", "k")] = permute_for_rope(k, num_key_value_heads, key_value_dim, dim).clone()
+            state_dict[new_key.replace("q|k|v|", "v")] = v.clone()
         
         elif "cross_attn" in key and "q_norm" in key or "k_norm" in key:
             # TODO since rope was permuted, we ought to permute q and k norms
@@ -214,26 +213,26 @@ def write_model(
         elif "mlp.up|gate_proj." in new_key:
             weight = torch.cat([chunk.pop(key) for chunk in loaded], dim=0)
             gate, up = weight.chunk(2)
-            state_dict[new_key.replace("up|gate", "up")] = up
-            state_dict[new_key.replace("up|gate", "gate")] = gate
+            state_dict[new_key.replace("up|gate", "up")] = up.clone()
+            state_dict[new_key.replace("up|gate", "gate")] = gate.clone()
         elif new_key == "vision_model.patch_embedding.weight":
-            state_dict[new_key] = torch.cat([chunk.pop(key) for chunk in loaded], dim=0).reshape(-1, num_channels, patch_size, patch_size) 
+            state_dict[new_key] = torch.cat([chunk.pop(key) for chunk in loaded], dim=0).reshape(-1, num_channels, patch_size, patch_size).clone()
         elif "cross_attn.k|v_proj" in new_key and "language_model" in new_key:
             weight = torch.cat([chunk.pop(key) for chunk in loaded], dim=0)
             k, v = weight.chunk(2, dim=0)
-            state_dict[new_key.replace("k|v", "k")] = k
-            state_dict[new_key.replace("k|v", "v")] = v 
+            state_dict[new_key.replace("k|v", "k")] = k.clone()
+            state_dict[new_key.replace("k|v", "v")] = v .clone()
         elif "layernorm" in new_key:
             state_dict = {
-                new_key  : [chunk.pop(key) for chunk in loaded][0]
+                new_key  : [chunk.pop(key) for chunk in loaded][0].clone()
             }
         elif "cross_attn_mlp_gate" in key or "cross_attn_attn_gate" in key:
             state_dict = {
-                new_key: [chunk.pop(key) for chunk in loaded][0][0].view(1)
+                new_key: [chunk.pop(key) for chunk in loaded][0][0].view(1).clone()
             }
         else:
             state_dict = {
-                new_key  : torch.cat([chunk.pop(key) for chunk in loaded], dim=0)
+                new_key  : torch.cat([chunk.pop(key) for chunk in loaded], dim=0).clone()
             }
 
         for k, v in state_dict.items():
