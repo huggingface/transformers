@@ -473,7 +473,6 @@ class DeepseekV2MoE(nn.Module):
         self.config = config
         self.num_experts_per_tok = config.num_experts_per_tok
         self.experts_per_rank = config.n_routed_experts
-        self.ep_rank = 0
         self.experts = nn.ModuleList(
             [
                 DeepseekV2MLP(config, intermediate_size=config.moe_intermediate_size)
@@ -520,7 +519,7 @@ class DeepseekV2MoE(nn.Module):
             end_idx = start_idx + num_tokens
             if num_tokens == 0:
                 continue
-            expert = self.experts[i + self.ep_rank * self.experts_per_rank]
+            expert = self.experts[i]
             tokens_for_this_expert = sorted_tokens[start_idx:end_idx]
             expert_out = expert(tokens_for_this_expert)
             outputs.append(expert_out)

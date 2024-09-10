@@ -587,6 +587,7 @@ class DeepseekV2MoE(nn.Module):
         )
         return final_hidden_states
 
+# Copied from transformers.models.llama.modeling_llama.LlamaAttention with Llama->DeepseekV2
 class DeepseekV2Attention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -606,29 +607,48 @@ class DeepseekV2Attention(nn.Module):
         self.num_heads = config.num_attention_heads
         self.max_position_embeddings = config.max_position_embeddings
         self.rope_theta = config.rope_theta
+        self.q_lora_rank = config.q_lora_rank
         self.qk_rope_head_dim = config.qk_rope_head_dim
+        self.kv_lora_rank = config.kv_lora_rank
         self.v_head_dim = config.v_head_dim
-        self.qk_nope_head_dim = config.qk_nope_head_dim
-        self.q_head_dim = config.qk_nope_head_dim + config.qk_rope_head_dim
+        self.qk_non_pe_head_dim = config.qk_non_pe_head_dim
+        self.q_head_dim = config.qk_non_pe_head_dim + config.qk_rope_head_dim
         self.is_causal = True
 
-        self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.q_head_dim, bias=False)
+        self.q_lora_rank = None
+        if self.q_lora_rank is None:
+            self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.q_head_dim, bias=False)
+        else:
+            self.q_down_proj = nn.Linear(self.hidden_size, config.q_lora_rank, bias=config.attention_bias)
+            self.q_down_norm = DeepseekV2RMSNorm(config.q_lora_rank)
+            self.q_up_norm = nn.Linear(config.q_lora_rank, self.num_heads * self.q_head_dim, bias=False)
 
-        self.kv_proj = nn.Linear(
+        self.kv_down_proj_with_mqa = nn.Linear(
             self.hidden_size,
-            self.num_heads * (self.q_head_dim - self.qk_rope_head_dim + self.v_head_dim),
+            config.kv_lora_rank + config.qk_rope_head_dim,
             bias=config.attention_bias,
-        )
+            )
+        self.kv_down_layernorm = DeepseekV2RMSNorm(config.kv_lora_rank)
+        self.kv_up_proj = nn.Linear(
+            config.kv_lora_rank,
+            self.num_heads * (self.q_head_dim - self.qk_rope_head_dim + self.v_head_dim),
+            bias=False,
+            )
 
-        self.o_proj = nn.Linear(self.num_heads * self.v_head_dim, self.hidden_size, bias=config.attention_bias)
+        self.o_proj = nn.Linear(
+            self.num_heads * self.v_head_dim,
+            self.hidden_size,
+            bias=config.attention_bias,
+            )
         self._init_rope()
 
         self.softmax_scale = self.q_head_dim ** (-0.5)
-        mscale_all_dim = self.config.rope_scaling.get("mscale_all_dim", 0)
-
-        if self.config.rope_scaling is not None and mscale_all_dim:
-            mscale = get_mscale(self.config.rope_scaling["factor"], mscale_all_dim)
-            self.softmax_scale = self.softmax_scale * mscale * mscale
+        if self.config.rope_scaling is not None:
+            mscale_all_dim = self.config.rope_scaling.get("mscale_all_dim", 0)
+            scaling_factor = self.config.rope_scaling["factor"]
+            if mscale_all_dim:
+                mscale = yarn_get_mscale(scaling_factor, mscale_all_dim)
+                self.softmax_scale = self.softmax_scale * mscale * mscale
 
     def _init_rope(self):
         if self.config.rope_scaling is None:
@@ -655,16 +675,23 @@ class DeepseekV2Attention(nn.Module):
                     base=self.rope_theta,
                 )
             elif scaling_type == "yarn":
+                kwargs = {
+                    key: self.config.rope_scaling[key]
+                    for key in [
+                        "original_max_position_embeddings",
+                        "beta_fast",
+                        "beta_slow",
+                        "mscale",
+                        "mscale_all_dim",
+                    ]
+                    if key in self.config.rope_scaling
+                }
                 self.rotary_emb = DeepseekV2YarnRotaryEmbedding(
                     self.qk_rope_head_dim,
                     max_position_embeddings=self.max_position_embeddings,
                     scaling_factor=scaling_factor,
                     base=self.rope_theta,
-                    original_max_position_embeddings=self.config.rope_scaling.get("original_max_position_embeddings", 4096),
-                    beta_fast=self.config.rope_scaling.get("beta_fast", 32),
-                    beta_slow=self.config.rope_scaling.get("beta_slow", 1),
-                    mscale=self.config.rope_scaling.get("mscale", 1),
-                    mscale_all_dim=self.config.rope_scaling.get("mscale_all_dim", 0),
+                    **kwargs,
                 )
             else:
                 raise ValueError(f"Unknown RoPE scaling type {scaling_type}")
@@ -682,17 +709,45 @@ class DeepseekV2Attention(nn.Module):
             use_cache: bool = False,
             **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        if "padding_mask" in kwargs:
+            warnings.warn(
+                "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
+            )
         bsz, q_len, _ = hidden_states.size()
 
-        q = self.q_proj(hidden_states)
-        kv = self.kv_proj(hidden_states)
+        if self.q_lora_rank is None:
+            q = self.q_proj(hidden_states)
+        else:
+            # (12) c_tQ = W_DQ h_t: down proj of query vector
+            # (13) q_tc = W_UQ h_t: up proj of compressed (12) vector
+            q = self.q_up_norm(self.q_down_norm(self.q_down_proj(hidden_states)))
 
+        # (4) splits query vector into multiple heads
         q = q.view(bsz, q_len, self.num_heads, self.q_head_dim).transpose(1, 2)
-        kv = kv.view(bsz, q_len, self.num_heads, self.q_head_dim - self.qk_rope_head_dim + self.v_head_dim).transpose(1, 2)
 
-        k_nope, value_states = torch.split(kv, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
+        # (13) continuation to split into non pe part, and part that will have RoPE applied
+        q_non_pe, q_pe = torch.split(q, [self.qk_non_pe_head_dim, self.qk_rope_head_dim], dim=-1)
+
+        # (9) kv_down_proj
+        compressed_kv = self.kv_down_proj_with_mqa(hidden_states)
+        # ER (17) decouple positionally encoded portion of kv
+        compressed_kv, k_pe = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
+
+        # for much later
+        k_pe = k_pe.view(bsz, q_len, 1, self.qk_rope_head_dim).transpose(1, 2)
+
+        # (10) up_proj kv
+        kv = (
+            self.kv_up_proj(self.kv_down_layernorm(compressed_kv))
+            .view(bsz, q_len, self.num_heads, self.qk_non_pe_head_dim + self.v_head_dim)
+            .transpose(1, 2)
+        )
+
+        # decouple kes and values
+        k_non_pe, value_states = torch.split(kv, [self.qk_non_pe_head_dim, self.v_head_dim], dim=-1)
 
         kv_seq_len = value_states.shape[-2]
+
         if past_key_value is not None:
             if self.layer_idx is None:
                 raise ValueError(
@@ -701,25 +756,33 @@ class DeepseekV2Attention(nn.Module):
                     "with a layer index."
                 )
             kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
+
+        # not explicitly in paper, find the cos/sin values to use in RoPE
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
 
-        q_pe = q[:, :, :, self.qk_nope_head_dim:]
-        k_pe = k_nope[:, :, :, self.qk_nope_head_dim:].view(bsz, self.num_heads, q_len, 1,
-                                                            self.qk_rope_head_dim).transpose(1, 2)
-        q_pe, k_pe = apply_rotary_pos_emb(q_pe)
+        # (14) (15) RoPE applied to queries and keys
+        b, h, s, d = q_pe.shape
+        q_pe = q_pe.view(b, h, s, d // 2, 2).transpose(4, 3).reshape(b, h, s, d)
 
+        b, h, s, d = k_pe.shape
+        k_pe = k_pe.view(b, h, s, d // 2, 2).transpose(4, 3).reshape(b, h, s, d)
+
+        q_pe, k_pe = apply_rotary_pos_emb(q_pe, k_pe, cos, sin, position_ids)
+
+        # (16) concat query
         query_states = k_pe.new_empty(bsz, self.num_heads, q_len, self.q_head_dim)
-        query_states[:, :, :, : self.qk_nope_head_dim] = q[:, :, :, : self.qk_nope_head_dim]
-        query_states[:, :, :, self.qk_nope_head_dim:] = q_pe
+        query_states[:, :, :, : self.qk_non_pe_head_dim] = q_non_pe # compressed part q_tC from (13)
+        query_states[:, :, :, self.qk_non_pe_head_dim :] = q_pe # RoPE part q_tR from (14)
 
+        # (17) concat key
         key_states = k_pe.new_empty(bsz, self.num_heads, q_len, self.q_head_dim)
-        key_states[:, :, :, : self.qk_nope_head_dim] = k_nope
-        key_states[:, :, :, self.qk_nope_head_dim:] = k_pe
-
+        key_states[:, :, :, : self.qk_non_pe_head_dim] = k_non_pe
+        key_states[:, :, :, self.qk_non_pe_head_dim :] = k_pe
         if past_key_value is not None:
             cache_kwargs = {"sin": sin, "cos": cos}  # Specific to RoPE models
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
+        # (7) standard attention weights calculation, dot of queries and keys, softmax_scale likely sqrt of key dim
         attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) * self.softmax_scale
 
         if attn_weights.size() != (bsz, self.num_heads, q_len, kv_seq_len):
@@ -727,6 +790,7 @@ class DeepseekV2Attention(nn.Module):
                 f"Attention weights should be of size {(bsz, self.num_heads, q_len, kv_seq_len)}, but is"
                 f" {attn_weights.size()}"
             )
+        assert attention_mask is not None
         if attention_mask is not None:
             if attention_mask.size() != (bsz, 1, q_len, kv_seq_len):
                 raise ValueError(
@@ -753,6 +817,7 @@ class DeepseekV2Attention(nn.Module):
             attn_weights = None
 
         return attn_output, attn_weights, past_key_value
+
 
 
 class DeepseekV2FlashAttention2(DeepseekV2Attention):
