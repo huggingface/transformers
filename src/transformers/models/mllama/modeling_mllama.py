@@ -856,11 +856,11 @@ class MllamaCrossAttentionDecoderLayer(torch.nn.Module):
         self.cross_attn = MLLAMA_TEXT_CROSS_ATTENTION_CLASSES[config._attn_implementation](config)
 
         self.input_layernorm = MllamaRMSNorm(config.hidden_size,eps=config.norm_eps,)
-        self.cross_attn_attn_gate = torch.nn.Parameter(torch.zeros(4))
+        self.cross_attn_attn_gate = torch.nn.Parameter(torch.zeros(1))
 
         self.mlp = MllamaTextMLP(config)
         self.post_attention_layernorm = MllamaRMSNorm(config.hidden_size, eps=config.norm_eps)
-        self.cross_attn_mlp_gate = torch.nn.Parameter(torch.zeros(4))
+        self.cross_attn_mlp_gate = torch.nn.Parameter(torch.zeros(1))
 
     def forward(
         self,

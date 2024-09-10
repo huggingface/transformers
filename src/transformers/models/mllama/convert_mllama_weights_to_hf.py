@@ -227,10 +227,8 @@ def write_model(
         elif "layernorm" in new_key:
             state_dict [
                 new_key  ]= [chunk.pop(key).contiguous().clone() for chunk in loaded][0]
-            
-        elif "cross_attn_mlp_gate" in key or "cross_attn_attn_gate" in key:
-            state_dict  [
-                new_key] =  [chunk.pop(key).contiguous().clone() for chunk in loaded][0][0].view(1)
+        elif "_gate" in new_key:
+            state_dict  [new_key] =  [chunk.pop(key).contiguous().clone() for chunk in loaded][0][0].view(1)
         elif new_key != "":
             state_dict[
                 new_key  ] = torch.cat([chunk.pop(key).contiguous().clone() for chunk in loaded], dim=0)
@@ -253,7 +251,7 @@ def write_model(
         "patch_size": patch_size,
         "projection_dim": params["dim"],  # need to figure out
         "vision_input_dim": 1280, # constant, "self.vision_input_dim = 1280" for CrossAttentionTransformerVision in original code
-        "return_intermediate": "3,7,15,23,30",
+        "return_intermediate": [3,7,15,23,30],
         "global_vision_layers": 8,  # constant "n_global_layers=8" for VisionEncoder in original code
         "max_num_tiles": 4,  # not used in the modeling code yet, "max_num_tiles=4" for VisionEncoder in original code
         "norm_eps": params["norm_eps"],
