@@ -136,6 +136,9 @@ ALL_LAYERNORM_LAYERS.append(CohereLayerNorm)
 
 
 class CohereRotaryEmbedding(nn.Module):
+    # Note: the forward pass of this RoPE is slightly different from Llama's, resulting in different `sin`/`cos` for
+    # the same parameterization. The differences are highlighted with a comment.
+
     def __init__(
         self,
         dim=None,
@@ -211,7 +214,7 @@ class CohereRotaryEmbedding(nn.Module):
         device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            emb = torch.repeat_interleave(freqs, 2, dim=-1)  # Note that this line is different from e.g. Llama.
+            emb = torch.repeat_interleave(freqs, 2, dim=-1)  # This line differs from Llama's implementation
             cos = emb.cos()
             sin = emb.sin()
 
