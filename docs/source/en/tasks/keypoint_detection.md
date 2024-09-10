@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Keypoint Detection Task Guide
+# Keypoint Detection
 
 [[open-in-colab]]
 
