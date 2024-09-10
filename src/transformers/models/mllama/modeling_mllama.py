@@ -859,6 +859,7 @@ class MllamaTextSelfAttention(nn.Module):
         causal_mask = attention_mask
         if attention_mask is not None:
             causal_mask = causal_mask[:, :, :, : key.shape[-2]]
+            causal_mask = causal_mask.transpose(0, 1).transpose(0, 1)
 
         # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
         # Reference: https://github.com/pytorch/pytorch/issues/112577.
@@ -1253,7 +1254,9 @@ class MllamaTextModel(PreTrainedModel):
         using_static_cache = isinstance(past_key_values, StaticCache)
 
         # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
-        if self.config._attn_implementation == "sdpa" and not using_static_cache and not output_attentions:
+        # TODO: we have only SDPA currently and there's a bug when attn-bias is passed. Need to add eager attn and return the line
+        # self.config._attn_implementation == "sdpa" and 
+        if not using_static_cache and not output_attentions:
             if AttentionMaskConverter._ignore_causal_mask_sdpa(
                 attention_mask,
                 inputs_embeds=input_tensor,
