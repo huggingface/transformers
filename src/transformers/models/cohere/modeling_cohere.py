@@ -135,7 +135,6 @@ class CohereLayerNorm(nn.Module):
 ALL_LAYERNORM_LAYERS.append(CohereLayerNorm)
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->Cohere
 class CohereRotaryEmbedding(nn.Module):
     def __init__(
         self,
@@ -212,7 +211,7 @@ class CohereRotaryEmbedding(nn.Module):
         device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
+            emb = torch.repeat_interleave(freqs, 2, dim=-1)  # Note that this line is different from e.g. Llama.
             cos = emb.cos()
             sin = emb.sin()
 
@@ -224,7 +223,7 @@ class CohereRotaryEmbedding(nn.Module):
 
 
 def rotate_half(x):
-    # Split and rotate
+    # Split and rotate. Note that this function is different from e.g. Llama.
     x1 = x[..., ::2]
     x2 = x[..., 1::2]
     rot_x = torch.stack([-x2, x1], dim=-1).flatten(-2)
@@ -337,7 +336,6 @@ class CohereAttention(nn.Module):
         # TODO (joao): remove in v4.46 (RoPE is computed in the model, not in the decoder layers)
         self.rotary_emb = CohereRotaryEmbedding(config=self.config)
 
-    # Ignore copy
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -492,7 +490,6 @@ class CohereFlashAttention2(CohereAttention):
 
         dropout_rate = self.attention_dropout if self.training else 0.0
 
-        # Ignore copy
         # In PEFT, usually we cast the layer norms in float32 for training stability reasons
         # therefore the input hidden states gets silently casted in float32. Hence, we need
         # cast them back in the correct dtype just to be sure everything works as expected.
@@ -539,7 +536,6 @@ class CohereFlashAttention2(CohereAttention):
         return attn_output, attn_weights, past_key_value
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaSdpaAttention Llama->Cohere
 class CohereSdpaAttention(CohereAttention):
     """
     Cohere attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
@@ -547,7 +543,6 @@ class CohereSdpaAttention(CohereAttention):
     SDPA API.
     """
 
-    # Ignore copy
     def forward(
         self,
         hidden_states: torch.Tensor,
