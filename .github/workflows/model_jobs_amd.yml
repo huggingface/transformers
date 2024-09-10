@@ -41,7 +41,7 @@ jobs:
       fail-fast: false
       matrix:
         folders: ${{ fromJson(inputs.folder_slices)[inputs.slice_id] }}
-    runs-on: ['${{ matrix.machine_type }}', self-hosted, amd-gpu, '${{ inputs.runner }}']
+    runs-on: ['${{ inputs.machine_type }}', self-hosted, amd-gpu, '${{ inputs.runner }}']
     container:
       image: ${{ inputs.docker }}
       options: --device /dev/kfd --device /dev/dri --env ROCR_VISIBLE_DEVICES --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
