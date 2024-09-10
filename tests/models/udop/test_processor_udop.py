@@ -54,7 +54,6 @@ if is_pytesseract_available():
 class UdopProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     tokenizer_class = UdopTokenizer
     rust_tokenizer_class = UdopTokenizerFast
-    image_processor_class = LayoutLMv3ImageProcessor
     processor_class = UdopProcessor
     maxDiff = None
 
@@ -80,7 +79,7 @@ class UdopProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         return self.tokenizer_class.from_pretrained(self.tokenizer_pretrained_name, **kwargs)
 
     def get_image_processor(self, **kwargs):
-        return self.image_processor_class.from_pretrained(self.tmpdirname, **kwargs).image_processor
+        return LayoutLMv3ImageProcessor.from_pretrained(self.tmpdirname, **kwargs)
 
     def get_rust_tokenizer(self, **kwargs) -> PreTrainedTokenizerFast:
         return self.rust_tokenizer_class.from_pretrained(self.tokenizer_pretrained_name, **kwargs)
@@ -152,7 +151,7 @@ class UdopProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()
 
-        inputs = processor(text=input_str, images=image_input)
+        inputs = processor(images=image_input, text=input_str)
 
         self.assertListEqual(list(inputs.keys()), processor.model_input_names)
 
@@ -221,8 +220,8 @@ class UdopProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         input_str = ["lower newer", "upper older longer string"]
         image_input = self.prepare_image_inputs() * 2
         inputs = processor(
-            text=input_str,
             images=image_input,
+            text=input_str,
             return_tensors="pt",
             size={"height": 214, "width": 214},
             padding="longest",
