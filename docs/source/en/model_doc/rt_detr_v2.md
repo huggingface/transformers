@@ -39,8 +39,8 @@ The framework of RT-DETRv2 remains the same as RT-DETR, with only modifications 
 >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg' 
 >>> image = Image.open(requests.get(url, stream=True).raw)
 
->>> image_processor = RTDetrImageProcessor.from_pretrained("PekingU/rtdetr_v2_r50vd")
->>> model = RTDetrV2ForObjectDetection.from_pretrained("PekingU/rtdetr_v2_r50vd")
+>>> image_processor = RTDetrImageProcessor.from_pretrained("danelcsb/rtdetr_v2_r50vd")
+>>> model = RTDetrV2ForObjectDetection.from_pretrained("danelcsb/rtdetr_v2_r50vd")
 
 >>> inputs = image_processor(images=image, return_tensors="pt")
 
@@ -54,11 +54,12 @@ The framework of RT-DETRv2 remains the same as RT-DETR, with only modifications 
 ...         score, label = score.item(), label_id.item()
 ...         box = [round(i, 2) for i in box.tolist()]
 ...         print(f"{model.config.id2label[label]}: {score:.2f} {box}")
-sofa: 0.97 [0.14, 0.38, 640.13, 476.21]
-cat: 0.96 [343.38, 24.28, 640.14, 371.5]
-cat: 0.96 [13.23, 54.18, 318.98, 472.22]
-remote: 0.95 [40.11, 73.44, 175.96, 118.48]
-remote: 0.92 [333.73, 76.58, 369.97, 186.99]
+cat: 0.96 [13.71, 54.12, 317.53, 472.65]
+cat: 0.95 [343.73, 23.68, 640.28, 373.05]
+sofa: 0.94 [0.2, 1.32, 640.17, 474.38]
+remote: 0.93 [40.6, 73.21, 175.74, 118.33]
+remote: 0.89 [333.51, 76.79, 370.17, 188.13]
+bed: 0.44 [0.69, 2.42, 640.68, 475.23]
 ```
 
 This model was contributed by [sangbumchoi](https://huggingface.co/danelcsb).
@@ -69,21 +70,21 @@ The original code can be found [here](https://github.com/lyuwenyu/RT-DETR).
 
 [[autodoc]] RTDetrV2Config
 
-## RTDetrResNetConfig
+## RTDetrV2ResNetConfig
 
-[[autodoc]] RTDetrResNetConfig
+[[autodoc]] RTDetrV2ResNetConfig
 
-## RTDetrModel
+## RTDetrV2Model
 
-[[autodoc]] RTDetrModel
+[[autodoc]] RTDetrV2Model
     - forward
 
-## RTDetrForObjectDetection
+## RTDetrV2ForObjectDetection
 
-[[autodoc]] RTDetrForObjectDetection
+[[autodoc]] RTDetrV2ForObjectDetection
     - forward
 
-## RTDetrResNetBackbone
+## RTDetrV2ResNetBackbone
 
-[[autodoc]] RTDetrResNetBackbone
+[[autodoc]] RTDetrV2ResNetBackbone
     - forward
