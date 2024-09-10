@@ -632,7 +632,7 @@ class ZambaModelIntegrationTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        model_id = "Zyphra/Zamba-v1"
+        model_id = "Zyphra/Zamba-7B-v1"
         cls.model = ZambaForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True)
         cls.tokenizer = AutoTokenizer.from_pretrained(model_id)
 
