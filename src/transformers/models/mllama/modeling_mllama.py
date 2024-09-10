@@ -253,10 +253,10 @@ class MllamaVisionSdpaAttention(nn.Module):
         self.num_kv_heads = num_attention_heads
         self.head_dim = hidden_size // num_attention_heads
 
-        self.q_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim, bias=True)
-        self.k_proj = nn.Linear(self.embed_dim, self.num_kv_heads * self.head_dim, bias=True)
-        self.v_proj = nn.Linear(self.embed_dim, self.num_kv_heads * self.head_dim, bias=True)
-        self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.embed_dim, bias=True)
+        self.q_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim, bias=False)
+        self.k_proj = nn.Linear(self.embed_dim, self.num_kv_heads * self.head_dim, bias=False)
+        self.v_proj = nn.Linear(self.embed_dim, self.num_kv_heads * self.head_dim, bias=False)
+        self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.embed_dim, bias=False)
 
     def forward(
         self,
@@ -304,8 +304,9 @@ class MllamaVisionEncoderLayer(nn.Module):
         self.post_attention_layernorm = nn.LayerNorm(self.hidden_size)
 
         # there used to be an if else here, no code path
-        self.gate_attn = nn.Parameter(torch.ones(1) * math.pi/4)
-        self.gate_ffn = nn.Parameter(torch.ones(1)* math.pi/4)
+        if is_gated:
+            self.gate_attn = nn.Parameter(torch.ones(1) * math.pi/4)
+            self.gate_ffn = nn.Parameter(torch.ones(1)* math.pi/4)
 
     def forward(
         self,
@@ -442,6 +443,7 @@ class MllamaVisionModel(PreTrainedModel):
             kernel_size=self.patch_size,
             stride=self.patch_size,
             padding="valid",
+            bias=False
         )
 
         self.class_embedding = nn.Parameter(self.scale * torch.randn(self.hidden_size))
@@ -459,7 +461,7 @@ class MllamaVisionModel(PreTrainedModel):
         # self.gated_positional_embedding = nn.Embedding(self.max_num_tiles * self.max_num_tiles, self.hidden_size)
         self.gated_positional_embedding_gate = nn.Parameter(torch.zeros(1))
         # TODO support properly initializing this depending on the number of tiles
-        self.cached_attention_mask = nn.Embedding(self.max_num_tiles * self.max_num_tiles, self.hidden_size)
+        # self.cached_attention_mask = nn.Embedding(self.max_num_tiles * self.max_num_tiles, self.hidden_size)
         # pre and post tile position embedding
         self.pre_tile_pos_embed = MllamaTilePositionEmbedding(
             max_num_tiles=config.max_num_tiles,
@@ -1217,6 +1219,7 @@ class MllamaTextModel(PreTrainedModel):
 class MllamaForCausalLM(PreTrainedModel):
     base_model_prefix="language_model"
     _tied_weights_keys = ["lm_head.weight"]
+    _no_split_modules = ["MllamaCrossAttentionDecoderLayer", "MllamaSelfAttentionDecoderLayer"]
 
     def __init__(self, config):
         super().__init__(config)

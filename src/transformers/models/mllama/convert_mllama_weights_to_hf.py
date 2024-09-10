@@ -54,12 +54,12 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"text_model.cross_attention_layers.(\d+).attention.wq.weight":                             r"language_model.model.layers.\1.cross_attn.q_proj.weight",
     r"text_model.cross_attention_layers.(\d+).attention.wkv":                                   r"language_model.model.layers.\1.cross_attn.k|v_proj",
     r"text_model.cross_attention_layers.(\d+).attention.wo":                                    r"language_model.model.layers.\1.cross_attn.o_proj",
+    r"text_model.cross_attention_layers.(\d+).attention.inner_attention.(q|k)_norm":            r"language_model.model.layers.\1.cross_attn.\2_norm",
     r"text_model.cross_attention_layers.(\d+).attention.wq.layer_norm_weight":                  r"language_model.model.layers.\1.input_layernorm.weight",
     r"text_model.cross_attention_layers.(\d+).attention.wk.layer_norm_weight":                  r"language_model.model.layers.\1.post_attention_layernorm.weight",
     r"text_model.cross_attention_layers.(\d+).feed_forward.mlp.fc1.weight":                     r"language_model.model.layers.\1.mlp.up|gate_proj.weight",
     r"text_model.cross_attention_layers.(\d+).feed_forward.mlp.fc2.weight":                     r"language_model.model.layers.\1.mlp.down_proj.weight",
     r"text_model.cross_attention_layers.(\d+).feed_forward.mlp.layer_norm_weight":              r"language_model.model.layers.\1.post_attention_layernorm.weight",
-    r"text_model.cross_attention_layers.(\d+).attention.inner_attention.(q|k)_norm":            r"language_model.model.layers.\1.cross_attn.\2_norm",
     # self attention layers
     r"text_model.layers.(\d+).attention.wqkv.weight":                                           r"language_model.model.layers.\1.self_attn.q|k|v|_proj.weight",
     r"text_model.layers.(\d+).attention.wo":                                                    r"language_model.model.layers.\1.self_attn.o_proj",
@@ -187,10 +187,10 @@ def write_model(
     new_keys = convert_old_keys_to_new_keys(all_keys)
 
     cross_layer_shift = [3, 7, 11, 15, 19, 23, 27, 31]
-    attn_layer_shift = [0, 1, 2, 4, 5, 6, 8, 9, 10, 12, 13, 14, 16, 17, 18, 20, 21, 22, 24, 25, 26, 28, 29, 30, 33, 33, 34, 35, 36, 37, 38, 39]
+    attn_layer_shift = [0, 1, 2, 4, 5, 6, 8, 9, 10, 12, 13, 14, 16, 17, 18, 20, 21, 22, 24, 25, 26, 28, 29, 30, 32, 33, 34, 35, 36, 37, 38, 39]
+    state_dict = {}
     for idx, key in enumerate(all_keys):
         filename = f"pytorch_model-{idx + 1}-of-{total_layers + 1}.bin"
-        state_dict = {}
         # Sharded
         # Note that attention.w{q,k,v,o}, feed_fordward.w[1,2,3], attention_norm.weight and ffn_norm.weight share
         # the same storage object, saving attention_norm and ffn_norm will save other weights too, which is
@@ -198,49 +198,49 @@ def write_model(
         new_key = new_keys[key]
         if "cross_attention" in key and "language_model" in new_key:
             new_key = re.sub(r"layers.(\d+).", lambda _match: f"layers.{cross_layer_shift[int(_match.groups()[0])]}.", new_key)
-        elif "self_attn" in new_key and "language_model" in new_key:
+        elif "text_model.layers" in key and "language_model" in new_key:
             new_key = re.sub(r"layers.(\d+).", lambda _match: f"layers.{attn_layer_shift[int(_match.groups()[0])]}.", new_key)
 
         if "self_attn.q|k|v|_proj" in new_key and "language_model" in new_key:
-            weight = torch.cat([chunk.pop(key) for chunk in loaded], dim=0) # TODO maybe a view is needed
+            weight = torch.cat([chunk.pop(key).contiguous().clone() for chunk in loaded], dim=0) # TODO maybe a view is needed
             q, k, v = torch.split(weight, [dim, key_value_dim, key_value_dim])
-            state_dict[new_key.replace("q|k|v|", "q")] = permute_for_rope(q, n_heads, dim, dim).clone()
-            state_dict[new_key.replace("q|k|v|", "k")] = permute_for_rope(k, num_key_value_heads, key_value_dim, dim).clone()
-            state_dict[new_key.replace("q|k|v|", "v")] = v.clone()
+            state_dict[new_key.replace("q|k|v|", "q")] = permute_for_rope(q, n_heads, dim, dim)
+            state_dict[new_key.replace("q|k|v|", "k")] = permute_for_rope(k, num_key_value_heads, key_value_dim, dim)
+            state_dict[new_key.replace("q|k|v|", "v")] = v
         elif "cross_attn" in key and "q_norm" in key or "k_norm" in key:
             # TODO since rope was permuted, we ought to permute q and k norms
             # depending on whether or not they are sharded as well!
-            pass
+            state_dict[
+                new_key  ] = [chunk.pop(key).contiguous().clone() for chunk in loaded][0]
         elif "mlp.up|gate_proj." in new_key:
-            weight = torch.cat([chunk.pop(key) for chunk in loaded], dim=0)
+            weight = torch.cat([chunk.pop(key).contiguous().clone() for chunk in loaded], dim=0)
             gate, up = weight.chunk(2)
-            state_dict[new_key.replace("up|gate", "up")] = up.clone()
-            state_dict[new_key.replace("up|gate", "gate")] = gate.clone()
+            state_dict[new_key.replace("up|gate", "up")] = up
+            state_dict[new_key.replace("up|gate", "gate")] = gate
         elif new_key == "vision_model.patch_embedding.weight":
-            state_dict[new_key] = torch.cat([chunk.pop(key) for chunk in loaded], dim=0).reshape(-1, num_channels, patch_size, patch_size).clone()
+            state_dict[new_key] = torch.cat([chunk.pop(key).contiguous().clone() for chunk in loaded], dim=0).reshape(-1, num_channels, patch_size, patch_size)
         elif "cross_attn.k|v_proj" in new_key and "language_model" in new_key:
-            weight = torch.cat([chunk.pop(key) for chunk in loaded], dim=0)
+            weight = torch.cat([chunk.pop(key).contiguous().clone() for chunk in loaded], dim=0)
             k, v = weight.chunk(2, dim=0)
-            state_dict[new_key.replace("k|v", "k")] = k.clone()
-            state_dict[new_key.replace("k|v", "v")] = v.clone()
+            state_dict[new_key.replace("k|v", "k")] = k
+            state_dict[new_key.replace("k|v", "v")] = v
         elif "layernorm" in new_key:
-            state_dict = {
-                new_key  : [chunk.pop(key) for chunk in loaded][0].clone()
-            }
+            state_dict [
+                new_key  ]= [chunk.pop(key).contiguous().clone() for chunk in loaded][0]
+            
         elif "cross_attn_mlp_gate" in key or "cross_attn_attn_gate" in key:
-            state_dict = {
-                new_key: [chunk.pop(key) for chunk in loaded][0][0].view(1).clone()
-            }
+            state_dict  [
+                new_key] =  [chunk.pop(key).contiguous().clone() for chunk in loaded][0][0].view(1)
+            
         else:
-            state_dict = {
-                new_key  : torch.cat([chunk.pop(key) for chunk in loaded], dim=0).clone()
-            }
+            state_dict[
+                new_key  ] = torch.cat([chunk.pop(key).contiguous().clone() for chunk in loaded], dim=0)
 
-        for k, v in state_dict.items():
-            index_dict["weight_map"][k] = filename
-            param_count += v.numel()
-        print(f"Saving {filename} in {tmp_model_path}...")
-        torch.save(state_dict, os.path.join(tmp_model_path, filename))
+        # for k, v in state_dict.items():
+        #     index_dict["weight_map"][k] = filename
+        #     param_count += v.numel()
+        # print(f"Saving {filename} in {tmp_model_path}...")
+        # torch.save(state_dict, os.path.join(tmp_model_path, filename))
 
     # Write configs
     index_dict["metadata"] = {"total_size": param_count * 2}
@@ -282,12 +282,15 @@ def write_model(
     print("Loading the checkpoint in a Llama model.")
 
     # Make space so we can load the model properly now.
-    del state_dict
+    # del state_dict
     del loaded
     gc.collect()
 
+    with torch.device("meta"):
+        model = MllamaForConditionalGeneration(config)
+    model.load_state_dict(state_dict, strict=True, assign=True)
 
-    mllama_model = MllamaForConditionalGeneration.from_pretrained(tmp_model_path, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True)
+    mllama_model = MllamaForConditionalGeneration.from_pretrained(tmp_model_path, torch_dtype=torch.bfloat16, device_map="auto")
     # Avoid saving this as part of the config.
     del mllama_model.config._name_or_path
     mllama_model.config.torch_dtype = torch.float16  # not sure about this.
@@ -377,7 +380,7 @@ def write_image_processor(config_path: str, save_dir: str):
 write_model(
     model_path="converted-mllama-11b",
     input_base_path="/raid/arthur/mllama-11b",
-    safe_serialization=True,
+    safe_serialization=False,
     model_size="11B",
     llama_version=3,
     vocab_size=128256,
