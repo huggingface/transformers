@@ -67,7 +67,7 @@ inputs = processor(images,return_tensors="pt").to(model.device, model.dtype)
 outputs = model(**inputs)
 ```
 
-The model output looks like following. The model output has relative keypoints, descriptors, masks and scores for each item in the batch. The mask here is a mask that highlights areas of the image where keypoints are present.
+The model output has relative keypoints, descriptors, masks and scores for each item in the batch. The mask highlights areas of the image where keypoints are present.
 
 ```python
 SuperPointKeypointDescriptionOutput(loss=None, keypoints=tensor([[[0.0437, 0.0167],
