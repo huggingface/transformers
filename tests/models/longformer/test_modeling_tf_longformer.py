@@ -37,8 +37,8 @@ if is_tf_available():
         TFLongformerForSequenceClassification,
         TFLongformerForTokenClassification,
         TFLongformerModel,
-        TFLongformerSelfAttention,
     )
+    from transformers.models.longformer.modeling_tf_longformer import TFLongformerSelfAttention
     from transformers.tf_utils import shape_list
 
 

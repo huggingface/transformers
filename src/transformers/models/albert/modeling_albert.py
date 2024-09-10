@@ -1466,3 +1466,16 @@ class AlbertForMultipleChoice(AlbertPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "load_tf_weights_in_albert",
+    "AlbertPreTrainedModel",
+    "AlbertModel",
+    "AlbertForPreTraining",
+    "AlbertForMaskedLM",
+    "AlbertForSequenceClassification",
+    "AlbertForTokenClassification",
+    "AlbertForQuestionAnswering",
+    "AlbertForMultipleChoice",
+]
