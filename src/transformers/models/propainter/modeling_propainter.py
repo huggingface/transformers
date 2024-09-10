@@ -18,7 +18,7 @@ import itertools
 import math
 from collections import namedtuple
 from functools import reduce
-from typing import List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -209,7 +209,7 @@ class ProPainterBasicMotionEncoder(nn.Module):
 
 
 class ProPainterSepConvGRU(nn.Module):
-    def __init__(self, config: ProPainterConfig, hidden_dim=128, input_dim=192 + 128):
+    def __init__(self, config: ProPainterConfig, hidden_dim: int = 128, input_dim: int = 192 + 128):
         super().__init__()
         self.config = config
 
@@ -239,7 +239,7 @@ class ProPainterSepConvGRU(nn.Module):
 
 
 class ProPainterFlowHead(nn.Module):
-    def __init__(self, config: ProPainterConfig, input_dim=128, hidden_dim=256):
+    def __init__(self, config: ProPainterConfig, input_dim: int = 128, hidden_dim: int = 256):
         super().__init__()
         self.config = config
 
@@ -255,7 +255,7 @@ class ProPainterFlowHead(nn.Module):
 
 
 class ProPainterBasicUpdateBlock(nn.Module):
-    def __init__(self, config: ProPainterConfig, hidden_dim=128, input_dim=128):
+    def __init__(self, config: ProPainterConfig, hidden_dim: int = 128, input_dim: int = 128):
         super().__init__()
         self.config = config
         self.encoder = ProPainterBasicMotionEncoder(config)
@@ -299,7 +299,7 @@ def sample_point(img, coords):
 
 
 class ProPainterCorrBlock:
-    def __init__(self, config: ProPainterConfig, fmap1, fmap2, num_levels=4, radius=4):
+    def __init__(self, config: ProPainterConfig, fmap1: torch.tensor, fmap2: torch.tensor, num_levels: int = 4, radius: int = 4):
         self.config = config
         self.num_levels = num_levels
         self.radius = radius
@@ -453,12 +453,12 @@ class ProPainterRaftOpticalFlow(nn.Module):
 class ProPainterP3DBlock(nn.Module):
     def __init__(
         self,
-        in_channels,
-        out_channels,
-        kernel_size,
-        stride,
-        padding,
-        use_residual=0,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int,
+        stride: int,
+        padding: int,
+        use_residual: bool = False,
         bias=True,
     ):
         super().__init__()
@@ -497,7 +497,7 @@ class ProPainterP3DBlock(nn.Module):
 
 
 class ProPainterEdgeDetection(nn.Module):
-    def __init__(self, config: ProPainterConfig, in_channel=2, out_channel=1, intermediate_channel=16):
+    def __init__(self, config: ProPainterConfig, in_channel: int = 2, out_channel: int = 1, intermediate_channel: int = 16):
         super().__init__()
 
         self.config = config
@@ -679,7 +679,7 @@ def fb_consistency_check(flow_forward, flow_backward, alpha1=0.01, alpha2=0.5):
 
 
 class ProPainterBidirectionalPropagationInPaint(nn.Module):
-    def __init__(self, config: ProPainterConfig, num_channels, learnable=True):
+    def __init__(self, config: ProPainterConfig, num_channels: int, learnable: bool = True):
         super().__init__()
         self.config = config
         self.deform_align = nn.ModuleDict()
@@ -816,7 +816,7 @@ class ProPainterBidirectionalPropagationInPaint(nn.Module):
 
 
 class ProPainterDeconv(nn.Module):
-    def __init__(self, input_channel, output_channel, kernel_size=3, padding=0):
+    def __init__(self, input_channel: int, output_channel: int, kernel_size: int = 3, padding: int = 0):
         super().__init__()
         self.conv = nn.Conv2d(
             input_channel,
@@ -834,15 +834,15 @@ class ProPainterDeconv(nn.Module):
 class ProPainterModulatedDeformConv2d(nn.Module):
     def __init__(
         self,
-        in_channels,
-        out_channels,
-        kernel_size,
-        stride=1,
-        padding=0,
-        dilation=1,
-        groups=1,
-        deform_groups=1,
-        bias=True,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int,
+        stride: int = 1,
+        padding: int = 0,
+        dilation: int = 1,
+        groups: int = 1,
+        deform_groups: int = 1,
+        bias: bool = True,
     ):
         super().__init__()
 
@@ -982,7 +982,7 @@ class ProPainterRecurrentFlowCompleteNet(nn.Module):
         self.encoder2 = nn.Sequential(
             ProPainterP3DBlock(config.in_channels[0], config.in_channels[0], config.patch_size, config.strides[0], config.padding),
             nn.LeakyReLU(0.2, inplace=True),
-            ProPainterP3DBlock(config.in_channels[0], self.config.num_channels, config.patch_size, 2, 1),
+            ProPainterP3DBlock(config.in_channels[0], self.config.num_channels, config.patch_size, config.strides[1], config.padding),
             nn.LeakyReLU(0.2, inplace=True),
         )  # 8x
 
@@ -1191,7 +1191,7 @@ class ProPainterEncoder(nn.Module):
 
 
 class ProPainterSoftSplit(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: ProPainterConfig):
         super().__init__()
         self.config = config
 
@@ -1274,14 +1274,14 @@ def window_partition(input_feature, window_size, num_attention_heads):
 class ProPainterSparseWindowAttention(nn.Module):
     def __init__(
         self,
-        hidden_size,
-        num_attention_heads,
-        window_size,
-        pool_size=(4, 4),
-        qkv_bias=True,
-        attn_drop=0.0,
-        proj_drop=0.0,
-        pooling_token=True,
+        hidden_size: int,
+        num_attention_heads: int,
+        window_size: Tuple[int, int],
+        pool_size: Tuple[int, int] = (4, 4),
+        qkv_bias: bool = True,
+        attn_drop: float = 0.0,
+        proj_drop: float = 0.0,
+        pooling_token: bool = True,
     ):
         super().__init__()
         assert hidden_size % num_attention_heads == 0
@@ -1642,7 +1642,7 @@ class ProPainterSparseWindowAttention(nn.Module):
 
 
 class ProPainterFusionFeedForward(nn.Module):
-    def __init__(self, hidden_size, hidden_dim=1960, token_to_token_params=None):
+    def __init__(self, hidden_size: int, hidden_dim: int = 1960, token_to_token_params: Dict = None):
         super().__init__()
         # We set hidden_dim as a default to 1960
         self.fc1 = nn.Sequential(nn.Linear(hidden_size, hidden_dim))
@@ -1701,10 +1701,10 @@ class ProPainterFusionFeedForward(nn.Module):
 class ProPainterTemporalSparseTransformerBlock(nn.Module):
     def __init__(
         self,
-        hidden_size,
-        num_attention_heads,
-        window_size,
-        pool_size,
+        hidden_size: int,
+        num_attention_heads: int,
+        window_size: Tuple[int, int],
+        pool_size: Tuple[int, int],
         layer_norm=nn.LayerNorm,
         token_to_token_params=None,
     ):
@@ -1754,12 +1754,12 @@ class ProPainterTemporalSparseTransformerBlock(nn.Module):
 class ProPainterTemporalSparseTransformer(nn.Module):
     def __init__(
         self,
-        hidden_size,
-        num_attention_heads,
-        window_size,
-        pool_size,
-        num_hidden_layers,
-        token_to_token_params=None,
+        hidden_size: int,
+        num_attention_heads: int,
+        window_size: Tuple[int, int],
+        pool_size: Tuple[int, int],
+        num_hidden_layers: int,
+        token_to_token_params: Dict=None,
     ):
         super().__init__()
         blocks = []
@@ -2254,9 +2254,9 @@ def spectral_norm(module, name="weight", num_power_iterations=1, eps=1e-12, dime
 class ProPainterDiscriminator(nn.Module):
     def __init__(
         self,
-        config,
-        in_channels=3,
-        use_spectral_norm=True,
+        config: ProPainterConfig,
+        in_channels: int = 3,
+        use_spectral_norm: bool = True,
     ):
         super().__init__()
         self.config = config
@@ -2338,7 +2338,7 @@ class ProPainterDiscriminator(nn.Module):
 
 # Adapted from https://github.com/richzhang/PerceptualSimilarity/blob/master/lpips/pretrained_networks.py
 class ProPainterVgg16(nn.Module):
-    def __init__(self, requires_grad=False, pretrained=True):
+    def __init__(self, requires_grad: bool = False, pretrained: bool = True):
         super().__init__()
         vgg_pretrained_features = tv.vgg16(pretrained=pretrained).features
         self.slice1 = nn.Sequential()
@@ -2399,7 +2399,7 @@ class ProPainterScalingLayer(nn.Module):
 class ProPainterIntermediateLossLayer(nn.Module):
     """A single linear layer which does a 1x1 conv"""
 
-    def __init__(self, num_channels, use_dropout=False):
+    def __init__(self, num_channels: int, use_dropout: bool = False):
         super().__init__()
 
         layers = (
@@ -2436,8 +2436,8 @@ def normalize_tensor(hidden_states, eps=1e-10):
 class ProPainterLpips(nn.Module):
     def __init__(
         self,
-        config,
-        use_dropout=True,
+        config: ProPainterConfig,
+        use_dropout: bool = True,
     ):
         """Initializes a perceptual loss torch.nn.Module
         use_dropout : bool
@@ -2485,10 +2485,10 @@ class ProPainterLpips(nn.Module):
 class ProPainterLpipsLoss(nn.Module):
     def __init__(
         self,
-        config,
-        loss_weight=1.0,
-        use_input_norm=True,
-        range_norm=False,
+        config: ProPainterConfig,
+        loss_weight: float = 1.0,
+        use_input_norm: bool = True,
+        range_norm: bool = False,
     ):
         super().__init__()
         self.config = config
@@ -2520,7 +2520,7 @@ class ProPainterAdversarialLoss(nn.Module):
     https://arxiv.org/abs/1711.10337
     """
 
-    def __init__(self, type="nsgan", target_real_label=1.0, target_fake_label=0.0):
+    def __init__(self, type: str = "nsgan", target_real_label: float = 1.0, target_fake_label: float = 0.0):
         r"""
         type = nsgan | lsgan | hinge
         """
