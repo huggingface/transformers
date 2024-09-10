@@ -296,6 +296,8 @@
       title: Trainer
     - local: main_classes/deepspeed
       title: DeepSpeed
+    - local: main_classes/executorch
+      title: ExecuTorch
     - local: main_classes/feature_extractor
       title: Feature Extractor
     - local: main_classes/image_processor
