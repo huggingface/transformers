@@ -404,7 +404,7 @@ class VitPoseImageProcessor(BaseImageProcessor):
         # one uses a pixel standard deviation of 200 pixels
         transformation = get_warp_matrix(rotation, center * 2.0, np.array(size) - 1.0, scale * 200.0)
 
-        # cv2 requires channels last format
+        # input image requires channels last format
         image = (
             image
             if input_data_format == ChannelDimension.LAST
