@@ -20,6 +20,8 @@ Processor class for Mllama.
 import numpy as np
 from typing import Dict, List, Optional, Union
 
+import numpy as np
+
 # TODO: uncomment
 # try:
 #     from typing import Unpack
@@ -27,6 +29,7 @@ from typing import Dict, List, Optional, Union
 from typing_extensions import Unpack
 
 from ...image_utils import ImageInput
+from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import (
     ImagesKwargs,
     ProcessingKwargs,
@@ -149,7 +152,6 @@ def convert_sparse_cross_attention_mask_to_dense(
                 if end == -1:
                     end = length
                 cross_attention_mask[sample_idx, start:end, mask_idx, :mask_num_tiles] = 1
-
     return cross_attention_mask
 
 
@@ -250,8 +252,6 @@ class MllamaProcessor(ProcessorMixin):
         images_kwargs.pop("return_tensors", None)
 
         data = {}
-        additional_not_tensor_data = {}  # TODO: remove when modeling is updated
-
         if text is not None:
 
             if isinstance(text, str):
@@ -261,6 +261,7 @@ class MllamaProcessor(ProcessorMixin):
                     "Invalid input text. Please provide a string, or a list of strings"
                 )
             n_images_in_text = [t.count(self.image_token) for t in text]
+            _ = text_kwargs.pop("padding_side", None) # hack until padding-side is an accepted kwarg by tokenizers
             encoding = self.tokenizer(text, **text_kwargs)
             data.update(encoding)
 
@@ -275,35 +276,24 @@ class MllamaProcessor(ProcessorMixin):
                 )
 
             image_features = self.image_processor(images, **images_kwargs)
-            additional_not_tensor_data["num_tiles"] = image_features.pop("num_tiles")
             data.update(image_features)
 
         # Create cross attention mask
         if images is not None and text is not None:
-        
             cross_attention_token_mask = [
                 get_cross_attention_token_mask(token_ids, self.image_token_id)
                 for token_ids in encoding["input_ids"]
             ]
             cross_attention_mask = convert_sparse_cross_attention_mask_to_dense(
                 cross_attention_token_mask,
-                num_tiles=additional_not_tensor_data["num_tiles"],
+                num_tiles=image_features.pop("num_tiles"),
                 max_num_tiles=self.image_processor.max_image_tiles,
                 length=max(len(input_ids) for input_ids in encoding["input_ids"]),
             )
             data["cross_attention_mask"] = cross_attention_mask
-            
-            # TODO: remove when modeling is updated
-            additional_not_tensor_data["cross_attention_token_mask"] = cross_attention_token_mask
 
         return_tensors = common_kwargs.pop("return_tensors", None)
-        batch_encoding = BatchEncoding(data=data, tensor_type=return_tensors, **common_kwargs)
-        batch_encoding.update(additional_not_tensor_data)
-
-        # fill missing keys with None
-        for key in self.model_input_names:
-            if key not in batch_encoding:
-                batch_encoding[key] = None
+        batch_encoding = BatchFeature(data=data, tensor_type=return_tensors, **common_kwargs)
 
         return batch_encoding
 
@@ -325,4 +315,4 @@ class MllamaProcessor(ProcessorMixin):
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
-        return list(tokenizer_input_names + image_processor_input_names + ["cross_attention_token_mask", "cross_attention_mask"])
+        return list(tokenizer_input_names + image_processor_input_names + ["cross_attention_mask"])

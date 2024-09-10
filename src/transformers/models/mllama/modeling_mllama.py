@@ -163,6 +163,7 @@ class MllamaPatchEmbedding(nn.Module):
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
         hidden_state = self.unfold(hidden_state)
         hidden_state = hidden_state.permute(0, 2, 1)
+        hidden_state = hidden_state.to(self.weight.data.device)
         hidden_state = F.linear(hidden_state, self.weight.view(self.out_channels, -1))
         return hidden_state
 
@@ -1505,6 +1506,16 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
                 "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
             )
 
+        if pixel_values is not None and inputs_embeds is not None:
+            raise ValueError(
+                "You cannot specify both pixel_values and inputs_embeds at the same time, and must specify either one"
+            )
+
+        if pixel_values is not None and cross_attention_key_value is not None:
+            raise ValueError(
+                "`pixel_values` and `cross_attention_key_value` cannot be provided simultaneously"
+            )
+
         if pixel_values is not None:
             if aspect_ratios is None:
                 raise ValueError("`aspect_ratios` must be provided if `pixel_values` is provided")
@@ -1547,7 +1558,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
         position_ids=None,
         pixel_values=None,
         aspect_ratios=None,
-        num_tiles=None,
+        cross_attention_mask=None,
         past_key_values=None,
         use_cache=False,
         cache_position=None,
@@ -1581,28 +1592,27 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
             # The clone here is for the same reason as for `position_ids`.
             model_inputs = {"input_ids": input_ids.clone(memory_format=torch.contiguous_format), "inputs_embeds": None}
 
-        # TODO @raushan: Uncomment when cache is added
-        # if isinstance(past_key_values, StaticCache) and attention_mask.ndim == 2:
-        #     if model_inputs["inputs_embeds"] is not None:
-        #         batch_size, sequence_length, _ = model_inputs["inputs_embeds"].shape
-        #         device = model_inputs["inputs_embeds"].device
-        #     else:
-        #         batch_size, sequence_length = model_inputs["input_ids"].shape
-        #         device = model_inputs["input_ids"].device
-        #
-        #     dtype = self.lm_head.weight.dtype
-        #     min_dtype = torch.finfo(dtype).min
-        #
-        #     attention_mask = _prepare_4d_causal_attention_mask_with_cache_position(
-        #         attention_mask,
-        #         sequence_length=sequence_length,
-        #         target_length=past_key_values.get_max_length(),
-        #         dtype=dtype,
-        #         device=device,
-        #         min_dtype=min_dtype,
-        #         cache_position=cache_position,
-        #         batch_size=batch_size,
-        #     )
+        if isinstance(past_key_values, StaticCache) and attention_mask.ndim == 2:
+            if model_inputs["inputs_embeds"] is not None:
+                batch_size, sequence_length, _ = model_inputs["inputs_embeds"].shape
+                device = model_inputs["inputs_embeds"].device
+            else:
+                batch_size, sequence_length = model_inputs["input_ids"].shape
+                device = model_inputs["input_ids"].device
+
+            dtype = self.get_output_embeddings().weight.dtype
+            min_dtype = torch.finfo(dtype).min
+
+            attention_mask = _prepare_4d_causal_attention_mask_with_cache_position(
+                attention_mask,
+                sequence_length=sequence_length,
+                target_length=past_key_values.get_max_length(),
+                dtype=dtype,
+                device=device,
+                min_dtype=min_dtype,
+                cache_position=cache_position,
+                batch_size=batch_size,
+            )
 
         if num_logits_to_keep is not None:
             model_inputs["num_logits_to_keep"] = num_logits_to_keep
@@ -1614,8 +1624,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
                 "past_key_values": past_key_values,
                 "use_cache": use_cache,
                 "attention_mask": attention_mask,
-                "num_tiles": num_tiles,
-                "cross_attention_token_mask": kwargs.get("cross_attention_token_mask"),
+                "cross_attention_mask": cross_attention_mask,
             }
         )
 
@@ -1630,6 +1639,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
         return model_inputs
 
     def _update_model_kwargs_for_generation(self, outputs, model_kwargs, is_encoder_decoder, **kwargs):
+        cross_attention_mask_prev = model_kwargs.get("cross_attention_mask", None)
         model_kwargs = super()._update_model_kwargs_for_generation(
             outputs=outputs,
             model_kwargs=model_kwargs,
@@ -1639,4 +1649,8 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
 
         # Get the precomputed image_hidden_states
         model_kwargs["cross_attention_key_value"] = outputs.cross_attention_key_value
+
+        # add cross-attn mask for new token
+        if cross_attention_mask_prev is not None:
+            model_kwargs["cross_attention_mask"] = torch.cat([cross_attention_mask_prev, cross_attention_mask_prev[:, -1:, ...]], dim=1)
         return model_kwargs
