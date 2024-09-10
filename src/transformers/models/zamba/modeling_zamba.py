@@ -890,7 +890,6 @@ class ZambaMambaDecoderLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         original_hidden_states: Optional[torch.Tensor] = None,
-        transformer_hidden_states: Optional[torch.Tensor] = None,
         layer_idx: int = None,
         attention_mask: Optional[torch.Tensor] = None,
         causal_mask: Optional[torch.Tensor] = None,
@@ -899,6 +898,7 @@ class ZambaMambaDecoderLayer(nn.Module):
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
+        transformer_hidden_states: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
         Args:
@@ -1017,7 +1017,7 @@ class HybridLayer(nn.Module):
         )
 
         if output_attentions:
-            layer_outputs[1] = self_attn_weights
+            layer_outputs = (layer_outputs[0], self_attn_weights) + layer_outputs[2:]
 
         return layer_outputs
 

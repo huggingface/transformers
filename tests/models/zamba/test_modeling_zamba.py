@@ -348,12 +348,21 @@ class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                     elif "D" in name:
                         # check if it's a ones like
                         self.assertTrue(torch.allclose(param.data, torch.ones_like(param.data), atol=1e-5, rtol=1e-5))
-                    elif "x_proj" in name or "dt_proj_weight" in name or "dt_proj_bias" in name:
+                    elif "x_proj" in name or "dt_proj_weight" in name:
                         self.assertIn(
                             ((param.data.mean() * 1e2).round() / 1e2).item(),
                             [0.0, 1.0],
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized (raw value {param.data.mean()})",
                         )
+                    elif "dt_proj_bias" in name:
+                        dt = torch.exp(
+                            torch.tensor([0, 1]) * (math.log(config.time_step_max) - math.log(config.time_step_min))
+                            + math.log(config.time_step_min)
+                        ).clamp(min=config.time_step_floor)
+                        inv_dt = dt + torch.log(-torch.expm1(-dt))
+                        if param.requires_grad:
+                            self.assertTrue(param.data.max().item() <= inv_dt[1])
+                            self.assertTrue(param.data.min().item() >= inv_dt[0])
                     else:
                         self.assertIn(
                             ((param.data.mean() * 1e9).round() / 1e9).item(),
