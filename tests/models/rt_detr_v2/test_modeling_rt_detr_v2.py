@@ -84,6 +84,7 @@ class RTDetrV2ModelTester:
         decoder_ffn_dim=64,
         num_feature_levels=3,
         decoder_n_points=4,
+        decoder_n_levels=3,
         decoder_layers=2,
         decoder_attention_heads=2,
         decoder_activation_function="relu",
@@ -128,6 +129,7 @@ class RTDetrV2ModelTester:
         self.decoder_ffn_dim = decoder_ffn_dim
         self.num_feature_levels = num_feature_levels
         self.decoder_n_points = decoder_n_points
+        self.decoder_n_levels = decoder_n_levels
         self.decoder_layers = decoder_layers
         self.decoder_attention_heads = decoder_attention_heads
         self.decoder_activation_function = decoder_activation_function
@@ -195,6 +197,7 @@ class RTDetrV2ModelTester:
             decoder_ffn_dim=self.decoder_ffn_dim,
             num_feature_levels=self.num_feature_levels,
             decoder_n_points=self.decoder_n_points,
+            decoder_n_levels=self.decoder_n_levels,
             decoder_layers=self.decoder_layers,
             decoder_attention_heads=self.decoder_attention_heads,
             decoder_activation_function=self.decoder_activation_function,
@@ -245,11 +248,17 @@ class RTDetrV2ModelTester:
 @require_torch
 class RTDetrV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (RTDetrV2Model, RTDetrV2ForObjectDetection) if is_torch_available() else ()
-    is_encoder_decoder = True
     test_torchscript = False
     test_pruning = False
     test_head_masking = False
     test_missing_keys = False
+    is_encoder_decoder = True
+
+    pipeline_model_mapping = (
+        {"image-feature-extraction": RTDetrV2Model, "mask-generation": RTDetrV2ForObjectDetection}
+        if is_torch_available()
+        else {}
+    )
 
     # special case for head models
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -383,9 +392,9 @@ class RTDetrV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             self.assertListEqual(
                 list(cross_attentions[0].shape[-3:]),
                 [
+                    self.model_tester.num_queries,
                     self.model_tester.decoder_attention_heads,
-                    self.model_tester.num_feature_levels,
-                    self.model_tester.decoder_n_points,
+                    self.model_tester.decoder_n_points * self.model_tester.decoder_n_levels,
                 ],
             )
 
@@ -588,7 +597,7 @@ class RTDetrV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             model = model_class(config=configs_no_init)
             # Skip the check for the backbone
             for name, module in model.named_modules():
-                if module.__class__.__name__ == "RTDetrConvEncoder":
+                if module.__class__.__name__ == "RTDetrV2ConvEncoder":
                     backbone_params = [f"{name}.{key}" for key in module.state_dict().keys()]
                     break
 
@@ -736,16 +745,14 @@ class RTDetrV2ModelIntegrationTest(unittest.TestCase):
         results = image_processor.post_process_object_detection(
             outputs, threshold=0.0, target_sizes=[image.size[::-1]]
         )[0]
-        expected_scores = torch.tensor(
-            [0.9703017473220825, 0.9599503874778748, 0.9575679302215576, 0.9506784677505493], device=torch_device
-        )
-        expected_labels = [57, 15, 15, 65]
+        expected_scores = torch.tensor([0.9559813, 0.9497552, 0.941835, 0.9307496], device=torch_device)
+        expected_labels = [15, 15, 57, 65]
         expected_slice_boxes = torch.tensor(
             [
-                [0.13774872, 0.37821293, 640.13074, 476.21088],
-                [343.38132, 24.276838, 640.1404, 371.49573],
-                [13.225126, 54.179348, 318.98422, 472.2207],
-                [40.114475, 73.44104, 175.9573, 118.48469],
+                [1.3706245e01, 5.4118309e01, 3.1752670e02, 4.7265100e02],
+                [3.4372583e02, 2.3684162e01, 6.4028491e02, 3.7305353e02],
+                [1.9779205e-01, 1.3190603e00, 6.4017426e02, 4.7437750e02],
+                [4.0596588e01, 7.3208641e01, 1.7573926e02, 1.1833281e02],
             ],
             device=torch_device,
         )
