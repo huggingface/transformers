@@ -73,10 +73,18 @@ class ProPainterConfig(PretrainedConfig):
             The dimensionality of hidden layers.
         kernel_size (`List[int, int]`, *optional*, defaults to `[7, 7]`):
             The size of the convolution kernels.
-        padding (`List[int, int]`, *optional*, defaults to `[3, 3]`):
+        kernel_size_3d (`List[int, int, int]`, *optional*, defaults to `[1, 3, 3]`):
+            The size of the 3d convolution kernels.
+        kernel_size_3d_discriminator (`List[int, int, int]`, *optional*, defaults to `[3, 5, 5]`):
+            The size of the 3d convolution kernels for discriminator modules used to calculate losses.
+        padding_inpaint_generator (`List[int, int]`, *optional*, defaults to `[3, 3]`):
+            The padding size for the convolution kernels in inpaint_generator module.
+        padding (int`, *optional*, defaults to `1`):
             The padding size for the convolution kernels.
         stride (`List[int, int]`, *optional*, defaults to `[3, 3]`):
             The stride for the convolution kernels.
+        stride_3d (`List[int, int, int]`, *optional*, defaults to `[1, 1, 1]`):
+            The stride for the 3d convolution kernels.
         num_hidden_layers (`int`, *optional*, defaults to 8):
             The number of hidden layers in the model.
         num_attention_heads (`int`, *optional*, defaults to 4):
@@ -93,6 +101,14 @@ class ProPainterConfig(PretrainedConfig):
             The number of channels at different levels of the model.
         strides (`List[int, int, int]`, *optional*, defaults to `[1, 2, 2]`):
             The stride values for the convolution layers at different levels of the model.
+        norm_fn (`List[str, str, str]`, *optional*, defaults to `["batch", "group", "instance", "none"]`):
+            The type of normalization to use in the model. Available options are:
+            - `"batch"`: Use Batch Normalization.
+            - `"group"`: Use Group Normalization.
+            - `"instance"`: Use Instance Normalization.
+            - `"none"`: No normalization will be applied.
+        patch_size (`int`, *optional*, defaults to 3):
+            The kernel size of the 2D convolution layer.
 
     Example:
 
@@ -132,8 +148,11 @@ class ProPainterConfig(PretrainedConfig):
         num_channels=128,
         hidden_size=512,
         kernel_size=[7, 7],
-        padding=[3, 3],
+        kernel_size_3d=[1, 3, 3],
+        kernel_size_3d_discriminator=[3, 5, 5],
+        padding_inpaint_generator=[3, 3],
         stride=[3, 3],
+        stride_3d=[1, 1, 1],
         num_hidden_layers=8,
         num_attention_heads=4,
         window_size=[5, 9],
@@ -142,6 +161,9 @@ class ProPainterConfig(PretrainedConfig):
         in_channels=[64, 64, 96],
         channels=[64, 96, 128],
         strides=[1, 2, 2],
+        norm_fn=["batch", "group", "instance", "none"],
+        patch_size=3,
+        padding=1,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -165,8 +187,10 @@ class ProPainterConfig(PretrainedConfig):
         self.num_channels = num_channels
         self.hidden_size = hidden_size
         self.kernel_size = kernel_size
-        self.padding = padding
+        self.kernel_size_3d = kernel_size_3d
+        self.padding_inpaint_generator = padding_inpaint_generator
         self.stride = stride
+        self.stride_3d = stride_3d
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.window_size = window_size
@@ -175,3 +199,7 @@ class ProPainterConfig(PretrainedConfig):
         self.in_channels = in_channels
         self.channels = channels
         self.strides = strides
+        self.norm_fn = norm_fn
+        self.patch_size = patch_size
+        self.padding = padding
+        self.kernel_size_3d_discriminator = kernel_size_3d_discriminator
