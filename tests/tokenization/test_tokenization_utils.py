@@ -273,7 +273,7 @@ class TokenizerUtilsTest(unittest.TestCase):
                 self.assertEqual(decoded_list, "##：")
 
     @require_tokenizers
-    def test_decoding_extra_params(self):
+    def test_decoding_skip_special_tokens(self):
         for tokenizer_class in [BertTokenizer, BertTokenizerFast]:
             with self.subTest(f"{tokenizer_class}"):
                 tokenizer = tokenizer_class.from_pretrained("google-bert/bert-base-cased")
