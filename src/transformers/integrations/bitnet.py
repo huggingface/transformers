@@ -12,20 +12,109 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from ..utils import is_accelerate_available, logging
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
 
+from ..utils import is_accelerate_available, is_torch_available, logging
 
 if is_accelerate_available():
     from accelerate import init_empty_weights
 
+if is_torch_available():
+    import torch
+    import torch.nn as nn
+    import torch.nn.functional as F
+
 logger = logging.get_logger(__name__)
 
+
+def pack_weights(quantized_weights: torch.Tensor) -> torch.Tensor:
+    """
+    Packs a tensor of quantized weights into a compact format using 2 bits per value.
+
+    Parameters:
+    -----------
+    quantized_weights : torch.Tensor
+        A tensor containing ternary quantized weights with values in {-1, 0, 1}. These values are adjusted to 
+        {0, 1, 2} before being packed.
+
+    Returns:
+    --------
+    torch.Tensor
+        A packed tensor where each element stores 4 quantized values (each using 2 bits) in an 8-bit format. 
+    """
+
+    quantized_weights += 1
+    original_shape = quantized_weights.shape
+    values_per_item = 4
+    row_dim = (original_shape[0] + values_per_item - 1) // values_per_item
+
+    if len(original_shape) == 1:
+        packed_tensor_shape = (row_dim,)
+    else:
+        packed_tensor_shape = (row_dim, *original_shape[1:])
+
+    packed = torch.zeros(packed_tensor_shape, device=quantized_weights.device, dtype=torch.uint8)
+    unpacked = quantized_weights.to(torch.uint8)
+
+    def lshift(t: torch.Tensor, bits: int):
+        return t << bits
+
+    it = min(values_per_item, (original_shape[0] // row_dim) + 1)
+    for i in range(it):
+        start = i * row_dim
+        end = min(start + row_dim, original_shape[0])
+        packed[: (end - start)] |= lshift(unpacked[start:end], 2 * i)
+
+    return packed
+
 @torch.compile
-def unpack_weights(packed: torch.Tensor, bits: int = 2) -> torch.Tensor:
-    values_per_item = 8 // bits
+def unpack_weights(packed: torch.Tensor) -> torch.Tensor:
+    """
+    Unpacks a tensor of quantized weights that were stored in a packed format using 2 bits per value.
+
+    Parameters:
+    -----------
+    packed : torch.Tensor
+        A tensor containing packed weights where each element represents 4 quantized values (using 2 bits per value).
+
+    Returns:
+    --------
+    torch.Tensor
+        A tensor of unpacked weights, where each value is converted from its packed 2-bit representation. 
+        
+    Example:
+    --------
+    packed = torch.tensor([[0b10100001, 0b00011000], 
+                           [0b10010000, 0b00001010]], dtype=torch.uint8)
+
+    # Unpack the values
+    unpacked = unpack_weights(packed)
+
+    # Resulting unpacked tensor
+    print(unpacked)
+    # Output: tensor([[ 0, -1],
+                      [-1,  1],
+                      [-1,  1],
+                      [-1,  1],
+                      [ 1,  0],
+                      [ 0, -1],
+                      [ 1, -1],
+                      [ 1, -1]])
+
+    Explanation of the example:
+    ---------------------------
+    Let's take the first value for example 0b10100001, we we will only focus on the first column, 
+    because every element is unpacked across the first dimension
+    - First 2 bits: `01` → 0 at [0][0]
+    - Second 2 bits: `00` → -1 at [0][2]
+    - Third 2 bits: `10` → 1 at [0][4]
+    - Fourth 2 bits: `10` → 1 at [0][6]
+    the second value of the same row (0b10010000) will give the values for [0][1], [0][3], [0][5], [0][7]
+
+    We subtract 1 because during the packing process, it's easier to work with values like 0, 1, and 2. To make this possible, 
+    we add 1 to the original ternary weights (which are typically -1, 0, and 1) when packing them. When unpacking, we reverse 
+    this by subtracting 1 to restore the original ternary values.
+    """
+    values_per_item = 4
     packed_shape = packed.shape
 
     if len(packed_shape) == 1:
@@ -46,14 +135,12 @@ def unpack_weights(packed: torch.Tensor, bits: int = 2) -> torch.Tensor:
     unpacked = unpacked.to(torch.bfloat16) - 1
     return unpacked.to(torch.bfloat16)
 
-class BitLinear158(nn.Module):
+class BitLinear(nn.Module):
 
-    def __init__(self, in_features: int, out_features: int, bias: bool = False, input_bits: int = 8,
+    def __init__(self, in_features: int, out_features: int, bias: bool, input_bits: int = 8,
                  device=None, dtype=None, config=None):
         super().__init__()
-        self.in_features = in_features
-        self.out_features = out_features
-        self.input_bits = input_bits
+
         self.register_buffer(
             "weight",
             torch.zeros(
@@ -83,11 +170,27 @@ class BitLinear158(nn.Module):
 
     @torch.compile
     def activation_quant(self, x, num_bits=8):
+        """
+        Activation function : Performs symmetric, per-channel quantization on the input activations.
+        Parameters:
+        -----------
+        x : torch.Tensor
+            Input activations to be quantized.
+        num_bits : int, optional (default=8)
+            Number of bits to use for quantization, determining the quantization range.
+        
+        Returns:
+        --------
+        result : torch.Tensor
+            Quantized activation tensor, with values mapped to an `int8` range.
+        s : torch.Tensor
+            The per-channel scaling factors used to quantize the tensor.
+        """
         Qn = -(2**(num_bits - 1))
         Qp = 2**(num_bits - 1) - 1
         s = Qp / x.abs().max(dim=-1, keepdim=True).values.clamp(min=1e-5)
         result = (x * s).round().clamp(Qn, Qp)
-        return result.type(torch.int8), s
+        return result.to(torch.int8), s
 
     @torch.compile
     def post_quant_process(self, input, si, sw):
@@ -135,7 +238,7 @@ def _replace_with_bitnet_linear(
                     in_features = module.in_features
                     out_features = module.out_features
 
-                    model._modules[name] = BitLinear158(
+                    model._modules[name] = BitLinear(
                         in_features=in_features,
                         out_features=out_features,
                         bias=module.bias is not None,

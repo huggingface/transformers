@@ -32,7 +32,7 @@ logger = logging.get_logger(__name__)
 class BitNetHfQuantizer(HfQuantizer):
     """
     1.58-bit quantization from BitNet quantization method:
-    before loading: converts transformer layers into BitLinear158 during loading.
+    before loading: converts transformer layers into BitLinear during loading.
     """
 
     requires_parameters_quantization = False
