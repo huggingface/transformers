@@ -13,14 +13,15 @@
 # limitations under the License.
 """Mllama model configuration"""
 
-import warnings
 
-from ...configuration_utils import PretrainedConfig
-from ...utils import logging
-from ..auto import CONFIG_MAPPING
 import os
 from typing import Union
+
+from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
+from ...utils import logging
+
+
 logger = logging.get_logger(__name__)
 
 
@@ -146,7 +147,7 @@ class MllamaVisionConfig(PretrainedConfig):
             )
 
         return cls.from_dict(config_dict, **kwargs)
-    
+
 
 
 
@@ -263,7 +264,7 @@ class MllamaTextConfig(PretrainedConfig):
             **kwargs,
         )
 
-    
+
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
         cls._set_token_in_kwargs(kwargs)

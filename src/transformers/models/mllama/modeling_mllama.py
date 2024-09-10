@@ -22,7 +22,8 @@ import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
+from torch.nn import CrossEntropyLoss
+
 from ... import PreTrainedModel
 from ...activations import ACT2FN
 from ...cache_utils import Cache, StaticCache
@@ -301,7 +302,7 @@ class MllamaVisionEncoderLayer(nn.Module):
 
         self.input_layernorm = nn.LayerNorm(self.hidden_size)
         self.post_attention_layernorm = nn.LayerNorm(self.hidden_size)
-        
+
         # there used to be an if else here, no code path
         self.gate_attn = nn.Parameter(torch.ones(1) * math.pi/4)
         self.gate_ffn = nn.Parameter(torch.ones(1)* math.pi/4)

@@ -14,16 +14,17 @@
 # limitations under the License.
 
 import math
-import numpy as np
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
-from typing import Any, Dict, List, Optional, Tuple, Union, Any, Tuple, Set, Dict, List
+import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
 from ...image_transforms import (
     PaddingMode,
     get_image_size,
+    pad,
+    resize,
 )
-from ...image_transforms import pad, resize
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,

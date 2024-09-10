@@ -4164,6 +4164,39 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             model_buffers = {".".join([prefix, key]) for key in model_buffers}
         unexpected_keys = sorted(unexpected_keys - model_buffers)
 
+        from collections import defaultdict
+        def update_key_name(keys):
+            # Dictionary to store all digit locations and their values
+            key_dict = defaultdict(set)
+            for key in keys:
+                modified_key = r""
+                # Iterate over each character in the key
+                for char in key:
+                    if char.isdigit():
+                        # If the character is a digit, add it to the list and replace with '-'
+                        if modified_key != "":
+                            modified_key += r"(\d+)"
+                            modified_key= modified_key.replace(".",r"\.")
+                            key_dict[modified_key].add(int(char))
+                            modified_key = r""
+                    else:
+                        # Otherwise, keep the character unchanged
+                        modified_key += char
+            # Create the final key with ranges based on the key dictionary
+            final_keys = set()
+
+            # Iterate over the dictionary and build the range-based string
+            for key in keys:
+                text = key
+                for pattern, values in key_dict.items():
+                    text = re.sub(pattern, lambda match: match.group(0)[:-len(match.group(1))]+str(values), text)
+                    # Replace underscores with range notation {0-max}
+                final_keys.add(text)
+
+            return final_keys
+
+
+
         model.tie_weights()
         if device_map is None and not is_fsdp_enabled() and not is_deepspeed_zero3_enabled():
             ptrs = collections.defaultdict(list)
@@ -4506,12 +4539,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
             raise RuntimeError(f"Error(s) in loading state_dict for {model.__class__.__name__}:\n\t{error_msg}")
 
+        # missing_keys = sorted(update_key_name(missing_keys), key =len)
+        # unexpected_keys =  sorted(update_key_name(unexpected_keys), key=len)
+
         if len(unexpected_keys) > 0:
             archs = [] if model.config.architectures is None else model.config.architectures
             warner = logger.warning if model.__class__.__name__ in archs else logger.info
+            _keys = '\n'.join(unexpected_keys)
             warner(
                 f"Some weights of the model checkpoint at {pretrained_model_name_or_path} were not used when"
-                f" initializing {model.__class__.__name__}: {unexpected_keys}\n- This IS expected if you are"
+                f" initializing {model.__class__.__name__}" + _keys + "\n- This IS expected if you are"
                 f" initializing {model.__class__.__name__} from the checkpoint of a model trained on another task or"
                 " with another architecture (e.g. initializing a BertForSequenceClassification model from a"
                 " BertForPreTraining model).\n- This IS NOT expected if you are initializing"
@@ -4521,9 +4558,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         else:
             logger.info(f"All model checkpoint weights were used when initializing {model.__class__.__name__}.\n")
         if len(missing_keys) > 0:
+            _keys = '\n'.join(missing_keys)
             logger.warning(
                 f"Some weights of {model.__class__.__name__} were not initialized from the model checkpoint at"
-                f" {pretrained_model_name_or_path} and are newly initialized: {missing_keys}\nYou should probably"
+                f" {pretrained_model_name_or_path} and are newly initialized:" + _keys + "\nYou should probably"
                 " TRAIN this model on a down-stream task to be able to use it for predictions and inference."
             )
         elif len(mismatched_keys) == 0:

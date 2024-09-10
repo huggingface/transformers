@@ -5331,10 +5331,6 @@ if TYPE_CHECKING:
         LlavaConfig,
         LlavaProcessor,
     )
-    from .models.mllama import (
-        MllamaConfig,
-        MllamaProcessor,
-    )
     from .models.llava_next import (
         LlavaNextConfig,
         LlavaNextProcessor,
@@ -7148,10 +7144,6 @@ if TYPE_CHECKING:
         from .models.llava import (
             LlavaForConditionalGeneration,
             LlavaPreTrainedModel,
-        )
-        from .models.mllama import (
-            MllamaForConditionalGeneration,
-            MllamaPreTrainedModel,
         )
         from .models.llava_next import (
             LlavaNextForConditionalGeneration,

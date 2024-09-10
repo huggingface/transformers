@@ -21,17 +21,14 @@ import requests
 
 from transformers import (
     AutoProcessor,
-    AutoTokenizer,
     MllamaConfig,
     MllamaForConditionalGeneration,
     is_torch_available,
     is_vision_available,
 )
 from transformers.testing_utils import (
-    require_bitsandbytes,
     require_torch,
     require_torch_gpu,
-    require_vision,
     slow,
     torch_device,
 )
@@ -218,7 +215,7 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     @require_torch_gpu
     def test_11b_model_integration_generate(self):
-        
+
         # Prepare inputs
         prompt = "<|image|><|begin_of_text|>If I had to write a haiku for this one"
 
@@ -258,13 +255,13 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         decoded_output = self.processor.decode(output[0], skip_special_tokens=True)
         expected_output = "If I had to write a haiku for this one, it would be:.\\nA dock on a lake.\\nA mountain in the distance.\\nA long exposure."  # fmt: skip
-        
+
         self.assertEqual(decoded_output, expected_output)
 
     @slow
     @require_torch_gpu
     def test_11b_model_integration_forward(self):
-        
+
         # Prepare inputs
         prompt = "<|image|><|begin_of_text|>If I had to write a haiku for this one"
 

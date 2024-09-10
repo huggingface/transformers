@@ -15,7 +15,7 @@
 
 import unittest
 
-from transformers import MllamaProcessor, AutoTokenizer, AutoImageProcessor
+from transformers import MllamaProcessor
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_vision_available
 

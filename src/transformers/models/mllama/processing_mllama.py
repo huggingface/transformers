@@ -18,7 +18,7 @@ Processor class for Mllama.
 
 # TODO: update all docs
 
-from typing import Dict, List, Optional, Union
+from typing import List, Optional, Union
 
 # TODO: uncomment
 # try:
@@ -48,7 +48,7 @@ class MllamaImagesKwargs(ImagesKwargs, total=False):
 
 class MllamaProcessorKwargs(ProcessingKwargs, total=False):
     images_kwargs: MllamaImagesKwargs
-    
+
     _defaults = {
         "image_kwargs": {
             "max_image_tiles": 4,
@@ -223,10 +223,10 @@ class MllamaProcessor(ProcessorMixin):
             return [self.cross_attention_token_mask(t) for t in input_ids]
 
         image_token_locations = [i for i, token in enumerate(input_ids) if token == self.image_token_id]
-        
+
         if len(image_token_locations) == 0:
             return []
-        
+
         # only one image present, unmask until end of sequence
         if len(image_token_locations) == 1:
             return [[image_token_locations[0], -1]]

@@ -12,18 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import argparse
 import gc
 import json
 import os
 import shutil
 import warnings
 
+import regex as re
 import torch
 
-from transformers import MllamaConfig, PreTrainedTokenizerFast, MllamaForConditionalGeneration
+from transformers import MllamaConfig, MllamaForConditionalGeneration, MllamaImageProcessor, PreTrainedTokenizerFast
 from transformers.convert_slow_tokenizer import TikTokenConverter
-from transformers import MllamaImageProcessor
+
 
 try:
     from transformers import LlamaTokenizerFast
@@ -83,7 +83,8 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"vision_model.vision_encoder.(?=\w)":                                                      r"vision_model.",
 }
 # fmt: on
-import regex as re
+
+
 def convert_old_keys_to_new_keys(state_dict_keys: dict = None):
     """
         This function should be applied only once, on the concatenated keys.
@@ -149,7 +150,7 @@ def write_model(
     # vision parameters
     n_layers_vision_transformer = 32 # vision model 1st transformer layers
     n_layers_global_transformer = 8 # global transformer vision layers
-    n_heads_vision = 16 
+    n_heads_vision = 16
     n_vision_heads_per_shard = n_heads_vision // num_shards
     vision_hidden_dim = 1280 # width of vision transformers
     vision_dims_per_head = vision_hidden_dim // n_heads_vision
@@ -171,7 +172,7 @@ def write_model(
 
     print(f"Fetching all parameters from the checkpoint at {input_base_path}.")
     if num_shards == 1:
-        loaded = [torch.load(os.path.join(input_base_path, f"consolidated.pth"), map_location="cpu")]
+        loaded = [torch.load(os.path.join(input_base_path, "consolidated.pth"), map_location="cpu")]
     else:
         loaded = [
             torch.load(os.path.join(input_base_path, f"consolidated.{i:02d}.pth"), map_location="cpu")
@@ -189,6 +190,7 @@ def write_model(
     attn_layer_shift = [0, 1, 2, 4, 5, 6, 8, 9, 10, 12, 13, 14, 16, 17, 18, 20, 21, 22, 24, 25, 26, 28, 29, 30, 33, 33, 34, 35, 36, 37, 38, 39]
     for idx, key in enumerate(all_keys):
         filename = f"pytorch_model-{idx + 1}-of-{total_layers + 1}.bin"
+        state_dict = {}
         # Sharded
         # Note that attention.w{q,k,v,o}, feed_fordward.w[1,2,3], attention_norm.weight and ffn_norm.weight share
         # the same storage object, saving attention_norm and ffn_norm will save other weights too, which is
@@ -205,7 +207,6 @@ def write_model(
             state_dict[new_key.replace("q|k|v|", "q")] = permute_for_rope(q, n_heads, dim, dim).clone()
             state_dict[new_key.replace("q|k|v|", "k")] = permute_for_rope(k, num_key_value_heads, key_value_dim, dim).clone()
             state_dict[new_key.replace("q|k|v|", "v")] = v.clone()
-        
         elif "cross_attn" in key and "q_norm" in key or "k_norm" in key:
             # TODO since rope was permuted, we ought to permute q and k norms
             # depending on whether or not they are sharded as well!
@@ -324,7 +325,7 @@ class MllamaConverter(TikTokenConverter):
             "<|eot_id|>",  # end of turn
             "<|python_tag|>",
             "<|image|>",
-        ] 
+        ]
         special_tokens += [
             f"<|reserved_special_token_{i + 2}|>"
             for i in range(num_reserved_special_tokens - len(special_tokens))
