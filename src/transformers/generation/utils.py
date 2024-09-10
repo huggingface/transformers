@@ -29,15 +29,8 @@ from ..cache_utils import (
     Cache,
     DynamicCache,
     EncoderDecoderCache,
-    HQQQuantizedCache,
-    HybridCache,
-    MambaCache,
     OffloadedCache,
-    OffloadedStaticCache,
     QuantizedCacheConfig,
-    QuantoQuantizedCache,
-    SlidingWindowCache,
-    StaticCache,
 )
 from ..integrations.deepspeed import is_deepspeed_zero3_enabled
 from ..modeling_outputs import CausalLMOutputWithPast, Seq2SeqLMOutput
@@ -68,7 +61,12 @@ from .candidate_generator import (
     _prepare_attention_mask,
     _prepare_token_type_ids,
 )
-from .configuration_utils import GenerationConfig, GenerationMode
+from .configuration_utils import (
+    NEED_SETUP_CACHE_CLASSES_MAPPING,
+    QUANT_BACKEND_CLASSES_MAPPING,
+    GenerationConfig,
+    GenerationMode,
+)
 from .logits_process import (
     EncoderNoRepeatNGramLogitsProcessor,
     EncoderRepetitionPenaltyLogitsProcessor,
@@ -117,15 +115,6 @@ logger = logging.get_logger(__name__)
 
 if is_accelerate_available():
     from accelerate.hooks import AlignDevicesHook, add_hook_to_module
-
-NEED_SETUP_CACHE_CLASSES_MAPPING = {
-    "static": StaticCache,
-    "offloaded_static": OffloadedStaticCache,
-    "sliding_window": SlidingWindowCache,
-    "hybrid": HybridCache,
-    "mamba": MambaCache,
-}
-QUANT_BACKEND_CLASSES_MAPPING = {"quanto": QuantoQuantizedCache, "HQQ": HQQQuantizedCache}
 
 
 @dataclass
@@ -609,6 +598,11 @@ class GenerationMixin:
                     and isinstance(dict_to_expand[key], torch.Tensor)
                 ):
                     dict_to_expand[key] = dict_to_expand[key].repeat_interleave(expand_size, dim=0)
+                elif isinstance(dict_to_expand[key], list):
+                    temp_list = []
+                    for sublist in dict_to_expand[key]:
+                        temp_list.extend([sublist] * expand_size)
+                    dict_to_expand[key] = temp_list
             return dict_to_expand
 
         if input_ids is not None:
@@ -2975,14 +2969,10 @@ class GenerationMixin:
 
             # Clone is needed to avoid keeping a hanging ref to outputs.logits which may be very large for first iteration
             # (the clone itself is always small)
-            # TODO: remove small change here so that we get full logits from generate
-            # the gold logist for comparison are full logits
-            next_token_logits = outputs.logits.clone()
+            next_token_logits = outputs.logits.clone()[:, -1, :]
 
             # pre-process distribution
-            next_token_scores = logits_processor(input_ids, next_token_logits[:, -1, :])
-            if do_sample:
-                next_token_scores = logits_warper(input_ids, next_token_scores)
+            next_token_scores = logits_processor(input_ids, next_token_logits)
 
             # Store scores, attentions and hidden_states when required
             if return_dict_in_generate:

@@ -14,7 +14,9 @@
 # limitations under the License.
 
 import math
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from collections import defaultdict
+from functools import lru_cache
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -34,174 +36,472 @@ from ...image_utils import (
     get_image_size,
     infer_channel_dimension_format,
     is_valid_image,
+    is_vision_available,
     to_numpy_array,
     validate_preprocess_arguments,
 )
 from ...utils import TensorType, logging
 
 
-# TODO: update aspect ratio stack for different shapes
-# TODO: update docs
-# TODO: update copied from statements
+if is_vision_available():
+    import PIL
+    from PIL import Image
+
 
 logger = logging.get_logger(__name__)
 
 
-def get_all_number_factors(n: int) -> Set[int]:
-    """Return all factors of a number."""
-    factors = set()
-    for i in range(1, int(n**0.5) + 1):
-        if n % i == 0:
-            factors.add(i)
-            factors.add(n // i)
-    return factors
-
-
-def find_supported_aspect_ratios(num_tiles: int) -> Dict[float, List[Tuple[int, int]]]:
+@lru_cache(maxsize=10)
+def find_supported_aspect_ratios(max_image_tiles: int) -> Dict[float, List[Tuple[int, int]]]:
     """
-    This function computes all the allowed aspect ratios for a fixed
-    number of input tiles.
-    For example, with `num_tiles=5`, it will return:
-    {
-        0.2: [(1, 5)],
-        5.0: [(5, 1)],
-        0.25: [(1, 4)],
-        1.0: [(2, 2), (1, 1)],
-        4.0: [(4, 1)],
-        0.3333333333333333: [(1, 3)],
-        3.0: [(3, 1)],
-        0.5: [(1, 2)],
-        2.0: [(2, 1)]
-    }
-    """
-    asp_dict = {}
-    for tile_size in range(num_tiles, 0, -1):
-        _factors = sorted(get_all_number_factors(tile_size))
-        _asp_ratios = [(x, tile_size // x) for x in _factors]
-        for ratio in _asp_ratios:
-            k = ratio[0] / ratio[1]
-            if k not in asp_dict:
-                asp_dict[k] = [ratio]
-            else:
-                asp_dict[k].append(ratio)
-    return asp_dict
+    Computes all allowed aspect ratios for a given maximum number of input tiles.
 
-
-def find_closest_aspect_ratio(num_tiles: int, img_width: int, img_height: int, tile_size: int) -> Tuple:
-    """
-    Given an image width, height and target number of tiles
-    this function will find the closest supported aspect ratio.
+    This function calculates all possible arrangements of tiles that can be formed
+    within the constraint of the maximum number of tiles. Each arrangement is
+    represented by its aspect ratio (width/height) and the corresponding tile configuration.
 
     Args:
-        tile_size: tile size
+        max_image_tiles (int):
+            The maximum number of tiles allowed.
 
+    Returns:
+        `Dict[float, List[Tuple[int, int]]]`: A dictionary where:
+            - Keys are aspect ratios (`float`)
+            - Values are lists of tuples, each tuple representing a valid (width, height)
+              configuration in terms of number of tiles.
+
+    Example:
+        For max_image_tiles=4, the function returns:
+        {
+            0.25: [(1, 4)],
+            0.33: [(1, 3)],
+            0.5: [(1, 2)],
+            1.0: [(1, 1), (2, 2)],  # Multiple arrangements
+            2.0: [(2, 1)],
+            3.0: [(3, 1)],
+            4.0: [(4, 1)],
+        }
+
+    Note:
+        - The aspect ratio is calculated as width/height.
+        - Multiple configurations can have the same aspect ratio (e.g., 2x2 and 1x1).
     """
-    tgt_ar = img_width / img_height
-    asp_dict = find_supported_aspect_ratios(num_tiles)
-    cl_d, cl_p = 1e23, None
-    if tgt_ar >= 1:
-        cl_p = min(
-            [k for k in asp_dict.keys() if k <= tgt_ar],
-            key=lambda x: abs(x - tgt_ar),
-        )
-        v = asp_dict[cl_p]
-        # select width
-        widths = [(idx, tile_size * vv[0]) for idx, vv in enumerate(v)]
-        tgt_idx = max(widths, key=lambda x: x[1])[0]
+    aspect_ratios_dict = defaultdict(list)
+    for width in range(1, max_image_tiles + 1):
+        for height in range(1, max_image_tiles + 1):
+            if width * height <= max_image_tiles:
+                aspect_ratios_dict[width / height].append((width, height))
+    return aspect_ratios_dict
+
+
+def find_closest_aspect_ratio(max_image_tiles: int, image_width: int, image_height: int) -> Tuple:
+    """
+    Find the closest supported aspect ratio for an image given its dimensions and maximum number of tiles.
+
+    This function determines the most suitable aspect ratio for an image, considering the constraints
+    of a maximum number of tiles. It aims to find a tile configuration that closely matches the
+    original image's aspect ratio while staying within the tile limit.
+
+    Args:
+        max_image_tiles (`int`):
+            The maximum number of tiles allowed for the image.
+        image_width (`int`):
+            The width of the input image.
+        image_height (`int`):
+            The height of the input image.
+
+    Returns:
+        `Tuple[int, int]`: A tuple representing the number of tiles in width and height
+        for the closest supported aspect ratio.
+
+    Note:
+        The function uses the `find_supported_aspect_ratios` to get all possible tile configurations,
+        then selects the one that best matches the input image's aspect ratio.
+    """
+    target_aspect_ratio = image_width / image_height
+    aspect_ratio_dict = find_supported_aspect_ratios(max_image_tiles)
+
+    if target_aspect_ratio >= 1:
+        # Search closest aspect ratio
+        ratios = [ratio for ratio in aspect_ratio_dict if ratio <= target_aspect_ratio]
+        closest_aspect_ratio = min(ratios, key=lambda ratio: abs(ratio - target_aspect_ratio))
+        aspect_ratio_factors = aspect_ratio_dict[closest_aspect_ratio]
+        # Find the aspect ratio factor with the maxium width
+        widths = [num_tiles_width for num_tiles_width, num_tiles_height in aspect_ratio_factors]
+        index = widths.index(max(widths))
+        aspect_ratio = aspect_ratio_factors[index]
     else:
-        cl_p = min(
-            [k for k in asp_dict.keys() if k > tgt_ar],
-            key=lambda x: abs(1 / x - 1 / tgt_ar),
-        )
-        v = asp_dict[cl_p]
-        # select height
-        heights = [(idx, tile_size * vv[1]) for idx, vv in enumerate(v)]
-        tgt_idx = max(heights, key=lambda x: x[1])[0]
-    out = v[tgt_idx]
-    return out
+        # Search closest aspect ratio
+        ratios = [ratio for ratio in aspect_ratio_dict if ratio > target_aspect_ratio]
+        closest_aspect_ratio = min(ratios, key=lambda ratio: abs(1 / ratio - 1 / target_aspect_ratio))
+        aspect_ratio_factors = aspect_ratio_dict[closest_aspect_ratio]
+        # Find the aspect ratio factor with the maxium height
+        heights = [num_tiles_height for num_tiles_width, num_tiles_height in aspect_ratio_factors]
+        index = heights.index(max(heights))
+        aspect_ratio = aspect_ratio_factors[index]
+    return aspect_ratio
+
+
+def get_size_for_image_fitted_to_tile_size(
+    image_height: int,
+    image_width: int,
+    tile_size: int,
+) -> Tuple[int, int]:
+    """
+    Calculate the size of an image when fitted to a tile of a specific size while maintaining aspect ratio.
+
+    This function determines the new dimensions of an image when it's scaled to fit
+    a tile of specified size. The scaling ensures that:
+    1. The larger dimension of the image is at least as large as the tile size.
+    2. The smaller dimension is scaled proportionally to maintain the original aspect ratio.
+
+    Args:
+        image_height (`int`):
+            The height of the original image.
+        image_width (`int`):
+            The width of the original image.
+        tile_size (`int`):
+            The size of the tile to fit the image into.
+
+    Returns:
+        `Tuple[int, int]`:
+            A tuple containing the new (height, width) of the fitted image.
+    """
+    scale = image_width / image_height
+
+    if image_width > image_height:
+        new_image_width = max(tile_size, image_width)
+        new_image_height = math.floor(new_image_width / scale)
+    else:
+        new_image_height = max(tile_size, image_height)
+        new_image_width = math.floor(new_image_height * scale)
+
+    return new_image_height, new_image_width
 
 
 def get_size_for_image_fitted_to_canvas(
     image_height: int,
     image_width: int,
-    tile_size: int,
-):
-    scale = image_width / image_height
-
-    if scale > 1.0:
-        # width > height
-        new_w = max(tile_size, image_width)
-        new_h = math.floor(new_w / scale)
-    else:
-        # height >= width
-        new_h = max(tile_size, image_height)
-        new_w = math.floor(new_h * scale)
-
-    return new_h, new_w
-
-
-def get_size_for_image_not_fitted_to_canvas(
-    image_height: int,
-    image_width: int,
     canvas_height: int,
     canvas_width: int,
-):
+) -> Tuple[int, int]:
+    """
+    Calculate the size of an image when fitted to a canvas while maintaining aspect ratio.
+
+    This function determines the new dimensions of an image when it's scaled to fit
+    a canvas of specified height and width. The scaling ensures that:
+    1. The larger dimension of the image matches the corresponding dimension of the canvas.
+    2. The smaller dimension is scaled proportionally to maintain the original aspect ratio.
+
+    Args:
+        image_height (`int`):
+            The height of the original image.
+        image_width (`int`):
+            The width of the original image.
+        canvas_height (`int`):
+            The height of the target canvas.
+        canvas_width (`int`): The width of the target canvas.
+
+    Returns:
+        `Tuple[int, int]`:
+            A tuple containing the new (height, width) of the fitted image.
+    """
     scale = image_width / image_height
 
-    if scale > 1.0:
-        # width > height
-        new_w = canvas_width
-        new_h = math.floor(new_w / scale)
+    if image_width > image_height:
+        new_image_width = canvas_width
+        new_image_height = math.floor(new_image_width / scale)
     else:
-        # height >= width
-        new_h = canvas_height
-        new_w = math.floor(new_h * scale)
+        new_image_height = canvas_height
+        new_image_width = math.floor(new_image_height * scale)
 
-    return new_h, new_w
+    return new_image_height, new_image_width
 
 
+def get_aspect_ratio_of_optimal_canvas_larger_than_image(
+    max_image_tiles: int, image_width: int, image_height: int, tile_size: int
+) -> Optional[Tuple[int, int]]:
+    """
+    Determines the optimal canvas size for an image given a maximum number of tiles.
+
+    This function attempts to fit an image without downsampling into various canvas sizes that can be constructed
+    from a grid of tiles. It aims to find the best fit that minimizes unused space while
+    maximizing the image's shorter edge.
+
+    Args:
+        max_image_tiles (`int`):
+            The maximum number of tiles available to construct the canvas.
+        image_width (`int`):
+            The width of the input image.
+        image_height (`int`):
+            The height of the input image.
+        tile_size (`int`):
+            The size of each square tile (width and height are equal).
+
+    Returns:
+        `Optional[Tuple[int, int]]`:
+            A tuple containing the number of tiles in width and height
+            for the optimal canvas, or None if no suitable canvas is found.
+    """
+    # Initialize the optimal canvas to None. If no canvas is found where image fits, function returns None.
+    optimal_canvas = None
+
+    # Gather all potential supported canvas arrangements
+    potential_arrangements = []
+    aspect_ratios_dict = find_supported_aspect_ratios(max_image_tiles)
+    for aspect_ratios in aspect_ratios_dict.values():
+        potential_arrangements.extend(aspect_ratios)
+
+    best_gap = float("inf")
+
+    for num_tiles_width, num_tiles_height in potential_arrangements:
+        # Compute the canvas size
+        canvas_width = num_tiles_width * tile_size
+        canvas_height = num_tiles_height * tile_size
+
+        # Check if image can fit into the canvas without downsampling
+        if canvas_width >= image_width and canvas_height >= image_height:
+            # If we did not find a good canvas yet, we will use the current one
+            if optimal_canvas is None:
+                optimal_canvas = (num_tiles_width, num_tiles_height)
+
+            # Compute the gap between the canvas and the image and update the best gap
+            current_gap = (canvas_width - image_width) + (canvas_height - image_height)
+            if current_gap < best_gap:
+                optimal_canvas = (num_tiles_width, num_tiles_height)
+                best_gap = current_gap
+
+    return optimal_canvas
+
+
+@lru_cache(maxsize=100)
 def get_target_image_size_and_aspect_ratio(
     image_height: int,
     image_width: int,
     max_image_tiles: int,
     tile_size: int,
-):
-    aspect_ratio = fit_image_to_canvas(
-        num_tiles=max_image_tiles,
-        img_width=image_width,
-        img_height=image_height,
+) -> Tuple[Tuple[int, int], Tuple[int, int]]:
+    """
+    Get the target image size and aspect ratio for an image to fit optimally within a tiled canvas.
+
+    This function determines the best size to resize an image and the optimal aspect ratio of the canvas
+    it should be placed on, given constraints on the maximum number of tiles and tile size.
+
+    The function follows these steps:
+    1. Attempt to find an optimal canvas larger than the image.
+    2. If a larger canvas is found, resize the image to better fit the tile size.
+    3. If no larger canvas is found, find the closest possible aspect ratio and downscale the image.
+
+    The result of the function is cached and will be not recomuted for the same parameters.
+
+    Args:
+        image_height (`int`):
+            The height of the original image.
+        image_width (`int`):
+            The width of the original image.
+        max_image_tiles (`int`):
+            The maximum number of tiles allowed in the canvas.
+        tile_size (`int`):
+            The size of each tile (assumed to be square).
+
+    Returns:
+        `Tuple[Tuple[int, int], Tuple[int, int]]`:
+            A tuple containing:
+            - The new dimensions (height, width) for the resized image.
+            - The aspect ratio of the canvas as (num_tiles_width, num_tiles_height)
+    """
+
+    # Get the aspect ratio of the optimal canvas larger than the image
+    # if no canvas larger than image can be found with given parameters,
+    # aspect_ratio will be None
+    aspect_ratio = get_aspect_ratio_of_optimal_canvas_larger_than_image(
+        max_image_tiles=max_image_tiles,
+        image_width=image_width,
+        image_height=image_height,
         tile_size=tile_size,
     )
-    is_fit_to_canvas = aspect_ratio is not None
 
-    if is_fit_to_canvas:
-        size = get_size_for_image_fitted_to_canvas(
+    # If we found a canvas, we get the optimal size for the image to better fit the tile size
+    if aspect_ratio is not None:
+        new_image_height, new_image_width = get_size_for_image_fitted_to_tile_size(
             image_height=image_height,
             image_width=image_width,
             tile_size=tile_size,
         )
 
-    # If we did not find a canvas, we have to find the closest aspect ratio and downsample the image
+    # If we did not find a canvas larger than the image,
+    # we have to find the closest aspect ratio and downsample the image
     else:
         aspect_ratio = find_closest_aspect_ratio(
-            num_tiles=max_image_tiles,
-            img_width=image_width,
-            img_height=image_height,
-            tile_size=tile_size,
+            max_image_tiles=max_image_tiles,
+            image_width=image_width,
+            image_height=image_height,
         )
-        canvas_width = aspect_ratio[0] * tile_size
-        canvas_height = aspect_ratio[1] * tile_size
-        size = get_size_for_image_not_fitted_to_canvas(
+        num_tiles_width, num_tiles_height = aspect_ratio
+        canvas_width = num_tiles_width * tile_size
+        canvas_height = num_tiles_height * tile_size
+        new_image_height, new_image_width = get_size_for_image_fitted_to_canvas(
             image_height=image_height,
             image_width=image_width,
             canvas_height=canvas_height,
             canvas_width=canvas_width,
         )
 
-    return size, aspect_ratio
+    return (new_image_height, new_image_width), aspect_ratio
 
 
-# Copied from IDEFICS2
+def split_to_tiles(image: np.ndarray, num_tiles_width: int, num_tiles_height: int) -> np.ndarray:
+    """
+    Split an image into a specified number of tiles along its width and height dimensions.
+
+    Args:
+        image (`np.ndarray`):
+            Input image with shape (num_channels, height, width).
+        num_tiles_width (`int`):
+            Number of tiles to split the image into along its width.
+        num_tiles_height (`int`):
+            Number of tiles to split the image into along its height.
+
+    Returns:
+        `np.ndarray`:
+            Array of image tiles with shape (num_tiles_width * num_tiles_height, num_channels, tile_height, tile_width).
+    """
+    num_channels, height, width = image.shape
+    tile_height = height // num_tiles_height
+    tile_width = width // num_tiles_width
+
+    image = image.reshape(num_channels, num_tiles_height, tile_height, num_tiles_width, tile_width)
+
+    # Permute to (num_tiles_height, num_tiles_width, num_channels, tile_height, tile_width)
+    image = image.transpose(1, 3, 0, 2, 4)
+    # image = image.transpose(0, 2, 4, 1, 3)
+
+    # Reshape into the desired output shape (num_tiles_width * num_tiles_height, num_channels, tile_height, tile_width)
+    image = image.reshape(num_tiles_width * num_tiles_height, num_channels, tile_height, tile_width)
+
+    return np.ascontiguousarray(image)
+
+
+def pack_images(
+    batch_images: List[List[np.ndarray]],
+    max_image_tiles: int,
+) -> Tuple[np.ndarray, List[List[int]]]:
+    """
+    Stack a list of lists of images with variable lengths into a numpy array, applying zero padding as needed.
+    Each list in the input represents a batch sample, and each image within a list is expected to be
+    pre-split into tiles. The resulting array will have a shape of
+    (batch_size, max_num_images, max_image_tiles, channels, tile_height, tile_width).
+
+    Args:
+        batch_images (`List[List[np.ndarray]]`):
+            A list of lists of image tiles. Each inner list represents
+            a batch sample containing multiple images, where each image is pre-split into tiles.
+            The shape of each tile array is (num_tiles, channels, tile_height, tile_width).
+        max_image_tiles (int):
+            The maximum number of tiles any image was potantially split.
+
+    Returns:
+        `Tuple[np.ndarray, List[List[int]]]`: A tuple containing:
+            - stacked_images (`np.ndarray`):
+                A numpy array of stacked images with shape
+                (batch_size, max_num_images, max_image_tiles, channels, tile_height, tile_width).
+            - all_num_tiles (`List[List[int]]`):
+                A list of lists containing the number of tiles
+                for each image in each batch sample.
+    """
+
+    # Determine output shape
+    batch_size = len(batch_images)
+    max_num_images = max([len(images) for images in batch_images])
+    shapes = [image.shape for images in batch_images for image in images]
+    _, channels, tile_height, tile_width = shapes[0]
+
+    # Initialize the stacked images array with zeros
+    stacked_images = np.zeros(
+        (batch_size, max_num_images, max_image_tiles, channels, tile_height, tile_width),
+        dtype=np.float32,
+    )
+
+    # Fill the stacked images array with the tiled images from the batch
+    all_num_tiles = []
+    for i, images in enumerate(batch_images):
+        num_sample_tiles = []
+        for j, image in enumerate(images):
+            num_tiles = image.shape[0]
+            stacked_images[i, j, :num_tiles] = image
+            num_sample_tiles.append(num_tiles)
+        all_num_tiles.append(num_sample_tiles)
+
+    return stacked_images, all_num_tiles
+
+
+def pack_aspect_ratios(aspect_ratios: List[List[Tuple[int, int]]], pad_value: int = 1) -> np.ndarray:
+    """
+    Stack a list of aspect ratios into a numpy array.
+
+    Args:
+        aspect_ratios (`List[List[Tuple[int, int]]]`):
+            A list of aspect ratios.
+        pad_value (`int`, *optional*, defaults to 1):
+            The value to pad the aspect ratios with.
+
+    Returns:
+        `np.ndarray`:
+            The aspect ratios stacked into a numpy array with shape (batch_size, max_num_images, 2).
+    """
+    batch_size = len(aspect_ratios)
+
+    # TODO: in original code there is also max_images = max(max_images, 1)
+    max_num_images = max([len(row) for row in aspect_ratios])
+
+    aspect_ratios_stacked = np.full((batch_size, max_num_images, 2), pad_value, dtype=np.int64)
+    for i, row in enumerate(aspect_ratios):
+        if len(row) > 0:
+            aspect_ratios_stacked[i, : len(row)] = np.array(row)
+    return aspect_ratios_stacked
+
+
+def convert_aspect_ratios_to_ids(aspect_ratios: List[List[Tuple[int, int]]], mux_num_tiles: int) -> np.ndarray:
+    """
+    Convert aspect ratio tuples to unique ids with the following encoding:
+
+        id = (num_tiles_h - 1) * max_image_tiles + num_tiles_w
+
+    For max_image_tiles = 4, we have the following encoding:
+
+        - aspect ratio (1, 1) -> id = 1
+        - aspect ratio (1, 2) -> id = 2
+        - aspect ratio (1, 3) -> id = 3
+        - aspect ratio (1, 4) -> id = 4
+        - aspect ratio (2, 1) -> id = 5
+        - aspect ratio (2, 2) -> id = 6
+        - aspect ratio (3, 1) -> id = 9
+        - aspect ratio (4, 1) -> id = 13
+
+    For batch padding we use 0, because there might be different number of images in each batch.
+
+    Args:
+        aspect_ratios (`List[List[Tuple[int, int]]]`):
+            A list of aspect ratios.
+        mux_num_tiles (`int`):
+            The maximum number of tiles any image was potentially split into.
+
+    Returns:
+        `np.ndarray`:
+            The aspect ratios ids as numpy array with shape (batch_size, max_num_images).
+    """
+
+    batch_size = len(aspect_ratios)
+    max_num_images = max([len(row) for row in aspect_ratios])
+
+    aspect_ratios_ids = np.zeros((batch_size, max_num_images), dtype=np.int64)
+    for i, sample_aspect_ratios in enumerate(aspect_ratios):
+        for j, (num_tiles_h, num_tiles_w) in enumerate(sample_aspect_ratios):
+            aspect_ratios_ids[i, j] = (num_tiles_h - 1) * mux_num_tiles + num_tiles_w
+    return aspect_ratios_ids
+
+
+# Copied from transformers.models.idefics2.image_processing_idefics2.to_channel_dimension_format
 def to_channel_dimension_format(
     image: np.ndarray,
     channel_dim: Union[ChannelDimension, str],
@@ -219,7 +519,8 @@ def to_channel_dimension_format(
             The channel dimension format of the input image. If not provided, it will be inferred from the input image.
 
     Returns:
-        `np.ndarray`: The image with the channel dimension set to `channel_dim`.
+        `np.ndarray`:
+            The image with the channel dimension set to `channel_dim`.
     """
     if not isinstance(image, np.ndarray):
         raise ValueError(f"Input image must be of type np.ndarray, got {type(image)}")
@@ -241,224 +542,31 @@ def to_channel_dimension_format(
     return image
 
 
-def validate_size(size: Dict[str, int]) -> None:
-    if not ("height" in size and "width" in size):
-        raise ValueError(f"Argument `size` must be a dictionary with keys 'height' and 'width'. Got: {size}")
-    if size["height"] != size["width"]:
-        raise ValueError(f"Argument `size` must have the same height and width, got {size}")
-
-
-def validate_mllama_preprocess_arguments(do_resize, size, do_pad, max_image_tiles):
-    if not do_pad:
-        raise ValueError("MllamaImageProcessor doesn't support `do_pad=False` mode.")
-    if not do_resize:
-        raise ValueError("MllamaImageProcessor doesn't support `do_resize=False` mode.")
-    if max_image_tiles is None or max_image_tiles <= 0:
-        raise ValueError(
-            f"MllamaImageProcessor `max_image_tiles` must be a positive integer, got {max_image_tiles}."
-        )
-    validate_size(size)
-
-
-def split_to_tiles(image: np.ndarray, ncw: int, nch: int) -> np.ndarray:
-    # Split image into number of required tiles (width x height)
-    num_channels, height, width = image.shape
-    image = image.reshape(num_channels, nch, height // nch, ncw, width // ncw)
-    # Permute dimensions to reorder the axes
-    image = image.transpose(1, 3, 0, 2, 4)
-    # Reshape into the desired output shape (batch_size * 4, num_channels, width/2, height/2)
-    image = image.reshape(ncw * nch, num_channels, height // nch, width // ncw)
-    # Make contiguous
-    image = np.ascontiguousarray(image)
-    return image
-
-
-def fit_image_to_canvas(num_tiles: int, img_width: int, img_height: int, tile_size: int) -> Any:
-    # fmt: off
-    r"""
-    Finds the best canvas (grid of tiles) to fit an image without resizing the image smaller.
-    Given the number of tiles, the function explores different grid arrangements (width x height)
-    and determines the one that best fits the image. The image must fit without downscaling,
-    and the function returns the grid with the smallest gap between the canvas size and image size.
-
-    Example of canvases made from tiles:
-
-    To visualize how the image can fit onto different tile grids, let's try fitting an ASCII cat into the tiles.
-
-    Here's an ASCII cat image you want to fit into the tiles:
-
-       /\_/\
-      ( o.o )
-       > ^ <
-
-    If `num_tiles=6`, possible tile grids would look like this:
-
-    **2x3 Canvas (2 tiles wide, 3 tiles tall)**: -> total of 6 tiles
-    +-------+-------+
-    | /\_/\ |   0   |   <- Cat image split across two tiles horizontally
-    +-------+-------+
-    | > ^ < |   0   |   <- Remaining part of the cat occupies the left tile
-    +-------+-------+
-    |( o.o )|   0   |
-    +-------+-------+
-
-    **3x2 Canvas (3 tiles wide, 2 tiles tall)**: -> total of 6 tiles
-    +-------+-------+-------+
-    | /\_/\ |( o.o )|   0   |   <- Cat image occupies the first two tiles, 1 tile remains empty
-    +-------+-------+-------+
-    | > ^ < |   0   |   0   |   <- Remaining part of the cat occupies the left tile
-    +-------+-------+-------+
-
-    **1x6 Canvas (1 tile wide, 6 tiles tall)**: -> total of 6 tiles
-    +-------+
-    | /\_/\ |   <- Top part of the cat
-    +-------+
-    |( o.o )|   <- Middle part of the cat
-    +-------+
-    | > ^ < |   <- Bottom part of the cat
-    +-------+
-    |   0   |
-    +-------+
-    |   0   |
-    +-------+
-    |   0   |
-    +-------+
-
-
-    The function tests these arrangements to find the smallest canvas where the image fits.
-    If multiple canvases fit, it selects the one where the dimensions are closest to the image size.
-
-    In this case the first canvas is the closest to the original image.
-
-    You then feed all of the tiles to the model:
-
-        +-------+-------+-------+-------+-------+-------+
-    -   | /\_/\ |( o.o )| > ^ < |   0   |   0   |   0   |  <- Last canvas
-        +-------+-------+-------+-------+-------+-------+
-
-        +-------+-------+-------+-------+-------+-------+
-    -   | /\_/\ |   0   |( o.o )|   0   | > ^ < |   0   | <- First canvas
-        +-------+-------+-------+-------+-------+-------+
-
-        +-------+-------+-------+-------+-------+-------+
-    -   | /\_/\ |( o.o )|   0   | > ^ < |   0   |   0   | <- second canvas
-        +-------+-------+-------+-------+-------+-------+
-
-    For each tile, you have num_channels (usually RGB so 3), tile_width, tile_height
-    Given that the tiles you get depend on the chosen aspect ratio, you have to add
-    embedding in the modeling code to help it know if it got a 3x2 or a 1x6 or a 2x3
-    aspect ratio.
-
-
-    Parameters:
-    - num_tiles: Total number of tiles available for the grid.
-    - img_width: The width of the image to fit into the canvas.
-    - img_height: The height of the image to fit into the canvas.
-    - tile_size: The size (side length) of each square tile.
-
-    Returns:
-    - The best-fitting canvas as a tuple (n_w, n_h), where n_w is the number of tiles in width
-      and n_h is the number of tiles in height.
-    - Returns None if no canvas can fit the image.
+# Copied from transformers.models.idefics2.image_processing_idefics2.convert_to_rgb
+def convert_to_rgb(image: ImageInput) -> ImageInput:
     """
-    # fmt: on
-    # Initialize the optimal canvas to None. If no canvas is found where image fits, function returns None.
-    optimal_canvas = None
-
-    # Gather all potential supported image resolutions and iterate through them to find best match
-    potential_arrangements = [
-        item for sublist in find_supported_aspect_ratios(num_tiles).values() for item in sublist
-    ]
-
-    current_gap = 1e23
-    for n_w, n_h in potential_arrangements:
-        # Compute the canvas size
-        canvas_width, canvas_height = n_w * tile_size, n_h * tile_size
-
-        # Check if image can fit into the canvas without downsampling
-        if canvas_width >= img_width and canvas_height >= img_height:
-            # If we did not find a good canvas yet, we will use the current one
-            if optimal_canvas is None:
-                # Set optimal canvas and determine the actual image height and width in the canvas with aspect ratio preserving resampling
-                optimal_canvas = (n_w, n_h)
-            else:
-                # Find closest fit based on gap
-                image_width_height = (n_w * tile_size, n_h * tile_size)
-                gap = abs(img_width - image_width_height[0]) + abs(img_height - image_width_height[1])
-                if gap < current_gap:
-                    # If the gap is smaller than the previous one, we will update our optimal canvas and image width height
-                    optimal_canvas = (n_w, n_h)
-                    current_gap = gap
-    return optimal_canvas
-
-
-def stack_images(
-    batch_images: List[List[np.ndarray]],
-    max_image_tiles: int,
-) -> Tuple[np.ndarray, List[List[int]]]:
-    # for each sample in a batch we have a list of images, and
-    # each image is split into num_tiles tiles. So, the image is represented as array
-    # of shape (num_tiles, channels, tile_height, tile_width), while the whole batch is
-    # of shape (batch_size, num_images, num_tiles, channels, tile_height, tile_width)
-
-    # TODO: in original code there is also max_images = max(max_images, 1)
-    max_num_images = max([len(images) for images in batch_images])
-
-    # collect shapes
-    shapes = [image.shape for images in batch_images for image in images]
-    _, channels, tile_height, tile_width = np.array(shapes).max(axis=0)
-
-    out_images, out_num_tiles = [], []
-    for images in batch_images:
-        out_images_i = np.zeros(
-            shape=(
-                max_num_images,
-                max_image_tiles,
-                channels,
-                tile_height,
-                tile_width,
-            ),
-            dtype=np.float32,
-        )
-        num_tiles_i = []
-        for j, image in enumerate(images):
-            num_tiles = image.shape[0]
-            out_images_i[j, :num_tiles] = image
-            num_tiles_i.append(num_tiles)
-        out_images.append(out_images_i)
-        out_num_tiles.append(num_tiles_i)
-
-    return np.stack(out_images), out_num_tiles
-
-
-def stack_aspect_ratios(aspect_ratios: List[List[Tuple[int, int]]], pad_value: int = 1) -> np.ndarray:
-    """
-    Stack a list of aspect ratios into a numpy array.
-
+    Converts an image to RGB format. Only converts if the image is of type PIL.Image.Image, otherwise returns the image
+    as is.
     Args:
-        aspect_ratios (`List[List[Tuple[int, int]]]`):
-            A list of aspect ratios.
-        pad_value (`int`, *optional*, defaults to 1):
-            The value to pad the aspect ratios with.
-
-    Returns:
-        `np.ndarray`: The aspect ratios stacked into a numpy array with shape (batch_size, max_num_images, 2).
+        image (Image):
+            The image to convert.
     """
-    batch_size = len(aspect_ratios)
+    if not isinstance(image, PIL.Image.Image):
+        return image
 
-    # TODO: in original code there is also max_images = max(max_images, 1)
-    max_num_images = max([len(row) for row in aspect_ratios])
+    # `image.convert("RGB")` would only work for .jpg images, as it creates a wrong background
+    # for transparent images. The call to `alpha_composite` handles this case
+    if image.mode == "RGB":
+        return image
 
-    aspect_ratios_stacked = np.full((batch_size, max_num_images, 2), pad_value, dtype=np.int64)
-    for i, row in enumerate(aspect_ratios):
-        if len(row) > 0:
-            aspect_ratios_stacked[i, : len(row)] = np.array(row)
-    return aspect_ratios_stacked
+    image_rgba = image.convert("RGBA")
+    background = Image.new("RGBA", image_rgba.size, (255, 255, 255))
+    alpha_composite = Image.alpha_composite(background, image_rgba)
+    alpha_composite = alpha_composite.convert("RGB")
+    return alpha_composite
 
-def is_valid_list_of_images(images: List):
-    return images and all([is_valid_image(image) for image in images])
 
-# Inspired by IDEFICS2
+# Modified from transformers.models.idefics2.image_processing_idefics2.make_list_of_images
 def make_list_of_images(images: ImageInput) -> List[List[Optional[np.ndarray]]]:
     """
     Convert a single image or a list of images to a list of numpy arrays.
@@ -474,10 +582,7 @@ def make_list_of_images(images: ImageInput) -> List[List[Optional[np.ndarray]]]:
     if is_valid_image(images):
         output_images = [[images]]
     # If it's a list of images, it's a single batch, so convert it to a list of lists
-    elif (
-        isinstance(images, (list, tuple))
-        and is_valid_list_of_images(images)
-    ):
+    elif isinstance(images, (list, tuple)) and is_valid_list_of_images(images):
         output_images = [images]
     # If it's a list of batches, it's already in the right format
     elif (
@@ -493,41 +598,65 @@ def make_list_of_images(images: ImageInput) -> List[List[Optional[np.ndarray]]]:
     return output_images
 
 
-def convert_aspect_ratios_to_ids(aspect_ratios: List[List[Tuple[int, int]]], mux_num_tiles: int) -> np.ndarray:
-    """
-    Convert aspect ratio tuples to unique ids with the following encoding:
+def is_valid_list_of_images(images: List):
+    return images and all([is_valid_image(image) for image in images])
 
-        id = (num_tiles_h - 1) * max_num_tiles + num_tiles_w
-        
-    For max_num_tiles = 4, we have the following encoding:
-        
-        - aspect ratio (1, 1) -> id = 1
-        - aspect ratio (1, 2) -> id = 2
-        - aspect ratio (1, 3) -> id = 3
-        - aspect ratio (1, 4) -> id = 4
-        - aspect ratio (2, 1) -> id = 5
-        - aspect ratio (2, 2) -> id = 6
-        - aspect ratio (3, 1) -> id = 9
-        - aspect ratio (4, 1) -> id = 13
 
-    For batch padding we use 0, because there might be different number of images in each batch.
-    """
+def validate_size(size: Dict[str, int]) -> None:
+    if not ("height" in size and "width" in size):
+        raise ValueError(f"Argument `size` must be a dictionary with keys 'height' and 'width'. Got: {size}")
+    if size["height"] != size["width"]:
+        raise ValueError(f"Argument `size` must have the same height and width, got {size}")
 
-    batch_size = len(aspect_ratios)
-    max_num_images = max([len(row) for row in aspect_ratios])
 
-    aspect_ratios_ids = np.zeros((batch_size, max_num_images), dtype=np.int64)
-    for i, sample_aspect_ratios in enumerate(aspect_ratios):
-        for j, (num_tiles_h, num_tiles_w) in enumerate(sample_aspect_ratios):
-            aspect_ratios_ids[i, j] = (num_tiles_h - 1) * mux_num_tiles + num_tiles_w
-    return aspect_ratios_ids
+def validate_mllama_preprocess_arguments(do_resize, size, do_pad, max_image_tiles):
+    if not do_pad:
+        raise ValueError("MllamaImageProcessor doesn't support `do_pad=False` mode.")
+    if not do_resize:
+        raise ValueError("MllamaImageProcessor doesn't support `do_resize=False` mode.")
+    if max_image_tiles is None or max_image_tiles <= 0:
+        raise ValueError(f"MllamaImageProcessor `max_image_tiles` must be a positive integer, got {max_image_tiles}.")
+    validate_size(size)
 
 
 class MllamaImageProcessor(BaseImageProcessor):
-    model_input_names = ["pixel_values", "num_tiles", "aspect_ratios", "aspect_ratio_ids"]
+    """
+    Constructs a Mllama image processor.
+
+    Args:
+        do_convert_rgb (`bool`, *optional*, defaults to `True`):
+            Whether to convert the image to RGB. This is useful if the input image is of a different format e.g. RGBA.
+            Only has an effect if the input image is in the PIL format.
+        do_resize (`bool`, *optional*, defaults to `self.do_resize`):
+            Whether to resize the image.
+        size (`Dict[str, int]`, *optional*, defaults to `self.size`):
+            Size of the image tile. Should be a dictionary containing 'height' and 'width' keys, both with integer values.
+            The height and width values should be equal.
+        resample (`int`, *optional*, defaults to `self.resample`):
+            Resampling filter to use if resizing the image. This can be one of the enum `PILImageResampling`. Only
+            has an effect if `do_resize` is set to `True`.
+        do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
+            Whether to rescale the image.
+        rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
+            Rescale factor to rescale the image by if `do_rescale` is set to `True`.
+        do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
+            Whether to normalize the image.
+        image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
+            Image mean to use for normalization. Only has an effect if `do_normalize` is set to `True`.
+        image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
+            Image standard deviation to use for normalization. Only has an effect if `do_normalize` is set to
+            `True`.
+        do_pad (`bool`, *optional*, defaults to `self.do_pad`):
+            Whether or not to pad the images to the largest height and width in the batch.
+        max_image_tiles (`int`, *optional*, defaults to `self.max_image_tiles`):
+            The maximum number of tiles to split the image into.
+    """
+
+    model_input_names = ["pixel_values", "num_tiles", "aspect_ratio_ids"]
 
     def __init__(
         self,
+        do_convert_rgb: bool = True,
         do_resize: bool = True,
         size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
@@ -541,6 +670,7 @@ class MllamaImageProcessor(BaseImageProcessor):
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
+        self.do_convert_rgb = do_convert_rgb
         self.do_resize = do_resize
         self.size = size if size is not None else {"height": 224, "width": 224}
         self.resample = resample
@@ -552,13 +682,12 @@ class MllamaImageProcessor(BaseImageProcessor):
         self.do_pad = do_pad
         self.max_image_tiles = max_image_tiles
 
-        validate_mllama_preprocess_arguments(
-            self.do_resize, self.size, self.do_pad, self.max_image_tiles
-        )
+        validate_mllama_preprocess_arguments(self.do_resize, self.size, self.do_pad, self.max_image_tiles)
 
     def preprocess(
         self,
         images: ImageInput,
+        do_convert_rgb: Optional[bool] = None,
         do_resize: Optional[bool] = None,
         size: Optional[Dict[str, int]] = None,
         resample: Optional[PILImageResampling] = None,
@@ -569,10 +698,61 @@ class MllamaImageProcessor(BaseImageProcessor):
         image_std: Optional[Union[float, List[float]]] = None,
         do_pad: Optional[bool] = None,
         max_image_tiles: Optional[int] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
         input_data_format: Optional[ChannelDimension] = None,
-        data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
+        return_tensors: Optional[Union[str, TensorType]] = None,
     ):
+        """
+        Preprocess a batch of images.
+
+        Args:
+            images (`ImageInput`):
+                A list of images to preprocess.
+            do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
+                Whether to convert the image to RGB.
+            do_resize (`bool`, *optional*, defaults to `self.do_resize`):
+                Whether to resize the image.
+            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
+                Size of the image tile. Should be a dictionary containing 'height' and 'width' keys, both with integer values.
+                The height and width values should be equal.
+            resample (`int`, *optional*, defaults to `self.resample`):
+                Resampling filter to use if resizing the image. This can be one of the enum `PILImageResampling`. Only
+                has an effect if `do_resize` is set to `True`.
+            do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
+                Whether to rescale the image.
+            rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
+                Rescale factor to rescale the image by if `do_rescale` is set to `True`.
+            do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
+                Whether to normalize the image.
+            image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
+                Image mean to use for normalization. Only has an effect if `do_normalize` is set to `True`.
+            image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
+                Image standard deviation to use for normalization. Only has an effect if `do_normalize` is set to
+                `True`.
+            do_pad (`bool`, *optional*, defaults to `self.do_pad`):
+                Whether or not to pad the images to the largest height and width in the batch.
+            max_image_tiles (`int`, *optional*, defaults to `self.max_image_tiles`):
+                The maximum number of tiles to split the image into.
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format for the input image. If unset, the channel dimension format is inferred
+                from the input image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
+            return_tensors (`str` or `TensorType`, *optional*):
+                The type of tensors to return. Can be one of:
+                - Unset: Return a list of `np.ndarray`.
+                - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
+                - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
+                - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
+                - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
+
+        Returns:
+            `BatchFeature` of the following structure:
+                - **pixel_values** (`TensorType`): The preprocessed pixel values.
+                - **aspect_ratio_ids** (`TensorType`): The aspect ratio ids of the images.
+                - **num_tiles** (`List[List[int]]`): The number of tiles for each image in the batch.
+        """
+        do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = size if size is not None else self.size
         resample = resample if resample is not None else self.resample
@@ -601,71 +781,84 @@ class MllamaImageProcessor(BaseImageProcessor):
         images_list = make_list_of_images(images)
         images_list = [[to_numpy_array(image) for image in images] for images in images_list]
 
-        # do_resize=False is not supported, validated
-        resized_images_and_aspect_ratios = [
+        # convert all images to (num_channels, height, width) format, it's much faster for preprocessing
+        data_format = ChannelDimension.FIRST
+        images_list = [
             [
-                self.resize(
-                    image,
-                    size,
-                    resample=resample,
-                    data_format=data_format,
-                    input_data_format=input_data_format,
-                    max_image_tiles=max_image_tiles,
-                )
+                to_channel_dimension_format(image, ChannelDimension.FIRST, input_channel_dim=input_data_format)
                 for image in images
             ]
             for images in images_list
         ]
-        images_list = [[image for image, ratio in images] for images in resized_images_and_aspect_ratios]
-        aspect_ratio_list = [[ratio for image, ratio in images] for images in resized_images_and_aspect_ratios]
 
-        # do_pad=False is not supported, validated
-        images_list = [
-            [
-                self.pad(
-                    image,
-                    size,
-                    aspect_ratio,
+        if self.do_convert_rgb:
+            images_list = [[convert_to_rgb(image) for image in images] for images in images_list]
+
+        batch_images = []
+        batch_aspect_ratios = []
+
+        # iterate over batch samples
+        for images in images_list:
+            sample_images = []
+            sample_aspect_ratios = []
+
+            # iterate over images in a batch sample
+            for image in images:
+                # do_resize=False is not supported, validated
+                image, aspect_ratio = self.resize(
+                    image=image,
+                    size=size,
+                    resample=resample,
+                    max_image_tiles=max_image_tiles,
+                    input_data_format=data_format,
                     data_format=data_format,
-                    input_data_format=input_data_format,
                 )
-                for image, aspect_ratio in zip(images, aspect_ratios)
-            ]
-            for images, aspect_ratios in zip(images_list, aspect_ratio_list)
-        ]
 
-        if do_rescale:
-            images_list = [
-                [
-                    self.rescale(
+                # do_pad=False is not supported, validated
+                image = self.pad(
+                    image=image,
+                    size=size,
+                    aspect_ratio=aspect_ratio,
+                    input_data_format=data_format,
+                    data_format=data_format,
+                )
+
+                if do_rescale:
+                    image = self.rescale(
                         image=image,
                         scale=rescale_factor,
                         input_data_format=input_data_format,
+                        data_format=data_format,
                     )
-                    for image in images
-                ]
-                for images in images_list
-            ]
 
-        if do_normalize:
-            images_list = [
-                [self.normalize(image, mean=image_mean, std=image_std) for image in images] for images in images_list
-            ]
+                if do_normalize:
+                    image = self.normalize(
+                        image=image,
+                        mean=image_mean,
+                        std=image_std,
+                        input_data_format=input_data_format,
+                        data_format=data_format,
+                    )
 
-        # Split each image to tiles
-        images_list = [
-            [split_to_tiles(image, aspect_ratio[0], aspect_ratio[1]) for image, aspect_ratio in zip(images, aspect_ratios)]
-            for images, aspect_ratios in zip(images_list, aspect_ratio_list)
-        ]
+                num_tiles_width, num_tiles_height = aspect_ratio
+                image = split_to_tiles(image, num_tiles_width, num_tiles_height)
 
-        images, num_tiles = stack_images(images_list, max_image_tiles)
-        aspect_ratios = stack_aspect_ratios(aspect_ratio_list, pad_value=1)
-        aspect_ratio_ids = convert_aspect_ratios_to_ids(aspect_ratio_list, mux_num_tiles=max_image_tiles)
+                sample_images.append(image)
+                sample_aspect_ratios.append(aspect_ratio)
 
-        # images: (batch_size, num_images, MAX_num_tiles, channels, tile_height, tile_width) - padded to max num tiles
-        # aspect_ratios: (batch_size, num_images, 2) - aspect ratios for each image, padded to max num images
-        # num_tiles: (batch_size, num_images)  - real number of tiles for each image
+            batch_images.append(sample_images)
+            batch_aspect_ratios.append(sample_aspect_ratios)
 
+        images, num_tiles = pack_images(batch_images, max_image_tiles)
+
+        # TODO: aspect ratios not be needed when ids are supported in modeling code
+        aspect_ratios = pack_aspect_ratios(batch_aspect_ratios, pad_value=1)
+        aspect_ratio_ids = convert_aspect_ratios_to_ids(batch_aspect_ratios, mux_num_tiles=max_image_tiles)
+
+        # images (np.ndarray) with shape (batch_size, max_num_images, max_image_tiles, channels, tile_height, tile_width)
+        # aspect_ratios (np.ndarray) with shape (batch_size, max_num_images, 2) - aspect ratios for each image, padded to max_num_images with 1
+        # aspect_ratio_ids (np.ndarray) with shape (batch_size, max_num_images) - aspect ratio ids for each image, padded to max_num_images with 0
+        # num_tiles (List[List[int]]) with (batch_size, num_images_in_batch) - real number of tiles for each image, not padded
         encoded_inputs = BatchFeature(
             data=dict(pixel_values=images, aspect_ratios=aspect_ratios, aspect_ratio_ids=aspect_ratio_ids),
             tensor_type=return_tensors,
@@ -704,9 +897,10 @@ class MllamaImageProcessor(BaseImageProcessor):
 
         validate_size(size)
 
-        image_height, image_width = get_image_size(image)
-        padded_height = aspect_ratio[1] * size["height"]
-        padded_width = aspect_ratio[0] * size["width"]
+        image_height, image_width = get_image_size(image, channel_dim=input_data_format)
+        num_tiles_width, num_tiles_height = aspect_ratio
+        padded_height = num_tiles_height * size["height"]
+        padded_width = num_tiles_width * size["width"]
         pad_size = ((0, padded_height - image_height), (0, padded_width - image_width))
 
         image = pad(
@@ -748,7 +942,7 @@ class MllamaImageProcessor(BaseImageProcessor):
 
         validate_size(size)
 
-        image_height, image_width = get_image_size(image)
+        image_height, image_width = get_image_size(image, channel_dim=input_data_format)
 
         (new_height, new_width), aspect_ratio = get_target_image_size_and_aspect_ratio(
             image_height=image_height,
