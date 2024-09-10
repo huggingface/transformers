@@ -125,12 +125,6 @@ class JambaConfig(PretrainedConfig):
     model_type = "jamba"
     keys_to_ignore_at_inference = ["past_key_values"]
 
-    def _check_supported_offset(self, property_: str, period: int, offset: int):
-        if offset >= period:
-            raise ValueError(
-                f"{property_} layer offset ({offset}) must be smaller than {property_} layer period ({period})"
-            )
-
     def __init__(
         self,
         vocab_size=65536,
@@ -231,3 +225,9 @@ class JambaConfig(PretrainedConfig):
             self.num_experts if i % self.expert_layer_period == self.expert_layer_offset else 1
             for i in range(self.num_hidden_layers)
         ]
+
+    def _check_supported_offset(self, property_: str, period: int, offset: int):
+        if offset >= period:
+            raise ValueError(
+                f"{property_} layer offset ({offset}) must be smaller than {property_} layer period ({period})"
+            )
