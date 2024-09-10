@@ -23,13 +23,6 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-def _check_supported_offset(property_: str, period: int, offset: int):
-    if offset >= period:
-        raise ValueError(
-            f"{property_} layer offset ({offset}) must be smaller than {property_} layer period ({period})"
-        )
-
-
 class JambaConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`JambaModel`]. It is used to instantiate a
@@ -132,6 +125,12 @@ class JambaConfig(PretrainedConfig):
     model_type = "jamba"
     keys_to_ignore_at_inference = ["past_key_values"]
 
+    def _check_supported_offset(self, property_: str, period: int, offset: int):
+        if offset >= period:
+            raise ValueError(
+                f"{property_} layer offset ({offset}) must be smaller than {property_} layer period ({period})"
+            )
+
     def __init__(
         self,
         vocab_size=65536,
@@ -200,8 +199,8 @@ class JambaConfig(PretrainedConfig):
         self.attn_layer_period = attn_layer_period
         self.attn_layer_offset = attn_layer_offset
 
-        _check_supported_offset("attention", self.attn_layer_period, self.attn_layer_offset)
-        _check_supported_offset("expert", self.expert_layer_period, self.expert_layer_offset)
+        self._check_supported_offset("attention", self.attn_layer_period, self.attn_layer_offset)
+        self._check_supported_offset("expert", self.expert_layer_period, self.expert_layer_offset)
 
         self.use_mamba_kernels = use_mamba_kernels
         self.mamba_d_state = mamba_d_state
