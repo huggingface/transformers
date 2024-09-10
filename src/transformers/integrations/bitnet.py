@@ -16,7 +16,8 @@ from ..utils import is_accelerate_available, logging
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from accelerate import init_empty_weights
+
+
 if is_accelerate_available():
     from accelerate import init_empty_weights
 
@@ -69,7 +70,7 @@ class BitLinear158(nn.Module):
                 device=device,
             ),
         )
-        if bias : 
+        if bias :
             self.register_buffer(
                 "bias",
                 torch.zeros(
@@ -77,9 +78,9 @@ class BitLinear158(nn.Module):
                     dtype=torch.bfloat16,
                     device=device
                 ))
-        else : 
+        else :
             self.bias = None
-        
+
     @torch.compile
     def activation_quant(self, x, num_bits=8):
         Qn = -(2**(num_bits - 1))
@@ -93,7 +94,7 @@ class BitLinear158(nn.Module):
         out = input / si
         out = out / sw
         return out
-    
+
     def forward(self, x):
         w = self.weight
         w_unpacked = unpack_weights(w)
@@ -101,7 +102,7 @@ class BitLinear158(nn.Module):
         x_quant, x_scale = self.activation_quant(x)
         y = F.linear(x_quant.to(torch.bfloat16), w_quant)
         y = self.post_quant_process(y, self.weight_scale, x_scale)
-        if self.bias is not None : 
+        if self.bias is not None :
             y += self.bias.view(1, -1).expand_as(y)
         return y
 
@@ -117,7 +118,7 @@ def _replace_with_bitnet_linear(
     Private method that wraps the recursion for module replacement.
 
     Returns the converted model and a boolean that indicates if the conversion has been successfull or not.
-    """    
+    """
 
     if current_key_name is None:
         current_key_name = []
@@ -161,7 +162,7 @@ def replace_with_bitnet_linear(
 ):
     """
     A helper function to replace all `torch.nn.Linear` modules by `BitLinear158` modules`.
-    
+
     The function will be run recursively and replace all `torch.nn.Linear` modules except for the `lm_head` that should
     be kept as a `torch.nn.Linear` module. The replacement is done under `init_empty_weights` context manager so no
     CPU/GPU memory is required to run this function. Each weight will be quantized along the channel.

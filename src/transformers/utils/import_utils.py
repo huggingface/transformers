@@ -961,7 +961,7 @@ def is_eetq_available():
 def is_fbgemm_gpu_available():
     return _fbgemm_gpu_available
 
-def is_bitblas_available() : 
+def is_bitblas_available() :
     return _bitblas_available
 
 

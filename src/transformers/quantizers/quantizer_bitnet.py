@@ -15,10 +15,12 @@ from typing import TYPE_CHECKING, List
 
 from .base import HfQuantizer
 
+
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
-from ..utils import is_accelerate_available, is_torch_available, logging, is_bitblas_available
+from ..utils import is_accelerate_available, is_torch_available, logging
+
 
 if is_torch_available():
     import torch
@@ -97,7 +99,7 @@ class BitNetHfQuantizer(HfQuantizer):
             quantization_config=self.quantization_config,
             pre_quantized=self.pre_quantized,
         )
-        
+
     @property
     def is_serializable(self):
         return True
