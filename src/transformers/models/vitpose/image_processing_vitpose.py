@@ -147,8 +147,8 @@ def get_keypoint_predictions(heatmaps):
     return preds, scores
 
 
-def post_dark_udp(coords, batch_heatmaps, kernel=3):
-    """DARK post-pocessing. Implemented by udp.
+def post_dark_unbiased_data_processing(coords, batch_heatmaps, kernel=3):
+    """DARK post-pocessing. Implemented by unbiased_data_processing.
 
     Paper references:
     - Huang et al. The Devil is in the Details: Delving into Unbiased Data Processing for Human Pose Estimation (CVPR 2020).
@@ -583,7 +583,7 @@ class VitPoseImageProcessor(BaseImageProcessor):
 
         coords, scores = get_keypoint_predictions(heatmaps)
 
-        preds = post_dark_udp(coords, heatmaps, kernel=kernel)
+        preds = post_dark_unbiased_data_processing(coords, heatmaps, kernel=kernel)
 
         # Transform back to the image
         for i in range(batch_size):
