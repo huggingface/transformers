@@ -86,7 +86,6 @@ class JambaConfigTester(ConfigTester):
     def test_jamba_offset_properties(self):
         self.test_attn_offsets()
         self.test_expert_offsets()
-        raise NotImplementedError
 
     def run_common_tests(self):
         self.test_jamba_offset_properties()
