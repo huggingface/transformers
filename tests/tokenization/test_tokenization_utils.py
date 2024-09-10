@@ -297,7 +297,6 @@ class TokenizerUtilsTest(unittest.TestCase):
                 self.assertEqual(decoded_sent, "")
 
                 # test special token stand alone, do not skip the special tokens
-                sentence = "ஐ"
                 ids = tokenizer(sentence)["input_ids"]
                 decoded_sent = tokenizer.decode(ids, skip_special_tokens=False)
                 self.assertEqual(decoded_sent, "[CLS] ஐ [SEP]")
