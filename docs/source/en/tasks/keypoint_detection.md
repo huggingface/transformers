@@ -25,9 +25,7 @@ Keypoint detection identifies and locates specific points of interest within an 
 
 In this guide, we will show how to extract keypoints from images.
 
-Let's begin. For this tutorial we will use [SuperPoint](./model_doc/superpoint.md) which is a foundation model for keypoint detection.
-
-We can initialize the model and the processor like following.
+For this tutorial, we will use [SuperPoint](./model_doc/superpoint.md), a foundation model for keypoint detection.
 
 ```python
 from transformers import AutoImageProcessor, SuperPointForKeypointDetection
