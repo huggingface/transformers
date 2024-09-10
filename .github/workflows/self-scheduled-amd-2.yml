@@ -9,6 +9,25 @@ on:
       gpu_flavor:
         required: true
         type: string
+      job:
+        required: true
+        type: string
+      slack_report_channel:
+        required: true
+        type: string
+      runner:
+        required: true
+        type: string
+      docker:
+        required: true
+        type: string
+      ci_event:
+        required: true
+        type: string
+      working-directory-prefix:
+        default: ''
+        required: false
+        type: string
 
 env:
   HF_HOME: /mnt/cache
@@ -18,7 +37,7 @@ env:
   RUN_SLOW: yes
   HF_HUB_READ_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
   SIGOPT_API_TOKEN: ${{ secrets.SIGOPT_API_TOKEN }}
-
+  NUM_SLICES: 2
 
 # Important note: each job (run_tests_single_gpu, run_tests_multi_gpu, run_examples_gpu, run_pipelines_torch_gpu) requires all the previous jobs before running.
 # This is done so that we avoid parallelizing the scheduled tests, to leave available
@@ -58,6 +77,7 @@ jobs:
           echo "ROCR: $ROCR_VISIBLE_DEVICES"
 
   setup:
+    if: contains(fromJSON('["run_models_gpu"]'), inputs.job)
     name: Setup
     needs: check_runners
     strategy:
@@ -68,7 +88,8 @@ jobs:
       image: huggingface/transformers-pytorch-amd-gpu
       options: --device /dev/kfd --device /dev/dri --env ROCR_VISIBLE_DEVICES --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     outputs:
-      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      folder_slices: ${{ steps.set-matrix.outputs.folder_slices }}
+      slice_ids: ${{ steps.set-matrix.outputs.slice_ids }}
     steps:
       - name: Update clone
         working-directory: /transformers
@@ -90,7 +111,8 @@ jobs:
         name: Identify models to test
         working-directory: /transformers/tests
         run: |
-          echo "matrix=$(python3 -c 'import os; tests = os.getcwd(); model_tests = os.listdir(os.path.join(tests, "models")); d1 = sorted(list(filter(os.path.isdir, os.listdir(tests)))); d2 = sorted(list(filter(os.path.isdir, [f"models/{x}" for x in model_tests]))); d1.remove("models"); d = d2 + d1; print(d)')" >> $GITHUB_OUTPUT
+          echo "folder_slices=$(python3 ../utils/split_model_tests.py --num_splits ${{ env.NUM_SLICES }})" >> $GITHUB_OUTPUT
+          echo "slice_ids=$(python3 -c 'd = list(range(${{ env.NUM_SLICES }})); print(d)')" >> $GITHUB_OUTPUT
 
       - name: ROCM-SMI
         run: |
