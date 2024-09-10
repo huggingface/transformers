@@ -17,8 +17,7 @@ Processor class for Mllama.
 """
 
 # TODO: update all docs
-import numpy as np
-from typing import Dict, List, Optional, Union
+from typing import List, Optional, Union
 
 import numpy as np
 
@@ -28,8 +27,8 @@ import numpy as np
 # except ImportError:
 from typing_extensions import Unpack
 
-from ...image_utils import ImageInput
 from ...feature_extraction_utils import BatchFeature
+from ...image_utils import ImageInput
 from ...processing_utils import (
     ImagesKwargs,
     ProcessingKwargs,
@@ -82,10 +81,10 @@ def get_cross_attention_token_mask(input_ids: List[int], image_token_id: int) ->
     """
 
     image_token_locations = [i for i, token in enumerate(input_ids) if token == image_token_id]
-    
+
     if len(image_token_locations) == 0:
         return []
-    
+
     # only one image present, unmask until end of sequence
     if len(image_token_locations) == 1:
         return [[image_token_locations[0], -1]]
@@ -135,7 +134,7 @@ def convert_sparse_cross_attention_mask_to_dense(
     Note:
         - Special handling is done for cases where the end token is -1, which is interpreted as attending to the end of the sequence.
     """
-    
+
     batch_size = len(cross_attention_token_mask)
     max_num_images = max([len(masks) for masks in cross_attention_token_mask])
 

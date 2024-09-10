@@ -14,10 +14,11 @@
 # limitations under the License.
 
 import math
-import numpy as np
-from functools import lru_cache
 from collections import defaultdict
+from functools import lru_cache
 from typing import Dict, List, Optional, Tuple, Union
+
+import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
 from ...image_transforms import (
@@ -651,7 +652,7 @@ class MllamaImageProcessor(BaseImageProcessor):
             The maximum number of tiles to split the image into.
     """
 
-    model_input_names = ["pixel_values", "num_tiles", "aspect_ratios", "aspect_ratio_ids"]
+    model_input_names = ["pixel_values", "num_tiles", "aspect_ratio_ids"]
 
     def __init__(
         self,
@@ -748,7 +749,6 @@ class MllamaImageProcessor(BaseImageProcessor):
         Returns:
             `BatchFeature` of the following structure:
                 - **pixel_values** (`TensorType`): The preprocessed pixel values.
-                - **aspect_ratios** (`TensorType`): The aspect ratios of the images.
                 - **aspect_ratio_ids** (`TensorType`): The aspect ratio ids of the images.
                 - **num_tiles** (`List[List[int]]`): The number of tiles for each image in the batch.
         """
