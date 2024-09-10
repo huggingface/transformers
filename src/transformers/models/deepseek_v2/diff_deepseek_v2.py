@@ -45,7 +45,7 @@ from transformers.modeling_utils import PreTrainedModel
 from transformers.models.llama.modeling_llama import LlamaRMSNorm
 from transformers.models.persimmon.modeling_persimmon import PersimmonRotaryEmbedding, \
     PersimmonLinearScalingRotaryEmbedding, PersimmonDynamicNTKScalingRotaryEmbedding, PERSIMMON_INPUTS_DOCSTRING, \
-    PersimmonForCausalLM, apply_rotary_pos_emb, rotate_half
+    PersimmonForCausalLM, apply_rotary_pos_emb, rotate_half, PersimmonPreTrainedModel
 from transformers.pytorch_utils import (
     ALL_LAYERNORM_LAYERS,
     is_torch_greater_or_equal_than_1_13,
@@ -59,6 +59,11 @@ from transformers.utils import (
     replace_return_docstrings,
 )
 from transformers.utils.import_utils import is_torch_fx_available
+
+
+if is_flash_attn_2_available():
+    from ...modeling_flash_attention_utils import _flash_attention_forward
+
 
 DeepseekV2_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
@@ -386,6 +391,7 @@ def apply_rotary_pos_emb(apply_rotary_pos_emb):
     pass
 
 
+# does not need to have hidden_size passed, same as qwen 2
 class DeepseekV2MLP(nn.Module):
     def __init__(self, config, hidden_size=None, intermediate_size=None):
         super().__init__()
@@ -910,7 +916,6 @@ class DeepseekV2DecoderLayer(nn.Module):
         use_cache: Optional[bool] = False,
         **kwargs,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
-        # TODO: no diff
         """
         Args:
 
@@ -949,7 +954,6 @@ class DeepseekV2DecoderLayer(nn.Module):
         # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
-
         hidden_states = self.mlp(hidden_states)
 
         hidden_states = residual + hidden_states
@@ -972,27 +976,8 @@ DeepseekV2_INPUTS_DOCSTRING = PERSIMMON_INPUTS_DOCSTRING[:PERSIMMON_INPUTS_DOCST
     "The bare DeepseekV2 Model outputting raw hidden-states without any specific head on top.",
     DeepseekV2_START_DOCSTRING,
 )
-class DeepseekV2PreTrainedModel(PreTrainedModel):
-    config_class = DeepseekV2Config
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+class DeepseekV2PreTrainedModel(PersimmonPreTrainedModel):
     _no_split_modules = ["DeepseekV2DecoderLayer"]
-    _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn_2 = True
-    _supports_cache_class = True
-
-
-    def _init_weights(self, module):
-        #TODO: no diff
-        std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
 
 @add_start_docstrings(
     "The bare DeepseekV2 Model outputting raw hidden-states without any specific head on top.",
@@ -1010,11 +995,6 @@ class DeepseekV2Model(DeepseekV2PreTrainedModel):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
-        torch.manual_seed(42)
-        torch.cuda.manual_seed(42)
-        torch.cuda.manual_seed_all(42)  # if you are using multiple GPUs
-        torch.backends.cudnn.deterministic = True
-        torch.backends.cudnn.benchmark = False
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
             [DeepseekV2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
@@ -1223,7 +1203,7 @@ class DeepseekV2ForCausalLM(PersimmonForCausalLM):
         return model_inputs
 
 
-    # Used a lot in other models, maybe can go in a utils?
+    #TODO: Used a lot in other models, maybe can go in a utils?
     @staticmethod
     def _reorder_cache(past_key_values, beam_idx):
         reordered_past = ()

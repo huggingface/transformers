@@ -126,7 +126,7 @@ class DeepseekV2Config(PretrainedConfig):
         num_key_value_heads=32,
         n_shared_experts=None,
         n_routed_experts=None,
-        ep_size=1,
+     #   ep_size=1,
         routed_scaling_factor=1.0,
         kv_lora_rank=512,
         q_lora_rank=1536,
@@ -168,7 +168,7 @@ class DeepseekV2Config(PretrainedConfig):
         self.num_attention_heads = num_attention_heads
         self.n_shared_experts = n_shared_experts
         self.n_routed_experts = n_routed_experts
-        self.ep_size = ep_size
+     #   self.ep_size = ep_size
         self.routed_scaling_factor = routed_scaling_factor
         self.kv_lora_rank = kv_lora_rank
         self.q_lora_rank = q_lora_rank

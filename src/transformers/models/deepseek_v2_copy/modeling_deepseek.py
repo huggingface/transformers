@@ -61,7 +61,7 @@ from .configuration_deepseek import DeepseekV2Config
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
-
+    from ...modeling_flash_attention_utils import _flash_attention_forward
 
 # This makes `_prepare_4d_causal_attention_mask` a leaf function in the FX graph.
 # It means that the function will not be traced through and simply appear as a node in the graph.
@@ -472,24 +472,6 @@ class DeepseekV2MoE(nn.Module):
         super().__init__()
         self.config = config
         self.num_experts_per_tok = config.num_experts_per_tok
-
-        # if hasattr(config, "ep_size") and config.ep_size > 1:
-        #     assert config.ep_size == dist.get_world_size()
-        #     self.ep_size = config.ep_size
-        #     self.experts_per_rank = config.n_routed_experts // config.ep_size
-        #     self.ep_rank = dist.get_rank()
-        #     self.experts = nn.ModuleList(
-        #         [
-        #             (
-        #                 DeepseekV2MLP(config, intermediate_size=config.moe_intermediate_size)
-        #                 if i >= self.ep_rank * self.experts_per_rank and i < (self.ep_rank + 1) * self.experts_per_rank
-        #                 else None
-        #             )
-        #             for i in range(config.n_routed_experts)
-        #         ]
-        #     )
-        # else:
-        self.ep_size = 1
         self.experts_per_rank = config.n_routed_experts
         self.ep_rank = 0
         self.experts = nn.ModuleList(
@@ -530,31 +512,6 @@ class DeepseekV2MoE(nn.Module):
         tokens_per_expert = cnts.sum(dim=0)
         idxs = topk_ids.view(-1).argsort()
         sorted_tokens = x[idxs // topk_ids.shape[1]]
-        sorted_tokens_shape = sorted_tokens.shape
-        # if self.ep_size > 1:
-        #     tokens_per_ep_rank = tokens_per_expert.view(self.ep_size, -1).sum(dim=1)
-        #     tokens_per_expert_group = tokens_per_expert.new_empty(tokens_per_expert.shape[0])
-        #     dist.all_to_all_single(tokens_per_expert_group, tokens_per_expert)
-        #     output_splits = tokens_per_expert_group.view(self.ep_size, -1).sum(1).cpu().numpy().tolist()
-        #     gathered_tokens = sorted_tokens.new_empty(
-        #         tokens_per_expert_group.sum(dim=0).cpu().item(), sorted_tokens.shape[1]
-        #     )
-        #     input_split_sizes = tokens_per_ep_rank.cpu().numpy().tolist()
-        #     dist.all_to_all(
-        #         list(gathered_tokens.split(output_splits)),
-        #         list(sorted_tokens.split(input_split_sizes)),
-        #     )
-        #     tokens_per_expert_post_gather = tokens_per_expert_group.view(self.ep_size, self.experts_per_rank).sum(
-        #         dim=0
-        #     )
-        #     gatherd_idxs = np.zeros(shape=(gathered_tokens.shape[0],), dtype=np.int32)
-        #     s = 0
-        #     for i, k in enumerate(tokens_per_expert_group.cpu().numpy()):
-        #         gatherd_idxs[s : s + k] = i % self.experts_per_rank
-        #         s += k
-        #     gatherd_idxs = gatherd_idxs.argsort()
-        #     sorted_tokens = gathered_tokens[gatherd_idxs]
-        #     tokens_per_expert = tokens_per_expert_post_gather
         tokens_per_expert = tokens_per_expert.cpu().numpy()
 
         outputs = []
@@ -570,16 +527,6 @@ class DeepseekV2MoE(nn.Module):
             start_idx = end_idx
 
         outs = torch.cat(outputs, dim=0) if len(outputs) else sorted_tokens.new_empty(0)
-        # if self.ep_size > 1:
-        #     new_x = torch.empty_like(outs)
-        #     new_x[gatherd_idxs] = outs
-        #     gathered_tokens = new_x.new_empty(*sorted_tokens_shape)
-        #     dist.all_to_all(
-        #         list(gathered_tokens.split(input_split_sizes)),
-        #         list(new_x.split(output_splits)),
-        #     )
-        #     outs = gathered_tokens
-
         new_x = torch.empty_like(outs)
         new_x[idxs] = outs
         final_out = (
@@ -590,21 +537,6 @@ class DeepseekV2MoE(nn.Module):
             .type(new_x.dtype)
         )
         return final_out
-
-
-
-# Copied from transformers.models.llama.modeling_llama.repeat_kv
-# def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-#     #TODO: no diff
-#     """
-#     This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-#     num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-#     """
-#     batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-#     if n_rep == 1:
-#         return hidden_states
-#     hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
-#     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaAttention with Llama->DeepseekV2
@@ -780,7 +712,7 @@ class DeepseekV2Attention(nn.Module):
         # not explicitly in paper, find the cos/sin values to use in RoPE
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
 
-      #  (14) (15) RoPE applied to queries and keys
+        # (14) (15) RoPE applied to queries and keys
         b, h, s, d = q_pe.shape
         q_pe = q_pe.view(b, h, s, d // 2, 2).transpose(4, 3).reshape(b, h, s, d)
 
@@ -899,9 +831,9 @@ class DeepseekV2FlashAttention2(DeepseekV2Attention):
         )
 
         k_non_pe, value_states = torch.split(kv, [self.qk_non_pe_head_dim, self.v_head_dim], dim=-1)
-        kv_seq_len = value_states.shape[-2]
 
         kv_seq_len = value_states.shape[-2]
+
         if past_key_value is not None:
             kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
 
@@ -957,7 +889,7 @@ class DeepseekV2FlashAttention2(DeepseekV2Attention):
             key_states = key_states.to(target_dtype)
             value_states = value_states.to(target_dtype)
 
-        attn_output = self._flash_attention_forward(
+        attn_output = _flash_attention_forward(
             query_states,
             key_states,
             value_states,
@@ -976,103 +908,6 @@ class DeepseekV2FlashAttention2(DeepseekV2Attention):
             attn_weights = None
 
         return attn_output, attn_weights, past_key_value
-
-    def _flash_attention_forward(
-        self,
-        query_states,
-        key_states,
-        value_states,
-        attention_mask,
-        query_length,
-        dropout=0.0,
-        softmax_scale=None,
-    ):
-        """
-        Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
-        first unpad the input, then computes the attention scores and pad the final attention scores.
-
-        Args:
-            query_states (`torch.Tensor`):
-                Input query states to be passed to Flash Attention API
-            key_states (`torch.Tensor`):
-                Input key states to be passed to Flash Attention API
-            value_states (`torch.Tensor`):
-                Input value states to be passed to Flash Attention API
-            attention_mask (`torch.Tensor`):
-                The padding mask - corresponds to a tensor of size `(batch_size, seq_len)` where 0 stands for the
-                position of padding tokens and 1 for the position of non-padding tokens.
-            dropout (`int`, *optional*):
-                Attention dropout
-            softmax_scale (`float`, *optional*):
-                The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
-        """
-        if not self._flash_attn_uses_top_left_mask:
-            causal = self.is_causal
-        else:
-            # TODO: Remove the `query_length != 1` check once Flash Attention for RoCm is bumped to 2.1. For details, please see the comment in DeepseekV2FlashAttention2 __init__.
-            causal = self.is_causal and query_length != 1
-
-        # Contains at least one padding token in the sequence
-        if attention_mask is not None:
-            batch_size = query_states.shape[0]
-            query_states, key_states,value_states,indices_q,cu_seq_lens,max_seq_lens = self._upad_input(
-            query_states, key_states, value_states, attention_mask, query_length)
-
-            cu_seqlens_q, cu_seqlens_k = cu_seq_lens
-            max_seqlen_in_batch_q, max_seqlen_in_batch_k = max_seq_lens
-
-            attn_output_unpad = flash_attn_varlen_func(
-                query_states,
-                key_states,
-                value_states,
-                cu_seqlens_q=cu_seqlens_q,
-                cu_seqlens_k=cu_seqlens_k,
-                max_seqlen_q=max_seqlen_in_batch_q,
-                max_seqlen_k=max_seqlen_in_batch_k,
-                dropout_p=dropout,
-                softmax_scale=softmax_scale,
-                causal=causal,
-            )
-
-            attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
-        else:
-            attn_output = flash_attn_func(
-                query_states, key_states, value_states,dropout, softmax_scale=softmax_scale, causal=causal,
-            )
-
-        return attn_output
-
-    def _upad_input(self, query_layer, key_layer, value_layer, attention_mask, query_length):
-        indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(attention_mask)
-        batch_size, kv_seq_len, num_key_value_heads, head_dim = key_layer.shape
-
-        key_layer = index_first_axis(key_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim), indices_k)
-        value_layer = index_first_axis(value_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim), indices_k)
-        if query_length == kv_seq_len:
-            query_layer = index_first_axis(query_layer.reshape(batch_size * kv_seq_len, self.num_heads, head_dim), indices_k)
-            cu_seqlens_q = cu_seqlens_k
-            max_seqlen_in_batch_q = max_seqlen_in_batch_k
-            indices_q = indices_k
-        elif query_length == 1:
-            max_seqlen_in_batch_q = 1
-            cu_seqlens_q = torch.arange(
-                batch_size + 1, dtype=torch.int32, device=query_layer.device
-            )  # There is a memcpy here, that is very bad.
-            indices_q = cu_seqlens_q[:-1]
-            query_layer = query_layer.squeeze(1)
-        else:
-            # The -q_len: slice assumes left padding.
-            attention_mask = attention_mask[:, -query_length:]
-            query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q = unpad_input(query_layer, attention_mask)
-
-        return (
-            query_layer,
-            key_layer,
-            value_layer,
-            indices_q,
-            (cu_seqlens_q, cu_seqlens_k),
-            (max_seqlen_in_batch_q, max_seqlen_in_batch_k),
-        )
 
 
 ATTENTION_CLASSES = {
@@ -1185,7 +1020,6 @@ DeepseekV2_START_DOCSTRING = r"""
     DeepseekV2_START_DOCSTRING,
 )
 class DeepseekV2PreTrainedModel(PreTrainedModel):
-    #TODO: diff
     config_class = DeepseekV2Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
@@ -1195,7 +1029,6 @@ class DeepseekV2PreTrainedModel(PreTrainedModel):
     _supports_cache_class = True
 
     def _init_weights(self, module):
-        #TODO: no diff
         std = self.config.initializer_range
         if isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=std)
@@ -1316,7 +1149,6 @@ class DeepseekV2Model(DeepseekV2PreTrainedModel):
         self.embed_tokens = value
 
     @add_start_docstrings_to_model_forward(DeepseekV2_INPUTS_DOCSTRING)
-    #TODO: diff
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1476,7 +1308,6 @@ class DeepseekV2ForCausalLM(DeepseekV2PreTrainedModel):
 
     @add_start_docstrings_to_model_forward(DeepseekV2_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
-    #TODO: diff
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1650,7 +1481,6 @@ class DeepseekV2ForCausalLM(DeepseekV2PreTrainedModel):
     DeepseekV2_START_DOCSTRING,
 )
 class DeepseekV2ForSequenceClassification(DeepseekV2PreTrainedModel):
-    #TODO: no diff
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
