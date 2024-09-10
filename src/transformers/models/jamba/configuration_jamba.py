@@ -23,9 +23,11 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-def _check_supported_offset(t_: str, period: int, offset: int):
+def _check_supported_offset(property_: str, period: int, offset: int):
     if offset >= period:
-        raise ValueError(f"{t_} layer offset ({offset}) must be smaller than {t_} layer period ({period})")
+        raise ValueError(
+            f"{property_} layer offset ({offset}) must be smaller than {property_} layer period ({period})"
+        )
 
 
 class JambaConfig(PretrainedConfig):
