@@ -890,11 +890,14 @@ class Idefics3Model(Idefics3PreTrainedModel):
         """
         num_images, _, vision_hidden_size = image_hidden_states.shape
         special_image_token_mask = input_ids == self.image_token_id
+        new_inputs_embeds = (
+            inputs_embeds.clone()
+        )  #  Fixes RuntimeError: a leaf Variable that requires grad is being used in an in-place operation.
         reshaped_image_hidden_states = image_hidden_states.view(-1, vision_hidden_size)
         # cast to the dtype of the input_embeds to support quantized models
         reshaped_image_hidden_states = reshaped_image_hidden_states.to(inputs_embeds.dtype)
-        inputs_embeds[special_image_token_mask] = reshaped_image_hidden_states
-        return inputs_embeds
+        new_inputs_embeds[special_image_token_mask] = reshaped_image_hidden_states
+        return new_inputs_embeds
 
     @add_start_docstrings_to_model_forward(
         """
