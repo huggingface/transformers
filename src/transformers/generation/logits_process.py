@@ -1102,7 +1102,7 @@ class SequenceBiasLogitsProcessor(LogitsProcessor):
     The full name of Donald is Donald Rumsfeld,
 
     >>> # We can also add a positive bias to nudge the model towards specific tokens or continuations
-    >>> sequence_bias = [get_tokens("Donald Duck"): 10.0]
+    >>> sequence_bias = [get_tokens("Donald Duck"), 10.0]
     >>> biased_ids = model.generate(inputs["input_ids"], max_new_tokens=4, num_beams=4, sequence_bias=sequence_bias)
     >>> print(tokenizer.batch_decode(biased_ids, skip_special_tokens=True)[0])
     The full name of Donald is Donald Duck.
