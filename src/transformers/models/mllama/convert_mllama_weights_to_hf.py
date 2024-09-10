@@ -289,6 +289,7 @@ def write_model(
     with torch.device("meta"):
         model = MllamaForConditionalGeneration(config)
     model.load_state_dict(state_dict, strict=True, assign=True)
+    model.save_pretrained(model_path, safe_serialization=safe_serialization)
 
     mllama_model = MllamaForConditionalGeneration.from_pretrained(tmp_model_path, torch_dtype=torch.bfloat16, device_map="auto")
     # Avoid saving this as part of the config.
@@ -380,7 +381,7 @@ def write_image_processor(config_path: str, save_dir: str):
 write_model(
     model_path="converted-mllama-11b",
     input_base_path="/raid/arthur/mllama-11b",
-    safe_serialization=False,
+    safe_serialization=True,
     model_size="11B",
     llama_version=3,
     vocab_size=128256,
