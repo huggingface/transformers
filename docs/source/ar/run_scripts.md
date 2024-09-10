@@ -198,7 +198,7 @@ python run_summarization.py  \
 pip install git+https://github.com/huggingface/accelerate
 ```
 
-بدلاً من نص `run_summarization.py` البرمجي، يجب عليك استخدام نص `run_summarization_no_trainer.py` البرمجي. ستكون النصوص البرمجية المدعومة من 🤗 Accelerate لها ملف `task_no_trainer.py` في المجلد. ابدأ بتشغيل الأمر التالي لإنشاء وحفظ ملف تكوين:
+بدلاً من إستخدام النص البرمجي `run_summarization.py`  يجب عليك استخدام النص البرمجي `run_summarization_no_trainer.py` . ستكون النصوص البرمجية المدعومة من 🤗 Accelerate لها ملف `task_no_trainer.py` في المجلد. ابدأ بتشغيل الأمر التالي لإنشاء وحفظ ملف تكوين:
 
 ```bash
 accelerate config
@@ -215,4 +215,137 @@ accelerate test
 ```bash
 accelerate launch run_summarization_no_trainer.py \
     --model_name_or_path google-t5/t5-small \
-    --dataset_name cnn
+    --dataset_name cnn_dailymail \
+    --dataset_config "3.0.0" \
+    --source_prefix "summarize: " \
+    --output_dir ~/tmp/tst-summarization
+```
+
+## استخدام مجموعة بيانات مخصصة
+
+يدعم النص البرمجي للتلخيص مجموعة بيانات مخصصة طالما أنها ملف CSV أو JSON Line. عندما تستخدم مجموعة بياناتك الخاصة، تحتاج إلى تحديد العديد من المعلمات الإضافية:
+
+- `train_file` و`validation_file` يحددان مسار ملفات التدريب والتحقق الخاصة بك.
+- `text_column`  النص المدخل الذي سيتم تلخيصه.
+- `summary_column`  النص الملخص المستهدف الذي سيتم إخراجه.
+
+سيبدو النص البرمجي للتلخيص الذي يستخدم مجموعة بيانات مخصصة على النحو التالي:
+
+```bash
+python examples/pytorch/summarization/run_summarization.py \
+    --model_name_or_path google-t5/t5-small \
+    --do_train \
+    --do_eval \
+    --train_file path_to_csv_or_jsonlines_file \
+    --validation_file path_to_csv_or_jsonlines_file \
+    --text_column text_column_name \
+    --summary_column summary_column_name \
+    --source_prefix "summarize: " \
+    --output_dir /tmp/tst-summarization \
+    --overwrite_output_dir \
+    --per_device_train_batch_size=4 \
+    --per_device_eval_batch_size=4 \
+    --predict_with_generate
+```
+
+## اختبار البرنامج النصي
+
+من الجيد غالبًا تشغيل نصك البرمجي على عدد أقل من أمثلة مجموعة البيانات للتأكد من أن كل شيء يعمل كما هو متوقع قبل الالتزام بمجموعة بيانات كاملة والتي قد تستغرق ساعات لإكمالها. استخدم المعلمات التالية لتقليص مجموعة البيانات إلى عدد أقصى من العينات:
+
+- `max_train_samples`
+- `max_eval_samples`
+- `max_predict_samples`
+
+```bash
+python examples/pytorch/summarization/run_summarization.py \
+    --model_name_or_path google-t5/t5-small \
+    --max_train_samples 50 \
+    --max_eval_samples 50 \
+    --max_predict_samples 50 \
+    --do_train \
+    --do_eval \
+    --dataset_name cnn_dailymail \
+    --dataset_config "3.0.0" \
+    --source_prefix "summarize: " \
+    --output_dir /tmp/tst-summarization \
+    --per_device_train_batch_size=4 \
+    --per_device_eval_batch_size=4 \
+    --overwrite_output_dir \
+    --predict_with_generate
+```
+
+لا تدعم جميع أمثلة النصوص البرمجية المعلمة `max_predict_samples`. إذا لم تكن متأكدًا مما إذا كان نصك البرمجي يدعم هذه المعلمة، فأضف معلمة `-h` للتحقق:
+
+```bash
+examples/pytorch/summarization/run_summarization.py -h
+```
+
+## استئناف التدريب من نقطة تفتيش
+
+خيار آخر مفيد لتمكينه هو استئناف التدريب من نقطة تفتيش سابقة. سيضمن ذلك أنك تستطيع الاستمرار من حيث توقفت دون البدء من جديد إذا تم مقاطعة تدريبك. هناك طريقتان لاستئناف التدريب من نقطة تفتيش.
+
+تستخدم الطريقة الأولى المعلمة `output_dir previous_output_dir` لاستئناف التدريب من أحدث نقطة تفتيش مخزنة في `output_dir`. في هذه الحالة، يجب عليك إزالة `overwrite_output_dir`:
+
+```bash
+python examples/pytorch/summarization/run_summarization.py
+    --model_name_or_path google-t5/t5-small \
+    --do_train \
+    --do_eval \
+    --dataset_name cnn_dailymail \
+    --dataset_config "3.0.0" \
+    --source_prefix "summarize: " \
+    --output_dir /tmp/tst-summarization \
+    --per_device_train_batch_size=4 \
+    --per_device_eval_batch_size=4 \
+    --output_dir previous_output_dir \
+    --predict_with_generate
+```
+
+تستخدم الطريقة الثانية معلمة `resume_from_checkpoint path_to_specific_checkpoint` لاستئناف التدريب من مجلد نقطة تفتيش محددة.
+
+```bash
+python examples/pytorch/summarization/run_summarization.py
+    --model_name_or_path google-t5/t5-small \
+    --do_train \
+    --do_eval \
+    --dataset_name cnn_dailymail \
+    --dataset_config "3.0.0" \
+    --source_prefix "summarize: " \
+    --output_dir /tmp/tst-summarization \
+    --per_device_train_batch_size=4 \
+    --per_device_eval_batch_size=4 \
+    --overwrite_output_dir \
+    --resume_from_checkpoint path_to_specific_checkpoint \
+    --predict_with_generate
+```
+
+## شارك نموذجك
+
+يمكن لجميع النصوص البرمجية رفع نموذجك النهائي إلى [مركز النماذج](https://huggingface.co/models). تأكد من تسجيل الدخول إلى Hugging Face قبل البدء:
+
+```bash
+huggingface-cli login
+```
+
+ثم أضف المعلمة `push_to_hub` إلى النص البرمجي . ستقوم هذه المعلمة بإنشاء مستودع باستخدام اسم مستخدم Hugging Face واسم المجلد المحدد في `output_dir`.
+
+لإعطاء مستودعك اسمًا محددًا، استخدم المعلمة `push_to_hub_model_id` لإضافته. سيتم عرض المستودع تلقائيًا ضمن مساحة الاسم الخاصة بك.
+
+يوضح المثال التالي كيفية رفع نموذج باستخدام اسم مستودع محدد:
+
+```bash
+python examples/pytorch/summarization/run_summarization.py
+    --model_name_or_path google-t5/t5-small \
+    --do_train \
+    --do_eval \
+    --dataset_name cnn_dailymail \
+    --dataset_config "3.0.0" \
+    --source_prefix "summarize: " \
+    --push_to_hub \
+    --push_to_hub_model_id finetuned-t5-cnn_dailymail \
+    --output_dir /tmp/tst-summarization \
+    --per_device_train_batch_size=4 \
+    --per_device_eval_batch_size=4 \
+    --overwrite_output_dir \
+    --predict_with_generate
+```
