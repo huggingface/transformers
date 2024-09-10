@@ -246,7 +246,7 @@ class TokenizerUtilsTest(unittest.TestCase):
         self.assertEqual(batch["input_ids"].tolist(), [[0, 1, 2, tokenizer.pad_token_id], [0, 1, 2, 3]])
 
     @require_tokenizers
-    def test_decoding(self):
+    def test_decoding_single_token(self):
         for tokenizer_class in [BertTokenizer, BertTokenizerFast]:
             with self.subTest(f"{tokenizer_class}"):
                 tokenizer = tokenizer_class.from_pretrained("google-bert/bert-base-cased")
