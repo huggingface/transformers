@@ -240,7 +240,6 @@ class DeepseekV2Config(PretrainedConfig):
         self.num_attention_heads = num_attention_heads
         self.n_shared_experts = n_shared_experts
         self.n_routed_experts = n_routed_experts
-        self.ep_size = ep_size
         self.routed_scaling_factor = routed_scaling_factor
         self.qk_rope_head_dim = qk_rope_head_dim
         self.v_head_dim = v_head_dim
@@ -523,13 +522,11 @@ class DeepseekV2MoE(nn.Module):
         super().__init__()
         self.config = config
         self.num_experts_per_tok = config.num_experts_per_tok
-        self.ep_size = 1
         self.experts_per_rank = config.n_routed_experts
-        self.ep_rank = 0
         self.experts = nn.ModuleList(
             [
                 DeepseekV2MLP(config, intermediate_size=config.moe_intermediate_size)
-                for i in range(config.n_routed_experts)
+                for _ in range(config.n_routed_experts)
             ]
         )
         self.gate = MoEGate(config)
@@ -545,17 +542,17 @@ class DeepseekV2MoE(nn.Module):
         flat_topk_idx = topk_idx.view(-1)
         if self.training:
             hidden_states = hidden_states.repeat_interleave(self.num_experts_per_tok, dim=0)
-            y = torch.empty_like(hidden_states)
-            for i, expert in enumerate(self.experts):
-                y[flat_topk_idx == i] = expert(hidden_states[flat_topk_idx == i])
-            y = (y.view(*topk_weight.shape, -1) * topk_weight.unsqueeze(-1)).sum(dim=1)
-            y = y.to(hidden_states.dtype).view(*orig_shape)
-            y = AddAuxiliaryLoss.apply(y, aux_loss)
+            final_hidden_states = torch.empty_like(hidden_states)
+            for expert_idx, expert_layer in enumerate(self.experts):
+                final_hidden_states[flat_topk_idx == expert_idx] = expert_layer(hidden_states[flat_topk_idx == expert_idx])
+            final_hidden_states = (final_hidden_states.view(*topk_weight.shape, -1) * topk_weight.unsqueeze(-1)).sum(dim=1)
+            final_hidden_states = final_hidden_states.to(hidden_states.dtype).view(*orig_shape)
+            final_hidden_states = AddAuxiliaryLoss.apply(final_hidden_states, aux_loss)
         else:
-            y = self.moe_infer(hidden_states, topk_idx, topk_weight).view(*orig_shape)
+            final_hidden_states = self.moe_infer(hidden_states, topk_idx, topk_weight).view(*orig_shape)
         if self.config.n_shared_experts is not None:
-            y = y + self.shared_experts(identity)
-        return y
+            final_hidden_states = final_hidden_states + self.shared_experts(identity)
+        return final_hidden_states
 
     @torch.no_grad()
     def moe_infer(self, x, topk_ids, topk_weight):
@@ -567,13 +564,13 @@ class DeepseekV2MoE(nn.Module):
 
         outputs = []
         start_idx = 0
-        for i, num_tokens in enumerate(tokens_per_expert):
+        for expert_idx, num_tokens in enumerate(tokens_per_expert):
             end_idx = start_idx + num_tokens
             if num_tokens == 0:
                 continue
-            expert = self.experts[i + self.ep_rank * self.experts_per_rank]
+            expert_layer = self.experts[expert_idx]
             tokens_for_this_expert = sorted_tokens[start_idx:end_idx]
-            expert_out = expert(tokens_for_this_expert)
+            expert_out = expert_layer(tokens_for_this_expert)
             outputs.append(expert_out)
             start_idx = end_idx
 
@@ -581,14 +578,14 @@ class DeepseekV2MoE(nn.Module):
 
         new_x = torch.empty_like(outs)
         new_x[idxs] = outs
-        final_out = (
+        final_hidden_states = (
             new_x.view(*topk_ids.shape, -1)
             .type(topk_weight.dtype)
             .mul_(topk_weight.unsqueeze(dim=-1))
             .sum(dim=1)
             .type(new_x.dtype)
         )
-        return final_out
+        return final_hidden_states
 
 class DeepseekV2Attention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
