@@ -40,8 +40,7 @@ The original code can be found [here](https://github.com/ViTAE-Transformer/ViTPo
 >>> outputs = model(pixel_values, dataset_index)
 ```
 
-- The current model utilizes a 2-step inference pipeline. The first step involves placing a bounding box around the region corresponding to the person.
-  After that, the second step uses VitPose to predict the keypoints.
+- ViTPose is a so-called top-down keypoint detection model. This means that one first uses an object detector, like [RT-DETR](rt-detr), to detect people (or other instances) in an image. Next, ViTPose takes the cropped images as input and predicts the keypoints.
 
 ```py
 >>> import torch
