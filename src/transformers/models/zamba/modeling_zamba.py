@@ -537,6 +537,8 @@ class ZambaMambaMixer(nn.Module):
 
         self.use_fast_kernels = config.use_mamba_kernels
 
+        assert self.intermediate_size % self.n_mamba_heads == 0, '`intermediate_size` should be divisible by `n_mamba_heads`.'
+
         # projection of the input hidden states
         self.in_proj = nn.Linear(self.hidden_size, self.intermediate_size * 2, bias=self.use_bias)
         # selective projection used to make dt, B and C input dependent
@@ -1064,13 +1066,15 @@ class ZambaPreTrainedModel(PreTrainedModel):
             dt_init_std = self.config.mamba_dt_rank**-0.5
             nn.init.uniform_(module.dt_proj_weight, -dt_init_std, dt_init_std)
 
+            intermediate_size = self.config.mamba_expand * self.config.hidden_size
             dt = torch.exp(
-                torch.rand(self.config.n_mamba_heads, self.config.intermediate_size // self.config.n_mamba_heads)
+                torch.rand(self.config.n_mamba_heads, intermediate_size // self.config.n_mamba_heads)
                 * (math.log(self.config.time_step_max) - math.log(self.config.time_step_min))
                 + math.log(self.config.time_step_min)
             ).clamp(min=self.config.time_step_floor)
             # # Inverse of softplus: https://github.com/pytorch/pytorch/issues/72759
             inv_dt = dt + torch.log(-torch.expm1(-dt))
+
             with torch.no_grad():
                 module.dt_proj_bias.copy_(inv_dt)
             module.dt_proj_bias._no_reinit = True
