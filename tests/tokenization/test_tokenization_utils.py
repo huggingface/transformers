@@ -286,7 +286,6 @@ class TokenizerUtilsTest(unittest.TestCase):
                 self.assertEqual(decoded_sent, "This is a beautiful flower")
 
                 # test special token with other tokens, do not skip the special tokens
-                sentence = "This is a beautiful flower ஐ"
                 ids = tokenizer(sentence)["input_ids"]
                 decoded_sent = tokenizer.decode(ids, skip_special_tokens=False)
                 self.assertEqual(decoded_sent, "[CLS] This is a beautiful flower ஐ [SEP]")
