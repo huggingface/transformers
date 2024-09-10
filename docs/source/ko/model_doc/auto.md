@@ -14,29 +14,24 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Auto Classes
+# 자동 클래스[[auto-classes]]
 
-In many cases, the architecture you want to use can be guessed from the name or the path of the pretrained model you
-are supplying to the `from_pretrained()` method. AutoClasses are here to do this job for you so that you
-automatically retrieve the relevant model given the name/path to the pretrained weights/config/vocabulary.
+많은 경우, 사용하려는 아키텍처는 `from_pretrained()` 메서드에 제공하는 사전 훈련된 모델의 이름이나 경로로부터 유추할 수 있습니다. AutoClasses는 이러한 작업을 대신하여, 사전 훈련된 가중치/구성/어휘에 대한 이름/경로를 제공하면 자동으로 관련 모델을 가져오도록 도와줍니다.
 
-Instantiating one of [`AutoConfig`], [`AutoModel`], and
-[`AutoTokenizer`] will directly create a class of the relevant architecture. For instance
+[`AutoConfig`], [`AutoModel`], [`AutoTokenizer`] 중 하나를 인스턴스화하면 해당 아키텍처의 클래스를 직접 생성합니다. 예를 들어,
 
 
 ```python
 model = AutoModel.from_pretrained("google-bert/bert-base-cased")
 ```
 
-will create a model that is an instance of [`BertModel`].
+[`BertModel`]의 인스턴스인 모델을 생성합니다.
 
-There is one class of `AutoModel` for each task, and for each backend (PyTorch, TensorFlow, or Flax).
+각 작업에 대해 하나의 `AutoModel` 클래스가 있으며, 각각의 백엔드(PyTorch, TensorFlow 또는 Flax)에 해당하는 클래스가 존재합니다.
 
-## Extending the Auto Classes
+## Auto 클래스 확장[[extending-the-auto-classes]]
 
-Each of the auto classes has a method to be extended with your custom classes. For instance, if you have defined a
-custom class of model `NewModel`, make sure you have a `NewModelConfig` then you can add those to the auto
-classes like this:
+각 Auto 클래스는 사용자의 커스텀 클래스로 확장될 수 있는 메서드를 가지고 있습니다. 예를 들어, `NewModel`이라는 커스텀 모델 클래스를 정의했다면, `NewModelConfig`를 준비한 후 다음과 같이 Auto 클래스에 추가할 수 있습니다:
 
 ```python
 from transformers import AutoConfig, AutoModel
@@ -45,339 +40,336 @@ AutoConfig.register("new-model", NewModelConfig)
 AutoModel.register(NewModelConfig, NewModel)
 ```
 
-You will then be able to use the auto classes like you would usually do!
+그 후에는 평소처럼 Auto 클래스를 사용할 수 있게 됩니다!
 
 <Tip warning={true}>
 
-If your `NewModelConfig` is a subclass of [`~transformers.PretrainedConfig`], make sure its
-`model_type` attribute is set to the same key you use when registering the config (here `"new-model"`).
+만약 `NewModelConfig`가 [`~transformers.PretrainedConfig`]의 서브클래스라면, 해당 `model_type` 속성이 등록할 때 사용하는 키(여기서는 `"new-model"`)와 동일하게 설정되어 있는지 확인하세요.
 
-Likewise, if your `NewModel` is a subclass of [`PreTrainedModel`], make sure its
-`config_class` attribute is set to the same class you use when registering the model (here
-`NewModelConfig`).
+마찬가지로, `NewModel`이 [`PreTrainedModel`]의 서브클래스라면, 해당 `config_class` 속성이 등록할 때 사용하는 클래스(여기서는 `NewModelConfig`)와 동일하게 설정되어 있는지 확인하세요.
 
 </Tip>
 
-## AutoConfig
+## AutoConfig[[transformers.AutoConfig]]
 
 [[autodoc]] AutoConfig
 
-## AutoTokenizer
+## AutoTokenizer[[transformers.AutoTokenizer]]
 
 [[autodoc]] AutoTokenizer
 
-## AutoFeatureExtractor
+## AutoFeatureExtractor[[transformers.AutoFeatureExtractor]]
 
 [[autodoc]] AutoFeatureExtractor
 
-## AutoImageProcessor
+## AutoImageProcessor[[transformers.AutoImageProcessor]]
 
 [[autodoc]] AutoImageProcessor
 
-## AutoProcessor
+## AutoProcessor[[transformers.AutoProcessor]]
 
 [[autodoc]] AutoProcessor
 
-## Generic model classes
+## 일반적인 모델 클래스[[generic-model-classes]]
 
-The following auto classes are available for instantiating a base model class without a specific head.
+다음 Auto 클래스들은 특정 헤드 없이 기본 모델 클래스를 인스턴스화하는 데 사용할 수 있습니다.
 
-### AutoModel
+### AutoModel[[transformers.AutoModel]]
 
 [[autodoc]] AutoModel
 
-### TFAutoModel
+### TFAutoModel[[transformers.TFAutoModel]]
 
 [[autodoc]] TFAutoModel
 
-### FlaxAutoModel
+### FlaxAutoModel[[transformers.FlaxAutoModel]]
 
 [[autodoc]] FlaxAutoModel
 
-## Generic pretraining classes
+## 일반적인 사전 학습 클래스[[generic-pretraining-classes]]
 
-The following auto classes are available for instantiating a model with a pretraining head.
+다음 Auto 클래스들은 사전 훈련 헤드가 포함된 모델을 인스턴스화하는 데 사용할 수 있습니다.
 
-### AutoModelForPreTraining
+### AutoModelForPreTraining[[transformers.AutoModelForPreTraining]]
 
 [[autodoc]] AutoModelForPreTraining
 
-### TFAutoModelForPreTraining
+### TFAutoModelForPreTraining[[transformers.TFAutoModelForPreTraining]]
 
 [[autodoc]] TFAutoModelForPreTraining
 
-### FlaxAutoModelForPreTraining
+### FlaxAutoModelForPreTraining[[transformers.FlaxAutoModelForPreTraining]]
 
 [[autodoc]] FlaxAutoModelForPreTraining
 
-## Natural Language Processing
+## 자연어 처리[[natural-language-processing]]
 
-The following auto classes are available for the following natural language processing tasks.
+다음 Auto 클래스들은 아래의 자연어 처리 작업에 사용할 수 있습니다.
 
-### AutoModelForCausalLM
+### AutoModelForCausalLM[[transformers.AutoModelForCausalLM]]
 
 [[autodoc]] AutoModelForCausalLM
 
-### TFAutoModelForCausalLM
+### TFAutoModelForCausalLM[[transformers.TFAutoModelForCausalLM]]
 
 [[autodoc]] TFAutoModelForCausalLM
 
-### FlaxAutoModelForCausalLM
+### FlaxAutoModelForCausalLM[[transformers.FlaxAutoModelForCausalLM]]
 
 [[autodoc]] FlaxAutoModelForCausalLM
 
-### AutoModelForMaskedLM
+### AutoModelForMaskedLM[[transformers.AutoModelForMaskedLM]]
 
 [[autodoc]] AutoModelForMaskedLM
 
-### TFAutoModelForMaskedLM
+### TFAutoModelForMaskedLM[[transformers.TFAutoModelForMaskedLM]]
 
 [[autodoc]] TFAutoModelForMaskedLM
 
-### FlaxAutoModelForMaskedLM
+### FlaxAutoModelForMaskedLM[[transformers.FlaxAutoModelForMaskedLM]]
 
 [[autodoc]] FlaxAutoModelForMaskedLM
 
-### AutoModelForMaskGeneration
+### AutoModelForMaskGeneration[[transformers.AutoModelForMaskGeneration]]
 
 [[autodoc]] AutoModelForMaskGeneration
 
-### TFAutoModelForMaskGeneration
+### TFAutoModelForMaskGeneration[[transformers.TFAutoModelForMaskGeneration]]
 
 [[autodoc]] TFAutoModelForMaskGeneration
 
-### AutoModelForSeq2SeqLM
+### AutoModelForSeq2SeqLM[[transformers.AutoModelForSeq2SeqLM]]
 
 [[autodoc]] AutoModelForSeq2SeqLM
 
-### TFAutoModelForSeq2SeqLM
+### TFAutoModelForSeq2SeqLM[[transformers.TFAutoModelForSeq2SeqLM]]
 
 [[autodoc]] TFAutoModelForSeq2SeqLM
 
-### FlaxAutoModelForSeq2SeqLM
+### FlaxAutoModelForSeq2SeqLM[[transformers.FlaxAutoModelForSeq2SeqLM]]
 
 [[autodoc]] FlaxAutoModelForSeq2SeqLM
 
-### AutoModelForSequenceClassification
+### AutoModelForSequenceClassification[[transformers.AutoModelForSequenceClassification]]
 
 [[autodoc]] AutoModelForSequenceClassification
 
-### TFAutoModelForSequenceClassification
+### TFAutoModelForSequenceClassification[[transformers.TFAutoModelForSequenceClassification]]
 
 [[autodoc]] TFAutoModelForSequenceClassification
 
-### FlaxAutoModelForSequenceClassification
+### FlaxAutoModelForSequenceClassification[[transformers.FlaxAutoModelForSequenceClassification]]
 
 [[autodoc]] FlaxAutoModelForSequenceClassification
 
-### AutoModelForMultipleChoice
+### AutoModelForMultipleChoice[[transformers.AutoModelForMultipleChoice]]
 
 [[autodoc]] AutoModelForMultipleChoice
 
-### TFAutoModelForMultipleChoice
+### TFAutoModelForMultipleChoice[[transformers.TFAutoModelForMultipleChoice]]
 
 [[autodoc]] TFAutoModelForMultipleChoice
 
-### FlaxAutoModelForMultipleChoice
+### FlaxAutoModelForMultipleChoice[[transformers.FlaxAutoModelForMultipleChoice]]
 
 [[autodoc]] FlaxAutoModelForMultipleChoice
 
-### AutoModelForNextSentencePrediction
+### AutoModelForNextSentencePrediction[[transformers.AutoModelForNextSentencePrediction]]
 
 [[autodoc]] AutoModelForNextSentencePrediction
 
-### TFAutoModelForNextSentencePrediction
+### TFAutoModelForNextSentencePrediction[[transformers.TFAutoModelForNextSentencePrediction]]
 
 [[autodoc]] TFAutoModelForNextSentencePrediction
 
-### FlaxAutoModelForNextSentencePrediction
+### FlaxAutoModelForNextSentencePrediction[[transformers.FlaxAutoModelForNextSentencePrediction]]
 
 [[autodoc]] FlaxAutoModelForNextSentencePrediction
 
-### AutoModelForTokenClassification
+### AutoModelForTokenClassification[[transformers.AutoModelForTokenClassification]]
 
 [[autodoc]] AutoModelForTokenClassification
 
-### TFAutoModelForTokenClassification
+### TFAutoModelForTokenClassification[[transformers.TFAutoModelForTokenClassification]]
 
 [[autodoc]] TFAutoModelForTokenClassification
 
-### FlaxAutoModelForTokenClassification
+### FlaxAutoModelForTokenClassification[[transformers.FlaxAutoModelForTokenClassification]]
 
 [[autodoc]] FlaxAutoModelForTokenClassification
 
-### AutoModelForQuestionAnswering
+### AutoModelForQuestionAnswering[[transformers.AutoModelForQuestionAnswering]]
 
 [[autodoc]] AutoModelForQuestionAnswering
 
-### TFAutoModelForQuestionAnswering
+### TFAutoModelForQuestionAnswering[[transformers.TFAutoModelForQuestionAnswering]]
 
 [[autodoc]] TFAutoModelForQuestionAnswering
 
-### FlaxAutoModelForQuestionAnswering
+### FlaxAutoModelForQuestionAnswering[[transformers.FlaxAutoModelForQuestionAnswering]]
 
 [[autodoc]] FlaxAutoModelForQuestionAnswering
 
-### AutoModelForTextEncoding
+### AutoModelForTextEncoding[[transformers.AutoModelForTextEncoding]]
 
 [[autodoc]] AutoModelForTextEncoding
 
-### TFAutoModelForTextEncoding
+### TFAutoModelForTextEncoding[[transformers.TFAutoModelForTextEncoding]]
 
 [[autodoc]] TFAutoModelForTextEncoding
 
-## Computer vision
+## 컴퓨터 비전[[computer-vision]]
 
-The following auto classes are available for the following computer vision tasks.
+다음 Auto 클래스들은 아래의 컴퓨터 비전 작업에 사용할 수 있습니다.
 
-### AutoModelForDepthEstimation
+### AutoModelForDepthEstimation[[transformers.AutoModelForDepthEstimation]]
 
 [[autodoc]] AutoModelForDepthEstimation
 
-### AutoModelForImageClassification
+### AutoModelForImageClassification[[transformers.AutoModelForImageClassification]]
 
 [[autodoc]] AutoModelForImageClassification
 
-### TFAutoModelForImageClassification
+### TFAutoModelForImageClassification[[transformers.TFAutoModelForImageClassification]]
 
 [[autodoc]] TFAutoModelForImageClassification
 
-### FlaxAutoModelForImageClassification
+### FlaxAutoModelForImageClassification[[transformers.FlaxAutoModelForImageClassification]]
 
 [[autodoc]] FlaxAutoModelForImageClassification
 
-### AutoModelForVideoClassification
+### AutoModelForVideoClassification[[transformers.AutoModelForVideoClassification]]
 
 [[autodoc]] AutoModelForVideoClassification
 
-### AutoModelForKeypointDetection
+### AutoModelForKeypointDetection[[transformers.AutoModelForKeypointDetection]]
 
 [[autodoc]] AutoModelForKeypointDetection
 
-### AutoModelForMaskedImageModeling
+### AutoModelForMaskedImageModeling[[transformers.AutoModelForMaskedImageModeling]]
 
 [[autodoc]] AutoModelForMaskedImageModeling
 
-### TFAutoModelForMaskedImageModeling
+### TFAutoModelForMaskedImageModeling[[transformers.TFAutoModelForMaskedImageModeling]]
 
 [[autodoc]] TFAutoModelForMaskedImageModeling
 
-### AutoModelForObjectDetection
+### AutoModelForObjectDetection[[transformers.AutoModelForObjectDetection]]
 
 [[autodoc]] AutoModelForObjectDetection
 
-### AutoModelForImageSegmentation
+### AutoModelForImageSegmentation[[transformers.AutoModelForImageSegmentation]]
 
 [[autodoc]] AutoModelForImageSegmentation
 
-### AutoModelForImageToImage
+### AutoModelForImageToImage[[transformers.AutoModelForImageToImage]]
 
 [[autodoc]] AutoModelForImageToImage
 
-### AutoModelForSemanticSegmentation
+### AutoModelForSemanticSegmentation[[transformers.AutoModelForSemanticSegmentation]]
 
 [[autodoc]] AutoModelForSemanticSegmentation
 
-### TFAutoModelForSemanticSegmentation
+### TFAutoModelForSemanticSegmentation[[transformers.TFAutoModelForSemanticSegmentation]]
 
 [[autodoc]] TFAutoModelForSemanticSegmentation
 
-### AutoModelForInstanceSegmentation
+### AutoModelForInstanceSegmentation[[transformers.AutoModelForInstanceSegmentation]]
 
 [[autodoc]] AutoModelForInstanceSegmentation
 
-### AutoModelForUniversalSegmentation
+### AutoModelForUniversalSegmentation[[transformers.AutoModelForUniversalSegmentation]]
 
 [[autodoc]] AutoModelForUniversalSegmentation
 
-### AutoModelForZeroShotImageClassification
+### AutoModelForZeroShotImageClassification[[transformers.AutoModelForZeroShotImageClassification]]
 
 [[autodoc]] AutoModelForZeroShotImageClassification
 
-### TFAutoModelForZeroShotImageClassification
+### TFAutoModelForZeroShotImageClassification[[transformers.TFAutoModelForZeroShotImageClassification]]
 
 [[autodoc]] TFAutoModelForZeroShotImageClassification
 
-### AutoModelForZeroShotObjectDetection
+### AutoModelForZeroShotObjectDetection[[transformers.AutoModelForZeroShotObjectDetection]]
 
 [[autodoc]] AutoModelForZeroShotObjectDetection
 
-## Audio
+## 오디오[[audio]]
 
-The following auto classes are available for the following audio tasks.
+다음 Auto 클래스들은 아래의 오디오 작업에 사용할 수 있습니다.
 
-### AutoModelForAudioClassification
+### AutoModelForAudioClassification[[transformers.AutoModelForAudioClassification]]
 
 [[autodoc]] AutoModelForAudioClassification
 
-### AutoModelForAudioFrameClassification
+### TFAutoModelForAudioClassification[[transformers.TFAutoModelForAudioClassification]]
 
 [[autodoc]] TFAutoModelForAudioClassification
 
-### TFAutoModelForAudioFrameClassification
+### AutoModelForAudioFrameClassification[[transformers.AutoModelForAudioFrameClassification]]
 
 [[autodoc]] AutoModelForAudioFrameClassification
 
-### AutoModelForCTC
+### AutoModelForCTC[[transformers.AutoModelForCTC]]
 
 [[autodoc]] AutoModelForCTC
 
-### AutoModelForSpeechSeq2Seq
+### AutoModelForSpeechSeq2Seq[[transformers.AutoModelForSpeechSeq2Seq]]
 
 [[autodoc]] AutoModelForSpeechSeq2Seq
 
-### TFAutoModelForSpeechSeq2Seq
+### TFAutoModelForSpeechSeq2Seq[[transformers.TFAutoModelForSpeechSeq2Seq]]
 
 [[autodoc]] TFAutoModelForSpeechSeq2Seq
 
-### FlaxAutoModelForSpeechSeq2Seq
+### FlaxAutoModelForSpeechSeq2Seq[[transformers.FlaxAutoModelForSpeechSeq2Seq]]
 
 [[autodoc]] FlaxAutoModelForSpeechSeq2Seq
 
-### AutoModelForAudioXVector
+### AutoModelForAudioXVector[[transformers.AutoModelForAudioXVector]]
 
 [[autodoc]] AutoModelForAudioXVector
 
-### AutoModelForTextToSpectrogram
+### AutoModelForTextToSpectrogram[[transformers.AutoModelForTextToSpectrogram]]
 
 [[autodoc]] AutoModelForTextToSpectrogram
 
-### AutoModelForTextToWaveform
+### AutoModelForTextToWaveform[[transformers.AutoModelForTextToWaveform]]
 
 [[autodoc]] AutoModelForTextToWaveform
 
-## Multimodal
+## 멀티모달[[multimodal]]
 
-The following auto classes are available for the following multimodal tasks.
+다음 Auto 클래스들은 아래의 멀티모달 작업에 사용할 수 있습니다.
 
-### AutoModelForTableQuestionAnswering
+### AutoModelForTableQuestionAnswering[[transformers.AutoModelForTableQuestionAnswering]]
 
 [[autodoc]] AutoModelForTableQuestionAnswering
 
-### TFAutoModelForTableQuestionAnswering
+### TFAutoModelForTableQuestionAnswering[[transformers.TFAutoModelForTableQuestionAnswering]]
 
 [[autodoc]] TFAutoModelForTableQuestionAnswering
 
-### AutoModelForDocumentQuestionAnswering
+### AutoModelForDocumentQuestionAnswering[[transformers.AutoModelForDocumentQuestionAnswering]]
 
 [[autodoc]] AutoModelForDocumentQuestionAnswering
 
-### TFAutoModelForDocumentQuestionAnswering
+### TFAutoModelForDocumentQuestionAnswering[[transformers.TFAutoModelForDocumentQuestionAnswering]]
 
 [[autodoc]] TFAutoModelForDocumentQuestionAnswering
 
-### AutoModelForVisualQuestionAnswering
+### AutoModelForVisualQuestionAnswering[[transformers.AutoModelForVisualQuestionAnswering]]
 
 [[autodoc]] AutoModelForVisualQuestionAnswering
 
-### AutoModelForVision2Seq
+### AutoModelForVision2Seq[[transformers.AutoModelForVision2Seq]]
 
 [[autodoc]] AutoModelForVision2Seq
 
-### TFAutoModelForVision2Seq
+### TFAutoModelForVision2Seq[[transformers.TFAutoModelForVision2Seq]]
 
 [[autodoc]] TFAutoModelForVision2Seq
 
-### FlaxAutoModelForVision2Seq
+### FlaxAutoModelForVision2Seq[[transformers.FlaxAutoModelForVision2Seq]]
 
 [[autodoc]] FlaxAutoModelForVision2Seq
