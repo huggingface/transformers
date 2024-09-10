@@ -307,7 +307,6 @@ class TokenizerUtilsTest(unittest.TestCase):
                 self.assertEqual(decoded_sent, "")
 
                 # test single special token alone, do not skip
-                pad_id = 0
                 decoded_sent = tokenizer.decode(pad_id, skip_special_tokens=False)
                 self.assertEqual(decoded_sent, "[PAD]")
 
