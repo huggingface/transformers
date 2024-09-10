@@ -999,6 +999,9 @@ class HybridLayer(nn.Module):
         )
 
         transformer_hidden_states = layer_outputs[0]
+        
+        if output_attentions:
+            self_attn_weights = layer_outputs[1]
 
         transformer_hidden_states = self.linear(transformer_hidden_states)
 
@@ -1012,6 +1015,9 @@ class HybridLayer(nn.Module):
             use_cache=use_cache,
             cache_position=cache_position,
         )
+        
+        if output_attentions:
+            layer_outputs[1] = self_attn_weights
 
         return layer_outputs
 
@@ -1291,6 +1297,11 @@ class ZambaModel(ZambaPreTrainedModel):
                     cache_position=cache_position,
                 )
             hidden_states = layer_outputs[0]
+            
+            if output_attentions:
+                if layer_outputs[1] is not None:
+                    # append attentions only of attention layers. Mamba layers return `None` as the attention weights
+                    all_self_attns += (layer_outputs[1],)
 
         hidden_states = self.final_layernorm(hidden_states)
 

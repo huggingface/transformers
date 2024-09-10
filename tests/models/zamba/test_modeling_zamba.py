@@ -348,7 +348,7 @@ class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                     elif "D" in name:
                         # check if it's a ones like
                         self.assertTrue(torch.allclose(param.data, torch.ones_like(param.data), atol=1e-5, rtol=1e-5))
-                    elif "x_proj" in name or "dt_proj_weight" in name:
+                    elif "x_proj" in name or "dt_proj_weight" in name or "dt_proj_bias" in name:
                         self.assertIn(
                             ((param.data.mean() * 1e2).round() / 1e2).item(),
                             [0.0, 1.0],
