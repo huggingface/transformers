@@ -210,6 +210,8 @@ for i in range(6):
 # for dab-DETR, also convert reference point head and query scale MLP
 rename_keys.extend(
     [
+        # only when the number of patterns (num_patterns parameter in config) are more than 0 like r50-pat3 or r50dc5-pat3
+        # ("transformer.patterns.weight", "patterns.weight"),
         ("input_proj.weight", "input_projection.weight"),
         ("input_proj.bias", "input_projection.bias"),
         ("refpoint_embed.weight", "query_refpoint_embeddings.weight"),
