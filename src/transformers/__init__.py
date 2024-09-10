@@ -953,6 +953,7 @@ _import_structure = {
     "utils.quantization_config": [
         "AqlmConfig",
         "AwqConfig",
+        "BitNetConfig",
         "BitsAndBytesConfig",
         "EetqConfig",
         "FbgemmFp8Config",
@@ -5774,6 +5775,7 @@ if TYPE_CHECKING:
     from .utils.quantization_config import (
         AqlmConfig,
         AwqConfig,
+        BitNetConfig,
         BitsAndBytesConfig,
         EetqConfig,
         FbgemmFp8Config,

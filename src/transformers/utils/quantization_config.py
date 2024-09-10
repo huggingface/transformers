@@ -44,6 +44,7 @@ class QuantizationMethod(str, Enum):
     HQQ = "hqq"
     FBGEMM_FP8 = "fbgemm_fp8"
     TORCHAO = "torchao"
+    BITNET = "bitnet"
 
 
 class AWQLinearVersion(str, Enum):
@@ -1161,3 +1162,22 @@ class TorchAoConfig(QuantizationConfigMixin):
 
     def __repr__(self):
         return f"{self.quant_type}({', '.join(str(k) + '=' + str(v) for k, v in self.kwargs.items())})"
+
+
+@dataclass
+class BitNetConfig(QuantizationConfigMixin):
+
+    def __init__(
+        self,
+        modules_to_not_convert: Optional[List] = None,
+        **kwargs,
+    ):
+        self.quant_method = QuantizationMethod.BITNET
+        self.modules_to_not_convert = modules_to_not_convert
+        self.post_init()
+
+    def post_init(self):
+        r"""
+        Safety checker that arguments are correct
+        """
+        pass
