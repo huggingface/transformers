@@ -1130,6 +1130,7 @@ class _LM_head(torch.autograd.Function):
         """
         # load saved tensors
         hidden_states, indices, weights = ctx.saved_tensors
+        weights.count -= 1
 
         ignore_index = -100
         mask = indices != ignore_index
@@ -1162,7 +1163,6 @@ class _LM_head(torch.autograd.Function):
             
         grad_input = grad_input @ weights
 
-        weights.count -= 1
         if weights.count == 0:
             return grad_input, None, weights.grad
         else:
