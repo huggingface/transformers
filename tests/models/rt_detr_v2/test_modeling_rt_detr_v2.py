@@ -23,8 +23,8 @@ from parameterized import parameterized
 
 from transformers import (
     RTDetrImageProcessor,
-    RTDetrResNetConfig,
     RTDetrV2Config,
+    RTDetrV2ResNetConfig,
     is_torch_available,
     is_vision_available,
 )
@@ -39,7 +39,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import RTDetrForObjectDetection, RTDetrModel
+    from transformers import RTDetrV2ForObjectDetection, RTDetrV2Model
 
 if is_vision_available():
     from PIL import Image
@@ -48,7 +48,7 @@ if is_vision_available():
 CHECKPOINT = ""  # TODO: replace
 
 
-class RTDetrModelTester:
+class RTDetrV2ModelTester:
     def __init__(
         self,
         parent,
@@ -166,7 +166,7 @@ class RTDetrModelTester:
 
     def get_config(self):
         hidden_sizes = [10, 20, 30, 40]
-        backbone_config = RTDetrResNetConfig(
+        backbone_config = RTDetrV2ResNetConfig(
             embeddings_size=10,
             hidden_sizes=hidden_sizes,
             depths=[1, 1, 2, 1],
@@ -215,7 +215,7 @@ class RTDetrModelTester:
         return config, inputs_dict
 
     def create_and_check_rt_detr_v2_model(self, config, pixel_values, pixel_mask, labels):
-        model = RTDetrModel(config=config)
+        model = RTDetrV2Model(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -225,7 +225,7 @@ class RTDetrModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.num_queries, self.d_model))
 
     def create_and_check_rt_detr_v2_object_detection_head_model(self, config, pixel_values, pixel_mask, labels):
-        model = RTDetrForObjectDetection(config=config)
+        model = RTDetrV2ForObjectDetection(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -243,8 +243,8 @@ class RTDetrModelTester:
 
 
 @require_torch
-class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (RTDetrModel, RTDetrForObjectDetection) if is_torch_available() else ()
+class RTDetrV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    all_model_classes = (RTDetrV2Model, RTDetrV2ForObjectDetection) if is_torch_available() else ()
     is_encoder_decoder = True
     test_torchscript = False
     test_pruning = False
@@ -256,7 +256,7 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
 
         if return_labels:
-            if model_class.__name__ == "RTDetrForObjectDetection":
+            if model_class.__name__ == "RTDetrV2ForObjectDetection":
                 labels = []
                 for i in range(self.model_tester.batch_size):
                     target = {}
@@ -272,7 +272,7 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         return inputs_dict
 
     def setUp(self):
-        self.model_tester = RTDetrModelTester(self)
+        self.model_tester = RTDetrV2ModelTester(self)
         self.config_tester = ConfigTester(
             self,
             config_class=RTDetrV2Config,
@@ -358,7 +358,7 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             if "labels" in inputs_dict:
                 correct_outlen += 1  # loss is added to beginning
             # Object Detection model returns pred_logits and pred_boxes
-            if model_class.__name__ == "RTDetrForObjectDetection":
+            if model_class.__name__ == "RTDetrV2ForObjectDetection":
                 correct_outlen += 2
 
             self.assertEqual(out_len, correct_outlen)
@@ -528,7 +528,7 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            if model_class.__name__ == "RTDetrForObjectDetection":
+            if model_class.__name__ == "RTDetrV2ForObjectDetection":
                 expected_shape = (
                     self.model_tester.batch_size,
                     self.model_tester.num_queries,
@@ -560,7 +560,7 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            if model_class.__name__ == "RTDetrForObjectDetection":
+            if model_class.__name__ == "RTDetrV2ForObjectDetection":
                 expected_shape = (
                     self.model_tester.batch_size,
                     self.model_tester.num_queries,
@@ -701,13 +701,13 @@ def prepare_img():
 
 @require_torch
 @require_vision
-class RTDetrModelIntegrationTest(unittest.TestCase):
+class RTDetrV2ModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
         return RTDetrImageProcessor.from_pretrained(CHECKPOINT) if is_vision_available() else None
 
     def test_inference_object_detection_head(self):
-        model = RTDetrForObjectDetection.from_pretrained(CHECKPOINT).to(torch_device)
+        model = RTDetrV2ForObjectDetection.from_pretrained(CHECKPOINT).to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()

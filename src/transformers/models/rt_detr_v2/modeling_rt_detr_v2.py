@@ -143,10 +143,10 @@ _CHECKPOINT_FOR_DOC = ""
 
 
 @dataclass
-# Copied from transformers.models.rt_detr.modeling_rt_detr.RTDetrDecoderOutput with R->R
-class RTDetrDecoderOutput(ModelOutput):
+# Copied from transformers.models.rt_detr.modeling_rt_detr.RTDetrDecoderOutput with RTDetr->RTDetrV2
+class RTDetrV2DecoderOutput(ModelOutput):
     """
-    Base class for outputs of the RTDetrDecoder. This class adds two attributes to
+    Base class for outputs of the RTDetrV2Decoder. This class adds two attributes to
     BaseModelOutputWithCrossAttentions, namely:
     - a stacked tensor of intermediate decoder hidden states (i.e. the output of each decoder layer)
     - a stacked tensor of intermediate reference points.
@@ -184,7 +184,7 @@ class RTDetrDecoderOutput(ModelOutput):
 
 
 @dataclass
-# Copied from transformers.models.rt_detr.modeling_rt_detr.RTDetrV2ModelOutput with R->R
+# Copied from transformers.models.rt_detr.modeling_rt_detr.RTDetrModelOutput with RTDetr->RTDetrV2
 class RTDetrV2ModelOutput(ModelOutput):
     """
     Base class for outputs of the RT-DETR encoder-decoder model.
@@ -257,10 +257,10 @@ class RTDetrV2ModelOutput(ModelOutput):
 
 
 @dataclass
-# Copied from transformers.models.rt_detr.modeling_rt_detr.RTDetrObjectDetectionOutput with R->R
-class RTDetrObjectDetectionOutput(ModelOutput):
+# Copied from transformers.models.rt_detr.modeling_rt_detr.RTDetrObjectDetectionOutput with RTDetr->RTDetrV2
+class RTDetrV2ObjectDetectionOutput(ModelOutput):
     """
-    Output type of [`RTDetrForObjectDetection`].
+    Output type of [`RTDetrV2ForObjectDetection`].
 
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
@@ -274,7 +274,7 @@ class RTDetrObjectDetectionOutput(ModelOutput):
         pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
             Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
             values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
-            possible padding). You can use [`~RTDetrImageProcessor.post_process_object_detection`] to retrieve the
+            possible padding). You can use [`~RTDetrV2ImageProcessor.post_process_object_detection`] to retrieve the
             unnormalized (absolute) bounding boxes.
         auxiliary_outputs (`list[Dict]`, *optional*):
             Optional, only returned when auxiliary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
@@ -361,8 +361,8 @@ def inverse_sigmoid(x, eps=1e-5):
     return torch.log(x1 / x2)
 
 
-# Copied from transformers.models.detr.modeling_detr.DetrFrozenBatchNorm2d with Detr->RTDetr
-class RTDetrFrozenBatchNorm2d(nn.Module):
+# Copied from transformers.models.detr.modeling_detr.DetrFrozenBatchNorm2d with Detr->RTDetrV2
+class RTDetrV2FrozenBatchNorm2d(nn.Module):
     """
     BatchNorm2d where the batch statistics and the affine parameters are fixed.
 
@@ -401,10 +401,10 @@ class RTDetrFrozenBatchNorm2d(nn.Module):
         return x * scale + bias
 
 
-# Copied from transformers.models.detr.modeling_detr.replace_batch_norm with Detr->RTDetr
+# Copied from transformers.models.detr.modeling_detr.replace_batch_norm with Detr->RTDetrV2
 def replace_batch_norm(model):
     r"""
-    Recursively replace all `torch.nn.BatchNorm2d` with `RTDetrFrozenBatchNorm2d`.
+    Recursively replace all `torch.nn.BatchNorm2d` with `RTDetrV2FrozenBatchNorm2d`.
 
     Args:
         model (torch.nn.Module):
@@ -412,7 +412,7 @@ def replace_batch_norm(model):
     """
     for name, module in model.named_children():
         if isinstance(module, nn.BatchNorm2d):
-            new_module = RTDetrFrozenBatchNorm2d(module.num_features)
+            new_module = RTDetrV2FrozenBatchNorm2d(module.num_features)
 
             if not module.weight.device == torch.device("meta"):
                 new_module.weight.data.copy_(module.weight)
@@ -549,12 +549,12 @@ def get_contrastive_denoising_training_group(
     return input_query_class, input_query_bbox, attn_mask, denoising_meta_values
 
 
-# Copied from transformers.models.rt_detr.modeling_rt_detr.RTDetrConvEncoder with R->R,rt_detr->rt_detr_v2
-class RTDetrConvEncoder(nn.Module):
+# Copied from transformers.models.rt_detr.modeling_rt_detr.RTDetrConvEncoder with RTDetr->RTDetrV2,rt_detr->rt_detr_v2
+class RTDetrV2ConvEncoder(nn.Module):
     """
     Convolutional backbone using the modeling_rt_detr_v2_resnet.py.
 
-    nn.BatchNorm2d layers are replaced by RTDetrFrozenBatchNorm2d as defined above.
+    nn.BatchNorm2d layers are replaced by RTDetrV2FrozenBatchNorm2d as defined above.
     https://github.com/lyuwenyu/RT-DETR/blob/main/rtdetr_pytorch/src/nn/backbone/presnet.py#L142
     """
 
@@ -582,8 +582,8 @@ class RTDetrConvEncoder(nn.Module):
         return out
 
 
-# Copied from transformers.models.rt_detr.modeling_rt_detr.RTDetrConvNormLayer with R->R
-class RTDetrConvNormLayer(nn.Module):
+# Copied from transformers.models.rt_detr.modeling_rt_detr.RTDetrConvNormLayer with RTDetr->RTDetrV2
+class RTDetrV2ConvNormLayer(nn.Module):
     def __init__(self, config, in_channels, out_channels, kernel_size, stride, padding=None, activation=None):
         super().__init__()
         self.conv = nn.Conv2d(
@@ -604,14 +604,14 @@ class RTDetrConvNormLayer(nn.Module):
         return hidden_state
 
 
-# Copied from transformers.models.rt_detr.modeling_rt_detr.RTDetrEncoderLayer with R->R,RTDetrConfig->RTDetrV2Config
-class RTDetrEncoderLayer(nn.Module):
+# Copied from transformers.models.rt_detr.modeling_rt_detr.RTDetrEncoderLayer with RTDetr->RTDetrV2
+class RTDetrV2EncoderLayer(nn.Module):
     def __init__(self, config: RTDetrV2Config):
         super().__init__()
         self.normalize_before = config.normalize_before
 
         # self-attention
-        self.self_attn = RTDetrMultiheadAttention(
+        self.self_attn = RTDetrV2MultiheadAttention(
             embed_dim=config.encoder_hidden_dim,
             num_heads=config.num_attention_heads,
             dropout=config.dropout,
@@ -688,8 +688,8 @@ class RTDetrEncoderLayer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.rt_detr.modeling_rt_detr.RTDetrRepVggBlock with R->R,RTDetrConfig->RTDetrV2Config
-class RTDetrRepVggBlock(nn.Module):
+# Copied from transformers.models.rt_detr.modeling_rt_detr.RTDetrRepVggBlock with RTDetr->RTDetrV2
+class RTDetrV2RepVggBlock(nn.Module):
     """
     RepVGG architecture block introduced by the work "RepVGG: Making VGG-style ConvNets Great Again".
     """
@@ -699,8 +699,8 @@ class RTDetrRepVggBlock(nn.Module):
 
         activation = config.activation_function
         hidden_channels = int(config.encoder_hidden_dim * config.hidden_expansion)
-        self.conv1 = RTDetrConvNormLayer(config, hidden_channels, hidden_channels, 3, 1, padding=1)
-        self.conv2 = RTDetrConvNormLayer(config, hidden_channels, hidden_channels, 1, 1, padding=0)
+        self.conv1 = RTDetrV2ConvNormLayer(config, hidden_channels, hidden_channels, 3, 1, padding=1)
+        self.conv2 = RTDetrV2ConvNormLayer(config, hidden_channels, hidden_channels, 1, 1, padding=0)
         self.activation = nn.Identity() if activation is None else ACT2CLS[activation]()
 
     def forward(self, x):
@@ -708,8 +708,8 @@ class RTDetrRepVggBlock(nn.Module):
         return self.activation(y)
 
 
-# Copied from transformers.models.rt_detr.modeling_rt_detr.RTDetrCSPRepLayer with R->R,RTDetrConfig->RTDetrV2Config
-class RTDetrCSPRepLayer(nn.Module):
+# Copied from transformers.models.rt_detr.modeling_rt_detr.RTDetrCSPRepLayer with RTDetr->RTDetrV2
+class RTDetrV2CSPRepLayer(nn.Module):
     """
     Cross Stage Partial (CSP) network layer with RepVGG blocks.
     """
@@ -723,11 +723,11 @@ class RTDetrCSPRepLayer(nn.Module):
         activation = config.activation_function
 
         hidden_channels = int(out_channels * config.hidden_expansion)
-        self.conv1 = RTDetrConvNormLayer(config, in_channels, hidden_channels, 1, 1, activation=activation)
-        self.conv2 = RTDetrConvNormLayer(config, in_channels, hidden_channels, 1, 1, activation=activation)
-        self.bottlenecks = nn.Sequential(*[RTDetrRepVggBlock(config) for _ in range(num_blocks)])
+        self.conv1 = RTDetrV2ConvNormLayer(config, in_channels, hidden_channels, 1, 1, activation=activation)
+        self.conv2 = RTDetrV2ConvNormLayer(config, in_channels, hidden_channels, 1, 1, activation=activation)
+        self.bottlenecks = nn.Sequential(*[RTDetrV2RepVggBlock(config) for _ in range(num_blocks)])
         if hidden_channels != out_channels:
-            self.conv3 = RTDetrConvNormLayer(config, hidden_channels, out_channels, 1, 1, activation=activation)
+            self.conv3 = RTDetrV2ConvNormLayer(config, hidden_channels, out_channels, 1, 1, activation=activation)
         else:
             self.conv3 = nn.Identity()
 
@@ -961,8 +961,8 @@ class RTDetrV2MultiscaleDeformableAttention(nn.Module):
         return output, attention_weights
 
 
-# Copied from transformers.models.rt_detr.modeling_rt_detr.RTDetrMultiheadAttention with R->R
-class RTDetrMultiheadAttention(nn.Module):
+# Copied from transformers.models.rt_detr.modeling_rt_detr.RTDetrMultiheadAttention with RTDetr->RTDetrV2
+class RTDetrV2MultiheadAttention(nn.Module):
     """
     Multi-headed attention from 'Attention Is All You Need' paper.
 
@@ -1083,7 +1083,7 @@ class RTDetrV2DecoderLayer(nn.Module):
     def __init__(self, config: RTDetrV2Config):
         super().__init__()
         # self-attention
-        self.self_attn = RTDetrMultiheadAttention(
+        self.self_attn = RTDetrV2MultiheadAttention(
             embed_dim=config.d_model,
             num_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
@@ -1182,12 +1182,12 @@ class RTDetrV2DecoderLayer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.rt_detr.modeling_rt_detr.RTDetrPreTrainedModel with R->R,rt_detr->rt_detr_v2,RTDetrConfig->RTDetrV2Config
-class RTDetrPreTrainedModel(PreTrainedModel):
+# Copied from transformers.models.rt_detr.modeling_rt_detr.RTDetrPreTrainedModel with RTDetr->RTDetrV2,rt_detr->rt_detr_v2
+class RTDetrV2PreTrainedModel(PreTrainedModel):
     config_class = RTDetrV2Config
     base_model_prefix = "rt_detr_v2"
     main_input_name = "pixel_values"
-    _no_split_modules = [r"RTDetrConvEncoder", r"RTDetrEncoderLayer", r"RTDetrDecoderLayer"]
+    _no_split_modules = [r"RTDetrV2ConvEncoder", r"RTDetrV2EncoderLayer", r"RTDetrV2DecoderLayer"]
 
     def _init_weights(self, module):
         """Initalize the weights"""
@@ -1277,12 +1277,12 @@ RTDETR_INPUTS_DOCSTRING = r"""
 """
 
 
-# Copied from transformers.models.rt_detr.modeling_rt_detr.RTDetrEncoder with R->R,RTDetrConfig->RTDetrV2Config
-class RTDetrEncoder(nn.Module):
+# Copied from transformers.models.rt_detr.modeling_rt_detr.RTDetrEncoder with RTDetr->RTDetrV2
+class RTDetrV2Encoder(nn.Module):
     def __init__(self, config: RTDetrV2Config):
         super().__init__()
 
-        self.layers = nn.ModuleList([RTDetrEncoderLayer(config) for _ in range(config.encoder_layers)])
+        self.layers = nn.ModuleList([RTDetrV2EncoderLayer(config) for _ in range(config.encoder_layers)])
 
     def forward(self, src, src_mask=None, pos_embed=None, output_attentions: bool = False) -> torch.Tensor:
         hidden_states = src
@@ -1296,10 +1296,10 @@ class RTDetrEncoder(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.rt_detr.modeling_rt_detr.RTDetrHybridEncoder with R->R,RTDetrConfig->RTDetrV2Config
-class RTDetrHybridEncoder(nn.Module):
+# Copied from transformers.models.rt_detr.modeling_rt_detr.RTDetrHybridEncoder with RTDetr->RTDetrV2
+class RTDetrV2HybridEncoder(nn.Module):
     """
-    Decoder consisting of a projection layer, a set of `RTDetrEncoder`, a top-down Feature Pyramid Network
+    Decoder consisting of a projection layer, a set of `RTDetrV2Encoder`, a top-down Feature Pyramid Network
     (FPN) and a bottom-up Path Aggregation Network (PAN). More details on the paper: https://arxiv.org/abs/2304.08069
 
     Args:
@@ -1320,28 +1320,28 @@ class RTDetrHybridEncoder(nn.Module):
         activation_function = config.activation_function
 
         # encoder transformer
-        self.encoder = nn.ModuleList([RTDetrEncoder(config) for _ in range(len(self.encode_proj_layers))])
+        self.encoder = nn.ModuleList([RTDetrV2Encoder(config) for _ in range(len(self.encode_proj_layers))])
         # top-down fpn
         self.lateral_convs = nn.ModuleList()
         self.fpn_blocks = nn.ModuleList()
         for _ in range(len(self.in_channels) - 1, 0, -1):
             self.lateral_convs.append(
-                RTDetrConvNormLayer(
+                RTDetrV2ConvNormLayer(
                     config, self.encoder_hidden_dim, self.encoder_hidden_dim, 1, 1, activation=activation_function
                 )
             )
-            self.fpn_blocks.append(RTDetrCSPRepLayer(config))
+            self.fpn_blocks.append(RTDetrV2CSPRepLayer(config))
 
         # bottom-up pan
         self.downsample_convs = nn.ModuleList()
         self.pan_blocks = nn.ModuleList()
         for _ in range(len(self.in_channels) - 1):
             self.downsample_convs.append(
-                RTDetrConvNormLayer(
+                RTDetrV2ConvNormLayer(
                     config, self.encoder_hidden_dim, self.encoder_hidden_dim, 3, 2, activation=activation_function
                 )
             )
-            self.pan_blocks.append(RTDetrCSPRepLayer(config))
+            self.pan_blocks.append(RTDetrV2CSPRepLayer(config))
 
     @staticmethod
     def build_2d_sincos_position_embedding(width, height, embed_dim=256, temperature=10000.0):
@@ -1463,13 +1463,13 @@ class RTDetrHybridEncoder(nn.Module):
         return BaseModelOutput(last_hidden_state=fpn_states, hidden_states=encoder_states, attentions=all_attentions)
 
 
-class RTDetrV2Decoder(RTDetrPreTrainedModel):
+class RTDetrV2Decoder(RTDetrV2PreTrainedModel):
     def __init__(self, config: RTDetrV2Config):
         super().__init__(config)
 
         self.dropout = config.dropout
         self.layers = nn.ModuleList([RTDetrV2DecoderLayer(config) for _ in range(config.decoder_layers)])
-        self.query_pos_head = RTDetrMLPPredictionHead(config, 4, 2 * config.d_model, config.d_model, num_layers=2)
+        self.query_pos_head = RTDetrV2MLPPredictionHead(config, 4, 2 * config.d_model, config.d_model, num_layers=2)
 
         # hack implementation for iterative bounding box refinement and two-stage Deformable DETR
         self.bbox_embed = None
@@ -1608,7 +1608,7 @@ class RTDetrV2Decoder(RTDetrPreTrainedModel):
                 ]
                 if v is not None
             )
-        return RTDetrDecoderOutput(
+        return RTDetrV2DecoderOutput(
             last_hidden_state=hidden_states,
             intermediate_hidden_states=intermediate,
             intermediate_logits=intermediate_logits,
@@ -1625,12 +1625,12 @@ class RTDetrV2Decoder(RTDetrPreTrainedModel):
     """,
     RTDETR_START_DOCSTRING,
 )
-class RTDetrV2Model(RTDetrPreTrainedModel):
+class RTDetrV2Model(RTDetrV2PreTrainedModel):
     def __init__(self, config: RTDetrV2Config):
         super().__init__(config)
 
         # Create backbone
-        self.backbone = RTDetrConvEncoder(config)
+        self.backbone = RTDetrV2ConvEncoder(config)
         intermediate_channel_sizes = self.backbone.intermediate_channel_sizes
 
         # Create encoder input projection layers
@@ -1648,7 +1648,7 @@ class RTDetrV2Model(RTDetrPreTrainedModel):
         self.encoder_input_proj = nn.ModuleList(encoder_input_proj_list)
 
         # Create encoder
-        self.encoder = RTDetrHybridEncoder(config)
+        self.encoder = RTDetrV2HybridEncoder(config)
 
         # denoising part
         if config.num_denoising > 0:
@@ -1666,7 +1666,7 @@ class RTDetrV2Model(RTDetrPreTrainedModel):
             nn.LayerNorm(config.d_model, eps=config.layer_norm_eps),
         )
         self.enc_score_head = nn.Linear(config.d_model, config.num_labels)
-        self.enc_bbox_head = RTDetrMLPPredictionHead(config, config.d_model, config.d_model, 4, num_layers=3)
+        self.enc_bbox_head = RTDetrV2MLPPredictionHead(config, config.d_model, config.d_model, 4, num_layers=3)
 
         # init encoder output anchors and valid_mask
         if config.anchor_image_size:
@@ -2006,10 +2006,10 @@ def sigmoid_focal_loss(inputs, targets, num_boxes, alpha: float = 0.25, gamma: f
     return loss.mean(1).sum() / num_boxes
 
 
-# Copied from transformers.models.rt_detr.modeling_rt_detr.RTDetrLoss with R->R
-class RTDetrLoss(nn.Module):
+# Copied from transformers.models.rt_detr.modeling_rt_detr.RTDetrLoss with RTDetr->RTDetrV2
+class RTDetrV2Loss(nn.Module):
     """
-    This class computes the losses for RTDetr. The process happens in two steps: 1) we compute hungarian assignment
+    This class computes the losses for RTDetrV2. The process happens in two steps: 1) we compute hungarian assignment
     between ground truth boxes and the outputs of the model 2) we supervise each pair of matched ground-truth /
     prediction (supervise class and box).
 
@@ -2017,7 +2017,7 @@ class RTDetrLoss(nn.Module):
         matcher (`DetrHungarianMatcher`):
             Module able to compute a matching between targets and proposals.
         weight_dict (`Dict`):
-            Dictionary relating each loss with its weights. These losses are configured in RTDetrConf as
+            Dictionary relating each loss with its weights. These losses are configured in RTDetrV2Conf as
             `weight_loss_vfl`, `weight_loss_bbox`, `weight_loss_giou`
         losses (`List[str]`):
             List of all the losses to be applied. See `get_loss` for a list of all available losses.
@@ -2034,7 +2034,7 @@ class RTDetrLoss(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        self.matcher = RTDetrHungarianMatcher(config)
+        self.matcher = RTDetrV2HungarianMatcher(config)
         self.num_classes = config.num_labels
         self.weight_dict = {
             "loss_vfl": config.weight_loss_vfl,
@@ -2316,8 +2316,8 @@ class RTDetrLoss(nn.Module):
 
 
 # taken from https://github.com/facebookresearch/detr/blob/master/models/detr.py
-# Copied from transformers.models.rt_detr.modeling_rt_detr.RTDetrMLPPredictionHead with R->R
-class RTDetrMLPPredictionHead(nn.Module):
+# Copied from transformers.models.rt_detr.modeling_rt_detr.RTDetrMLPPredictionHead with RTDetr->RTDetrV2
+class RTDetrV2MLPPredictionHead(nn.Module):
     """
     Very simple multi-layer perceptron (MLP, also called FFN), used to predict the normalized center coordinates,
     height and width of a bounding box w.r.t. an image.
@@ -2339,8 +2339,8 @@ class RTDetrMLPPredictionHead(nn.Module):
         return x
 
 
-# Copied from transformers.models.rt_detr.modeling_rt_detr.RTDetrHungarianMatcher with R->R,RTDetrConfig->RTDetrV2Config
-class RTDetrHungarianMatcher(nn.Module):
+# Copied from transformers.models.rt_detr.modeling_rt_detr.RTDetrHungarianMatcher with RTDetr->RTDetrV2
+class RTDetrV2HungarianMatcher(nn.Module):
     """This class computes an assignment between the targets and the predictions of the network
 
     For efficiency reasons, the targets don't include the no_object. Because of this, in general, there are more
@@ -2546,7 +2546,7 @@ def nested_tensor_from_tensor_list(tensor_list: List[Tensor]):
     """,
     RTDETR_START_DOCSTRING,
 )
-class RTDetrV2ForObjectDetection(RTDetrPreTrainedModel):
+class RTDetrV2ForObjectDetection(RTDetrV2PreTrainedModel):
     # When using clones, all layers > 0 will be clones, but layer 0 *is* required
     _tied_weights_keys = ["bbox_embed", "class_embed"]
     # We can't initialize the model on meta device as some weights are modified during the initialization
@@ -2560,7 +2560,7 @@ class RTDetrV2ForObjectDetection(RTDetrPreTrainedModel):
 
         # Detection heads on top
         self.class_embed = partial(nn.Linear, config.d_model, config.num_labels)
-        self.bbox_embed = partial(RTDetrMLPPredictionHead, config, config.d_model, config.d_model, 4, num_layers=3)
+        self.bbox_embed = partial(RTDetrV2MLPPredictionHead, config, config.d_model, config.d_model, 4, num_layers=3)
 
         # if two-stage, the last class_embed and bbox_embed is for region proposal generation
         num_pred = config.decoder_layers
@@ -2586,7 +2586,7 @@ class RTDetrV2ForObjectDetection(RTDetrPreTrainedModel):
         return [{"logits": a, "pred_boxes": b} for a, b in zip(outputs_class, outputs_coord)]
 
     @add_start_docstrings_to_model_forward(RTDETR_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=RTDetrObjectDetectionOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=RTDetrV2ObjectDetectionOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -2598,7 +2598,7 @@ class RTDetrV2ForObjectDetection(RTDetrPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.FloatTensor], RTDetrObjectDetectionOutput]:
+    ) -> Union[Tuple[torch.FloatTensor], RTDetrV2ObjectDetectionOutput]:
         r"""
         labels (`List[Dict]` of len `(batch_size,)`, *optional*):
             Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
@@ -2690,7 +2690,7 @@ class RTDetrV2ForObjectDetection(RTDetrPreTrainedModel):
         loss, loss_dict, auxiliary_outputs = None, None, None
         if labels is not None:
             # First: create the criterion
-            criterion = RTDetrLoss(self.config)
+            criterion = RTDetrV2Loss(self.config)
             criterion.to(self.device)
             # Second: compute the losses, based on outputs and labels
             outputs_loss = {}
@@ -2721,7 +2721,7 @@ class RTDetrV2ForObjectDetection(RTDetrPreTrainedModel):
                 output = (logits, pred_boxes) + outputs
             return ((loss, loss_dict) + output) if loss is not None else output
 
-        return RTDetrObjectDetectionOutput(
+        return RTDetrV2ObjectDetectionOutput(
             loss=loss,
             loss_dict=loss_dict,
             logits=logits,
