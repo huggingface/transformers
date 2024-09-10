@@ -95,6 +95,7 @@ class MllamaVisionConfig(PretrainedConfig):
         vision_max_num_chunks=4,
         projection_dim=4096,
         vision_input_dim=1280,
+        vision_output_dim=7680,
         return_intermediate="3,7,15,23,30",
         global_vision_layers=8,
         max_num_tiles=4, # same as vision max num chunks? yes ;-)
@@ -105,6 +106,7 @@ class MllamaVisionConfig(PretrainedConfig):
         **kwargs,
     ):
         super().__init__(**kwargs)
+        self.vision_output_dim = vision_output_dim
         self.n_heads=n_heads
         self.num_layers = num_layers
         self.n_global_layers = n_global_layers

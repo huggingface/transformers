@@ -425,15 +425,15 @@ class MllamaVisionModel(PreTrainedModel):
     ):
         super().__init__(config)
         self.max_num_tiles = config.max_num_tiles
-        self.hidden_size = config.projection_dim
+        self.hidden_size = config.vision_input_dim
         self.in_channels = config.in_channels
         self.return_intermediate = return_intermediate
-        self.image_size = (224, 224)
-        self.patch_size = (14, 14)
+        self.image_size = [config.vision_chunk_size, config.vision_chunk_size]
+        self.patch_size = [config.patch_size, config.patch_size]
         self.num_patches_height = self.image_size[0] // self.patch_size[0]
         self.num_patches_width = self.image_size[1] // self.patch_size[1]
         self.num_patches = self.num_patches_height * self.num_patches_width + 1
-        self.scale = config.projection_dim**-0.5
+        self.scale = config.vision_input_dim**-0.5
 
         self.patch_embedding = nn.Conv2d(
             in_channels=config.in_channels,
@@ -450,7 +450,7 @@ class MllamaVisionModel(PreTrainedModel):
         self.positional_embedding = nn.Parameter(self.scale * positional_embedding)
 
         gated_positional_embedding = torch.randn(
-            self.max_num_tiles * self.max_num_tiles, self.num_patches, self.hidden_size
+            self.max_num_tiles, self.max_num_tiles, self.num_patches, self.hidden_size
         )
         self.gated_positional_embedding = nn.Parameter(self.scale * gated_positional_embedding)
 
@@ -899,11 +899,11 @@ class MllamaCrossAttentionDecoderLayer(torch.nn.Module):
         self.cross_attn = MLLAMA_TEXT_CROSS_ATTENTION_CLASSES[config._attn_implementation](config)
 
         self.input_layernorm = MllamaRMSNorm(config.hidden_size,eps=config.norm_eps,)
-        self.gate_attn = torch.nn.Parameter(torch.zeros(1))
+        self.cross_attn_attn_gate = torch.nn.Parameter(torch.zeros(4))
 
         self.mlp = MllamaTextMLP(config)
         self.post_attention_layernorm = MllamaRMSNorm(config.hidden_size, eps=config.norm_eps)
-        self.ffn_gate = torch.nn.Parameter(torch.zeros(1))
+        self.cross_attn_mlp_gate = torch.nn.Parameter(torch.zeros(4))
 
     def forward(
         self,
@@ -934,13 +934,13 @@ class MllamaCrossAttentionDecoderLayer(torch.nn.Module):
             cache_position=cache_position,
             position_embeddings=position_embeddings,
         )
-        hidden_states = residual + self.gate_attn.tanh() * hidden_states
+        hidden_states = residual + self.cross_attn_attn_gate.tanh() * hidden_states
 
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = full_text_row_masked_out_mask[:, 0] * hidden_states  # type: ignore
-        hidden_states = residual + self.ffn_gate.tanh() * hidden_states
+        hidden_states = residual + self.cross_attn_mlp_gate.tanh() * hidden_states
 
         outputs = (hidden_states,)
 
@@ -1436,7 +1436,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
         super().__init__(config)
         self.vision_model = MllamaVisionModel(config.vision_config)
         self.multi_modal_projector = nn.Linear(
-            config.vision_config.vision_chunk_size,
+            config.vision_config.vision_output_dim,
             config.text_config.hidden_size,
             #! originally bias=True, but bias was not used in original forward pass
             bias=True,
@@ -1446,7 +1446,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self.post_init()
         self.vision_max_num_chunks = config.vision_config.vision_max_num_chunks
-        self.vision_chunk_size = config.vision_config.vision_chunk_size
+        self.vision_output_dim = config.vision_config.vision_output_dim
 
         self.post_init()
 

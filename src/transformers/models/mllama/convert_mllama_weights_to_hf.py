@@ -42,48 +42,45 @@ NUM_SHARDS = {
 
 # fmt: off
 ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
-    r"text_model.norm.weight":                                          r"language_model.model.norm.weight",
-    r"text_model.output.weight":                                        r"language_model.lm_head.weight",
-    r"text_model.tok_embeddings":                                       r"language_model.model.embed_tokens",
-    r"text_model.learnable_embedding":                                  r"language_model.model.learnable_embedding",
-    r"text_model.rope.freqs":                                           None,                                            # meaning we skip it and don't want it
+    r"text_model.norm.weight":                                                                  r"language_model.model.norm.weight",
+    r"text_model.output.weight":                                                                r"language_model.lm_head.weight",
+    r"text_model.tok_embeddings":                                                               r"language_model.model.embed_tokens",
+    r"text_model.learnable_embedding":                                                          r"language_model.model.learnable_embedding",
+    r"text_model.rope.freqs":                                                                   None, # meaning we skip it and don't want it
     # For every cross attention layer, the layer needs to be updated
-    r"text_model.cross_attention_layers.(\d+).gate_attn":               r"language_model.model.layers.\1.gate_attn",
-    r"text_model.cross_attention_layers.(\d+).gate_ffwd":               r"language_model.model.layers.\1.ffn_gate",
+    r"text_model.cross_attention_layers.(\d+).gate_attn":                                       r"language_model.model.layers.\1.cross_attn_attn_gate",
+    r"text_model.cross_attention_layers.(\d+).gate_ffwd":                                       r"language_model.model.layers.\1.cross_attn_mlp_gate",
     # special key, wqkv needs to be split afterwards
-    r"text_model.cross_attention_layers.(\d+).attention.wq.weight":                     r"language_model.model.layers.\1.cross_attn.q_proj.weight",
-    r"text_model.cross_attention_layers.(\d+).attention.wkv":                           r"language_model.model.layers.\1.cross_attn.k|v_proj",
-    r"text_model.cross_attention_layers.(\d+).attention.wo":                            r"language_model.model.layers.\1.cross_attn.o_proj",
-    r"text_model.cross_attention_layers.(\d+).attention.wq.layer_norm_weight":          r"language_model.model.layers.\1.input_layernorm.weight",
-    r"text_model.cross_attention_layers.(\d+).attention.wk.layer_norm_weight":          r"language_model.model.layers.\1.post_attention_layernorm.weight",
-
-    r"text_model.cross_attention_layers.(\d+).feed_forward.mlp.fc1.weight":             r"language_model.model.layers.\1.mlp.down_proj.weight",
-    r"text_model.cross_attention_layers.(\d+).feed_forward.mlp.fc1_weight":             r"language_model.model.layers.\1.mlp.down_proj____.weight",
-    r"text_model.cross_attention_layers.(\d+).feed_forward.mlp.fc2.weight":             r"language_model.model.layers.\1.mlp.up|gate_proj.weight",
-    r"text_model.cross_attention_layers.(\d+).feed_forward.mlp.layer_norm_weight":      r"language_model.model.layers.\1.post_attention_layernorm.weight",
-    r"text_model.cross_attention_layers.(\d+).attention.inner_attention.(q|k)_norm":    r"language_model.model.layers.\1.cross_attn.\2_norm",
-
-    r"text_model.layers.(\d+).attention.wqkv.weight":                          r"language_model.model.layers.\1.self_attn.q|k|v|_proj.weight",
-    r"text_model.layers.(\d+).attention.wo":                            r"language_model.model.layers.\1.self_attn.o_proj",
-    r"text_model.layers.(\d+).attention.wqkv.layer_norm_weight":        r"language_model.model.layers.\1.input_layernorm.weight",
-    r"text_model.layers.(\d+).feed_forward.mlp.layer_norm_weight":      r"language_model.model.layers.\1.post_attention_layernorm.weight",
-    r"text_model.layers.(\d+).feed_forward.mlp.fc2.":                    r"language_model.model.layers.\1.mlp.down_proj.",
-    r"text_model.layers.(\d+).feed_forward.mlp.fc1.":                    r"language_model.model.layers.\1.mlp.up|gate_proj.",
-
+    r"text_model.cross_attention_layers.(\d+).attention.wq.weight":                             r"language_model.model.layers.\1.cross_attn.q_proj.weight",
+    r"text_model.cross_attention_layers.(\d+).attention.wkv":                                   r"language_model.model.layers.\1.cross_attn.k|v_proj",
+    r"text_model.cross_attention_layers.(\d+).attention.wo":                                    r"language_model.model.layers.\1.cross_attn.o_proj",
+    r"text_model.cross_attention_layers.(\d+).attention.wq.layer_norm_weight":                  r"language_model.model.layers.\1.input_layernorm.weight",
+    r"text_model.cross_attention_layers.(\d+).attention.wk.layer_norm_weight":                  r"language_model.model.layers.\1.post_attention_layernorm.weight",
+    r"text_model.cross_attention_layers.(\d+).feed_forward.mlp.fc1.weight":                     r"language_model.model.layers.\1.mlp.down_proj.weight",
+    r"text_model.cross_attention_layers.(\d+).feed_forward.mlp.fc2.weight":                     r"language_model.model.layers.\1.mlp.up|gate_proj.weight",
+    r"text_model.cross_attention_layers.(\d+).feed_forward.mlp.layer_norm_weight":              r"language_model.model.layers.\1.post_attention_layernorm.weight",
+    r"text_model.cross_attention_layers.(\d+).attention.inner_attention.(q|k)_norm":            r"language_model.model.layers.\1.cross_attn.\2_norm",
+    # self attention layers
+    r"text_model.layers.(\d+).attention.wqkv.weight":                                           r"language_model.model.layers.\1.self_attn.q|k|v|_proj.weight",
+    r"text_model.layers.(\d+).attention.wo":                                                    r"language_model.model.layers.\1.self_attn.o_proj",
+    r"text_model.layers.(\d+).attention.wqkv.layer_norm_weight":                                r"language_model.model.layers.\1.input_layernorm.weight",
+    r"text_model.layers.(\d+).feed_forward.mlp.layer_norm_weight":                              r"language_model.model.layers.\1.post_attention_layernorm.weight",
+    r"text_model.layers.(\d+).feed_forward.mlp.fc2.":                                           r"language_model.model.layers.\1.mlp.down_proj.",
+    r"text_model.layers.(\d+).feed_forward.mlp.fc1.":                                           r"language_model.model.layers.\1.mlp.up|gate_proj.",
     # Vision encoder mapping
-    r"vision_model.vision_encoder.conv1._linear":                       r"vision_model.patch_embedding",
-    r'vision_model.vision_projection.':                                 r"multi_modal_projector.",
-    r"vision_model.vision_encoder.(global_transformer|transformer).resblocks.(\d+).attn.wq": r"vision_model.\1.layers.\2.self_attn.q_proj",
-    r"vision_model.vision_encoder.(global_transformer|transformer).resblocks.(\d+).attn.wk": r"vision_model.\1.layers.\2.self_attn.k_proj",
-    r"vision_model.vision_encoder.(global_transformer|transformer).resblocks.(\d+).attn.wv": r"vision_model.\1.layers.\2.self_attn.v_proj",
-    r"vision_model.vision_encoder.(global_transformer|transformer).resblocks.(\d+).attn.wo": r"vision_model.\1.layers.\2.self_attn.o_proj",
-    r"vision_model.vision_encoder.(global_transformer|transformer).resblocks.(\d+).mlp.c_fc": r"vision_model.\1.layers.\2.mlp.fc1",
+    r"vision_model.vision_encoder.conv1._linear":                                               r"vision_model.patch_embedding",
+    r'vision_model.vision_projection.':                                                         r"multi_modal_projector.",
+    r"vision_model.vision_encoder.(global_transformer|transformer).resblocks.(\d+).attn.wq":    r"vision_model.\1.layers.\2.self_attn.q_proj",
+    r"vision_model.vision_encoder.(global_transformer|transformer).resblocks.(\d+).attn.wk":    r"vision_model.\1.layers.\2.self_attn.k_proj",
+    r"vision_model.vision_encoder.(global_transformer|transformer).resblocks.(\d+).attn.wv":    r"vision_model.\1.layers.\2.self_attn.v_proj",
+    r"vision_model.vision_encoder.(global_transformer|transformer).resblocks.(\d+).attn.wo":    r"vision_model.\1.layers.\2.self_attn.o_proj",
+    r"vision_model.vision_encoder.(global_transformer|transformer).resblocks.(\d+).mlp.c_fc":   r"vision_model.\1.layers.\2.mlp.fc1",
     r"vision_model.vision_encoder.(global_transformer|transformer).resblocks.(\d+).mlp.c_proj": r"vision_model.\1.layers.\2.mlp.fc2",
-    r"vision_model.vision_encoder.(global_transformer|transformer).resblocks.(\d+).ln_1": r"vision_model.\1.layers.\2.input_layernorm",
-    r"vision_model.vision_encoder.(global_transformer|transformer).resblocks.(\d+).ln_2": r"vision_model.\1.layers.\2.post_attention_layernorm",
-    r"vision_model.vision_encoder.global_transformer.resblocks.(\d+).(gate_ffn|gate_attn)": r"vision_model.global_transformer.layers.\1.\2",
-    r'vision_model.vision_encoder.ln_(pre|post).(weight|bias)':         r'vision_model.vision_encoder.ln_\1.\2',
-    r"vision_model.vision_encoder.(?=\w)":                              r"vision_model.",
+    r"vision_model.vision_encoder.(global_transformer|transformer).resblocks.(\d+).ln_1":       r"vision_model.\1.layers.\2.input_layernorm",
+    r"vision_model.vision_encoder.(global_transformer|transformer).resblocks.(\d+).ln_2":       r"vision_model.\1.layers.\2.post_attention_layernorm",
+    r"vision_model.vision_encoder.global_transformer.resblocks.(\d+).(gate_ffn|gate_attn)":     r"vision_model.global_transformer.layers.\1.\2",
+    r'vision_model.vision_encoder.ln_(pre|post).(weight|bias)':                                 r'vision_model.vision_encoder.ln_\1.\2',
+    r"vision_model.vision_encoder.(?=\w)":                                                      r"vision_model.",
 }
 # fmt: on
 import regex as re
@@ -111,6 +108,15 @@ def read_json(path):
 def write_json(text, path):
     with open(path, "w") as f:
         json.dump(text, f)
+
+def permute_for_rope(input_tensor, n_heads, dim1, dim2):
+    input_tensor = input_tensor.reshape(dim1, dim2)
+    input_tensor = input_tensor.view(n_heads, dim1 // n_heads // 2, 2, dim2)
+    input_tensor = input_tensor.transpose(1, 2).reshape(dim1, dim2)
+    return input_tensor
+
+def process_layer_norm_post_rope(layer_norm_weight, num_shards, dims_per_heads):
+    pass # TODO
 
 def write_model(
     model_path,
@@ -188,38 +194,43 @@ def write_model(
         # the same storage object, saving attention_norm and ffn_norm will save other weights too, which is
         # redundant as other weights will be stitched from multiple shards. To avoid that, they are cloned.
         new_key = new_keys[key]
-        if "cross_attn" in new_key and "language_model" in new_key:
-            old = key
+        if "cross_attention" in key and "language_model" in new_key:
             new_key = re.sub(r"layers.(\d+).", lambda _match: f"layers.{cross_layer_shift[int(_match.groups()[0])]}.", new_key)
-            print(old, "->", new_key)
         elif "self_attn" in new_key and "language_model" in new_key:
             new_key = re.sub(r"layers.(\d+).", lambda _match: f"layers.{attn_layer_shift[int(_match.groups()[0])]}.", new_key)
 
         if "self_attn.q|k|v|_proj" in new_key and "language_model" in new_key:
-            weight = torch.cat([chunk.pop(key) for chunk in loaded], dim=0)
+            weight = torch.cat([chunk.pop(key) for chunk in loaded], dim=0) # TODO maybe a view is needed
             q, k, v = torch.split(weight, [dim, key_value_dim, key_value_dim])
             # TODO PERMUTE FOR ROPE
-            state_dict[new_key.replace("q|k|v|", "q")] = q 
-            state_dict[new_key.replace("q|k|v|", "k")] = k
+            state_dict[new_key.replace("q|k|v|", "q")] = permute_for_rope(q, n_heads, dim, dim) 
+            state_dict[new_key.replace("q|k|v|", "k")] = permute_for_rope(k, num_key_value_heads, key_value_dim, dim)
             state_dict[new_key.replace("q|k|v|", "v")] = v
         
+        elif "cross_attn" in key and "q_norm" in key or "k_norm" in key:
+            # TODO since rope was permuted, we ought to permute q and k norms
+            # depending on whether or not they are sharded as well!
+            pass
         elif "mlp.up|gate_proj." in new_key:
             weight = torch.cat([chunk.pop(key) for chunk in loaded], dim=0)
-            up, gate = weight.chunk(2, dim=0)
+            gate, up = weight.chunk(2)
             state_dict[new_key.replace("up|gate", "up")] = up
             state_dict[new_key.replace("up|gate", "gate")] = gate
-        
+        elif new_key == "vision_model.patch_embedding.weight":
+            state_dict[new_key] = torch.cat([chunk.pop(key) for chunk in loaded], dim=0).reshape(-1, num_channels, patch_size, patch_size) 
         elif "cross_attn.k|v_proj" in new_key and "language_model" in new_key:
             weight = torch.cat([chunk.pop(key) for chunk in loaded], dim=0)
             k, v = weight.chunk(2, dim=0)
             state_dict[new_key.replace("k|v", "k")] = k
             state_dict[new_key.replace("k|v", "v")] = v 
-
         elif "layernorm" in new_key:
             state_dict = {
                 new_key  : [chunk.pop(key) for chunk in loaded][0]
             }
-
+        elif "cross_attn_mlp_gate" in key or "cross_attn_attn_gate" in key:
+            state_dict = {
+                new_key: [chunk.pop(key) for chunk in loaded][0][0].view(1)
+            }
         else:
             state_dict = {
                 new_key  : torch.cat([chunk.pop(key) for chunk in loaded], dim=0)
@@ -230,9 +241,6 @@ def write_model(
             param_count += v.numel()
         print(f"Saving {filename} in {tmp_model_path}...")
         torch.save(state_dict, os.path.join(tmp_model_path, filename))
-
-    print("2. Converting the vision model")
-
 
     # Write configs
     index_dict["metadata"] = {"total_size": param_count * 2}
