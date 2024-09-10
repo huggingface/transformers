@@ -3504,6 +3504,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             padding=padding, max_length=max_length, verbose=verbose
         )
 
+        required_input = encoded_inputs[self.model_input_names[0]]
         if required_input and not isinstance(required_input[0], (list, tuple)):
             encoded_inputs = self._pad(
                 encoded_inputs,
@@ -3532,8 +3533,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 max_length=max_length,
                 padding_strategy=padding_strategy,
                 pad_to_multiple_of=pad_to_multiple_of,
-                return_attention_mask=return_attention_mask,
                 padding_side=padding_side,
+                return_attention_mask=return_attention_mask,
             )
 
             for key, value in outputs.items():
@@ -3867,7 +3868,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 - PaddingStrategy.LONGEST Pad to the longest sequence in the batch
                 - PaddingStrategy.MAX_LENGTH: Pad to the max length (default)
                 - PaddingStrategy.DO_NOT_PAD: Do not pad
-                The tokenizer padding sides are defined in padding_side:
+                The tokenizer padding sides are defined in `padding_side` argument:
 
                     - 'left': pads on the left of the sequences
                     - 'right': pads on the right of the sequences
