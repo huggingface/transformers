@@ -79,6 +79,7 @@ For now the supported model architectures are the architectures that have been v
 - Mistral
 - Qwen2
 - Qwen2Moe
+- Phi3
 
 ## Example usage
 
