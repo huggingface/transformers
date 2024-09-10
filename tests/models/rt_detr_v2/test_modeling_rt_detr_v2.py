@@ -45,7 +45,7 @@ if is_vision_available():
     from PIL import Image
 
 
-CHECKPOINT = ""  # TODO: replace
+CHECKPOINT = "danelcsb/rtdetr_v2_r50vd"  # TODO: replace
 
 
 class RTDetrV2ModelTester:
@@ -720,18 +720,10 @@ class RTDetrV2ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.logits.shape, expected_shape_logits)
 
         expected_logits = torch.tensor(
-            [
-                [-4.64763879776001, -5.001153945922852, -4.978509902954102],
-                [-4.159348487854004, -4.703853607177734, -5.946484565734863],
-                [-4.437461853027344, -4.65836238861084, -6.235235691070557],
-            ]
+            [[-4.7881, -4.6754, -6.1624], [-5.4441, -6.6486, -4.3840], [-3.5455, -4.9318, -6.3544]]
         ).to(torch_device)
         expected_boxes = torch.tensor(
-            [
-                [0.1688060760498047, 0.19992263615131378, 0.21225441992282867],
-                [0.768376350402832, 0.41226309537887573, 0.4636859893798828],
-                [0.25953856110572815, 0.5483334064483643, 0.4777486026287079],
-            ]
+            [[0.2588, 0.5487, 0.4747], [0.5497, 0.2760, 0.0573], [0.7688, 0.4133, 0.4634]]
         ).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_logits, atol=1e-4))
