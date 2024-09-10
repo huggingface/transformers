@@ -203,7 +203,7 @@ This feature can be used with any `nn.Module`-based model.
 
 </Tip>
 
-If you start getting `loss=NaN` or the model inhibits some other abnormal behavior due to `inf` or `nan` in
+If you start getting `loss=NaN` or the model exhibits some other abnormal behavior due to `inf` or `nan` in
 activations or weights one needs to discover where the first underflow or overflow happens and what led to it. Luckily
 you can accomplish that easily by activating a special module that will do the detection automatically.
 
