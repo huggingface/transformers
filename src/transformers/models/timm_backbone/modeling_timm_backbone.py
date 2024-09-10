@@ -113,10 +113,10 @@ class TimmBackbone(PreTrainedModel, BackboneMixin):
         return super()._from_config(config, **kwargs)
 
     def freeze_batch_norm_2d(self):
-        timm.layers.freeze_batch_norm_2d(self._backbone)
+        timm.utils.model.freeze_batch_norm_2d(self._backbone)
 
     def unfreeze_batch_norm_2d(self):
-        timm.layers.unfreeze_batch_norm_2d(self._backbone)
+        timm.utils.model.unfreeze_batch_norm_2d(self._backbone)
 
     def _init_weights(self, module):
         """

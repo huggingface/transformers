@@ -376,7 +376,9 @@ class MraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip("Model has `nan` in hidden_states, see https://github.com/huggingface/transformers/issues/29373.")
+    @unittest.skip(
+        reason="Model has `nan` in hidden_states, see https://github.com/huggingface/transformers/issues/29373."
+    )
     def test_batching_equivalence(self):
         pass
 

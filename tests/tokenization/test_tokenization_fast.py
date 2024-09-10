@@ -47,9 +47,10 @@ class PreTrainedTokenizationFastTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = PreTrainedTokenizerFast.from_pretrained(model_paths[0])
         tokenizer.save_pretrained(self.tmpdirname)
 
+    @unittest.skip(
+        "We disable this test for PreTrainedTokenizerFast because it is the only tokenizer that is not linked to any model"
+    )
     def test_tokenizer_mismatch_warning(self):
-        # We disable this test for PreTrainedTokenizerFast because it is the only tokenizer that is not linked to any
-        # model
         pass
 
     @unittest.skip(
@@ -70,13 +71,12 @@ class PreTrainedTokenizationFastTest(TokenizerTesterMixin, unittest.TestCase):
     def test_additional_special_tokens_serialization(self):
         pass
 
+    @unittest.skip(reason="PreTrainedTokenizerFast is the only tokenizer that is not linked to any model")
     def test_prepare_for_model(self):
-        # We disable this test for PreTrainedTokenizerFast because it is the only tokenizer that is not linked to any
-        # model
         pass
 
+    @unittest.skip(reason="PreTrainedTokenizerFast doesn't have tokenizer_file in its signature")
     def test_rust_tokenizer_signature(self):
-        # PreTrainedTokenizerFast doesn't have tokenizer_file in its signature
         pass
 
     def test_training_new_tokenizer(self):

@@ -12,18 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import argparse
 import gc
 import json
 import os
 import shutil
 import warnings
 
+import regex as re
 import torch
 
-from transformers import MllamaConfig, PreTrainedTokenizerFast, MllamaForConditionalGeneration
+from transformers import MllamaConfig, MllamaForConditionalGeneration, MllamaImageProcessor, PreTrainedTokenizerFast
 from transformers.convert_slow_tokenizer import TikTokenConverter
-from transformers import MllamaImageProcessor
+
 
 try:
     from transformers import LlamaTokenizerFast
@@ -40,88 +40,84 @@ NUM_SHARDS = {
     "11B": 1,
 }
 
-def split_wqkv_to_query_key_value(wqkv, n_heads, n_kv_heads):
+# fmt: off
+ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
+    r"text_model.norm.weight":                                                                  r"language_model.model.norm.weight",
+    r"text_model.output.weight":                                                                r"language_model.lm_head.weight",
+    r"text_model.tok_embeddings":                                                               r"language_model.model.embed_tokens",
+    r"text_model.learnable_embedding":                                                          r"language_model.model.learnable_embedding",
+    r"text_model.rope.freqs":                                                                   None, # meaning we skip it and don't want it
+    # For every cross attention layer, the layer needs to be updated
+    r"text_model.cross_attention_layers.(\d+).gate_attn":                                       r"language_model.model.layers.\1.cross_attn_attn_gate",
+    r"text_model.cross_attention_layers.(\d+).gate_ffwd":                                       r"language_model.model.layers.\1.cross_attn_mlp_gate",
+    # special key, wqkv needs to be split afterwards
+    r"text_model.cross_attention_layers.(\d+).attention.wq.weight":                             r"language_model.model.layers.\1.cross_attn.q_proj.weight",
+    r"text_model.cross_attention_layers.(\d+).attention.wkv":                                   r"language_model.model.layers.\1.cross_attn.k|v_proj",
+    r"text_model.cross_attention_layers.(\d+).attention.wo":                                    r"language_model.model.layers.\1.cross_attn.o_proj",
+    r"text_model.cross_attention_layers.(\d+).attention.wq.layer_norm_weight":                  r"language_model.model.layers.\1.input_layernorm.weight",
+    r"text_model.cross_attention_layers.(\d+).attention.wk.layer_norm_weight":                  r"language_model.model.layers.\1.post_attention_layernorm.weight",
+    r"text_model.cross_attention_layers.(\d+).feed_forward.mlp.fc1.weight":                     r"language_model.model.layers.\1.mlp.up|gate_proj.weight",
+    r"text_model.cross_attention_layers.(\d+).feed_forward.mlp.fc2.weight":                     r"language_model.model.layers.\1.mlp.down_proj.weight",
+    r"text_model.cross_attention_layers.(\d+).feed_forward.mlp.layer_norm_weight":              r"language_model.model.layers.\1.post_attention_layernorm.weight",
+    r"text_model.cross_attention_layers.(\d+).attention.inner_attention.(q|k)_norm":            r"language_model.model.layers.\1.cross_attn.\2_norm",
+    # self attention layers
+    r"text_model.layers.(\d+).attention.wqkv.weight":                                           r"language_model.model.layers.\1.self_attn.q|k|v|_proj.weight",
+    r"text_model.layers.(\d+).attention.wo":                                                    r"language_model.model.layers.\1.self_attn.o_proj",
+    r"text_model.layers.(\d+).attention.wqkv.layer_norm_weight":                                r"language_model.model.layers.\1.input_layernorm.weight",
+    r"text_model.layers.(\d+).feed_forward.mlp.layer_norm_weight":                              r"language_model.model.layers.\1.post_attention_layernorm.weight",
+    r"text_model.layers.(\d+).feed_forward.mlp.fc2.":                                           r"language_model.model.layers.\1.mlp.down_proj.",
+    r"text_model.layers.(\d+).feed_forward.mlp.fc1.":                                           r"language_model.model.layers.\1.mlp.up|gate_proj.",
+    # Vision encoder mapping
+    r"vision_model.vision_encoder.conv1._linear":                                               r"vision_model.patch_embedding",
+    r'vision_model.vision_projection.':                                                         r"multi_modal_projector.",
+    r"vision_model.vision_encoder.(global_transformer|transformer).resblocks.(\d+).attn.wq":    r"vision_model.\1.layers.\2.self_attn.q_proj",
+    r"vision_model.vision_encoder.(global_transformer|transformer).resblocks.(\d+).attn.wk":    r"vision_model.\1.layers.\2.self_attn.k_proj",
+    r"vision_model.vision_encoder.(global_transformer|transformer).resblocks.(\d+).attn.wv":    r"vision_model.\1.layers.\2.self_attn.v_proj",
+    r"vision_model.vision_encoder.(global_transformer|transformer).resblocks.(\d+).attn.wo":    r"vision_model.\1.layers.\2.self_attn.o_proj",
+    r"vision_model.vision_encoder.(global_transformer|transformer).resblocks.(\d+).mlp.c_fc":   r"vision_model.\1.layers.\2.mlp.fc1",
+    r"vision_model.vision_encoder.(global_transformer|transformer).resblocks.(\d+).mlp.c_proj": r"vision_model.\1.layers.\2.mlp.fc2",
+    r"vision_model.vision_encoder.(global_transformer|transformer).resblocks.(\d+).ln_1":       r"vision_model.\1.layers.\2.input_layernorm",
+    r"vision_model.vision_encoder.(global_transformer|transformer).resblocks.(\d+).ln_2":       r"vision_model.\1.layers.\2.post_attention_layernorm",
+    r"vision_model.vision_encoder.global_transformer.resblocks.(\d+).(gate_ffn|gate_attn)":     r"vision_model.global_transformer.layers.\1.\2",
+    r'vision_model.vision_encoder.ln_(pre|post).(weight|bias)':                                 r'vision_model.vision_encoder.ln_\1.\2',
+    r"vision_model.vision_encoder.(?=\w)":                                                      r"vision_model.",
+}
+# fmt: on
 
-    total_n_heads = n_heads + n_kv_heads * 2
-    head_dim = wqkv.shape[0] // total_n_heads
-    dim1 = head_dim * n_heads
-    dim2 = dim1 + head_dim * n_kv_heads
-    dim3 = dim1 + head_dim * n_kv_heads * 2
 
-    query = wqkv[:dim1]
-    key = wqkv[dim1:dim2]
-    value = wqkv[dim2:dim3]
-
-    return query, key, value
-
-
-def apply_load_hooks_(state_dict):
-
-    keys = list(state_dict.keys())
-    
-    for param_name in keys:
-
-        # text model cross attention layers
-        if "text_model.cross_attention_layers." in param_name:
-            
-            # CrossAttention load_hook
-            if "inner_attention.q_norm.weight" in param_name:
-                q_weight = state_dict.pop(param_name)
-                new_param_name = param_name.replace("inner_attention.q_norm.weight", "q_norm.weight")
-                state_dict[new_param_name] = q_weight
-            if "inner_attention.k_norm.weight" in param_name:
-                k_weight = state_dict.pop(param_name)
-                new_param_name = param_name.replace("inner_attention.k_norm.weight", "k_norm.weight")
-                state_dict[new_param_name] = k_weight
-            if "wkv.weight" in param_name:
-                wk, wv = state_dict.pop(param_name).chunk(2)
-                new_param_name = param_name.replace("wkv.weight", "wk.weight")
-                state_dict[new_param_name] = wk
-                new_param_name = param_name.replace("wkv.weight", "wv.weight")
-                state_dict[new_param_name] = wv
-
-            # CrossAttentionTransformerBlock load_hook
-            if "gate_attn" in param_name:
-                attn_gate = state_dict.pop(param_name)
-                new_param_name = param_name.replace("gate_attn", "gate_attn")
-                if attn_gate.dim() == 1:
-                    attn_gate = attn_gate[0].view(1)
-                if attn_gate.dim() == 3:
-                    attn_gate = attn_gate.view(1)
-                state_dict[new_param_name] = attn_gate
-            if "gate_ffwd" in param_name:
-                ffn_gate = state_dict.pop(param_name)
-                new_param_name = param_name.replace("gate_ffwd", "gate_ffwd")
-                if ffn_gate.dim() == 1:
-                    ffn_gate = ffn_gate[0].view(1)
-                if ffn_gate.dim() == 3:
-                    ffn_gate = ffn_gate.view(1)
-                state_dict[new_param_name] = ffn_gate
-            if "feed_forward.mlp.layer_norm_weight" in param_name:
-                new_param_name = param_name.replace("feed_forward.mlp.layer_norm_weight", "ffn_norm.weight")
-                state_dict[new_param_name] = state_dict.pop(param_name)
-            if "attention.wq.layer_norm_weight" in param_name:
-                new_param_name = param_name.replace("attention.wq.layer_norm_weight", "attention_norm.weight")
-                state_dict[new_param_name] = state_dict.pop(param_name)
-
-            # FeedForward load_hook
-            if "mlp.fc1_weight" in param_name:
-                fc1_weight, fc3_weight = state_dict.pop(param_name).chunk(2)
-                state_dict[param_name.replace("mlp.fc1_weight", "w1.weight")] = fc1_weight
-                state_dict[param_name.replace("mlp.fc1_weight", "w3.weight")] = fc3_weight
-            if "mlp.fc2_weight" in param_name:
-                fc2_weight = state_dict.pop(param_name)
-                state_dict[param_name.replace("mlp.fc2_weight", "w2.weight")] = fc2_weight
+def convert_old_keys_to_new_keys(state_dict_keys: dict = None):
+    """
+        This function should be applied only once, on the concatenated keys.
+    """
+    output_dict = {}
+    if state_dict_keys is not None:
+        old_text = "\n".join(state_dict_keys)
+        new_text = old_text
+        for pattern, replacement in ORIGINAL_TO_CONVERTED_KEY_MAPPING.items():
+            if replacement is None:
+                new_text = re.sub(pattern, "", new_text) # an empty line
+                continue
+            new_text = re.sub(pattern, replacement, new_text)
+        output_dict = {k:v for k,v in zip(old_text.split("\n"), new_text.split("\n"))}
+    return output_dict
 
 
 def read_json(path):
     with open(path, "r") as f:
         return json.load(f)
 
-
 def write_json(text, path):
     with open(path, "w") as f:
         json.dump(text, f)
+
+def permute_for_rope(input_tensor, n_heads, dim1, dim2):
+    input_tensor = input_tensor.reshape(dim1, dim2)
+    input_tensor = input_tensor.view(n_heads, dim1 // n_heads // 2, 2, dim2)
+    input_tensor = input_tensor.transpose(1, 2).reshape(dim1, dim2)
+    return input_tensor
+
+def process_layer_norm_post_rope(layer_norm_weight, num_shards, dims_per_heads):
+    pass # TODO
 
 def write_model(
     model_path,
@@ -131,9 +127,6 @@ def write_model(
     llama_version=1,
     vocab_size=None,
 ):
-    # for backward compatibility, before you needed the repo to be called `my_repo/model_size`
-    if not os.path.isfile(os.path.join(input_base_path, "params.json")):
-        input_base_path = os.path.join(input_base_path, model_size)
 
     os.makedirs(model_path, exist_ok=True)
     tmp_model_path = os.path.join(model_path, "tmp")
@@ -152,36 +145,22 @@ def write_model(
     dims_per_head = dim // n_heads
     patch_size = 14
     num_channels = 3
-
-    
     base = params.get("rope_theta", 10000.0)
-    inv_freq = 1.0 / (base ** (torch.arange(0, dims_per_head, 2).float() / dims_per_head))
 
     # vision parameters
     n_layers_vision_transformer = 32 # vision model 1st transformer layers
     n_layers_global_transformer = 8 # global transformer vision layers
-    n_heads_vision = 16 
+    n_heads_vision = 16
     n_vision_heads_per_shard = n_heads_vision // num_shards
     vision_hidden_dim = 1280 # width of vision transformers
     vision_dims_per_head = vision_hidden_dim // n_heads_vision
     mlp_ratio = 4 # vision_hidden_dim * mlp_ratio is mlp dim
 
-    if base > 10000.0 and llama_version != 3:
-        max_position_embeddings = 16384
-    else:
-        # Depending on the Llama version, the default max_position_embeddings has different values.
-        if llama_version == 1:
-            max_position_embeddings = 2048
-        elif llama_version == 2:
-            max_position_embeddings = 4096
-        elif llama_version == 3:
-            max_position_embeddings = 8192
-
     vocab_size = vocab_size if vocab_size is not None else 32000
     if params.get("n_kv_heads", None) is not None:
         num_key_value_heads = params["n_kv_heads"]  # for GQA / MQA
         num_local_key_value_heads = n_heads_per_shard // num_key_value_heads
-        key_value_dim = dim // num_key_value_heads
+        key_value_dim = dim // num_local_key_value_heads
     else:  # compatibility with other checkpoints
         num_key_value_heads = n_heads
         num_local_key_value_heads = n_heads_per_shard
@@ -192,533 +171,76 @@ def write_model(
         return w.view(n_heads, dim1 // n_heads // 2, 2, dim2).transpose(1, 2).reshape(dim1, dim2)
 
     print(f"Fetching all parameters from the checkpoint at {input_base_path}.")
-    # Load weights
     if num_shards == 1:
-        # Not sharded
-        # (The sharded implementation would also work, but this is simpler.)
-        loaded = torch.load(os.path.join(input_base_path, "consolidated.pth"), map_location="cpu", weights_only=True)
-        apply_load_hooks_(loaded)
-        loaded = [loaded]
+        loaded = [torch.load(os.path.join(input_base_path, "consolidated.pth"), map_location="cpu")]
     else:
-        # Sharded
         loaded = [
             torch.load(os.path.join(input_base_path, f"consolidated.{i:02d}.pth"), map_location="cpu")
             for i in range(num_shards)
         ]
 
-
-    # weights are loaded. Now, we convert them into a state_dict.
-
-    # first, language model weights.
-
-    # we start with self-attention layers.
-
     param_count = 0
     index_dict = {"weight_map": {}}
-    print("Converting language model self-attention layers.")
-    for layer_i in range(n_layers):
-        filename = f"pytorch_language_model-{layer_i + 1}-of-{n_layers + 1}.bin"
+    print("1. Converting language model")
+    total_layers = len(loaded[0].keys())
+    all_keys = list(loaded[0].keys())
+    new_keys = convert_old_keys_to_new_keys(all_keys)
+
+    cross_layer_shift = [3, 7, 11, 15, 19, 23, 27, 31]
+    attn_layer_shift = [0, 1, 2, 4, 5, 6, 8, 9, 10, 12, 13, 14, 16, 17, 18, 20, 21, 22, 24, 25, 26, 28, 29, 30, 33, 33, 34, 35, 36, 37, 38, 39]
+    for idx, key in enumerate(all_keys):
+        filename = f"pytorch_model-{idx + 1}-of-{total_layers + 1}.bin"
+        state_dict = {}
         # Sharded
         # Note that attention.w{q,k,v,o}, feed_fordward.w[1,2,3], attention_norm.weight and ffn_norm.weight share
         # the same storage object, saving attention_norm and ffn_norm will save other weights too, which is
         # redundant as other weights will be stitched from multiple shards. To avoid that, they are cloned.
+        new_key = new_keys[key]
+        if "cross_attention" in key and "language_model" in new_key:
+            new_key = re.sub(r"layers.(\d+).", lambda _match: f"layers.{cross_layer_shift[int(_match.groups()[0])]}.", new_key)
+        elif "self_attn" in new_key and "language_model" in new_key:
+            new_key = re.sub(r"layers.(\d+).", lambda _match: f"layers.{attn_layer_shift[int(_match.groups()[0])]}.", new_key)
 
-        state_dict = {}
-        if model_size == "11B":
-            state_dict[f"model.language_model.layers.{layer_i}.input_layernorm.weight"] = loaded[0].pop(
-                f"text_model.layers.{layer_i}.attention.wqkv.layer_norm_weight"
-            ).clone()
-            state_dict[f"model.language_model.layers.{layer_i}.post_attention_layernorm.weight"] = loaded[0].pop(
-                f"text_model.layers.{layer_i}.feed_forward.mlp.layer_norm_weight"
-            ).clone()
+        if "self_attn.q|k|v|_proj" in new_key and "language_model" in new_key:
+            weight = torch.cat([chunk.pop(key) for chunk in loaded], dim=0) # TODO maybe a view is needed
+            q, k, v = torch.split(weight, [dim, key_value_dim, key_value_dim])
+            state_dict[new_key.replace("q|k|v|", "q")] = permute_for_rope(q, n_heads, dim, dim).clone()
+            state_dict[new_key.replace("q|k|v|", "k")] = permute_for_rope(k, num_key_value_heads, key_value_dim, dim).clone()
+            state_dict[new_key.replace("q|k|v|", "v")] = v.clone()
+        elif "cross_attn" in key and "q_norm" in key or "k_norm" in key:
+            # TODO since rope was permuted, we ought to permute q and k norms
+            # depending on whether or not they are sharded as well!
+            pass
+        elif "mlp.up|gate_proj." in new_key:
+            weight = torch.cat([chunk.pop(key) for chunk in loaded], dim=0)
+            gate, up = weight.chunk(2)
+            state_dict[new_key.replace("up|gate", "up")] = up.clone()
+            state_dict[new_key.replace("up|gate", "gate")] = gate.clone()
+        elif new_key == "vision_model.patch_embedding.weight":
+            state_dict[new_key] = torch.cat([chunk.pop(key) for chunk in loaded], dim=0).reshape(-1, num_channels, patch_size, patch_size).clone()
+        elif "cross_attn.k|v_proj" in new_key and "language_model" in new_key:
+            weight = torch.cat([chunk.pop(key) for chunk in loaded], dim=0)
+            k, v = weight.chunk(2, dim=0)
+            state_dict[new_key.replace("k|v", "k")] = k.clone()
+            state_dict[new_key.replace("k|v", "v")] = v.clone()
+        elif "layernorm" in new_key:
+            state_dict = {
+                new_key  : [chunk.pop(key) for chunk in loaded][0].clone()
+            }
+        elif "cross_attn_mlp_gate" in key or "cross_attn_attn_gate" in key:
+            state_dict = {
+                new_key: [chunk.pop(key) for chunk in loaded][0][0].view(1).clone()
+            }
         else:
-            state_dict[f"model.language_model.layers.{layer_i}.input_layernorm.weight"] = loaded[0].pop(
-                f"text_model.layers.{layer_i}.attention_norm.weight"
-            ).clone()
-            state_dict[f"model.language_model.layers.{layer_i}.post_attention_layernorm.weight"] = loaded[0].pop(
-                f"text_model.layers.{layer_i}.ffn_norm.weight"
-            ).clone()
+            state_dict = {
+                new_key  : torch.cat([chunk.pop(key) for chunk in loaded], dim=0).clone()
+            }
 
-
-        if model_size == "11B":
-            wqkv = loaded[0].pop(f"text_model.layers.{layer_i}.attention.wqkv.weight")
-            query, key, value = split_wqkv_to_query_key_value(wqkv, n_heads, num_key_value_heads)
-            state_dict[f"model.language_model.layers.{layer_i}.self_attn.q_proj.weight"] = query
-            state_dict[f"model.language_model.layers.{layer_i}.self_attn.k_proj.weight"] = key
-            state_dict[f"model.language_model.layers.{layer_i}.self_attn.v_proj.weight"] = value
-        else:
-            state_dict[f"model.language_model.layers.{layer_i}.self_attn.q_proj.weight"] = permute(
-                torch.cat(
-                    [
-                        loaded[i].pop(f"text_model.layers.{layer_i}.attention.wq.weight").view(n_heads_per_shard, dims_per_head, dim)
-                        for i in range(num_shards)
-                    ],
-                    dim=0,
-                ).reshape(dim, dim),
-                n_heads=n_heads,
-            )
-            state_dict[f"model.language_model.layers.{layer_i}.self_attn.k_proj.weight"] = permute(
-                torch.cat(
-                    [
-                        loaded[i].pop(f"text_model.layers.{layer_i}.attention.wk.weight").view(
-                            num_local_key_value_heads, dims_per_head, dim
-                        )
-                        for i in range(num_shards)
-                    ],
-                    dim=0,
-                ).reshape(key_value_dim, dim),
-                num_key_value_heads,
-                key_value_dim,
-                dim,
-            )
-            state_dict[f"model.language_model.layers.{layer_i}.self_attn.v_proj.weight"] = torch.cat(
-                [
-                    loaded[i].pop(f"text_model.layers.{layer_i}.attention.wv.weight").view(
-                        num_local_key_value_heads, dims_per_head, dim
-                    )
-                    for i in range(num_shards)
-                ],
-                dim=0,
-            ).reshape(key_value_dim, dim)
-
-        state_dict[f"model.language_model.layers.{layer_i}.self_attn.o_proj.weight"] = torch.cat(
-            [loaded[i].pop(f"text_model.layers.{layer_i}.attention.wo.weight") for i in range(num_shards)], dim=1
-        )
-
-        if model_size == "11B":
-            state_dict[f"model.language_model.layers.{layer_i}.mlp.down_proj.weight"] = loaded[0].pop(
-                f"text_model.layers.{layer_i}.feed_forward.mlp.fc2_weight"
-            )
-            w1w3 = loaded[0].pop(f"text_model.layers.{layer_i}.feed_forward.mlp.fc1_weight")
-            w1, w3 = w1w3.chunk(2)
-            state_dict[f"model.language_model.layers.{layer_i}.mlp.gate_proj.weight"] = w1
-            state_dict[f"model.language_model.layers.{layer_i}.mlp.up_proj.weight"] = w3
-        else:
-            state_dict[f"model.language_model.layers.{layer_i}.mlp.gate_proj.weight"] = torch.cat(
-                [loaded[i].pop(f"text_model.layers.{layer_i}.feed_forward.w1.weight") for i in range(num_shards)], dim=0
-            )
-            state_dict[f"model.language_model.layers.{layer_i}.mlp.down_proj.weight"] = torch.cat(
-                [loaded[i].pop(f"text_model.layers.{layer_i}.feed_forward.w2.weight") for i in range(num_shards)], dim=1
-            )
-            state_dict[f"model.language_model.layers.{layer_i}.mlp.up_proj.weight"] = torch.cat(
-                [loaded[i].pop(f"text_model.layers.{layer_i}.feed_forward.w3.weight") for i in range(num_shards)], dim=0
-            )
-
-        #! no inv_freqs in modeling code?
-        state_dict[f"model.language_model.layers.{layer_i}.self_attn.rotary_emb.inv_freq"] = inv_freq
         for k, v in state_dict.items():
             index_dict["weight_map"][k] = filename
             param_count += v.numel()
         print(f"Saving {filename} in {tmp_model_path}...")
         torch.save(state_dict, os.path.join(tmp_model_path, filename))
-
-    # save embedding layer and norm
-
-    filename = f"pytorch_language_model-{n_layers + 1}-of-{n_layers + 1}.bin"
-    concat_dim = 0 if llama_version == 3 else 1
-    state_dict = {
-        "model.language_model.norm.weight": loaded[0].pop("text_model.norm.weight"),
-        "model.language_model.embed_tokens.weight": torch.cat(
-            [loaded[i].pop("text_model.tok_embeddings.weight") for i in range(num_shards)], dim=concat_dim
-        ),
-        "model.language_model.learnable_embedding.weight": torch.cat(
-            [loaded[i].pop("text_model.learnable_embedding.weight") for i in range(num_shards)], dim=concat_dim
-        ),
-        "lm_head.weight": torch.cat([loaded[i].pop("text_model.output.weight") for i in range(num_shards)], dim=0),
-    }
-
-    for k, v in state_dict.items():
-        index_dict["weight_map"][k] = filename
-        param_count += v.numel()
-    print(f"Saving {filename} in {tmp_model_path}...")
-    torch.save(state_dict, os.path.join(tmp_model_path, filename))
-
-    # Then, cross-attention layers from the language model
-    # TODO instead of cross-attention layers, could we bundle self + cross attention into the same layers?
-    # that might be a better abstraction
-    print("Converting cross-attention layers.")
-    for xattn_layer_i in range(n_layers_cross_attention):
-        cross_attentions_filename = f"pytorch_language_model_xattn-{xattn_layer_i + 1}-of-{n_layers_cross_attention + 1}.bin"
-
-        # norms
-
-        state_dict = {
-            f"model.language_model.cross_attention_layers.{xattn_layer_i}.input_layernorm.weight": loaded[0].pop(
-                f"text_model.cross_attention_layers.{xattn_layer_i}.attention_norm.weight"
-            ).clone(),
-            f"model.language_model.cross_attention_layers.{xattn_layer_i}.post_attention_layernorm.weight": loaded[0].pop(
-                f"text_model.cross_attention_layers.{xattn_layer_i}.ffn_norm.weight"
-            ).clone(),
-        }        
-
-        # projections
-
-        state_dict[f"model.language_model.cross_attention_layers.{xattn_layer_i}.mlp.gate_proj.weight"] = torch.cat(
-            [loaded[i].pop(f"text_model.cross_attention_layers.{xattn_layer_i}.feed_forward.w1.weight") for i in range(num_shards)], dim=0
-        )
-        state_dict[f"model.language_model.cross_attention_layers.{xattn_layer_i}.mlp.down_proj.weight"] = torch.cat(
-            [loaded[i].pop(f"text_model.cross_attention_layers.{xattn_layer_i}.feed_forward.w2.weight") for i in range(num_shards)], dim=1
-        )
-        state_dict[f"model.language_model.cross_attention_layers.{xattn_layer_i}.mlp.up_proj.weight"] = torch.cat(
-            [loaded[i].pop(f"text_model.cross_attention_layers.{xattn_layer_i}.feed_forward.w3.weight") for i in range(num_shards)], dim=0
-        )
-
-        # attention weights
-        if model_size == "11B":
-            state_dict[f"model.language_model.cross_attention_layers.{xattn_layer_i}.self_attn.q_proj.weight"] = loaded[0].pop(
-                f"text_model.cross_attention_layers.{xattn_layer_i}.attention.wq.weight"
-            ).clone()
-            state_dict[f"model.language_model.cross_attention_layers.{xattn_layer_i}.self_attn.k_proj.weight"] = loaded[0].pop(
-                f"text_model.cross_attention_layers.{xattn_layer_i}.attention.wk.weight"
-            ).clone()
-            state_dict[f"model.language_model.cross_attention_layers.{xattn_layer_i}.self_attn.v_proj.weight"] = loaded[0].pop(
-                f"text_model.cross_attention_layers.{xattn_layer_i}.attention.wv.weight"
-            ).clone()
-        else:
-            state_dict[f"model.language_model.cross_attention_layers.{xattn_layer_i}.self_attn.q_proj.weight"] = torch.cat(
-                    [
-                        loaded[i].pop(f"text_model.cross_attention_layers.{xattn_layer_i}.attention.wq.weight").view(n_heads_per_shard, dims_per_head, dim)
-                        for i in range(num_shards)
-                    ],
-                    dim=0,
-                ).reshape(dim, dim)
-            state_dict[f"model.language_model.cross_attention_layers.{xattn_layer_i}.self_attn.k_proj.weight"] = torch.cat(
-                    [
-                        loaded[i].pop(f"text_model.cross_attention_layers.{xattn_layer_i}.attention.wk.weight").view(
-                            num_local_key_value_heads, dims_per_head, dim
-                        )
-                        for i in range(num_shards)
-                    ],
-                    dim=0,
-                ).reshape(key_value_dim, dim)
-            state_dict[f"model.language_model.cross_attention_layers.{xattn_layer_i}.self_attn.v_proj.weight"] = torch.cat(
-                [
-                    loaded[i].pop(f"text_model.cross_attention_layers.{xattn_layer_i}.attention.wv.weight").view(
-                        num_local_key_value_heads, dims_per_head, dim
-                    )
-                    for i in range(num_shards)
-                ],
-                dim=0,
-            ).reshape(key_value_dim, dim)
-
-        state_dict[f"model.language_model.cross_attention_layers.{xattn_layer_i}.self_attn.o_proj.weight"] = torch.cat(
-            [loaded[i].pop(f"text_model.cross_attention_layers.{xattn_layer_i}.attention.wo.weight") for i in range(num_shards)], dim=1
-        )
-
-        # gate attn (to mimic the loading hook from the authors)
-        attn_gate = loaded[0].pop(f"text_model.cross_attention_layers.{xattn_layer_i}.gate_attn")
-        if attn_gate.dim() == 1:
-            attn_gate = attn_gate[0].view(1)
-        if attn_gate.dim() == 3:
-            attn_gate = attn_gate.view(1)
-
-        ffn_gate = loaded[0].pop(f"text_model.cross_attention_layers.{xattn_layer_i}.gate_ffwd")
-
-        if ffn_gate.dim() == 1:
-            ffn_gate = ffn_gate[0].view(1)
-        if ffn_gate.dim() == 3:
-            ffn_gate = ffn_gate.view(1)
-        # model.language_model.cross_attention_layers.0.gate_attn
-        state_dict[f"model.language_model.cross_attention_layers.{xattn_layer_i}.gate_attn"] = attn_gate.clone()
-
-        state_dict[f"model.language_model.cross_attention_layers.{xattn_layer_i}.ffn_gate"] = ffn_gate.clone()
-
-        if model_size == "11B":
-            q_weight = loaded[0].pop(f"text_model.cross_attention_layers.{xattn_layer_i}.attention.q_norm.weight")
-            k_weight = loaded[0].pop(f"text_model.cross_attention_layers.{xattn_layer_i}.attention.k_norm.weight")            
-        else:
-            # q and k normalization weights (for cross-attention stability in training) are not sharded
-            q_weight = loaded[0].pop(f"text_model.cross_attention_layers.{xattn_layer_i}.attention.inner_attention.q_norm.weight")
-            k_weight = loaded[0].pop(f"text_model.cross_attention_layers.{xattn_layer_i}.attention.inner_attention.k_norm.weight")
-
-        state_dict[f"model.language_model.cross_attention_layers.{xattn_layer_i}.self_attn.q_norm.weight"] = q_weight.contiguous()
-        state_dict[f"model.language_model.cross_attention_layers.{xattn_layer_i}.self_attn.k_norm.weight"] = k_weight.contiguous()
-
-        # save state dict of this layer
-
-        for k, v in state_dict.items():
-            index_dict["weight_map"][k] = cross_attentions_filename
-            param_count += v.numel()
-        print(f"Saving {cross_attentions_filename} in {tmp_model_path}...")
-        torch.save(state_dict, os.path.join(tmp_model_path, cross_attentions_filename))
-
-    # then, converting the vision model double transformer (2 sets of layers, same width)
-
-    # projection parameters for vision
-
-    projection_filename = "pytorch_vision_projection.bin"
-    state_dict = {
-            'model.vision_model.vision_projection.weight': torch.cat(
-            [loaded[i].pop("vision_model.vision_projection.weight") for i in range(num_shards)], dim=concat_dim
-        ),
-            'model.vision_model.vision_projection.bias': torch.cat(
-            [loaded[i].pop("vision_model.vision_projection.bias") for i in range(num_shards)], dim=concat_dim
-        ),
-    }
-    for k, v in state_dict.items():
-        index_dict["weight_map"][k] = projection_filename
-        param_count += v.numel()
-    print(f"Saving {projection_filename} in {tmp_model_path}...")
-    torch.save(state_dict, os.path.join(tmp_model_path, projection_filename))
-
-    # global vision layers - identical to a CLIPVisionModel except:
-    # - there are 2 gating parameters
-    # - there are no class embedding/patch embedding layers
-    for global_vision_layer_i in range(n_layers_global_transformer):
-        state_dict = {}
-        global_vision_filename = f"pytorch_global_vision_transformer-{global_vision_layer_i}-of-{n_layers_global_transformer + 1}.bin"
-
-        # the extra gating params gate_attn and gate_ffn are not sharded
-
-        state_dict[f'model.vision_model.vision_encoder.global_transformer.layers.{global_vision_layer_i}.gate_attn'] = loaded[0].pop(f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.gate_attn')
-        state_dict[f'model.vision_model.vision_encoder.global_transformer.layers.{global_vision_layer_i}.gate_ffn'] = loaded[0].pop(f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.gate_ffn')
-
-
-        if model_size == "11B":
-            state_dict[f"model.vision_model.vision_encoder.global_transformer.layers.{global_vision_layer_i}.self_attn.q_proj.weight"] = loaded[0].pop(
-                f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.attn.wq.weight'
-            ).clone()
-            state_dict[f"model.vision_model.vision_encoder.global_transformer.layers.{global_vision_layer_i}.self_attn.k_proj.weight"] = loaded[0].pop(
-                f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.attn.wk.weight'
-            ).clone()
-            state_dict[f"model.vision_model.vision_encoder.global_transformer.layers.{global_vision_layer_i}.self_attn.v_proj.weight"] = loaded[0].pop(
-                f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.attn.wv.weight'
-            ).clone()
-        
-        else:
-            # attention weights and biases are sharded
-            state_dict[f"model.vision_model.vision_encoder.global_transformer.layers.{global_vision_layer_i}.self_attn.q_proj.weight"] = permute(
-                torch.cat(
-                    [
-                        loaded[i].pop(f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.attn.wq.weight').view(n_vision_heads_per_shard, vision_dims_per_head, vision_hidden_dim)
-                        for i in range(num_shards)
-                    ],
-                    dim=0,
-                ).reshape(vision_hidden_dim, vision_hidden_dim),
-                n_heads=n_heads_vision,
-                dim1=vision_hidden_dim,
-                dim2=vision_hidden_dim
-            )
-
-            # for vision n_kv_heads = n_heads and local_kv heads = n_vision_heads per shard!
-            #  same for normal and global image transformer
-
-            state_dict[f"model.vision_model.vision_encoder.global_transformer.layers.{global_vision_layer_i}.self_attn.k_proj.weight"] = permute(
-                torch.cat(
-                    [
-                        loaded[i].pop(f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.attn.wk.weight').view(
-                            n_vision_heads_per_shard, vision_dims_per_head, vision_hidden_dim
-                        )
-                        for i in range(num_shards)
-                    ],
-                    dim=0,
-                ).reshape(vision_hidden_dim, vision_hidden_dim),
-                n_heads=n_heads_vision,
-                dim1=vision_hidden_dim,
-                dim2=vision_hidden_dim,
-            )
-
-            state_dict[f"model.vision_model.vision_encoder.global_transformer.layers.{global_vision_layer_i}.self_attn.v_proj.weight"] = torch.cat(
-                [
-                    loaded[i].pop(f"vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.attn.wv.weight").view(
-                        n_vision_heads_per_shard, vision_dims_per_head, vision_hidden_dim
-                    )
-                    for i in range(num_shards)
-                ],
-                dim=0,
-            ).reshape(vision_hidden_dim, vision_hidden_dim)
-
-
-        # simple concatenation for sharded o_proj
-        state_dict[f'model.vision_model.vision_encoder.global_transformer.layers.{global_vision_layer_i}.self_attn.o_proj.weight'] = torch.cat(
-            [loaded[i].pop(f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.attn.wo.weight') for i in range(num_shards)], dim=1
-        )
-
-        # simple concatenation for sharded biases
-        state_dict[f'model.vision_model.vision_encoder.global_transformer.layers.{global_vision_layer_i}.self_attn.q_proj.bias'] = torch.cat(
-            [loaded[i].pop(f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.attn.wq.bias') for i in range(num_shards)], dim=concat_dim
-        )
-        state_dict[f'model.vision_model.vision_encoder.global_transformer.layers.{global_vision_layer_i}.self_attn.k_proj.bias'] = torch.cat(
-            [loaded[i].pop(f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.attn.wk.bias') for i in range(num_shards)], dim=concat_dim
-        )
-        state_dict[f'model.vision_model.vision_encoder.global_transformer.layers.{global_vision_layer_i}.self_attn.v_proj.bias'] = torch.cat(
-            [loaded[i].pop(f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.attn.wv.bias') for i in range(num_shards)], dim=concat_dim
-        )
-
-        # o_proj bias is not sharded (RowParallelLinear does not shard bias across devices)
-        state_dict[f'model.vision_model.vision_encoder.global_transformer.layers.{global_vision_layer_i}.self_attn.o_proj.bias'] = loaded[0].pop(f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.attn.wo.bias') 
-
-        # mlp layers
-
-        state_dict[f'model.vision_model.vision_encoder.global_transformer.layers.{global_vision_layer_i}.mlp.fc1.weight'] = torch.cat(
-            [loaded[i].pop(f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.mlp.c_fc.weight') for i in range(num_shards)], dim=concat_dim
-        )
-        state_dict[f'model.vision_model.vision_encoder.global_transformer.layers.{global_vision_layer_i}.mlp.fc1.bias'] = torch.cat(
-            [loaded[i].pop(f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.mlp.c_fc.bias') for i in range(num_shards)], dim=concat_dim
-        )
-        state_dict[f'model.vision_model.vision_encoder.global_transformer.layers.{global_vision_layer_i}.mlp.fc2.weight'] = torch.cat(
-            [loaded[i].pop(f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.mlp.c_proj.weight') for i in range(num_shards)], dim=1
-        )
-        state_dict[f'model.vision_model.vision_encoder.global_transformer.layers.{global_vision_layer_i}.mlp.fc2.bias'] = loaded[0].pop(f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.mlp.c_proj.bias')
-
-        state_dict[f'model.vision_model.vision_encoder.global_transformer.layers.{global_vision_layer_i}.layer_norm1.weight'] = loaded[0].pop(f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.ln_1.weight').clone()
-        state_dict[f'model.vision_model.vision_encoder.global_transformer.layers.{global_vision_layer_i}.layer_norm1.bias'] = loaded[0].pop(f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.ln_1.bias').clone()
-        state_dict[f'model.vision_model.vision_encoder.global_transformer.layers.{global_vision_layer_i}.layer_norm2.weight'] = loaded[0].pop(f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.ln_2.weight').clone()
-        state_dict[f'model.vision_model.vision_encoder.global_transformer.layers.{global_vision_layer_i}.layer_norm2.bias'] = loaded[0].pop(f'vision_model.vision_encoder.global_transformer.resblocks.{global_vision_layer_i}.ln_2.bias').clone()
-
-        for k, v in state_dict.items():
-            index_dict["weight_map"][k] = global_vision_filename
-            param_count += v.numel()
-
-        print(f"Saving {global_vision_filename} in {tmp_model_path}...")
-        torch.save(state_dict, os.path.join(tmp_model_path, global_vision_filename))
-        
-
-    # the normal transformer - 32 layers for 90B, a CLIP model except with additional tile position embeddings
-    # vision encoder embedding parameters
-
-    encoder_embeddings_params_filename = "pytorch_embedding_params.bin"
-
-    # patch embedding conv weights are sharded and based on _unfold so 
-    # they require to be reshaped properly
-
-    linear_patch_weights = torch.cat(
-        [loaded[i].pop('vision_model.vision_encoder.conv1._linear.weight') for i in range(num_shards)], dim=concat_dim
-    )
-    out_channels = linear_patch_weights.shape[0]
-    linear_patch_weights = linear_patch_weights.view(out_channels, num_channels, patch_size, patch_size)
-
-
-
-    state_dict = {
-        # embeddings are not sharded
-        'model.vision_model.vision_encoder.class_embedding': loaded[0].pop('vision_model.vision_encoder.class_embedding'),
-        "model.vision_model.vision_encoder.positional_embedding": loaded[0].pop('vision_model.vision_encoder.positional_embedding'),
-        'model.vision_model.vision_encoder.gated_positional_embedding': loaded[0].pop('vision_model.vision_encoder.gated_positional_embedding'),
-        'model.vision_model.vision_encoder.gated_positional_embedding_gate': loaded[0].pop('vision_model.vision_encoder.gated_positional_embedding_gate'),
-        'model.vision_model.vision_encoder.patch_embedding.weight': linear_patch_weights,
-        # layer norms are not sharded
-        'model.vision_model.vision_encoder.ln_post.weight': loaded[0].pop('vision_model.vision_encoder.ln_post.weight'),   
-        'model.vision_model.vision_encoder.ln_post.bias': loaded[0].pop('vision_model.vision_encoder.ln_post.bias'),     
-        'model.vision_model.vision_encoder.ln_pre.weight': loaded[0].pop('vision_model.vision_encoder.ln_pre.weight'),
-        'model.vision_model.vision_encoder.ln_pre.bias': loaded[0].pop('vision_model.vision_encoder.ln_pre.bias'),
-        # tile pos embeddings (specific to mllama) are not sharded
-        'model.vision_model.vision_encoder.pre_tile_pos_embed.embedding': loaded[0].pop('vision_model.vision_encoder.pre_tile_pos_embed.embedding'),
-        'model.vision_model.vision_encoder.pre_tile_pos_embed.gate': loaded[0].pop('vision_model.vision_encoder.pre_tile_pos_embed.gate'),
-        'model.vision_model.vision_encoder.post_tile_pos_embed.embedding': loaded[0].pop('vision_model.vision_encoder.post_tile_pos_embed.embedding'),
-        'model.vision_model.vision_encoder.post_tile_pos_embed.gate': loaded[0].pop('vision_model.vision_encoder.post_tile_pos_embed.gate'),
-    }
-    for k, v in state_dict.items():
-        index_dict["weight_map"][k] = encoder_embeddings_params_filename
-        param_count += v.numel()
-    print(f"Saving {encoder_embeddings_params_filename} in {tmp_model_path}...")
-    torch.save(state_dict, os.path.join(tmp_model_path, encoder_embeddings_params_filename))
-
-    # vision transformer layer parameters
-
-    
-    for vision_layer_i in range(n_layers_vision_transformer):
-        state_dict = {}
-        encoder_layer_parameters_filename = f"pytorch_vision_transformer-{vision_layer_i}-of-{n_layers_vision_transformer + 1}.bin"
-
-        # attention weights and biases are sharded
-        if model_size == "11B":
-            state_dict[f"model.vision_model.vision_encoder.transformer.layers.{vision_layer_i}.self_attn.q_proj.weight"] = loaded[0].pop(
-                f'vision_model.vision_encoder.transformer.resblocks.{vision_layer_i}.attn.wq.weight'
-            ).clone()
-            state_dict[f"model.vision_model.vision_encoder.transformer.layers.{vision_layer_i}.self_attn.k_proj.weight"] = loaded[0].pop(
-                f'vision_model.vision_encoder.transformer.resblocks.{vision_layer_i}.attn.wk.weight'
-            ).clone()
-            state_dict[f"model.vision_model.vision_encoder.transformer.layers.{vision_layer_i}.self_attn.v_proj.weight"] = loaded[0].pop(
-                f'vision_model.vision_encoder.transformer.resblocks.{vision_layer_i}.attn.wv.weight'
-            ).clone()
-
-        else:
-            state_dict[f"model.vision_model.vision_encoder.transformer.layers.{vision_layer_i}.self_attn.q_proj.weight"] = permute(
-                torch.cat(
-                    [
-                        loaded[i].pop(f'vision_model.vision_encoder.transformer.resblocks.{vision_layer_i}.attn.wq.weight').view(n_vision_heads_per_shard, vision_dims_per_head, vision_hidden_dim)
-                        for i in range(num_shards)
-                    ],
-                    dim=0,
-                ).reshape(vision_hidden_dim, vision_hidden_dim),
-                n_heads=n_heads_vision,
-                dim1=vision_hidden_dim,
-                dim2=vision_hidden_dim
-            )
-
-            # for vision n_kv_heads = n_heads and local_kv heads = n_vision_heads per shard!
-            #  same for normal and global image transformer
-
-            state_dict[f"model.vision_model.vision_encoder.transformer.layers.{vision_layer_i}.self_attn.k_proj.weight"] = permute(
-                torch.cat(
-                    [
-                        loaded[i].pop(f'vision_model.vision_encoder.transformer.resblocks.{vision_layer_i}.attn.wk.weight').view(
-                            n_vision_heads_per_shard, vision_dims_per_head, vision_hidden_dim
-                        )
-                        for i in range(num_shards)
-                    ],
-                    dim=0,
-                ).reshape(vision_hidden_dim, vision_hidden_dim),
-                n_heads=n_heads_vision,
-                dim1=vision_hidden_dim,
-                dim2=vision_hidden_dim,
-            )
-
-            state_dict[f"model.vision_model.vision_encoder.transformer.layers.{vision_layer_i}.self_attn.v_proj.weight"] = torch.cat(
-                [
-                    loaded[i].pop(f"vision_model.vision_encoder.transformer.resblocks.{vision_layer_i}.attn.wv.weight").view(
-                        n_vision_heads_per_shard, vision_dims_per_head, vision_hidden_dim
-                    )
-                    for i in range(num_shards)
-                ],
-                dim=0,
-            ).reshape(vision_hidden_dim, vision_hidden_dim)
-
-
-        # simple concatenation for sharded o_proj
-        state_dict[f'model.vision_model.vision_encoder.transformer.layers.{vision_layer_i}.self_attn.o_proj.weight'] = torch.cat(
-            [loaded[i].pop(f'vision_model.vision_encoder.transformer.resblocks.{vision_layer_i}.attn.wo.weight') for i in range(num_shards)], dim=1
-        )
-
-        # simple concatenation for sharded biases
-        state_dict[f'model.vision_model.vision_encoder.transformer.layers.{vision_layer_i}.self_attn.q_proj.bias'] = torch.cat(
-            [loaded[i].pop(f'vision_model.vision_encoder.transformer.resblocks.{vision_layer_i}.attn.wq.bias') for i in range(num_shards)], dim=concat_dim
-        )
-        state_dict[f'model.vision_model.vision_encoder.transformer.layers.{vision_layer_i}.self_attn.k_proj.bias'] = torch.cat(
-            [loaded[i].pop(f'vision_model.vision_encoder.transformer.resblocks.{vision_layer_i}.attn.wk.bias') for i in range(num_shards)], dim=concat_dim
-        )
-        state_dict[f'model.vision_model.vision_encoder.transformer.layers.{vision_layer_i}.self_attn.v_proj.bias'] = torch.cat(
-            [loaded[i].pop(f'vision_model.vision_encoder.transformer.resblocks.{vision_layer_i}.attn.wv.bias') for i in range(num_shards)], dim=concat_dim
-        )
-        state_dict[f'model.vision_model.vision_encoder.transformer.layers.{vision_layer_i}.self_attn.o_proj.bias'] = loaded[0].pop(f'vision_model.vision_encoder.transformer.resblocks.{vision_layer_i}.attn.wo.bias')
-
-        # mlp layers
-        state_dict[f'model.vision_model.vision_encoder.transformer.layers.{vision_layer_i}.mlp.fc1.weight'] = torch.cat(
-            [loaded[i].pop(f'vision_model.vision_encoder.transformer.resblocks.{vision_layer_i}.mlp.c_fc.weight') for i in range(num_shards)], dim=concat_dim
-        )
-        state_dict[f'model.vision_model.vision_encoder.transformer.layers.{vision_layer_i}.mlp.fc1.bias'] = torch.cat(
-            [loaded[i].pop(f'vision_model.vision_encoder.transformer.resblocks.{vision_layer_i}.mlp.c_fc.bias') for i in range(num_shards)], dim=concat_dim
-        )
-        state_dict[f'model.vision_model.vision_encoder.transformer.layers.{vision_layer_i}.mlp.fc2.weight'] = torch.cat(
-            [loaded[i].pop(f'vision_model.vision_encoder.transformer.resblocks.{vision_layer_i}.mlp.c_proj.weight') for i in range(num_shards)], dim=1
-        )
-        state_dict[f'model.vision_model.vision_encoder.transformer.layers.{vision_layer_i}.mlp.fc2.bias'] = loaded[0].pop(f'vision_model.vision_encoder.transformer.resblocks.{vision_layer_i}.mlp.c_proj.bias')
-
-        state_dict[f'model.vision_model.vision_encoder.transformer.layers.{vision_layer_i}.layer_norm1.weight'] = loaded[0].pop(f'vision_model.vision_encoder.transformer.resblocks.{vision_layer_i}.ln_1.weight').clone()
-        state_dict[f'model.vision_model.vision_encoder.transformer.layers.{vision_layer_i}.layer_norm1.bias'] = loaded[0].pop(f'vision_model.vision_encoder.transformer.resblocks.{vision_layer_i}.ln_1.bias').clone()
-        state_dict[f'model.vision_model.vision_encoder.transformer.layers.{vision_layer_i}.layer_norm2.weight'] = loaded[0].pop(f'vision_model.vision_encoder.transformer.resblocks.{vision_layer_i}.ln_2.weight').clone()
-        state_dict[f'model.vision_model.vision_encoder.transformer.layers.{vision_layer_i}.layer_norm2.bias'] = loaded[0].pop(f'vision_model.vision_encoder.transformer.resblocks.{vision_layer_i}.ln_2.bias').clone()
-
-        for k, v in state_dict.items():
-            index_dict["weight_map"][k] = encoder_layer_parameters_filename
-            param_count += v.numel()
-
-        print(f"Saving {encoder_layer_parameters_filename} in {tmp_model_path}...")
-        torch.save(state_dict, os.path.join(tmp_model_path, encoder_layer_parameters_filename))
-           
-
-
 
     # Write configs
     index_dict["metadata"] = {"total_size": param_count * 2}
@@ -751,16 +273,20 @@ def write_model(
         "vision_num_cross_attention_layers": params["vision_num_cross_attention_layers"],  # should be in vision config?
         "multiple_of": params["multiple_of"],
         "vision_input_dim": 1280, # constant, see "vision_input_dim" in vision config
+        "attention_bias":False,
+        "tie_word_embeddings":False,
     }
     config = MllamaConfig(vision_config=vision_config, text_config=text_config)
+    config.architectures = ["MllamaForConditionalGeneration"]
     config.save_pretrained(tmp_model_path)
+    print("Loading the checkpoint in a Llama model.")
 
     # Make space so we can load the model properly now.
     del state_dict
     del loaded
     gc.collect()
 
-    print("Loading the checkpoint in a Llama model.")
+
     mllama_model = MllamaForConditionalGeneration.from_pretrained(tmp_model_path, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True)
     # Avoid saving this as part of the config.
     del mllama_model.config._name_or_path
@@ -799,7 +325,7 @@ class MllamaConverter(TikTokenConverter):
             "<|eot_id|>",  # end of turn
             "<|python_tag|>",
             "<|image|>",
-        ] 
+        ]
         special_tokens += [
             f"<|reserved_special_token_{i + 2}|>"
             for i in range(num_reserved_special_tokens - len(special_tokens))
@@ -849,8 +375,8 @@ def write_image_processor(config_path: str, save_dir: str):
 
 
 write_model(
-    model_path="/home/ubuntu/projects/new-model-addition-mllama/mllama-11b",
-    input_base_path="/home/ubuntu/projects/meta_mllama/weights-11b-biases",
+    model_path="converted-mllama-11b",
+    input_base_path="/raid/arthur/mllama-11b",
     safe_serialization=True,
     model_size="11B",
     llama_version=3,

@@ -35,7 +35,7 @@ rendered properly in your Markdown viewer.
 - [`~integrations.TensorBoardCallback`] (PyTorch >= 1.4 を介して) tensorboard にアクセスできる場合
   またはテンソルボードX）。
 - [`~integrations.WandbCallback`] [wandb](https://www.wandb.com/) がインストールされている場合。
-- [`~integrations.CometCallback`] [comet_ml](https://www.comet.ml/site/) がインストールされている場合。
+- [`~integrations.CometCallback`] [comet_ml](https://www.comet.com/site/) がインストールされている場合。
 - [mlflow](https://www.mlflow.org/) がインストールされている場合は [`~integrations.MLflowCallback`]。
 - [`~integrations.NeptuneCallback`] [neptune](https://neptune.ai/) がインストールされている場合。
 - [`~integrations.AzureMLCallback`] [azureml-sdk](https://pypi.org/project/azureml-sdk/) の場合

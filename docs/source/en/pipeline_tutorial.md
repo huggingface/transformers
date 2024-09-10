@@ -54,7 +54,7 @@ speech-to-text.
 Not the result you had in mind? Check out some of the [most downloaded automatic speech recognition models](https://huggingface.co/models?pipeline_tag=automatic-speech-recognition&sort=trending) 
 on the Hub to see if you can get a better transcription.
 
-Let's try the [Whisper large-v2](https://huggingface.co/openai/whisper-large) model from OpenAI. Whisper was released 
+Let's try the [Whisper large-v2](https://huggingface.co/openai/whisper-large-v2) model from OpenAI. Whisper was released 
 2 years later than Wav2Vec2, and was trained on close to 10x more data. As such, it beats Wav2Vec2 on most downstream 
 benchmarks. It also has the added benefit of predicting punctuation and casing, neither of which are possible with  
 Wav2Vec2.
@@ -113,7 +113,9 @@ This will work regardless of whether you are using PyTorch or Tensorflow.
 transcriber = pipeline(model="openai/whisper-large-v2", device=0)
 ```
 
-If the model is too large for a single GPU and you are using PyTorch, you can set `device_map="auto"` to automatically 
+If the model is too large for a single GPU and you are using PyTorch, you can set `torch_dtype='float16'` to enable FP16 precision inference. Usually this would not cause significant performance drops but make sure you evaluate it on your models!
+
+Alternatively, you can set `device_map="auto"` to automatically 
 determine how to load and store the model weights. Using the `device_map` argument requires the 🤗 [Accelerate](https://huggingface.co/docs/accelerate)
 package:
 
@@ -342,4 +344,3 @@ gr.Interface.from_pipeline(pipe).launch()
 
 By default, the web demo runs on a local server. If you'd like to share it with others, you can generate a temporary public
 link by setting `share=True` in `launch()`. You can also host your demo on [Hugging Face Spaces](https://huggingface.co/spaces) for a permanent link. 
-

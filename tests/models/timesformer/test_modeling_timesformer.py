@@ -217,7 +217,7 @@ class TimesformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
     def test_attention_outputs(self):
         if not self.has_attentions:
-            pass
+            self.skipTest(reason="Model has no attentions")
 
         else:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

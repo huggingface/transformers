@@ -565,7 +565,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
         Args:
             token_ids (`Union[int, List[int], np.ndarray, torch.Tensor, tf.Tensor]`):
                 List of tokenized input ids. Can be obtained using the `__call__` method.
-            time_precision (`float`, `optional`, defaults to 0.02):
+            time_precision (`float`, *optional*, defaults to 0.02):
                 The time ratio to convert from token to time.
         """
         offsets = []
@@ -615,7 +615,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
         Compute the timestamp token ids for a given precision and save to least-recently used (LRU) cache.
 
         Args:
-            time_precision (`float`, `optional`, defaults to 0.02):
+            time_precision (`float`, *optional*, defaults to 0.02):
                 The time ratio to convert from token to time.
         """
         return self.convert_tokens_to_ids([("<|%.2f|>" % (i * time_precision)) for i in range(1500 + 1)])
@@ -671,7 +671,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
             output_offsets (`bool`, *optional*, defaults to `False`):
                 Whether or not to output the offsets of the tokens. This should only be set if the model predicted
                 timestamps.
-            time_precision (`float`, `optional`, defaults to 0.02):
+            time_precision (`float`, *optional*, defaults to 0.02):
                 The time ratio to convert from token to time.
             decode_with_timestamps (`bool`, *optional*, defaults to `False`):
                 Whether or not to decode with timestamps included in the raw text.
@@ -810,14 +810,6 @@ class WhisperTokenizer(PreTrainedTokenizer):
             text = " " + text
         return (text, kwargs)
 
-    @property
-    # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.default_chat_template
-    def default_chat_template(self):
-        """
-        A simple chat template that ignores role information and just concatenates messages with EOS tokens.
-        """
-        return "{% for message in messages %}" "{{ message.content }}{{ eos_token }}" "{% endfor %}"
-
     def get_decoder_prompt_ids(self, task=None, language=None, no_timestamps=True):
         self.set_prefix_tokens(task=task, language=language, predict_timestamps=not no_timestamps)
         # prefix tokens are of the form: <|startoftranscript|> <|lang_id|> <|task|> <|notimestamps|>
@@ -851,15 +843,35 @@ class WhisperTokenizer(PreTrainedTokenizer):
         batch_encoding.convert_to_tensors(tensor_type=return_tensors)
         return batch_encoding["input_ids"]
 
-    @staticmethod
-    def _strip_prompt(token_ids: List[int], prompt_token_id: int, decoder_start_token_id: int):
-        has_prompt = isinstance(token_ids, list) and token_ids and token_ids[0] == prompt_token_id
+    def _strip_prompt(self, token_ids: List[int], prompt_token_id: int, decoder_start_token_id: int):
+        if not isinstance(token_ids, list):
+            token_ids = self._convert_to_list(token_ids)
+
+        # handle case of empty token_ids for decoding with timestamps.
+        # at this point token_ids is a list, so it is safe to use if not check.
+        if not token_ids:
+            return token_ids
+
+        has_prompt = token_ids[0] == prompt_token_id
         if has_prompt:
             if decoder_start_token_id in token_ids:
                 return token_ids[token_ids.index(decoder_start_token_id) :]
             else:
                 return []
 
+        return token_ids
+
+    @staticmethod
+    def _convert_to_list(token_ids):
+        # convert type to ndarray if necessary
+        if hasattr(token_ids, "numpy"):
+            if "torch" in str(type(token_ids)):
+                token_ids = token_ids.cpu().numpy()
+            elif "tensorflow" in str(type(token_ids)):
+                token_ids = token_ids.numpy()
+        # now the token ids are either a numpy array, or a list of lists
+        if isinstance(token_ids, np.ndarray):
+            token_ids = token_ids.tolist()
         return token_ids
 
 
@@ -1013,7 +1025,7 @@ def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language,
                         chunk["text"] = resolved_text
                         if return_timestamps == "word":
                             chunk["words"] = _collate_word_timestamps(
-                                tokenizer, resolved_tokens, resolved_token_timestamps, last_language
+                                tokenizer, resolved_tokens, resolved_token_timestamps, last_language, return_language
                             )
                         chunks.append(chunk)
 
@@ -1065,7 +1077,7 @@ def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language,
         chunk["text"] = resolved_text
         if return_timestamps == "word":
             chunk["words"] = _collate_word_timestamps(
-                tokenizer, resolved_tokens, resolved_token_timestamps, last_language
+                tokenizer, resolved_tokens, resolved_token_timestamps, last_language, return_language
             )
         chunks.append(chunk)
 
@@ -1162,7 +1174,22 @@ def _find_longest_common_sequence(sequences, token_timestamp_sequences=None):
                     "There is a bug within whisper `decode_asr` function, please report it. Dropping to prevent bad inference."
                 )
 
-            matches = np.sum(left == right)
+            if token_timestamp_sequences:
+                # Get length of longest subsequence of tokens that match
+                # and have timestamps that are in order
+                matches = sum(
+                    1
+                    for idx, elem in enumerate(left)
+                    if (
+                        elem == right[idx]
+                        and left_token_timestamp_sequence[left_start + idx]
+                        <= token_timestamp_sequences[seq_idx + 1][right_start + idx]
+                    )
+                )
+
+            else:
+                matches = np.sum(left == right)
+
             matching = matches / i + eps
             if matches > 1 and matching > max_:
                 max_ = matching
@@ -1197,12 +1224,16 @@ def _find_longest_common_sequence(sequences, token_timestamp_sequences=None):
         return total_sequence, []
 
 
-def _collate_word_timestamps(tokenizer, tokens, token_timestamps, language):
+def _collate_word_timestamps(tokenizer, tokens, token_timestamps, language, return_language):
     words, _, token_indices = _combine_tokens_into_words(tokenizer, tokens, language)
+
+    optional_language_field = {"language": language} if return_language else {}
+
     timings = [
         {
             "text": word,
             "timestamp": (token_timestamps[indices[0]][0], token_timestamps[indices[-1]][1]),
+            **optional_language_field,
         }
         for word, indices in zip(words, token_indices)
     ]

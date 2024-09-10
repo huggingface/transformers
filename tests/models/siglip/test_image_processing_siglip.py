@@ -43,6 +43,7 @@ class SiglipImageProcessingTester(unittest.TestCase):
         image_mean=[0.5, 0.5, 0.5],
         image_std=[0.5, 0.5, 0.5],
     ):
+        super().__init__()
         size = size if size is not None else {"height": 18, "width": 18}
         self.parent = parent
         self.batch_size = batch_size
@@ -120,7 +121,7 @@ class SiglipImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         )
         self.assertEqual(image_processor.size, {"height": 84, "width": 84})
 
-    @unittest.skip("not supported")
+    @unittest.skip(reason="not supported")
     # Ignore copy
     def test_call_numpy_4_channels(self):
         pass

@@ -48,7 +48,7 @@ class MllamaImagesKwargs(ImagesKwargs, total=False):
 
 class MllamaProcessorKwargs(ProcessingKwargs, total=False):
     images_kwargs: MllamaImagesKwargs
-    
+
     _defaults = {
         "image_kwargs": {
             "max_image_tiles": 4,
@@ -263,7 +263,6 @@ class MllamaProcessor(ProcessorMixin):
             n_images_in_text = [t.count(self.image_token) for t in text]
             encoding = self.tokenizer(text, **text_kwargs)
             data.update(encoding)
-
 
         if images is not None:
 

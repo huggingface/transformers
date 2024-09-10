@@ -15,6 +15,7 @@
 """Image processor class for MaskFormer."""
 
 import math
+import warnings
 from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Set, Tuple, Union
 
 import numpy as np
@@ -772,7 +773,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
             ignore_index,
             do_reduce_labels,
             return_tensors,
-            input_data_format=input_data_format,
+            input_data_format=data_format,
         )
         return encoded_inputs
 
@@ -987,7 +988,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
             `torch.Tensor`:
                 A tensor of shape (`batch_size, num_class_labels, height, width`).
         """
-        logger.warning(
+        warnings.warn(
             "`post_process_segmentation` is deprecated and will be removed in v5 of Transformers, please use"
             " `post_process_instance_segmentation`",
             FutureWarning,

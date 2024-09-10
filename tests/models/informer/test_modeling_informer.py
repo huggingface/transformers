@@ -278,17 +278,19 @@ class InformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
-    # Ignore since we have no tokens embeddings
+    @unittest.skip(reason="Informer does not have tokens embeddings")
     def test_resize_tokens_embeddings(self):
         pass
 
+    @unittest.skip
     def test_model_outputs_equivalence(self):
         pass
 
+    @unittest.skip
     def test_determinism(self):
         pass
 
-    @unittest.skip("randomly selects U keys while calculating attentions")
+    @unittest.skip(reason="randomly selects U keys while calculating attentions")
     def test_batching_equivalence(self):
         pass
 

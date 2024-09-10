@@ -381,7 +381,7 @@ class FalconModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
             # If it doesn't support cache, pass the test
             if not hasattr(config, "use_cache"):
-                return
+                self.skipTest(reason="Model does not support cache")
 
             model = model_class(config).to(torch_device)
             if "use_cache" not in inputs:
@@ -390,7 +390,7 @@ class FalconModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
             # If "past_key_values" is not returned, pass the test (e.g. RWKV uses a different cache name and format)
             if "past_key_values" not in outputs:
-                return
+                self.skipTest(reason="Model does not return past_key_values")
 
             num_hidden_layers = (
                 getattr(config, "decoder_layers", None)
