@@ -43,11 +43,34 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 METADATA_FIELDS = ("_from_model_config", "_commit_hash", "_original_object_hash", "transformers_version")
 NEEDS_CACHE_CONFIG = {}
+NEED_SETUP_CACHE_CLASSES_MAPPING = {}
+QUANT_BACKEND_CLASSES_MAPPING = {}
+ALL_CACHE_IMPLEMENTATIONS = []
 
 if is_torch_available():
-    from ..cache_utils import QuantizedCacheConfig
+    from ..cache_utils import (
+        HQQQuantizedCache,
+        HybridCache,
+        MambaCache,
+        OffloadedStaticCache,
+        QuantizedCacheConfig,
+        QuantoQuantizedCache,
+        SlidingWindowCache,
+        StaticCache,
+        StaticCacheConfig,
+    )
 
     NEEDS_CACHE_CONFIG["quantized"] = QuantizedCacheConfig
+    NEEDS_CACHE_CONFIG["static"] = StaticCacheConfig
+    NEED_SETUP_CACHE_CLASSES_MAPPING = {
+        "static": StaticCache,
+        "offloaded_static": OffloadedStaticCache,
+        "sliding_window": SlidingWindowCache,
+        "hybrid": HybridCache,
+        "mamba": MambaCache,
+    }
+    QUANT_BACKEND_CLASSES_MAPPING = {"quanto": QuantoQuantizedCache, "HQQ": HQQQuantizedCache}
+    ALL_CACHE_IMPLEMENTATIONS = list(NEED_SETUP_CACHE_CLASSES_MAPPING.keys()) + list(NEEDS_CACHE_CONFIG.keys())
 
 
 class GenerationMode(ExplicitEnum):
@@ -70,7 +93,7 @@ class GenerationMode(ExplicitEnum):
 
 class GenerationConfig(PushToHubMixin):
     # no-format
-    r"""
+    rf"""
     Class that holds a configuration for a generation task. A `generate` call supports the following generation methods
     for text-decoder, text-to-text, speech-to-text, and vision-to-text models:
 
@@ -146,7 +169,10 @@ class GenerationConfig(PushToHubMixin):
             Whether or not the model should use the past last key/values attentions (if applicable to the model) to
             speed up decoding.
         cache_implementation (`str`, *optional*, default to `None`):
-            Cache class that should be used when generating.
+            Name of the cache class that will be instantiated in `generate`, for faster decoding. Possible values are:
+            {ALL_CACHE_IMPLEMENTATIONS}. We support other cache types, but they must be manually instantiated and
+            passed to `generate` through the `past_key_values` argument. See our
+            [cache documentation](https://huggingface.co/docs/transformers/en/kv_cache) for further information.
         cache_config (`CacheConfig` or `dict`, *optional*, default to `None`):
             Arguments used in the key-value cache class can be passed in `cache_config`. Can be passed as a `Dict` and
             it will be converted to its repsective `CacheConfig` internally.
@@ -324,6 +350,11 @@ class GenerationConfig(PushToHubMixin):
               reduce by 1. `num_assistant_tokens` value is persistent over multiple generation calls with the same assistant model.
             - `"heuristic_transient"`: Same as `"heuristic"` but `num_assistant_tokens` is reset to its initial value after each generation call.
             - `"constant"`: `num_assistant_tokens` stays unchanged during generation
+        assistant_confidence_threshold (`float`, *optional*):
+            The confidence threshold for the assistant model. If the assistant model's confidence in its prediction for the current token is lower
+            than this threshold, the assistant model stops the current token generation iteration, even if the number of _speculative tokens_
+            (defined by `num_assistant_tokens`) is not yet reached. It is an unsupervised version of the dynamic speculation lookahead
+            from Dynamic Speculation Lookahead Accelerates Speculative Decoding of Large Language Models <https://arxiv.org/abs/2405.04304>.
         prompt_lookup_num_tokens (`int`, *optional*, default to `None`):
             The number of tokens to be output as candidate tokens.
         max_matching_ngram_size (`int`, *optional*, default to `None`):
@@ -423,6 +454,7 @@ class GenerationConfig(PushToHubMixin):
         # Assistant generation
         self.num_assistant_tokens = kwargs.pop("num_assistant_tokens", 5)
         self.num_assistant_tokens_schedule = kwargs.pop("num_assistant_tokens_schedule", "heuristic")
+        self.assistant_confidence_threshold = kwargs.pop("assistant_confidence_threshold", None)
 
         # Prompt lookup decoding
         self.prompt_lookup_num_tokens = kwargs.pop("prompt_lookup_num_tokens", None)
@@ -699,6 +731,11 @@ class GenerationConfig(PushToHubMixin):
                 )
 
         # 5. check cache-related arguments
+        if self.cache_implementation is not None and self.cache_implementation not in ALL_CACHE_IMPLEMENTATIONS:
+            raise ValueError(
+                f"Invalid `cache_implementation` ({self.cache_implementation}). Choose one of: "
+                f"{ALL_CACHE_IMPLEMENTATIONS}"
+            )
         if self.cache_config is not None:
             cache_class = NEEDS_CACHE_CONFIG.get(self.cache_implementation)
             if cache_class is None:

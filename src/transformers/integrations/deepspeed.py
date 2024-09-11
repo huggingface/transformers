@@ -241,7 +241,7 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
                 # automatically assign the optimal config values based on model config
                 self.fill_only(
                     "zero_optimization.stage3_prefetch_bucket_size",
-                    0.9 * hidden_size * hidden_size,
+                    int(0.9 * hidden_size * hidden_size),
                 )
                 self.fill_only(
                     "zero_optimization.stage3_param_persistence_threshold",
