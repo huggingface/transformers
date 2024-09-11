@@ -142,6 +142,7 @@ class OPTModelTester:
             embed_dim=self.embed_dim,
             is_encoder_decoder=False,
             word_embed_proj_dim=self.word_embed_proj_dim,
+            attn_implementation="eager",
         )
 
     def get_pipeline_config(self):
