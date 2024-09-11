@@ -140,7 +140,7 @@ def unpack_weights(packed: torch.Tensor, dtype: torch.dtype) -> torch.Tensor:
 class BitLinear(nn.Module):
 
     def __init__(self, in_features: int, out_features: int, bias: bool,
-                 device=None, dtype=None, config=None):
+                 device=None, dtype=None):
         super().__init__()
         self.dtype = dtype
         self.register_buffer(
