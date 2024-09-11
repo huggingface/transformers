@@ -208,6 +208,7 @@ def is_dvclive_available():
 
 def is_bitsandbytes_multi_backend_available() -> bool:
     import bitsandbytes as bnb
+
     return "multi_backend" in getattr(bnb, "features", set())
 
 
@@ -271,7 +272,6 @@ def validate_bnb_backend_availability(raise_exception=False):
     """
     Validates if the available devices are supported by bitsandbytes, optionally raising an exception if not.
     """
-    import bitsandbytes as bnb
 
     if is_bitsandbytes_multi_backend_available():
         return _validate_bnb_multi_backend_availability(raise_exception)

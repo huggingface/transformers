@@ -168,6 +168,7 @@ if TYPE_CHECKING:
         get_reporting_integration_callbacks,
         hp_params,
         is_azureml_available,
+        is_bitsandbytes_multi_backend_available,
         is_clearml_available,
         is_codecarbon_available,
         is_comet_available,
@@ -189,7 +190,6 @@ if TYPE_CHECKING:
         run_hp_search_sigopt,
         run_hp_search_wandb,
         validate_bnb_backend_availability,
-        is_bitsandbytes_multi_backend_available,
     )
     from .peft import PeftAdapterMixin
     from .quanto import replace_with_quanto_layers

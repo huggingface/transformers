@@ -43,13 +43,13 @@ import urllib3
 from transformers import logging as transformers_logging
 
 from .integrations import (
+    is_bitsandbytes_multi_backend_available,
     is_clearml_available,
     is_optuna_available,
     is_ray_available,
     is_sigopt_available,
     is_tensorboard_available,
     is_wandb_available,
-    is_bitsandbytes_multi_backend_available,
 )
 from .integrations.deepspeed import is_deepspeed_available
 from .utils import (
