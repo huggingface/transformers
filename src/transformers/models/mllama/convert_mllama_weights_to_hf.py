@@ -81,12 +81,12 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"vision_model.vision_encoder.(global_transformer|transformer).resblocks.(\d+).ln_2":       r"vision_model.\1.layers.\2.post_attention_layernorm",
     r"vision_model.vision_encoder.global_transformer.resblocks.(\d+).(gate_ffn|gate_attn)":     r"vision_model.global_transformer.layers.\1.\2",
     r'vision_model.vision_encoder.ln_(pre|post).(weight|bias)':                                 r'vision_model.vision_encoder.ln_\1.\2',
+    r'vision_model.vision_encoder.gated_positional_embedding\b':                                r'vision_model.gated_positional_embedding.weight',
     r"vision_model.vision_encoder.(?=\w)":                                                      r"vision_model.",
 }
 # fmt: on
 
 CONFIG_KEY_MAPPING = {
-    "n_layers": "num_hidden_layers",
     "n_heads": "num_attention_heads",
     "vocab_size": "vocab_size",
     "dim":"hidden_size",
@@ -121,6 +121,25 @@ def permute_for_rope(input_tensor, n_heads, dim1, dim2):
     input_tensor = input_tensor.transpose(1, 2).reshape(dim1, dim2)
     return input_tensor
 
+def pre_compute_positional_embedding(embedding):
+    max_num_tiles, *shapes = embedding.shape
+    hidden_size = shapes[-1]
+    max_aspect_ratio_id = (max_num_tiles - 1) * max_num_tiles + 1
+    if len(shapes) == 2: # tile embedding
+        num_patches = 1
+        precomputed_embeddings = torch.zeros(max_aspect_ratio_id + 1,  max_num_tiles , num_patches,  hidden_size, device=embedding.device)
+    else:
+        num_patches = shapes[1]
+        precomputed_embeddings = torch.zeros(max_aspect_ratio_id + 1,  max_num_tiles,  num_patches, hidden_size, device=embedding.device)
+
+    for height in range(1, max_num_tiles + 1):
+        for width in range(1, max_num_tiles + 1):
+            if height * width > max_num_tiles:
+                continue
+            aspect_ratio_id = (height - 1) * max_num_tiles + width 
+            current_embedding = embedding[:height, :width].reshape(height * width, num_patches, hidden_size)
+            precomputed_embeddings[aspect_ratio_id, :height * width] = current_embedding
+    return precomputed_embeddings
 
 def write_model(
     model_path,
@@ -209,6 +228,10 @@ def write_model(
             state_dict [new_key]= [chunk.pop(key).contiguous().clone() for chunk in loaded][0]
         elif "_gate" in new_key:
             state_dict[new_key] =  [chunk.pop(key).contiguous().clone() for chunk in loaded][0][0].view(1)
+        elif "tile_pos_embed.weight" in new_key or "gated_positional_embedding.weight" in new_key:
+            # pre-compute the embeddings
+            embedding = torch.cat([chunk.pop(key).contiguous().clone() for chunk in loaded], dim=0)
+            state_dict[new_key] = pre_compute_positional_embedding(embedding)
         elif new_key != "":
             state_dict[new_key] = torch.cat([chunk.pop(key).contiguous().clone() for chunk in loaded], dim=0)
 
@@ -223,6 +246,7 @@ def write_model(
     }
     vision_config = MllamaVisionConfig(
         **config_parameters, 
+        num_hidden_layers=n_layers,
         vision_input_dim=1280,  # Constant, taken directly from your notes
         return_intermediate=[3, 7, 15, 23, 30],  # Based on return_intermediate indices
         global_vision_layers=8,  # Constant from the original code
@@ -231,6 +255,7 @@ def write_model(
     )
     text_config = MllamaTextConfig(
         **config_parameters, 
+        num_hidden_layers=len(cross_layer_shift) + n_layers,
         cross_attention_layers=cross_layer_shift,
         vision_input_dim=1280,  # Constant, aligned with vision config
         attention_bias=False,  # Constant set to False
@@ -242,12 +267,11 @@ def write_model(
     print("Loading the checkpoint in a Llama model.")
 
 
-
     with torch.device("meta"):
         model = MllamaForConditionalGeneration(config)
     model.load_state_dict(state_dict, strict=True, assign=True)
     model.save_pretrained(model_path, safe_serialization=safe_serialization)
-
+    del state_dict; gc.collect()
     # Safety check: reload the converted model
     mllama_model = MllamaForConditionalGeneration.from_pretrained(model_path, torch_dtype=torch.bfloat16, device_map="auto")
     # Avoid saving this as part of the config.

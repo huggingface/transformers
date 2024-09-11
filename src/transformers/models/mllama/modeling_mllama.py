@@ -201,14 +201,8 @@ class MllamaPatchEmbedding(nn.Module):
         return hidden_state
 
 
-class MllamaTilePositionEmbedding(nn.Module):
-    # originally TilePositionEmbedding
-    def __init__(
-        self,
-        max_num_tiles: int,
-        hidden_size: int,
-        is_gated: bool = False,
-    ):
+class MllamaPrecomputedAspectRatioEmbedding(nn.Module): # TODO use nn.embedding
+    def __init__(self,max_num_tiles, hidden_size, is_gated, **kwargs):
         super().__init__()
         self.max_num_tiles = max_num_tiles
         self.hidden_size = hidden_size
@@ -221,6 +215,7 @@ class MllamaTilePositionEmbedding(nn.Module):
 
     @staticmethod
     def _dynamic_resize(embedding: torch.Tensor, num_tiles: int):
+        # TODO this no longer really hodls as we need to take into account the pre-computation!
         embedding = embedding.permute(2, 3, 0, 1)
 
         embedding_new = F.interpolate(
@@ -233,59 +228,10 @@ class MllamaTilePositionEmbedding(nn.Module):
         embedding_new = embedding_new.permute(2, 3, 0, 1)
         return embedding_new
 
-    def forward(
-        self, hidden_state: torch.Tensor, aspect_ratio_ids: torch.Tensor, num_tiles: Optional[int] = None
-    ) -> torch.Tensor:
-        if num_tiles is None:
-            num_tiles = self.max_num_tiles
-        elif num_tiles > self.max_num_tiles:
-            self.embedding = self._dynamic_resize(self.embedding, num_tiles)
-
-        batch_size = hidden_state.shape[0]
-        out_tile_embedding = torch.zeros(
-            batch_size, num_tiles, 1, self.hidden_size, device=hidden_state.device, dtype=hidden_state.dtype
-        )
-        # TODO again here if we have aspect_ratio_ids, we can directly store the embeddings.
-        for idx, aspect_ratio_i in enumerate(aspect_ratio_ids):
-            height, width = aspect_ratio_i
-            tile_embedding_i = self.embedding[:height, :width]
-            out_tile_embedding[idx, : height * width] = tile_embedding_i.reshape(height * width, 1, self.hidden_size)
-
-        if self.is_gated:
-            out_tile_embedding = out_tile_embedding * self.gate.tanh()
-
-        hidden_state = hidden_state + out_tile_embedding
-        return hidden_state
-
-
-class MllamaPrecomputedTilePositionEmbedding(MllamaTilePositionEmbedding):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.precomputed_embeddings = self._precompute_tile_embeddings(self.embedding, self.max_num_tiles)
-        
-        # in case we load weights we have to re-calcuate embeddings
-        self.register_load_state_dict_post_hook(self._load_hook)
-
-    @staticmethod
-    def _precompute_tile_embeddings(embedding: torch.Tensor, max_num_tiles: int) -> torch.Tensor:
-        hidden_size = embedding.shape[-1]
-        max_aspect_ratio_id = (max_num_tiles - 1) * max_num_tiles + 1
-        precomputed_embeddings = torch.zeros(max_aspect_ratio_id + 1, max_num_tiles, hidden_size)
-        for height in range(1, max_num_tiles + 1):
-            for width in range(1, max_num_tiles + 1):
-                if height * width > max_num_tiles:
-                    continue
-                aspect_ratio_id = (height - 1) * max_num_tiles + width 
-                current_embedding = embedding[:height, :width].reshape(height * width, hidden_size)
-                precomputed_embeddings[aspect_ratio_id, :height * width] = current_embedding
-        return precomputed_embeddings
-
-    def _load_hook(self, *args, **kwargs):
-        self.precomputed_embeddings = self._precompute_tile_embeddings(self.embedding, self.max_num_tiles)
 
     def forward(self, hidden_state: torch.Tensor, aspect_ratio_ids: torch.Tensor) -> torch.Tensor:
-        
-        embeddings = self.precomputed_embeddings[aspect_ratio_ids]
+        # TODO use torch.nn.functionnal.embedding for compile compatibility
+        embeddings = self.embedding[aspect_ratio_ids]
         embeddings = embeddings.reshape(-1, self.max_num_tiles, 1, self.hidden_size)
 
         if self.is_gated:
@@ -294,25 +240,21 @@ class MllamaPrecomputedTilePositionEmbedding(MllamaTilePositionEmbedding):
         hidden_state = hidden_state + embeddings
         return hidden_state
 
-class MllamaPrecomputedPositionEmbedding(nn.Embedding):
+class MllamaPrecomputedPositionEmbedding(nn.Module):
 
     def __init__(self, config, *args, **kwargs):
         self.config = config
-        super().__init__(config.max_num_tiles, config.hidden_size, **kwargs)
+        super().__init__(**kwargs)
         self.max_num_tiles = config.max_num_tiles
         self.num_patches = 1025
         self.hidden_size = config.vision_input_dim
-        self.is_gated = True
+        self.is_gated = False # just for now :wink:
 
         max_aspect_ratio_id = (self.max_num_tiles - 1) * self.max_num_tiles + 1 # TODO @pavel this should be as small as possible
         precomputed_embeddings = torch.zeros(max_aspect_ratio_id + 1,  self.max_num_tiles,  self.num_patches , self.hidden_size)
 
         self.weight = torch.nn.Parameter(precomputed_embeddings)
         # in case we load weights we have to re-calcuate embeddings
-        self.register_load_state_dict_post_hook(self._load_hook)
-
-    def _load_hook(self, *args, **kwargs):
-        self.precomputed_embeddings = self._precompute_tile_embeddings(self.weight, self.max_num_tiles)
 
     def forward(self, hidden_state: torch.Tensor, aspect_ratio_ids: torch.Tensor) -> torch.Tensor:
         self.precomputed_embeddings = self._precompute_tile_embeddings(self.weight, self.max_num_tiles) 
@@ -320,28 +262,11 @@ class MllamaPrecomputedPositionEmbedding(nn.Embedding):
         batch  = hidden_state.shape[0]
         embeddings = embeddings.reshape(batch, -1, self.num_patches,  self.hidden_size)
 
-        # if self.is_gated:
-        #     embeddings = embeddings * self.gate.tanh()
+        if self.is_gated:
+            embeddings = embeddings * self.gate.tanh()
 
         hidden_state = hidden_state + embeddings
         return hidden_state
-    
-    def _precompute_tile_embeddings(self, embedding: torch.Tensor, max_num_tiles: int) -> torch.Tensor:
-
-        hidden_size = self.max_num_tiles * self.num_patches * self.hidden_size
-        max_aspect_ratio_id = (max_num_tiles - 1) * max_num_tiles + 1 # TODO @pavel this should be as small as possible
-        precomputed_embeddings = torch.zeros(max_aspect_ratio_id + 1,  self.max_num_tiles,  self.num_patches , self.hidden_size, device=embedding.device)
-
-        for height in range(1, max_num_tiles + 1):
-            for width in range(1, max_num_tiles + 1):
-                if height * width > max_num_tiles:
-                    continue
-                aspect_ratio_id = (height - 1) * max_num_tiles + width 
-                current_embedding = embedding[:height, :width].reshape(height * width, self.num_patches, -1)
-                precomputed_embeddings[aspect_ratio_id, :height * width] = current_embedding
-            # instead of slicing, the rest of the `gated_positional_embedding_with_gate` should be 0
-        # precomputed_embeddings = precomputed_embeddings.reshape(max_aspect_ratio_id, hidden_size)
-        return precomputed_embeddings
 
 # Copied from transformers.models.clip.modeling_clip.CLIPMLP with CLIP->MllamaVision
 class MllamaVisionMLP(nn.Module):
@@ -562,28 +487,18 @@ class MllamaVisionModel(PreTrainedModel):
         )
 
         self.class_embedding = nn.Parameter(self.scale * torch.randn(self.hidden_size))
-
-        # positional embeddings and gate
         positional_embedding = torch.randn(self.num_patches, self.hidden_size)
         self.positional_embedding = nn.Parameter(self.scale * positional_embedding)
-
-        gated_positional_embedding = torch.randn(
-            self.max_num_tiles, self.max_num_tiles, self.num_patches, self.hidden_size
-        )
         self.gated_positional_embedding = MllamaPrecomputedPositionEmbedding(config)
 
-        # We replace the original embedding by storing the full embedding
-        # self.gated_positional_embedding = nn.Embedding(self.max_num_tiles * self.max_num_tiles, self.hidden_size)
         self.gated_positional_embedding_gate = nn.Parameter(torch.zeros(1))
-        # TODO support properly initializing this depending on the number of tiles
-        # self.cached_attention_mask = nn.Embedding(self.max_num_tiles * self.max_num_tiles, self.hidden_size)
-        # pre and post tile position embedding
-        self.pre_tile_pos_embed = MllamaPrecomputedTilePositionEmbedding(
+
+        self.pre_tile_pos_embed = MllamaPrecomputedAspectRatioEmbedding(
             max_num_tiles=config.max_num_tiles,
             hidden_size=self.hidden_size,
             is_gated=True,
         )
-        self.post_tile_pos_embed = MllamaPrecomputedTilePositionEmbedding(
+        self.post_tile_pos_embed = MllamaPrecomputedAspectRatioEmbedding(
             max_num_tiles=config.max_num_tiles,
             hidden_size=self.hidden_size,
             is_gated=True,
@@ -600,30 +515,7 @@ class MllamaVisionModel(PreTrainedModel):
         projection_input_dim = (len(self.vision_selection_layers) + 1) * config.vision_input_dim
         self.output_dim = config.projection_dim
         #! originally bias=True, but bias was not used in original forward pass
-        self.vision_projection = nn.Linear(projection_input_dim, config.projection_dim, bias=False)
-
-    def apply_positional_embedding(self, hidden_state: torch.Tensor, aspect_ratio_ids: torch.Tensor) -> torch.Tensor:
-        bsz, num_chunks, num_tokens, dim = hidden_state.shape
-        hidden_state = hidden_state.view(bsz * num_chunks, num_tokens, dim)
-
-        # apply regular positional embedding with gate
-        gate = 1 - self.gated_positional_embedding_gate.tanh()
-        hidden_state = hidden_state + gate * self.positional_embedding
-
-        hidden_state = hidden_state.view(bsz, num_chunks, num_tokens, dim)
-        hidden_state = self.gated_positional_embedding(hidden_state, aspect_ratio_ids)
-        # apply gated positional embedding with gate
-        # for idx, (aspect_ratio_h, aspect_ratio_w) in enumerate(aspect_ratio_ids):
-        #     num_tiles = aspect_ratio_h * aspect_ratio_w
-        #     gated_positional_embedding = self.gated_positional_embedding[:aspect_ratio_h, :aspect_ratio_w]
-        #     embedding_height, embedding_width = gated_positional_embedding.shape[2:] # this is just num patches, hidden_size
-        #     gated_positional_embedding = gated_positional_embedding.reshape(num_tiles, embedding_height, embedding_width)
-        #     gate = self.gated_positional_embedding_gate.tanh()
-        #     gated_positional_embedding_with_gate = gate * gated_positional_embedding
-        #     hidden_state[idx, :num_tiles] += gated_positional_embedding_with_gate
-        #     # instead of slicing, the rest of the `gated_positional_embedding_with_gate` should be 0
-
-        return hidden_state
+        # self.vision_projection = nn.Linear(projection_input_dim, config.projection_dim, bias=False)
 
     def apply_class_embedding(self, hidden_state: torch.Tensor) -> torch.Tensor:
         batch_size, _, hidden_size = hidden_state.shape
@@ -653,7 +545,7 @@ class MllamaVisionModel(PreTrainedModel):
 
         # apply position embeddings
         hidden_state = hidden_state.reshape(batch_size * num_concurrent_media, num_tiles, num_patches, dim)
-        hidden_state = self.apply_positional_embedding(hidden_state, aspect_ratio_ids)
+        hidden_state = self.gated_positional_embedding(hidden_state, aspect_ratio_ids)
 
         # apply encoder
         hidden_state = self.ln_pre(hidden_state)
@@ -671,8 +563,6 @@ class MllamaVisionModel(PreTrainedModel):
         # aspect ratios can be like input ids, and we can call embedding layer on them
 
         # Let's cache the mask per aspect_ratio_ids. Not sure I 100% got how they do it but alright
-        # TODO: after aspect-ratio-ids can be used fix this place
-        # attention_mask = self.cached_attention_mask(aspect_ratio_ids)
         hidden_state = hidden_state.view(batch_size * num_concurrent_media, -1, dim)
         output = self.transformer(
             hidden_state, attention_mask=attention_mask, output_hidden_states=True,
@@ -706,9 +596,7 @@ class MllamaVisionModel(PreTrainedModel):
             batch_size, num_concurrent_media, num_tiles, num_patches, -1
         )
         hidden_state = torch.cat([hidden_state, intermediate_hidden_states], dim=-1)
-        hidden_state = self.vision_projection(hidden_state)
-
-        return hidden_state.view(batch_size, -1, self.output_dim)
+        return hidden_state
 
 
 # Copied from Mllama
@@ -1025,8 +913,6 @@ class MllamaSelfAttentionDecoderLayer(torch.nn.Module):
 class MllamaCrossAttentionDecoderLayer(torch.nn.Module):
     """Cross-attention transformer block with tanh-gated attention and feedforward."""
 
-    # originally CrossAttentionTransformerBlock
-
     def __init__(self, config: MllamaTextConfig, layer_id: int) -> None:
         super().__init__()
         self.layer_id = layer_id
@@ -1148,12 +1034,11 @@ class MllamaTextModel(PreTrainedModel):
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
         self.embed_tokens = nn.Embedding(config.vocab_size+8, config.hidden_size, self.padding_idx)
-
-        self.fusion_schedule = [3, 7, 11, 15, 19, 23, 27, 31] # one cross each 4 layers
+        self.cross_attention_layers = config.cross_attention_layers 
 
         layers = []
-        for layer_idx in range(config.num_hidden_layers+len(self.fusion_schedule)):
-            if layer_idx in self.fusion_schedule :
+        for layer_idx in range(config.num_hidden_layers):
+            if layer_idx in self.cross_attention_layers :
                 layers.append(MllamaCrossAttentionDecoderLayer(config, layer_idx))
             else:
                 layers.append(MllamaSelfAttentionDecoderLayer(config, layer_idx))

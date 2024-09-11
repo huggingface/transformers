@@ -229,6 +229,7 @@ class MllamaTextConfig(PretrainedConfig):
         self.num_hidden_layers = num_hidden_layers
         if cross_attention_layers is None:
             cross_attention_layers = [3, 7, 11, 15, 19, 23, 27, 31]
+        self.cross_attention_layers = cross_attention_layers
         self.hidden_size = hidden_size
         self.num_attention_heads = num_attention_heads
         self.num_key_value_heads = num_key_value_heads
