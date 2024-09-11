@@ -167,9 +167,9 @@ def write_model(
     params = params.get("model", params)
 
     n_layers = params["n_layers"]  # language model self-attention layers
-    n_layers_cross_attention = params[
-        "vision_num_cross_attention_layers"
-    ]  # language model cross-attention layers; 90B - 20, 11B - 8
+    n_layers_cross_attention = params["vision_num_cross_attention_layers"]  # language model cross-attention layers; 90B - 20, 11B - 8
+    n_layers_vision = 32  # constant
+    n_layers_vision_global = 8  # constant
     n_heads = params["n_heads"]
     n_heads_per_shard = n_heads // num_shards
     dim = params["dim"]
@@ -193,7 +193,6 @@ def write_model(
             torch.load(os.path.join(input_base_path, f"consolidated.{i:02d}.pth"), map_location="cpu")
             for i in range(num_shards)
         ]
-
 
     print("1. Converting language model")
     all_keys = list(loaded[0].keys())
@@ -267,12 +266,11 @@ def write_model(
     config_parameters = {CONFIG_KEY_MAPPING[key]: params[key] for key in CONFIG_KEY_MAPPING.keys()}
     vision_config = MllamaVisionConfig(
         **config_parameters,
-        num_hidden_layers=n_layers,
+        num_hidden_layers=n_layers_vision,
         vision_input_dim=1280,  # Constant, taken directly from your notes
         return_intermediate=[3, 7, 15, 23, 30],  # Based on return_intermediate indices
-        global_vision_layers=8,  # Constant from the original code
         max_num_tiles=4,
-        num_global_layers=params["vision_num_cross_attention_layers"],
+        num_global_layers=n_layers_vision_global,
     )
     text_config = MllamaTextConfig(
         **config_parameters,
@@ -297,7 +295,7 @@ def write_model(
 
     # Safety check: reload the converted model
     gc.collect()
-    mllama_model = MllamaForConditionalGeneration.from_pretrained(
+    MllamaForConditionalGeneration.from_pretrained(
         model_path, torch_dtype=torch.bfloat16, device_map="auto"
     )
 
@@ -387,7 +385,7 @@ def main():
     )
     parser.add_argument(
         "--output_dir",
-        default="converted-mllama-11b",
+        default="converted-mllama-11b-small",
         help="Location to write HF model and tokenizer",
     )
     parser.add_argument(
