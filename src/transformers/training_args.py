@@ -148,6 +148,7 @@ class OptimizerNames(ExplicitEnum):
 
     ADAMW_HF = "adamw_hf"
     ADAMW_TORCH = "adamw_torch"
+    ADAMW_MINI = "adamw_mini"
     ADAMW_TORCH_FUSED = "adamw_torch_fused"
     ADAMW_TORCH_XLA = "adamw_torch_xla"
     ADAMW_TORCH_NPU_FUSED = "adamw_torch_npu_fused"
