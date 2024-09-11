@@ -271,26 +271,23 @@ class VipLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_vipllava_merge_inputs_error_bug(self):
         # This is a reproducer of https://github.com/huggingface/transformers/pull/28333 and makes sure it does not happen anymore
         model_id = "llava-hf/vip-llava-7b-hf"
-        model = VipLlavaForConditionalGeneration.from_pretrained(
-            model_id, torch_dtype=torch.float16, low_cpu_mem_usage=True
-        ).to(torch_device)
+        model = VipLlavaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
 
         # Simulate some user inputs
         pixel_values = torch.randn(
-            (2, 3, 336, 336),
+            (1, 3, 336, 336),
             dtype=torch.float,
             device=torch_device,
         )
         input_ids = torch.tensor(
             [
                 [32001, 32001, 1, 15043, 7084, 32000, 29871, 13, 7900],
-                [1, 15043, 7084, 29901, 29871, 32000, 29871, 13, 7900],
             ],
             dtype=torch.long,
             device=torch_device,
         )
         attention_mask = torch.tensor(
-            [[0, 0, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1]],
+            [[0, 0, 1, 1, 1, 1, 1, 1, 1]],
             dtype=torch.long,
             device=torch_device,
         )

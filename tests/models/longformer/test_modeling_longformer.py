@@ -34,8 +34,8 @@ if is_torch_available():
         LongformerForSequenceClassification,
         LongformerForTokenClassification,
         LongformerModel,
-        LongformerSelfAttention,
     )
+    from transformers.models.longformer.modeling_longformer import LongformerSelfAttention
 
 
 class LongformerModelTester:
