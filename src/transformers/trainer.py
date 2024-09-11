@@ -699,11 +699,28 @@ class Trainer:
         # returned to 0 every time flos need to be logged
         self.current_flos = 0
         self.hp_search_backend = None
-        default_label_names = find_labels(self.model.__class__)
-        self.label_names = default_label_names if self.args.label_names is None else self.args.label_names
-        self.can_return_loss = can_return_loss(self.model.__class__)
-        self.control = self.callback_handler.on_init_end(self.args, self.state, self.control)
 
+        # Modified for peft related changes that were missing in the original version
+
+        # Old code commented
+        # default_label_names = find_labels(self.model.__class__)
+        # self.label_names = default_label_names if self.args.label_names is None else self.args.label_names
+        # self.can_return_loss = can_return_loss(self.model.__class__)
+        # self.control = self.callback_handler.on_init_end(self.args, self.state, self.control)
+
+        if _is_peft_model(self.model):
+            if hasattr(self.model, "get_base_model"):
+                model_to_inspect = self.model.get_base_model()
+                default_label_names = find_labels(model_to_inspect.__class__)
+                self.can_return_loss = can_return_loss(model_to_inspect.__class__)
+        else:
+            default_label_names = find_labels(self.model.__class__)
+            self.can_return_loss = can_return_loss(self.model.__class__)
+
+        self.label_names = default_label_names if self.args.label_names is None else self.args.label_names
+        self.control = self.callback_handler.on_init_end(self.args, self.state, self.control)
+        # End of modification
+        
         # Internal variables to help with automatic batch size reduction
         self._train_batch_size = args.train_batch_size
         self._created_lr_scheduler = False
