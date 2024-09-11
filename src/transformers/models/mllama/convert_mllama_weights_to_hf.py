@@ -289,18 +289,16 @@ def write_model(
     with torch.device("meta"):
         model = MllamaForConditionalGeneration(config)
     model.load_state_dict(state_dict, strict=True, assign=True)
+    del mllama_model.config._name_or_path
     model.save_pretrained(model_path, safe_serialization=safe_serialization)
-    del state_dict
-    gc.collect()
+    del state_dict, model
+
+
     # Safety check: reload the converted model
+    gc.collect()
     mllama_model = MllamaForConditionalGeneration.from_pretrained(
         model_path, torch_dtype=torch.bfloat16, device_map="auto"
     )
-    # Avoid saving this as part of the config.
-    del mllama_model.config._name_or_path
-    mllama_model.config.torch_dtype = torch.float16  # not sure about this.
-    print("Saving in the Transformers format.")
-    mllama_model.save_pretrained(model_path, safe_serialization=safe_serialization)
 
 
 class MllamaConverter(TikTokenConverter):
