@@ -17,10 +17,7 @@ import unittest
 import numpy as np
 
 from transformers.models.whisper import WhisperTokenizer, WhisperTokenizerFast
-from transformers.models.whisper.tokenization_whisper import (
-    _combine_tokens_into_words,
-    _find_longest_common_sequence,
-)
+from transformers.models.whisper.tokenization_whisper import _combine_tokens_into_words, _find_longest_common_sequence
 from transformers.testing_utils import (
     require_flax,
     require_tf,
@@ -121,9 +118,7 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         expected_encoding = {'input_ids': [[50257, 50362, 41762, 364, 357, 36234, 1900, 355, 12972, 13165, 354, 12, 35636, 364, 290, 12972, 13165, 354, 12, 5310, 13363, 12, 4835, 8, 3769, 2276, 12, 29983, 45619, 357, 13246, 51, 11, 402, 11571, 12, 17, 11, 5564, 13246, 38586, 11, 16276, 44, 11, 4307, 346, 33, 861, 11, 16276, 7934, 23029, 329, 12068, 15417, 28491, 357, 32572, 52, 8, 290, 12068, 15417, 16588, 357, 32572, 38, 8, 351, 625, 3933, 10, 2181, 13363, 4981, 287, 1802, 10, 8950, 290, 2769, 48817, 1799, 1022, 449, 897, 11, 9485, 15884, 354, 290, 309, 22854, 37535, 13, 50256], [50257, 50362, 13246, 51, 318, 3562, 284, 662, 12, 27432, 2769, 8406, 4154, 282, 24612, 422, 9642, 9608, 276, 2420, 416, 26913, 21143, 319, 1111, 1364, 290, 826, 4732, 287, 477, 11685, 13, 50256], [50257, 50362, 464, 2068, 7586, 21831, 18045, 625, 262, 16931, 3290, 13, 50256]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]}  # fmt: skip
 
         self.tokenizer_integration_test_util(
-            expected_encoding=expected_encoding,
-            model_name="openai/whisper-tiny.en",
-            padding=False,
+            expected_encoding=expected_encoding, model_name="openai/whisper-tiny.en", padding=False
         )
 
     def test_output_offsets(self):
@@ -147,10 +142,7 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
                     " small, sharp blow high on his chest.<|endoftext|>"
                 ),
                 "offsets": [
-                    {
-                        "text": " of spectators, retrievality is not worth thinking about.",
-                        "timestamp": (0.0, 5.0),
-                    },
+                     {"text": " of spectators, retrievality is not worth thinking about.", "timestamp": (0.0, 5.0)},
                     {
                         "text": " His instant panic was followed by a small, sharp blow high on his chest.",
                         "timestamp": (5.0, 9.4),
@@ -217,21 +209,11 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         # fmt: on
         expected_with_special_tokens = "<|startofprev|> Mr. Quilter<|startoftranscript|><|en|><|transcribe|><|notimestamps|> On the general principles of art, Mr. Quilter writes with equal lucidity.<|endoftext|>"
         expected_without_special_tokens = " On the general principles of art, Mr. Quilter writes with equal lucidity."
+        self.assertEqual(tokenizer.decode(encoded_input, skip_special_tokens=False), expected_with_special_tokens)
+        self.assertEqual(tokenizer.decode(encoded_input, skip_special_tokens=True), expected_without_special_tokens)
+        self.assertEqual(rust_tokenizer.decode(encoded_input, skip_special_tokens=False), expected_with_special_tokens)
         self.assertEqual(
-            tokenizer.decode(encoded_input, skip_special_tokens=False),
-            expected_with_special_tokens,
-        )
-        self.assertEqual(
-            tokenizer.decode(encoded_input, skip_special_tokens=True),
-            expected_without_special_tokens,
-        )
-        self.assertEqual(
-            rust_tokenizer.decode(encoded_input, skip_special_tokens=False),
-            expected_with_special_tokens,
-        )
-        self.assertEqual(
-            rust_tokenizer.decode(encoded_input, skip_special_tokens=True),
-            expected_without_special_tokens,
+            rust_tokenizer.decode(encoded_input, skip_special_tokens=True), expected_without_special_tokens
         )
 
     def test_skip_special_tokens_with_timestamps(self):
@@ -316,13 +298,7 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         # 'whatever "whatever" said someone, clever!?'
         encoded_input = [1363, 7969, 503, 1363, 7969, 1, 848, 1580, 11, 13494, 7323]
         expected_words = ["whatever", ' "whatever"', " said", " someone,", " clever!?"]
-        expected_tokens = [
-            [1363, 7969],
-            [503, 1363, 7969, 1],
-            [848],
-            [1580, 11],
-            [13494, 7323],
-        ]
+        expected_tokens = [[1363, 7969], [503, 1363, 7969, 1], [848], [1580, 11], [13494, 7323]]
         expected_indices = [[0, 1], [2, 3, 4, 5], [6], [7, 8], [9, 10]]
         output = _combine_tokens_into_words(tokenizer, encoded_input)
         self.assertEqual(expected_words, output[0])
@@ -350,10 +326,7 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(decoded_output_normalize, expected_output_normalize)
 
         decoded_output_diacritics = tokenizer.decode(
-            encoded_input,
-            skip_special_tokens=True,
-            basic_normalize=True,
-            remove_diacritics=True,
+            encoded_input, skip_special_tokens=True, basic_normalize=True, remove_diacritics=True
         )
         self.assertEqual(decoded_output_diacritics, expected_output_diacritics)
 
@@ -366,10 +339,7 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(decoded_output_normalize, expected_output_normalize)
 
         decoded_output_diacritics = rust_tokenizer.decode(
-            encoded_input,
-            skip_special_tokens=True,
-            basic_normalize=True,
-            remove_diacritics=True,
+            encoded_input, skip_special_tokens=True, basic_normalize=True, remove_diacritics=True
         )
         self.assertEqual(decoded_output_diacritics, expected_output_diacritics)
 
@@ -391,10 +361,7 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
 
         tokenizer = WhisperTokenizer.from_pretrained("onnx-community/whisper-tiny.en_timestamped")
         result = tokenizer._decode_asr(
-            model_outputs,
-            return_timestamps="word",
-            return_language=False,
-            time_precision=0.02,
+            model_outputs, return_timestamps="word", return_language=False, time_precision=0.02
         )
 
         EXPECTED_OUTPUT = (
