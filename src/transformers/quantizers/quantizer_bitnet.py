@@ -45,7 +45,7 @@ class BitNetHfQuantizer(HfQuantizer):
         self.quantization_config = quantization_config
 
     def validate_environment(self, *args, **kwargs):
-    
+
         if not is_accelerate_available():
             raise ImportError("Loading an BitNet quantized model requires accelerate (`pip install accelerate`)")
 
@@ -55,8 +55,8 @@ class BitNetHfQuantizer(HfQuantizer):
                 " sure the weights are in PyTorch format."
             )
 
-        # if not torch.cuda.is_available():
-        #     raise RuntimeError("No GPU found. A GPU is needed for quantization.")
+        if not torch.cuda.is_available():
+            raise RuntimeError("No GPU found. A GPU is needed for quantization.")
 
         device_map = kwargs.get("device_map", None)
         if device_map is None:

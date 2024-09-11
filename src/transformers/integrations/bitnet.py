@@ -33,13 +33,13 @@ def pack_weights(quantized_weights: torch.Tensor) -> torch.Tensor:
     Parameters:
     -----------
     quantized_weights : torch.Tensor
-        A tensor containing ternary quantized weights with values in {-1, 0, 1}. These values are adjusted to 
+        A tensor containing ternary quantized weights with values in {-1, 0, 1}. These values are adjusted to
         {0, 1, 2} before being packed.
 
     Returns:
     --------
     torch.Tensor
-        A packed tensor where each element stores 4 quantized values (each using 2 bits) in an 8-bit format. 
+        A packed tensor where each element stores 4 quantized values (each using 2 bits) in an 8-bit format.
     """
 
     quantized_weights += 1
@@ -80,11 +80,11 @@ def unpack_weights(packed: torch.Tensor, dtype: torch.dtype) -> torch.Tensor:
     Returns:
     --------
     torch.Tensor
-        A tensor of unpacked weights, where each value is converted from its packed 2-bit representation. 
-        
+        A tensor of unpacked weights, where each value is converted from its packed 2-bit representation.
+
     Example:
     --------
-    packed = torch.tensor([[0b10100001, 0b00011000], 
+    packed = torch.tensor([[0b10100001, 0b00011000],
                            [0b10010000, 0b00001010]], dtype=torch.uint8)
 
     # Unpack the values
@@ -103,7 +103,7 @@ def unpack_weights(packed: torch.Tensor, dtype: torch.dtype) -> torch.Tensor:
 
     Explanation of the example:
     ---------------------------
-    Let's take the first value for example 0b10100001, we we will only focus on the first column, 
+    Let's take the first value for example 0b10100001, we we will only focus on the first column,
     because every element is unpacked across the first dimension
     - First 2 bits: `01` → 0 at [0][0]
     - Second 2 bits: `00` → -1 at [0][2]
@@ -111,8 +111,8 @@ def unpack_weights(packed: torch.Tensor, dtype: torch.dtype) -> torch.Tensor:
     - Fourth 2 bits: `10` → 1 at [0][6]
     the second value of the same row (0b10010000) will give the values for [0][1], [0][3], [0][5], [0][7]
 
-    We subtract 1 because during the packing process, it's easier to work with values like 0, 1, and 2. To make this possible, 
-    we add 1 to the original ternary weights (which are typically -1, 0, and 1) when packing them. When unpacking, we reverse 
+    We subtract 1 because during the packing process, it's easier to work with values like 0, 1, and 2. To make this possible,
+    we add 1 to the original ternary weights (which are typically -1, 0, and 1) when packing them. When unpacking, we reverse
     this by subtracting 1 to restore the original ternary values.
     """
     values_per_item = 4
@@ -179,7 +179,7 @@ class BitLinear(nn.Module):
             Input activations to be quantized.
         num_bits : int, optional (default=8)
             Number of bits to use for quantization, determining the quantization range.
-        
+
         Returns:
         --------
         result : torch.Tensor
