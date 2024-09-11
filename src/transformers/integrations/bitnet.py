@@ -67,7 +67,7 @@ def pack_weights(quantized_weights: torch.Tensor) -> torch.Tensor:
     return packed
 
 @torch.compile
-def unpack_weights(packed: torch.Tensor) -> torch.Tensor:
+def unpack_weights(packed: torch.Tensor, dtype: torch.dtype) -> torch.Tensor:
     """
     Unpacks a tensor of quantized weights that were stored in a packed format using 2 bits per value.
 
@@ -75,7 +75,8 @@ def unpack_weights(packed: torch.Tensor) -> torch.Tensor:
     -----------
     packed : torch.Tensor
         A tensor containing packed weights where each element represents 4 quantized values (using 2 bits per value).
-
+    dtype : torch.dtype
+        The dtype of the returned Tensor
     Returns:
     --------
     torch.Tensor
@@ -132,15 +133,15 @@ def unpack_weights(packed: torch.Tensor) -> torch.Tensor:
         mask = (3 << (2 * i))
         unpacked[start:end] = (packed & mask) >> (2 * i)
 
-    unpacked = unpacked.to(torch.bfloat16) - 1
-    return unpacked.to(torch.bfloat16)
+    unpacked = unpacked.to(dtype) - 1
+    return unpacked.to(dtype)
 
 class BitLinear(nn.Module):
 
-    def __init__(self, in_features: int, out_features: int, bias: bool, input_bits: int = 8,
+    def __init__(self, in_features: int, out_features: int, bias: bool,
                  device=None, dtype=None, config=None):
         super().__init__()
-
+        self.dtype = dtype
         self.register_buffer(
             "weight",
             torch.zeros(
@@ -153,7 +154,7 @@ class BitLinear(nn.Module):
             "weight_scale",
             torch.ones(
                 (1),
-                dtype=torch.bfloat16,
+                dtype=dtype,
                 device=device,
             ),
         )
@@ -162,7 +163,7 @@ class BitLinear(nn.Module):
                 "bias",
                 torch.zeros(
                     (self.out_features),
-                    dtype=torch.bfloat16,
+                    dtype=dtype,
                     device=device
                 ))
         else :
@@ -200,10 +201,9 @@ class BitLinear(nn.Module):
 
     def forward(self, x):
         w = self.weight
-        w_unpacked = unpack_weights(w)
-        w_quant = w_unpacked.to(torch.bfloat16)
+        w_quant = unpack_weights(w, dtype=self.dtype)
         x_quant, x_scale = self.activation_quant(x)
-        y = F.linear(x_quant.to(torch.bfloat16), w_quant)
+        y = F.linear(x_quant.to(self.dtype), w_quant)
         y = self.post_quant_process(y, self.weight_scale, x_scale)
         if self.bias is not None :
             y += self.bias.view(1, -1).expand_as(y)
@@ -237,12 +237,12 @@ def _replace_with_bitnet_linear(
                 if isinstance(module, nn.Linear) and name not in modules_to_not_convert:
                     in_features = module.in_features
                     out_features = module.out_features
-
                     model._modules[name] = BitLinear(
                         in_features=in_features,
                         out_features=out_features,
                         bias=module.bias is not None,
                         device=module.weight.device,
+                        dtype=module.weight.dtype
                     )
                     has_been_replaced = True
                     model._modules[name].requires_grad_(False)

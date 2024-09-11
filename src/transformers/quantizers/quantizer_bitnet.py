@@ -55,8 +55,8 @@ class BitNetHfQuantizer(HfQuantizer):
                 " sure the weights are in PyTorch format."
             )
 
-        if not torch.cuda.is_available():
-            raise RuntimeError("No GPU found. A GPU is needed for quantization.")
+        # if not torch.cuda.is_available():
+        #     raise RuntimeError("No GPU found. A GPU is needed for quantization.")
 
         device_map = kwargs.get("device_map", None)
         if device_map is None:
