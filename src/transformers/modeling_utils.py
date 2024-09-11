@@ -4546,9 +4546,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             archs = [] if model.config.architectures is None else model.config.architectures
             warner = logger.warning if model.__class__.__name__ in archs else logger.info
             _keys = '\n'.join(unexpected_keys)
+            # model.vision_model.vision_encoder.transformer.layers.9.self_attn.v_proj.bias
+            # model.language_model.layers.16.mlp.down_proj.weight
             warner(
                 f"Some weights of the model checkpoint at {pretrained_model_name_or_path} were not used when"
-                f" initializing {model.__class__.__name__}" + _keys + "\n- This IS expected if you are"
+                f" initializing {model.__class__.__name__}" + "\n- This IS expected if you are"
                 f" initializing {model.__class__.__name__} from the checkpoint of a model trained on another task or"
                 " with another architecture (e.g. initializing a BertForSequenceClassification model from a"
                 " BertForPreTraining model).\n- This IS NOT expected if you are initializing"
@@ -4559,11 +4561,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             logger.info(f"All model checkpoint weights were used when initializing {model.__class__.__name__}.\n")
         if len(missing_keys) > 0:
             _keys = '\n'.join(missing_keys)
-            logger.warning(
-                f"Some weights of {model.__class__.__name__} were not initialized from the model checkpoint at"
-                f" {pretrained_model_name_or_path} and are newly initialized:" + _keys + "\nYou should probably"
-                " TRAIN this model on a down-stream task to be able to use it for predictions and inference."
-            )
+            # logger.warning(
+            #     f"Some weights of {model.__class__.__name__} were not initialized from the model checkpoint at"
+            #     f" {pretrained_model_name_or_path} and are newly initialized:" + _keys + "\nYou should probably"
+            #     " TRAIN this model on a down-stream task to be able to use it for predictions and inference."
+            # )
         elif len(mismatched_keys) == 0:
             logger.info(
                 f"All the weights of {model.__class__.__name__} were initialized from the model checkpoint at"

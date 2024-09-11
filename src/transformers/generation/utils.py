@@ -1375,6 +1375,9 @@ class GenerationMixin:
     def _get_initial_cache_position(self, input_ids, model_kwargs):
         """Calculates `cache_position` for the pre-fill stage based on `input_ids` and optionally past length"""
         # `torch.compile`-friendly `torch.arange` from a shape -- the lines below are equivalent to `torch.arange`
+        if "cache_position" in model_kwargs:
+            return model_kwargs
+
         if "inputs_embeds" in model_kwargs:
             cache_position = torch.ones_like(model_kwargs["inputs_embeds"][0, :, 0], dtype=torch.int64).cumsum(0) - 1
         else:
@@ -1580,9 +1583,9 @@ class GenerationMixin:
         # keeps copying the cache thus using much more memory
         else:
             model_kwargs[cache_name] = (
-                DynamicCache()
+                DynamicCache(self.config.get_text_config())
                 if not requires_cross_attention_cache
-                else EncoderDecoderCache(DynamicCache(), DynamicCache())
+                else EncoderDecoderCache(DynamicCache(self.config.get_text_config()), DynamicCache(self.config.get_text_config()))
             )
 
     def _supports_num_logits_to_keep(self) -> bool:
