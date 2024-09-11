@@ -1325,6 +1325,13 @@ else:
             "WhisperTimeStampLogitsProcessor",
         ]
     )
+
+    # PyTorch domain libraries integration
+    _import_structure["integrations.executorch"] = [
+        "TorchExportableModuleWithStaticCache",
+        "convert_and_export_with_cache",
+    ]
+
     _import_structure["modeling_flash_attention_utils"] = []
     _import_structure["modeling_outputs"] = []
     _import_structure["modeling_rope_utils"] = ["ROPE_INIT_FUNCTIONS"]
@@ -6130,6 +6137,10 @@ if TYPE_CHECKING:
             WatermarkDetector,
             WatermarkLogitsProcessor,
             WhisperTimeStampLogitsProcessor,
+        )
+        from .integrations.executorch import (
+            TorchExportableModuleWithStaticCache,
+            convert_and_export_with_cache,
         )
         from .modeling_rope_utils import ROPE_INIT_FUNCTIONS
         from .modeling_utils import PreTrainedModel
