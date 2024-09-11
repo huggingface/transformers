@@ -68,7 +68,6 @@ Thought: I should multiply 2 by 3.6452. special_marker
 Code:
 ```py
 result = 2**3.6452
-print(result)
 ```<end_code>
 """
     else:  # We're at step 2

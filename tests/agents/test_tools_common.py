@@ -31,7 +31,7 @@ if is_vision_available():
     from PIL import Image
 
 
-AUTHORIZED_TYPES = ["text", "audio", "image", "any"]
+AUTHORIZED_TYPES = ["string", "number", "audio", "image", "any"]
 
 
 def create_inputs(tool_inputs: Dict[str, Dict[Union[str, type], str]]):
@@ -40,7 +40,7 @@ def create_inputs(tool_inputs: Dict[str, Dict[Union[str, type], str]]):
     for input_name, input_desc in tool_inputs.items():
         input_type = input_desc["type"]
 
-        if input_type == "text":
+        if input_type == "string":
             inputs[input_name] = "Text input"
         elif input_type == "image":
             inputs[input_name] = Image.open(
@@ -56,7 +56,7 @@ def create_inputs(tool_inputs: Dict[str, Dict[Union[str, type], str]]):
 
 def output_type(output):
     if isinstance(output, (str, AgentText)):
-        return "text"
+        return "string"
     elif isinstance(output, (Image.Image, AgentImage)):
         return "image"
     elif isinstance(output, (torch.Tensor, AgentAudio)):
@@ -107,7 +107,7 @@ class ToolTesterMixin:
 class ToolTests(unittest.TestCase):
     def test_tool_init_with_decorator(self):
         @tool
-        def coolfunc(a: str, b: int) -> tuple:
+        def coolfunc(a: str, b: int) -> float:
             """Cool function
 
             Args:
@@ -116,4 +116,4 @@ class ToolTests(unittest.TestCase):
             """
             return b + 2, a
 
-        assert coolfunc.output_type == "tuple"
+        assert coolfunc.output_type == "number"

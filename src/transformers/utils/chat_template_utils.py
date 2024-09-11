@@ -22,7 +22,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union, get_args, 
 
 from packaging import version
 
-from .import_utils import is_jinja_available
+from .import_utils import is_jinja_available, is_vision_available, is_torch_available
 
 
 if is_jinja_available():
@@ -31,6 +31,12 @@ if is_jinja_available():
     from jinja2.sandbox import ImmutableSandboxedEnvironment
 else:
     jinja2 = None
+
+if is_vision_available():
+    from PIL.Image import Image
+
+if is_torch_available():
+    from torch import Tensor
 
 
 BASIC_TYPES = (int, float, str, bool, Any, type(None), ...)
@@ -63,13 +69,14 @@ class DocstringParsingException(Exception):
 
     pass
 
-
 def _get_json_schema_type(param_type: str) -> Dict[str, str]:
     type_mapping = {
         int: {"type": "integer"},
         float: {"type": "number"},
         str: {"type": "string"},
         bool: {"type": "boolean"},
+        Image: {"type": "image"},
+        Tensor: {"type": "audio"},
         Any: {},
     }
     return type_mapping.get(param_type, {"type": "object"})

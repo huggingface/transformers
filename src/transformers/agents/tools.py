@@ -383,7 +383,7 @@ class Tool:
                 super().__init__()
                 self.name = _gradio_tool.name
                 self.description = _gradio_tool.description
-                self.output_type = "text"
+                self.output_type = "string"
                 self._gradio_tool = _gradio_tool
                 func_args = list(inspect.signature(_gradio_tool.run).parameters.keys())
                 self.inputs = {key: "" for key in func_args}
@@ -405,7 +405,7 @@ class Tool:
                 self.name = _langchain_tool.name.lower()
                 self.description = _langchain_tool.description
                 self.inputs = parse_langchain_args(_langchain_tool.args)
-                self.output_type = "text"
+                self.output_type = "string"
                 self.langchain_tool = _langchain_tool
 
             def forward(self, *args, **kwargs):
@@ -422,6 +422,7 @@ class Tool:
 DEFAULT_TOOL_DESCRIPTION_TEMPLATE = """
 - {{ tool.name }}: {{ tool.description }}
     Takes inputs: {{tool.inputs}}
+    Returns an output of type: {{tool.output_type}}
 """
 
 
@@ -622,18 +623,18 @@ def launch_gradio_demo(tool_class: Tool):
     gradio_inputs = []
     for input_name, input_details in tool_class.inputs.items():
         input_type = input_details["type"]
-        if input_type == "text":
-            gradio_inputs.append(gr.Textbox(label=input_name))
-        elif input_type == "image":
+        if input_type == "image":
             gradio_inputs.append(gr.Image(label=input_name))
         elif input_type == "audio":
             gradio_inputs.append(gr.Audio(label=input_name))
+        elif input_type in ["string", "integer", "number"]:
+            gradio_inputs.append(gr.Textbox(label=input_name))
         else:
             error_message = f"Input type '{input_type}' not supported."
             raise ValueError(error_message)
 
     gradio_output = tool_class.output_type
-    assert gradio_output in ["text", "image", "audio"], f"Output type '{gradio_output}' not supported."
+    assert gradio_output in ["string", "image", "audio"], f"Output type '{gradio_output}' not supported."
 
     gr.Interface(
         fn=fn,
