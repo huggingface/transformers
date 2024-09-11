@@ -19,10 +19,11 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from transformers import is_torch_available, load_tool
+from transformers import is_torch_available
 from transformers.agents.agent_types import AGENT_TYPE_MAPPING
 from transformers.agents.default_tools import FinalAnswerTool
 from transformers.testing_utils import get_tests_dir, require_torch
+
 
 if is_torch_available():
     import torch

@@ -392,7 +392,7 @@ else:
 if char.isalpha():
     print('2')"""
         state = {}
-        result = evaluate_python_code(code, BASE_PYTHON_TOOLS, state=state)
+        evaluate_python_code(code, BASE_PYTHON_TOOLS, state=state)
         assert state["print_outputs"] == "2\n"
 
     def test_imports(self):
@@ -470,7 +470,7 @@ if char.isalpha():
         code = "print('Hello world!')\nprint('Ok no one cares')"
         state = {}
         result = evaluate_python_code(code, BASE_PYTHON_TOOLS, state=state)
-        assert result == None
+        assert result is None
         assert state["print_outputs"] == "Hello world!\nOk no one cares\n"
 
         # test print in function
@@ -594,7 +594,7 @@ except ValueError as e:
     def test_print(self):
         code = "print(min([1, 2, 3]))"
         state = {}
-        result = evaluate_python_code(code, {"min": min, "print": print}, state=state)
+        evaluate_python_code(code, {"min": min, "print": print}, state=state)
         assert state["print_outputs"] == "1\n"
 
     def test_types_as_objects(self):

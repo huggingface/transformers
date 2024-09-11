@@ -19,7 +19,7 @@ import re
 import requests
 from requests.exceptions import RequestException
 
-from .tools import Tool, tool
+from .tools import Tool
 
 
 class DuckDuckGoSearchTool(Tool):
@@ -50,7 +50,7 @@ class VisitWebpageTool(Tool):
         }
     }
     output_type = "string"
-    
+
     def forward(self, url: str) -> str:
         try:
             from markdownify import markdownify

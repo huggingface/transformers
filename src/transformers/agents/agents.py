@@ -22,7 +22,7 @@ from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Union
 from .. import is_torch_available
 from ..utils import logging as transformers_logging
 from ..utils.import_utils import is_pygments_available
-from .agent_types import AgentAudio, AgentImage, AgentText
+from .agent_types import AgentAudio, AgentImage
 from .default_tools import BASE_PYTHON_TOOLS, FinalAnswerTool, setup_default_tools
 from .llm_engine import HfApiEngine, MessageRole
 from .prompts import (

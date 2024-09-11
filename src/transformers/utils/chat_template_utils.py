@@ -22,7 +22,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union, get_args, 
 
 from packaging import version
 
-from .import_utils import is_jinja_available, is_vision_available, is_torch_available
+from .import_utils import is_jinja_available, is_torch_available, is_vision_available
 
 
 if is_jinja_available():
@@ -68,6 +68,7 @@ class DocstringParsingException(Exception):
     """Exception raised for errors in parsing docstrings to generate JSON schemas"""
 
     pass
+
 
 def _get_json_schema_type(param_type: str) -> Dict[str, str]:
     type_mapping = {
