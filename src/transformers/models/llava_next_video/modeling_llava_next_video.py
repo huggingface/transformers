@@ -764,8 +764,6 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        num_logits_to_keep: int = 0,
     ) -> Union[Tuple, LlavaNextVideoCausalLMOutputWithPast]:
         r"""
         Args:
@@ -978,7 +976,6 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             cache_position=cache_position,
-            num_logits_to_keep=num_logits_to_keep,
         )
 
         logits = outputs[0]
@@ -1021,7 +1018,6 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel):
         image_sizes=None,
         attention_mask=None,
         cache_position=None,
-        num_logits_to_keep=None,
         **kwargs,
     ):
         if input_ids is not None:
@@ -1041,7 +1037,6 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel):
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             cache_position=cache_position,
-            num_logits_to_keep=num_logits_to_keep,
             **kwargs,
         )
 

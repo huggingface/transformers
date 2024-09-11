@@ -705,7 +705,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--files_to_parse",
-        default=["examples/diff-conversion/modular_dummy_bert.py"],
+        default=["all"],
         nargs="+",
         help="A list of `diff_xxxx` files that should be converted to single model file",
     )
