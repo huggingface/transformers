@@ -661,4 +661,4 @@ class VitPoseImageProcessor(BaseImageProcessor):
                 batch_results.append(pose_result)
             results.append(batch_results)
 
-        r
+        return results
