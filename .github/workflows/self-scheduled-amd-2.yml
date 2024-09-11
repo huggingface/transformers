@@ -67,9 +67,11 @@ jobs:
       - name: ROCM-SMI
         run: |
           rocm-smi
+
       - name: ROCM-INFO
         run: |
           rocminfo  | grep "Agent" -A 14
+
       - name: Show ROCR environment
         run: |
           echo "ROCR: $ROCR_VISIBLE_DEVICES"
@@ -119,6 +121,7 @@ jobs:
       - name: ROCM-INFO
         run: |
           rocminfo  | grep "Agent" -A 14
+
       - name: Show ROCR environment
         run: |
           echo "ROCR: $ROCR_VISIBLE_DEVICES"
@@ -205,6 +208,65 @@ jobs:
           name: ${{ matrix.machine_type }}_run_pipelines_torch_gpu_test_reports
           path: /transformers/reports/${{ matrix.machine_type }}_run_pipelines_torch_gpu_test_reports
 
+  run_examples_gpu:
+    if: ${{ inputs.job == 'run_examples_gpu' }}
+    name: Examples directory
+    strategy:
+      fail-fast: false
+      matrix:
+        machine_type: [single-gpu]
+    runs-on: ['${{ matrix.machine_type }}', self-hosted, amd-gpu, '${{ inputs.runner }}']
+    container:
+      image: ${{ inputs.docker }}
+      options: --device /dev/kfd --device /dev/dri --env ROCR_VISIBLE_DEVICES --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+    needs: setup
+    steps:
+      - name: Update clone
+        working-directory: /transformers
+        run: git fetch && git checkout ${{ github.sha }}
+
+      - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
+        working-directory: /transformers
+        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
+
+      - name: ROCM-SMI
+        run: |
+          rocm-smi
+
+      - name: ROCM-INFO
+        run: |
+          rocminfo  | grep "Agent" -A 14
+
+      - name: Show ROCR environment
+        run: |
+          echo "ROCR: $ROCR_VISIBLE_DEVICES"
+
+      - name: Environment
+        working-directory: /transformers
+        run: |
+          python3 utils/print_env.py
+
+      - name: Show installed libraries and their versions
+        working-directory: /transformers
+        run: pip freeze
+
+      - name: Run examples tests on GPU
+        working-directory: /transformers
+        run: |
+          pip install -r examples/pytorch/_tests_requirements.txt
+          python3 -m pytest -v --make-reports=${{ matrix.machine_type }}_run_examples_gpu_test_reports examples/pytorch -m "not not_device_test"
+
+      - name: Failure short reports
+        if: ${{ failure() }}
+        continue-on-error: true
+        run: cat /transformers/reports/${{ matrix.machine_type }}_run_examples_gpu_test_reports/failures_short.txt
+
+      - name: "Test suite reports artifacts: ${{ matrix.machine_type }}_run_examples_gpu_test_reports"
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.machine_type }}_run_examples_gpu_test_reports
+          path: /transformers/reports/${{ matrix.machine_type }}_run_examples_gpu_test_reports
 
 
 
