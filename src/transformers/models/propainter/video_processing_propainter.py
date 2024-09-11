@@ -129,7 +129,7 @@ def convert_to_grayscale_and_dilation(
 
 def extrapolation(
     image: ImageInput,
-    scale: Optional[tuple[float, float]] = None,
+    scale_hw: Optional[tuple[float, float]] = None,
     data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
     input_data_format: Optional[Union[str, ChannelDimension]] = None,
 ):
@@ -137,8 +137,8 @@ def extrapolation(
     Prepares video frames for the outpainting process by extrapolating the field of view (FOV) and generating masks.
 
     This function performs the following tasks:
-    (a) Scaling: If the `scale` parameter is provided(necesaary to provide for outpainting), it resizes the dimensions of the video frames based on
-        the scaling factors for height  and width. This step is crucial for `"video_outpainting"` mode. If `scale` is `None`, no resizing is applied.
+    (a) Scaling: If the `scale_hw` parameter is provided(necesaary to provide for outpainting), it resizes the dimensions of the video frames based on
+        the scaling factors for height  and width. This step is crucial for `"video_outpainting"` mode. If `scale_hw` is `None`, no resizing is applied.
     (b) Field of View Expansion: The function calculates new dimensions for the frames to accommodate the expanded FOV.
         The new dimensions are adjusted to be divisible by 8 to meet processing requirements.
     (c) Frame Adjustment: The original frames are placed at the center of the new, larger frames. The rest of the frame is filled with zeros.
@@ -150,11 +150,9 @@ def extrapolation(
     Args:
         image (Image):
             The video frames to convert.
-        scale (`tuple[float, float]`, *optional*, defaults to `None`):
+        scale_hw (`tuple[float, float]`, *optional*, defaults to `None`):
             Tuple containing scaling factors for the video's height and width dimensions during `"video_outpainting"` mode.
             It is only applicable during `"video_outpainting"` mode. If `None`, no scaling is applied and code execution will end.
-        num_frames (`int`, *optional*, defaults to `None`):
-            The number of frames in a video.
         data_format (`str` or `ChannelDimension`, *optional*):
             The channel dimension format of the image. If not provided, it will be the same as the input image.
         input_data_format (`str` or `ChannelDimension`, *optional*):
@@ -172,8 +170,8 @@ def extrapolation(
     num_channels = image.shape[get_channel_dimension_axis(image, input_data_format)]
 
     # Defines new FOV.
-    height_extr = int(scale[0] * height)
-    width_extr = int(scale[1] * width)
+    height_extr = int(scale_hw[0] * height)
+    width_extr = int(scale_hw[1] * width)
     height_extr = height_extr - height_extr % 8
     width_extr = width_extr - width_extr % 8
     height_start = int((height_extr - height) / 2)
@@ -379,7 +377,7 @@ class ProPainterVideoProcessor(BaseImageProcessor):
     def _extrapolation(
         self,
         images: ImageInput,
-        scale: Optional[tuple[float, float]] = None,
+        scale_hw: Optional[tuple[float, float]] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> np.ndarray:
@@ -389,11 +387,9 @@ class ProPainterVideoProcessor(BaseImageProcessor):
         Args:
         images (Image):
             The video frames to convert.
-        scale (`tuple[float, float]`, *optional*, defaults to `None`):
+        scale_hw (`tuple[float, float]`, *optional*, defaults to `None`):
             Tuple containing scaling factors for the video's height and width dimensions during `"video_outpainting"` mode.
             It is only applicable during `"video_outpainting"` mode. If `None`, no scaling is applied and code execution will end.
-        num_frames (`int`, *optional*, defaults to `None`):
-            The number of frames in a video.
         data_format (`str` or `ChannelDimension`, *optional*):
             The channel dimension format of the image. If not provided, it will be the same as the input image.
         input_data_format (`str` or `ChannelDimension`, *optional*):
@@ -407,7 +403,7 @@ class ProPainterVideoProcessor(BaseImageProcessor):
             *[
                 extrapolation(
                     image=image,
-                    scale=scale,
+                    scale_hw=scale_hw,
                     data_format=data_format,
                     input_data_format=input_data_format,
                 )
@@ -569,7 +565,7 @@ class ProPainterVideoProcessor(BaseImageProcessor):
             resample (`PILImageResampling`, *optional*, defaults to `self.resample`):
                 Resampling filter to use if resizing the video. This can be one of the enum `PILImageResampling`, Only
                 has an effect if `do_resize` is set to `True`.
-            do_center_crop (`bool`, *optional*, defaults to `self.do_centre_crop`):
+            do_center_crop (`bool`, *optional*, defaults to `self.do_center_crop`):
                 Whether to centre crop the video.
             crop_size (`Dict[str, int]`, *optional*, defaults to `self.crop_size`):
                 Size of the video after applying the centre crop.
@@ -715,7 +711,7 @@ class ProPainterVideoProcessor(BaseImageProcessor):
                     *[
                         self._extrapolation(
                             video,
-                            scale=scale_hw,
+                            scale_hw=scale_hw,
                             data_format=data_format,
                             input_data_format=input_data_format,
                         )

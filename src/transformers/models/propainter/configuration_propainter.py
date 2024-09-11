@@ -79,7 +79,7 @@ class ProPainterConfig(PretrainedConfig):
             The size of the 3d convolution kernels for discriminator modules used to calculate losses.
         padding_inpaint_generator (`List[int, int]`, *optional*, defaults to `[3, 3]`):
             The padding size for the convolution kernels in inpaint_generator module.
-        padding (int`, *optional*, defaults to `1`):
+        padding (`int`, *optional*, defaults to `1`):
             The padding size for the convolution kernels.
         stride (`List[int, int]`, *optional*, defaults to `[3, 3]`):
             The stride for the convolution kernels.
@@ -101,7 +101,7 @@ class ProPainterConfig(PretrainedConfig):
             The number of channels at different levels of the model.
         strides (`List[int, int, int]`, *optional*, defaults to `[1, 2, 2]`):
             The stride values for the convolution layers at different levels of the model.
-        norm_fn (`List[str, str, str]`, *optional*, defaults to `["batch", "group", "instance", "none"]`):
+        norm_fn (`List[str, str, str, str]`, *optional*, defaults to `["batch", "group", "instance", "none"]`):
             The type of normalization to use in the model. Available options are:
             - `"batch"`: Use Batch Normalization.
             - `"group"`: Use Group Normalization.
@@ -151,6 +151,7 @@ class ProPainterConfig(PretrainedConfig):
         kernel_size_3d=[1, 3, 3],
         kernel_size_3d_discriminator=[3, 5, 5],
         padding_inpaint_generator=[3, 3],
+        padding=1,
         stride=[3, 3],
         stride_3d=[1, 1, 1],
         num_hidden_layers=8,
@@ -163,7 +164,6 @@ class ProPainterConfig(PretrainedConfig):
         strides=[1, 2, 2],
         norm_fn=["batch", "group", "instance", "none"],
         patch_size=3,
-        padding=1,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -188,7 +188,9 @@ class ProPainterConfig(PretrainedConfig):
         self.hidden_size = hidden_size
         self.kernel_size = kernel_size
         self.kernel_size_3d = kernel_size_3d
+        self.kernel_size_3d_discriminator = kernel_size_3d_discriminator
         self.padding_inpaint_generator = padding_inpaint_generator
+        self.padding = padding
         self.stride = stride
         self.stride_3d = stride_3d
         self.num_hidden_layers = num_hidden_layers
@@ -201,5 +203,3 @@ class ProPainterConfig(PretrainedConfig):
         self.strides = strides
         self.norm_fn = norm_fn
         self.patch_size = patch_size
-        self.padding = padding
-        self.kernel_size_3d_discriminator = kernel_size_3d_discriminator
