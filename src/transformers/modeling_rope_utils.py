@@ -362,10 +362,10 @@ ROPE_INIT_FUNCTIONS = {
 
 def _check_received_keys(rope_type: str, received_keys: set, required_keys: set, optional_keys: Optional[set] = None):
     """Compare the received keys in `config.rope_scaling` against the expected and optional keys"""
-    # BC: "rope_type" was originally "type" -- let's gracefully handle it
-    if "rope_type" not in received_keys and "type" in received_keys:
+    # BC: "rope_type" was originally "type" -- let's check for "rope_type" when "type" is present
+    if "type" in received_keys:
         received_keys -= {"type"}
-        received_keys.add("rope_type")
+        required_keys.add("rope_type")
 
     missing_keys = required_keys - received_keys
     if missing_keys:
@@ -487,10 +487,11 @@ def _validate_longrope_parameters(config: PretrainedConfig):
             logger.warning(f"`rope_scaling`'s factor field must be a float >= 1, got {factor}")
 
         attention_factor = rope_scaling.get("attention_factor")
-        if attention_factor is not None and not isinstance(attention_factor, float) or attention_factor < 0:
-            logger.warning(
-                f"`rope_scaling`'s attention_factor field must be a float greater than 0, got {attention_factor}"
-            )
+        if attention_factor is not None:
+            if not isinstance(attention_factor, float) or attention_factor < 0.0:
+                logger.warning(
+                    f"`rope_scaling`'s attention_factor field must be a float greater than 0, got {attention_factor}"
+                )
 
 
 def _validate_llama3_parameters(config: PretrainedConfig):

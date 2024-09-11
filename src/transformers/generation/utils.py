@@ -29,15 +29,8 @@ from ..cache_utils import (
     Cache,
     DynamicCache,
     EncoderDecoderCache,
-    HQQQuantizedCache,
-    HybridCache,
-    MambaCache,
     OffloadedCache,
-    OffloadedStaticCache,
     QuantizedCacheConfig,
-    QuantoQuantizedCache,
-    SlidingWindowCache,
-    StaticCache,
 )
 from ..integrations.deepspeed import is_deepspeed_zero3_enabled
 from ..modeling_outputs import CausalLMOutputWithPast, Seq2SeqLMOutput
@@ -68,7 +61,12 @@ from .candidate_generator import (
     _prepare_attention_mask,
     _prepare_token_type_ids,
 )
-from .configuration_utils import GenerationConfig, GenerationMode
+from .configuration_utils import (
+    NEED_SETUP_CACHE_CLASSES_MAPPING,
+    QUANT_BACKEND_CLASSES_MAPPING,
+    GenerationConfig,
+    GenerationMode,
+)
 from .logits_process import (
     EncoderNoRepeatNGramLogitsProcessor,
     EncoderRepetitionPenaltyLogitsProcessor,
@@ -117,15 +115,6 @@ logger = logging.get_logger(__name__)
 
 if is_accelerate_available():
     from accelerate.hooks import AlignDevicesHook, add_hook_to_module
-
-NEED_SETUP_CACHE_CLASSES_MAPPING = {
-    "static": StaticCache,
-    "offloaded_static": OffloadedStaticCache,
-    "sliding_window": SlidingWindowCache,
-    "hybrid": HybridCache,
-    "mamba": MambaCache,
-}
-QUANT_BACKEND_CLASSES_MAPPING = {"quanto": QuantoQuantizedCache, "HQQ": HQQQuantizedCache}
 
 
 @dataclass
@@ -1450,8 +1439,8 @@ class GenerationMixin:
                     cache_dtype = self.get_output_embeddings().weight.dtype
 
             cache_kwargs = {
-                "config": self.config,
-                "batch_size": batch_size,
+                "config": self.config if hasattr(self.config, "text_config") else self.config,
+                "max_batch_size": batch_size,
                 "max_cache_len": max_cache_len,
                 "device": device,
                 "dtype": cache_dtype,
@@ -1481,6 +1470,7 @@ class GenerationMixin:
         model_kwargs: Dict,
         assistant_model: "PreTrainedModel",
         batch_size: int,
+        max_cache_length: int,
         device: torch.device,
     ) -> bool:
         """
@@ -1547,8 +1537,8 @@ class GenerationMixin:
                     )
                 model_kwargs[cache_name] = self._get_cache(
                     cache_implementation=generation_config.cache_implementation,
-                    batch_size=generation_config.num_beams * generation_config.num_return_sequences * batch_size,
-                    max_cache_len=generation_config.max_length,
+                    batch_size=max(generation_config.num_beams, generation_config.num_return_sequences) * batch_size,
+                    max_cache_len=max_cache_length,
                     device=device,
                     model_kwargs=model_kwargs,
                 )
@@ -1639,13 +1629,14 @@ class GenerationMixin:
 
         # Set pad token if unset (and there are conditions to do so)
         if pad_token_tensor is None and eos_token_tensor is not None:
-            if kwargs_has_attention_mask is not None and not kwargs_has_attention_mask:
-                logger.warning(
-                    "The attention mask and the pad token id were not set. As a consequence, you may observe "
-                    "unexpected behavior. Please pass your input's `attention_mask` to obtain reliable results."
-                )
+            if not is_torchdynamo_compiling():
+                if kwargs_has_attention_mask is not None and not kwargs_has_attention_mask:
+                    logger.warning(
+                        "The attention mask and the pad token id were not set. As a consequence, you may observe "
+                        "unexpected behavior. Please pass your input's `attention_mask` to obtain reliable results."
+                    )
+                logger.warning(f"Setting `pad_token_id` to `eos_token_id`:{pad_token_tensor} for open-end generation.")
             pad_token_tensor = eos_token_tensor[0]
-            logger.warning(f"Setting `pad_token_id` to `eos_token_id`:{pad_token_tensor} for open-end generation.")
 
         # Sanity checks/warnings
         if self.config.is_encoder_decoder and decoder_start_token_tensor is None:
@@ -1888,7 +1879,16 @@ class GenerationMixin:
         # TODO (joao): remove `user_defined_cache` after v4.47 (remove default conversion to legacy format)
         cache_name = "past_key_values" if "mamba" not in self.__class__.__name__.lower() else "cache_params"
         user_defined_cache = model_kwargs.get(cache_name)
-        self._prepare_cache_for_generation(generation_config, model_kwargs, assistant_model, batch_size, device)
+        max_cache_length = generation_config.max_length
+        if (
+            inputs_tensor.shape[1] != input_ids_length
+            and model_input_name == "inputs_embeds"
+            and not self.config.is_encoder_decoder
+        ):
+            max_cache_length += inputs_tensor.shape[1]
+        self._prepare_cache_for_generation(
+            generation_config, model_kwargs, assistant_model, batch_size, max_cache_length, device
+        )
 
         # 8. determine generation mode
         generation_mode = generation_config.get_generation_mode(assistant_model)
@@ -1936,8 +1936,8 @@ class GenerationMixin:
                 raise ValueError("assisted generate is only supported for batch_size = 1")
             if not model_kwargs["use_cache"]:
                 raise ValueError("assisted generate requires `use_cache=True`")
-            if generation_config.cache_implementation == "static":
-                raise ValueError("assisted generate is not supported with `static_cache`")
+            if generation_config.cache_implementation in ["static", "hybrid", "sliding_window"]:
+                raise ValueError("assisted generate is not supported with Static cache classes`")
             if self._is_stateful:
                 # In assisted generation we need the ability to confirm whether the model would pick certain tokens,
                 # which is not possible with stateful models (they can't reset to a previous subset of generated text)
@@ -2353,7 +2353,11 @@ class GenerationMixin:
         this_peer_finished = False
 
         # prepare layers for DoLa decoding
-        final_layer = self.config.num_hidden_layers
+        final_layer = (
+            self.config.text_config.num_hidden_layers
+            if hasattr(self.config, "text_config")
+            else self.config.num_hidden_layers
+        )
         # if the model has tied word embeddings, we skip the word embeddings (0-th) layer and start from the 2nd layer,
         # as the early exit from word embeddings will become identity function
         # if the model is really shallow (<=2 layers), we use the 1st layer if it's not the final layer and the 0-th
