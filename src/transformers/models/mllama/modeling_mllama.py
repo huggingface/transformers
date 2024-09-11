@@ -599,12 +599,8 @@ class MllamaVisionModel(PreTrainedModel):
 
         projection_input_dim = (len(self.vision_selection_layers) + 1) * config.vision_input_dim
         self.output_dim = config.projection_dim
-        self.vision_projection = nn.Linear(
-            projection_input_dim,
-            config.projection_dim,
-            #! originally bias=True, but bias was not used in original forward pass
-            bias=False,
-        )
+        #! originally bias=True, but bias was not used in original forward pass
+        self.vision_projection = nn.Linear(projection_input_dim, config.projection_dim, bias=False)
 
     def apply_positional_embedding(self, hidden_state: torch.Tensor, aspect_ratio_ids: torch.Tensor) -> torch.Tensor:
         bsz, num_chunks, num_tokens, dim = hidden_state.shape

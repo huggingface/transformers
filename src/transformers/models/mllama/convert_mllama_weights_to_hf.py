@@ -248,6 +248,7 @@ def write_model(
     model.load_state_dict(state_dict, strict=True, assign=True)
     model.save_pretrained(model_path, safe_serialization=safe_serialization)
 
+    # Safety check: reload the converted model
     mllama_model = MllamaForConditionalGeneration.from_pretrained(model_path, torch_dtype=torch.bfloat16, device_map="auto")
     # Avoid saving this as part of the config.
     del mllama_model.config._name_or_path
