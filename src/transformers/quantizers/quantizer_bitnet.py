@@ -45,12 +45,7 @@ class BitNetHfQuantizer(HfQuantizer):
         self.quantization_config = quantization_config
 
     def validate_environment(self, *args, **kwargs):
-        # if not is_bitblas_available():
-        #     raise ImportError(
-        #         "Using bitnet quantization requires bitblas kernel."
-        #         "Please install the latest version of bitblas from : https://github.com/microsoft/BitBLAS"
-        #     )
-
+    
         if not is_accelerate_available():
             raise ImportError("Loading an BitNet quantized model requires accelerate (`pip install accelerate`)")
 

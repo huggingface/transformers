@@ -100,7 +100,6 @@ _aqlm_available = _is_package_available("aqlm")
 _av_available = importlib.util.find_spec("av") is not None
 _bitsandbytes_available = _is_package_available("bitsandbytes")
 _eetq_available = _is_package_available("eetq")
-_bitblas_available = _is_package_available("bitblas")
 _fbgemm_gpu_available = _is_package_available("fbgemm_gpu")
 _galore_torch_available = _is_package_available("galore_torch")
 _lomo_available = _is_package_available("lomo_optim")
@@ -960,9 +959,6 @@ def is_eetq_available():
 
 def is_fbgemm_gpu_available():
     return _fbgemm_gpu_available
-
-def is_bitblas_available() :
-    return _bitblas_available
 
 
 def is_levenshtein_available():
