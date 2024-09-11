@@ -18,12 +18,7 @@ import numpy as np
 
 from transformers.models.whisper import WhisperTokenizer, WhisperTokenizerFast
 from transformers.models.whisper.tokenization_whisper import _combine_tokens_into_words, _find_longest_common_sequence
-from transformers.testing_utils import (
-    require_flax,
-    require_tf,
-    require_torch,
-    slow,
-)
+from transformers.testing_utils import require_flax, require_tf, require_torch, slow
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
@@ -142,7 +137,7 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
                     " small, sharp blow high on his chest.<|endoftext|>"
                 ),
                 "offsets": [
-                     {"text": " of spectators, retrievality is not worth thinking about.", "timestamp": (0.0, 5.0)},
+                    {"text": " of spectators, retrievality is not worth thinking about.", "timestamp": (0.0, 5.0)},
                     {
                         "text": " His instant panic was followed by a small, sharp blow high on his chest.",
                         "timestamp": (5.0, 9.4),
