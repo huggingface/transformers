@@ -45,6 +45,8 @@ class FbgemmFp8Linear(torch.nn.Module):
 
     def forward(self, x):
         num_tokens = None
+        # quantize_fp8_per_row will squash the leading dimensions, so save the desired shape here
+        output_shape = (*x.shape[:-1], -1)
         # x_quantized and x_scale are not necessarily on the same device as x, this is an issue.
         # https://github.com/pytorch/FBGEMM/blob/e08af8539c391437f447173863df0f3f6f6f1855/fbgemm_gpu/experimental/gen_ai/src/quantize/quantize.cu#L1237C3-L1237C45
         x_quantized, x_scale = torch.ops.fbgemm.quantize_fp8_per_row(
@@ -60,6 +62,7 @@ class FbgemmFp8Linear(torch.nn.Module):
         output = output + self.bias if self.bias is not None else output
         # Hacky for now, we have the output to the device of x
         output = output.to(x.device)
+        output = output.reshape(output_shape)
         del x_quantized, x_scale
         return output
 
