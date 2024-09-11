@@ -47,18 +47,18 @@ class TimesFMConfig(PretrainedConfig):
             The tolerance for the quantile loss.
         freq_size (`int`, *optional*, defaults to 3):
             The number of frequency embeddings.
-        d_model (`int`, *optional*, defaults to 512):
+        d_model (`int`, *optional*, defaults to 1280):
             Size of the encoder layers and the pooler layer.
-        d_kv (`int`, *optional*, defaults to 64):
+        d_kv (`int`, *optional*, defaults to 80):
             Size of the key, query, value projections per attention head. The `inner_dim` of the projection layer will
             be defined as `num_heads * d_kv`.
         d_ff (`int`, *optional*, defaults to 1280):
             Size of the intermediate feed forward layer in each `TimesFMBlock`.
-        num_layers (`int`, *optional*, defaults to 6):
+        num_layers (`int`, *optional*, defaults to 20):
             Number of hidden layers in the Transformer encoder.
         num_decoder_layers (`int`, *optional*):
             Number of hidden layers in the Transformer decoder. Will use the same value as `num_layers` if not set.
-        num_heads (`int`, *optional*, defaults to 8):
+        num_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the Transformer encoder.
         relative_attention_num_buckets (`int`, *optional*, defaults to 32):
             The number of buckets to use for each attention layer.
