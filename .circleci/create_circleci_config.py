@@ -119,6 +119,7 @@ class CircleCIJob:
             {"attach_workspace": {"at": "test_preparation"}},
             {"run": "apt-get update && apt-get install -y curl"},
             {"run": " && ".join(self.install_steps)},
+            {"run": {"name": "Install datasets@main", "command": 'pip uninstall datasets -y && pip install "datasets @ git+https://github.com/huggingface/datasets@main#egg=datasets"'}},
             {"run": {"name": "Download NLTK files", "command": """python -c "import nltk; nltk.download('punkt', quiet=True)" """} if "example" in self.name else "echo Skipping"},
             {"run": {
                     "name": "Show installed libraries and their size",
