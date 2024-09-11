@@ -598,11 +598,6 @@ class GenerationMixin:
                     and isinstance(dict_to_expand[key], torch.Tensor)
                 ):
                     dict_to_expand[key] = dict_to_expand[key].repeat_interleave(expand_size, dim=0)
-                elif isinstance(dict_to_expand[key], list):
-                    temp_list = []
-                    for sublist in dict_to_expand[key]:
-                        temp_list.extend([sublist] * expand_size)
-                    dict_to_expand[key] = temp_list
             return dict_to_expand
 
         if input_ids is not None:
@@ -1580,9 +1575,9 @@ class GenerationMixin:
         # keeps copying the cache thus using much more memory
         else:
             model_kwargs[cache_name] = (
-                DynamicCache()
+                DynamicCache(self.config.get_text_config())
                 if not requires_cross_attention_cache
-                else EncoderDecoderCache(DynamicCache(), DynamicCache())
+                else EncoderDecoderCache(DynamicCache(self.config.get_text_config()), DynamicCache(self.config.get_text_config()))
             )
 
     def _supports_num_logits_to_keep(self) -> bool:
@@ -2969,7 +2964,7 @@ class GenerationMixin:
 
             # Clone is needed to avoid keeping a hanging ref to outputs.logits which may be very large for first iteration
             # (the clone itself is always small)
-            next_token_logits = outputs.logits.clone()[:, -1, :]
+            next_token_logits = outputs.logits.clone()[:, -1, :].float()
 
             # pre-process distribution
             next_token_scores = logits_processor(input_ids, next_token_logits)

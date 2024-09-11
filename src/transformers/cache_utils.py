@@ -318,10 +318,10 @@ class DynamicCache(Cache):
         ```
     """
 
-    def __init__(self) -> None:
+    def __init__(self, config: PretrainedConfig) -> None:
         super().__init__()
-        self.key_cache: List[torch.Tensor] = []
-        self.value_cache: List[torch.Tensor] = []
+        self.key_cache: List[torch.Tensor] = [[] for _ in range(config.num_hidden_layers)]
+        self.value_cache: List[torch.Tensor] = [[] for _ in range(config.num_hidden_layers)]
         self._seen_tokens = 0  # Used in `generate` to keep tally of how many tokens the cache has seen
 
     def __getitem__(self, layer_idx: int) -> List[Tuple[torch.Tensor]]:
@@ -377,9 +377,9 @@ class DynamicCache(Cache):
             self._seen_tokens += key_states.shape[-2]
 
         # Update the cache
-        if len(self.key_cache) <= layer_idx:
-            self.key_cache.append(key_states)
-            self.value_cache.append(value_states)
+        if self.key_cache[layer_idx] == []:
+            self.key_cache[layer_idx] = key_states
+            self.value_cache[layer_idx] = value_states
         else:
             self.key_cache[layer_idx] = torch.cat([self.key_cache[layer_idx], key_states], dim=-2)
             self.value_cache[layer_idx] = torch.cat([self.value_cache[layer_idx], value_states], dim=-2)
@@ -389,7 +389,7 @@ class DynamicCache(Cache):
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
         # TODO: deprecate this function in favor of `cache_position`
-        if len(self.key_cache) <= layer_idx:
+        if self.key_cache[layer_idx] == []:
             return 0
         return self.key_cache[layer_idx].shape[-2]
 
@@ -1355,7 +1355,8 @@ class EncoderDecoderCache(Cache):
 
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
-        if len(self.self_attention_cache.key_cache) <= layer_idx:
+        # check if empty list because in case of static cache it will be a tensors and we can't check `if not torch.Tensor`
+        if self.self_attention_cache.key_cache[layer_idx] == []:
             return 0
         return (self.self_attention_cache.key_cache[layer_idx][0, 0].any(dim=-1)).sum()
 

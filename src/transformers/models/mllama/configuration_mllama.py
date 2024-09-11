@@ -43,8 +43,6 @@ class MllamaVisionConfig(PretrainedConfig):
             The config object or dictionary of the text backbone.
         ignore_index (`int`, *optional*, defaults to -100):
             The ignore index for the loss function.
-        image_token_index (`int`, *optional*, defaults to 32000):
-            The image token index to encode the image prompt.
         projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
             The activation function used by the multimodal projector.
         vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
@@ -161,8 +159,6 @@ class MllamaTextConfig(PretrainedConfig):
             The config object or dictionary of the text backbone.
         ignore_index (`int`, *optional*, defaults to -100):
             The ignore index for the loss function.
-        image_token_index (`int`, *optional*, defaults to 32000):
-            The image token index to encode the image prompt.
         projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
             The activation function used by the multimodal projector.
         vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
@@ -284,7 +280,7 @@ class MllamaConfig(PretrainedConfig):
             The config object or dictionary of the text backbone.
         ignore_index (`int`, *optional*, defaults to -100):
             The ignore index for the loss function.
-        image_token_index (`int`, *optional*, defaults to 32000):
+        image_token_index (`int`, *optional*, defaults to 128256):
             The image token index to encode the image prompt.
         projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
             The activation function used by the multimodal projector.
@@ -322,6 +318,7 @@ class MllamaConfig(PretrainedConfig):
         self,
         vision_config=None,
         text_config=None,
+        image_token_index=128256,
         **kwargs,
     ):
         if vision_config is None:
@@ -331,6 +328,8 @@ class MllamaConfig(PretrainedConfig):
             self.vision_config = MllamaVisionConfig(**vision_config)
         elif isinstance(vision_config, MllamaVisionConfig):
             self.vision_config = vision_config
+        
+        self.image_token_index = image_token_index
 
         if text_config is None:
             self.text_config = MllamaTextConfig()
