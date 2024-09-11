@@ -148,6 +148,7 @@ jobs:
   run_pipelines_torch_gpu:
     if: ${{ inputs.job == 'run_pipelines_torch_gpu' }}
     name: PyTorch pipelines
+    needs: check_runners
     strategy:
       fail-fast: false
       matrix:
@@ -156,7 +157,6 @@ jobs:
     container:
       image: ${{ inputs.docker }}
       options: --device /dev/kfd --device /dev/dri --env ROCR_VISIBLE_DEVICES --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
-    needs: setup
     steps:
       - name: Update clone
         working-directory: /transformers
@@ -207,6 +207,7 @@ jobs:
   run_examples_gpu:
     if: ${{ inputs.job == 'run_examples_gpu' }}
     name: Examples directory
+    needs: check_runners
     strategy:
       fail-fast: false
       matrix:
@@ -215,7 +216,6 @@ jobs:
     container:
       image: ${{ inputs.docker }}
       options: --device /dev/kfd --device /dev/dri --env ROCR_VISIBLE_DEVICES --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
-    needs: setup
     steps:
       - name: Update clone
         working-directory: /transformers
@@ -265,7 +265,9 @@ jobs:
           path: /transformers/reports/${{ matrix.machine_type }}_run_examples_gpu_test_reports
 
   run_torch_cuda_extensions_gpu:
+    if: ${{ inputs.job == 'run_torch_cuda_extensions_gpu' }}
     name: Torch ROCm deepspeed tests
+    needs: check_runners
     strategy:
       fail-fast: false
       matrix:
@@ -274,7 +276,6 @@ jobs:
     container:
       image: ${{ inputs.docker }}
       options: --device /dev/kfd --device /dev/dri --env ROCR_VISIBLE_DEVICES --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
-    needs: setup
     steps:
       - name: Update clone
         working-directory: /transformers
@@ -341,6 +342,7 @@ jobs:
       slack_report_channel: ${{ inputs.slack_report_channel }}
       # This would be an empty string if `setup` is skipped.
       folder_slices: ${{ needs.setup.outputs.folder_slices }}
+      quantization_matrix: ${{ needs.setup.outputs.quantization_matrix }}
       ci_event: ${{ inputs.ci_event }}
 
     secrets: inherit
