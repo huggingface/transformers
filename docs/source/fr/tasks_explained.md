@@ -95,13 +95,6 @@ ViT et ConvNeXT peuvent tous deux être utilisés pour la classification d'image
 </div>
 
 Le principal changement introduit par ViT concerne la façon dont les images sont fournies à un Transformer :
-### Classification d'images
-
-ViT et ConvNeXT peuvent tous deux être utilisés pour la classification d'images ; la principale différence réside dans leurs approches : ViT utilise un mécanisme d'attention tandis que ConvNeXT repose sur des convolutions.
-
-#### Transformer
-
-[ViT](model_doc/vit) remplace entièrement les convolutions par une architecture Transformer pure. Voici les principales étapes pour la classification d'images avec ViT :
 
 1. **Tokenisation des images** : L'image est divisée en patches carrés non chevauchants, chacun étant transformé en un vecteur ou *embedding de patch*. Ces embeddings de patch sont générés à partir d'une couche convolutionnelle 2D pour adapter les dimensions d'entrée (par exemple, 768 valeurs pour chaque embedding de patch). Si vous avez une image de 224x224 pixels, elle peut être divisée en 196 patches de 16x16 pixels. Ainsi, une image est "tokenisée" en une séquence de patches.
 
@@ -158,8 +151,6 @@ La sortie des blocs de convolution est ensuite passée à une tête de classific
 </div>
 
 Décomposons le fonctionnement de DETR (DEtection TRansformer) pour la détection d'objets :
-
-### DETR (DEtection TRansformer) pour la détection d'objets
 
 1. **Extraction des caractéristiques avec le CNN** : Un CNN préentraîné, appelé *backbone*, prend une image et génère une carte de caractéristiques (*feature map*) à basse résolution. Une convolution 1x1 est ensuite appliquée pour réduire la dimensionnalité et créer une nouvelle carte de caractéristiques qui représente des abstractions de plus haut niveau de l'image. Cette dernière est ensuite aplatie en une séquence de vecteurs de caractéristiques, qui sont combinés avec des embeddings positionnels.
 
