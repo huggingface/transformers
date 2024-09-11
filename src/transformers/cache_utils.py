@@ -293,6 +293,46 @@ class QuantizedCacheConfig(CacheConfig):
             )
 
 
+@dataclass
+class StaticCacheConfig(CacheConfig):
+    """
+    Configuration class for static cache settings.
+    """
+
+    cache_implementation = "static"
+
+    def __init__(self, batch_size: int, max_cache_len: int, device="cpu"):
+        self.batch_size = batch_size
+        self.max_cache_len = max_cache_len
+        self.device = device
+
+    def validate(self):
+        """Validates if the arguments passed are correct"""
+
+        incorrect_arg_msg = (
+            "Some of the keys in `cache_config` are defined incorrectly. `{key}` should be {correct_value}` "
+            "but found {found_value}"
+        )
+
+        if self.batch_size <= 0:
+            raise ValueError(
+                incorrect_arg_msg.format(
+                    key="batch_size",
+                    correct_value="> 0",
+                    found_value=self.batch_size,
+                ),
+            )
+
+        if self.max_cache_len <= 0:
+            raise ValueError(
+                incorrect_arg_msg.format(
+                    key="max_cache_len",
+                    correct_value="> 0",
+                    found_value=self.max_cache_len,
+                ),
+            )
+
+
 class DynamicCache(Cache):
     """
     A cache that grows dynamically as more tokens are generated. This is the default for generative models.
@@ -305,15 +345,16 @@ class DynamicCache(Cache):
         ```python
         >>> from transformers import AutoTokenizer, AutoModelForCausalLM, DynamicCache
 
-        >>> model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
-        >>> tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
+        >>> model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2-0.5B-Instruct")
+        >>> tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-0.5B-Instruct")
 
-        >>> inputs = tokenizer(text="My name is GPT2", return_tensors="pt")
+        >>> inputs = tokenizer(text="My name is Qwen2", return_tensors="pt")
 
         >>> # Prepare a cache class and pass it to model's forward
         >>> past_key_values = DynamicCache()
         >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
-        >>> past_kv_length = outputs.past_key_values # access cache filled with key/values from generation
+        >>> outputs.past_key_values # access cache filled with key/values from generation
+        DynamicCache()
         ```
     """
 
@@ -680,16 +721,17 @@ class QuantoQuantizedCache(QuantizedCache):
         >>> # Run pip install quanto first if you don't have it yet
         >>> from transformers import AutoTokenizer, AutoModelForCausalLM, QuantoQuantizedCache, QuantizedCacheConfig
 
-        >>> model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
-        >>> tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
+        >>> model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2-0.5B-Instruct")
+        >>> tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-0.5B-Instruct")
 
-        >>> inputs = tokenizer(text="My name is GPT2", return_tensors="pt")
+        >>> inputs = tokenizer(text="My name is Qwen2", return_tensors="pt")
 
         >>> # Prepare a cache class and pass it to model's forward
         >>> cache_config = QuantizedCacheConfig(nbits=4)
         >>> past_key_values = QuantoQuantizedCache(cache_config=cache_config)
         >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
-        >>> past_kv_length = outputs.past_key_values # access cache filled with key/values from generation
+        >>> outputs.past_key_values # access cache filled with key/values from generation
+        QuantoQuantizedCache()
         ```
     """
 
@@ -739,16 +781,17 @@ class HQQQuantizedCache(QuantizedCache):
         >>> # Run pip install hqq first if you don't have it yet
         >>> from transformers import AutoTokenizer, AutoModelForCausalLM, HQQQuantizedCache, QuantizedCacheConfig
 
-        >>> model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
-        >>> tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
+        >>> model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2-0.5B-Instruct")
+        >>> tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-0.5B-Instruct")
 
-        >>> inputs = tokenizer(text="My name is GPT2", return_tensors="pt")
+        >>> inputs = tokenizer(text="My name is Qwen2", return_tensors="pt")
 
         >>> # Prepare a cache class and pass it to model's forward
         >>> cache_config = QuantizedCacheConfig(nbits=4, axis_key=1, axis_value=1)
         >>> past_key_values = HQQQuantizedCache(cache_config=cache_config)
         >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
-        >>> past_kv_length = outputs.past_key_values # access cache filled with key/values from generation
+        >>> outputs.past_key_values # access cache filled with key/values from generation
+        HQQQuantizedCache()
         ```
     """
 
@@ -806,15 +849,16 @@ class SinkCache(Cache):
         ```python
         >>> from transformers import AutoTokenizer, AutoModelForCausalLM, SinkCache
 
-        >>> model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
-        >>> tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
+        >>> model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2-0.5B-Instruct")
+        >>> tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-0.5B-Instruct")
 
-        >>> inputs = tokenizer(text="My name is GPT2", return_tensors="pt")
+        >>> inputs = tokenizer(text="My name is Qwen2", return_tensors="pt")
 
         >>> # Prepare a cache class and pass it to model's forward
         >>> past_key_values = SinkCache(window_length=256, num_sink_tokens=4)
         >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
-        >>> past_kv_length = outputs.past_key_values # access cache filled with key/values from generation
+        >>> outputs.past_key_values # access cache filled with key/values from generation
+        SinkCache()
         ```
     """
 
@@ -992,17 +1036,18 @@ class StaticCache(Cache):
         ```python
         >>> from transformers import AutoTokenizer, AutoModelForCausalLM, StaticCache
 
-        >>> model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
-        >>> tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
+        >>> model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
+        >>> tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
 
-        >>> inputs = tokenizer(text="My name is GPT2", return_tensors="pt")
+        >>> inputs = tokenizer(text="My name is Llama", return_tensors="pt")
 
         >>> # Prepare a cache class and pass it to model's forward
         >>> # Leave empty space for 10 new tokens, which can be used when calling forward iteratively 10 times to generate
         >>> max_generated_length = inputs.input_ids.shape[1] + 10
         >>> past_key_values = StaticCache(config=model.config, batch_size=1, max_cache_len=max_generated_length, device=model.device, dtype=model.dtype)
         >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
-        >>> past_kv_length = outputs.past_key_values # access cache filled with key/values from generation
+        >>> outputs.past_key_values # access cache filled with key/values from generation
+        StaticCache()
         ```
     """
 
@@ -1025,6 +1070,7 @@ class StaticCache(Cache):
 
         self.batch_size = batch_size or max_batch_size
         self.max_cache_len = config.max_position_embeddings if max_cache_len is None else max_cache_len
+
         # Some model define a custom `head_dim` != config.hidden_size // config.num_attention_heads
         self.head_dim = (
             config.head_dim if hasattr(config, "head_dim") else config.hidden_size // config.num_attention_heads
@@ -1161,17 +1207,18 @@ class SlidingWindowCache(StaticCache):
         ```python
         >>> from transformers import AutoTokenizer, AutoModelForCausalLM, SlidingWindowCache
 
-        >>> model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
-        >>> tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
+        >>> model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-Instruct-v0.3")
+        >>> tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-Instruct-v0.3")
 
-        >>> inputs = tokenizer(text="My name is GPT2", return_tensors="pt")
+        >>> inputs = tokenizer(text="My name is Mistral", return_tensors="pt")
 
         >>> # Prepare a cache class and pass it to model's forward
         >>> # Leave empty space for 10 new tokens, which can be used when calling forward iteratively 10 times to generate
         >>> max_generated_length = inputs.input_ids.shape[1] + 10
         >>> past_key_values = SlidingWindowCache(config=model.config, batch_size=1, max_cache_len=max_generated_length, device=model.device, dtype=model.dtype)
         >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
-        >>> past_kv_length = outputs.past_key_values # access cache filled with key/values from generation
+        >>> outputs.past_key_values # access cache filled with key/values from generation
+        SlidingWindowCache()
         ```
     """
 
@@ -1281,7 +1328,8 @@ class EncoderDecoderCache(Cache):
         >>> cross_attention_cache = DynamicCache()
         >>> past_key_values = EncoderDecoderCache(self_attention_cache, cross_attention_cache)
         >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
-        >>> past_kv_length = outputs.past_key_values # access cache filled with key/values from generation
+        >>> outputs.past_key_values # access cache filled with key/values from generation
+        EncoderDecoderCache()
         ```
 
     """
@@ -1453,8 +1501,8 @@ class HybridCache(Cache):
         ```python
         >>> from transformers import AutoTokenizer, AutoModelForCausalLM, HybridCache
 
-        >>> model = AutoModelForCausalLM.from_pretrained("google/gemma-2-9b")
-        >>> tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-9b")
+        >>> model = AutoModelForCausalLM.from_pretrained("google/gemma-2-2b")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-2b")
 
         >>> inputs = tokenizer(text="My name is Gemma", return_tensors="pt")
 
@@ -1463,7 +1511,8 @@ class HybridCache(Cache):
         >>> max_generated_length = inputs.input_ids.shape[1] + 10
         >>> past_key_values = HybridCache(config=model.config, batch_size=1, max_cache_len=max_generated_length, device=model.device, dtype=model.dtype)
         >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
-        >>> past_kv_length = outputs.past_key_values # access cache filled with key/values from generation
+        >>> outputs.past_key_values # access cache filled with key/values from generation
+        HybridCache()
         ```
     """
 
@@ -1645,7 +1694,8 @@ class MambaCache:
         >>> # Prepare a cache class and pass it to model's forward
         >>> past_key_values = MambaCache(config=model.config, batch_size=1, device=model.device, dtype=model.dtype)
         >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
-        >>> past_kv = outputs.past_key_values
+        >>> outputs.past_key_values
+        MambaCache()
         ```
     """
 
