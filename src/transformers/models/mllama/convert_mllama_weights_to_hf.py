@@ -229,8 +229,7 @@ def write_model(
 
     if params.get("n_kv_heads", None) is not None:
         num_key_value_heads = params["n_kv_heads"]  # for GQA / MQA
-        num_local_key_value_heads = n_heads_per_shard // num_key_value_heads
-        key_value_dim = dim // num_local_key_value_heads
+        num_local_key_value_heads = num_key_value_heads // num_shards
         key_value_dim = dims_per_head * num_key_value_heads
     else:  # compatibility with other checkpoints
         num_key_value_heads = n_heads
@@ -239,7 +238,7 @@ def write_model(
 
     print(f"Fetching all parameters from the checkpoint at {input_base_path}.")
     if num_shards == 1:
-        loaded = [torch.load(os.path.join(input_base_path, "consolidated.pth"), map_location="cpu")]
+        loaded = [torch.load(os.path.join(input_base_path, "consolidated.pth"), map_location="cpu", mmap=True)]
     else:
         loaded = [
             torch.load(os.path.join(input_base_path, f"consolidated.{i:02d}.pth"), map_location="cpu", mmap=True)
