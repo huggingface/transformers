@@ -1489,6 +1489,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
         self.language_model = MllamaForCausalLM(config.text_config)
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self.post_init()
+        self.hidden_size = self.config.text_config.hidden_size
         self.max_num_tiles = config.vision_config.max_num_tiles
         self.vision_output_dim = config.vision_config.vision_output_dim
 
@@ -1555,6 +1556,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
                 raise ValueError("`aspect_ratio_ids` must be provided if `pixel_values` is provided")
             # get vision tokens from vision model
             cross_attention_states = self.vision_model(pixel_values, aspect_ratio_ids, aspect_ratio_mask)
+            cross_attention_states = self.multi_modal_projector(cross_attention_states).reshape(-1, cross_attention_states.shape[-2],self.hidden_size)
 
         cross_attention_mask, full_text_row_masked_out_mask = prepare_cross_attention_mask(
             cross_attention_mask,
