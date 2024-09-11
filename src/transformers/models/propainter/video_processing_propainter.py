@@ -280,10 +280,10 @@ class ProPainterVideoProcessor(BaseImageProcessor):
         video_painting_mode (`str`, *optional*, defaults to `"video_inpainting"`):
             Specifies the mode for video reconstruction tasks, such as object removal, video completion, video outpainting.
             choices=['video_inpainting', 'video_outpainting']
-        scale_hw (`tuple[float, float]`, *optional*, defaults to `None`):
+        scale_hw (`tuple[float, float]`, *optional*):
             Tuple containing scaling factors for the video's height and width dimensions during `"video_outpainting"` mode.
             It is only applicable during `"video_outpainting"` mode. If `None`, no scaling is applied and code execution will end.
-        mask_dilation (`int`, *optional*, defaults to `4`):
+        mask_dilation (`int`, *optional*, defaults to 4):
             The number of iterations for binary dilation the mask used in video processing tasks.
     """
 
@@ -597,13 +597,13 @@ class ProPainterVideoProcessor(BaseImageProcessor):
                 - `"channels_first"` or `ChannelDimension.FIRST`: video in (num_channels, height, width) format.
                 - `"channels_last"` or `ChannelDimension.LAST`: video in (height, width, num_channels) format.
                 - `"none"` or `ChannelDimension.NONE`: video in (height, width) format.
-            video_painting_mode (`str`, *optional*, defaults to `"video_inpainting"`):
+            video_painting_mode (`str`, *optional*, defaults to `self.video_inpainting`):
                 Specifies the mode for video reconstruction tasks, such as object removal, video completion, video outpainting.
                 choices=['video_inpainting', 'video_outpainting']
-            scale_hw (`tuple[float, float]`, *optional*, defaults to `None`):
+            scale_hw (`tuple[float, float]`, *optional*, defaults to `self.scale_hw`):
                 Tuple containing scaling factors for the video's height and width dimensions during `"video_outpainting"` mode.
                 It is only applicable during `"video_outpainting"` mode. If `None`, no scaling is applied and code execution will end.
-            mask_dilation (`int`, *optional*, defaults to `4`):
+            mask_dilation (`int`, *optional*, defaults to `self.mask_dilation`):
                 The number of iterations for binary dilation the mask used in video processing tasks.
         """
         do_resize = do_resize if do_resize is not None else self.do_resize

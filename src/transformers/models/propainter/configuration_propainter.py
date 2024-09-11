@@ -50,7 +50,7 @@ class ProPainterConfig(PretrainedConfig):
         perceptual_weight (`float`, *optional*, defaults to 0.0):
             The weight of the perceptual loss.
         interp_mode (`str`, *optional*, defaults to `"nearest"`):
-            The interpolation mode used for resizing. Options are `"nearest"`, `"bilinear"`, etc.
+            The interpolation mode used for resizing. Options are `"nearest"`, `"bilinear"`, `"bicubic"`.
         ref_stride (`int`, *optional*, defaults to 10):
             The stride for reference frames in the ProPainter inpaint_generator network.
         neighbor_length (`int`, *optional*, defaults to 10):
@@ -71,37 +71,37 @@ class ProPainterConfig(PretrainedConfig):
             The number of channels in the feature maps.
         hidden_size (`int`, *optional*, defaults to 512):
             The dimensionality of hidden layers.
-        kernel_size (`List[int, int]`, *optional*, defaults to `[7, 7]`):
+        kernel_size (`List[int]`, *optional*, defaults to `[7, 7]`):
             The size of the convolution kernels.
-        kernel_size_3d (`List[int, int, int]`, *optional*, defaults to `[1, 3, 3]`):
+        kernel_size_3d (`List[int]`, *optional*, defaults to `[1, 3, 3]`):
             The size of the 3d convolution kernels.
-        kernel_size_3d_discriminator (`List[int, int, int]`, *optional*, defaults to `[3, 5, 5]`):
+        kernel_size_3d_discriminator (`List[int]`, *optional*, defaults to `[3, 5, 5]`):
             The size of the 3d convolution kernels for discriminator modules used to calculate losses.
-        padding_inpaint_generator (`List[int, int]`, *optional*, defaults to `[3, 3]`):
+        padding_inpaint_generator (`List[int]`, *optional*, defaults to `[3, 3]`):
             The padding size for the convolution kernels in inpaint_generator module.
-        padding (`int`, *optional*, defaults to `1`):
+        padding (`int`, *optional*, defaults to 1):
             The padding size for the convolution kernels.
-        stride (`List[int, int]`, *optional*, defaults to `[3, 3]`):
+        stride (`List[int]`, *optional*, defaults to `[3, 3]`):
             The stride for the convolution kernels.
-        stride_3d (`List[int, int, int]`, *optional*, defaults to `[1, 1, 1]`):
+        stride_3d (`List[int]`, *optional*, defaults to `[1, 1, 1]`):
             The stride for the 3d convolution kernels.
         num_hidden_layers (`int`, *optional*, defaults to 8):
             The number of hidden layers in the model.
         num_attention_heads (`int`, *optional*, defaults to 4):
             The number of attention heads for each attention layer in the model.
-        window_size (`List[int, int]`, *optional*, defaults to `[5, 9]`):
+        window_size (`List[int]`, *optional*, defaults to `[5, 9]`):
             The size of the sliding window for attention operations.
-        pool_size (`List[int, int]`, *optional*, defaults to `[4, 4]`):
+        pool_size (`List[int]`, *optional*, defaults to `[4, 4]`):
             The size of the pooling layers in the model.
         no_dis (`bool`, *optional*, defaults to `False`):
             Whether to disable discriminator.
-        in_channels (`List[int, int, int]`, *optional*, defaults to `[64, 64, 96]`):
+        in_channels (`List[int]`, *optional*, defaults to `[64, 64, 96]`):
             The number of input channels at different levels of the model.
-        channels (`List[int, int, int]`, *optional*, defaults to `[64, 96, 128]`):
+        channels (`List[int]`, *optional*, defaults to `[64, 96, 128]`):
             The number of channels at different levels of the model.
-        strides (`List[int, int, int]`, *optional*, defaults to `[1, 2, 2]`):
+        strides (`List[int]`, *optional*, defaults to `[1, 2, 2]`):
             The stride values for the convolution layers at different levels of the model.
-        norm_fn (`List[str, str, str, str]`, *optional*, defaults to `["batch", "group", "instance", "none"]`):
+        norm_fn (`List[str]`, *optional*, defaults to `['batch', 'group', 'instance', 'none']`):
             The type of normalization to use in the model. Available options are:
             - `"batch"`: Use Batch Normalization.
             - `"group"`: Use Group Normalization.
