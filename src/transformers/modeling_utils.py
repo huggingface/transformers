@@ -1765,7 +1765,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         def make_inputs_require_grads(module, input, output):
             output.requires_grad_(True)
 
-        self._require_grads_hook = self.get_input_embeddings().register_forward_hook(make_inputs_require_grads)
+        if self.get_input_embeddings() is not None:
+            self._require_grads_hook = self.get_input_embeddings().register_forward_hook(make_inputs_require_grads)
+        else:
+            raise NotImplementedError
 
     def disable_input_require_grads(self):
         """

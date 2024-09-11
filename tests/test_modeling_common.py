@@ -416,7 +416,11 @@ class ModelTesterMixin:
 
             # check enable works
             model._hf_peft_config_loaded = True
-            model.gradient_checkpointing_enable()
+            try:
+                model.gradient_checkpointing_enable()
+            except NotImplementedError:
+                continue
+
             self.assertTrue(model.is_gradient_checkpointing)
 
             # Loop over all modules and check that relevant modules have gradient_checkpointing set to True
