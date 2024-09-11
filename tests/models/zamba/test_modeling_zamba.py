@@ -646,6 +646,9 @@ class ZambaModelIntegrationTest(unittest.TestCase):
             model_id, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True, use_mamba_kernels=False
         )
         cls.tokenizer = AutoTokenizer.from_pretrained(model_id)
+        cls.tokenizer.add_special_tokens({'pad_token': '[PAD]'})
+        cls.model.resize_token_embeddings(len(cls.tokenizer))
+        
 
     @slow
     def test_simple_generate(self):
