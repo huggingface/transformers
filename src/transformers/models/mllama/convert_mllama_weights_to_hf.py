@@ -12,18 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import gc
-import os
 import argparse
-import warnings
+import gc
 import json
+import math
+import os
+import warnings
+from typing import List
+
 import regex as re
 import torch
-import math
-from typing import List
+
 from transformers import MllamaConfig, MllamaForConditionalGeneration, MllamaImageProcessor, PreTrainedTokenizerFast
-from transformers.models.mllama.configuration_mllama import MllamaVisionConfig, MllamaTextConfig
 from transformers.convert_slow_tokenizer import TikTokenConverter
+from transformers.models.mllama.configuration_mllama import MllamaTextConfig, MllamaVisionConfig
 
 
 try:
@@ -35,13 +37,9 @@ except ImportError as e:
     )
     LlamaTokenizerFast = None
 
-
-NUM_SHARDS = {
-    "90B": 8,
-    "11B": 1,
-}
-
 # fmt: off
+# If a weight needs to be split in two or more keys, use `|` to indicate it. ex:
+# r"text_model.layers.(\d+).attention.wqkv.weight": r"language_model.model.layers.\1.self_attn.q|k|v|_proj.weight"
 ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"text_model.norm.weight":                                                                  r"language_model.model.norm.weight",
     r"text_model.output.weight":                                                                r"language_model.lm_head.weight",
@@ -89,10 +87,11 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
 CONFIG_KEY_MAPPING = {
     "n_heads": "num_attention_heads",
     "vocab_size": "vocab_size",
-    "dim":"hidden_size",
-    "norm_eps":"rms_norm_eps",
-    "rope_theta":"rope_theta",
+    "dim": "hidden_size",
+    "norm_eps": "rms_norm_eps",
+    "rope_theta": "rope_theta",
 }
+
 
 def convert_old_keys_to_new_keys(state_dict_keys: dict = None):
     """
@@ -105,15 +104,16 @@ def convert_old_keys_to_new_keys(state_dict_keys: dict = None):
         new_text = old_text
         for pattern, replacement in ORIGINAL_TO_CONVERTED_KEY_MAPPING.items():
             if replacement is None:
-                new_text = re.sub(pattern, "", new_text) # an empty line
+                new_text = re.sub(pattern, "", new_text)  # an empty line
                 continue
             new_text = re.sub(pattern, replacement, new_text)
-        output_dict = {k:v for k,v in zip(old_text.split("\n"), new_text.split("\n"))}
+        output_dict = dict(zip(old_text.split("\n"), new_text.split("\n")))
     return output_dict
+
 
 def permute_for_rope(input_tensor, n_heads, dim1, dim2):
     """
-    When you go from the complex ROPE formulation to sin and cos one, you need 
+    When you go from the complex ROPE formulation to sin and cos one, you need
     to permute hte query and key weights (to avoid doing it on the fly)
     """
     input_tensor = input_tensor.reshape(dim1, dim2)
@@ -121,34 +121,43 @@ def permute_for_rope(input_tensor, n_heads, dim1, dim2):
     input_tensor = input_tensor.transpose(1, 2).reshape(dim1, dim2)
     return input_tensor
 
+
 def pre_compute_positional_embedding(embedding):
+    """
+    Instead of iterating of the batch of images, and the ratios inside, we pre-compute the
+    positional embeddings depending on the aspect ratio id. This is done to support `torch.compile`
+    and efficient inference / training with different aspect ratios.
+    """
     max_num_tiles, *shapes = embedding.shape
     hidden_size = shapes[-1]
     max_aspect_ratio_id = (max_num_tiles - 1) * max_num_tiles + 1
-    if len(shapes) == 2: # tile embedding
+    if len(shapes) == 2:  # tile embedding does not have patches
         num_patches = 1
-        precomputed_embeddings = torch.zeros(max_aspect_ratio_id + 1,  max_num_tiles , num_patches,  hidden_size, device=embedding.device)
+        precomputed_embeddings = torch.zeros(
+            max_aspect_ratio_id + 1, max_num_tiles, num_patches, hidden_size, device=embedding.device
+        )
     else:
         num_patches = shapes[1]
-        precomputed_embeddings = torch.zeros(max_aspect_ratio_id + 1,  max_num_tiles,  num_patches, hidden_size, device=embedding.device)
+        precomputed_embeddings = torch.zeros(
+            max_aspect_ratio_id + 1, max_num_tiles, num_patches, hidden_size, device=embedding.device
+        )
 
     for height in range(1, max_num_tiles + 1):
         for width in range(1, max_num_tiles + 1):
             if height * width > max_num_tiles:
                 continue
-            aspect_ratio_id = (height - 1) * max_num_tiles + width 
+            aspect_ratio_id = (height - 1) * max_num_tiles + width
             current_embedding = embedding[:height, :width].reshape(height * width, num_patches, hidden_size)
-            precomputed_embeddings[aspect_ratio_id, :height * width] = current_embedding
+            precomputed_embeddings[aspect_ratio_id, : height * width] = current_embedding
     return precomputed_embeddings
+
 
 def write_model(
     model_path,
     input_base_path,
     num_shards,
     safe_serialization=True,
-    vocab_size=None,
 ):
-
     os.makedirs(model_path, exist_ok=True)
 
     with open(os.path.join(input_base_path, "params.json"), "r") as f:
@@ -156,9 +165,10 @@ def write_model(
 
     params = params.get("model", params)
 
-    # language parameters
-    n_layers = params["n_layers"] # language model self-attention layers
-    n_layers_cross_attention = params["vision_num_cross_attention_layers"]  # language model cross-attention layers; 90B - 20, 11B - 8
+    n_layers = params["n_layers"]  # language model self-attention layers
+    n_layers_cross_attention = params[
+        "vision_num_cross_attention_layers"
+    ]  # language model cross-attention layers; 90B - 20, 11B - 8
     n_heads = params["n_heads"]
     n_heads_per_shard = n_heads // num_shards
     dim = params["dim"]
@@ -187,8 +197,8 @@ def write_model(
     all_keys = list(loaded[0].keys())
     new_keys = convert_old_keys_to_new_keys(all_keys)
 
-    cross_attention_frequency = math.ceil(n_layers/n_layers_cross_attention) 
-    cross_layer_shift = list(range(n_layers))[cross_attention_frequency-1::cross_attention_frequency]
+    cross_attention_frequency = math.ceil(n_layers / n_layers_cross_attention)
+    cross_layer_shift = list(range(n_layers))[cross_attention_frequency - 1 :: cross_attention_frequency]
     attn_layer_shift = [k for k in range(len(cross_layer_shift) + n_layers) if k not in cross_layer_shift]
 
     state_dict = {}
@@ -199,62 +209,68 @@ def write_model(
         # redundant as other weights will be stitched from multiple shards. To avoid that, they are cloned.
         new_key = new_keys[key]
         if "cross_attention" in key and "language_model" in new_key:
-            new_key = re.sub(r"layers.(\d+).", lambda _match: f"layers.{cross_layer_shift[int(_match.groups()[0])]}.", new_key)
+            new_key = re.sub(
+                r"layers.(\d+).", lambda _match: f"layers.{cross_layer_shift[int(_match.groups()[0])]}.", new_key
+            )
         elif "text_model.layers" in key and "language_model" in new_key:
-            new_key = re.sub(r"layers.(\d+).", lambda _match: f"layers.{attn_layer_shift[int(_match.groups()[0])]}.", new_key)
+            new_key = re.sub(
+                r"layers.(\d+).", lambda _match: f"layers.{attn_layer_shift[int(_match.groups()[0])]}.", new_key
+            )
 
-        # Post-process the weights
+        current_parameter = torch.cat([chunk.pop(key).contiguous().clone() for chunk in loaded], dim=0)
+
+        # Post-process the current_parameter.
         if "self_attn.q|k|v|_proj" in new_key and "language_model" in new_key:
-            weight = torch.cat([chunk.pop(key).contiguous().clone() for chunk in loaded], dim=0) # TODO maybe a view is needed
-            q, k, v = torch.split(weight, [dim, key_value_dim, key_value_dim])
+            q, k, v = torch.split(current_parameter, [dim, key_value_dim, key_value_dim])
             state_dict[new_key.replace("q|k|v|", "q")] = permute_for_rope(q, n_heads, dim, dim)
             state_dict[new_key.replace("q|k|v|", "k")] = permute_for_rope(k, num_key_value_heads, key_value_dim, dim)
             state_dict[new_key.replace("q|k|v|", "v")] = v
         elif "cross_attn" in key and "q_norm" in key or "k_norm" in key:
-            state_dict[new_key] = [chunk.pop(key).contiguous().clone() for chunk in loaded][0].view(-1, 2).t().reshape(-1)
+            state_dict[new_key] = current_parameter[0].view(-1, 2).t().reshape(-1)
         elif "mlp.up|gate_proj." in new_key:
-            weight = torch.cat([chunk.pop(key).contiguous().clone() for chunk in loaded], dim=0)
-            gate, up = weight.chunk(2)
+            gate, up = current_parameter.chunk(2)
             state_dict[new_key.replace("up|gate", "up")] = up
             state_dict[new_key.replace("up|gate", "gate")] = gate
         elif new_key == "vision_model.patch_embedding.weight":
-            state_dict[new_key] = torch.cat([chunk.pop(key).contiguous().clone() for chunk in loaded], dim=0).reshape(-1, num_channels, patch_size, patch_size)
+            state_dict[new_key] = current_parameter.reshape(-1, num_channels, patch_size, patch_size)
         elif "cross_attn.k|v_proj" in new_key and "language_model" in new_key:
-            weight = torch.cat([chunk.pop(key).contiguous().clone() for chunk in loaded], dim=0)
-            k, v = weight.chunk(2, dim=0)
+            k, v = current_parameter.chunk(2, dim=0)
             state_dict[new_key.replace("k|v", "k")] = k
             state_dict[new_key.replace("k|v", "v")] = v
         elif "layernorm" in new_key:
-            state_dict [new_key]= [chunk.pop(key).contiguous().clone() for chunk in loaded][0]
+            state_dict[new_key] = current_parameter[0]
         elif "_gate" in new_key:
-            state_dict[new_key] =  [chunk.pop(key).contiguous().clone() for chunk in loaded][0][0].view(1)
+            state_dict[new_key] = current_parameter[0][0].view(1)
         elif "tile_pos_embed.weight" in new_key or "gated_positional_embedding.weight" in new_key:
             # pre-compute the embeddings
-            embedding = torch.cat([chunk.pop(key).contiguous().clone() for chunk in loaded], dim=0)
+            embedding = current_parameter
             state_dict[new_key] = pre_compute_positional_embedding(embedding)
         elif new_key != "":
-            state_dict[new_key] = torch.cat([chunk.pop(key).contiguous().clone() for chunk in loaded], dim=0)
+            state_dict[new_key] = current_parameter
 
     state_dict["language_model.model.embed_tokens.weight"] = torch.cat(
-        [state_dict["language_model.model.embed_tokens.weight"], state_dict.pop("language_model.model.learnable_embedding.weight")], dim=0
+        [
+            state_dict["language_model.model.embed_tokens.weight"],
+            state_dict.pop("language_model.model.learnable_embedding.weight"),
+        ],
+        dim=0,
     )
-    del loaded;gc.collect()
+    del loaded
+    gc.collect()
 
     # Write configs
-    config_parameters = {
-        CONFIG_KEY_MAPPING[key]: params[key] for key in CONFIG_KEY_MAPPING.keys()
-    }
+    config_parameters = {CONFIG_KEY_MAPPING[key]: params[key] for key in CONFIG_KEY_MAPPING.keys()}
     vision_config = MllamaVisionConfig(
-        **config_parameters, 
+        **config_parameters,
         num_hidden_layers=n_layers,
         vision_input_dim=1280,  # Constant, taken directly from your notes
         return_intermediate=[3, 7, 15, 23, 30],  # Based on return_intermediate indices
         global_vision_layers=8,  # Constant from the original code
-        max_num_tiles=4, 
-        num_global_layers=params["vision_num_cross_attention_layers"]
+        max_num_tiles=4,
+        num_global_layers=params["vision_num_cross_attention_layers"],
     )
     text_config = MllamaTextConfig(
-        **config_parameters, 
+        **config_parameters,
         num_hidden_layers=len(cross_layer_shift) + n_layers,
         cross_attention_layers=cross_layer_shift,
         vision_input_dim=1280,  # Constant, aligned with vision config
@@ -266,19 +282,22 @@ def write_model(
     config.save_pretrained(model_path)
     print("Loading the checkpoint in a Llama model.")
 
-
     with torch.device("meta"):
         model = MllamaForConditionalGeneration(config)
     model.load_state_dict(state_dict, strict=True, assign=True)
     model.save_pretrained(model_path, safe_serialization=safe_serialization)
-    del state_dict; gc.collect()
+    del state_dict
+    gc.collect()
     # Safety check: reload the converted model
-    mllama_model = MllamaForConditionalGeneration.from_pretrained(model_path, torch_dtype=torch.bfloat16, device_map="auto")
+    mllama_model = MllamaForConditionalGeneration.from_pretrained(
+        model_path, torch_dtype=torch.bfloat16, device_map="auto"
+    )
     # Avoid saving this as part of the config.
     del mllama_model.config._name_or_path
     mllama_model.config.torch_dtype = torch.float16  # not sure about this.
     print("Saving in the Transformers format.")
     mllama_model.save_pretrained(model_path, safe_serialization=safe_serialization)
+
 
 class MllamaConverter(TikTokenConverter):
     def __init__(self, vocab_file, num_reserved_special_tokens=256, **kwargs):
@@ -311,8 +330,7 @@ class MllamaConverter(TikTokenConverter):
             "<|image|>",
         ]
         special_tokens += [
-            f"<|reserved_special_token_{i + 2}|>"
-            for i in range(num_reserved_special_tokens - len(special_tokens))
+            f"<|reserved_special_token_{i + 2}|>" for i in range(num_reserved_special_tokens - len(special_tokens))
         ]
         tokenizer.add_special_tokens(special_tokens)
 
@@ -324,8 +342,6 @@ class MllamaConverter(TikTokenConverter):
             chat_template=chat_template,
             model_input_names=["input_ids", "attention_mask"],
         )
-
-
 
 
 def write_tokenizer(tokenizer_path: str, save_dir: str):
@@ -403,7 +419,6 @@ def main():
         config_path=f"{args.input_dir}/params.json",
         save_dir=args.output_dir,
     )
-
 
 
 if __name__ == "__main__":

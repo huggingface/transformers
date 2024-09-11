@@ -13,7 +13,6 @@
 # limitations under the License.
 """Mllama model configuration"""
 
-
 import os
 from typing import Union
 
@@ -74,6 +73,7 @@ class MllamaVisionConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "mllama_vision_model"
 
     def __init__(
@@ -94,8 +94,8 @@ class MllamaVisionConfig(PretrainedConfig):
         vision_input_dim=1280,
         vision_output_dim=7680,
         return_intermediate=None,
-        max_num_tiles=4, # same as vision max num chunks? yes ;-)
-        norm_eps= 1.0e-5,
+        max_num_tiles=4,  # same as vision max num chunks? yes ;-)
+        norm_eps=1.0e-5,
         in_channels=3,
         **kwargs,
     ):
@@ -112,7 +112,7 @@ class MllamaVisionConfig(PretrainedConfig):
         self.projection_dim = projection_dim
         self.vision_input_dim = vision_input_dim
         if return_intermediate is None:
-            return_intermediate = [3,7,15,23,30]
+            return_intermediate = [3, 7, 15, 23, 30]
         self.return_intermediate = return_intermediate
         self.num_global_layers = num_global_layers
         self.max_num_tiles = max_num_tiles
@@ -123,7 +123,6 @@ class MllamaVisionConfig(PretrainedConfig):
         self.attention_heads = num_attention_heads
         self.intermediate_size = 4 * vision_input_dim
         self.hidden_act = hidden_act
-
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
@@ -141,8 +140,6 @@ class MllamaVisionConfig(PretrainedConfig):
             )
 
         return cls.from_dict(config_dict, **kwargs)
-
-
 
 
 class MllamaTextConfig(PretrainedConfig):
@@ -194,6 +191,7 @@ class MllamaTextConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "mllama_text_model"
 
     def __init__(
@@ -204,7 +202,7 @@ class MllamaTextConfig(PretrainedConfig):
         hidden_size=4096,
         num_attention_heads=32,
         num_key_value_heads=8,
-        rope_theta= 500000,
+        rope_theta=500000,
         use_scaled_rope=True,
         intermediate_size=14336,
         hidden_act="silu",
@@ -237,8 +235,8 @@ class MllamaTextConfig(PretrainedConfig):
         self.use_scaled_rope = use_scaled_rope
         self.rms_norm_eps = rms_norm_eps
         self.intermediate_size = intermediate_size
-        self.dropout=dropout
-        self.hidden_activation=hidden_activation
+        self.dropout = dropout
+        self.hidden_activation = hidden_activation
         self.attention_bias = attention_bias
         self.rope_type = "default"
         rope_config_validation(self)
@@ -249,7 +247,6 @@ class MllamaTextConfig(PretrainedConfig):
             eos_token_id=eos_token_id,
             tie_word_embeddings=tie_word_embeddings,
         )
-
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
@@ -327,7 +324,6 @@ class MllamaConfig(PretrainedConfig):
         text_config=None,
         **kwargs,
     ):
-
         if vision_config is None:
             self.vision_config = MllamaVisionConfig()
             logger.info("vision_config is None, using default mllama vision config")
@@ -335,7 +331,6 @@ class MllamaConfig(PretrainedConfig):
             self.vision_config = MllamaVisionConfig(**vision_config)
         elif isinstance(vision_config, MllamaVisionConfig):
             self.vision_config = vision_config
-
 
         if text_config is None:
             self.text_config = MllamaTextConfig()

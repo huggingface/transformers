@@ -33,7 +33,6 @@ from ...image_utils import (
     ChannelDimension,
     ImageInput,
     PILImageResampling,
-    get_image_size,
     infer_channel_dimension_format,
     is_valid_image,
     is_vision_available,
@@ -411,7 +410,7 @@ def build_aspect_ratio_mask(aspect_ratios: List[List[Tuple[int, int]]], max_imag
     # Set the aspect ratio mask for the rest of the tiles
     for i, sample_aspect_ratios in enumerate(aspect_ratios):
         for j, (num_tiles_w, num_tiles_h) in enumerate(sample_aspect_ratios):
-            aspect_ratio_mask[i, j, :num_tiles_w * num_tiles_h] = 1
+            aspect_ratio_mask[i, j, : num_tiles_w * num_tiles_h] = 1
 
     return aspect_ratio_mask
 
@@ -622,7 +621,7 @@ def make_list_of_images(images: ImageInput) -> List[List[Optional[np.ndarray]]]:
     elif (
         isinstance(images, (list, tuple))
         and all(isinstance(images_i, (list, tuple)) for images_i in images)
-        and any([is_valid_list_of_images(images_i) for images_i in images])
+        and any(is_valid_list_of_images(images_i) for images_i in images)
     ):
         output_images = images
     else:
@@ -633,7 +632,7 @@ def make_list_of_images(images: ImageInput) -> List[List[Optional[np.ndarray]]]:
 
 
 def is_valid_list_of_images(images: List):
-    return images and all([is_valid_image(image) for image in images])
+    return images and all(is_valid_image(image) for image in images)
 
 
 def validate_size(size: Dict[str, int]) -> None:
@@ -896,7 +895,12 @@ class MllamaImageProcessor(BaseImageProcessor):
         # num_tiles (List[List[int]]) with (batch_size, num_images_in_batch) - real number of tiles for each image, not padded
         # aspect_ratio_mask (np.ndarray) with shape (batch_size, max_num_images, max_image_tiles) - number of tiles for each image, padded to max_num_images with 0
         encoded_inputs = BatchFeature(
-            data=dict(pixel_values=images, aspect_ratios=aspect_ratios, aspect_ratio_ids=aspect_ratio_ids, aspect_ratio_mask=aspect_ratio_mask),
+            data=dict(
+                pixel_values=images,
+                aspect_ratios=aspect_ratios,
+                aspect_ratio_ids=aspect_ratio_ids,
+                aspect_ratio_mask=aspect_ratio_mask,
+            ),
             tensor_type=return_tensors,
         )
         encoded_inputs["num_tiles"] = num_tiles

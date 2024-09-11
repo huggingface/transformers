@@ -252,20 +252,16 @@ class MllamaProcessor(ProcessorMixin):
 
         data = {}
         if text is not None:
-
             if isinstance(text, str):
                 text = [text]
             elif not (isinstance(text, (list, tuple)) and all(isinstance(t, str) for t in text)):
-                raise ValueError(
-                    "Invalid input text. Please provide a string, or a list of strings"
-                )
+                raise ValueError("Invalid input text. Please provide a string, or a list of strings")
             n_images_in_text = [t.count(self.image_token) for t in text]
-            _ = text_kwargs.pop("padding_side", None) # hack until padding-side is an accepted kwarg by tokenizers
+            _ = text_kwargs.pop("padding_side", None)  # hack until padding-side is an accepted kwarg by tokenizers
             encoding = self.tokenizer(text, **text_kwargs)
             data.update(encoding)
 
         if images is not None:
-
             images = make_list_of_images(images)
             n_images_in_images = [len(sample) for sample in images]
 
@@ -280,8 +276,7 @@ class MllamaProcessor(ProcessorMixin):
         # Create cross attention mask
         if images is not None and text is not None:
             cross_attention_token_mask = [
-                get_cross_attention_token_mask(token_ids, self.image_token_id)
-                for token_ids in encoding["input_ids"]
+                get_cross_attention_token_mask(token_ids, self.image_token_id) for token_ids in encoding["input_ids"]
             ]
             cross_attention_mask = convert_sparse_cross_attention_mask_to_dense(
                 cross_attention_token_mask,

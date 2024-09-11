@@ -3,21 +3,18 @@ import torch
 
 PRENAME_MAPPING = {
     "text_model.layers.": "language_model.layers",
-    "attention.wqkv.layer_norm_weight":"input_layernorm.weight",
-    "feed_forward.mlp,.layer_norm_weight":"post_attention_layernorm.weight",
-    "attention.wo.weight":"self_attn.o_proj.weight",
-    "feed_forward.mlp.fc2_weight":"mlp.down_proj.weigh",
+    "attention.wqkv.layer_norm_weight": "input_layernorm.weight",
+    "feed_forward.mlp,.layer_norm_weight": "post_attention_layernorm.weight",
+    "attention.wo.weight": "self_attn.o_proj.weight",
+    "feed_forward.mlp.fc2_weight": "mlp.down_proj.weigh",
     # language model specifics
-    "text_model.norm.weight":"model.language_model.norm.weigh",
-    "text_model.tok_embeddings.weight":"model.language_model.embed_tokens.weight",
-    "text_model.learnable_embedding.weight":"model.language_model.learnable_embedding.weight",
-    "text_model.output.weight":"lm_head.weight",
+    "text_model.norm.weight": "model.language_model.norm.weigh",
+    "text_model.tok_embeddings.weight": "model.language_model.embed_tokens.weight",
+    "text_model.learnable_embedding.weight": "model.language_model.learnable_embedding.weight",
+    "text_model.output.weight": "lm_head.weight",
     # cross attention layers
-    "cross_attention_layers":"layers", # pretty sure that this is the easiest for our codebase
+    "cross_attention_layers": "layers",  # pretty sure that this is the easiest for our codebase
 }
-
-
-
 
 
 class GatedPositionalEmbeddingModel:
@@ -47,16 +44,17 @@ class GatedPositionalEmbeddingModel:
             max_tiles = max(max_tiles, num_tiles)
 
         # Pad embeddings and masks so all have the same number of tiles
-        self.precomputed_embeddings = torch.stack([
-            torch.nn.functional.pad(embed * self.gated_positional_embedding_gate.tanh(), (0, 0, 0, max_tiles - embed.shape[0]))
-            for embed in embeddings
-        ])
+        self.precomputed_embeddings = torch.stack(
+            [
+                torch.nn.functional.pad(
+                    embed * self.gated_positional_embedding_gate.tanh(), (0, 0, 0, max_tiles - embed.shape[0])
+                )
+                for embed in embeddings
+            ]
+        )
 
         # Create a padded mask for each entry (pad with zeros for invalid tiles)
-        self.mask = torch.stack([
-            torch.nn.functional.pad(m, (0, max_tiles - m.shape[0]), value=0)
-            for m in mask_list
-        ])
+        self.mask = torch.stack([torch.nn.functional.pad(m, (0, max_tiles - m.shape[0]), value=0) for m in mask_list])
 
     def apply_gated_positional_embedding(self, hidden_state):
         # Apply the gate to all precomputed embeddings at once
@@ -68,8 +66,9 @@ class GatedPositionalEmbeddingModel:
         hidden_state.masked_scatter_(mask_expanded, gated_positional_embeddings_with_gate)
         return hidden_state
 
-    def apply_gated_positional_embedding2(self, hidden_state: torch.Tensor, aspect_ratios: torch.Tensor) -> torch.Tensor:
-
+    def apply_gated_positional_embedding2(
+        self, hidden_state: torch.Tensor, aspect_ratios: torch.Tensor
+    ) -> torch.Tensor:
         bsz, num_chunks, num_tokens, dim = hidden_state.shape
         hidden_state = hidden_state.view(bsz * num_chunks, num_tokens, dim)
 
@@ -84,12 +83,15 @@ class GatedPositionalEmbeddingModel:
             num_tiles = aspect_ratio_h * aspect_ratio_w
             gated_positional_embedding = self.gated_positional_embedding[:aspect_ratio_h, :aspect_ratio_w]
             embedding_height, embedding_width = gated_positional_embedding.shape[2:]
-            gated_positional_embedding = gated_positional_embedding.reshape(num_tiles, embedding_height, embedding_width)
+            gated_positional_embedding = gated_positional_embedding.reshape(
+                num_tiles, embedding_height, embedding_width
+            )
             gate = self.gated_positional_embedding_gate.tanh()
             gated_positional_embedding_with_gate = gate * gated_positional_embedding
             hidden_state[idx, :num_tiles] += gated_positional_embedding_with_gate
 
         return hidden_state
+
 
 # Initialize random seed for reproducibility
 torch.manual_seed(42)
@@ -123,5 +125,6 @@ for idx, (h, w) in enumerate(aspect_ratios):
     num_tiles = h * w
     # Ensure only the valid tiles are updated
     print(f"Updated tiles in hidden state (non-zero entries): {torch.count_nonzero(hidden_state[idx, :num_tiles])}")
-    assert torch.count_nonzero(hidden_state[idx, num_tiles:]) == 0, \
-        f"Error: Non-updated tiles should remain zero for batch {idx}"
+    assert (
+        torch.count_nonzero(hidden_state[idx, num_tiles:]) == 0
+    ), f"Error: Non-updated tiles should remain zero for batch {idx}"
