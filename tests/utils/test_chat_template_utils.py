@@ -17,6 +17,7 @@ import os
 import tempfile
 import unittest
 from typing import List, Optional, Tuple, Union
+from pathlib import Path
 
 from transformers import AutoTokenizer
 from transformers.testing_utils import require_jinja
@@ -45,7 +46,6 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
             },
         }
         self.assertEqual(schema["function"], expected_schema)
-        raise ValueError("Test that this test is run, and fails!")
 
     def test_no_arguments(self):
         def fn():
@@ -486,6 +486,7 @@ class ChatTemplateTest(unittest.TestCase):
     def _get_tokenizer(self):
         return AutoTokenizer.from_pretrained("hf-internal-testing/tiny-gpt2-with-chatml-template")
 
+    @require_jinja
     def test_chat_template(self):
         dummy_template = "{% for message in messages %}{{message['role'] + message['content']}}{% endfor %}"
         dummy_conversation = [
@@ -525,7 +526,6 @@ class ChatTemplateTest(unittest.TestCase):
         self.assertEqual(output, expected_output)  # Test output is the same after reloading
         # Check that no error raised
         tokenizer.apply_chat_template(dummy_conversation, tokenize=True, return_dict=False)
-        raise ValueError("Test that this test is run, and fails!")
 
     @require_jinja
     def test_chat_template_batched(self):
@@ -778,5 +778,76 @@ class ChatTemplateTest(unittest.TestCase):
         # Assert that the serialized list is correctly reconstructed as a single dict
         self.assertEqual(new_tokenizer.chat_template, tokenizer.chat_template)
 
+class InverseChatTemplateTest(unittest.TestCase):
+    def _get_tokenizer(self):
+        tokenizer = AutoTokenizer.from_pretrained("Rocketknight1/tiny-gpt2-with-mistral-tool-template")
+        tokenizer.inverse_template = r"""
+{%- set user_messages = finditer('(?:\[INST\] )(.+?)\[\/INST\]', chat, flags=16, add_tag="user") %}
+{%- set asst_messages = finditer('(?:\[\/INST\]|\[\/TOOL_RESULTS\]) (.+?)<\/s>', chat, flags=16, add_tag="assistant") %}
+{%- set available_tools = finditer('\[AVAILABLE_TOOLS\] (.*?)\[\/AVAILABLE_TOOLS\]', chat, flags=16, add_tag="available_tools") %}
+{%- set tool_calls = finditer('\[TOOL_CALLS\] (.+?\])<\/s>', chat, flags=16, add_tag="tool_calls") %}
+{%- set tool_results = finditer('\[TOOL_RESULTS\] (.+?)\[\/TOOL_RESULTS\]', chat, flags=16, add_tag="tool") %}
+{%- set combined = sort_by_group_start(user_messages + asst_messages + tool_calls + tool_results, group_idx=1) %}
+{{- '{"messages": [' }}
+{%- for match in combined %}
+    {%- if match.tag == 'assistant' or match.tag == 'user' %}
+        {%- set message_dict = dict(role=match.tag, content=match.group[1]) %}
+    {%- elif match.tag == "tool_calls" %}
+        {%- set tool_call = json_loads(match.group[1])[0] %}
+        {%- set tool_call = dict(type="function", id=tool_call["id"]|string, function=dict(name=tool_call.name, arguments=tool_call.arguments)) %}
+        {%- set message_dict = dict(role="assistant", tool_calls=[tool_call]) %}
+    {%- elif match.tag == "tool" %}
+        {%- set base_dict = json_loads(match.group[1]) %}
+        {%- set message_dict = dict(role=match.tag, content=base_dict.content|string, tool_call_id=base_dict.call_id|string) %}
+    {%- endif %}
+    {{- message_dict | tojson }}
+    {%- if not loop.last %}
+        {{- ", " }}
+    {%- else %}
+        {{- "]" }}
+    {%- endif %}
+{%- endfor %}
+{{- "}" }}
+""".strip()
+        return tokenizer
 
-# TODO Why aren't tests running?
+    def test_inverse_chat_template_save_load(self):
+        # Pick a tokenizer with no chat template or reverse template
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        self.assertIsNone(tokenizer.inverse_template)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_dir = Path(tmp_dir)
+            tokenizer.save_pretrained(tmp_dir / "tokenizer")
+            tokenizer_config = json.load(open(tmp_dir / "tokenizer/tokenizer_config.json"))
+            self.assertIsNone(tokenizer_config.get("inverse_template", None))
+            tokenizer.inverse_template = "aaaa"
+            tokenizer.save_pretrained(tmp_dir / "tokenizer_with_inverse_template")
+            tokenizer_config = json.load(open(tmp_dir / "tokenizer_with_inverse_template/tokenizer_config.json"))
+            self.assertEqual(tokenizer_config["inverse_template"], "aaaa")
+            reloaded_tokenizer = AutoTokenizer.from_pretrained(str(tmp_dir / "tokenizer_with_inverse_template"))
+            self.assertEqual(reloaded_tokenizer.inverse_template, "aaaa")
+
+    def test_simple_chat_inversion(self):
+        tokenizer = self._get_tokenizer()
+        chat = [
+            {"role": "user", "content": "user message"},
+            {"role": "assistant", "content": "assistant message"},
+        ]
+        chat_str = tokenizer.apply_chat_template(chat, tokenize=False)
+        inverted_chat = tokenizer.apply_inverse_template(chat_str)
+        self.assertEqual(chat, inverted_chat['messages'])
+
+    def test_chat_inversion_with_tool_calls(self):
+        tokenizer = self._get_tokenizer()
+        chat = [
+            {"role": "user", "content": "user message"},
+            {"role": "assistant", "tool_calls": [{"type": "function", "id": "9Ae3bDc2F", "function": {"name": "get_current_temperature", "arguments": {"location": "Paris, France", "unit": "celsius"}}}]},
+            {"role": "tool", "content": "22.0", "tool_call_id": "9Ae3bDc2F"},
+            {"role": "assistant", "content": "assistant message"},
+        ]
+        chat_str = tokenizer.apply_chat_template(chat, tokenize=False)
+        inverted_chat = tokenizer.apply_inverse_template(chat_str)
+        self.assertEqual(chat, inverted_chat['messages'])
+
+    def test_tool_extraction(self):
+        # TODO Not done yet!
