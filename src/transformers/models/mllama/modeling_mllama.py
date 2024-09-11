@@ -103,7 +103,8 @@ def prepare_cross_attention_mask(
 ) -> Tuple[torch.Tensor, torch.Tensor]:
 
     if cross_attention_mask is None:
-        raise ValueError("no cross attn mask is provided as base")
+        # should we raise error or prepare a full attn mask with all ones?
+        return None, None
     else:
         # reshape so it can be used by attn module
         batch_size, text_total_length, *_ = cross_attention_mask.shape
@@ -842,7 +843,7 @@ class MllamaTextSelfAttention(nn.Module):
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
         cos, sin = position_embeddings
-        query, key = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
@@ -854,8 +855,7 @@ class MllamaTextSelfAttention(nn.Module):
 
         causal_mask = attention_mask
         if attention_mask is not None:
-            causal_mask = causal_mask[:, :, :, : key.shape[-2]]
-            causal_mask = causal_mask.transpose(0, 1).transpose(0, 1)
+            causal_mask = causal_mask[:, :, :, : key_states.shape[-2]]
 
         # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
         # Reference: https://github.com/pytorch/pytorch/issues/112577.
@@ -1597,40 +1597,40 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
         if pixel_values is not None:
             if aspect_ratio_ids is None:
                 raise ValueError("`aspect_ratio_ids` must be provided if `pixel_values` is provided")
-            # get vision tokens from vision model
             cross_attention_states = self.vision_model(pixel_values, aspect_ratio_ids)
-            # torch.save(cross_attention_states, "/raid/raushan/vision_token_new.pt")
-            cross_attention_states = torch.load("/raid/raushan/vision_tokens_flattened.pt")
 
-            cross_attention_mask, full_text_row_masked_out_mask = prepare_cross_attention_mask(
-                cross_attention_mask,
-                past_key_values=past_key_values,
-                num_vision_tokens=self.vision_model.num_patches,
-                device=self.device,
-                dtype=self.dtype,
-            )
+        cross_attention_mask, full_text_row_masked_out_mask = prepare_cross_attention_mask(
+            cross_attention_mask,
+            past_key_values=past_key_values,
+            num_vision_tokens=self.vision_model.num_patches,
+            device=self.device,
+            dtype=self.dtype,
+        )
 
-            if cross_attention_states is not None and past_key_values is not None:
-                # get past kv length for cross attn layers
-                cross_attn_layer_ids = self.language_model.model.cross_attention_layers
-                past_cross_attn_kv_length = past_key_values.get_seq_length(cross_attn_layer_ids[0])
-                if past_cross_attn_kv_length != 0:
-                    # make all zeros mask for prev cross attn, all zeros right?
-                    # i.e. extend curr cross attn image-seq-length to accoun for past images
-                    past_cross_attn_mask = torch.zeros((*cross_attention_mask.shape[-1:], past_cross_attn_kv_length), dtype=cross_attention_mask.dtype, device=cross_attention_mask.device)
-                    print(past_cross_attn_mask.shape, cross_attention_mask.shape, past_cross_attn_kv_length, past_key_values.get_seq_length(), past_key_values.get_seq_length(3))
-                    # concat both on image-seq-length
-                    cross_attention_mask = torch.cat([past_cross_attn_mask, cross_attention_mask], dim=-1)
+        # cross_attention_states can be passed to forward directly, so let's not put it under the above 'if'
+        if cross_attention_states is not None and past_key_values is not None:
+            # get past kv length for cross attn layers
+            cross_attn_layer_ids = self.language_model.model.cross_attention_layers
+            past_cross_attn_kv_length = past_key_values.get_seq_length(cross_attn_layer_ids[0])
+            if past_cross_attn_kv_length != 0:
+                # make all zeros mask for cross-attn-mask from previuos cached hidden_states, all zeros right?
+                # i.e. extend current cross-attn-mask on image-seq-length dimension to account for past_seen_tokens
+                # TODO: fix after Meta tels how cross-attn works for new tokens
+                past_cross_attn_mask = torch.zeros(
+                    (*cross_attention_mask.shape[:-1], past_cross_attn_kv_length),
+                    dtype=cross_attention_mask.dtype,
+                    device=cross_attention_mask.device
+                )
+                # concatenate both on image-seq-length dimension
+                cross_attention_mask = torch.cat([past_cross_attn_mask, cross_attention_mask], dim=-1)
 
-        # if input_ids.shape[1] != 0:
-        #     print("FORWARD", cross_attention_mask.shape, cache_position)
         outputs = self.language_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
             cross_attention_states=cross_attention_states,
-            cross_attention_mask=cross_attention_mask[:, :, cache_position] if cross_attention_states is not None else None,
-            full_text_row_masked_out_mask=full_text_row_masked_out_mask[:, :, cache_position] if cross_attention_states is not None else None,
+            cross_attention_mask=cross_attention_mask if cross_attention_states is not None else None,
+            full_text_row_masked_out_mask=full_text_row_masked_out_mask if cross_attention_states is not None else None,
             past_key_values=past_key_values,
             use_cache=use_cache,
             output_hidden_states=output_hidden_states,
@@ -1638,8 +1638,6 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
             return_dict=return_dict,
             cache_position=cache_position,
         )
-        # if input_ids.shape[1] == 24:
-        #     print("PASSED")
 
         return outputs
 
@@ -1723,7 +1721,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel):
 
         # If we're in pre-fill or cacheless decoding step, then we need pixel_values and aspect ratios
         # to compute image hidden states, otherwise they are cached within each cross attn layer
-        if cache_position[0] == 0:
+        if (input_ids == self.config.image_token_index).any():
             model_inputs["pixel_values"] = pixel_values
             model_inputs["aspect_ratio_ids"] = aspect_ratio_ids
 
