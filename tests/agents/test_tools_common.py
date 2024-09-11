@@ -12,6 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import unittest
 from pathlib import Path
 from typing import Dict, Union
 
@@ -19,6 +20,7 @@ import numpy as np
 
 from transformers import is_torch_available, is_vision_available
 from transformers.agents.agent_types import AGENT_TYPE_MAPPING, AgentAudio, AgentImage, AgentText
+from transformers.agents.tools import tool
 from transformers.testing_utils import get_tests_dir, is_agent_test
 
 
@@ -100,3 +102,18 @@ class ToolTesterMixin:
         for _input, expected_input in zip(inputs, self.tool.inputs.values()):
             input_type = expected_input["type"]
             _inputs.append(AGENT_TYPE_MAPPING[input_type](_input))
+
+
+class ToolTests(unittest.TestCase):
+    def test_tool_init_with_decorator(self):
+        @tool
+        def coolfunc(a: str, b: int) -> tuple:
+            """Cool function
+
+            Args:
+                a: The first argument
+                b: The third one
+            """
+            return b + 2, a
+
+        assert coolfunc.output_type == "tuple"

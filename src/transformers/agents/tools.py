@@ -21,7 +21,7 @@ import json
 import os
 import tempfile
 from functools import lru_cache
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Union
 
 from huggingface_hub import create_repo, get_collection, hf_hub_download, metadata_update, upload_folder
 from huggingface_hub.utils import RepositoryNotFoundError, build_hf_headers, get_session
@@ -36,6 +36,7 @@ from ..models.auto import AutoProcessor
 from ..utils import (
     CONFIG_NAME,
     cached_file,
+    get_json_schema,
     is_accelerate_available,
     is_torch_available,
     is_vision_available,
@@ -808,3 +809,31 @@ class ToolCollection:
         self._collection = get_collection(collection_slug, token=token)
         self._hub_repo_ids = {item.item_id for item in self._collection.items if item.item_type == "space"}
         self.tools = {Tool.from_hub(repo_id) for repo_id in self._hub_repo_ids}
+
+
+def tool(tool_function: Callable) -> Tool:
+    """
+    Decorator that turns a function into an instance of a specific Tool subclass
+
+    Args:
+        tool_function: Your function. Should have type hints for each input and for the output, and a description with 'Args:' part where each argument is described.
+    """
+    parameters = get_json_schema(tool_function)["function"]
+    class_name = f"{parameters['name'].capitalize()}Tool"
+    specific_tool_class = type(
+        class_name,
+        (Tool,),
+        {
+            "name": parameters["name"],
+            "description": parameters["description"],
+            "inputs": parameters["parameters"],
+            "output_type": parameters["return"]["type"],
+        },
+    )
+
+    def forward(self, *args, **kwargs):
+        return tool_function(*args, **kwargs)
+
+    setattr(specific_tool_class, "forward", forward)
+
+    return specific_tool_class()
