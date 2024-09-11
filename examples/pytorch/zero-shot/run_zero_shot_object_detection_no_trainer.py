@@ -824,7 +824,7 @@ def main():
         if args.with_tracking:
             accelerator.log(
                 {
-                    "train_loss": total_loss.item() / len(train_dataloader),
+                    "train_loss": total_loss / len(train_dataloader),
                     **metrics,
                     "epoch": epoch,
                     "step": completed_steps,
