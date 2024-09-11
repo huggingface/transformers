@@ -115,7 +115,7 @@ def convert_old_keys_to_new_keys(state_dict_keys: dict = None):
 def permute_for_rope(input_tensor, n_heads, dim1, dim2):
     """
     When you go from the complex ROPE formulation to sin and cos one, you need
-    to permute hte query and key weights (to avoid doing it on the fly)
+    to permute the query and key weights (to avoid doing it on the fly)
     """
     input_tensor = input_tensor.reshape(dim1, dim2)
     input_tensor = input_tensor.view(n_heads, dim1 // n_heads // 2, 2, dim2)
@@ -153,6 +153,49 @@ def pre_compute_positional_embedding(embedding):
     return precomputed_embeddings
 
 
+def is_param_different_across_shards(key):
+    patterns = [
+        r"vision_model.patch_embedding.weight",
+        r"vision_model.(transformer|global_transformer).layers.(\d+).self_attn.(q|k|v|o)_proj.weight",
+        r"vision_model.(transformer|global_transformer).layers.(\d+).mlp.fc1.(weight|bias)",
+        r"vision_model.(transformer|global_transformer).layers.(\d+).mlp.fc2.weight",  # fc2 bias is shared across shards
+        r"multi_modal_projector.(weight|bias)",
+        r"language_model.model.embed_tokens.weight",
+        r"language_model.lm_head.weight",
+        r"language_model.model.layers.(\d+).self_attn.q\|k\|v\|_proj.weight",
+        r"language_model.model.layers.(\d+).self_attn.o_proj.weight",
+        r"language_model.model.layers.(\d+).mlp.up\|gate_proj.weight",
+        r"language_model.model.layers.(\d+).mlp.down_proj.weight",
+        r"language_model.model.layers.(\d+).cross_attn.q_proj.weight",
+        r"language_model.model.layers.(\d+).cross_attn.k\|v_proj.weight",
+        r"language_model.model.layers.(\d+).cross_attn.o_proj.weight",
+        r"language_model.model.layers.(\d+).mlp.up\|gate_proj.weight",
+        r"language_model.model.layers.(\d+).mlp.down_proj.weight",
+        r"language_model.model.learnable_embedding.weight",
+    ]
+    return any(re.search(pattern, key) for pattern in patterns)
+
+
+def get_concat_dim(key):
+    concat_dim_1 = [
+        r"vision_model.(transformer|global_transformer).layers.(\d+).mlp.fc2.weight",
+        r"vision_model.(transformer|global_transformer).layers.(\d+).self_attn.o_proj.weight",
+        r"language_model.model.layers.(\d+).cross_attn.o_proj.weight",
+        r"language_model.model.layers.(\d+).self_attn.o_proj.weight",
+        r"language_model.model.layers.(\d+).mlp.down_proj.weight"
+    ]
+    if any(re.search(pattern, key) for pattern in concat_dim_1):
+        return 1
+    return 0
+
+
+def compute_intermediate_size(hidden_dim, multiple_of=1024, ffn_dim_multiplier=1.3):
+    hidden_dim = 4 * int(2 * hidden_dim / 3)
+    hidden_dim = int(ffn_dim_multiplier * hidden_dim)
+    hidden_dim = multiple_of * ((hidden_dim + multiple_of - 1) // multiple_of)
+    return hidden_dim
+
+
 def write_model(
     model_path,
     input_base_path,
@@ -168,18 +211,27 @@ def write_model(
 
     n_layers = params["n_layers"]  # language model self-attention layers
     n_layers_cross_attention = params["vision_num_cross_attention_layers"]  # language model cross-attention layers; 90B - 20, 11B - 8
-    n_layers_vision = 32  # constant
-    n_layers_vision_global = 8  # constant
     n_heads = params["n_heads"]
     n_heads_per_shard = n_heads // num_shards
     dim = params["dim"]
+    dims_per_head = dim // n_heads
     patch_size = 14
     num_channels = 3
+    intermediate_size = compute_intermediate_size(dim, multiple_of=params["multiple_of"])  # 28672 for 90B, 5120 for 11B
+
+    # vision model
+    n_layers_vision = 32  # constant
+    n_layers_vision_global = 8  # constant
+    dim_vision = 1280
+    n_heads_vision = 16
+    n_heads_per_shard_vision = n_heads_vision // num_shards
+    dims_per_head_vision = dim_vision // n_heads_vision
 
     if params.get("n_kv_heads", None) is not None:
         num_key_value_heads = params["n_kv_heads"]  # for GQA / MQA
         num_local_key_value_heads = n_heads_per_shard // num_key_value_heads
         key_value_dim = dim // num_local_key_value_heads
+        key_value_dim = dims_per_head * num_key_value_heads
     else:  # compatibility with other checkpoints
         num_key_value_heads = n_heads
         num_local_key_value_heads = n_heads_per_shard
@@ -190,9 +242,33 @@ def write_model(
         loaded = [torch.load(os.path.join(input_base_path, "consolidated.pth"), map_location="cpu")]
     else:
         loaded = [
-            torch.load(os.path.join(input_base_path, f"consolidated.{i:02d}.pth"), map_location="cpu")
+            torch.load(os.path.join(input_base_path, f"consolidated.{i:02d}.pth"), map_location="cpu", mmap=True)
             for i in range(num_shards)
         ]
+
+    # ************************************ DEBUG ********************************************
+
+    # Filter out keys for layers > n_layers
+    n_layers = 4
+    n_layers_cross_attention = 1
+    n_layers_vision = 4
+    n_layers_vision_global = 1
+    for shard in loaded:
+        for key in list(shard.keys()):
+            # text_model layers
+            if "text_model.layers" in key and int(key.split(".")[2]) >= n_layers:
+                del shard[key]
+            # cross attention layers
+            if "text_model.cross_attention_layers." in key and int(key.split(".")[2]) >= n_layers_cross_attention:
+                del shard[key]
+            # vision_model layers
+            if "vision_model.vision_encoder.transformer" in key and int(key.split(".")[4]) >= n_layers_vision:
+                del shard[key]
+            # vision_model layers
+            if "vision_model.vision_encoder.global_transformer" in key and int(key.split(".")[4]) >= n_layers_vision_global:
+                del shard[key]
+    
+    # ****************************************************************************************
 
     print("1. Converting language model")
     all_keys = list(loaded[0].keys())
@@ -218,38 +294,75 @@ def write_model(
                 r"layers.(\d+).", lambda _match: f"layers.{attn_layer_shift[int(_match.groups()[0])]}.", new_key
             )
 
-        if "norm" in key or "_gate" in key:
-            current_parameter =[chunk.pop(key).contiguous().clone() for chunk in loaded]
-        else:
-            current_parameter = torch.cat([chunk.pop(key).contiguous().clone() for chunk in loaded], dim=0)
+        current_parameter = [chunk.pop(key).contiguous().clone() for chunk in loaded]
+        if not is_param_different_across_shards(new_key):
+            current_parameter = current_parameter[0]
+        
+        concat_dim = get_concat_dim(new_key)
 
         # Post-process the current_parameter.
         if "self_attn.q|k|v|_proj" in new_key and "language_model" in new_key:
-            q, k, v = torch.split(current_parameter, [dim, key_value_dim, key_value_dim])
-            state_dict[new_key.replace("q|k|v|", "q")] = permute_for_rope(q, n_heads, dim, dim)
-            state_dict[new_key.replace("q|k|v|", "k")] = permute_for_rope(k, num_key_value_heads, key_value_dim, dim)
-            state_dict[new_key.replace("q|k|v|", "v")] = v
+            qkv_splits = [
+                torch.split(param, [dim // num_shards, key_value_dim // num_shards, key_value_dim // num_shards])
+                for param in current_parameter
+            ]
+
+            # query
+            queries = [q for q, _, _ in qkv_splits]
+            query = torch.cat([param.view(n_heads_per_shard, dims_per_head, dim) for param in queries], dim=0)
+            state_dict[new_key.replace("q|k|v|", "q")] = permute_for_rope(query, n_heads, dim, dim)
+
+            # key
+            keys = [k for _, k, _ in qkv_splits]
+            key = torch.cat([param.view(num_local_key_value_heads, dims_per_head, dim) for param in keys], dim=0)
+            state_dict[new_key.replace("q|k|v|", "k")] = permute_for_rope(key, num_key_value_heads, key_value_dim, dim)
+
+            # value
+            values = [v for _, _, v in qkv_splits]
+            value = torch.cat([param.view(num_local_key_value_heads, dims_per_head, dim) for param in values], dim=0)
+            state_dict[new_key.replace("q|k|v|", "v")] = value.reshape(num_key_value_heads * dims_per_head, dim)
+
+        elif "cross_attn.q_proj.weight" in new_key and "language_model" in new_key:
+            query = torch.cat([param.view(n_heads_per_shard, dims_per_head, dim) for param in current_parameter], dim=0)
+            state_dict[new_key] = query.reshape(n_heads * dims_per_head, dim)
+
+        elif "cross_attn.k|v_proj" in new_key and "language_model" in new_key:
+            key_values = [param.chunk(2) for param in current_parameter]
+            keys = [k for k, _ in key_values]
+            values = [v for _, v in key_values]
+            key = torch.cat([param.view(num_local_key_value_heads, dims_per_head, dim) for param in keys], dim=0)
+            value = torch.cat([param.view(num_local_key_value_heads, dims_per_head, dim) for param in values], dim=0)
+            state_dict[new_key.replace("k|v", "k")] = key.reshape(num_key_value_heads * dims_per_head, dim)
+            state_dict[new_key.replace("k|v", "v")] = value.reshape(num_key_value_heads * dims_per_head, dim)
+
         elif "cross_attn" in key and "q_norm" in key or "k_norm" in key:
-            state_dict[new_key] = current_parameter[0].view(-1, 2).t().reshape(-1)
+            state_dict[new_key] = current_parameter.view(-1, 2).t().reshape(-1)
+
         elif "mlp.up|gate_proj." in new_key:
-            gate, up = current_parameter.chunk(2)
+            gate_and_up = [param.chunk(2) for param in current_parameter]
+            gate = torch.cat([gate for gate, _ in gate_and_up], dim=concat_dim)
+            up = torch.cat([up for _, up in gate_and_up], dim=concat_dim)
             state_dict[new_key.replace("up|gate", "up")] = up
             state_dict[new_key.replace("up|gate", "gate")] = gate
+        
+        elif "vision_model" in new_key and ("q_proj" in new_key or "k_proj" in new_key or "v_proj" in new_key):
+            param = torch.cat([param.view(n_heads_per_shard_vision, dims_per_head_vision, dim_vision) for param in current_parameter], dim=0)
+            state_dict[new_key] = param.reshape(n_heads_vision * dims_per_head_vision, dim_vision)
+
         elif new_key == "vision_model.patch_embedding.weight":
+            current_parameter = torch.cat(current_parameter, dim=0)
             state_dict[new_key] = current_parameter.reshape(-1, num_channels, patch_size, patch_size)
-        elif "cross_attn.k|v_proj" in new_key and "language_model" in new_key:
-            k, v = current_parameter.chunk(2, dim=0)
-            state_dict[new_key.replace("k|v", "k")] = k
-            state_dict[new_key.replace("k|v", "v")] = v
-        elif "norm" in key:
-            state_dict[new_key] = current_parameter[0]
+
         elif new_key.endswith("gate"):
             state_dict[new_key] = current_parameter[0].view(1)
-        elif "tile_pos_embed.weight" in new_key or "gated_positional_embedding.weight" in new_key:
+
+        elif "tile_pos_embed.embedding" in new_key or "gated_positional_embedding.weight" in new_key:
             # pre-compute the embeddings
-            embedding = current_parameter
-            state_dict[new_key] = pre_compute_positional_embedding(embedding)
+            state_dict[new_key] = pre_compute_positional_embedding(current_parameter)
+
         elif new_key != "":
+            if isinstance(current_parameter, list):
+                current_parameter = torch.cat(current_parameter, dim=concat_dim)
             state_dict[new_key] = current_parameter
 
     state_dict["language_model.model.embed_tokens.weight"] = torch.cat(
@@ -265,20 +378,22 @@ def write_model(
     # Write configs
     config_parameters = {CONFIG_KEY_MAPPING[key]: params[key] for key in CONFIG_KEY_MAPPING.keys()}
     vision_config = MllamaVisionConfig(
-        **config_parameters,
         num_hidden_layers=n_layers_vision,
-        vision_input_dim=1280,  # Constant, taken directly from your notes
+        vision_input_dim=dim_vision,  # Constant, taken directly from your notes
         return_intermediate=[3, 7, 15, 23, 30],  # Based on return_intermediate indices
         max_num_tiles=4,
         num_global_layers=n_layers_vision_global,
+        vision_chunk_size=params["vision_chunk_size"],
+        num_attention_heads=n_heads_vision,
     )
     text_config = MllamaTextConfig(
         **config_parameters,
         num_hidden_layers=len(cross_layer_shift) + n_layers,
         cross_attention_layers=cross_layer_shift,
-        vision_input_dim=1280,  # Constant, aligned with vision config
+        vision_input_dim=dim_vision,  # Constant, aligned with vision config
         attention_bias=False,  # Constant set to False
         tie_word_embeddings=False,  # Constant set to False
+        intermediate_size=intermediate_size,
     )
     config = MllamaConfig(vision_config=vision_config, text_config=text_config)
     config.architectures = ["MllamaForConditionalGeneration"]
@@ -291,7 +406,6 @@ def write_model(
     del model.config._name_or_path
     model.save_pretrained(model_path, safe_serialization=safe_serialization)
     del state_dict, model
-
 
     # Safety check: reload the converted model
     gc.collect()
@@ -358,12 +472,12 @@ def write_image_processor(config_path: str, save_dir: str):
     with open(config_path, "r") as f:
         params = json.load(f)
 
-    patch_size = params["vision_chunk_size"]
+    tile_size = params["vision_chunk_size"]
     max_image_tiles = params["vision_max_num_chunks"]
 
     image_processor = MllamaImageProcessor(
         do_resize=True,
-        size={"height": patch_size, "width": patch_size},
+        size={"height": tile_size, "width": tile_size},
         do_rescale=True,
         rescale_factor=1 / 255,
         do_normalize=True,
@@ -380,12 +494,12 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--input_dir",
-        default="/home/ubuntu/projects/meta_mllama/weights-11b",
+        default="/home/ubuntu/projects/meta_mllama/weights-90b",
         help="Location of LLaMA weights, which contains tokenizer.model and model folders",
     )
     parser.add_argument(
         "--output_dir",
-        default="converted-mllama-11b-small",
+        default="converted-mllama-90b-debug",
         help="Location to write HF model and tokenizer",
     )
     parser.add_argument(
@@ -399,7 +513,7 @@ def main():
     )
     parser.add_argument(
         "--num_shards",
-        default=1,
+        default=8,
         type=int,
         help="The number of individual shards used for the model. Does not have to be the same as the number of consolidated_xx.pth",
     )

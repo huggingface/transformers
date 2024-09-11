@@ -229,7 +229,8 @@ class MllamaPrecomputedAspectRatioEmbedding(nn.Module):  # TODO use nn.embedding
         self.is_gated = is_gated
 
         scale = hidden_size**-0.5
-        self.embedding = nn.Parameter(torch.randn(self.max_num_tiles, self.max_num_tiles, 1, self.hidden_size) / scale)
+        max_aspect_ratio_id = (self.max_num_tiles - 1) * self.max_num_tiles + 1
+        self.embedding = nn.Parameter(torch.randn(max_aspect_ratio_id + 1, self.max_num_tiles, 1, self.hidden_size) / scale)
         if is_gated:
             self.gate = nn.Parameter(torch.zeros(1))
 
@@ -265,13 +266,12 @@ class MllamaPrecomputedPositionEmbedding(nn.Module):
         self.config = config
         super().__init__(**kwargs)
         self.max_num_tiles = config.max_num_tiles
-        self.num_patches = 1025
+        self.num_patches = (config.vision_chunk_size // config.patch_size) ** 2 + 1
         self.hidden_size = config.vision_input_dim
         self.is_gated = False  # just for now :wink:
 
-        max_aspect_ratio_id = (
-            self.max_num_tiles - 1
-        ) * self.max_num_tiles + 1  # TODO @pavel this should be as small as possible
+        # TODO @pavel this should be as small as possible
+        max_aspect_ratio_id = (self.max_num_tiles - 1) * self.max_num_tiles + 1
         precomputed_embeddings = torch.zeros(
             max_aspect_ratio_id + 1, self.max_num_tiles, self.num_patches, self.hidden_size
         )
