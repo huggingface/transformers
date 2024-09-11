@@ -42,8 +42,12 @@ class GgufIntegrationTests(unittest.TestCase):
     llama3_model_id = "NousResearch/Meta-Llama-3-8B-GGUF"
     tinyllama_model_id = "PenutChen/TinyLlama-1.1B-Chat-v1.0-GGUF"
     phi3_model_id = "microsoft/Phi-3-mini-4k-instruct-gguf"
+<<<<<<< HEAD
     bloom_model_id = "afrideva/bloom-560m-GGUF"
     original_bloom_model_id = "bigscience/bloom-560m"
+=======
+    falcon_model_id = "YokaiKoibito/falcon-40b-GGUF"
+>>>>>>> 96474f27a (feat(gguf): add falcon q2 k)
 
     # standard quants
     q4_0_gguf_model_id = "tinyllama-1.1b-chat-v1.0.Q4_0.gguf"
@@ -74,6 +78,17 @@ class GgufIntegrationTests(unittest.TestCase):
     fp16_bloom_model_id = "bloom-560m.fp16.gguf"
     q8_bloom_model_id = "bloom-560m.q8_0.gguf"
     f16_tinyllama_model_id = "TinyLlama-1.1B-Chat-v1.0.FP16.gguf"
+
+    q2_k_falcon_model_id = "falcon-40b-Q2_K.gguf"
+    q3_k_l_falcon_model_id = "falcon-40b-Q3_K_L.gguf"
+    q3_k_m_falcon_model_id = "falcon-40b-Q3_K_M.gguf"
+    q3_k_s_falcon_model_id = "falcon-40b-Q3_K_S.gguf"
+    q4_k_m_falcon_model_id = "falcon-40b-Q4_K_M.gguf"
+    q4_k_s_falcon_model_id = "falcon-40b-Q4_K_S.gguf"
+    q5_k_m_falcon_model_id = "falcon-40b-Q5_K_M.gguf"
+    q5_k_s_falcon_model_id = "falcon-40b-Q5_K_S.gguf"
+    q6_k_falcon_model_id = "falcon-40b-Q6_K.gguf"
+    q8_0_falcon_model_id = "falcon-40b-Q8_0.gguf"
 
     example_text = "Hello"
 
@@ -444,6 +459,22 @@ class GgufIntegrationTests(unittest.TestCase):
             ):
                 self.assertTrue(quantized_param.shape == original_param.shape)
                 torch.testing.assert_close(quantized_param, original_param)
+
+    def test_falcon_q2_k(self):
+        tokenizer = AutoTokenizer.from_pretrained(self.falcon_model_id, gguf_file=self.q2_k_falcon_model_id)
+        model = AutoModelForCausalLM.from_pretrained(
+            self.falcon_model_id,
+            gguf_file=self.q2_k_falcon_model_id,
+
+            device_map="auto",
+            torch_dtype=torch.float16,
+        )
+
+        text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
+        out = model.generate(**text, max_new_tokens=10)
+
+        EXPECTED_TEXT = "Hello, I am interested in [The Park]\nThe"
+        self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
     def test_tokenization_xnli(self):
         import tqdm

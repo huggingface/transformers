@@ -120,6 +120,19 @@ GGUF_TENSOR_MAPPING = {
         "output.weight": "lm_head.weight",
         "output_norm": "transformer.ln_f",
     },
+    "falcon": {
+        "token_embd": "model.embed_tokens",
+        "blk": "model.h",
+        "ffn_up": "mlp.dense_h_to_4h",
+        "ffn_down": "mlp.dense_4h_to_h",
+        "ffn_gate": "mlp.gate_proj",
+        "ffn_norm": "post_attention_layernorm",
+        "attn_norm": "ln_mlp",
+        "attn_qkv": "self_attention.query_key_value",
+        "attn_output": "self_attention.o_proj",
+        "output.weight": "lm_head.weight",
+        "output_norm": "model.ln_f",
+    },
 }
 
 
@@ -167,6 +180,18 @@ GGUF_CONFIG_MAPPING = {
         "vocab_size": "vocab_size",
     },
     "qwen2moe": {
+        "context_length": "max_position_embeddings",
+        "block_count": "num_hidden_layers",
+        "feed_forward_length": "intermediate_size",
+        "embedding_length": "hidden_size",
+        "rope.dimension_count": None,
+        "rope.freq_base": "rope_theta",
+        "attention.head_count": "num_attention_heads",
+        "attention.head_count_kv": "num_key_value_heads",
+        "attention.layer_norm_rms_epsilon": "rms_norm_eps",
+        "vocab_size": "vocab_size",
+    },
+    "falcon": {
         "context_length": "max_position_embeddings",
         "block_count": "num_hidden_layers",
         "feed_forward_length": "intermediate_size",
@@ -530,6 +555,7 @@ GGUF_TO_FAST_CONVERTERS = {
     "qwen2_moe": GGUFQwen2Converter,
     "phi3": GGUFPhi3Converter,
     "bloom": GGUFBloomConverter,
+    "falcon": GGUFBloomConverter,
 }
 
 
