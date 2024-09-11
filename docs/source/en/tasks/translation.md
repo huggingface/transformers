@@ -212,7 +212,7 @@ At this point, only three steps remain:
 ...     save_total_limit=3,
 ...     num_train_epochs=2,
 ...     predict_with_generate=True,
-...     fp16=True, # change to bf16=True for XPU
+...     fp16=True, #change to bf16=True for XPU
 ...     push_to_hub=True,
 ... )
 
