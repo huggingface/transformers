@@ -1880,8 +1880,6 @@ class ProPainterSparseWindowAttention(nn.Module):
             att_s = self.attn_drop(att_s)
             y_s = att_s @ window_value_s
             output[i, unmask_ind_i] = y_s
-        _att_t = att_t
-        _att_s = att_s
         if output_attentions:
             all_self_attentions = all_self_attentions + (att_t,) + (att_s,)
         # re-assemble all head outputs side by side

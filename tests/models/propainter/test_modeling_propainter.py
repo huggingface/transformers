@@ -68,12 +68,12 @@ class ProPainterModelTester:
     def __init__(
         self,
         parent,
-        batch_size=3,
+        batch_size=2,
         image_size=64,
         is_training=True,
         hidden_size=512,
         num_hidden_layers=2,
-        num_attention_heads=2,
+        num_attention_heads=1,
         num_frames=8,
     ):
         self.parent = parent
