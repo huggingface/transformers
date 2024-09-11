@@ -853,6 +853,10 @@ class WandbCallback(TrainerCallback):
                 self._wandb.config["model/num_parameters"] = model.num_parameters()
             except AttributeError:
                 logger.info("Could not log the number of model parameters in Weights & Biases.")
+            except self._wandb.sdk.lib.config_util.ConfigError:
+                logger.warning(
+                    "A ConfigError was raised whilst setting the number of model parameters in Weights & Biases config."
+                )
 
             # log the initial model architecture to an artifact
             if self._log_model.is_enabled:
