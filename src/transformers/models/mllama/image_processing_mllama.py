@@ -534,7 +534,6 @@ def convert_aspect_ratios_to_ids(aspect_ratios: List[List[Tuple[int, int]]], max
     return aspect_ratios_ids
 
 
-# Copied from transformers.models.idefics2.image_processing_idefics2.to_channel_dimension_format
 def to_channel_dimension_format(
     image: np.ndarray,
     channel_dim: Union[ChannelDimension, str],

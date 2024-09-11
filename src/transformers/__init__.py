@@ -577,10 +577,6 @@ _import_structure = {
     ],
     "models.mistral": ["MistralConfig"],
     "models.mixtral": ["MixtralConfig"],
-    "models.mllama": [
-        "MllamaConfig",
-        "MllamaProcessor",
-    ],
     "models.mluke": [],
     "models.mobilebert": [
         "MobileBertConfig",
