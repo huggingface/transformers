@@ -667,7 +667,7 @@ class ZambaMambaMixer(nn.Module):
             if attention_mask is not None and not torch.all(attention_mask == 1):
                 hidden_states = hidden_states * attention_mask.unsqueeze(1)
 
-        # 3. State Space Model sequence transformation
+        # 3. SSM sequence transformation
         # 3.a. input varying initialization of time_step, B and C
 
         hidden_states = hidden_states.reshape(
