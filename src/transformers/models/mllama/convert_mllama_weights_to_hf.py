@@ -192,7 +192,7 @@ def write_model(
             state_dict[new_key.replace("q|k|v|", "k")] = permute_for_rope(k, num_key_value_heads, key_value_dim, dim)
             state_dict[new_key.replace("q|k|v|", "v")] = v
         elif "cross_attn" in key and "q_norm" in key or "k_norm" in key:
-            state_dict[new_key] = [chunk.pop(key).contiguous().clone() for chunk in loaded][0].view(-1, 2).t().reshape(1, -1)
+            state_dict[new_key] = [chunk.pop(key).contiguous().clone() for chunk in loaded][0].view(-1, 2).t().reshape(-1)
         elif "mlp.up|gate_proj." in new_key:
             weight = torch.cat([chunk.pop(key).contiguous().clone() for chunk in loaded], dim=0)
             gate, up = weight.chunk(2)
