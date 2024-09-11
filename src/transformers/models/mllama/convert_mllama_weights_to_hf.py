@@ -194,6 +194,7 @@ def write_model(
             for i in range(num_shards)
         ]
 
+
     print("1. Converting language model")
     all_keys = list(loaded[0].keys())
     new_keys = convert_old_keys_to_new_keys(all_keys)
@@ -289,7 +290,7 @@ def write_model(
     with torch.device("meta"):
         model = MllamaForConditionalGeneration(config)
     model.load_state_dict(state_dict, strict=True, assign=True)
-    del mllama_model.config._name_or_path
+    del model.config._name_or_path
     model.save_pretrained(model_path, safe_serialization=safe_serialization)
     del state_dict, model
 
@@ -304,7 +305,6 @@ def write_model(
 class MllamaConverter(TikTokenConverter):
     def __init__(self, vocab_file, num_reserved_special_tokens=256, **kwargs):
         super().__init__(vocab_file, **kwargs)
-        tokenizer = self.converted()
         chat_template = (
             "{% set loop_messages = messages %}"
             "{% for message in loop_messages %}"
@@ -329,12 +329,13 @@ class MllamaConverter(TikTokenConverter):
             "<|eom_id|>",  # end of message
             "<|eot_id|>",  # end of turn
             "<|python_tag|>",
-            "<|image|>",
         ]
         special_tokens += [
             f"<|reserved_special_token_{i + 2}|>" for i in range(num_reserved_special_tokens - len(special_tokens))
         ]
-        tokenizer.add_special_tokens(special_tokens)
+        special_tokens.append("<|image|>")
+        self.additional_special_tokens = special_tokens
+        tokenizer = self.converted()
 
         self.tokenizer = PreTrainedTokenizerFast(
             tokenizer_object=tokenizer,
@@ -356,7 +357,7 @@ def write_tokenizer(tokenizer_path: str, save_dir: str):
 
 
 def write_image_processor(config_path: str, save_dir: str):
-    with open(os.path.join(config_path, "params.json"), "r") as f:
+    with open(config_path, "r") as f:
         params = json.load(f)
 
     patch_size = params["vision_chunk_size"]
@@ -381,7 +382,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--input_dir",
-        default="/raid/arthur/mllama-11b",
+        default="/home/ubuntu/projects/meta_mllama/weights-11b",
         help="Location of LLaMA weights, which contains tokenizer.model and model folders",
     )
     parser.add_argument(
@@ -413,12 +414,12 @@ def main():
     )
 
     write_tokenizer(
-        tokenizer_path=f"{args.input_dir}/tokenizer.model",
+        tokenizer_path=os.path.join(args.input_dir, "tokenizer.model"),
         save_dir=args.output_dir,
     )
 
     write_image_processor(
-        config_path=f"{args.input_dir}/params.json",
+        config_path=os.path.join(args.input_dir, "params.json"),
         save_dir=args.output_dir,
     )
 
