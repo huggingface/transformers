@@ -598,11 +598,6 @@ class GenerationMixin:
                     and isinstance(dict_to_expand[key], torch.Tensor)
                 ):
                     dict_to_expand[key] = dict_to_expand[key].repeat_interleave(expand_size, dim=0)
-                elif isinstance(dict_to_expand[key], list):
-                    temp_list = []
-                    for sublist in dict_to_expand[key]:
-                        temp_list.extend([sublist] * expand_size)
-                    dict_to_expand[key] = temp_list
             return dict_to_expand
 
         if input_ids is not None:
@@ -1375,9 +1370,6 @@ class GenerationMixin:
     def _get_initial_cache_position(self, input_ids, model_kwargs):
         """Calculates `cache_position` for the pre-fill stage based on `input_ids` and optionally past length"""
         # `torch.compile`-friendly `torch.arange` from a shape -- the lines below are equivalent to `torch.arange`
-        if "cache_position" in model_kwargs:
-            return model_kwargs
-
         if "inputs_embeds" in model_kwargs:
             cache_position = torch.ones_like(model_kwargs["inputs_embeds"][0, :, 0], dtype=torch.int64).cumsum(0) - 1
         else:
@@ -2972,7 +2964,7 @@ class GenerationMixin:
 
             # Clone is needed to avoid keeping a hanging ref to outputs.logits which may be very large for first iteration
             # (the clone itself is always small)
-            next_token_logits = outputs.logits.clone()[:, -1, :]
+            next_token_logits = outputs.logits.clone()[:, -1, :].float()
 
             # pre-process distribution
             next_token_scores = logits_processor(input_ids, next_token_logits)
