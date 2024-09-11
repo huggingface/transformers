@@ -73,12 +73,10 @@ class Bnb8BitHfQuantizer(HfQuantizer):
             raise ImportError(
                 "Using `bitsandbytes` 8-bit quantization requires the latest version of bitsandbytes: `pip install -U bitsandbytes`"
             )
-        import bitsandbytes as bnb
 
-        bnb_multibackend_is_enabled = "multi_backend" in getattr(bnb, "features", set())
+        from ..integrations.integration_utils import validate_bnb_backend_availability, is_bitsandbytes_multi_backend_available
 
-        from ..integrations.integration_utils import validate_bnb_backend_availability
-
+        bnb_multibackend_is_enabled = is_bitsandbytes_multi_backend_available()
         validate_bnb_backend_availability(raise_exception=True)
 
         if kwargs.get("from_tf", False) or kwargs.get("from_flax", False):

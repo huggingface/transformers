@@ -206,6 +206,11 @@ def is_dvclive_available():
     return importlib.util.find_spec("dvclive") is not None
 
 
+def is_bitsandbytes_multi_backend_available() -> bool:
+    import bitsandbytes as bnb
+    return "multi_backend" in getattr(bnb, "features", set())
+
+
 def _validate_bnb_multi_backend_availability(raise_exception):
     import bitsandbytes as bnb
 
@@ -268,7 +273,7 @@ def validate_bnb_backend_availability(raise_exception=False):
     """
     import bitsandbytes as bnb
 
-    if "multi_backend" in getattr(bnb, "features", set()):
+    if is_bitsandbytes_multi_backend_available():
         return _validate_bnb_multi_backend_availability(raise_exception)
     return _validate_bnb_cuda_backend_availability(raise_exception)
 

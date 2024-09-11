@@ -49,6 +49,7 @@ from .integrations import (
     is_sigopt_available,
     is_tensorboard_available,
     is_wandb_available,
+    is_bitsandbytes_multi_backend_available,
 )
 from .integrations.deepspeed import is_deepspeed_available
 from .utils import (
@@ -978,11 +979,8 @@ def require_torch_gpu_if_bnb_not_multi_backend_enabled(test_case):
     """
     Decorator marking a test that requires a GPU if bitsandbytes multi-backend feature is not enabled.
     """
-    if is_bitsandbytes_available():
-        import bitsandbytes as bnb
-
-        if hasattr(bnb, "features") and "multi_backend" in bnb.features:
-            return test_case
+    if is_bitsandbytes_available() and is_bitsandbytes_multi_backend_available():
+        return test_case
     return require_torch_gpu(test_case)
 
 
