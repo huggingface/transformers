@@ -78,56 +78,49 @@ class MllamaVisionConfig(PretrainedConfig):
 
     def __init__(
         self,
-        hidden_size=768,
-        intermediate_size=3072,
-        num_hidden_layers=12,
-        num_attention_heads=12,
+        hidden_size=1280,
+        intermediate_size=5120,
+        num_hidden_layers=32,
+        num_attention_heads=16,
         num_channels=3,
         image_size=224,
         patch_size=14,
         hidden_act="gelu",
         layer_norm_eps=1e-6,
         attention_dropout=0.0,
-        # TODO standard parameter names
-        n_heads=16,
-        n_global_layers=8,
-        num_layers=32,
+        num_global_layers=8,
         vision_chunk_size=448,
-        vision_max_num_chunks=4,
         projection_dim=4096,
         vision_input_dim=1280,
         vision_output_dim=7680,
         return_intermediate=None,
-        global_vision_layers=8,
         max_num_tiles=4, # same as vision max num chunks? yes ;-)
         norm_eps= 1.0e-5,
-        ffn_dim_multiplier=1.3,
-        multiple_of=4096,
         in_channels=3,
         **kwargs,
     ):
-        super().__init__(**kwargs)
+        super().__init__()
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.intermediate_size = intermediate_size
+        self.num_channels = num_channels
+        self.image_size = image_size
+        self.layer_norm_eps = layer_norm_eps
         self.vision_output_dim = vision_output_dim
-        self.n_heads=n_heads
-        self.num_layers = num_layers
-        self.n_global_layers = n_global_layers
         self.vision_chunk_size = vision_chunk_size
-        self.vision_max_num_chunks = vision_max_num_chunks
         self.patch_size = patch_size
         self.projection_dim = projection_dim
         self.vision_input_dim = vision_input_dim
         if return_intermediate is None:
             return_intermediate = [3,7,15,23,30]
         self.return_intermediate = return_intermediate
-        self.global_vision_layers = global_vision_layers
+        self.num_global_layers = num_global_layers
         self.max_num_tiles = max_num_tiles
         self.norm_eps = norm_eps
-        self.ffn_dim_multiplier = ffn_dim_multiplier
-        self.multiple_of = multiple_of
         self.in_channels = in_channels
 
         self.hidden_size = vision_input_dim
-        self.attention_heads = n_heads
+        self.attention_heads = num_attention_heads
         self.intermediate_size = 4 * vision_input_dim
         self.hidden_act = hidden_act
 
@@ -206,17 +199,13 @@ class MllamaTextConfig(PretrainedConfig):
     def __init__(
         self,
         vocab_size=128256,
-        num_hidden_layers=32,
+        num_hidden_layers=40,
+        cross_attention_layers=None,
         hidden_size=4096,
         num_attention_heads=32,
         num_key_value_heads=8,
-        max_seq_len=512,
-        ffn_dim_multiplier= 1.3,
         rope_theta= 500000,
         use_scaled_rope=True,
-        vision_num_cross_attention_layers=20, # TODO comon
-        multiple_of=4096, # TODO common
-        vision_input_dim=1280, # TODO common
         intermediate_size=14336,
         hidden_act="silu",
         max_position_embeddings=2048,
@@ -226,7 +215,6 @@ class MllamaTextConfig(PretrainedConfig):
         pad_token_id=None,
         bos_token_id=1,
         eos_token_id=2,
-        pretraining_tp=1,
         tie_word_embeddings=False,
         rope_scaling=None,
         attention_bias=False,
@@ -239,19 +227,15 @@ class MllamaTextConfig(PretrainedConfig):
     ):
         self.vocab_size = vocab_size
         self.num_hidden_layers = num_hidden_layers
+        if cross_attention_layers is None:
+            cross_attention_layers = [3, 7, 11, 15, 19, 23, 27, 31]
         self.hidden_size = hidden_size
         self.num_attention_heads = num_attention_heads
         self.num_key_value_heads = num_key_value_heads
-        self.max_seq_len = max_seq_len
-        self.vision_num_cross_attention_layers = vision_num_cross_attention_layers
         self.rope_theta = rope_theta
         self.use_scaled_rope = use_scaled_rope
         self.rms_norm_eps = rms_norm_eps
-        self.multiple_of = multiple_of
-        self.ffn_dim_multiplier= ffn_dim_multiplier
         self.intermediate_size = intermediate_size
-        self.vision_input_dim = vision_input_dim
-        self.cross_attention_freq = 2
         self.dropout=dropout
         self.hidden_activation=hidden_activation
         self.attention_bias = attention_bias
@@ -263,7 +247,6 @@ class MllamaTextConfig(PretrainedConfig):
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
             tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
         )
 
 

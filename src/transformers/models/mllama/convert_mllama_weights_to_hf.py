@@ -13,15 +13,16 @@
 # limitations under the License.
 
 import gc
-import json
 import os
-import shutil
+import argparse
 import warnings
-
+import json
 import regex as re
 import torch
-
+import math
+from typing import List
 from transformers import MllamaConfig, MllamaForConditionalGeneration, MllamaImageProcessor, PreTrainedTokenizerFast
+from transformers.models.mllama.configuration_mllama import MllamaVisionConfig, MllamaTextConfig
 from transformers.convert_slow_tokenizer import TikTokenConverter
 
 
@@ -84,10 +85,19 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
 }
 # fmt: on
 
+CONFIG_KEY_MAPPING = {
+    "n_layers": "num_hidden_layers",
+    "n_heads": "num_attention_heads",
+    "vocab_size": "vocab_size",
+    "dim":"hidden_size",
+    "norm_eps":"rms_norm_eps",
+    "rope_theta":"rope_theta",
+}
 
 def convert_old_keys_to_new_keys(state_dict_keys: dict = None):
     """
-        This function should be applied only once, on the concatenated keys.
+    This function should be applied only once, on the concatenated keys to efficiently rename using
+    the key mappings.
     """
     output_dict = {}
     if state_dict_keys is not None:
@@ -101,62 +111,41 @@ def convert_old_keys_to_new_keys(state_dict_keys: dict = None):
         output_dict = {k:v for k,v in zip(old_text.split("\n"), new_text.split("\n"))}
     return output_dict
 
-
-def read_json(path):
-    with open(path, "r") as f:
-        return json.load(f)
-
-def write_json(text, path):
-    with open(path, "w") as f:
-        json.dump(text, f)
-
 def permute_for_rope(input_tensor, n_heads, dim1, dim2):
+    """
+    When you go from the complex ROPE formulation to sin and cos one, you need 
+    to permute hte query and key weights (to avoid doing it on the fly)
+    """
     input_tensor = input_tensor.reshape(dim1, dim2)
     input_tensor = input_tensor.view(n_heads, dim1 // n_heads // 2, 2, dim2)
     input_tensor = input_tensor.transpose(1, 2).reshape(dim1, dim2)
     return input_tensor
 
-def process_layer_norm_post_rope(layer_norm_weight, num_shards, dims_per_heads):
-    pass # TODO
 
 def write_model(
     model_path,
     input_base_path,
-    model_size,
+    num_shards,
     safe_serialization=True,
-    llama_version=1,
     vocab_size=None,
 ):
 
     os.makedirs(model_path, exist_ok=True)
-    tmp_model_path = os.path.join(model_path, "tmp")
-    os.makedirs(tmp_model_path, exist_ok=True)
 
-    params = read_json(os.path.join(input_base_path, "params.json"))
-    num_shards = NUM_SHARDS[model_size]
+    with open(os.path.join(input_base_path, "params.json"), "r") as f:
+        params = json.load(f)
+
     params = params.get("model", params)
 
     # language parameters
     n_layers = params["n_layers"] # language model self-attention layers
     n_layers_cross_attention = params["vision_num_cross_attention_layers"]  # language model cross-attention layers; 90B - 20, 11B - 8
-    n_heads = params["n_heads"] # 64 for 90b (70b llama), 32 for 11b mllama
+    n_heads = params["n_heads"]
     n_heads_per_shard = n_heads // num_shards
     dim = params["dim"]
-    dims_per_head = dim // n_heads
     patch_size = 14
     num_channels = 3
-    base = params.get("rope_theta", 10000.0)
 
-    # vision parameters
-    n_layers_vision_transformer = 32 # vision model 1st transformer layers
-    n_layers_global_transformer = 8 # global transformer vision layers
-    n_heads_vision = 16
-    n_vision_heads_per_shard = n_heads_vision // num_shards
-    vision_hidden_dim = 1280 # width of vision transformers
-    vision_dims_per_head = vision_hidden_dim // n_heads_vision
-    mlp_ratio = 4 # vision_hidden_dim * mlp_ratio is mlp dim
-
-    vocab_size = vocab_size if vocab_size is not None else 32000
     if params.get("n_kv_heads", None) is not None:
         num_key_value_heads = params["n_kv_heads"]  # for GQA / MQA
         num_local_key_value_heads = n_heads_per_shard // num_key_value_heads
@@ -165,10 +154,6 @@ def write_model(
         num_key_value_heads = n_heads
         num_local_key_value_heads = n_heads_per_shard
         key_value_dim = dim
-
-    # permute for sliced rotary
-    def permute(w, n_heads, dim1=dim, dim2=dim):
-        return w.view(n_heads, dim1 // n_heads // 2, 2, dim2).transpose(1, 2).reshape(dim1, dim2)
 
     print(f"Fetching all parameters from the checkpoint at {input_base_path}.")
     if num_shards == 1:
@@ -179,18 +164,16 @@ def write_model(
             for i in range(num_shards)
         ]
 
-    param_count = 0
-    index_dict = {"weight_map": {}}
     print("1. Converting language model")
-    total_layers = len(loaded[0].keys())
     all_keys = list(loaded[0].keys())
     new_keys = convert_old_keys_to_new_keys(all_keys)
 
-    cross_layer_shift = [3, 7, 11, 15, 19, 23, 27, 31]
-    attn_layer_shift = [0, 1, 2, 4, 5, 6, 8, 9, 10, 12, 13, 14, 16, 17, 18, 20, 21, 22, 24, 25, 26, 28, 29, 30, 32, 33, 34, 35, 36, 37, 38, 39]
+    cross_attention_frequency = math.ceil(n_layers/n_layers_cross_attention) 
+    cross_layer_shift = list(range(n_layers))[cross_attention_frequency-1::cross_attention_frequency]
+    attn_layer_shift = [k for k in range(len(cross_layer_shift) + n_layers) if k not in cross_layer_shift]
+
     state_dict = {}
-    for idx, key in enumerate(all_keys):
-        filename = f"pytorch_model-{idx + 1}-of-{total_layers + 1}.bin"
+    for key in all_keys:
         # Sharded
         # Note that attention.w{q,k,v,o}, feed_fordward.w[1,2,3], attention_norm.weight and ffn_norm.weight share
         # the same storage object, saving attention_norm and ffn_norm will save other weights too, which is
@@ -201,6 +184,7 @@ def write_model(
         elif "text_model.layers" in key and "language_model" in new_key:
             new_key = re.sub(r"layers.(\d+).", lambda _match: f"layers.{attn_layer_shift[int(_match.groups()[0])]}.", new_key)
 
+        # Post-process the weights
         if "self_attn.q|k|v|_proj" in new_key and "language_model" in new_key:
             weight = torch.cat([chunk.pop(key).contiguous().clone() for chunk in loaded], dim=0) # TODO maybe a view is needed
             q, k, v = torch.split(weight, [dim, key_value_dim, key_value_dim])
@@ -208,10 +192,7 @@ def write_model(
             state_dict[new_key.replace("q|k|v|", "k")] = permute_for_rope(k, num_key_value_heads, key_value_dim, dim)
             state_dict[new_key.replace("q|k|v|", "v")] = v
         elif "cross_attn" in key and "q_norm" in key or "k_norm" in key:
-            # TODO since rope was permuted, we ought to permute q and k norms
-            # depending on whether or not they are sharded as well!
-            state_dict[
-                new_key  ] = [chunk.pop(key).contiguous().clone() for chunk in loaded][0]
+            state_dict[new_key] = [chunk.pop(key).contiguous().clone() for chunk in loaded][0].view(-1, 2).t().reshape(1, -1)
         elif "mlp.up|gate_proj." in new_key:
             weight = torch.cat([chunk.pop(key).contiguous().clone() for chunk in loaded], dim=0)
             gate, up = weight.chunk(2)
@@ -225,80 +206,55 @@ def write_model(
             state_dict[new_key.replace("k|v", "k")] = k
             state_dict[new_key.replace("k|v", "v")] = v
         elif "layernorm" in new_key:
-            state_dict [
-                new_key  ]= [chunk.pop(key).contiguous().clone() for chunk in loaded][0]
+            state_dict [new_key]= [chunk.pop(key).contiguous().clone() for chunk in loaded][0]
         elif "_gate" in new_key:
-            state_dict  [new_key] =  [chunk.pop(key).contiguous().clone() for chunk in loaded][0][0].view(1)
+            state_dict[new_key] =  [chunk.pop(key).contiguous().clone() for chunk in loaded][0][0].view(1)
         elif new_key != "":
-            state_dict[
-                new_key  ] = torch.cat([chunk.pop(key).contiguous().clone() for chunk in loaded], dim=0)
+            state_dict[new_key] = torch.cat([chunk.pop(key).contiguous().clone() for chunk in loaded], dim=0)
 
-        # for k, v in state_dict.items():
-        #     index_dict["weight_map"][k] = filename
-        #     param_count += v.numel()
-        # print(f"Saving {filename} in {tmp_model_path}...")
-        # torch.save(state_dict, os.path.join(tmp_model_path, filename))
     state_dict["language_model.model.embed_tokens.weight"] = torch.cat(
         [state_dict["language_model.model.embed_tokens.weight"], state_dict.pop("language_model.model.learnable_embedding.weight")], dim=0
     )
+    del loaded;gc.collect()
+
     # Write configs
-    index_dict["metadata"] = {"total_size": param_count * 2}
-    write_json(index_dict, os.path.join(tmp_model_path, "pytorch_model.bin.index.json"))
-    vision_config = {
-        "n_heads": params["n_heads"],
-        "vision_chunk_size": params["vision_chunk_size"],
-        "vision_max_num_chunks": params["vision_max_num_chunks"],
-        "patch_size": patch_size,
-        "projection_dim": params["dim"],  # need to figure out
-        "vision_input_dim": 1280, # constant, "self.vision_input_dim = 1280" for CrossAttentionTransformerVision in original code
-        "return_intermediate": [3,7,15,23,30],
-        "global_vision_layers": 8,  # constant "n_global_layers=8" for VisionEncoder in original code
-        "max_num_tiles": 4,  # not used in the modeling code yet, "max_num_tiles=4" for VisionEncoder in original code
-        "norm_eps": params["norm_eps"],
-        "ffn_dim_multiplier": params["ffn_dim_multiplier"],
-        "multiple_of": params["multiple_of"],
+    config_parameters = {
+        CONFIG_KEY_MAPPING[key]: params[key] for key in CONFIG_KEY_MAPPING.keys()
     }
-    text_config = {
-        "vocab_size": params["vocab_size"],
-        "n_layers": params["n_layers"],
-        "dim": params["dim"],
-        "n_heads": params["n_heads"],
-        "n_kv_heads": params["n_kv_heads"],
-        "max_seq_len": 512,  # in examples
-        "ffn_dim_multiplier": params["ffn_dim_multiplier"],
-        "norm_eps": params["norm_eps"],
-        "rope_theta": params["rope_theta"],
-        "use_scaled_rope": params["use_scaled_rope"],
-        "vision_num_cross_attention_layers": params["vision_num_cross_attention_layers"],  # should be in vision config?
-        "multiple_of": params["multiple_of"],
-        "vision_input_dim": 1280, # constant, see "vision_input_dim" in vision config
-        "attention_bias":False,
-        "tie_word_embeddings":False,
-    }
+    vision_config = MllamaVisionConfig(
+        **config_parameters, 
+        vision_input_dim=1280,  # Constant, taken directly from your notes
+        return_intermediate=[3, 7, 15, 23, 30],  # Based on return_intermediate indices
+        global_vision_layers=8,  # Constant from the original code
+        max_num_tiles=4, 
+        num_global_layers=params["vision_num_cross_attention_layers"]
+    )
+    text_config = MllamaTextConfig(
+        **config_parameters, 
+        cross_attention_layers=cross_layer_shift,
+        vision_input_dim=1280,  # Constant, aligned with vision config
+        attention_bias=False,  # Constant set to False
+        tie_word_embeddings=False,  # Constant set to False
+    )
     config = MllamaConfig(vision_config=vision_config, text_config=text_config)
     config.architectures = ["MllamaForConditionalGeneration"]
-    config.save_pretrained(tmp_model_path)
+    config.save_pretrained(model_path)
     print("Loading the checkpoint in a Llama model.")
 
-    # Make space so we can load the model properly now.
-    # del state_dict
-    del loaded
-    gc.collect()
+
 
     with torch.device("meta"):
         model = MllamaForConditionalGeneration(config)
     model.load_state_dict(state_dict, strict=True, assign=True)
     model.save_pretrained(model_path, safe_serialization=safe_serialization)
 
-    mllama_model = MllamaForConditionalGeneration.from_pretrained(tmp_model_path, torch_dtype=torch.bfloat16, device_map="auto")
+    mllama_model = MllamaForConditionalGeneration.from_pretrained(model_path, torch_dtype=torch.bfloat16, device_map="auto")
     # Avoid saving this as part of the config.
     del mllama_model.config._name_or_path
     mllama_model.config.torch_dtype = torch.float16  # not sure about this.
     print("Saving in the Transformers format.")
     mllama_model.save_pretrained(model_path, safe_serialization=safe_serialization)
-    shutil.rmtree(tmp_model_path)
 
-# TODO: update to new provided code: python + video tokens
 class MllamaConverter(TikTokenConverter):
     def __init__(self, vocab_file, num_reserved_special_tokens=256, **kwargs):
         super().__init__(vocab_file, **kwargs)
@@ -345,8 +301,9 @@ class MllamaConverter(TikTokenConverter):
         )
 
 
-def write_tokenizer(tokenizer_path: str, save_dir: str):
 
+
+def write_tokenizer(tokenizer_path: str, save_dir: str):
     converter = MllamaConverter(
         tokenizer_path,
         pattern=r"(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+",  # noqa: W605
@@ -356,8 +313,8 @@ def write_tokenizer(tokenizer_path: str, save_dir: str):
 
 
 def write_image_processor(config_path: str, save_dir: str):
-
-    params = read_json(config_path)
+    with open(os.path.join(config_path, "params.json"), "r") as f:
+        params = json.load(f)
 
     patch_size = params["vision_chunk_size"]
     max_image_tiles = params["vision_max_num_chunks"]
@@ -377,21 +334,52 @@ def write_image_processor(config_path: str, save_dir: str):
     image_processor.save_pretrained(save_dir)
 
 
-write_model(
-    model_path="converted-mllama-11b",
-    input_base_path="/raid/arthur/mllama-11b",
-    safe_serialization=True,
-    model_size="11B",
-    llama_version=3,
-    vocab_size=128256,
-)
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--input_dir",
+        default="/raid/arthur/mllama-11b",
+        help="Location of LLaMA weights, which contains tokenizer.model and model folders",
+    )
+    parser.add_argument(
+        "--output_dir",
+        default="converted-mllama-11b",
+        help="Location to write HF model and tokenizer",
+    )
+    parser.add_argument(
+        "--safe_serialization", default=True, type=bool, help="Whether or not to save using `safetensors`."
+    )
+    parser.add_argument(
+        "--special_tokens",
+        default=None,
+        type=List[str],
+        help="The list of special tokens that should be added to the model.",
+    )
+    parser.add_argument(
+        "--num_shards",
+        default=1,
+        type=int,
+        help="The number of individual shards used for the model. Does not have to be the same as the number of consolidated_xx.pth",
+    )
+    args = parser.parse_args()
+    write_model(
+        model_path=args.output_dir,
+        input_base_path=args.input_dir,
+        safe_serialization=args.safe_serialization,
+        num_shards=args.num_shards,
+    )
 
-write_tokenizer(
-    tokenizer_path="/home/ubuntu/projects/meta_mllama/weights-11b-biases/tokenizer.model",
-    save_dir="/home/ubuntu/projects/new-model-addition-mllama/mllama-11b",
-)
+    write_tokenizer(
+        tokenizer_path=f"{args.input_dir}/tokenizer.model",
+        save_dir=args.output_dir,
+    )
 
-write_image_processor(
-    config_path="/home/ubuntu/projects/meta_mllama/weights-11b-biases/params.json",
-    save_dir="/home/ubuntu/projects/new-model-addition-mllama/mllama-11b",
-)
+    write_image_processor(
+        config_path=f"{args.input_dir}/params.json",
+        save_dir=args.output_dir,
+    )
+
+
+
+if __name__ == "__main__":
+    main()
