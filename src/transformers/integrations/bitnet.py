@@ -13,7 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ..utils import is_accelerate_available, is_torch_available, logging
+from ..utils import is_accelerate_available, is_torch_available,logging
+
 
 if is_accelerate_available():
     from accelerate import init_empty_weights
