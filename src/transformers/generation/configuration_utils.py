@@ -327,7 +327,7 @@ class GenerationConfig(PushToHubMixin):
         assistant_confidence_threshold (`float`, *optional*):
             The confidence threshold for the assistant model. If the assistant model's confidence in its prediction for the current token is lower
             than this threshold, the assistant model stops the current token generation iteration, even if the number of _speculative tokens_
-            (defined by `num_assistant_tokens`) is not yet reached. It is an unsupervised version of the dynamic speculation lookahead 
+            (defined by `num_assistant_tokens`) is not yet reached. It is an unsupervised version of the dynamic speculation lookahead
             from Dynamic Speculation Lookahead Accelerates Speculative Decoding of Large Language Models <https://arxiv.org/abs/2405.04304>.
         prompt_lookup_num_tokens (`int`, *optional*, default to `None`):
             The number of tokens to be output as candidate tokens.
