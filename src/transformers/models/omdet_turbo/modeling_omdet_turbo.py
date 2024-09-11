@@ -266,6 +266,7 @@ def multi_scale_deformable_attention(
 ) -> Tensor:
     batch_size, _, num_heads, hidden_dim = value.shape
     _, num_queries, num_heads, num_levels, num_points, _ = sampling_locations.shape
+    # Ignore copy
     value_list = value.split([height * width for height, width in value_spatial_shapes], dim=1)
     sampling_grids = 2 * sampling_locations - 1
     sampling_value_list = []
@@ -875,7 +876,6 @@ class OmDetTurboHybridEncoder(nn.Module):
             self.pan_blocks.append(OmDetTurboCSPRepLayer(config))
 
     @staticmethod
-    # Copied from transformers.models.rt_detr.modeling_rt_detr.RTDetrHybridEncoder.build_2d_sincos_position_embedding
     def build_2d_sincos_position_embedding(
         width, height, embed_dim=256, temperature=10000.0, device="cpu", dtype=torch.float32
     ):
