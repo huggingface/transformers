@@ -38,6 +38,10 @@ pip install compressed-tensors
 
 
 ## Sample Model Load
+Quantized models can be easily loaded for inference as shown below. Only models that 
+have already been quantized can be loaded. To quantize a model into the compressed-tensors 
+format see [llm-compressor](https://github.com/vllm-project/llm-compressor).
+
 ```python
 from transformers import AutoModelForCausalLM
 compressed_tensors_model = AutoModelForCausalLM.from_pretrained("nm-testing/tinyllama-oneshot-w4a16-group128-v3")

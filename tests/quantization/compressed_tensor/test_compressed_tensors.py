@@ -13,7 +13,9 @@ if is_torch_available():
 @require_compressed_tensors
 @require_torch
 class CompressedTensorsTest(unittest.TestCase):
-    tinyllama_w8a8 = "nm-testing/tinyllama-oneshot-w8a8-test-static-shape-change-v3"
+    tinyllama_w8a16 = "nm-testing/tinyllama-w8a16-dense-hf-quantizer"
+    tinyllama_w4a16 = "nm-testing/tinyllama-w4a16-compressed-hf-quantizer"
+    tinyllama_w8a8 = "nm-testing/tinyllama-w8a8-compressed-hf-quantizer"
     llama3_8b_fp8 = "nm-testing/Meta-Llama-3-8B-Instruct-fp8-hf_compat"
 
     prompt = "Paris is the capital of which country?"
@@ -45,12 +47,22 @@ class CompressedTensorsTest(unittest.TestCase):
         self.assertIsInstance(config_from_dict.sparsity_config, SparsityCompressionConfig)
 
     def test_tinyllama_w8a8(self):
-        self._test_quantized_model(self.tinyllama_w8a8)
+        expected_out = "<s> Paris is the capital of which country?\n\n**A) Paris**\n\n**Q** ** Paris is the capital of which country?\n\n**A) Paris**\n\n**Q** ** Paris is the capital of which country"
+        self._test_quantized_model(self.tinyllama_w8a8, expected_out)
+
+    def test_tinyllama_w4a16(self):
+        expected_out = "<s> Paris is the capital of which country?\nAnswer: Paris is the capital of France.\nQuestion: Which country is the capital of which city?\nAnswer: The capital of the city of New York is New York.\nQuestion: Which"
+        self._test_quantized_model(self.tinyllama_w4a16, expected_out)
+
+    def test_tinyllama_w8a16(self):
+        expected_out = "<s> Paris is the capital of which country?\nA. France\nB. Germany\nC. Spain\nD. Italy\nE. Switzerland\nQ10. Which of the following is not a country in the European Union?\nA."
+        self._test_quantized_model(self.tinyllama_w8a16, expected_out)
 
     def test_llama_8b_fp8(self):
-        self._test_quantized_model(self.llama3_8b_fp8)
+        expected_out = "<|begin_of_text|>Paris is the capital of which country? France\nWhat is the name of the famous art museum in Paris? The Louvre\nWhat is the name of the famous opera house in Paris? Palais Garnier\nWhat is the name of the"
+        self._test_quantized_model(self.llama3_8b_fp8, expected_out)
 
-    def _test_quantized_model(self, model_name: str):
+    def _test_quantized_model(self, model_name: str, expected_output: str):
         """Carry out generation"""
         quantized_model = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto")
         tokenizer = AutoTokenizer.from_pretrained(model_name)
@@ -68,7 +80,8 @@ class CompressedTensorsTest(unittest.TestCase):
             "quantized model should load a non-trivial scale into the state dict",
         )
         inputs = tokenizer(self.prompt, return_tensors="pt").to(device)
-        generated_ids = quantized_model.generate(**inputs, max_length=50)
+        generated_ids = quantized_model.generate(**inputs, max_length=50, do_sample=False)
         outputs = tokenizer.batch_decode(generated_ids)
 
         self.assertIsNotNone(outputs)
+        self.assertEqual(outputs[0], expected_output)
