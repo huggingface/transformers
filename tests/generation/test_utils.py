@@ -3566,5 +3566,5 @@ class TestAnyTokenizerGenerationCorrectness(unittest.TestCase):
             assistant_tokenizer=assistant_tokenizer,
         )
 
-        assert expected_out.shape == predicted_out.shape
-        assert (expected_out == predicted_out).all().item()
+        self.assertEqual(expected_out.shape, predicted_out.shape)
+        self.assertTrue((expected_out == predicted_out).all().item())
