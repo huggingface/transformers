@@ -80,6 +80,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"vision_model.vision_encoder.global_transformer.resblocks.(\d+).(gate_ffn|gate_attn)":     r"vision_model.global_transformer.layers.\1.\2",
     r'vision_model.vision_encoder.ln_(pre|post).(weight|bias)':                                 r'vision_model.vision_encoder.ln_\1.\2',
     r'vision_model.vision_encoder.gated_positional_embedding\b':                                r'vision_model.gated_positional_embedding.weight',
+    r'vision_model.vision_encoder.gated_positional_embedding_gate':                             r'vision_model.gated_positional_embedding.gate',
     r"vision_model.vision_encoder.(?=\w)":                                                      r"vision_model.",
 }
 # fmt: on
@@ -134,12 +135,12 @@ def pre_compute_positional_embedding(embedding):
     if len(shapes) == 2:  # tile embedding does not have patches
         num_patches = 1
         precomputed_embeddings = torch.zeros(
-            max_aspect_ratio_id + 1, max_num_tiles, num_patches, hidden_size, device=embedding.device
+            max_aspect_ratio_id + 1, max_num_tiles, num_patches, hidden_size, device=embedding.device, dtype=embedding.dtype
         )
     else:
         num_patches = shapes[1]
         precomputed_embeddings = torch.zeros(
-            max_aspect_ratio_id + 1, max_num_tiles, num_patches, hidden_size, device=embedding.device
+            max_aspect_ratio_id + 1, max_num_tiles, num_patches, hidden_size, device=embedding.device, dtype=embedding.dtype
         )
 
     for height in range(1, max_num_tiles + 1):
@@ -217,7 +218,10 @@ def write_model(
                 r"layers.(\d+).", lambda _match: f"layers.{attn_layer_shift[int(_match.groups()[0])]}.", new_key
             )
 
-        current_parameter = torch.cat([chunk.pop(key).contiguous().clone() for chunk in loaded], dim=0)
+        if "norm" in key or "_gate" in key:
+            current_parameter =[chunk.pop(key).contiguous().clone() for chunk in loaded]
+        else:
+            current_parameter = torch.cat([chunk.pop(key).contiguous().clone() for chunk in loaded], dim=0)
 
         # Post-process the current_parameter.
         if "self_attn.q|k|v|_proj" in new_key and "language_model" in new_key:
@@ -237,10 +241,10 @@ def write_model(
             k, v = current_parameter.chunk(2, dim=0)
             state_dict[new_key.replace("k|v", "k")] = k
             state_dict[new_key.replace("k|v", "v")] = v
-        elif "layernorm" in new_key:
+        elif "norm" in key:
             state_dict[new_key] = current_parameter[0]
-        elif "_gate" in new_key:
-            state_dict[new_key] = current_parameter[0][0].view(1)
+        elif new_key.endswith("gate"):
+            state_dict[new_key] = current_parameter[0].view(1)
         elif "tile_pos_embed.weight" in new_key or "gated_positional_embedding.weight" in new_key:
             # pre-compute the embeddings
             embedding = current_parameter

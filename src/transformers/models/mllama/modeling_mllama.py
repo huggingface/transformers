@@ -260,13 +260,12 @@ class MllamaPrecomputedPositionEmbedding(nn.Module):
         precomputed_embeddings = torch.zeros(
             max_aspect_ratio_id + 1, self.max_num_tiles, self.num_patches, self.hidden_size
         )
-
+        self.gate = nn.Parameter(torch.zeros(1))
         self.weight = torch.nn.Parameter(precomputed_embeddings)
         # in case we load weights we have to re-calcuate embeddings
 
     def forward(self, hidden_state: torch.Tensor, aspect_ratio_ids: torch.Tensor) -> torch.Tensor:
-        self.precomputed_embeddings = self._precompute_tile_embeddings(self.weight, self.max_num_tiles)
-        embeddings = self.precomputed_embeddings[aspect_ratio_ids]
+        embeddings = self.weight[aspect_ratio_ids]
         batch = hidden_state.shape[0]
         embeddings = embeddings.reshape(batch, -1, self.num_patches, self.hidden_size)
 
@@ -499,8 +498,6 @@ class MllamaVisionModel(PreTrainedModel):
         positional_embedding = torch.randn(self.num_patches, self.hidden_size)
         self.positional_embedding = nn.Parameter(self.scale * positional_embedding)
         self.gated_positional_embedding = MllamaPrecomputedPositionEmbedding(config)
-
-        self.gated_positional_embedding_gate = nn.Parameter(torch.zeros(1))
 
         self.pre_tile_pos_embed = MllamaPrecomputedAspectRatioEmbedding(
             max_num_tiles=config.max_num_tiles,
