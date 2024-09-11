@@ -275,8 +275,8 @@ class Bnb4BitTest(Base4bitTest):
 
         if torch.cuda.is_available():
             # Move back to CUDA device
-            self.model_4bit.to(0)
-            self.assertEqual(self.model_4bit.device, torch.device(0))
+            self.model_4bit.to("cuda")
+            self.assertEqual(self.model_4bit.device, torch.device("cuda"))
             self.assertAlmostEqual(self.model_4bit.get_memory_footprint(), mem_before)
 
     def test_device_and_dtype_assignment(self):
