@@ -267,6 +267,8 @@ class PaliGemmaProcessor(ProcessorMixin):
             images = [[images]]
         elif isinstance(images, list) and is_valid_image(images[0]):
             images = [[image] for image in images]
+        elif not (isinstance(images, list) and isinstance(images[0], list) and is_valid_image(images[0][0])):
+            raise ValueError("images must be an image, list of images or list of list of images")
 
         if suffix is not None and _is_str_or_image(suffix):
             suffix = [suffix]
