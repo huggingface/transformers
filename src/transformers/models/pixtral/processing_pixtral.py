@@ -40,7 +40,7 @@ class PixtralProcessor(ProcessorMixin):
             The image processor is a required input.
         tokenizer ([`LlamaTokenizerFast`], *optional*):
             The tokenizer is a required input.
-        patch_size (`int`, *optional*):
+        patch_size (`int`, *optional*, defaults to 16):
             Patch size from the vision tower.
         chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
             in a chat into a tokenizable string.
@@ -64,7 +64,7 @@ class PixtralProcessor(ProcessorMixin):
         self,
         image_processor=None,
         tokenizer=None,
-        patch_size=None,
+        patch_size: int = 16,
         chat_template=None,
         image_token="[IMG]",  # set the default and let users change if they have peculiar special tokens in rare cases
         image_break_token="[IMG_BREAK]",
@@ -145,27 +145,19 @@ class PixtralProcessor(ProcessorMixin):
         # try to expand inputs in processing if we have the necessary parts
         prompt_strings = text
         if image_inputs.get("pixel_values") is not None:
-            if self.patch_size is not None:
-                # Replace the image token with the expanded image token sequence
-                pixel_values = image_inputs["pixel_values"]
-                height, width = get_image_size(to_numpy_array(pixel_values[0]))
-                num_height_tokens = height // self.patch_size
-                num_width_tokens = width // self.patch_size
+            # Replace the image token with the expanded image token sequence
+            pixel_values = image_inputs["pixel_values"]
+            height, width = get_image_size(to_numpy_array(pixel_values[0]))
+            num_height_tokens = height // self.patch_size
+            num_width_tokens = width // self.patch_size
 
-                prompt_strings = []
-                replace_tokens = [self.image_token] * num_width_tokens + [self.image_break_token] * num_height_tokens
-                replace_tokens[-1] = self.image_end_token
-                replace_str = "".join(replace_tokens)
-                for sample in text:
-                    sample = sample.replace(self.image_token, replace_str)
-                    prompt_strings.append(sample)
-            else:
-                logger.warning_once(
-                    "Expanding inputs for image tokens in Pixtral should be done in processing. "
-                    "Please add `patch_size` to the model's processing config or set directly "
-                    "with `processor.patch_size = {{patch_size}}`"
-                    "Using processors without these attributes in the config is deprecated and will throw an error in v4.47."
-                )
+            prompt_strings = []
+            replace_tokens = [self.image_token] * num_width_tokens + [self.image_break_token] * num_height_tokens
+            replace_tokens[-1] = self.image_end_token
+            replace_str = "".join(replace_tokens)
+            for sample in text:
+                sample = sample.replace(self.image_token, replace_str)
+                prompt_strings.append(sample)
 
         text_inputs = self.tokenizer(
             prompt_strings,
