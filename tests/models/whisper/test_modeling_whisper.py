@@ -1683,9 +1683,9 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             input_features = input_dict["input_features"]
 
             labels_length = config.max_target_positions
-            labels = torch.ones(1, labels_length, dtype=torch.int64)
+            labels = torch.ones(1, labels_length, dtype=torch.int64).to(torch_device)
 
-            model = model_class(config)
+            model = model_class(config).to(torch_device)
             model(input_features=input_features, labels=labels)
 
     def test_labels_sequence_max_length_correct_after_changing_config(self):
@@ -1697,9 +1697,9 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             config.max_target_positions += 100
 
             labels_length = config.max_target_positions
-            labels = torch.ones(1, labels_length, dtype=torch.int64)
+            labels = torch.ones(1, labels_length, dtype=torch.int64).to(torch_device)
 
-            model = model_class(config)
+            model = model_class(config).to(torch_device)
             model(input_features=input_features, labels=labels)
 
     def test_labels_sequence_max_length_error(self):
@@ -1709,9 +1709,9 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             input_features = input_dict["input_features"]
 
             labels_length = config.max_target_positions + 1
-            labels = torch.ones(1, labels_length, dtype=torch.int64)
+            labels = torch.ones(1, labels_length, dtype=torch.int64).to(torch_device)
 
-            model = model_class(config)
+            model = model_class(config).to(torch_device)
             with self.assertRaises(ValueError):
                 model(input_features=input_features, labels=labels)
 
@@ -1719,11 +1719,11 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_generative_model_classes:
-            model = model_class(config)
+            model = model_class(config).to(torch_device)
             input_features = input_dict["input_features"]
 
             labels_length = config.max_target_positions + 1
-            labels = torch.ones(1, labels_length, dtype=torch.int64)
+            labels = torch.ones(1, labels_length, dtype=torch.int64).to(torch_device)
 
             new_max_length = config.max_target_positions + 100
             model.config.max_length = new_max_length
