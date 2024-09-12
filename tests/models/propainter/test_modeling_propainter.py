@@ -200,7 +200,11 @@ class ProPainterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             model.eval()
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.encoder_attentions if config.is_encoder_decoder else tuple(tuple(t.half() for t in attention) for attention in outputs.attentions)
+            attentions = (
+                outputs.encoder_attentions
+                if config.is_encoder_decoder
+                else tuple(tuple(t.half() for t in attention) for attention in outputs.attentions)
+            )
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
             # check that output_attentions also work using config
@@ -211,7 +215,11 @@ class ProPainterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             model.eval()
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.encoder_attentions if config.is_encoder_decoder else tuple(tuple(t.half() for t in attention) for attention in outputs.attentions)
+            attentions = (
+                outputs.encoder_attentions
+                if config.is_encoder_decoder
+                else tuple(tuple(t.half() for t in attention) for attention in outputs.attentions)
+            )
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
             if chunk_length is not None:
@@ -300,7 +308,11 @@ class ProPainterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
                 added_hidden_states = 1
             self.assertEqual(out_len + added_hidden_states, len(outputs))
 
-            self_attentions = outputs.encoder_attentions if config.is_encoder_decoder else tuple(tuple(t.half() for t in attention) for attention in outputs.attentions)
+            self_attentions = (
+                outputs.encoder_attentions
+                if config.is_encoder_decoder
+                else tuple(tuple(t.half() for t in attention) for attention in outputs.attentions)
+            )
 
             self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
             if chunk_length is not None:
