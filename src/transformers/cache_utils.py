@@ -293,6 +293,46 @@ class QuantizedCacheConfig(CacheConfig):
             )
 
 
+@dataclass
+class StaticCacheConfig(CacheConfig):
+    """
+    Configuration class for static cache settings.
+    """
+
+    cache_implementation = "static"
+
+    def __init__(self, batch_size: int, max_cache_len: int, device="cpu"):
+        self.batch_size = batch_size
+        self.max_cache_len = max_cache_len
+        self.device = device
+
+    def validate(self):
+        """Validates if the arguments passed are correct"""
+
+        incorrect_arg_msg = (
+            "Some of the keys in `cache_config` are defined incorrectly. `{key}` should be {correct_value}` "
+            "but found {found_value}"
+        )
+
+        if self.batch_size <= 0:
+            raise ValueError(
+                incorrect_arg_msg.format(
+                    key="batch_size",
+                    correct_value="> 0",
+                    found_value=self.batch_size,
+                ),
+            )
+
+        if self.max_cache_len <= 0:
+            raise ValueError(
+                incorrect_arg_msg.format(
+                    key="max_cache_len",
+                    correct_value="> 0",
+                    found_value=self.max_cache_len,
+                ),
+            )
+
+
 class DynamicCache(Cache):
     """
     A cache that grows dynamically as more tokens are generated. This is the default for generative models.
@@ -1034,6 +1074,7 @@ class StaticCache(Cache):
 
         self.batch_size = batch_size or max_batch_size
         self.max_cache_len = config.max_position_embeddings if max_cache_len is None else max_cache_len
+
         # Some model define a custom `head_dim` != config.hidden_size // config.num_attention_heads
         self.head_dim = (
             config.head_dim if hasattr(config, "head_dim") else config.hidden_size // config.num_attention_heads

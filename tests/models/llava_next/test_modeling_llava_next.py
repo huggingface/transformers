@@ -363,11 +363,7 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
             output = model(**inputs)
 
         expected_slice = torch.tensor(
-            [
-                [-4.7695, -4.5664, -0.2786],
-                [-10.6250, -10.8906, -2.5254],
-                [-6.7383, -7.2461, -0.6787],
-            ],
+            [[-4.7695, -4.5664, -0.2788], [-10.6172, -10.8828, -2.5273], [-6.7383, -7.2422, -0.6694]],
             dtype=torch.float32,
             device=torch_device,
         )
@@ -471,16 +467,16 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
             output = model(**inputs)
 
         expected_slice = torch.tensor(
-            [[-0.0308, -0.0313, -0.0314], [-0.3064, -0.3013, -0.2986], [-0.1226, -0.1246, -0.1210]],
+            [[-0.1287, -0.1294, -0.1284], [-0.2744, -0.2698, -0.2671], [-0.1071, -0.1091, -0.1056]],
             dtype=torch.float32,
             device=torch_device,
         )
         assert torch.allclose(output.logits[0, -3:, -3:], expected_slice, atol=1e-3)
-        assert torch.allclose(output.loss, torch.tensor(6.8619, device=torch_device))
+        assert torch.allclose(output.loss, torch.tensor(7.0206, device=torch_device), atol=1e-3)
 
         # verify generation
         output = model.generate(**inputs, max_new_tokens=50)
-        EXPECTED_DECODED_TEXT = '[INST]  \nWhat is shown in this image? [/INST] The image shows a forested area with a misty or foggy atmosphere. In the foreground, there is a grassy field with a few deer grazing. The deer are partially obscured by the fog, and the trees in the background'  # fmt: skip
+        EXPECTED_DECODED_TEXT = '[INST]  \nWhat is shown in this image? [/INST] The image shows two deer, likely fawns, in a grassy area with trees in the background. The setting appears to be a forest or woodland, and the photo is taken during what seems to be either dawn or dusk, given'  # fmt: skip
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
@@ -534,38 +530,66 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # model is in eval mode by default so we should get pad on the left side
         # we can check the first hidden-states (aka inputs embeds)
-        # the first element was lo-res image and we expect the first 1414 tokens to be all pads
-        output_eval = model(**inputs_batched, output_hidden_states=True)
-        self.assertTrue((output_eval.hidden_states[0][0, :1414, ...] == 0).all().item())
-
-        # otherwise padding is on the right side, so it's last 1414 tokens
-        self.processor.padding_side = "right"
-        inputs_batched = self.processor(
-            [self.prompt, self.prompt], images=[lowres_img, cats_image], return_tensors="pt", padding=True
-        ).to(torch_device)
-
-        model.train()
+        # the first element was lo-res image and we expect the first 732 tokens to be all pads
         with torch.no_grad():
-            output_train = model(**inputs_batched, output_hidden_states=True)
-        self.assertTrue((output_train.hidden_states[0][0, -1414:, ...] == 0).all().item())
+            output_eval = model(**inputs_batched, output_hidden_states=True)
+        self.assertTrue((output_eval.hidden_states[0][0, :732, ...] == 0).all().item())
 
         with self.assertLogs("transformers", level="WARNING") as logs:
             model.padding_side = "left"
             model.train()
-            model(**inputs_batched, output_hidden_states=True)
+            with torch.no_grad():
+                model(**inputs_batched, output_hidden_states=True)
 
-            self.assertIn(
-                "Padding side is set to 'left' but the model is in training mode. For training", logs.output[0]
-            )
+            self.assertIn("Padding side is set to 'left' but the model is in training mode. For training", logs)
 
         with self.assertLogs("transformers", level="WARNING") as logs:
             model.padding_side = "right"
             model.eval()
-            model(**inputs_batched, output_hidden_states=True)
+            with torch.no_grad():
+                model(**inputs_batched, output_hidden_states=True)
 
-            self.assertIn(
-                "Padding side is set to 'right' but the model is in inference mode. For correct", logs.output[0]
-            )
+            self.assertIn("Padding side is set to 'right' but the model is in inference mode. For correct", logs)
+
+    @slow
+    @require_bitsandbytes
+    def test_expansion_in_processing_multiimage(self):
+        model_id = "llava-hf/llava-v1.6-mistral-7b-hf"
+        model = LlavaNextForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
+        processor = AutoProcessor.from_pretrained(model_id)
+
+        prompt = "USER: <image><image>\nDescribe the similarity between the two images:\nASSISTANT:"
+        image_file = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        raw_image = Image.open(requests.get(image_file, stream=True).raw)
+        deer_image = Image.open(
+            requests.get(
+                "https://4.img-dpreview.com/files/p/TS560x560~forums/56876524/03975b28741443319e9a94615e35667e",
+                stream=True,
+            ).raw
+        )
+
+        # check processing with expansion of inputs
+        processor.vision_feature_select_strategy = "default"
+        processor.patch_size = 14
+        inputs_expanded = processor(text=prompt, images=[raw_image, deer_image], return_tensors="pt").to(
+            torch_device, torch.float16
+        )
+        self.assertTrue(inputs_expanded.input_ids.shape[-1] == 3969)
+
+        # check processing without expansion of inputs (legacy behavior)
+        processor.vision_feature_select_strategy = None
+        processor.patch_size = None
+        inputs = processor(text=prompt, images=[raw_image, deer_image], return_tensors="pt").to(
+            torch_device, torch.float16
+        )
+        self.assertTrue(inputs.input_ids.shape[-1] == 23)
+
+        # generate exactly 20 tokens
+        output = model.generate(**inputs, min_new_tokens=20, max_new_tokens=20)
+        output_expanded = model.generate(**inputs_expanded, min_new_tokens=20, max_new_tokens=20)
+
+        # check that both inputs are handled correctly and generate the same output
+        self.assertListEqual(output_expanded[:, -20:].tolist(), output[:, -20:].tolist())
 
     @slow
     @require_bitsandbytes

@@ -1558,3 +1558,16 @@ class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel, TFMultipleChoiceLoss):
         if getattr(self, "classifier", None) is not None:
             with tf.name_scope(self.classifier.name):
                 self.classifier.build([None, None, self.config.hidden_size])
+
+
+__all__ = [
+    "TFAlbertPreTrainedModel",
+    "TFAlbertModel",
+    "TFAlbertForPreTraining",
+    "TFAlbertForMaskedLM",
+    "TFAlbertForSequenceClassification",
+    "TFAlbertForTokenClassification",
+    "TFAlbertForQuestionAnswering",
+    "TFAlbertForMultipleChoice",
+    "TFAlbertMainLayer",
+]
