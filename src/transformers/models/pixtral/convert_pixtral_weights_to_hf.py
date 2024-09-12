@@ -34,6 +34,7 @@ text_config = MistralConfig(
 vision_config = PixtralConfig()
 config = LlavaConfig(vision_config, text_config)
 config.architectures = ["LlavaForConditionalGeneration"]
+config.text_config.head_dim = 128
 config.save_pretrained("../pixtral")
 
         
@@ -110,20 +111,21 @@ for key, value in original_state_dict.items():
 
     new_dict[new_key] = value
 
-with torch.device("meta"):
-    model = LlavaForConditionalGeneration(config)
+config.text_config.head_dim = 128
+# with torch.device("meta"):
+#     model = LlavaForConditionalGeneration(config)
+# model.load_state_dict(new_dict, strict=True, assign=True)
 
-model.load_state_dict(new_dict, strict=True, assign=True)
+# model.save_pretrained("../pixtral")
 
-
-
+model = LlavaForConditionalGeneration.from_pretrained("../pixtral", config=config).to("cuda")
 processor = AutoProcessor.from_pretrained("llava-hf/llava-1.5-7b-hf")
 processor.tokenizer = tokenizer
 prompt = "USER: <image>\nWhat's the content of the image? ASSISTANT:"
 url = "https://www.ilankelman.org/stopsigns/australia.jpg"
 image = Image.open(requests.get(url, stream=True).raw)
 
-inputs = processor(text=prompt, images=image, return_tensors="pt")
+inputs = processor(text=prompt, images=image, return_tensors="pt").to("cuda")
 
 # Generate
 generate_ids = model.generate(**inputs, max_new_tokens=15)

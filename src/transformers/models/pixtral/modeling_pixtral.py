@@ -621,4 +621,4 @@ class PixtralModel(PixtralPreTrainedModel):
         out = self.transformer(patch_embeds, attention_mask, position_embedding)
 
         # remove batch dimension of the single sequence
-        return out.squeeze(0)
+        return out
