@@ -1,4 +1,4 @@
-name: Self-hosted runner (AMD mi250 scheduled CI caller)
+name: Self-hosted runner (AMD mi210 scheduled CI caller)
 
 on:
   workflow_run:
@@ -10,27 +10,27 @@ on:
       - revive_amd_scheduled_ci
 
 jobs:
-#  model-ci:
-#    name: Model CI
-#    uses: ./.github/workflows/self-scheduled-amd.yml
-#    with:
-#      job: run_models_gpu
-#      slack_report_channel: "#transformers-ci-daily-amd"
-#      runner: mi250
-#      docker: huggingface/transformers-pytorch-amd-gpu
-#      ci_event: Scheduled CI (AMD) - mi250
-#    secrets: inherit
-#
-#  torch-pipeline:
-#    name: Torch pipeline CI
-#    uses: ./.github/workflows/self-scheduled-amd.yml
-#    with:
-#      job: run_pipelines_torch_gpu
-#      slack_report_channel: "#transformers-ci-daily-amd"
-#      runner: mi250
-#      docker: huggingface/transformers-pytorch-amd-gpu
-#      ci_event: Scheduled CI (AMD) - mi250
-#    secrets: inherit
+  model-ci:
+    name: Model CI
+    uses: ./.github/workflows/self-scheduled-amd.yml
+    with:
+      job: run_models_gpu
+      slack_report_channel: "#transformers-ci-daily-amd"
+      runner: mi210
+      docker: huggingface/transformers-pytorch-amd-gpu
+      ci_event: Scheduled CI (AMD) - mi210
+    secrets: inherit
+
+  torch-pipeline:
+    name: Torch pipeline CI
+    uses: ./.github/workflows/self-scheduled-amd.yml
+    with:
+      job: run_pipelines_torch_gpu
+      slack_report_channel: "#transformers-ci-daily-amd"
+      runner: mi210
+      docker: huggingface/transformers-pytorch-amd-gpu
+      ci_event: Scheduled CI (AMD) - mi210
+    secrets: inherit
 
   example-ci:
     name: Example CI
@@ -38,18 +38,18 @@ jobs:
     with:
       job: run_examples_gpu
       slack_report_channel: "#transformers-ci-daily-amd"
-      runner: mi250
+      runner: mi210
       docker: huggingface/transformers-pytorch-amd-gpu
-      ci_event: Scheduled CI (AMD) - mi250
+      ci_event: Scheduled CI (AMD) - mi210
     secrets: inherit
 
-#  deepspeed-ci:
-#    name: DeepSpeed CI
-#    uses: ./.github/workflows/self-scheduled-amd.yml
-#    with:
-#      job: run_torch_cuda_extensions_gpu
-#      slack_report_channel: "#transformers-ci-daily-amd"
-#      runner: mi250
-#      docker: huggingface/transformers-pytorch-deepspeed-amd-gpu
-#      ci_event: Scheduled CI (AMD) - mi250
-#    secrets: inherit
+  deepspeed-ci:
+    name: DeepSpeed CI
+    uses: ./.github/workflows/self-scheduled-amd.yml
+    with:
+      job: run_torch_cuda_extensions_gpu
+      slack_report_channel: "#transformers-ci-daily-amd"
+      runner: mi210
+      docker: huggingface/transformers-pytorch-deepspeed-amd-gpu
+      ci_event: Scheduled CI (AMD) - mi210
+    secrets: inherit
