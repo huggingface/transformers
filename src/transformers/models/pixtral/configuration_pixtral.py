@@ -83,7 +83,7 @@ class PixtralConfig(PretrainedConfig):
         num_channels=3,
         image_size=1024,
         patch_size=16,
-        hidden_act="gelu",
+        hidden_activation="gelu",
         layer_norm_eps=1e-5,
         attention_dropout=0.0,
         rope_theta=10000.0,
@@ -101,7 +101,7 @@ class PixtralConfig(PretrainedConfig):
         self.image_size = image_size
         self.attention_dropout = attention_dropout
         self.layer_norm_eps = layer_norm_eps
-        self.hidden_act = hidden_act
+        self.hidden_activation = hidden_activation
         self.rope_theta = rope_theta
         self.tie_word_embeddings = tie_word_embeddings
         self.head_dim = hidden_size // num_attention_heads

@@ -39,38 +39,44 @@ original_state_dict = safe_load_file("/Users/arthurzucker/Work/pixtral/model.saf
 
 OLD_KEY_TO_NEW_KEY_MAPPING = {
     # Layer Normalization Weights
-    r"vision_encoder.transformer.layers.(\d+).input_layernorm.weight": r"vision_tower.transformer.layers.\1.attention_norm.weight",
-    r"vision_encoder.transformer.layers.(\d+).ffn_norm.weight": r"vision_tower.transformer.layers.\1.post_attention_layernorm.weight",
+    r"vision_encoder.transformer.layers.(\d+).input_layernorm.weight":  r"vision_tower.transformer.layers.\1.attention_norm.weight",
+    r"vision_encoder.transformer.layers.(\d+).ffn_norm.weight":         r"vision_tower.transformer.layers.\1.ffn_norm.weight",
     
     # Self Attention Projections
-    r"vision_encoder.transformer.layers.(\d+).attention.wq.weight": r"vision_tower.transformer.layers.\1.self_attn.q_proj.weight",
-    r"vision_encoder.transformer.layers.(\d+).attention.wk.weight": r"vision_tower.transformer.layers.\1.self_attn.k_proj.weight",
-    r"vision_encoder.transformer.layers.(\d+).attention.wv.weight": r"vision_tower.transformer.layers.\1.self_attn.v_proj.weight",
-    r"vision_encoder.transformer.layers.(\d+).attention.wo.weight": r"vision_tower.transformer.layers.\1.self_attn.o_proj.weight",
+    r"vision_encoder.transformer.layers.(\d+).attention.wq.weight":     r"vision_tower.transformer.layers.\1.attention.q_proj.weight",
+    r"vision_encoder.transformer.layers.(\d+).attention.wk.weight":     r"vision_tower.transformer.layers.\1.attention.k_proj.weight",
+    r"vision_encoder.transformer.layers.(\d+).attention.wv.weight":     r"vision_tower.transformer.layers.\1.attention.v_proj.weight",
+    r"vision_encoder.transformer.layers.(\d+).attention.wo.weight":     r"vision_tower.transformer.layers.\1.attention.o_proj.weight",
     
     # MLP Projections
-    r"vision_encoder.transformer.layers.(\d+).feed_forward.w1.weight": r"vision_tower.transformer.layers.\1.mlp.gate_proj.weight",
-    r"vision_encoder.transformer.layers.(\d+).feed_forward.w2.weight": r"vision_tower.transformer.layers.\1.mlp.down_proj.weight",
-    r"vision_encoder.transformer.layers.(\d+).feed_forward.w3.weight": r"vision_tower.transformer.layers.\1.mlp.up_proj.weight",
+    r"vision_encoder.transformer.layers.(\d+).feed_forward.w1.weight":  r"vision_tower.transformer.layers.\1.feed_forward.gate_proj.weight",
+    r"vision_encoder.transformer.layers.(\d+).feed_forward.w2.weight":  r"vision_tower.transformer.layers.\1.feed_forward.down_proj.weight",
+    r"vision_encoder.transformer.layers.(\d+).feed_forward.w3.weight":  r"vision_tower.transformer.layers.\1.feed_forward.up_proj.weight",
     
     # Additional mappings
-    r"vision_encoder": r"vision_tower",
-    r"vision_language_adapter.w_in": r"multimodal_projector.linear_1",
-    r"vision_language_adapter.w_out": r"multimodal_projector.linear_2",
-    r"layers.(\d+).attention.wq.weight": r"language_model.model.layers.\1.self_attn.q_proj.weight",
-    r"layers.(\d+).attention.wk.weight": r"language_model.model.layers.\1.self_attn.k_proj.weight",
-    r"layers.(\d+).attention.wv.weight": r"language_model.model.layers.\1.self_attn.v_proj.weight",
-    r"layers.(\d+).attention.wo.weight": r"language_model.model.layers.\1.self_attn.o_proj.weight",
-    r"layers.(\d+).feed_forward.w1.weight": r"vision_tower.transformer.layers.\1.mlp.gate_proj.weight",
-    r"layers.(\d+).feed_forward.w2.weight": r"vision_tower.transformer.layers.\1.mlp.down_proj.weight",
-    r"layers.(\d+).feed_forward.w3.weight": r"vision_tower.transformer.layers.\1.mlp.up_proj.weight",
+    r"vision_encoder":                                  r"vision_tower",
+    r"vision_language_adapter.w_in":                    r"multi_modal_projector.linear_1",
+    r"vision_language_adapter.w_out":                   r"multi_modal_projector.linear_2",
+    r"layers.(\d+).attention.wq.weight":                r"language_model.model.layers.\1.self_attn.q_proj.weight",
+    r"layers.(\d+).attention.wk.weight":                r"language_model.model.layers.\1.self_attn.k_proj.weight",
+    r"layers.(\d+).attention.wv.weight":                r"language_model.model.layers.\1.self_attn.v_proj.weight",
+    r"layers.(\d+).attention.wo.weight":                r"language_model.model.layers.\1.self_attn.o_proj.weight",
+    r"layers.(\d+).feed_forward.w1.weight":             r"language_model.model.layers.\1.mlp.gate_proj.weight",
+    r"layers.(\d+).feed_forward.w2.weight":             r"language_model.model.layers.\1.mlp.down_proj.weight",
+    r"layers.(\d+).feed_forward.w3.weight":             r"language_model.model.layers.\1.mlp.up_proj.weight",
+    r"layers.(\d+).ffn_norm.weight":                    r"language_model.model.layers.\1.post_attention_layernorm.weight",
+    r"layers.(\d+).attention_norm.weight":              r"language_model.model.layers.\1.input_layernorm.weight",
+    r"tok_embeddings.weight":                           r"language_model.model.embed_tokens.weight",
+    r"output.weight":                                   r"language_model.lm_head.weight",
+    r"norm.weight":                                     r"language_model.model.norm.weight"
+
 }
 
 new_state_dict = {} 
 all_keys = "\n".join(original_state_dict.keys())
 old_keys = all_keys
 for old, new in OLD_KEY_TO_NEW_KEY_MAPPING.items():
-    all_keys = re.sub(old,new,all_keys)
+    all_keys = re.sub(r"\n"+ old,r"\n"+new,all_keys)
 
 OLD_TO_NEW = dict(zip(old_keys.split("\n"), all_keys.split("\n")))
 

@@ -303,7 +303,7 @@ class PixtralAttentionLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.attention_norm = PixtralRMSNorm(config.hidden_size, eps=1e-5)
-        self.feed_forward = PixtralMLP
+        self.feed_forward = PixtralMLP(config)
         self.attention = PixtralAttention(config)
         self.ffn_norm =  PixtralRMSNorm(config.hidden_size, eps=1e-5)
 
