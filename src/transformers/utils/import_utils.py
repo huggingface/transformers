@@ -851,6 +851,9 @@ def is_torch_xpu_available(check_device=False):
 
 @lru_cache()
 def is_bitsandbytes_available():
+    if not is_torch_available():
+        return False
+
     from transformers.integrations.integration_utils import validate_bnb_backend_availability
 
     return _bitsandbytes_available and validate_bnb_backend_availability(raise_exception=False)
