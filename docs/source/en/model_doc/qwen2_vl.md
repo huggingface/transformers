@@ -233,7 +233,6 @@ Additionally, you can set the minimum and maximum pixels when calling the proces
 
 ```python
 inputs = processor(text=PROMPT, images=IMAGE, size={"min_pixels": 224*224, "max_pixels": 2048*2048}, return_tensors="pt")
-
 ```
 
 #### Multiple Image Inputs
