@@ -97,7 +97,7 @@ class PixtralRotaryEmbedding(nn.Module):
     """
     def __init__(self, config, device):
         super().__init__()
-
+        self.rope_type = "default"
         self.dim = config.head_dim
         self.base = config.rope_theta
         max_patches_per_side = config.image_size // config.patch_size
@@ -115,6 +115,7 @@ class PixtralRotaryEmbedding(nn.Module):
             ],
             dim=-1,
         ).reshape(-1, self.dim) # we reshape to only index on the position indexes, not tuple of indexes
+        # Different from paper, but it uses a different permutation in order to obtain the same calculation
 
         # TODO maybe make it torch compatible later on. We can also just slice
         self.register_buffer("inv_freq", inv_freq, persistent=False)
@@ -131,8 +132,7 @@ class PixtralRotaryEmbedding(nn.Module):
         device_type = x.device.type
         device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):
-            freqs = freqs
-            emb = torch.cat((freqs, freqs), dim=-1)
+            emb = freqs
             cos = emb.cos()
             sin = emb.sin()
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
@@ -167,7 +167,7 @@ def rotate_half(x):
 
 
 # Copied from transformers.models.llama.modeling_llama.apply_rotary_pos_emb
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=0):
     """Applies Rotary Position Embedding to the query and key tensors.
 
     Args:
@@ -287,14 +287,14 @@ class PixtralRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-def position_ids_in_meshgrid(patch_embeds_list: list[torch.Tensor]) -> torch.Tensor:
+def position_ids_in_meshgrid(patch_embeds_list):
     positions = []
     for patch in patch_embeds_list:
         height, width = patch.shape[-2:]
-        mesh = torch.meshgrid(torch.arange(height*width), indexing="ij")
-        h_grid, v_grid = mesh
-        ids = h_grid * width + v_grid
-        positions.append(ids)
+        mesh = torch.meshgrid(torch.arange(height), torch.arange(width), indexing="ij")
+        h_grid, v_grid = torch.stack(mesh, dim=-1).reshape(-1, 2).chunk(2,-1)
+        ids = h_grid * height + v_grid
+        positions.append(ids[:,0])
     return torch.cat(positions)
 
 
@@ -328,7 +328,7 @@ class PixtralAttentionLayer(nn.Module):
         residual = hidden_states
 
         hidden_states = self.attention_norm(hidden_states)
-        hidden_states, attn_weights = self.self_attn(
+        hidden_states, attn_weights = self.attention(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_embeddings=position_embeddings,
@@ -352,9 +352,11 @@ class PixtralAttentionLayer(nn.Module):
 class PixtralTransformer(nn.Module):
     def __init__(self, config):
         super().__init__()
+        self.config = config
         self.layers = torch.nn.ModuleList()
         for _ in range(config.num_hidden_layers):
             self.layers.append(PixtralAttentionLayer(config))
+        self.gradient_checkpointing = False
 
     def forward(
         self,
@@ -592,7 +594,7 @@ class PixtralModel(PixtralPreTrainedModel):
     def dtype(self) -> torch.device:
         return next(self.parameters()).dtype
 
-    def forward(self, images: List[torch.Tensor]) -> torch.Tensor:
+    def forward(self, images: List[torch.Tensor], output_hidden_states=False, *kwargs) -> torch.Tensor:
         """
         Args:
             images: list of N_img images of variable sizes,
@@ -614,7 +616,7 @@ class PixtralModel(PixtralPreTrainedModel):
         # positional embeddings
         position_ids = position_ids_in_meshgrid(patch_embeds_list).to(self.device)
 
-        position_embedding = self.patch_positional_embedding(position_ids)
+        position_embedding = self.patch_positional_embedding(patch_embeds, position_ids)
         attention_mask = None
         out = self.transformer(patch_embeds, attention_mask, position_embedding)
 

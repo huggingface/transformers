@@ -34,10 +34,10 @@ text_config = MistralConfig(
 vision_config = PixtralConfig()
 config = LlavaConfig(vision_config, text_config)
 config.architectures = ["LlavaForConditionalGeneration"]
-config.save_pretrained("/Users/arthurzucker/Work/pixtral")
+config.save_pretrained("../pixtral")
 
         
-original_state_dict = safe_load_file("/Users/arthurzucker/Work/pixtral/model.safetensors")
+original_state_dict = safe_load_file("../pixtral/consolidated.safetensors")
 
 
 OLD_KEY_TO_NEW_KEY_MAPPING = {
