@@ -164,6 +164,10 @@ def pre_compute_positional_embedding(embedding):
 
 
 def is_param_different_across_shards(key):
+    """
+    Return `True` if the parameter is different across checkpoint shards
+    and needs to be concatenated.
+    """
     patterns = [
         r"vision_model.patch_embedding.weight",
         r"vision_model.(transformer|global_transformer).layers.(\d+).self_attn.(q|k|v|o)_proj.weight",
@@ -187,6 +191,9 @@ def is_param_different_across_shards(key):
 
 
 def get_concat_dim(key):
+    """
+    Return the dimension to concatenate the weights on.
+    """
     concat_dim_1 = [
         r"vision_model.(transformer|global_transformer).layers.(\d+).mlp.fc2.weight",
         r"vision_model.(transformer|global_transformer).layers.(\d+).self_attn.o_proj.weight",
