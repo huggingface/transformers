@@ -1390,7 +1390,7 @@ class RTDetrHybridEncoder(nn.Module):
                         self.positional_encoding_temperature,
                         device=src_flatten.device,
                         dtype=src_flatten.dtype,
-                    ).to(src_flatten.device, src_flatten.dtype)
+                    )
                 else:
                     pos_embed = None
 
