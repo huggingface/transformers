@@ -24,7 +24,12 @@ _import_structure = {
         "replace_quantization_scales",
         "replace_with_awq_linear",
     ],
-    "bitnet": ["replace_with_bitnet_linear"],
+    "bitnet": [
+        "replace_with_bitnet_linear",  
+        "BitLinear",
+        "pack_weights",
+        "unpack_weights",
+    ],
     "bitsandbytes": [
         "dequantize_and_replace",
         "get_keys_to_not_convert",
@@ -118,7 +123,12 @@ if TYPE_CHECKING:
         replace_quantization_scales,
         replace_with_awq_linear,
     )
-    from .bitnet import replace_with_bitnet_linear
+    from .bitnet import (
+        replace_with_bitnet_linear,
+        BitLinear,
+        pack_weights,
+        unpack_weights
+    )
     from .bitsandbytes import (
         dequantize_and_replace,
         get_keys_to_not_convert,

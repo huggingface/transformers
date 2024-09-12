@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, List, Dict, Union
 
 from .base import HfQuantizer
 
@@ -47,7 +47,9 @@ class BitNetHfQuantizer(HfQuantizer):
     def validate_environment(self, *args, **kwargs):
 
         if not is_accelerate_available():
-            raise ImportError("Loading an BitNet quantized model requires accelerate (`pip install accelerate`)")
+            raise ImportError(
+                "Loading an BitNet quantized model requires accelerate (`pip install accelerate`)"
+            )
 
         if kwargs.get("from_tf", False) or kwargs.get("from_flax", False):
             raise ValueError(
@@ -65,7 +67,9 @@ class BitNetHfQuantizer(HfQuantizer):
                 "your model on a GPU device in order to run your model."
             )
         elif device_map is not None:
-            if isinstance(device_map, dict) and ("cpu" in device_map.values() or "disk" in device_map.values()):
+            if isinstance(device_map, dict) and (
+                "cpu" in device_map.values() or "disk" in device_map.values()
+            ):
                 raise ValueError(
                     "You are attempting to load an BitNet model with a device_map that contains a CPU or disk device."
                     " This is not supported. Please remove the CPU or disk device from the device_map."
@@ -86,7 +90,9 @@ class BitNetHfQuantizer(HfQuantizer):
         self.modules_to_not_convert = get_keys_to_not_convert(model)
 
         if self.quantization_config.modules_to_not_convert is not None:
-            self.modules_to_not_convert.extend(self.quantization_config.modules_to_not_convert)
+            self.modules_to_not_convert.extend(
+                self.quantization_config.modules_to_not_convert
+            )
 
         model = replace_with_bitnet_linear(
             model,
@@ -94,6 +100,27 @@ class BitNetHfQuantizer(HfQuantizer):
             quantization_config=self.quantization_config,
             pre_quantized=self.pre_quantized,
         )
+
+    def adjust_max_memory(
+        self, max_memory: Dict[str, Union[int, str]]
+    ) -> Dict[str, Union[int, str]]:
+        max_memory = {key: val * 0.90 for key, val in max_memory.items()}
+        return max_memory
+
+    def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
+        if torch_dtype is None:
+            logger.info(
+                "Overriding torch_dtype=%s with `torch_dtype=torch.bfloat16`"
+                "Pass your own torch_dtype to specify the dtype of the remaining non-linear layers or pass"
+                "torch_dtype=torch.bfloat16 to remove this warning.",
+                torch_dtype,
+            )
+            torch_dtype = torch.bfloat16
+        return torch_dtype
+
+    def adjust_target_dtype(self, target_dtype: "torch.dtype") -> "torch.dtype":
+        target_dtype = torch.int8
+        return target_dtype
 
     @property
     def is_serializable(self):
