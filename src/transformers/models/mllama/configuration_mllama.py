@@ -95,6 +95,7 @@ class MllamaVisionConfig(PretrainedConfig):
         max_num_tiles=4,  # same as vision max num chunks? yes ;-)
         norm_eps=1.0e-5,
         in_channels=3,
+        supported_aspect_ratios=None,
         **kwargs,
     ):
         super().__init__()
@@ -121,6 +122,11 @@ class MllamaVisionConfig(PretrainedConfig):
         self.attention_heads = num_attention_heads
         self.intermediate_size = 4 * vision_input_dim
         self.hidden_act = hidden_act
+        self.supported_aspect_ratios = supported_aspect_ratios
+
+    @property
+    def max_aspect_ratio_id(self) -> int:
+        return len(self.supported_aspect_ratios)
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":

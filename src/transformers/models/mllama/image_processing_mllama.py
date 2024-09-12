@@ -51,7 +51,7 @@ logger = logging.get_logger(__name__)
 
 
 @lru_cache(maxsize=10)
-def find_supported_aspect_ratios(max_image_tiles: int) -> Dict[float, List[Tuple[int, int]]]:
+def get_all_supported_aspect_ratios(max_image_tiles: int) -> List[Tuple[int, int]]:
     """
     Computes all allowed aspect ratios for a given maximum number of input tiles.
 
@@ -60,37 +60,25 @@ def find_supported_aspect_ratios(max_image_tiles: int) -> Dict[float, List[Tuple
     represented by its aspect ratio (width/height) and the corresponding tile configuration.
 
     Args:
-        max_image_tiles (int):
+        max_image_tiles (`int`):
             The maximum number of tiles allowed.
 
     Returns:
-        `Dict[float, List[Tuple[int, int]]]`: A dictionary where:
-            - Keys are aspect ratios (`float`)
-            - Values are lists of tuples, each tuple representing a valid (width, height)
-              configuration in terms of number of tiles.
+        `List[Tuple[int, int]]`: A list of tuples, each tuple representing a valid (width, height)
+        configuration in terms of number of tiles.
 
     Example:
-        For max_image_tiles=4, the function returns:
-        {
-            0.25: [(1, 4)],
-            0.33: [(1, 3)],
-            0.5: [(1, 2)],
-            1.0: [(1, 1), (2, 2)],  # Multiple arrangements
-            2.0: [(2, 1)],
-            3.0: [(3, 1)],
-            4.0: [(4, 1)],
-        }
+        >>> get_all_supported_aspect_ratios(4)
+        [(1, 1), (1, 2), (1, 3), (1, 4), (2, 1), (2, 2), (3, 1), (4, 1)]
 
-    Note:
-        - The aspect ratio is calculated as width/height.
-        - Multiple configurations can have the same aspect ratio (e.g., 2x2 and 1x1).
     """
-    aspect_ratios_dict = defaultdict(list)
+    aspect_ratios = []
     for width in range(1, max_image_tiles + 1):
         for height in range(1, max_image_tiles + 1):
             if width * height <= max_image_tiles:
-                aspect_ratios_dict[width / height].append((width, height))
-    return aspect_ratios_dict
+                aspect_ratios.append((width, height))
+    return aspect_ratios
+
 
 
 def find_closest_aspect_ratio(max_image_tiles: int, image_width: int, image_height: int) -> Tuple:
@@ -114,11 +102,14 @@ def find_closest_aspect_ratio(max_image_tiles: int, image_width: int, image_heig
         for the closest supported aspect ratio.
 
     Note:
-        The function uses the `find_supported_aspect_ratios` to get all possible tile configurations,
+        The function uses the `get_all_supported_aspect_ratios` to get all possible tile configurations,
         then selects the one that best matches the input image's aspect ratio.
     """
     target_aspect_ratio = image_width / image_height
-    aspect_ratio_dict = find_supported_aspect_ratios(max_image_tiles)
+    aspect_ratios = get_all_supported_aspect_ratios(max_image_tiles)
+    aspect_ratio_dict = defaultdict(list)
+    for num_tiles_width, num_tiles_height in aspect_ratios:
+        aspect_ratio_dict[num_tiles_width / num_tiles_height].append((num_tiles_width, num_tiles_height))
 
     if target_aspect_ratio >= 1:
         # Search closest aspect ratio
@@ -246,10 +237,7 @@ def get_aspect_ratio_of_optimal_canvas_larger_than_image(
     optimal_canvas = None
 
     # Gather all potential supported canvas arrangements
-    potential_arrangements = []
-    aspect_ratios_dict = find_supported_aspect_ratios(max_image_tiles)
-    for aspect_ratios in aspect_ratios_dict.values():
-        potential_arrangements.extend(aspect_ratios)
+    potential_arrangements = get_all_supported_aspect_ratios(max_image_tiles)
 
     best_gap = float("inf")
 
@@ -373,7 +361,6 @@ def split_to_tiles(image: np.ndarray, num_tiles_width: int, num_tiles_height: in
 
     # Permute to (num_tiles_height, num_tiles_width, num_channels, tile_height, tile_width)
     image = image.transpose(1, 3, 0, 2, 4)
-    # image = image.transpose(0, 2, 4, 1, 3)
 
     # Reshape into the desired output shape (num_tiles_width * num_tiles_height, num_channels, tile_height, tile_width)
     image = image.reshape(num_tiles_width * num_tiles_height, num_channels, tile_height, tile_width)
@@ -496,41 +483,32 @@ def pack_aspect_ratios(aspect_ratios: List[List[Tuple[int, int]]], pad_value: in
 
 def convert_aspect_ratios_to_ids(aspect_ratios: List[List[Tuple[int, int]]], max_image_tiles: int) -> np.ndarray:
     """
-    Convert aspect ratio tuples to unique ids with the following encoding:
-
-        id = (num_tiles_h - 1) * max_image_tiles + num_tiles_w
-
-    For max_image_tiles = 4, we have the following encoding:
-
-        - aspect ratio (1, 1) -> id = 1
-        - aspect ratio (1, 2) -> id = 2
-        - aspect ratio (1, 3) -> id = 3
-        - aspect ratio (1, 4) -> id = 4
-        - aspect ratio (2, 1) -> id = 5
-        - aspect ratio (2, 2) -> id = 6
-        - aspect ratio (3, 1) -> id = 9
-        - aspect ratio (4, 1) -> id = 13
+    Convert aspect ratio tuples to unique ids.
 
     For batch padding we use 0, because there might be different number of images in each batch.
+    The aspect ratio ids start from 1, with 1 corresponding to the first supported aspect ratio.
 
     Args:
         aspect_ratios (`List[List[Tuple[int, int]]]`):
-            A list of aspect ratios.
+            A list of aspect ratios for each image in the batch.
         max_image_tiles (`int`):
-            The maximum number of tiles any image was potentially split into.
+            The maximum number of tiles any image can be split into.
 
     Returns:
         `np.ndarray`:
-            The aspect ratios ids as numpy array with shape (batch_size, max_num_images).
+            The aspect ratios ids as a numpy array with shape (batch_size, max_num_images).
+            Each id corresponds to the index of the aspect ratio in the list of supported aspect ratios,
+            offset by 1 (so 0 can be used for padding).
     """
 
     batch_size = len(aspect_ratios)
     max_num_images = max([len(row) for row in aspect_ratios])
+    supported_aspect_ratios = get_all_supported_aspect_ratios(max_image_tiles)
 
     aspect_ratios_ids = np.zeros((batch_size, max_num_images), dtype=np.int64)
     for i, sample_aspect_ratios in enumerate(aspect_ratios):
         for j, (num_tiles_h, num_tiles_w) in enumerate(sample_aspect_ratios):
-            aspect_ratios_ids[i, j] = (num_tiles_h - 1) * max_image_tiles + num_tiles_w
+            aspect_ratios_ids[i, j] = supported_aspect_ratios.index((num_tiles_h, num_tiles_w)) + 1
     return aspect_ratios_ids
 
 

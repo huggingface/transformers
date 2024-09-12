@@ -222,14 +222,13 @@ class MllamaPatchEmbedding(nn.Module):
 
 
 class MllamaPrecomputedAspectRatioEmbedding(nn.Module):  # TODO use nn.embedding
-    def __init__(self, max_num_tiles, hidden_size, is_gated, **kwargs):
+    def __init__(self, max_num_tiles, max_aspect_ratio_id, hidden_size, is_gated, **kwargs):
         super().__init__()
         self.max_num_tiles = max_num_tiles
         self.hidden_size = hidden_size
         self.is_gated = is_gated
 
         scale = hidden_size**-0.5
-        max_aspect_ratio_id = (self.max_num_tiles - 1) * self.max_num_tiles + 1
         self.embedding = nn.Parameter(torch.randn(max_aspect_ratio_id + 1, self.max_num_tiles, 1, self.hidden_size) / scale)
         if is_gated:
             self.gate = nn.Parameter(torch.zeros(1))
@@ -266,18 +265,16 @@ class MllamaPrecomputedPositionEmbedding(nn.Module):
         self.config = config
         super().__init__(**kwargs)
         self.max_num_tiles = config.max_num_tiles
+        self.max_aspect_ratio_id = config.max_aspect_ratio_id
         self.num_patches = (config.vision_chunk_size // config.patch_size) ** 2 + 1
         self.hidden_size = config.vision_input_dim
         self.is_gated = False  # just for now :wink:
 
-        # TODO @pavel this should be as small as possible
-        max_aspect_ratio_id = (self.max_num_tiles - 1) * self.max_num_tiles + 1
         precomputed_embeddings = torch.zeros(
-            max_aspect_ratio_id + 1, self.max_num_tiles, self.num_patches, self.hidden_size
+            self.max_aspect_ratio_id + 1, self.max_num_tiles, self.num_patches, self.hidden_size
         )
         self.gate = nn.Parameter(torch.zeros(1))
         self.weight = torch.nn.Parameter(precomputed_embeddings)
-        # in case we load weights we have to re-calcuate embeddings
 
     def forward(self, hidden_state: torch.Tensor, aspect_ratio_ids: torch.Tensor) -> torch.Tensor:
         embeddings = self.weight[aspect_ratio_ids]
@@ -520,11 +517,13 @@ class MllamaVisionModel(PreTrainedModel):
 
         self.pre_tile_pos_embed = MllamaPrecomputedAspectRatioEmbedding(
             max_num_tiles=config.max_num_tiles,
+            max_aspect_ratio_id=config.max_aspect_ratio_id,
             hidden_size=self.hidden_size,
             is_gated=True,
         )
         self.post_tile_pos_embed = MllamaPrecomputedAspectRatioEmbedding(
             max_num_tiles=config.max_num_tiles,
+            max_aspect_ratio_id=config.max_aspect_ratio_id,
             hidden_size=self.hidden_size,
             is_gated=True,
         )

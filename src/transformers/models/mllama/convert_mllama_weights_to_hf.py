@@ -26,6 +26,7 @@ import torch
 from transformers import MllamaConfig, MllamaForConditionalGeneration, MllamaImageProcessor, PreTrainedTokenizerFast
 from transformers.convert_slow_tokenizer import TikTokenConverter
 from transformers.models.mllama.configuration_mllama import MllamaTextConfig, MllamaVisionConfig
+from transformers.models.mllama.image_processing_mllama import get_all_supported_aspect_ratios
 
 
 try:
@@ -131,7 +132,8 @@ def pre_compute_positional_embedding(embedding):
     """
     max_num_tiles, *shapes = embedding.shape
     hidden_size = shapes[-1]
-    max_aspect_ratio_id = (max_num_tiles - 1) * max_num_tiles + 1
+    supported_aspect_ratios = get_all_supported_aspect_ratios(max_num_tiles)
+    max_aspect_ratio_id = len(supported_aspect_ratios)  # we keep 0 index for padding
     if len(shapes) == 2:  # tile embedding does not have patches
         num_patches = 1
         precomputed_embeddings = torch.zeros(
@@ -153,13 +155,10 @@ def pre_compute_positional_embedding(embedding):
             dtype=embedding.dtype,
         )
 
-    for height in range(1, max_num_tiles + 1):
-        for width in range(1, max_num_tiles + 1):
-            if height * width > max_num_tiles:
-                continue
-            aspect_ratio_id = (height - 1) * max_num_tiles + width
-            current_embedding = embedding[:height, :width].reshape(height * width, num_patches, hidden_size)
-            precomputed_embeddings[aspect_ratio_id, : height * width] = current_embedding
+    for i, (height, width) in enumerate(supported_aspect_ratios):
+        aspect_ratio_id = i + 1  # we keep 0 index for padding
+        current_embedding = embedding[:height, :width].reshape(height * width, num_patches, hidden_size)
+        precomputed_embeddings[aspect_ratio_id, : height * width] = current_embedding
     return precomputed_embeddings
 
 
@@ -391,10 +390,11 @@ def write_model(
         num_hidden_layers=n_layers_vision,
         vision_input_dim=dim_vision,  # Constant, taken directly from your notes
         return_intermediate=[3, 7, 15, 23, 30],  # Based on return_intermediate indices
-        max_num_tiles=4,
         num_global_layers=n_layers_vision_global,
         vision_chunk_size=params["vision_chunk_size"],
         num_attention_heads=n_heads_vision,
+        max_num_tiles=4,
+        supported_aspect_ratios=get_all_supported_aspect_ratios(4),
     )
     text_config = MllamaTextConfig(
         **config_parameters,
@@ -413,13 +413,18 @@ def write_model(
     with torch.device("meta"):
         model = MllamaForConditionalGeneration(config)
     model.load_state_dict(state_dict, strict=True, assign=True)
+    print("Checkpoint loaded successfully.")
     del model.config._name_or_path
+
+    print("Saving the model.")
     model.save_pretrained(model_path, safe_serialization=safe_serialization)
     del state_dict, model
 
     # Safety check: reload the converted model
     gc.collect()
+    print("Reloading the model to check if it's saved correctly.")
     MllamaForConditionalGeneration.from_pretrained(model_path, torch_dtype=torch.bfloat16, device_map="auto")
+    print("Model reloaded successfully.")
 
 
 class MllamaConverter(TikTokenConverter):
