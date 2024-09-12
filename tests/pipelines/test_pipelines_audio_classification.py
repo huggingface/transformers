@@ -12,14 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import inspect
-import json
-import re
 import unittest
-from pathlib import Path
-from subprocess import run
-from tempfile import TemporaryDirectory
-from textwrap import dedent
 
 import numpy as np
 
@@ -142,70 +135,3 @@ class AudioClassificationPipelineTests(unittest.TestCase):
     @unittest.skip(reason="Audio classification is not implemented for TF")
     def test_small_model_tf(self):
         pass
-
-
-@is_pipeline_test
-class HuggingfaceJSEquivalencetest(unittest.TestCase):
-    def test_huggingface_js_equivalence(self):
-        # Putting this here for now because this file is already tested by CircleCI, will move later
-        PIPELINES_TO_TEST = {
-            "audio-classification": AudioClassificationPipeline,
-        }
-
-        js_task_to_input_spec = self._get_huggingface_js_task_specs(PIPELINES_TO_TEST.keys())
-
-        for task, pipeline_cls in PIPELINES_TO_TEST.items():
-            js_spec = js_task_to_input_spec[task]
-            docstring = inspect.getdoc(pipeline_cls.__call__).strip()
-            docstring_args = self._parse_google_format_docstring_by_indentation(docstring)
-            if set(js_spec.keys()) != set(docstring_args):
-                raise ValueError(
-                    f"Pipeline task {task} has divergent input spec!\n"
-                    f"Huggingface.js: {set(js_spec.keys())}\n"
-                    f"Transformers: {set(docstring_args)}"
-                )
-
-    @staticmethod
-    def _get_huggingface_js_task_specs(task_list):
-        with TemporaryDirectory() as tempdir:
-            run(["git", "clone", "https://github.com/huggingface/huggingface.js.git", tempdir])
-            tasks_path = Path(tempdir) / "packages/tasks/src/tasks"
-            js_task_to_input_spec = {}
-
-            for task in task_list:
-                subdir = tasks_path / task
-                spec = subdir / "spec/input.json"
-                json_spec = json.load(spec.open())["$defs"]
-                # Might need some custom handling for different tasks here, but they mostly follow this structure
-                json_spec = list(json_spec.values())[0]
-                json_spec = json_spec["properties"]
-                js_task_to_input_spec[task] = json_spec
-        return js_task_to_input_spec
-
-    @staticmethod
-    def _parse_google_format_docstring_by_indentation(docstring):
-        docstring = dedent(docstring)
-        lines_by_indent = [
-            (len(line) - len(line.lstrip()), line.strip()) for line in docstring.split("\n") if line.strip()
-        ]
-        args_lineno = None
-        args_indent = None
-        args_end = None
-        for lineno, (indent, line) in enumerate(lines_by_indent):
-            if line == "Args:":
-                args_lineno = lineno
-                args_indent = indent
-                continue
-            elif args_lineno is not None and indent == args_indent:
-                args_end = lineno
-                break
-        if args_lineno is None:
-            raise ValueError("No args block to parse!")
-        elif args_end is None:
-            args_block = lines_by_indent[args_lineno + 1 :]
-        else:
-            args_block = lines_by_indent[args_lineno + 1 : args_end]
-        outer_indent_level = min(line[0] for line in args_block)
-        outer_lines = [line for line in args_block if line[0] == outer_indent_level]
-        arg_names = [re.match(r"(\w+)\W", line[1]).group(1) for line in outer_lines]
-        return arg_names
