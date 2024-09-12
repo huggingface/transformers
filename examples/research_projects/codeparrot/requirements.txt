@@ -2,7 +2,7 @@ transformers==4.38.0
 datasets==1.16.0
 wandb==0.12.0
 tensorboard==2.6.0
-torch==1.13.1
+torch==2.2.0
 huggingface-hub==0.1.0
 git+https://github.com/huggingface/accelerate.git@3c45b6f760ad8745be9ebc9bbb26f5b04dea4abe
 datasketch==1.5.7

@@ -22,7 +22,13 @@ from .base import HfQuantizer
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
-from ..utils import is_accelerate_available, is_bitsandbytes_available, is_torch_available, logging
+from ..utils import (
+    ACCELERATE_MIN_VERSION,
+    is_accelerate_available,
+    is_bitsandbytes_available,
+    is_torch_available,
+    logging,
+)
 from .quantizers_utils import get_module_from_name
 
 
@@ -62,7 +68,9 @@ class Bnb8BitHfQuantizer(HfQuantizer):
             raise RuntimeError("No GPU found. A GPU is needed for quantization.")
 
         if not is_accelerate_available():
-            raise ImportError("Using `bitsandbytes` 8-bit quantization requires Accelerate: `pip install accelerate`")
+            raise ImportError(
+                f"Using `bitsandbytes` 8-bit quantization requires Accelerate: `pip install 'accelerate>={ACCELERATE_MIN_VERSION}'`"
+            )
         if not is_bitsandbytes_available():
             raise ImportError(
                 "Using `bitsandbytes` 8-bit quantization requires the latest version of bitsandbytes: `pip install -U bitsandbytes`"

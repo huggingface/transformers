@@ -449,7 +449,8 @@ def main():
     if args.model_size is None and args.num_shards is None:
         raise ValueError("You have to set at least `num_shards` if you are not giving the `model_size`")
     if args.special_tokens is None:
-        args.special_tokens = DEFAULT_LLAMA_SPECIAL_TOKENS[str(args.llama_version)]
+        # no special tokens by default
+        args.special_tokens = DEFAULT_LLAMA_SPECIAL_TOKENS.get(str(args.llama_version), [])
 
     spm_path = os.path.join(args.input_dir, "tokenizer.model")
     vocab_size = len(

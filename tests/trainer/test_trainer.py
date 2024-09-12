@@ -62,12 +62,15 @@ from transformers.testing_utils import (
     require_bitsandbytes,
     require_deepspeed,
     require_galore_torch,
+    require_grokadamw,
     require_intel_extension_for_pytorch,
+    require_liger_kernel,
     require_lomo,
     require_optuna,
     require_peft,
     require_ray,
     require_safetensors,
+    require_schedulefree,
     require_sentencepiece,
     require_sigopt,
     require_tensorboard,
@@ -98,6 +101,7 @@ from transformers.utils import (
     is_apex_available,
     is_bitsandbytes_available,
     is_safetensors_available,
+    is_torchao_available,
     is_torchdistx_available,
 )
 from transformers.utils.hp_naming import TrialShortNamer
@@ -140,6 +144,21 @@ if is_accelerate_available():
 
 
 PATH_SAMPLE_TEXT = f"{get_tests_dir()}/fixtures/sample_text.txt"
+
+
+class MockCudaOOMCallback(TrainerCallback):
+    """
+    Simple callback to simulate CUDA OOM error if
+    the batch size is >= to `batch_size_limit`.
+    """
+
+    def __init__(self, batch_size_limit=16):
+        self.batch_size_limit = batch_size_limit
+
+    def on_step_end(self, args, state, control, **kwargs):
+        # simulate OOM on the first step
+        if state.train_batch_size >= self.batch_size_limit:
+            raise RuntimeError("CUDA out of memory.")
 
 
 class RegressionDataset:
@@ -1323,6 +1342,42 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertEqual(first_dataloader, first_dataloader_repeated)
         self.assertEqual(second_dataloader, second_dataloader_repeated)
 
+    @require_liger_kernel
+    def test_use_liger_kernel_patching(self):
+        # Test that the model code actually gets patched with Liger kernel
+        from liger_kernel.transformers.rms_norm import LigerRMSNorm
+
+        from transformers.models.llama import modeling_llama
+
+        config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
+        tiny_llama = LlamaForCausalLM(config)
+
+        args = TrainingArguments(
+            "./test",
+            use_liger_kernel=True,
+        )
+        Trainer(tiny_llama, args)
+
+        # Check that one of the Llama model layers has been correctly patched with Liger kernel
+        self.assertEqual(modeling_llama.LlamaRMSNorm, LigerRMSNorm)
+
+    @require_liger_kernel
+    @require_torch_gpu
+    def test_use_liger_kernel_trainer(self):
+        # Check that trainer still works with liger kernel applied
+        config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
+        tiny_llama = LlamaForCausalLM(config)
+
+        x = torch.randint(0, 100, (128,))
+        train_dataset = RepeatDataset(x)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            args = TrainingArguments(tmpdir, learning_rate=1e-2, logging_steps=5, max_steps=20, use_liger_kernel=True)
+            trainer = Trainer(tiny_llama, args, train_dataset=train_dataset)
+
+            # Check this works
+            _ = trainer.train()
+
     @require_lomo
     @require_torch_gpu
     def test_lomo(self):
@@ -1360,6 +1415,49 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 learning_rate=1e-9,
                 logging_steps=5,
                 optim="adalomo",
+            )
+            trainer = Trainer(tiny_llama, args, train_dataset=train_dataset)
+
+            # Check this works
+            _ = trainer.train()
+
+    @require_grokadamw
+    @require_torch_gpu
+    def test_grokadamw():
+        config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
+        tiny_llama = LlamaForCausalLM(config)
+        x = torch.randint(0, 100, (128,))
+        train_dataset = RepeatDataset(x)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Trainer without inf/nan filter
+            args = TrainingArguments(
+                tmpdir,
+                learning_rate=2e-5,
+                logging_steps=5,
+                optim="grokadamw",
+                max_steps=20,
+            )
+            trainer = Trainer(tiny_llama, args, train_dataset=train_dataset)
+
+            # Check this works
+            _ = trainer.train()
+
+    @require_schedulefree
+    @require_torch_gpu
+    def test_schedulefree_adam(self):
+        config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
+        tiny_llama = LlamaForCausalLM(config)
+        x = torch.randint(0, 100, (128,))
+        train_dataset = RepeatDataset(x)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Trainer without inf/nan filter
+            args = TrainingArguments(
+                tmpdir,
+                learning_rate=1e-9,
+                logging_steps=5,
+                optim="schedule_free_adamw",
             )
             trainer = Trainer(tiny_llama, args, train_dataset=train_dataset)
 
@@ -2443,7 +2541,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             run_glue.main()
 
     @require_deepspeed
-    def test_auto_batch_size_with_resume_from_checkpoint_with_deepspeed(self):
+    def test_auto_batch_size_with_deepspeed(self):
         train_dataset = RegressionDataset(length=128)
 
         config = RegressionModelConfig(a=0, b=2)
@@ -2451,33 +2549,27 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
         tmp_dir = self.get_auto_remove_tmp_dir()
 
-        class MockCudaOOMCallback(TrainerCallback):
-            def on_step_end(self, args, state, control, **kwargs):
-                # simulate OOM on the first step
-                if state.train_batch_size >= 16:
-                    raise RuntimeError("CUDA out of memory.")
-
-        deepspeed = {
-            "zero_optimization": {
-                "stage": 1,
-            },
-            "train_batch_size": "auto",
-            "train_micro_batch_size_per_gpu": "auto",
-        }
+        for stage in [1, 2]:
+            deepspeed = {
+                "zero_optimization": {
+                    "stage": stage,
+                },
+                "train_batch_size": "auto",
+                "train_micro_batch_size_per_gpu": "auto",
+            }
 
         args = RegressionTrainingArguments(
             tmp_dir,
             do_train=True,
             max_steps=2,
-            save_steps=1,
+            save_strategy="no",
             per_device_train_batch_size=16,
             auto_find_batch_size=True,
             deepspeed=deepspeed,
         )
-        # Note: This can have issues, for now we don't support this functionality
-        # ref: https://github.com/huggingface/transformers/pull/29057
-        with self.assertRaises(NotImplementedError):
-            _ = Trainer(model, args, train_dataset=train_dataset, callbacks=[MockCudaOOMCallback()])
+        trainer = Trainer(model, args, train_dataset=train_dataset, callbacks=[MockCudaOOMCallback()])
+        trainer.train()
+        self.assertEqual(trainer._train_batch_size, 8)
 
     def test_auto_batch_size_with_resume_from_checkpoint(self):
         train_dataset = RegressionDataset(length=128)
@@ -2486,12 +2578,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         model = RegressionRandomPreTrainedModel(config)
 
         tmp_dir = self.get_auto_remove_tmp_dir()
-
-        class MockCudaOOMCallback(TrainerCallback):
-            def on_step_end(self, args, state, control, **kwargs):
-                # simulate OOM on the first step
-                if state.train_batch_size >= 16:
-                    raise RuntimeError("CUDA out of memory.")
 
         args = RegressionTrainingArguments(
             tmp_dir,
@@ -4187,6 +4273,16 @@ if is_torch_available():
                 dict(default_adam_kwargs, **default_anyprecision_kwargs),
             )
         )
+    if is_torchao_available():
+        import torchao
+
+        optim_test_params.append(
+            (
+                TrainingArguments(optim=OptimizerNames.ADAMW_TORCH_4BIT, output_dir="None"),
+                torchao.prototype.low_bit_optim.AdamW4bit,
+                default_adam_kwargs,
+            )
+        )
 
 
 @require_torch
@@ -4356,7 +4452,7 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
         args = TrainingArguments(optim=OptimizerNames.ADAMW_BNB, output_dir="None")
 
         # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
-        # bnb will fail even if bnb is installed.
+        # bnb will fail even if `bitsandbytes` is installed.
         with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
             with self.assertRaises(ValueError):
                 Trainer.get_optimizer_cls_and_kwargs(args)
@@ -4365,7 +4461,7 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
         args = TrainingArguments(optim=OptimizerNames.PAGED_ADAMW, output_dir="None")
 
         # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
-        # bnb will fail even if bnb is installed.
+        # bnb will fail even if `bitsandbytes` is installed.
         with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
             with self.assertRaises(ValueError):
                 Trainer.get_optimizer_cls_and_kwargs(args)
@@ -4374,7 +4470,7 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
         args = TrainingArguments(optim=OptimizerNames.PAGED_ADAMW_8BIT, output_dir="None")
 
         # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
-        # bnb will fail even if bnb is installed.
+        # bnb will fail even if `bitsandbytes` is installed.
         with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
             with self.assertRaises(ValueError):
                 Trainer.get_optimizer_cls_and_kwargs(args)
@@ -4383,7 +4479,7 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
         args = TrainingArguments(optim=OptimizerNames.PAGED_LION, output_dir="None")
 
         # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
-        # bnb will fail even if bnb is installed.
+        # bnb will fail even if `bitsandbytes` is installed.
         with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
             with self.assertRaises(ValueError):
                 Trainer.get_optimizer_cls_and_kwargs(args)
@@ -4392,7 +4488,7 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
         args = TrainingArguments(optim=OptimizerNames.PAGED_LION_8BIT, output_dir="None")
 
         # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
-        # bnb will fail even if bnb is installed.
+        # bnb will fail even if `bitsandbytes` is installed.
         with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
             with self.assertRaises(ValueError):
                 Trainer.get_optimizer_cls_and_kwargs(args)

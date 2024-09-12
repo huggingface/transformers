@@ -45,6 +45,7 @@ from ..utils import (
     is_torch_cuda_available,
     is_torch_mlu_available,
     is_torch_mps_available,
+    is_torch_musa_available,
     is_torch_npu_available,
     is_torch_xpu_available,
     logging,
@@ -218,7 +219,7 @@ def infer_framework_load_model(
     If both frameworks are installed and available for `model`, PyTorch is selected.
 
     Args:
-        model (`str`, [`PreTrainedModel`] or [`TFPreTrainedModel`]):
+        model (`str`, [`PreTrainedModel`] or [`TFPreTrainedModel]`):
             The model to infer the framework from. If `str`, a checkpoint name. The model to infer the framewrok from.
         config ([`AutoConfig`]):
             The config associated with the model to help using the correct class
@@ -322,7 +323,7 @@ def infer_framework_from_model(
     If both frameworks are installed and available for `model`, PyTorch is selected.
 
     Args:
-        model (`str`, [`PreTrainedModel`] or [`TFPreTrainedModel`]):
+        model (`str`, [`PreTrainedModel`] or [`TFPreTrainedModel]`):
             The model to infer the framework from. If `str`, a checkpoint name. The model to infer the framewrok from.
         model_classes (dictionary `str` to `type`, *optional*):
             A mapping framework to class.
@@ -349,7 +350,7 @@ def get_framework(model, revision: Optional[str] = None):
     Select framework (TensorFlow or PyTorch) to use.
 
     Args:
-        model (`str`, [`PreTrainedModel`] or [`TFPreTrainedModel`]):
+        model (`str`, [`PreTrainedModel`] or [`TFPreTrainedModel]`):
             If both frameworks are installed, picks the one corresponding to the model passed (either a model class or
             the model name). If no specific model is provided, defaults to using PyTorch.
     """
@@ -385,7 +386,7 @@ def get_default_model_and_revision(
     Select a default model to use for a given task. Defaults to pytorch if ambiguous.
 
     Args:
-        targeted_task (`Dict` ):
+        targeted_task (`Dict`):
            Dictionary representing the given task, that should contain default models
 
         framework (`str`, None)
@@ -873,6 +874,8 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
                 self.device = torch.device("cpu")
             elif is_torch_mlu_available():
                 self.device = torch.device(f"mlu:{device}")
+            elif is_torch_musa_available():
+                self.device = torch.device(f"musa:{device}")
             elif is_torch_cuda_available():
                 self.device = torch.device(f"cuda:{device}")
             elif is_torch_npu_available():
@@ -1041,6 +1044,9 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
                     yield
             elif self.device.type == "mlu":
                 with torch.mlu.device(self.device):
+                    yield
+            elif self.device.type == "musa":
+                with torch.musa.device(self.device):
                     yield
             else:
                 yield
