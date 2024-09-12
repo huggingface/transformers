@@ -53,9 +53,7 @@ def pack_weights(quantized_weights: torch.Tensor) -> torch.Tensor:
     else:
         packed_tensor_shape = (row_dim, *original_shape[1:])
 
-    packed = torch.zeros(
-        packed_tensor_shape, device=quantized_weights.device, dtype=torch.uint8
-    )
+    packed = torch.zeros(packed_tensor_shape, device=quantized_weights.device, dtype=torch.uint8)
     unpacked = quantized_weights.to(torch.uint8)
 
     def lshift(t: torch.Tensor, bits: int):
@@ -142,10 +140,7 @@ def unpack_weights(packed: torch.Tensor, dtype: torch.dtype) -> torch.Tensor:
 
 
 class BitLinear(nn.Module):
-
-    def __init__(
-        self, in_features: int, out_features: int, bias: bool, device=None, dtype=None
-    ):
+    def __init__(self, in_features: int, out_features: int, bias: bool, device=None, dtype=None):
         super().__init__()
         self.dtype = dtype
         self.register_buffer(
@@ -165,9 +160,7 @@ class BitLinear(nn.Module):
             ),
         )
         if bias:
-            self.register_buffer(
-                "bias", torch.zeros((out_features), dtype=dtype, device=device)
-            )
+            self.register_buffer("bias", torch.zeros((out_features), dtype=dtype, device=device))
         else:
             self.bias = None
 
@@ -288,9 +281,7 @@ def replace_with_bitnet_linear(
             it) is not in the list of modules to not convert (for instances modules that are offloaded to `cpu` or
             `disk`).
     """
-    modules_to_not_convert = (
-        ["lm_head"] if modules_to_not_convert is None else modules_to_not_convert
-    )
+    modules_to_not_convert = ["lm_head"] if modules_to_not_convert is None else modules_to_not_convert
     if quantization_config and quantization_config.modules_to_not_convert is not None:
         modules_to_not_convert.extend(quantization_config.modules_to_not_convert)
     modules_to_not_convert = list(set(modules_to_not_convert))
