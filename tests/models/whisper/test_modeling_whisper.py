@@ -2550,14 +2550,14 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         ).input_features.to(torch_device)
 
         # task defaults to transcribe
-        sequences = model.generate(input_features)
+        sequences = model.generate(input_features, return_timestamps=True)
 
         transcription = processor.batch_decode(sequences)[0]
 
         assert transcription == " मिर्ची में कितने विबिन्द प्रजातियां हैं? मिर्ची में कितने विबिन्द प्रजातियां हैं?"
 
         # set task to translate
-        sequences = model.generate(input_features, task="translate")
+        sequences = model.generate(input_features, task="translate", return_timestamps=True)
         transcription = processor.batch_decode(sequences)[0]
 
         assert (
