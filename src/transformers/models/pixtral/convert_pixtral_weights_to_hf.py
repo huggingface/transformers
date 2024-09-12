@@ -4,6 +4,9 @@ import torch
 from safetensors.torch import load_file as safe_load_file
 import regex as re
 
+from PIL import Image
+import requests
+from transformers import AutoProcessor
 tokenizer = AutoTokenizer.from_pretrained("leafspark/Pixtral-12B-2409-hf", )
 
 
@@ -83,23 +86,27 @@ OLD_TO_NEW = dict(zip(old_keys.split("\n"), all_keys.split("\n")))
 new_dict={}
 
 def permute_for_rope(value, n_heads, config):
-        dim1 = config.head_dim
+        dim1 = value.shape[0]
         dim2 = config.hidden_size
         return value.view(n_heads, dim1 // n_heads // 2, 2, dim2).transpose(1, 2).reshape(dim1, dim2) 
 
 for key, value in original_state_dict.items():
 
+    new_key = OLD_TO_NEW[key]
     if "vision_encoder" in key:
         _config = vision_config
+        num_attention_heads = _config.num_attention_heads
     else:
         _config = text_config
+        if "q_proj" in new_key:
+            num_attention_heads = _config.num_attention_heads
+        if "k_proj" in new_key:
+            num_attention_heads = _config.num_key_value_heads
         # convert the text model (basically mistral model)
 
-    new_key = OLD_TO_NEW[key]
-    if "q_proj" in new_key:
-        value = permute_for_rope(value,_config.num_attention_heads, _config)
-    if "k_proj" in new_key:
-        value = permute_for_rope(value,_config.num_key_value_heads, _config)
+
+    if "q_proj" in new_key or "k_proj" in new_key:
+        value = permute_for_rope(value,num_attention_heads, _config)
 
     new_dict[new_key] = value
 
@@ -107,3 +114,17 @@ with torch.device("meta"):
     model = LlavaForConditionalGeneration(config)
 
 model.load_state_dict(new_dict, strict=True, assign=True)
+
+
+
+processor = AutoProcessor.from_pretrained("llava-hf/llava-1.5-7b-hf")
+processor.tokenizer = tokenizer
+prompt = "USER: <image>\nWhat's the content of the image? ASSISTANT:"
+url = "https://www.ilankelman.org/stopsigns/australia.jpg"
+image = Image.open(requests.get(url, stream=True).raw)
+
+inputs = processor(text=prompt, images=image, return_tensors="pt")
+
+# Generate
+generate_ids = model.generate(**inputs, max_new_tokens=15)
+processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
