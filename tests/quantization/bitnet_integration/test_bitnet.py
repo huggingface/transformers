@@ -81,7 +81,7 @@ class BitNetTest(unittest.TestCase):
 
     def test_replace_with_bitlinear(self):
 
-        from transformers.integrations import replace_with_bitnet_linear, BitLinear
+        from transformers.integrations import BitLinear, replace_with_bitnet_linear
 
         model_id = "facebook/opt-350m"
         config = AutoConfig.from_pretrained(model_id)

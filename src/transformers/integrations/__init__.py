@@ -25,9 +25,9 @@ _import_structure = {
         "replace_with_awq_linear",
     ],
     "bitnet": [
-        "replace_with_bitnet_linear",  
         "BitLinear",
         "pack_weights",
+        "replace_with_bitnet_linear",
         "unpack_weights",
     ],
     "bitsandbytes": [
@@ -124,9 +124,9 @@ if TYPE_CHECKING:
         replace_with_awq_linear,
     )
     from .bitnet import (
-        replace_with_bitnet_linear,
         BitLinear,
         pack_weights,
+        replace_with_bitnet_linear,
         unpack_weights
     )
     from .bitsandbytes import (
