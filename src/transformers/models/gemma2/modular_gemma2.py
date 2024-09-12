@@ -20,20 +20,6 @@ import torch.nn as nn
 import torch.utils.checkpoint
 from torch.nn import CrossEntropyLoss
 
-from transformers.models.gemma.modeling_gemma import (
-    GemmaAttention,
-    GemmaDecoderLayer,
-    GemmaForCausalLM,
-    GemmaForSequenceClassification,
-    GemmaForTokenClassification,
-    GemmaModel,
-    GemmaPreTrainedModel,
-    GemmaRMSNorm,
-    _prepare_4d_causal_attention_mask_with_cache_position,
-    apply_rotary_pos_emb,
-    repeat_kv,
-)
-
 from ...activations import ACT2FN
 from ...cache_utils import Cache, HybridCache
 from ...configuration_utils import PretrainedConfig
@@ -47,6 +33,19 @@ from ...utils import (
     is_flash_attn_greater_or_equal_2_10,
     is_torchdynamo_compiling,
     logging,
+)
+from ..gemma.modeling_gemma import (
+    GemmaAttention,
+    GemmaDecoderLayer,
+    GemmaForCausalLM,
+    GemmaForSequenceClassification,
+    GemmaForTokenClassification,
+    GemmaModel,
+    GemmaPreTrainedModel,
+    GemmaRMSNorm,
+    _prepare_4d_causal_attention_mask_with_cache_position,
+    apply_rotary_pos_emb,
+    repeat_kv,
 )
 
 
