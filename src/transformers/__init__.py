@@ -526,6 +526,10 @@ _import_structure = {
         "LlavaConfig",
         "LlavaProcessor",
     ],
+    "models.pixtral": [
+        "PixtralConfig",
+       
+    ],
     "models.llava_next": [
         "LlavaNextConfig",
         "LlavaNextProcessor",
@@ -2522,6 +2526,12 @@ else:
         [
             "LlavaForConditionalGeneration",
             "LlavaPreTrainedModel",
+        ]
+    )
+    _import_structure["models.pixtral"].extend(
+        [
+            "PixtralModel",
+            "PixtralPreTrainedModel",
         ]
     )
     _import_structure["models.llava_next"].extend(
@@ -5290,6 +5300,10 @@ if TYPE_CHECKING:
         LlavaConfig,
         LlavaProcessor,
     )
+    from .models.pixtral import (
+        PixtralConfig,
+       
+    )
     from .models.llava_next import (
         LlavaNextConfig,
         LlavaNextProcessor,
@@ -7096,6 +7110,10 @@ if TYPE_CHECKING:
         from .models.llava import (
             LlavaForConditionalGeneration,
             LlavaPreTrainedModel,
+        )
+        from .models.pixtral import (
+            PixtralModel,
+            PixtralPreTrainedModel,
         )
         from .models.llava_next import (
             LlavaNextForConditionalGeneration,

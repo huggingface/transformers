@@ -548,11 +548,12 @@ def load_state_dict(checkpoint_file: Union[str, os.PathLike], is_quantized: bool
         # Check format of the archive
         with safe_open(checkpoint_file, framework="pt") as f:
             metadata = f.metadata()
-        if metadata.get("format") not in ["pt", "tf", "flax", "mlx"]:
-            raise OSError(
-                f"The safetensors archive passed at {checkpoint_file} does not contain the valid metadata. Make sure "
-                "you save your model with the `save_pretrained` method."
-            )
+        if metadata is not None:
+            if metadata.get("format") not in ["pt", "tf", "flax", "mlx"]:
+                raise OSError(
+                    f"The safetensors archive passed at {checkpoint_file} does not contain the valid metadata. Make sure "
+                    "you save your model with the `save_pretrained` method."
+                )
         return safe_load_file(checkpoint_file)
     try:
         if (
@@ -3751,21 +3752,22 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             with safe_open(resolved_archive_file, framework="pt") as f:
                 metadata = f.metadata()
 
-            if metadata.get("format") == "pt":
-                pass
-            elif metadata.get("format") == "tf":
-                from_tf = True
-                logger.info("A TensorFlow safetensors file is being loaded in a PyTorch model.")
-            elif metadata.get("format") == "flax":
-                from_flax = True
-                logger.info("A Flax safetensors file is being loaded in a PyTorch model.")
-            elif metadata.get("format") == "mlx":
-                # This is a mlx file, we assume weights are compatible with pt
-                pass
-            else:
-                raise ValueError(
-                    f"Incompatible safetensors file. File metadata is not ['pt', 'tf', 'flax', 'mlx'] but {metadata.get('format')}"
-                )
+            if metadata is not None:
+                if metadata.get("format") == "pt":
+                    pass
+                elif metadata.get("format") == "tf":
+                    from_tf = True
+                    logger.info("A TensorFlow safetensors file is being loaded in a PyTorch model.")
+                elif metadata.get("format") == "flax":
+                    from_flax = True
+                    logger.info("A Flax safetensors file is being loaded in a PyTorch model.")
+                elif metadata.get("format") == "mlx":
+                    # This is a mlx file, we assume weights are compatible with pt
+                    pass
+                else:
+                    raise ValueError(
+                        f"Incompatible safetensors file. File metadata is not ['pt', 'tf', 'flax', 'mlx'] but {metadata.get('format')}"
+                    )
 
         from_pt = not (from_tf | from_flax)
 

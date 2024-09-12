@@ -277,6 +277,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("xmod", "XmodModel"),
         ("yolos", "YolosModel"),
         ("yoso", "YosoModel"),
+        ("pixtral", "PixtralModel"),
     ]
 )
 
@@ -728,6 +729,7 @@ MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES = OrderedDict(
         ("instructblipvideo", "InstructBlipVideoForConditionalGeneration"),
         ("kosmos-2", "Kosmos2ForConditionalGeneration"),
         ("llava", "LlavaForConditionalGeneration"),
+        ("pixtral", "PixtralModel"),
         ("llava_next", "LlavaNextForConditionalGeneration"),
         ("llava_next_video", "LlavaNextVideoForConditionalGeneration"),
         ("llava_onevision", "LlavaOnevisionForConditionalGeneration"),

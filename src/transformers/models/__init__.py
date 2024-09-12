@@ -130,6 +130,7 @@ from . import (
     lilt,
     llama,
     llava,
+    pixtral,
     llava_next,
     llava_next_video,
     llava_onevision,
