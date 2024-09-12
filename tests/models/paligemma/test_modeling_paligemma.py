@@ -308,7 +308,7 @@ class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, unittest.Test
 
 @slow
 @require_torch
-@require_read_token
+# @require_read_token
 class PaliGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.processor = PaliGemmaProcessor.from_pretrained("google/paligemma-3b-pt-224")
@@ -334,6 +334,32 @@ class PaliGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         output = model.generate(**inputs, max_new_tokens=20)
         EXPECTED_DECODED_TEXT = "\ncow on the beach"  # fmt: skip
+
+        self.assertEqual(
+            self.processor.decode(output[0], skip_special_tokens=True),
+            EXPECTED_DECODED_TEXT,
+        )
+
+    @slow
+    # @require_read_token
+    def test_small_model_integration_test_multiimage(self):
+        model_id = "google/paligemma-3b-ft-nlvr2-448"  # checkpoint tuned for multiple images
+        model = PaliGemmaForConditionalGeneration.from_pretrained(model_id)
+        processor = PaliGemmaProcessor.from_pretrained(model_id)
+        prompt = "answer en Which of the two pictures shows a snowman, first or second?"
+        stop_sign_image = Image.open(
+            requests.get("https://www.ilankelman.org/stopsigns/australia.jpg", stream=True).raw
+        )
+        snow_image = Image.open(
+            requests.get(
+                "https://huggingface.co/microsoft/kosmos-2-patch14-224/resolve/main/snowman.jpg", stream=True
+            ).raw
+        )
+
+        inputs = processor(text=prompt, images=[[snow_image, stop_sign_image]], return_tensors="pt")
+
+        output = model.generate(**inputs, max_new_tokens=20)
+        EXPECTED_DECODED_TEXT = "answer en Which of the two pictures shows a snowman, first or second?\nFirst"
 
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),

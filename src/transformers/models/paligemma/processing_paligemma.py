@@ -52,7 +52,7 @@ def _is_str_or_image(elem):
     return isinstance(elem, (str)) or is_image_or_image_url(elem)
 
 
-def build_string_from_input(prompt, bos_token, image_seq_len, image_token):
+def build_string_from_input(prompt, bos_token, image_seq_len, image_token, num_images):
     """
     Builds a string from the input prompt and image tokens.
     For example, for the call:
@@ -69,8 +69,33 @@ def build_string_from_input(prompt, bos_token, image_seq_len, image_token):
         bos_token (`str`): The beginning of sentence token.
         image_seq_len (`int`): The length of the image sequence.
         image_token (`str`): The image token.
+        num_images (`int`): Number of images in the prompt.
     """
-    return f"{image_token * image_seq_len}{bos_token}{prompt}\n"
+    return f"{image_token * image_seq_len * num_images}{bos_token}{prompt}\n"
+
+
+# Copied from transformers.models.llava_next.image_processing_llava_next.make_batched_images
+def make_batched_images(images) -> List[List[ImageInput]]:
+    """
+    Accepts images in list or nested list format, and makes a list of images for preprocessing.
+
+    Args:
+        images (`Union[List[List[ImageInput]], List[ImageInput], ImageInput]`):
+            The input image.
+
+    Returns:
+        list: A list of images.
+    """
+    if isinstance(images, (list, tuple)) and isinstance(images[0], (list, tuple)) and is_valid_image(images[0][0]):
+        return [img for img_list in images for img in img_list]
+
+    elif isinstance(images, (list, tuple)) and is_valid_image(images[0]):
+        return images
+
+    elif is_valid_image(images):
+        return [images]
+
+    raise ValueError(f"Could not make batched video from {images}")
 
 
 class PaliGemmaProcessor(ProcessorMixin):
@@ -230,12 +255,19 @@ class PaliGemmaProcessor(ProcessorMixin):
         if isinstance(text, List) and isinstance(images, List):
             if len(images) < len(text):
                 raise ValueError(
-                    f"Received {len(images)} images for {len(text)} prompts. Each prompt should be associated with an image."
+                    f"Received {len(images)} images for {len(text)} prompts. Each prompt should be associated with an image or list of images."
                 )
         if _is_str_or_image(text):
             text = [text]
         elif isinstance(text, list) and _is_str_or_image(text[0]):
             pass
+
+        # make a nested list of lists to be able to iterate over the images and text below
+        if is_valid_image(images):
+            images = [[images]]
+        elif isinstance(images, list) and is_valid_image(images[0]):
+            images = [[image] for image in images]
+
         if suffix is not None and _is_str_or_image(suffix):
             suffix = [suffix]
         if suffix is not None:
@@ -247,10 +279,12 @@ class PaliGemmaProcessor(ProcessorMixin):
                 bos_token=self.tokenizer.bos_token,
                 image_seq_len=self.image_seq_length,
                 image_token=IMAGE_TOKEN,
+                num_images=len(image_list) if isinstance(image_list, list) else 1,
             )
-            for prompt in text
+            for prompt, image_list in zip(text, images)
         ]
 
+        images = make_batched_images(images)
         pixel_values = self.image_processor(
             images,
             do_resize=do_resize,
